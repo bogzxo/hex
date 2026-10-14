@@ -29,6 +29,9 @@ internal sealed partial class HexScene : Scene
 
     // Where it keeps the layouts that were worked on last (one path a line, the latest first), and how many of them
     private const string RECENT_FILE = "hex_recent.txt";
+
+    // Which skin the layouts were shown in the last time, see the Skin menu
+    private const string SKIN_FILE = "hex_skin.txt";
     private const int MAX_RECENT = 8;
 
     // The screen the layouts being edited are made for, scaled to whatever room the canvas has.
@@ -51,7 +54,8 @@ internal sealed partial class HexScene : Scene
     private static readonly string[] Palette =
     [
         "stack", "grid", "panel", "scroll", "label", "button", "toggle", "textbox", "number_box", "selector",
-        "dropdown", "list", "slider", "color_picker", "progress_bar", "image", "tabs", "divider", "spacer"
+        "dropdown", "list", "slider", "color_picker", "progress_bar", "image", "tabs", "divider", "spacer",
+        "readout", "meter", "graph", "segments"
     ];
 
     // The properties that are one of a few words, and the words.
@@ -75,12 +79,20 @@ internal sealed partial class HexScene : Scene
         ["stagger"] = (0.0f, 0.5f)
     };
 
-    private const float EDITOR_WIDTH = 252;
+    // How wide what a property is set with is, which is whatever the properties have left next to what it is
+    // called. They can be dragged wider (see HexScene.Settings). What is taken off is the padding either side (8
+    // and 8), the name and the gap after it (128 and 6), and the scroll bar with the gap it keeps (6 and 6). It
+    // was 14 short of that once and every editor ran on under the bar
+    private const float EDITOR_MARGIN = 162;
+    private const float MIN_EDITOR_WIDTH = 96;
+    private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN);
     private const float EDITOR_HEIGHT = 28;
     private const float EDITOR_TEXT = 0.125f;
     private const float PICKER_HEIGHT = 112;
 
-    private static readonly Vector4 DimColor = new(0.58f, 0.6f, 0.66f, 1.0f);
+    // What is said quietly, the colour the editor's skin writes in turned down. Not a colour of its own, the
+    // editor comes in a light theme as well
+    private Vector4 DimColor => (compositor.Skin?.TextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 1.0f)) with { W = 0.62f };
     private static readonly Vector4 FolderColor = new(0.38f, 0.62f, 1.0f, 1.0f);
     private static readonly Vector4 ErrorColor = new(1.0f, 0.45f, 0.4f, 1.0f);
 
@@ -107,7 +119,7 @@ internal sealed partial class HexScene : Scene
     private readonly ScrollPanel treeScroll, inspectorScroll, codeScroll;
     private readonly Label status, treeTitle, coords;
     private readonly CodeView code;
-
+    
     // The layouts that were opened or saved last, the latest first
     private readonly List<string> recent = [];
 
@@ -199,6 +211,7 @@ internal sealed partial class HexScene : Scene
         coords = layout.Get<Label>("coords");
 
         layoutDebugger = new HexLayoutDebugger(stage);
+        LoadSettings();
 
         recent.AddRange(ReadRecent());
         BuildMenus();
@@ -222,9 +235,13 @@ internal sealed partial class HexScene : Scene
 
         if (options.Open is not null)
             Open(options.Open);
+        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse)
+            Open(recent[0]);
 
         if (options.SelfTest)
             StartSelfTest();
+        else if (options.Check.Length == 0)
+            Horizon.UI.Skinning.UISkins.Remember(Path.Combine(AppContext.BaseDirectory, SKIN_FILE));
         else if (options.Browse)
             OpenPressed();
     }
@@ -265,6 +282,7 @@ internal sealed partial class HexScene : Scene
             RunChecks();
 
         UpdateDialog();
+        ColourChrome();
         FitChrome();
         PlaceCanvas();
         UpdateCanvasPointer();
@@ -323,7 +341,10 @@ internal sealed partial class HexScene : Scene
         Vector2 inLayout = document.Module.ToLocal(pointer.Position);
 
         // Not over the canvas if a menu of the editor is in the way of it
-        bool overCanvas = canvas.Bounds.Contains(inChrome) && chrome.Popup is null;
+        // Nor if a question or the menu of art is up over it, a click on those is not a click on the layout
+        // Nor on the bottom edge of the canvas itself, which is dragged to make it taller
+        bool overCanvas = canvas.Bounds.Contains(inChrome) && chrome.Popup is null && chrome.Dialog is null && artPicker is not { IsOpen: true }
+            && canvas.ActiveGrip == UIResize.None && !canvas.IsResizing;
 
         // Where the pointer is in the layout, in its own units, for lining things up by number
         coords.Text = overCanvas ? $"{inLayout.X:0}, {inLayout.Y:0}" : string.Empty;
@@ -333,6 +354,10 @@ internal sealed partial class HexScene : Scene
             dragging = false;
             return;
         }
+
+        // An edge of what is selected, dragged to make it bigger, before the press is taken for anything else
+        if (!dragging && UpdateCanvasHandles(pointer, inLayout, overCanvas, pressed))
+            return;
 
         if (pressed && overCanvas)
         {
@@ -361,13 +386,14 @@ internal sealed partial class HexScene : Scene
         }
         else if (dragging && pointer.Down)
         {
-            Vector2 moved = inLayout - dragLast;
+            // On the grid if there is one, what the pointer moved past the last line of it waits for the next
+            Vector2 moved = Snapped(inLayout - dragLast);
             if (moved != Vector2.Zero)
             {
                 foreach (var selected in document.TopSelection())
                     selected.Position += moved;
 
-                dragLast = inLayout;
+                dragLast += moved;
                 dragMoved = true;
                 codeDirty = true;
             }

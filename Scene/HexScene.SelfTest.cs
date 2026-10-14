@@ -1,7 +1,9 @@
 using System.Numerics;
 
+using Horizon.HIDL.Runtime;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Skinning;
 
 namespace Horizon.Hex;
 
@@ -33,7 +35,7 @@ internal sealed partial class HexScene
 
     private void StartSelfTest()
     {
-        var test = selfTest = new HexPointerScript();
+        var test = selfTest = new HexPointerScript { Pace = options.Watch ? 8 : 1 };
         compositor.PointerSource = () => test.Pointer;
 
         string workspace = Path.GetFullPath(options.Workspace);
@@ -97,9 +99,9 @@ internal sealed partial class HexScene
 
         // The first layout has to have happened before there is anything to point at, and a window that starts
         // out maximised takes a moment to get there
-        test.Wait(0.5f);
+        test.Settle(0.5f);
         test.WaitFor(() => Near(chrome.Root.Bounds.Width * compositor.UIScale, Engine.WindowManager.ViewportSize.X, 1), 3.0f);
-        test.Wait(0.3f);
+        test.Settle(0.3f);
 
         /* The editor itself */
 
@@ -218,28 +220,28 @@ internal sealed partial class HexScene
         /* Undoing */
 
         string settled = string.Empty;
-        test.Wait(0.6f);
+        test.Settle(0.6f);
         test.Run(() =>
         {
             settled = Code();
             Type((TextBox)editors["label"], "Brawl");
         });
-        test.Wait(0.6f);
+        test.Settle(0.6f);
         test.Check("undo: the button is lit once there is something to take back", () => (document.CanUndo || recordPending) && ((Button)button!).Label == "Brawl");
 
         Pick("Edit", () => "Undo");
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Check("undo: takes the last change back, and only that one", () =>
             Code() == settled && document.Find("button1") is Button { Label: "Fight" });
         test.Check("undo: what was selected still is", () =>
             document.Selected == document.Find("button1") && stage.Highlighted == document.Selected && editors["label"] is TextBox { Text: "Fight" });
 
         Pick("Edit", () => "Redo");
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Check("redo: makes the change again", () => document.Find("button1") is Button { Label: "Brawl" } && !document.CanRedo);
 
         Pick("Edit", () => "Undo");
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Run(() =>
         {
             // Going back builds the layout again, what the test was holding on to is from before
@@ -324,6 +326,50 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("reorder: and down puts it back", () => stack!.Children[1] == label);
 
+        test.Click(Part("move_up"));
+        test.Wait();
+        test.Check("reorder: the buttons over the tree do the same", () => stack!.Children[0] == label && treeRows[label!].Selected);
+        test.Click(Part("move_down"));
+        test.Wait();
+        test.Check("reorder: there and back", () => stack!.Children[1] == label);
+        Pick("Edit", () => "Move down");
+        test.Wait();
+        test.Check("reorder: the last one stays the last one", () => stack!.Children[^1] == label);
+
+        test.RightClick(Row(() => label));
+        test.Click(() => chrome.ToWorld(contextMenu!.ItemBounds("Move up").Center));
+        test.Wait();
+        test.Check("reorder: the right click menu of a row moves it up", () => stack!.Children[0] == label);
+        test.RightClick(Row(() => label));
+        test.Click(() => chrome.ToWorld(contextMenu!.ItemBounds("Move down").Center));
+        test.Wait();
+        test.Check("reorder: and down again", () => stack!.Children[1] == label);
+
+        Pick("Edit", () => "Move out");
+        test.Wait();
+        test.Check("reparent: out puts it after the container it was in", () =>
+            label!.Parent == document.Module.Root
+            && document.Module.Root.Children.ToList().IndexOf(label) == document.Module.Root.Children.ToList().IndexOf(stack!) + 1
+            && document.Selected == label);
+        Pick("Edit", () => "Move into");
+        test.Wait();
+        test.Check("reparent: and into puts it back in, at the end", () => label!.Parent == stack && stack!.Children[^1] == label && CheckRoundTrip(document));
+
+        UIComponent? pasted = null;
+        int rowsBefore = 0;
+        test.Run(() => rowsBefore = treeRows.Count);
+        Pick("Edit", () => "Copy");
+        Pick("Edit", () => "Paste");
+        test.Wait();
+        test.Check("clipboard: a copy is pasted next to what's selected, with a name of its own, and selected", () =>
+            (pasted = document.Selected) is Label && pasted != label && pasted.Parent == stack
+            && document.NameOf(pasted) != document.NameOf(label!) && treeRows.Count == rowsBefore + 1);
+        Pick("Edit", () => "Cut");
+        test.Wait();
+        test.Check("clipboard: cut takes it out again", () => pasted!.Parent is null && treeRows.Count == rowsBefore && document.Selected is null);
+        test.Click(Row(() => label));
+        test.Wait();
+
         Pick("Edit", () => "Delete");
         test.Wait();
         test.Check("delete: gone from the layout, the tree and the code", () =>
@@ -342,7 +388,7 @@ internal sealed partial class HexScene
             ((TextBox)editors["template"]).Insert("item.hor");
             Type((NumberBox)editors["preview_count"], "3");
         });
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Check("templates: a container shows items made from its template", () => document.PreviewCount == 3 && stack!.Children.Count == 4);
         test.Check("templates: which are in neither the tree nor the code", () =>
             document.Walk().Count() == 3 && treeRows.Count == 3 && Code().Contains("template: \"item.hor\"") && !Code().Contains("an item"));
@@ -387,7 +433,7 @@ internal sealed partial class HexScene
             && fileRows.Exists(row => Path.GetFileName(row.Path) == "item.hor"));
 
         test.Click(File("selftest_menu.hor"));
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Check("open: the layout is back the way it was saved", () =>
             !browsing && documents.Count == 1 && document.Name == "selftest_menu" && Code() == saved && document.Walk().Count() == 3);
         test.Check("open: items and all", () => document.PreviewCount == 3);
@@ -416,7 +462,7 @@ internal sealed partial class HexScene
         string own = System.IO.File.ReadAllText(EDITOR_LAYOUT);
 
         Pick("File", () => "The editor's own UI");
-        test.Wait(0.4f);
+        test.Settle(0.4f);
         test.Check("bootstrap: the editor opens its own UI", () => document.Name == "editor" && documents.Count == 2 && document.Walk().Count() == layout.Parts.Count);
         test.Check("bootstrap: and writes it back the same", () => CheckRoundTrip(document));
         test.Check("bootstrap: with stand-ins where it fills things in itself", () => document.PreviewCount >= 20);
@@ -428,9 +474,9 @@ internal sealed partial class HexScene
 
         /* Scrolling */
 
-        test.Hover(Part("tree_scroll"), 0.2f);
+        test.Hover(Part("tree_scroll"));
         test.Run(() => compositor.Scroll(-3));
-        test.Wait(0.2f);
+        test.Settle(0.2f);
         test.Check("scroll: the wheel scrolls the list under the pointer", () => Near(treeScroll.Offset, 3 * treeScroll.WheelStep));
 
         if (options.Wheel)
@@ -454,7 +500,7 @@ internal sealed partial class HexScene
             scaleAfter = Scales[(Array.IndexOf(Scales, scaleBefore) + 1) % Scales.Length];
         });
         Pick("View", () => DescribeScale(scaleAfter));
-        test.Wait(0.4f);
+        test.Settle(0.4f);
         test.Check("scale: the menu draws the editor and the layouts at the next size", () =>
             compositor.Scale == scaleAfter && compositor.UIScale == scaleAfter && stage.UIScale == scaleAfter);
         test.Check("scale: and the columns make do with the room that leaves", Fits);
@@ -463,7 +509,7 @@ internal sealed partial class HexScene
         test.Check("scale: buttons are still where they are drawn", () => layoutDebugger.IsOn);
         Pick("View", () => "Layout debugger");
         Pick("View", () => DescribeScale(scaleBefore));
-        test.Wait(0.4f);
+        test.Settle(0.4f);
         test.Check("scale: and back", () => compositor.UIScale == scaleBefore && Fits());
 
         /* The layout debugger */
@@ -471,6 +517,16 @@ internal sealed partial class HexScene
         Pick("View", () => "Layout debugger");
         test.Wait();
         test.Check("debugger: the menu switches the layout debugger on", () => layoutDebugger.IsOn && stage.LayoutOverlay == layoutDebugger.Options);
+
+        // Zoomed far in the layout is bigger than the canvas, and neither it nor the boxes the debugger draws
+        // about it may run on out of the canvas over the lists either side
+        test.Run(() => ZoomCanvas(8.0f, canvas.Bounds.Center));
+        test.Settle(0.4f);
+        test.Check("debugger: zoomed in, the layout and what is drawn about it are cut off at the canvas", () =>
+            document.Module.Clip is { } cut && Near(cut.Width * document.Module.Scale.X, canvas.Bounds.Width, 1.0f)
+            && Near(cut.Height * document.Module.Scale.Y, canvas.Bounds.Height, 1.0f) && document.Module.Frame.Width * document.Module.Scale.X > canvas.Bounds.Width);
+        test.Run(ZoomToFit);
+        test.Wait();
         Pick("View", () => "Layout debugger");
         test.Wait();
         test.Check("debugger: and off again", () => !layoutDebugger.IsOn && stage.LayoutOverlay is null);
@@ -489,7 +545,7 @@ internal sealed partial class HexScene
         Func<Vector2> Nothing() => Part("canvas", 0.04f, 0.5f);
 
         Pick("File", () => "New");
-        test.Wait(0.3f);
+        test.Settle(0.3f);
         test.Click(Kind("label"));
         test.Wait();
         test.Run(() => first = document.Selected);
@@ -511,6 +567,53 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("multiselect: ctrl and a click adds to what's selected", () =>
             document.Selection.Count == 2 && stage.Highlights.Count == 2 && treeRows[first!].Selected && treeRows[second!].Selected);
+
+        // The style of the button, picked out of the art of the skin. The button was picked last, the rows are its.
+        // Its row is a good way down the properties by now, so it is brought into view first
+        test.Run(() => inspectorScroll.ScrollIntoView(editors["style"]));
+        test.Wait();
+        test.Click(() => chrome.ToWorld(((TextBox)editors["style"]).ButtonBounds.Center));
+        test.Settle(0.3f);
+        test.Check("art: the button in the style box opens the art of the skin the layouts wear", () =>
+            artPicker is { IsOpen: true, Tiles.Count: > 10 } && editors["style"] is TextBox { HasButton: true });
+        test.Run(() => artPicker!.Filter = "button_flat");
+        test.Settle(0.3f);
+        test.Check("art: typing narrows it down", () => artPicker!.Tiles.Count is > 0 and < 40);
+        test.Click(() => chrome.ToWorld(artPicker!.Tiles[0].Bounds.Center));
+        test.Wait();
+        test.Check("art: a click on a piece picks it, for the box, the component and the code", () =>
+            !artPicker!.IsOpen && second is Button { Style: var style } && style.StartsWith("button_flat")
+            && ((TextBox)editors["style"]).Text == style && Code().Contains($"style: \"{style}\""));
+        test.Run(() => Set(second!, "style", new StringValue("button")));
+        test.Wait();
+
+        Vector2 firstAt = default;
+        test.Run(() =>
+        {
+            firstAt = first!.Position;
+            Set(second!, "intro", new StringValue("fade"));
+            Set(second!, "intro_delay", new NumberValue(0.5f));
+        });
+        test.Check("multiselect: a property changed in the inspector is changed for everything selected", () =>
+            first!.Intro == UIIntro.Fade && second!.Intro == UIIntro.Fade && Near(first.IntroDelay, 0.5f, 0.001f) && Near(second.IntroDelay, 0.5f, 0.001f));
+        test.Run(() => ((NumberBox)((StackPanel)editors["pos"]).Children[0]).OnValueChanged!(33));
+        test.Check("multiselect: one number of a position only changes that number for the rest", () =>
+            Near(second!.Position.X, 33) && Near(first!.Position.X, 33) && Near(first.Position.Y, firstAt.Y) && !Near(first.Position.Y, second.Position.Y, 20));
+        test.Run(() =>
+        {
+            Set(second!, "intro", new StringValue("none"));
+            Set(second!, "intro_delay", new NumberValue(0.0f));
+            document.SettleIntros();
+        });
+        test.Wait();
+
+        Pick("Arrange", () => "Left edges");
+        test.Wait();
+        test.Check("arrange: left edges puts two things on the one line", () =>
+            Near(first!.Bounds.Min.X, second!.Bounds.Min.X, 0.6f) && !Near(first.Bounds.Center.Y, second.Bounds.Center.Y, 20) && document.Selection.Count == 2);
+        Pick("Arrange", () => "Centres across");
+        test.Wait();
+        test.Check("arrange: and centres across puts their middles on it", () => Near(first!.Bounds.Center.X, second!.Bounds.Center.X, 0.6f));
 
         test.Run(() =>
         {
@@ -618,12 +721,204 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("close: a layout with changes asks first", () => chrome.Dialog is { IsOpen: true } && documents.Count == open);
 
+        // The question pops up, and while it is still growing its buttons are not yet where they will be
+        test.Settle(0.35f);
+
         // Where the answer is, remembered while the question is still up (the click takes it down)
         Vector2 dontSave = Vector2.Zero;
         test.Run(() => dontSave = chrome.Dialog is { } asked ? chrome.ToWorld(asked.Buttons[1].Bounds.Center) : Vector2.Zero);
         test.Click(() => dontSave);
         test.Wait();
         test.Check("close: and goes without saving when told to", () => chrome.Dialog is null && documents.Count == Math.Max(1, open - 1));
+
+        /* Dragging edges, of what is in the canvas and of the editor's own panels */
+
+        // A point of the editor or of the layout in the canvas, in their own units, as the pointer wants it
+        Func<Vector2> InChrome(Func<Vector2> point) => () => chrome.ToWorld(point());
+        Func<Vector2> InLayout(Func<Vector2> point) => () => document.Module.ToWorld(point());
+
+        UIComponent? box = null;
+        Vector2 boxSize = default, boxAt = default;
+        Pick("File", () => "New");
+        test.Settle(0.3f);
+        test.Click(Kind("panel"));
+        test.Wait();
+        test.Run(() =>
+        {
+            box = document.Selected;
+            Set(box!, "size", new Vector2Value(new Vector2(200, 120)));
+        });
+        test.Wait();
+        test.Run(() => boxSize = box!.Bounds.Size);
+        test.Check("handles: the one thing that is selected has a tab on every edge", () =>
+            box is Panel && stage.Highlighted == box && stage.HighlightGrips == UIResize.All && Near(boxSize.X, 200) && Near(boxSize.Y, 120));
+
+        test.Hover(InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)));
+        test.Check("handles: and the one under the pointer is lit", () => stage.HighlightLitGrips == UIResize.Right);
+        test.Drag(
+            InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)),
+            InLayout(() => new Vector2(box!.Bounds.Center.X + boxSize.X * 0.5f - 2 + 60, box.Bounds.Center.Y)));
+        test.Wait();
+        test.Check("handles: dragging the right edge makes it that much wider and no taller, code and all", () =>
+            Near(box!.Size.X, 260, 1.5f) && Near(box.Size.Y, 120) && Code().Contains("size: vec(") && !dragging);
+
+        test.Run(() => boxSize = box!.Bounds.Size);
+        test.Drag(
+            InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Max.Y - 2)),
+            InLayout(() => new Vector2(box!.Bounds.Max.X - 2 + 30, box.Bounds.Max.Y - 2 + 40)));
+        test.Wait();
+        test.Check("handles: a corner drags both", () => box!.Size.X > boxSize.X + 10 && box.Size.Y > boxSize.Y + 10);
+
+        test.Run(() => settings.Snap = 8.0f);
+        test.Drag(
+            InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)),
+            InLayout(() => new Vector2(box!.Bounds.Max.X - 2 + 21, box.Bounds.Center.Y)));
+        test.Wait();
+        test.Check("snap: with a grid a size lands on it", () => Near(box!.Size.X % 8.0f, 0.0f, 0.01f));
+        test.Run(() => boxAt = box!.Position);
+        test.Drag(At(() => box), InLayout(() => box!.Bounds.Center + new Vector2(21, 0)));
+        test.Wait();
+        test.Check("snap: and so does a move, by whole steps of it", () =>
+            box!.Position.X > boxAt.X && Near((box.Position.X - boxAt.X) % 8.0f, 0.0f, 0.01f) && Near(box.Position.Y, boxAt.Y));
+        test.Run(() => settings.Snap = 0.0f);
+
+        test.Run(() => settings.CanvasHandles = false);
+        test.Hover(InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)));
+        test.Check("handles: switched off there are none", () => stage.HighlightGrips == UIResize.None && stage.HighlightLitGrips == UIResize.None);
+        test.Run(() => settings.CanvasHandles = true);
+
+        test.Run(() => Set(box!, "resize", new StringValue("right, bottom")));
+        test.Wait();
+        test.Check("resize: a component that can be dragged in a game says so in its code", () =>
+            box!.Resizable == (UIResize.Right | UIResize.Bottom) && Code().Contains("resize: \"right, bottom\""));
+        test.Check("resize: and writes back the same", () => CheckRoundTrip(document));
+
+        float listWide = 0, canvasTall = 0;
+        test.Run(() =>
+        {
+            listWide = treeScroll.Size.X;
+            canvasTall = canvas.Size.Y;
+        });
+        test.Hover(InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)));
+        test.Check("panels: the edge between the lists and the canvas lights up under the pointer", () => treeScroll.ActiveGrip == UIResize.Right);
+        test.Drag(
+            InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)),
+            InChrome(() => new Vector2(treeScroll.Bounds.Min.X + listWide + 4 + 70, treeScroll.Bounds.Center.Y)));
+        test.Wait();
+        test.Check("panels: dragging it makes the lists wider and the canvas make do", () =>
+            Near(treeScroll.Size.X, listWide + 70, 2) && Near(settings.LeftWidth, treeScroll.Size.X) && Fits() && !treeScroll.IsResizing);
+        test.Check("panels: and nothing in the canvas was touched by it", () => document.Selected == box && !dragging);
+        test.Check("panels: the rows of the list and the buttons over it are as wide as the list is now", () =>
+            tree.Children.Count > 0 && tree.Children.All(row => Near(row.Size.X, treeScroll.Size.X - 24, 1))
+            && Near(paletteButtons[0].Size.X * 2 + 4, treeScroll.Size.X, 2) && tree.Children[0].Bounds.Max.X <= treeScroll.Bounds.Max.X);
+
+        // The properties on the other side, dragged by their left edge. What a property is set with gets the room
+        // Where to take hold of it is read once, before it moves. Asked for again on the way the edge has gone
+        // along with the pointer and the layout is a tick behind, and the drag comes up short
+        float propertiesWide = 0, editorWide = 0;
+        Vector2 propertiesEdge = default;
+        test.Run(() =>
+        {
+            propertiesWide = inspectorScroll.Size.X;
+            editorWide = editors["name"].Bounds.Width;
+            propertiesEdge = new Vector2(inspectorScroll.Bounds.Min.X - 4, inspectorScroll.Bounds.Center.Y);
+        });
+        test.Drag(InChrome(() => propertiesEdge), InChrome(() => propertiesEdge - new Vector2(90, 0)));
+        test.Wait();
+        test.Check("panels: dragging the properties wider makes what is in them wider with them", () =>
+            Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(editors["name"].Bounds.Width, editorWide + 90, 2)
+            && editors["name"].Bounds.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits());
+        test.Check("panels: every kind of editor in them, the ones that are two and four numbers across as well", () =>
+            editors["pos"] is StackPanel pair && Near(pair.Bounds.Width, editors["name"].Bounds.Width, 2)
+            && editors["padding"] is StackPanel four && Near(four.Bounds.Width, editors["name"].Bounds.Width, 2));
+
+        // The canvas got narrower twice over and is the shape of a screen, so it is lower than it started as
+        float narrowTall = 0, narrowCode = 0;
+        Vector2 canvasEdge = default;
+        test.Run(() =>
+        {
+            narrowTall = canvas.Size.Y;
+            narrowCode = codeScroll.Size.Y;
+            canvasEdge = new Vector2(canvas.Bounds.Center.X, canvas.Bounds.Min.Y - 4);
+        });
+        test.Drag(InChrome(() => canvasEdge), InChrome(() => canvasEdge - new Vector2(0, 50)));
+        test.Wait();
+        test.Check("panels: the bottom of the canvas drags it taller, out of the room the code had", () =>
+            canvas.Size.Y > narrowTall + 30 && codeScroll.Size.Y < narrowCode - 30 && Fits());
+
+        test.Run(ResetPanels);
+        test.Wait();
+        test.Check("panels: and they go back to what they come as", () =>
+            Near(treeScroll.Size.X, listWide, 1) && Near(canvas.Size.Y, canvasTall, 2) && settings.LeftWidth == 0.0f && Fits());
+
+        /* The settings, and the skins */
+
+        UIDialog? asking = null;
+        UIComponent Setting(int row) => ((StackPanel)asking!.Body.Children[row]).Children[1];
+
+        Pick("File", () => "Settings...");
+        test.Settle(0.4f);
+        test.Check("settings: the file menu opens them, a row for everything there is to set", () =>
+            (asking = settingsDialog) is { IsOpen: true } && chrome.Dialog == asking && asking.Body.Children.Count >= 7
+            && Setting(0) is Selector { Value: "dark" } && Setting(2) is SkinPicker);
+
+        test.Click(At(() => Setting(0), 0.9f));
+        test.Settle(0.3f);
+        test.Check("settings: the editor goes into the next theme of its skin there and then", () =>
+            settings.EditorTheme != "dark" && compositor.Skin?.Theme == settings.EditorTheme && Setting(0) is Selector { Value: var shown } && shown == settings.EditorTheme);
+        test.Check("settings: boxes, background and all", () =>
+            compositor.Skin is { } worn && treeScroll.Color == worn.PanelColor with { W = 1.0f });
+        test.Run(() => UseEditorTheme("light", save: false));
+        test.Settle(0.3f);
+        test.Check("settings: the light one is light, and what the editor says quietly can still be read on it", () =>
+            compositor.Skin is { Theme: "light", PanelColor.X: > 0.8f, TextColor.X: < 0.3f } && DimColor.X < 0.3f);
+        test.Run(() => UseEditorTheme("dark", save: false));
+
+        test.Click(At(() => Setting(3), 0.9f));
+        test.Wait();
+        test.Check("settings: the grid is one of a few", () => settings.Snap == HexSettings.Grids[1]);
+        test.Run(() => settings.Snap = 0.0f);
+
+        test.Click(At(() => Setting(4), 0.1f));
+        test.Wait();
+        test.Check("settings: the resize handles switch off", () => !settings.CanvasHandles && Setting(4) is ToggleButton { State: false, Label: "off" });
+        test.Click(At(() => Setting(4), 0.1f));
+        test.Wait();
+        test.Check("settings: and on again", () => settings.CanvasHandles);
+
+        test.Click(At(() => ((SkinPicker)Setting(2)).Skins, 0.92f));
+        test.Settle(0.4f);
+        test.Check("settings: the layouts go into the next skin, the editor stays in its own", () =>
+            UISkins.Current.Name != UISkins.DEFAULT && stage.Skin is { } worn && !ReferenceEquals(worn, compositor.Skin)
+            && stage.FollowsSkins && !compositor.FollowsSkins);
+
+        Vector2 done = Vector2.Zero;
+        test.Run(() => done = chrome.ToWorld(asking!.Buttons[0].Bounds.Center));
+        test.Click(() => done);
+        test.Wait();
+        test.Check("settings: done closes them", () => settingsDialog is null && chrome.Dialog is null);
+
+        foreach (UISkinChoice skin in UISkins.Available)
+        {
+            // Every skin there is by its line of the menu, in the first and the last of its themes. Every theme
+            // of every skin is the business of the check-ui-skins scene of the examples, which doesn't have to
+            // open a menu thirty times to get at them
+            string?[] themes = skin.Themes.Count > 0 ? [.. new[] { skin.Themes[0], skin.Themes[^1] }.Distinct()] : [null];
+            foreach (string? theme in themes)
+            {
+                Pick("Skin", () => theme is null ? skin.Title : $"{skin.Title}, {theme}");
+                test.WaitFor(() => stage.Skin is { } worn && worn.Theme == (theme ?? worn.Theme) && UISkins.Current == skin && !worn.HasPendingArt, 2.0f);
+                test.Wait();
+                test.Check($"skins: {skin.Name}{(theme is null ? string.Empty : " in " + theme)} comes up, with art for a button and a panel, or a colour for them", () =>
+                    UISkins.Current == skin && stage.Skin is { } worn && (theme is null || worn.Theme == theme)
+                    && (worn.Sheet is null || (worn.Sheet.TryGetSprite("button", worn.Theme, out _) && worn.Sheet.TryGetSprite("panel", worn.Theme, out _)))
+                    && box!.Bounds.Width > 0);
+            }
+        }
+
+        test.Run(() => UISkins.Use(UISkins.DEFAULT));
+        test.Settle(0.3f);
+        test.Check("skins: and back to the one games come in", () => UISkins.Current.Name == UISkins.DEFAULT && stage.Skin is { Sheet: not null });
 
         test.Hover(Part("canvas", 0.04f, 0.06f));
     }

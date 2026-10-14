@@ -50,7 +50,7 @@ internal sealed partial class HexScene
             if (plain)
                 stage.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN);
             else
-                stage.SetSkin(UICompositor.DEFAULT_SKIN_DIRECTORY, UICompositor.DEFAULT_SKIN_FILE);
+                stage.FollowSkins();
         }
 
         // Only the layout that is being worked on is on screen

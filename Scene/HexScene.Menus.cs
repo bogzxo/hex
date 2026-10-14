@@ -5,6 +5,7 @@ using Horizon.HIDL.Runtime;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Skinning;
 
 using Key = Silk.NET.Input.Key;
 
@@ -28,6 +29,21 @@ internal sealed partial class HexScene
             button.OnPressed = () => AddComponentOf(kind);
             paletteButtons.Add(button);
         }
+
+        // The buttons over the tree, the things done to it most without going up to a menu for them
+        void Tool(string name, string tip, Action pressed)
+        {
+            var button = layout.Get<Button>(name);
+            button.Tooltip = tip;
+            button.OnPressed = pressed;
+        }
+
+        Tool("move_up", "Move up the tree, earlier among its siblings (Ctrl+Up)", () => MoveSelected(-1));
+        Tool("move_down", "Move down the tree, later among its siblings (Ctrl+Down)", () => MoveSelected(1));
+        Tool("move_out", "Move out of the container it is in (Ctrl+Left)", () => MoveSelectedAcross(inwards: false));
+        Tool("move_in", "Move into the container before it (Ctrl+Right)", () => MoveSelectedAcross(inwards: true));
+        Tool("duplicate", "Make a copy next to it (Ctrl+D)", DuplicateSelected);
+        Tool("remove", "Delete it and everything in it (Del)", DeleteAll);
     }
 
     /// <summary>
@@ -54,6 +70,10 @@ internal sealed partial class HexScene
         "tabs" => "Pages with a strip of tabs along the top",
         "divider" => "A line between things",
         "spacer" => "Nothing, of a size, for a gap",
+        "readout" => "A number that changes all the time, and what it is counted in",
+        "meter" => "A thin line that says how full something is",
+        "graph" => "The last so many of something as bars",
+        "segments" => "One bar cut up by how much of a whole things are",
         _ => string.Empty
     };
 
@@ -74,6 +94,18 @@ internal sealed partial class HexScene
 
         shortcuts.Add(Key.Delete, DeleteAll);
 
+        // The clipboard, which a text box keeps for itself while it is being typed into
+        shortcuts.Add(Key.C, CopySelected, control: true);
+        shortcuts.Add(Key.X, CutSelected, control: true);
+        shortcuts.Add(Key.V, Paste, control: true);
+        shortcuts.Add(Key.Comma, OpenSettings, control: true);
+
+        // With control the arrows move it about the tree instead of about the canvas
+        shortcuts.Add(Key.Up, () => MoveSelected(-1), control: true);
+        shortcuts.Add(Key.Down, () => MoveSelected(1), control: true);
+        shortcuts.Add(Key.Left, () => MoveSelectedAcross(inwards: false), control: true);
+        shortcuts.Add(Key.Right, () => MoveSelectedAcross(inwards: true), control: true);
+
         // The arrows move whatever is selected a pixel at a time, for lining things up by eye
         shortcuts.Add(Key.Left, () => Nudge(-1, 0));
         shortcuts.Add(Key.Right, () => Nudge(1, 0));
@@ -90,10 +122,18 @@ internal sealed partial class HexScene
         edit.Add("Undo", Undo, "Ctrl+Z").IsEnabled = () => document.CanUndo || recordPending;
         edit.Add("Redo", Redo, "Ctrl+Y").IsEnabled = () => document.CanRedo;
         edit.AddSeparator();
-        edit.Add("Move up", () => MoveSelected(-1)).IsEnabled = () => document.Selected is not null;
-        edit.Add("Move down", () => MoveSelected(1)).IsEnabled = () => document.Selected is not null;
-        edit.Add("Delete", DeleteAll, "Del").IsEnabled = () => document.Selected is not null;
+        edit.Add("Cut", CutSelected, "Ctrl+X").IsEnabled = () => document.Selected is not null;
+        edit.Add("Copy", CopySelected, "Ctrl+C").IsEnabled = () => document.Selected is not null;
+        edit.Add("Paste", Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
         edit.Add("Duplicate", DuplicateSelected, "Ctrl+D").IsEnabled = () => document.Selected is not null;
+        edit.Add("Delete", DeleteAll, "Del").IsEnabled = () => document.Selected is not null;
+        edit.AddSeparator();
+
+        // Where it is in the tree, which in a stack is where it is laid out
+        edit.Add("Move up", () => MoveSelected(-1), "Ctrl+Up").IsEnabled = () => document.Selected is not null;
+        edit.Add("Move down", () => MoveSelected(1), "Ctrl+Down").IsEnabled = () => document.Selected is not null;
+        edit.Add("Move out", () => MoveSelectedAcross(inwards: false), "Ctrl+Left").IsEnabled = () => document.Selected is not null;
+        edit.Add("Move into", () => MoveSelectedAcross(inwards: true), "Ctrl+Right").IsEnabled = () => document.Selected is not null;
         edit.AddSeparator();
         edit.Add("Group", GroupSelected, "Ctrl+G").IsEnabled = () => document.Selected is not null;
         edit.Add("Ungroup", UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
@@ -103,6 +143,20 @@ internal sealed partial class HexScene
         edit.AddSeparator();
         edit.Add("Select all", SelectAll, "Ctrl+A");
         edit.Add("Select nothing", () => Select(null), "Esc").IsEnabled = () => document.Selected is not null;
+
+        // Lining up is against each other with several things selected, against the container with one
+        Menu arrange = menu.AddMenu("Arrange");
+        Func<bool> some = () => document.Selected is not null;
+        arrange.Add("Left edges", () => Align(Edge.Left)).IsEnabled = some;
+        arrange.Add("Centres across", () => Align(Edge.Center)).IsEnabled = some;
+        arrange.Add("Right edges", () => Align(Edge.Right)).IsEnabled = some;
+        arrange.AddSeparator();
+        arrange.Add("Top edges", () => Align(Edge.Top)).IsEnabled = some;
+        arrange.Add("Middles", () => Align(Edge.Middle)).IsEnabled = some;
+        arrange.Add("Bottom edges", () => Align(Edge.Bottom)).IsEnabled = some;
+        arrange.AddSeparator();
+        arrange.Add("Space out across", () => Distribute(horizontally: true)).IsEnabled = () => document.Selection.Count >= 3;
+        arrange.Add("Space out up and down", () => Distribute(horizontally: false)).IsEnabled = () => document.Selection.Count >= 3;
 
         Menu view = menu.AddMenu("View");
         view.Add("Play intros", () => document.PlayIntros());
@@ -120,6 +174,34 @@ internal sealed partial class HexScene
         // The sizes it can be are the ones the editor knows how to lay itself out at
         foreach (float scale in Scales)
             view.Add(DescribeScale(scale), () => SetScale(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
+
+        // The skin the layouts are shown in, every one there is under Assets/uix and every theme of each. It is the
+        // game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set to
+        // the same, and the editor itself stays in its flat one
+        Menu skins = menu.AddMenu("Skin");
+        foreach (UISkinChoice skin in UISkins.Available)
+        {
+            if (skin.Themes.Count == 0)
+            {
+                skins.Add(skin.Title, () => UseSkin(skin, null)).IsChecked = () => UISkins.Current == skin;
+                continue;
+            }
+
+            foreach (string theme in skin.Themes)
+            {
+                skins.Add($"{skin.Title}, {theme}", () => UseSkin(skin, theme)).IsChecked =
+                    () => UISkins.Current == skin && (UISkins.Theme ?? skin.UsualTheme) == theme;
+            }
+
+            skins.AddSeparator();
+        }
+    }
+
+    /// <summary>Helper method to show the layouts in another skin, the one a game would be set to.</summary>
+    private void UseSkin(UISkinChoice skin, string? theme)
+    {
+        UISkins.Use(skin, theme);
+        Say(theme is null ? $"layouts are shown in {skin.Title}" : $"layouts are shown in {skin.Title}, {theme}");
     }
 
     /// <summary>
@@ -136,6 +218,8 @@ internal sealed partial class HexScene
         fileMenu.Add("Save", Save, "Ctrl+S");
         fileMenu.Add("Save as...", SaveAs);
         fileMenu.Add("Close", Close, "Ctrl+W");
+        fileMenu.AddSeparator();
+        fileMenu.Add("Settings...", OpenSettings, "Ctrl+,");
 
         if (recent.Count > 0)
         {

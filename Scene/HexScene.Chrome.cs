@@ -65,6 +65,52 @@ internal sealed partial class HexScene
     /// the left and the inspector the height their columns have to spare, the canvas and the code the width
     /// between the two and the height between them. Everything else keeps the size its layout gives it.
     /// </summary>
+    // How much narrower than its list a row of it is, the room the scroll bar, the gap next to it and the
+    // padding take
+    private const float ROW_MARGIN = 24.0f;
+
+    // How wide the lists and the properties were the last time what is in them was fitted to that
+    private float fittedLeft, fittedRight;
+
+    /// <summary>
+    /// Helper method to have what is in the panels on either side be as wide as the panels, which can be dragged
+    /// wider and narrower. The rows of the lists and the buttons over them are simply given the width, the
+    /// properties are put together again, every kind of editor in them shares its row out its own way.
+    /// </summary>
+    private void FitRows(float leftWidth, float rightWidth)
+    {
+        if (rightWidth != fittedRight)
+        {
+            fittedRight = rightWidth;
+            inspectorDirty = true;
+        }
+
+        // The rows are made anew at the width their template has whenever the list changes, so they are looked
+        // at every time. Counted through by number, a foreach would make something to go through them with
+        float row = MathF.Max(MIN_FLEXIBLE, leftWidth - ROW_MARGIN);
+        Widen(tree.Children, row);
+        Widen(layers.Children, row);
+
+        if (leftWidth == fittedLeft)
+            return;
+
+        fittedLeft = leftWidth;
+
+        // Two to a line, with the gap of their grid between them
+        float button = MathF.Floor((leftWidth - 4.0f) * 0.5f);
+        for (int i = 0; i < paletteButtons.Count; i++)
+            paletteButtons[i].Size = paletteButtons[i].Size with { X = button };
+    }
+
+    private static void Widen(IReadOnlyList<UIComponent> rows, float width)
+    {
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Size.X != width)
+                rows[i].Size = rows[i].Size with { X = width };
+        }
+    }
+
     private void FitChrome()
     {
         UIRect screen = chrome.Root.Bounds;
@@ -85,12 +131,19 @@ internal sealed partial class HexScene
         float Spoken(StackPanel column, params UIComponent[] flexible) =>
             column.Bounds.Height - flexible.Sum(part => part.Bounds.Height);
 
+        // The layers under the list are as wide as the list, whichever way that was dragged
+        layersScroll.Size = layersScroll.Size with { X = leftWidth };
         treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
         status.Size = new Vector2(screen.Width - root.Padding.Total.X, status.Size.Y);
 
-        // The canvas is the shape of the screen the layouts are made for, as long as that leaves room for the code
-        float canvasHeight = MathF.Min(centerWidth * DesignSize.Y / DesignSize.X, height * CANVAS_SHARE);
+        FitRows(leftWidth, rightWidth);
+
+        // The canvas is the shape of the screen the layouts are made for, as long as that leaves room for the code.
+        // Unless its bottom edge was dragged, then it is as tall as it was left, as long as that leaves the code some
+        float canvasHeight = settings.CanvasHeight > 0.0f
+            ? MathF.Min(settings.CanvasHeight, height - Spoken(center, canvas, codeScroll) - MIN_FLEXIBLE)
+            : MathF.Min(centerWidth * DesignSize.Y / DesignSize.X, height * CANVAS_SHARE);
 
         canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, canvasHeight));
         codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas, codeScroll) - canvas.Size.Y));
