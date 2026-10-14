@@ -1,0 +1,4 @@
+// What is behind the layouts in the canvas, the first module of the stage, as big as the canvas (see PlaceCanvas).
+#define layout
+
+let backdrop = compositor.panel({ fill: "both", color: vec(0.02, 0.02, 0.03, 1) });

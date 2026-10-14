@@ -1,0 +1,15 @@
+// The editor of a colour, picked by eye on top and its four numbers underneath for when they have to be exact.
+#define layout
+
+let both = compositor.stack({ spacing: 4 });
+
+let picker = compositor.color_picker({
+    parent: both,
+    size: vec(220, 112)
+});
+
+let row = compositor.stack({ parent: both, direction: "horizontal", spacing: 4 });
+let a = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
+let b = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
+let c = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
+let d = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });

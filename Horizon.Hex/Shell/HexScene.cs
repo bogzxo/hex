@@ -23,6 +23,7 @@ internal sealed partial class HexScene : Scene
     // The skin of the editor itself, flat and without any art. See the file for what it looks like and why
     private const string TOOL_SKIN_DIRECTORY = "Assets/uix/flat/";
     private const string TOOL_SKIN = "skin.hor";
+    private const string TOOL_SKIN_NAME = "flat";
 
     // Where the editor keeps how big it was last asked to draw itself, next to its executable.
     private const string SCALE_FILE = "hex_ui_scale.txt";
@@ -83,13 +84,18 @@ internal sealed partial class HexScene : Scene
 
     // How wide what a property is set with is, which is whatever the properties have left next to what it is
     // called. They can be dragged wider (see HexScene.Settings). What is taken off is the padding either side (8
-    // and 8), the name and the gap after it (128 and 6), and the scroll bar with the gap it keeps (6 and 6). It
-    // was 14 short of that once and every editor ran on under the bar
-    private const float EDITOR_MARGIN = 162;
+    // and 8), the name and the gap after it (CaptionWidth and 6), and the scroll bar with the gap it keeps (6 and 6).
+    // It was 14 short of that once and every editor ran on under the bar
+    private const float EDITOR_MARGIN = 34;
     private const float MIN_EDITOR_WIDTH = 96;
-    private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN);
+
+    // The name of a property takes a share of the row and the editor the rest, the name had a fixed 128 once and the
+    // editors were squeezed into what a narrow panel had left, the way round nobody wants it
+    private const float CAPTION_SHARE = 0.3f, MIN_CAPTION = 70, MAX_CAPTION = 112;
+    private float CaptionWidth => MathF.Round(Math.Clamp(inspectorScroll.Size.X * CAPTION_SHARE, MIN_CAPTION, MAX_CAPTION));
+    private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN - CaptionWidth);
     private const float EDITOR_HEIGHT = 28;
-    private const float EDITOR_TEXT = 0.125f;
+    private const float EDITOR_TEXT = 0.14f;
     private const float PICKER_HEIGHT = 112;
 
     // What is said quietly, the colour the editor's skin writes in turned down. Not a colour of its own, the
@@ -108,8 +114,8 @@ internal sealed partial class HexScene : Scene
 
     // The parts of the editor's own layout, found by name
     private readonly TextBox nameBox;
-    private readonly StackPanel root, toolbar, body, left, center, right;
-    private readonly StackPanel tabs, tree, inspector, layers;
+    private readonly StackPanel root, top, toolbar, body, activity, left, center, right;
+    private readonly StackPanel tree, inspector, layers;
     private readonly MenuBar menu;
     private readonly HexLayoutDebugger layoutDebugger;
     private Menu fileMenu = null!;
@@ -120,8 +126,7 @@ internal sealed partial class HexScene : Scene
     private static readonly Vector4 CanvasColor = new(0.02f, 0.02f, 0.03f, 1.0f);
     private readonly ScrollPanel treeScroll, inspectorScroll;
     private readonly Panel codeScroll;
-    private readonly Label codeTitle;
-    private readonly Label status, treeTitle, coords;
+    private readonly Label treeTitle;
     
     // The layouts that were opened or saved last, the latest first
     private readonly List<string> recent = [];
@@ -144,9 +149,16 @@ internal sealed partial class HexScene : Scene
     // What has to be put together again before the next frame, so a click never rebuilds what it is in the middle of
     private bool tabsDirty = true, treeDirty = true, inspectorDirty = true, codeDirty = true;
 
-    // Opening a layout. The list on the left shows the files of a folder rather than the components of the layout
-    private bool browsing;
+    // Where files are opened from and new ones saved to without a workspace
     private string browseDirectory;
+
+    // How often the code of a layout is written again while it is out of sight, and how long until it is next
+    private const float HIDDEN_CODE_EVERY = 0.1f;
+    private float codeWait;
+    private bool codeShown;
+
+    // The files that were told what #define layout does to them and saved anyway, they aren't asked twice
+    private readonly HashSet<string> layoutWarned = new(StringComparer.OrdinalIgnoreCase);
 
     // What the lists on screen are showing right now, by what they stand for
     private readonly List<Button> paletteButtons = [];
@@ -175,7 +187,6 @@ internal sealed partial class HexScene : Scene
         camera = AddEntity(new Camera2D(Engine.WindowManager.ViewportSize));
         ActiveCamera = camera;
 
-
         // The layouts first and the editor over them. The canvas is a hole in the editor they are seen through, so the
         // menus, lists and dialogs of the editor come out on top of them rather than under. What is dark behind the
         // layouts is a module of the stage itself, the first one, see PlaceCanvas
@@ -184,7 +195,10 @@ internal sealed partial class HexScene : Scene
         backdrop = stage.CreateModule();
         backdrop.ShowInLayoutDebugger = false;
         backdrop.Interactive = false;
-        backdrop.AddComponent(new Panel { Fill = UIFill.Both, Color = CanvasColor });
+        backdrop.LoadLayout("Assets/hex/backdrop.hor");
+
+        // What the editor says, before anything of it is shown, its layouts name the texts by key
+        ReadStrings();
 
         // Bootstrapping. The editor is made of the same thing it makes
         chrome = compositor.CreateModule();
@@ -192,40 +206,44 @@ internal sealed partial class HexScene : Scene
         layout = chrome.LoadLayout(EDITOR_LAYOUT);
 
         root = layout.Get<StackPanel>("root");
+        top = layout.Get<StackPanel>("top");
         toolbar = layout.Get<StackPanel>("toolbar");
         body = layout.Get<StackPanel>("body");
+        activity = layout.Get<StackPanel>("activity");
         left = layout.Get<StackPanel>("left");
         center = layout.Get<StackPanel>("center");
         right = layout.Get<StackPanel>("right");
         codeScroll = layout.Get<Panel>("code_scroll");
-        codeTitle = layout.Get<Label>("code_title");
         menu = layout.Get<MenuBar>("menu");
         layers = layout.Get<StackPanel>("layers");
 
         nameBox = layout.Get<TextBox>("name_box");
-        layout.Get<Button>("play_button").OnPressed = PlayIntros;
-        tabs = layout.Get<StackPanel>("tabs");
         tree = layout.Get<StackPanel>("tree");
         treeTitle = layout.Get<Label>("tree_title");
         treeScroll = layout.Get<ScrollPanel>("tree_scroll");
         inspector = layout.Get<StackPanel>("inspector");
         inspectorScroll = layout.Get<ScrollPanel>("inspector_scroll");
         canvas = layout.Get<Panel>("canvas");
-        status = layout.Get<Label>("status");
-        coords = layout.Get<Label>("coords");
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        BuildStatusBar();
+        BuildPanel();
+        BuildTabs();
 
         recent.AddRange(ReadRecent());
         BuildMenus();
-        BuildLayoutMenu();
         BuildShortcuts();
         BuildSelectionShortcuts();
         WireViews();
+        WireToolbar();
+        WireActivityBar();
 
         // A right click on the canvas that nothing of the editor took is a menu for what's there
         compositor.ContextRequested = OnContextRequested;
+
+        // The window has no frame of the system's, the title bar is the editor's and so are the edges
+        compositor.ResizesWindow = true;
 
         SetScale(options.Scale ?? ReadScale() ?? ScaleFor(Engine.WindowManager.ViewportSize), remember: false);
 
@@ -262,19 +280,17 @@ internal sealed partial class HexScene : Scene
         Engine.Graphics.ClearColor = new Vector4(0.065f, 0.07f, 0.092f, 1.0f);
     }
 
-    private void ToggleBrowsing()
-    {
-        browsing = !browsing;
-        treeDirty = true;
-
-        if (browsing)
-            Say($"files of {browseDirectory}");
-    }
+    /// <summary>Says something in the status bar, and keeps it in the output under the editor.</summary>
+    // When Hex last said something, and how long that stays in the status bar
+    private long saidAt;
+    private const long SAID_FOR = 10_000;
 
     private void Say(string message, bool error = false)
     {
-        status.Text = message.Replace('[', '(').Replace(']', ')');
-        status.Color = error ? ErrorColor : DimColor;
+        saidAt = System.Environment.TickCount64;
+        messageItem.Text = (error ? "$(error) " : string.Empty) + Plain(message);
+        messageItem.Color = error ? ErrorColor : null;
+        Note(message, error);
     }
 
     /* Every frame */
@@ -289,13 +305,13 @@ internal sealed partial class HexScene : Scene
         if (options.Check.Length > 0 && !checksDone)
             RunChecks();
 
-        UpdateDialog();
-        UpdateClosing();
-        ColourChrome();
-        FitChrome();
-        PlaceCanvas();
-        UpdateCanvasPointer();
-        UpdateHistory(dt);
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateDialog(); Probe("UpdateDialog", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateClosing(); Probe("UpdateClosing", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); ColourChrome(); Probe("ColourChrome", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); FitChrome(); Probe("FitChrome", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); PlaceCanvas(); Probe("PlaceCanvas", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateCanvasPointer(); Probe("UpdateCanvasPointer", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateHistory(dt); Probe("UpdateHistory", probeAt); } // PROBE
 
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
@@ -304,20 +320,47 @@ internal sealed partial class HexScene : Scene
             settleTimer = SETTLE_TIME;
         }
 
-        if (codeDirty) ShowCode();
+        // The code of a layout is written again for every change, every tick of a drag. Out of sight in the designer it is
+        // written at most every so often, the change waits, in sight it is written as it happens
+        codeWait -= dt;
+        if (codeDirty && (!LayoutTools || codeWait <= 0.0f))
+        {
+            ShowCode();
+            codeWait = HIDDEN_CODE_EVERY;
+            codeShown = true;
+        }
 
-        RevealInTree();
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); RevealInTree(); Probe("RevealInTree", probeAt); } // PROBE
 
         if (tabsDirty) RebuildTabs();
         if (treeDirty) RebuildTree();
         if (inspectorDirty) RebuildInspector();
 
-        tabsDirty = treeDirty = inspectorDirty = codeDirty = false;
+        tabsDirty = treeDirty = inspectorDirty = false;
+        if (codeShown)
+            codeDirty = codeShown = false;
 
-        base.UpdateState(dt);
+        UpdatePanel(dt);
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateStatusBar(); Probe("UpdateStatusBar", probeAt); } // PROBE
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateCrumbs(); Probe("UpdateCrumbs", probeAt); } // PROBE
+
+        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); base.UpdateState(dt); Probe("base.UpdateState", probeAt); } // PROBE
 
         UpdateSelfTest(dt);
     }
+    // PROBE
+    private readonly Dictionary<string, long> probed = []; // PROBE
+    private double probeLast; // PROBE
+    private void Probe(string step, long at) // PROBE
+    { // PROBE
+        probed[step] = probed.GetValueOrDefault(step) + System.GC.GetAllocatedBytesForCurrentThread() - at; // PROBE
+        double now = System.Environment.TickCount64 / 1000.0; // PROBE
+        if (now - probeLast < 3.0) return; // PROBE
+        probeLast = now; // PROBE
+        System.Console.WriteLine("[PROBE] " + string.Join(", ", probed.Where(pair => pair.Value > 0).Select(pair => $"{pair.Key} {pair.Value}"))); // PROBE
+        probed.Clear(); // PROBE
+    } // PROBE
+
 
     /// <summary>
     /// Helper method to put the code of the layout on screen, and to work out whether it is still what is in its file.
@@ -331,7 +374,7 @@ internal sealed partial class HexScene : Scene
             SetCode(document, written, fresh: false);
 
         // The tab of a layout says so when there is something to save
-        bool modified = written != document.SavedCode || document.CodeEdited;
+        bool modified = written != document.SavedCode || document.CodeEdited || document.CrLf != document.SavedCrLf;
         if (modified != document.Modified)
         {
             document.Modified = modified;
@@ -352,7 +395,7 @@ internal sealed partial class HexScene : Scene
         {
             pointerWasDown = pointer.Down;
             dragging = false;
-            coords.Text = string.Empty;
+            ShowCoords(false, default);
             return;
         }
 
@@ -367,11 +410,11 @@ internal sealed partial class HexScene : Scene
         // Not over the canvas if a menu of the editor is in the way of it
         // Nor if a question or the menu of art is up over it, a click on those is not a click on the layout
         // Nor on the bottom edge of the canvas itself, which is dragged to make it taller
-        bool overCanvas = canvas.Bounds.Contains(inChrome) && chrome.Popup is null && chrome.Dialog is null && artPicker is not { IsOpen: true }
+        bool overCanvas = PointerOnCanvas(pointer.Position) && chrome.Popup is null && chrome.Dialog is null && artPicker is not { IsOpen: true }
             && canvas.ActiveGrip == UIResize.None && !canvas.IsResizing;
 
         // Where the pointer is in the layout, in its own units, for lining things up by number
-        coords.Text = overCanvas ? $"{inLayout.X:0}, {inLayout.Y:0}" : string.Empty;
+        ShowCoords(overCanvas, inLayout);
 
         // The hover of what is pointed at, so it can be seen while it is set up. Not while it is being dragged about
         HoldHover(overCanvas && !dragging ? document.Module.FindAt(pointer.Position) : null);
@@ -439,10 +482,38 @@ internal sealed partial class HexScene : Scene
         }
     }
 
+    // Where the pointer was last said to be, in whole units of the layout, null for off the canvas
+    private (int X, int Y)? coordsShown;
+
+    /// <summary>Says where the pointer is in the layout, made into text only when it has moved a whole unit.</summary>
+    private void ShowCoords(bool over, Vector2 at)
+    {
+        (int X, int Y)? now = over ? ((int)MathF.Round(at.X), (int)MathF.Round(at.Y)) : null;
+        if (now == coordsShown)
+            return;
+
+        coordsShown = now;
+        coordsItem.Text = now is var (x, y) ? $"$(location) {x}, {y}" : string.Empty;
+    }
+
+    /// <summary>
+    /// Whether a point is on the canvas with nothing of the editor's own over it. The canvas is a hole in the editor its
+    /// layouts are seen through, the innermost thing of the editor there is the canvas itself, and anything else found
+    /// there (a little window like the settings, what is in it) is in front of it and has the pointer, not the layout under it.
+    /// </summary>
+    private bool PointerOnCanvas(Vector2 world)
+    {
+        if (!canvas.Bounds.Contains(chrome.ToLocal(world)))
+            return false;
+
+        UIComponent? over = chrome.FindAt(world);
+        return over is null || over == canvas;
+    }
+
     private void Quit(int failures)
     {
         System.Environment.ExitCode = failures == 0 ? 0 : 1;
         closeConfirmed = true;
-        Engine.WindowManager.Window.Close();
+        Engine.WindowManager.Close();
     }
 }

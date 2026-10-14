@@ -1,0 +1,23 @@
+// The search view of the side bar before anything was looked for, what to do and a button that does it.
+#define layout
+
+let empty = compositor.stack({ anchor: "left", spacing: 10 });
+
+let hint = compositor.label({
+    parent: empty,
+    anchor: "left",
+    size: vec(250, 0),
+    text: "@search.hint",
+    text_scale: 0.14,
+    color: vec(0.58, 0.6, 0.66, 1),
+    align: "top_left",
+    wrap: true
+});
+
+let find = compositor.button({
+    parent: empty,
+    anchor: "left",
+    label: "@search.find",
+    icon: "search",
+    lbl_scale: 0.14
+});

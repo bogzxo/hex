@@ -1,0 +1,332 @@
+// settings, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+#define layout
+
+
+let window = compositor.window({
+    size: vec(700, 480),
+    z: 10,
+    padding: vec(8, 8, 8, 8),
+    min_size: vec(520, 320),
+    title: "@settings.title",
+    icon: "settings-gear"
+});
+
+let pages = compositor.tabs({
+    parent: window,
+    size: vec(0, 438),
+    fill: "both",
+    tabs: [
+    "@settings.tabs.editor",
+    "@settings.tabs.designer",
+    "@settings.tabs.files",
+    "@settings.tabs.extensions"
+],
+    text_scale: 0.14,
+    spacing: 22
+});
+
+let editor_page = compositor.stack({
+    parent: pages,
+    fill: "both",
+    padding: vec(14, 16, 14, 8),
+    spacing: 10
+});
+
+let editor_heading = compositor.label({
+    parent: editor_page,
+    size: vec(620, 0),
+    anchor: "left",
+    pivot: "left",
+    text: "@settings.editor.heading",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});
+
+let theme_row = compositor.stack({
+    parent: editor_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let theme_name = compositor.label({
+    parent: theme_row,
+    size: vec(210, 28),
+    tooltip: "@settings.editor.skin_tip",
+    text: "@settings.editor.skin",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let theme = compositor.dropdown({
+    parent: theme_row,
+    size: vec(260, 28),
+    text_scale: 0.14,
+    max_rows: 12
+});
+
+let size_row = compositor.stack({
+    parent: editor_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let size_name = compositor.label({
+    parent: size_row,
+    size: vec(210, 28),
+    tooltip: "@settings.editor.size_tip",
+    text: "@settings.editor.size",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let size = compositor.selector({
+    parent: size_row,
+    size: vec(260, 28),
+    text_scale: 0.14
+});
+
+let code_zoom_row = compositor.stack({
+    parent: editor_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let code_zoom_name = compositor.label({
+    parent: code_zoom_row,
+    size: vec(210, 28),
+    tooltip: "@settings.editor.code_size_tip",
+    text: "@settings.editor.code_size",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let code_zoom = compositor.selector({
+    parent: code_zoom_row,
+    size: vec(260, 28),
+    text_scale: 0.14
+});
+
+let panels_row = compositor.stack({
+    parent: editor_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let panels_name = compositor.label({
+    parent: panels_row,
+    size: vec(210, 28),
+    tooltip: "@settings.editor.panels_tip",
+    text: "@settings.editor.panels",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let panels = compositor.button({
+    parent: panels_row,
+    size: vec(260, 28),
+    label: "@settings.editor.put_back",
+    icon: "discard",
+    lbl_scale: 0.14
+});
+
+let designer_page = compositor.stack({
+    parent: pages,
+    fill: "both",
+    padding: vec(14, 16, 14, 8),
+    spacing: 10
+});
+
+let designer_heading = compositor.label({
+    parent: designer_page,
+    size: vec(620, 0),
+    anchor: "left",
+    pivot: "left",
+    text: "@settings.designer.heading",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});
+
+let skin_row = compositor.stack({
+    parent: designer_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let skin_name = compositor.label({
+    parent: skin_row,
+    size: vec(210, 28),
+    tooltip: "@settings.designer.skin_tip",
+    text: "@settings.designer.skin",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let skin = compositor.selector({
+    parent: skin_row,
+    size: vec(260, 28),
+    text_scale: 0.14
+});
+
+let layout_theme_row = compositor.stack({
+    parent: designer_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let layout_theme_name = compositor.label({
+    parent: layout_theme_row,
+    size: vec(210, 28),
+    tooltip: "@settings.designer.theme_tip",
+    text: "@settings.designer.theme",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let layout_theme = compositor.selector({
+    parent: layout_theme_row,
+    size: vec(260, 28),
+    text_scale: 0.14
+});
+
+let snap_row = compositor.stack({
+    parent: designer_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let snap_name = compositor.label({
+    parent: snap_row,
+    size: vec(210, 28),
+    tooltip: "@settings.designer.snap_tip",
+    text: "@settings.designer.snap",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let snap = compositor.selector({
+    parent: snap_row,
+    size: vec(260, 28),
+    text_scale: 0.14
+});
+
+let handles_row = compositor.stack({
+    parent: designer_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let handles_name = compositor.label({
+    parent: handles_row,
+    size: vec(210, 28),
+    tooltip: "@settings.designer.handles_tip",
+    text: "@settings.designer.handles",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let handles = compositor.toggle({
+    parent: handles_row,
+    label: "@settings.on",
+    lbl_scale: 0.14
+});
+
+let files_page = compositor.stack({
+    parent: pages,
+    fill: "both",
+    padding: vec(14, 16, 14, 8),
+    spacing: 10
+});
+
+let files_heading = compositor.label({
+    parent: files_page,
+    size: vec(620, 0),
+    anchor: "left",
+    pivot: "left",
+    text: "@settings.files.heading",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});
+
+let reopen_row = compositor.stack({
+    parent: files_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let reopen_name = compositor.label({
+    parent: reopen_row,
+    size: vec(210, 28),
+    tooltip: "@settings.files.reopen_tip",
+    text: "@settings.files.reopen",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let reopen = compositor.toggle({
+    parent: reopen_row,
+    label: "@settings.off",
+    lbl_scale: 0.14
+});
+
+let files_note = compositor.label({
+    parent: files_page,
+    size: vec(620, 0),
+    anchor: "left",
+    pivot: "left",
+    text: "@settings.files.note",
+    text_scale: 0.14,
+    color: vec(0.58, 0.6, 0.66, 1),
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});
+
+let extensions_page = compositor.stack({
+    parent: pages,
+    fill: "both",
+    padding: vec(14, 16, 14, 8),
+    spacing: 12
+});
+
+let extensions_icon = compositor.symbol({
+    parent: extensions_page,
+    size: vec(64, 64),
+    hover: "pulse",
+    hover_amount: 0.25,
+    icon: "extensions",
+    color: vec(0.36, 0.523, 0.78, 1)
+});
+
+let extensions_note = compositor.label({
+    parent: extensions_page,
+    size: vec(440, 0),
+    text: "@settings.extensions.page",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true
+});

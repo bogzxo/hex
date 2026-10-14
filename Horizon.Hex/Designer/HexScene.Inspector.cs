@@ -31,37 +31,79 @@ internal sealed partial class HexScene
 
         if (document.Selected is not { } selected)
         {
-            inspector.Add(new Label("select something in the canvas\nor in the layout on the left")
-            {
-                Anchor = Origin.Left,
-                Align = Origin.TopLeft,
-                TextScale = EDITOR_TEXT,
-                Color = DimColor
-            });
+            Hint(inspector, "select something in the canvas\nor in the layout on the left");
             return;
         }
 
         // With several things selected the rows are those of the one picked last, and what is changed in them is
         // changed for all of them that have such a thing to change
         if (document.Selection.Count > 1)
-        {
-            inspector.Add(new Label($"{document.Selection.Count} things selected, a change here goes to\nall of them that have the property")
-            {
-                Anchor = Origin.Left,
-                Align = Origin.TopLeft,
-                TextScale = EDITOR_TEXT,
-                Color = FolderColor
-            });
-        }
+            layout.Instantiate(NOTE_TEMPLATE, inspector).Get<Label>("note").Text = $"{document.Selection.Count} things selected, a change here goes to\nall of them that have the property";
 
-        var nameEditor = new TextBox(document.NameOf(selected))
+        string kind = UIModule.KindOf(selected) ?? selected.GetType().Name;
+
+        // The rows go into folding sections by what they are about, the kind's own after what everything has, so a
+        // long list of properties is the part somebody is working on and not a wall of it
+        var sections = new Dictionary<string, Collapsible>();
+        foreach (string title in SectionOrder)
+            sections[title == KIND_SECTION ? kind.Replace('_', ' ') : title] = null!;
+
+        AddRow(Section(sections, SectionOf("name", kind)), "name", into => NameEditor(selected, into));
+        AddRow(Section(sections, SectionOf("kind", kind)), "kind", into =>
         {
-            Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
-            TextScale = EDITOR_TEXT,
-            MaxLength = 32,
-            Padding = new UIEdges(8, 6)
-        };
-        nameEditor.OnChanged = text =>
+            var shown = Editor(EditorTemplate.Kind, into).Get<Label>("kind");
+            shown.Text = kind;
+            shown.Size = shown.Size with { X = EditorWidth };
+            return shown;
+        });
+
+        foreach (var (name, value) in HexDocument.ReadProperties(selected))
+        {
+            // Handlers are functions, there is nothing to type one into
+            if (value is FunctionValue or NativeFunctionValue or NullValue)
+                continue;
+
+            AddRow(Section(sections, SectionOf(name, kind)), name, into => CreateEditor(selected, name, value, into));
+        }
+    }
+
+    // The templates of what the inspector is made of, next to the editor's own layout
+    private const string NOTE_TEMPLATE = "note.hor", HINT_TEMPLATE = "hint.hor";
+
+    private enum EditorTemplate { Text, Number, YesNo, Choice, Slider, Pair, Four, Colour, Kind, Section }
+
+    private static string TemplateOf(EditorTemplate template) => template switch
+    {
+        EditorTemplate.Text => "editors/text.hor",
+        EditorTemplate.Number => "editors/number.hor",
+        EditorTemplate.YesNo => "editors/yes_no.hor",
+        EditorTemplate.Choice => "editors/choice.hor",
+        EditorTemplate.Slider => "editors/slider.hor",
+        EditorTemplate.Pair => "editors/pair.hor",
+        EditorTemplate.Four => "editors/four.hor",
+        EditorTemplate.Colour => "editors/colour.hor",
+        EditorTemplate.Kind => "editors/kind.hor",
+        _ => "editors/section.hor"
+    };
+
+    /// <summary>Helper method to build one of the inspector's templates inside of something.</summary>
+    private UILayout Editor(EditorTemplate template, UIComponent into) => layout.Instantiate(TemplateOf(template), into);
+
+    /// <summary>Helper method to say something where a list has nothing in it, out of hint.hor.</summary>
+    private Label Hint(UIComponent into, string text)
+    {
+        var hint = layout.Instantiate(HINT_TEMPLATE, into).Get<Label>("hint");
+        hint.Text = text;
+        return hint;
+    }
+
+    private UIComponent NameEditor(UIComponent selected, UIComponent into)
+    {
+        var box = Editor(EditorTemplate.Text, into).Get<TextBox>("box");
+        box.Text = document.NameOf(selected);
+        box.MaxLength = 32;
+        box.Size = box.Size with { X = EditorWidth };
+        box.OnChanged = text =>
         {
             if (document.Rename(selected, text))
             {
@@ -73,27 +115,8 @@ internal sealed partial class HexScene
                 Say($"'{text}' can't be its name: taken, or not a name a variable can have", error: true);
             }
         };
-        string kind = UIModule.KindOf(selected) ?? selected.GetType().Name;
 
-        // The rows go into folding sections by what they are about, the kind's own after what everything has, so a
-        // long list of properties is the part somebody is working on and not a wall of it
-        var sections = new Dictionary<string, Collapsible>();
-        foreach (string title in SectionOrder)
-            sections[title == KIND_SECTION ? kind.Replace('_', ' ') : title] = null!;
-
-        AddRow(Section(sections, SectionOf("name", kind)), "name", nameEditor);
-        AddRow(Section(sections, SectionOf("kind", kind)), "kind", new Label(kind)
-        {
-            Align = Origin.Left,
-            TextScale = EDITOR_TEXT,
-            Size = new Vector2(EditorWidth, 24)
-        });
-
-        foreach (var (name, value) in HexDocument.ReadProperties(selected))
-        {
-            if (CreateEditor(selected, name, value) is { } editor)
-                AddRow(Section(sections, SectionOf(name, kind)), name, editor);
-        }
+        return box;
     }
 
     // The sections of the properties, in the order they come, the one named after the kind standing in for its own
@@ -115,23 +138,17 @@ internal sealed partial class HexScene
     };
 
     /// <summary>
-    /// Helper method to find the section a row goes into, making it the first time it is asked for. It is put in its
-    /// place among the ones there are by the order they come in, whichever of them happened to be made first.
+    /// Helper method to find the section a row goes into, making it out of its template the first time it is asked for.
+    /// It is put in its place among the ones there are by the order they come in, whichever of them happened to be made first.
     /// </summary>
     private Collapsible Section(Dictionary<string, Collapsible> sections, string title)
     {
         if (sections.TryGetValue(title, out var section) && section is not null)
             return section;
 
-        section = new Collapsible(title)
-        {
-            Fill = UIFill.Horizontal,
-            TextScale = EDITOR_TEXT,
-            HeaderHeight = 24,
-            Spacing = 5,
-            Padding = new UIEdges(0, 6, 0, 8),
-            Expanded = !foldedSections.Contains(title)
-        };
+        section = Editor(EditorTemplate.Section, inspector).Get<Collapsible>("section");
+        section.Title = title;
+        section.Expanded = !foldedSections.Contains(title);
         section.OnToggled = open =>
         {
             if (open) foldedSections.Remove(title);
@@ -146,11 +163,11 @@ internal sealed partial class HexScene
         {
             if (other == title)
                 break;
-            if (made is not null && made.Parent == inspector)
+            if (made is not null && made != section && made.Parent == inspector)
                 index = inspector.Children.ToList().IndexOf(made) + 1;
         }
 
-        inspector.Insert(index, section);
+        inspector.MoveChild(section, index);
         return section;
     }
 
@@ -171,22 +188,43 @@ internal sealed partial class HexScene
     // The menu of art that was opened last, for the self-test to find its tiles
     private ArtPicker? artPicker;
 
-    private void AddRow(UIComponent section, string name, UIComponent editor)
+    /// <summary>
+    /// Helper method to add a row for a property, the row out of the inspector's template and its editor made inside of
+    /// the room it leaves for one. A property with nothing to edit it with gets no row.
+    /// </summary>
+    private void AddRow(UIComponent section, string name, Func<StackPanel, UIComponent?> make)
     {
-        // The row itself is the template the inspector names, the editor goes into the room it leaves for one
         var row = layout.Instantiate(inspector.Template, section);
 
-        row.Get<Label>("caption").Text = name.Replace('_', ' ');
-        row.Get<StackPanel>("editor").Add(editor);
+        var caption = row.Get<Label>("caption");
+        caption.Text = name.Replace('_', ' ');
+        caption.Size = caption.Size with { X = CaptionWidth };
+
+        var room = row.Get<StackPanel>("editor");
+        if (make(room) is not { } editor)
+        {
+            section.Remove(row.Get<UIComponent>("row"));
+            return;
+        }
 
         // What the property does, on its name and on whatever is in the editor that has nothing of its own to say
         string help = UIPropertyHelp.Describe(document.Selected is { } shown ? UIModule.KindOf(shown) : null, name);
-        row.Get<Label>("caption").Tooltip = help;
-        row.Get<StackPanel>("editor").Tooltip = help;
+        caption.Tooltip = help;
+        room.Tooltip = help;
         editors[name] = editor;
     }
 
-    private UIComponent? CreateEditor(UIComponent target, string name, IRuntimeValue value)
+    /// <summary>A number box of an editor's template, given its value, its width and what a change does.</summary>
+    private static NumberBox Number(UILayout made, string part, float width, float value, Action<float> changed)
+    {
+        var number = made.Get<NumberBox>(part);
+        number.Value = value;
+        number.Size = number.Size with { X = width };
+        number.OnValueChanged = changed;
+        return number;
+    }
+
+    private UIComponent? CreateEditor(UIComponent target, string name, IRuntimeValue value, StackPanel into)
     {
         switch (value)
         {
@@ -194,21 +232,19 @@ internal sealed partial class HexScene
             {
                 // A slider for getting there quickly and the number next to it for getting there exactly
                 var (min, max) = target is Slider ranged && name == "value" ? (ranged.Min, ranged.Max) : Ranges[name];
-                var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4 };
+                var made = Editor(EditorTemplate.Slider, into);
 
-                NumberBox exact = null!;
-                var slider = row.Add(new Slider
-                {
-                    Size = new Vector2(EditorWidth - 72, EDITOR_HEIGHT - 6),
-                    Min = min,
-                    Max = max,
-                    Value = number.Value
-                });
-                exact = row.Add(NumberEditor(68, number.Value, changed =>
+                var slider = made.Get<Slider>("slider");
+                slider.Min = min;
+                slider.Max = max;
+                slider.Value = number.Value;
+                slider.Size = slider.Size with { X = EditorWidth - 72 };
+
+                NumberBox exact = Number(made, "exact", 68, number.Value, changed =>
                 {
                     slider.Value = changed;
                     Set(target, name, new NumberValue(changed));
-                }));
+                });
                 exact.DragStep = (max - min) / 100.0f;
 
                 slider.OnChanged = changed =>
@@ -218,41 +254,39 @@ internal sealed partial class HexScene
                     exact.Value = changed;
                     Set(target, name, new NumberValue(changed));
                 };
-                return row;
+                return made.Get<StackPanel>("row");
             }
 
             case NumberValue number:
-                return NumberEditor(EditorWidth, number.Value, changed => Set(target, name, new NumberValue(changed)));
+                return Number(Editor(EditorTemplate.Number, into), "number", EditorWidth, number.Value, changed => Set(target, name, new NumberValue(changed)));
 
             case BooleanValue boolean:
-                return new Selector("no", "yes")
-                {
-                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
-                    TextScale = EDITOR_TEXT,
-                    Value = boolean.Value ? "yes" : "no",
-                    OnChanged = chosen => Set(target, name, new BooleanValue(chosen == "yes"))
-                };
+            {
+                var choice = Editor(EditorTemplate.YesNo, into).Get<Selector>("choice");
+                choice.Size = choice.Size with { X = EditorWidth };
+                choice.Value = boolean.Value ? "yes" : "no";
+                choice.OnChanged = chosen => Set(target, name, new BooleanValue(chosen == "yes"));
+                return choice;
+            }
 
             case StringValue text when Choices.TryGetValue(name, out var choices):
-                return new Dropdown(choices)
-                {
-                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
-                    TextScale = EDITOR_TEXT,
-                    Value = text.Value,
-                    OnChanged = chosen => Set(target, name, new StringValue(chosen))
-                };
+            {
+                var choice = Editor(EditorTemplate.Choice, into).Get<Dropdown>("choice");
+                choice.Options = choices;
+                choice.Size = choice.Size with { X = EditorWidth };
+                choice.Value = text.Value;
+                choice.OnChanged = chosen => Set(target, name, new StringValue(chosen));
+                return choice;
+            }
 
             case StringValue text:
             {
+                var box = Editor(EditorTemplate.Text, into).Get<TextBox>("box");
+                box.Text = text.Value;
+                box.Size = box.Size with { X = EditorWidth };
+
                 // A quote can't be written into a script, so one never gets as far as the component
-                var box = new TextBox(text.Value)
-                {
-                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
-                    TextScale = EDITOR_TEXT,
-                    MaxLength = 200,
-                    Padding = new UIEdges(8, 6),
-                    OnChanged = typed => Set(target, name, new StringValue(typed.Replace('"', '\'')))
-                };
+                box.OnChanged = typed => Set(target, name, new StringValue(typed.Replace('"', '\'')));
 
                 // What names a piece of the skin's art gets a button that shows the lot of it to pick from, the
                 // art of the skin the layouts are shown in and not the plain one the editor wears
@@ -274,36 +308,38 @@ internal sealed partial class HexScene
             case Vector2Value vector:
             {
                 Vector2 current = vector.Value;
-                var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4 };
+                var made = Editor(EditorTemplate.Pair, into);
 
                 // The rest of what is selected only takes the number that was changed, each keeps its other one.
                 // Setting the x of five things mustn't put them all at the same y
-                row.Add(NumberEditor((EditorWidth - 4) / 2, current.X, x =>
+                Number(made, "x", (EditorWidth - 4) / 2, current.X, x =>
                 {
                     current.X = x;
                     Set(target, name, new Vector2Value(current), theirs => theirs is Vector2Value had ? new Vector2Value(had.Value with { X = x }) : null);
-                }));
-                row.Add(NumberEditor((EditorWidth - 4) / 2, current.Y, y =>
+                });
+                Number(made, "y", (EditorWidth - 4) / 2, current.Y, y =>
                 {
                     current.Y = y;
                     Set(target, name, new Vector2Value(current), theirs => theirs is Vector2Value had ? new Vector2Value(had.Value with { Y = y }) : null);
-                }));
-                return row;
+                });
+                return made.Get<StackPanel>("row");
             }
 
             case Vector4Value vector:
             {
-                // Colours go from 0 to 1, everything else with four numbers is edges in pixels
+                // Colours go from 0 to 1, everything else with four numbers is edges in pixels. A colour is picked by eye
+                // on top, the numbers it comes to underneath for when they have to be exact
                 bool colour = name is "color" or "tint";
                 Vector4 current = vector.Value;
-                var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4 };
+                var made = Editor(colour ? EditorTemplate.Colour : EditorTemplate.Four, into);
                 var numbers = new NumberBox[4];
-                ColorPicker? picker = null;
+                ColorPicker? picker = colour ? made.Get<ColorPicker>("picker") : null;
+                string[] parts = ["a", "b", "c", "d"];
 
                 for (int i = 0; i < 4; i++)
                 {
                     int component = i;
-                    numbers[i] = row.Add(NumberEditor((EditorWidth - 12) / 4, current[i], changed =>
+                    numbers[i] = Number(made, parts[i], (EditorWidth - 12) / 4, current[i], changed =>
                     {
                         current[component] = changed;
                         if (picker is not null) picker.Color = current;
@@ -315,45 +351,30 @@ internal sealed partial class HexScene
                             kept[component] = changed;
                             return new Vector4Value(kept);
                         });
-                    }));
+                    });
                     numbers[i].DragStep = colour ? 0.02f : 1.0f;
                 }
 
-                if (!colour)
-                    return row;
+                if (picker is null)
+                    return made.Get<StackPanel>("row");
 
-                // Picked by eye on top, the numbers it comes to underneath for when they have to be exact
-                var both = new StackPanel { Spacing = 4 };
-                picker = both.Add(new ColorPicker
+                picker.Size = new Vector2(EditorWidth, PICKER_HEIGHT);
+                picker.Color = current;
+                picker.OnChanged = picked =>
                 {
-                    Size = new Vector2(EditorWidth, PICKER_HEIGHT),
-                    Color = current,
-                    OnChanged = picked =>
-                    {
-                        current = new Vector4(MathF.Round(picked.X, 3), MathF.Round(picked.Y, 3), MathF.Round(picked.Z, 3), MathF.Round(picked.W, 3));
-                        for (int i = 0; i < 4; i++)
-                            numbers[i].Value = current[i];
+                    current = new Vector4(MathF.Round(picked.X, 3), MathF.Round(picked.Y, 3), MathF.Round(picked.Z, 3), MathF.Round(picked.W, 3));
+                    for (int i = 0; i < 4; i++)
+                        numbers[i].Value = current[i];
 
-                        Set(target, name, new Vector4Value(current));
-                    }
-                });
-                both.Add(row);
-                return both;
+                    Set(target, name, new Vector4Value(current));
+                };
+                return made.Get<StackPanel>("both");
             }
 
-            // Handlers are functions, there is nothing to type one into
             default:
                 return null;
         }
     }
-
-    private static NumberBox NumberEditor(float width, float value, Action<float> changed) => new(value)
-    {
-        Size = new Vector2(width, EDITOR_HEIGHT),
-        TextScale = EDITOR_TEXT,
-        Padding = new UIEdges(6, 6),
-        OnValueChanged = changed
-    };
 
     /// <summary>
     /// Helper method to set a property of what the inspector shows, and of everything else that is selected and has

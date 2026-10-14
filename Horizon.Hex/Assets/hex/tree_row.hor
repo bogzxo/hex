@@ -13,6 +13,6 @@ let caption = compositor.label({
     pos: vec(10, 0),
     anchor: "left",
     text: "name (kind)",
-    text_scale: 0.125,
+    text_scale: 0.14,
     align: "left"
 });

@@ -188,7 +188,15 @@ internal sealed partial class HexScene
     {
         if (options.SelfTest)
         {
-            ToggleBrowsing();
+            // Testing itself there is no dialog of Windows to ask in, the files of the folder are shown instead, and again goes back
+            if (browsing)
+            {
+                Side = HomeSide;
+                return;
+            }
+
+            ShowSide(HexSide.Explorer);
+            Say($"files of {browseDirectory}");
             return;
         }
 
@@ -202,6 +210,27 @@ internal sealed partial class HexScene
 
     private void Save()
     {
+        // A file of code that has had #define layout typed into it is a layout the next time it is opened, which it is
+        // told before it is saved that way
+        if (document.IsText && document.Path is { } typed && !layoutWarned.Contains(typed)
+            && Horizon.HIDL.Preprocessing.HIDLPreprocessor.IsLayout(document.Editor.Text)
+            && !Horizon.HIDL.Preprocessing.HIDLPreprocessor.IsLayout(document.SavedCode))
+        {
+            HexDocument warned = document;
+            UIDialog.Show(chrome, "Save it as a layout?", LayoutWarning(Path.GetFileName(typed)),
+                new DialogChoice("Save it", () =>
+                {
+                    layoutWarned.Add(typed);
+                    if (documents.Contains(warned))
+                    {
+                        Show(warned);
+                        Save();
+                    }
+                }),
+                new DialogChoice("Cancel"));
+            return;
+        }
+
         // Back to where it came from, unless it has been given another name since. That is saving a copy
         if (document.Path is { } known && Path.GetFileNameWithoutExtension(known) == document.Name)
             SaveTo(known);
@@ -286,6 +315,7 @@ internal sealed partial class HexScene
 
             document.Path = path;
             document.SavedCode = written;
+            document.SavedCrLf = document.CrLf;
             vocabulary = null;
             document.Modified = false;
 

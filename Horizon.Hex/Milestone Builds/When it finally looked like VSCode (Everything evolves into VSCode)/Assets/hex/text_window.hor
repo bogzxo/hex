@@ -1,0 +1,31 @@
+// A little window with a page of markdown in it that scrolls, the keys, the language, what Hex is.
+#define layout
+
+let window = compositor.window({
+    anchor: "center",
+    size: vec(760, 560),
+    min_size: vec(360, 220),
+    title: "Hex",
+    icon: "book",
+    closable: true,
+    resize_grip: true,
+    z: 10,
+    padding: vec(8, 8, 8, 8)
+});
+
+let text_scroll = compositor.scroll({
+    parent: window,
+    fill: "both",
+    padding: vec(8, 8, 8, 8)
+});
+
+let text = compositor.label({
+    parent: text_scroll,
+    anchor: "top_left",
+    size: vec(700, 0),
+    text: "# Hex",
+    text_scale: 0.14,
+    align: "top_left",
+    markdown: true,
+    wrap: true
+});

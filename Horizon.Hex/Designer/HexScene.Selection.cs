@@ -194,6 +194,52 @@ internal sealed partial class HexScene
         Say($"took {groups.Count} group{(groups.Count == 1 ? string.Empty : "s")} apart");
     }
 
+    // What a container can be changed into, the kind, whether a stack runs across, and what the menu calls it
+    private static readonly (string Kind, bool Across, string Label)[] Containers =
+    [
+        ("stack", false, "Stack, down"),
+        ("stack", true, "Stack, across"),
+        ("grid", false, "Grid"),
+        ("panel", false, "Panel"),
+        ("scroll", false, "Scroll"),
+        ("collapsible", false, "Collapsible"),
+        ("tabs", false, "Tabs, a page each"),
+        ("group", false, "Group")
+    ];
+
+    /// <summary>Whether the one selected is a container that is already this kind, which isn't offered as a change.</summary>
+    private bool IsAlready(string kind, bool across) =>
+        document.Selected is { } selected && UIModule.KindOf(selected) == kind
+        && (selected is not StackPanel stack || selected is Collapsible || (stack.Direction == UIDirection.Horizontal) == across);
+
+    /// <summary>A menu of what the container selected can be changed into, for its right click and the Layout menu.</summary>
+    private void AddConvertMenu(Menu into)
+    {
+        foreach (var (kind, across, label) in Containers)
+        {
+            into.Add(label, () => ConvertSelected(kind, across), icon: KindIcon(kind)).IsEnabled =
+                () => document.Selected is { } selected && HexDocument.IsContainer(selected) && !IsAlready(kind, across);
+        }
+    }
+
+    /// <summary>Changes the container selected into another kind of container, everything in it with it.</summary>
+    private void ConvertSelected(string kind, bool across)
+    {
+        if (document.Selected is not { } selected)
+            return;
+
+        string was = UIModule.KindOf(selected) ?? "container";
+        if (document.Convert(selected, kind, across, out string problem) is not { } made)
+        {
+            Say(problem, error: true);
+            return;
+        }
+
+        Select(made);
+        treeDirty = codeDirty = inspectorDirty = true;
+        Say($"{document.NameOf(made)} is a {kind}{(kind == "stack" ? (across ? " across" : " down") : string.Empty)} now, it was a {was}, Ctrl+Z puts it back");
+    }
+
     private void DuplicateSelected()
     {
         var originals = document.TopSelection();
@@ -278,30 +324,35 @@ internal sealed partial class HexScene
         var shown = new Menu("component");
         Func<bool> any = () => document.Selection.Count > 0;
 
-        shown.Add("Move up", () => MoveSelected(-1), "Ctrl+Up").IsEnabled = any;
-        shown.Add("Move down", () => MoveSelected(1), "Ctrl+Down").IsEnabled = any;
-        shown.Add("Move out", () => MoveSelectedAcross(inwards: false), "Ctrl+Left").IsEnabled = any;
-        shown.Add("Move into", () => MoveSelectedAcross(inwards: true), "Ctrl+Right").IsEnabled = any;
-        shown.AddSeparator();
         shown.Add("Cut", CutSelected, "Ctrl+X").IsEnabled = any;
-        shown.Add("Copy", CopySelected, "Ctrl+C").IsEnabled = any;
+        shown.Add("Copy", CopySelected, "Ctrl+C", "copy").IsEnabled = any;
         shown.Add("Paste", Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
-        shown.Add("Duplicate", DuplicateSelected, "Ctrl+D").IsEnabled = any;
-        shown.Add("Delete", DeleteAll, "Del").IsEnabled = any;
+        shown.Add("Duplicate", DuplicateSelected, "Ctrl+D", "copy").IsEnabled = any;
+        shown.Add("Delete", DeleteAll, "Del", "trash").IsEnabled = any;
         shown.AddSeparator();
-        shown.Add("Bring to front", () => ReorderSelected(HexDocument.Order.Front), "Ctrl+]").IsEnabled = any;
-        shown.Add("Bring forward", () => ReorderSelected(HexDocument.Order.Forward), "]").IsEnabled = any;
-        shown.Add("Send backward", () => ReorderSelected(HexDocument.Order.Backward), "[").IsEnabled = any;
-        shown.Add("Send to back", () => ReorderSelected(HexDocument.Order.Back), "Ctrl+[").IsEnabled = any;
+
+        // What goes inside of the one selected, a menu of the kinds
+        Menu inside = shown.AddMenu("Add inside", "add");
+        foreach (string kind in Palette)
+            inside.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
+
+        AddMoveMenu(shown.AddMenu("Move", "arrow-swap"), any);
+        AddArrangeMenu(shown.AddMenu("Arrange", "layers"), any);
+        AddAlignMenu(shown.AddMenu("Line up", "symbol-ruler"), any);
         shown.AddSeparator();
-        shown.Add("Group", GroupSelected, "Ctrl+G").IsEnabled = any;
+        shown.Add("Group", GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
         shown.Add("Ungroup", UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
+
+        // A container, a group above all, can be had as any other kind of container, what is in it and all
+        if (document.Selected is { } container && HexDocument.IsContainer(container))
+            AddConvertMenu(shown.AddMenu("Change into", "arrow-swap"));
         shown.AddSeparator();
-        shown.Add("Select parent", SelectParent).IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
+        shown.Add("Select parent", SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
         shown.Add("Select all", SelectAll, "Ctrl+A");
+        shown.Add("Its code", ShowSelectedCode, icon: "code").IsEnabled = any;
 
         if (document.Selected is TabPanel)
-            shown.Add("Add a page", AddPage);
+            shown.Add("Add a page", AddPage, icon: "add");
 
         return shown;
     }
@@ -315,7 +366,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void OnContextRequested(UIComponent? over, Vector2 world)
     {
-        if (!canvas.Bounds.Contains(chrome.ToLocal(world)))
+        if (!PointerOnCanvas(world))
             return;
 
         var hit = ResolveClick(document.OwnerOf(document.Module.FindAt(world)));
@@ -331,15 +382,17 @@ internal sealed partial class HexScene
         shortcuts.Add(Key.G, UngroupSelected, control: true, shift: true);
         shortcuts.Add(Key.D, DuplicateSelected, control: true);
         shortcuts.Add(Key.A, SelectAll, control: true);
-        shortcuts.Add(Key.Escape, () => Select(null));
+        // Escape puts away the little window on top first (the settings, a page of help), then what is selected
+        shortcuts.Add(Key.Escape, () => { if (!CloseTopWindow()) Select(null); });
         shortcuts.Add(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Front), control: true);
         shortcuts.Add(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Back), control: true);
         shortcuts.Add(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Forward));
         shortcuts.Add(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Backward));
 
-        shortcuts.Add(Key.Number0, ZoomToFit, control: true);
+        // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
+        shortcuts.Add(Key.Number0, () => { if (LayoutTools) ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
         shortcuts.Add(Key.Number1, ZoomToActualSize, control: true);
-        shortcuts.Add(Key.Equal, () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), control: true);
-        shortcuts.Add(Key.Minus, () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), control: true);
+        shortcuts.Add(Key.Equal, () => { if (LayoutTools) ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center); else ZoomCode(CODE_ZOOM_STEP); }, control: true, whileTyping: true);
+        shortcuts.Add(Key.Minus, () => { if (LayoutTools) ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center); else ZoomCode(1.0f / CODE_ZOOM_STEP); }, control: true, whileTyping: true);
     }
 }

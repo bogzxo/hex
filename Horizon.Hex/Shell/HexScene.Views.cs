@@ -24,36 +24,36 @@ internal sealed partial class HexScene
     /// <summary>Puts on screen what the view of the document on screen wants, see the top of this file.</summary>
     private void ApplyView()
     {
+        // The code may be a little behind the layout while it was out of sight, it is about to be looked at
+        if (codeDirty)
+        {
+            ShowCode();
+            codeDirty = false;
+        }
+
         bool tools = LayoutTools;
 
         canvas.Visible = tools;
-        codeScroll.Visible = codeTitle.Visible = !tools;
-
-        foreach (string part in LayoutOnlyParts)
-            layout.Get<UIComponent>(part).Visible = tools;
+        codeScroll.Visible = !tools;
 
         layout.Get<UIComponent>("views").Visible = !document.IsText;
         layout.Get<Button>("design_view").Selected = tools;
         layout.Get<Button>("code_view").Selected = !tools;
-        layout.Get<Label>("inspector_title").Text = tools ? "PROPERTIES" : "FILE";
+        nameBox.Visible = !document.IsText;
+        layout.Get<Label>("inspector_title").Text = Said(tools ? "properties.title" : "properties.file");
 
-        codeTitle.Text = document.IsText
-            ? $"CODE OF {document.Name.ToUpperInvariant()}"
-            : "CODE OF THE LAYOUT, WHAT IS TYPED GOES INTO IT ON THE WAY BACK TO THE DESIGNER (F7)";
+        var play = layout.Get<Button>("play_button");
+        play.Label = Said(tools ? "toolbar.play" : "toolbar.run");
+        play.Tooltip = Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
 
-        // The designer has the components on the left, the code the explorer (when there is a workspace) or the outline
-        browsing = !tools && (browsing || !workspace.IsEmpty);
         if (tools)
-        {
-            results = null;
             code.Unfocus();
-        }
         else
-        {
             code.Focus();
-        }
 
-        treeDirty = inspectorDirty = true;
+        // The side bar is the view each kind of document was left on, put back the next time round
+        sideShown = null;
+        treeDirty = inspectorDirty = tabsDirty = problemsDirty = true;
     }
 
     /// <summary>Shows a layout as its designer or as its code. The code typed into goes into the layout on its way to the designer.</summary>
@@ -120,6 +120,25 @@ internal sealed partial class HexScene
             return;
         }
 
+        UIDialog.Show(chrome, "Make it a layout?", LayoutWarning(Path.GetFileName(path)),
+            new DialogChoice("Make it a layout", () => MakeLayoutNow(path)),
+            new DialogChoice("Cancel"));
+    }
+
+    /// <summary>
+    /// What a file loses by being a layout, said before it is made one. The designer writes the whole of a layout's file
+    /// anew out of the layout it builds whenever it is saved, nothing else in it survives that.
+    /// </summary>
+    private static string LayoutWarning(string name) =>
+        $"{name} will open in the designer from now on, and the designer writes the whole file anew out of the layout it builds " +
+        "every time it is saved from there. Anything in it that isn't part of the layout (comments between the components, " +
+        "lets the layout doesn't use, functions, the way it is spaced out) will be gone the first time that happens.";
+
+    private void MakeLayoutNow(string path)
+    {
+        // Told already, saving it isn't asked about again
+        layoutWarned.Add(path);
+
         int line = 0;
         while (line < code.Document.LineCount && code.Document.LineAt(line).TrimStart().StartsWith("//")) line++;
 
@@ -148,8 +167,14 @@ internal sealed partial class HexScene
     /// The window was asked to close with something unsaved. Every file with changes is saved, or all of them are thrown
     /// away, or nothing happens. A layout that has never been saved anywhere is the one thing saving can't do by itself.
     /// </summary>
+    // The question about what is unsaved while it is up, so asking again doesn't put up another on top of it
+    private UIDialog? closeQuestion;
+
     private void AskBeforeClosing()
     {
+        if (closeQuestion is { IsOpen: true })
+            return;
+
         var unsaved = documents.Where(open => open.Modified || open.CodeEdited).ToList();
         if (unsaved.Count == 0)
         {
@@ -159,7 +184,7 @@ internal sealed partial class HexScene
 
         string names = string.Join(", ", unsaved.Take(6).Select(open => open.Name)) + (unsaved.Count > 6 ? $" and {unsaved.Count - 6} more" : string.Empty);
 
-        UIDialog.Show(chrome, "Unsaved changes",
+        closeQuestion = UIDialog.Show(chrome, "Unsaved changes",
             $"{unsaved.Count} {(unsaved.Count == 1 ? "file has" : "files have")} changes that aren't in {(unsaved.Count == 1 ? "its file" : "their files")}: {names}.",
             new DialogChoice("Save all", () => SaveAllAndQuit(unsaved)),
             new DialogChoice("Don't save", QuitNow),
@@ -188,6 +213,6 @@ internal sealed partial class HexScene
     private void QuitNow()
     {
         closeConfirmed = true;
-        Engine.WindowManager.Window.Close();
+        Engine.WindowManager.Close();
     }
 }

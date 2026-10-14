@@ -1,0 +1,20 @@
+// What goes into a dialog that picks one of a list narrowed down by what is typed, Ctrl+P and the command palette.
+#define layout
+
+let picking = compositor.stack({ spacing: 6 });
+
+let answer = compositor.textbox({
+    parent: picking,
+    size: vec(620, 32),
+    padding: vec(8, 6, 8, 6),
+    placeholder: "a few letters",
+    text_scale: 0.14,
+    max_length: 400
+});
+
+let choices = compositor.list({
+    parent: picking,
+    size: vec(620, 0),
+    rows: 14,
+    text_scale: 0.14
+});

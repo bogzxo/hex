@@ -75,7 +75,10 @@ internal sealed class HexDocument
     public CodeEditor Editor { get; } = new() { Fill = UIFill.Both };
 
     /// <summary>Whether the file had its lines ended with \r\n, which saving keeps. The code itself is always \n.</summary>
-    public bool CrLf { get; init; }
+    public bool CrLf { get; set; }
+
+    /// <summary>Whether the file had its lines ended with \r\n when it was last read or saved, swapping them is a change to save.</summary>
+    public bool SavedCrLf { get; set; }
 
     /// <summary>Whether a layout is shown as its designer or as its code. A file of code is only ever its code.</summary>
     public HexView View { get; set; } = HexView.Design;
@@ -742,6 +745,87 @@ internal sealed class HexDocument
 
         NameOf(group);
         return group;
+    }
+
+    /// <summary>Whether a component holds other components, which is what can be changed into another kind that does.</summary>
+    public static bool IsContainer(UIComponent component) => component is Panel or TabPanel;
+
+    /// <summary>
+    /// Changes a container into another kind of container, a group into a stack, a stack into a grid or tabs. It keeps its
+    /// name, its place in the tree, where it is and how big, its look where the new kind has one, and everything in it in
+    /// the same order. Into tabs, everything in it is a page, its name the tab.
+    /// </summary>
+    /// <param name="across">For a stack, whether it runs across rather than down.</param>
+    /// <returns>The new one, null with the reason why if it can't be done.</returns>
+    public UIComponent? Convert(UIComponent container, string kind, bool across, out string problem)
+    {
+        problem = string.Empty;
+        if (!IsContainer(container))
+        {
+            problem = $"{NameOf(container)} doesn't hold anything to put in something else";
+            return null;
+        }
+
+        if (UIModule.CreateDetached(kind) is not { } made || !IsContainer(made))
+        {
+            problem = $"a {kind} can't hold other components";
+            return null;
+        }
+
+        UIComponent parent = container.Parent ?? Module.Root;
+        int index = IndexIn(parent, container);
+        string name = NameOf(container);
+
+        // Where it is and what it is to the layout
+        made.Anchor = container.Anchor;
+        made.Pivot = container.Pivot;
+        made.Position = container.Position;
+        made.Size = container.Size;
+        made.Fill = container.Fill;
+        made.Padding = container.Padding;
+        made.Visible = container.Visible;
+        made.Enabled = container.Enabled;
+        made.Layer = container.Layer;
+        made.Tooltip = container.Tooltip;
+
+        // Its look, and what it is filled with, where both are panels
+        if (container is Panel was && made is Panel panel)
+        {
+            panel.Color = was.Color;
+            panel.Background = was.Background;
+            panel.Radius = was.Radius;
+            panel.Outline = was.Outline;
+            panel.Template = was.Template;
+            panel.PreviewCount = was.PreviewCount;
+            panel.Stagger = was.Stagger;
+        }
+
+        if (made is StackPanel stack)
+        {
+            stack.Direction = across ? UIDirection.Horizontal : UIDirection.Vertical;
+            if (container is StackPanel stacked)
+                stack.Spacing = stacked.Spacing;
+        }
+
+        if (made is Collapsible section)
+            section.Title = name.Replace('_', ' ');
+
+        // What was in it, in its order. Stand-ins for a template's items aren't the layout's, the new one makes its own
+        var moving = container.Children.Where(child => !previews.Contains(child)).ToList();
+        parent.Insert(index, made);
+        foreach (var child in moving)
+            made.Add(child);
+
+        if (made is TabPanel tabs)
+            tabs.Tabs = [.. moving.Select(page => NameOf(page).Replace('_', ' '))];
+
+        parent.Remove(container);
+        names.Remove(container);
+        selection.Remove(container);
+        names[made] = name;
+
+        RefreshPreviews();
+        return made;
     }
 
     /// <summary>

@@ -1,0 +1,278 @@
+// Everything Hex says, in English, by where it says it. Hex's layouts name these with an @, "@toolbar.save", and the code
+// asks for the rest by the same keys. Change anything here and Hex shows it the next time it starts (the windows of
+// the Help menu read it again every time they open). A text written as a list is its lines, which is how the pages of
+// help are written, markdown and all (# a heading, - a bullet, `code`, **bold**, and $(name) for an icon). A name in
+// braces, {version}, is filled in by Hex.
+
+let strings = {
+    // The window itself, its title bar
+    window: {
+        title: "Hex"
+    },
+
+    // The row of buttons under the menus, and what each says when the pointer rests on it
+    toolbar: {
+        new_file: "A new layout (Ctrl+N)",
+        open_file: "Open a file (Ctrl+O)",
+        save: "Save (Ctrl+S)",
+        save_all: "Save every file that has changes (Ctrl+Shift+S)",
+        undo: "Undo (Ctrl+Z)",
+        redo: "Redo (Ctrl+Y)",
+        design: "Design",
+        design_tip: "The canvas and everything for putting a layout together (F7)",
+        code: "Code",
+        code_tip: "The code the layout is written as, what is typed goes back into it on the way to the designer (F7)",
+        play: "Play",
+        play_tip: "Plays the entrances of the whole layout from the start, the way loading it does (F5)",
+        run: "Run",
+        run_tip: "Runs the file and lists what it declares in the output (F5)",
+        find: "Find in every file (Ctrl+Shift+F)",
+        name_placeholder: "name of the layout",
+        name_tip: "What the layout is called, which is the name of its file"
+    },
+
+    // The column of icons down the left, which view the side bar shows
+    activity: {
+        explorer: "Explorer, the folders of the workspace (Ctrl+Shift+E)",
+        search: "Search, what was found in every file (Ctrl+Shift+F)",
+        outline: "Outline, what the file declares (Ctrl+Shift+O)",
+        design: "The designer's toolbox, components and layers (Ctrl+Shift+O)",
+        settings: "Settings (Ctrl+,)"
+    },
+
+    // The side bar, its heading for each view and its sections
+    side: {
+        explorer: "EXPLORER",
+        explorer_of: "EXPLORER, {workspace}",
+        open_a_layout: "OPEN A LAYOUT",
+        search: "SEARCH",
+        outline_of: "OUTLINE OF {file}",
+        designer: "DESIGNER",
+        toolbox: "TOOLBOX",
+        layers: "LAYERS"
+    },
+
+    // The panel under the editor
+    panel: {
+        problems: "$(error) PROBLEMS",
+        problems_count: "$(error) PROBLEMS  {count}",
+        output: "$(output) OUTPUT"
+    },
+
+    // The column on the right
+    properties: {
+        title: "PROPERTIES",
+        file: "FILE"
+    },
+
+    // The search view before anything was looked for
+    search: {
+        hint: "Find something in every file of the workspace with Ctrl+Shift+F, or everywhere a name is used with Shift+F12 in the code",
+        find: "Find in files..."
+    },
+
+    // The dialogs that pick one of a list as it is typed into (Ctrl+P, the command palette)
+    choose: {
+        placeholder: "a few letters"
+    },
+
+    // The settings window, a page each
+    settings: {
+        title: "Settings",
+        on: "on",
+        off: "off",
+
+        tabs: {
+            editor: "$(settings-gear) Editor",
+            designer: "$(layout) Designer",
+            files: "$(files) Files",
+            extensions: "$(extensions) Extensions"
+        },
+
+        editor: {
+            heading: [
+                "## The editor",
+                "How Hex itself looks. Its own skin is the flat one, in one of its themes."
+            ],
+            skin: "Skin",
+            skin_tip: "The skin the editor itself is drawn in, any of them in any of their themes, however obnoxious",
+            size: "Size",
+            size_tip: "How big the editor draws itself and the layouts in it",
+            code_size: "Code size",
+            code_size_tip: "How big the code is drawn against the rest of the editor, Ctrl+= and Ctrl+- in code",
+            panels: "Panels",
+            panels_tip: "The side bar, the properties, the panel under the editor and the layers, as wide and as tall as they come",
+            put_back: "Put them back"
+        },
+
+        designer: {
+            heading: [
+                "## The designer",
+                "How layouts are shown and put together on the canvas."
+            ],
+            skin: "Layouts are shown in",
+            skin_tip: "The skin the layouts in the canvas are drawn in, the game's setting and not the editor's, the same as the View menu's",
+            theme: "In its theme",
+            theme_tip: "The theme of the skin the layouts are shown in, the colour of its art",
+            snap: "Snap to a grid",
+            snap_tip: "What positions and sizes land on when something is dragged in the canvas",
+            handles: "Resize handles",
+            handles_tip: "Whether what is selected in the canvas can be dragged bigger by its edges"
+        },
+
+        files: {
+            heading: [
+                "## Files",
+                "What Hex opens and where it keeps things."
+            ],
+            reopen: "Open the last layout",
+            reopen_tip: "Whether the editor starts with the layout that was worked on last",
+            note: "Hex keeps its settings in `hex_settings.hor` next to it, and the workspace that was open last comes back when it starts."
+        },
+
+        extensions: {
+            page: [
+                "## Extensions",
+                "Work in progress. One day Hex will take extensions of its own here."
+            ]
+        }
+    },
+
+    // The windows of the Help menu
+    changelog: {
+        title: "What changed",
+        page: [
+            "# What changed",
+            "The newest first. Hex is {version}.",
+            "",
+            "## 0.1.0",
+            "- The close button asks once about unsaved files and can be answered, it used to ask again every moment",
+            "- A click on the settings (or any little window) over the canvas stays in the window",
+            "- Hex publishes again, a native exe that needs no .NET",
+            "- The handles that drag the panels bigger are where the pointer holds them",
+            "- The layers and the panel under the editor stop growing where the window runs out, the status bar stays on it",
+            "- A group, or any container, changes into another kind on its right click, a stack, a grid, tabs and the rest, what is in it and all",
+            "- Every text of Hex is in its own file of texts (Assets/hex/localisation/en-gb.hor) to edit, this changelog among them",
+            "- The pages of help wrap to their window as it is resized",
+            "- Next to nothing while it sits there, it draws when something changes, ticks a few times a second idle and waits for the system",
+            "- Next to no garbage, the output and the problems are built a row at a time and only when they are looked at",
+            "- The editor can wear any skin there is, however obnoxious",
+            "- The theme of the layouts' skin has a row of its own in the settings",
+            "- A greeting in the title bar",
+            "",
+            "## 0.0.9",
+            "- A title bar of Hex's own with the menus in it, dragged to move the window, double clicked to maximise it",
+            "- Settings in a little window of their own with tabs, editor, designer, files and extensions",
+            "- Every part of Hex's own UI is a layout file you can open in Hex",
+            "- Bigger text everywhere, and a zoom of its own for the code (Ctrl+= and Ctrl+-, Ctrl and the wheel)",
+            "- The properties give their editors more room and their names less",
+            "",
+            "## 0.0.8",
+            "- Looks like VS Code, an activity bar, a side bar of views, tabs with a dot for changes, breadcrumbs, the problems and the output under the editor, a status bar",
+            "- Icons throughout, VS Code's own Codicons",
+            "- Menus that fit what is open, menus inside of menus, and Ctrl+Shift+P for every command there is",
+            "- Right click menus for the code, the canvas, the tree, the tabs and the problems",
+            "- Code coloured by what a name is, brackets by how deep they are, hints on whatever the pointer rests on",
+            "- Swatches of the colours written in the code, clicked for a picker, and F2 to rename a name all through a file",
+            "",
+            "## 0.0.7",
+            "- `#define layout` says a file is a layout, and the designer and the code of a layout are views of their own (F7)",
+            "- Every tab has an x, and closing with something unsaved asks first",
+            "- HIDL has a preprocessor, #define, #if and the rest",
+            "",
+            "## 0.0.6",
+            "- Workspaces of several folders, an explorer to go about them, saved as .hex-workspace files",
+            "- Completion as you type, F12 to where something is declared, Shift+F12 to everywhere it is used",
+            "",
+            "## 0.0.5",
+            "- Hex edits every .hor and not only layouts, a code editor with finding, replacing and going to a line",
+            "- Ctrl+P opens any file by a few letters, Ctrl+Shift+F finds in every file, F8 checks them all, F5 runs one",
+            "",
+            "## 0.0.4",
+            "- Hex has a repository of its own, the engine a submodule of it",
+            "",
+            "## 0.0.3",
+            "- Layouts name the game's texts by key (@main_menu.quit) and show them in the game's language",
+            "- Labels write bold, italic, colours, sizes and markdown",
+            "",
+            "## 0.0.2",
+            "- Sections of the properties fold away, and what a component does under the pointer (its hover) can be set",
+            "- Tab into a box picks all of what is in it, the tree scrolls to what is selected",
+            "",
+            "## 0.0.1",
+            "- The layout editor, a canvas the layout is drawn in as a game draws it, a palette, a tree, properties, the code it writes, undo, layers, templates, and a self test that clicks through the lot"
+        ]
+    },
+
+    keys: {
+        title: "The keys",
+        heading: "# The keys",
+
+        // What isn't in a menu, after the keys of every menu (those are read out of the menus, so they are never out of date)
+        not_in_a_menu: [
+            "## Not in a menu",
+            "- `Ctrl+Space`  complete the word being typed",
+            "- `Tab` and `Shift+Tab`  indent and outdent what is selected in code",
+            "- `Ctrl+Up`, `Down`, `Left`, `Right`  move what is selected about the tree of a layout",
+            "- the arrows  nudge what is selected in the canvas a pixel",
+            "- the wheel  zoom the canvas, the middle button (or space) pans it",
+            "- `Ctrl` and the wheel in code  make the code bigger or smaller",
+            "- `F2` on a row of the explorer  rename it"
+        ]
+    },
+
+    language: {
+        title: "HIDL",
+        page: [
+            "# HIDL",
+            "The little interpreted language every .hor file is written in, layouts, data, languages and skins.",
+            "",
+            "## Values",
+            "- numbers `3`, `0.5`, texts `\"fight\"`, `true`, `false`, `null`",
+            "- vectors `vec(1, 2)`, `vec(0.2, 0.4, 0.9, 1)` for a colour",
+            "- objects `{ name: \"Ryu\", health: 100 }`, lists `[1, 2, 3]`",
+            "",
+            "## Code",
+            "```",
+            "let speed = 3;",
+            "const name = \"fight\";",
+            "func add(a, b) { return a + b; }",
+            "if (speed > 2) { print(\"fast\"); } else { print(\"slow\"); }",
+            "for (item in [1, 2, 3]) { print(item); }",
+            "let other = include(\"other.hor\");",
+            "```",
+            "",
+            "## Directives",
+            "A line that starts with a # is read before the rest. `#define layout` says the file is a layout, Hex opens it with its designer. `#define name value`, `#if defined(name)`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, and the code can ask with `defined(\"name\")` and `definition(\"name\")`.",
+            "",
+            "## A layout",
+            "```",
+            "#define layout",
+            "let panel = compositor.stack({ spacing: 8 });",
+            "let title = compositor.label({ parent: panel, text: \"@main_menu.title\" });",
+            "```",
+            "A text that starts with @ is a key of the game's language. A label reads `[b]`, `[i]`, `[color:red]`, `$(save)` for an icon, and markdown when it says `markdown: true`.",
+            "",
+            "## Texts like these",
+            "A file of texts is `let strings = { ... }`, a text by a key, an object of them for keys with dots in them, and a list of texts for one that runs over lines.",
+            "",
+            "## The library",
+            "`print`, `include`, `keys`, `values`, `has`, `range`, `len`, `text`, `number`, `format`, `typeof`, `error`, `math` and `defined`. Rest the pointer on any of them in the editor for more."
+        ]
+    },
+
+    about: {
+        title: "About Hex",
+        page: [
+            "# Hex {version}",
+            "The layout editor of Horizon, and the IDE of HIDL, drawn by Horizon's own UI with Vulkan.",
+            "",
+            "Horizon {engine}, .NET {dotnet}",
+            "",
+            "## Licences",
+            "The icons are **Codicons**, the icons of Visual Studio Code, Copyright (c) Microsoft Corporation, under the Creative Commons Attribution 4.0 International licence (Assets/fonts/codicons in the engine).",
+            "",
+            "Cascadia Mono is under the SIL Open Font License."
+        ]
+    }
+};

@@ -173,10 +173,9 @@ internal sealed partial class HexScene
 
     private static string DescribeDesign(Vector2 size) => $"Made for {size.X:0} x {size.Y:0}";
 
-    private void BuildLayoutMenu()
+    /// <summary>What screen the layout is made for, how it goes on another one, and what it is previewed on, the Layout menu's Screen.</summary>
+    private void FillScreenMenu(Menu made)
     {
-        Menu made = menu.AddMenu("Layout");
-
         made.Add("Made for any screen", () => SetDesign(null, document.Fit)).IsChecked = () => document.Design is null;
         foreach (Vector2 size in Designs)
             made.Add(DescribeDesign(size), () => SetDesign(size, document.Fit)).IsChecked = () => document.Design == size;
