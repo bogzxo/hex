@@ -25,6 +25,7 @@ internal sealed partial class HexScene
             tab.Label = shown.Modified ? $"{shown.Name} *" : shown.Name;
             tab.Selected = shown == document;
             tab.OnPressed = () => Show(shown);
+            items[i].Get<Button>("close").OnPressed = () => CloseDocument(shown);
             tabButtons.Add(tab);
         }
     }

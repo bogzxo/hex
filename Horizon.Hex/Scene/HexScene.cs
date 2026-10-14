@@ -45,7 +45,6 @@ internal sealed partial class HexScene : Scene
     // the canvas gets at most.
     private const float MIN_FLEXIBLE = 80;
     private const float MIN_CENTER = 240;
-    private const float CANVAS_SHARE = 0.64f;
 
     // How long a layout has to be left alone before how it is now is a step to come back to
     private const float SETTLE_TIME = 0.3f;
@@ -223,6 +222,7 @@ internal sealed partial class HexScene : Scene
         BuildLayoutMenu();
         BuildShortcuts();
         BuildSelectionShortcuts();
+        WireViews();
 
         // A right click on the canvas that nothing of the editor took is a menu for what's there
         compositor.ContextRequested = OnContextRequested;
@@ -290,6 +290,7 @@ internal sealed partial class HexScene : Scene
             RunChecks();
 
         UpdateDialog();
+        UpdateClosing();
         ColourChrome();
         FitChrome();
         PlaceCanvas();
@@ -441,6 +442,7 @@ internal sealed partial class HexScene : Scene
     private void Quit(int failures)
     {
         System.Environment.ExitCode = failures == 0 ? 0 : 1;
+        closeConfirmed = true;
         Engine.WindowManager.Window.Close();
     }
 }

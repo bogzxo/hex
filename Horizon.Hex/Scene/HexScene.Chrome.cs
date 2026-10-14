@@ -139,12 +139,6 @@ internal sealed partial class HexScene
 
         FitRows(leftWidth, rightWidth);
 
-        // The canvas is the shape of the screen the layouts are made for, as long as that leaves room for the code.
-        // Unless its bottom edge was dragged, then it is as tall as it was left, as long as that leaves the code some
-        float canvasHeight = settings.CanvasHeight > 0.0f
-            ? MathF.Min(settings.CanvasHeight, height - Spoken(center, canvas, codeScroll) - MIN_FLEXIBLE)
-            : MathF.Min(centerWidth * DesignSize.Y / DesignSize.X, height * CANVAS_SHARE);
-
         // Whichever of the two is showing has the whole of the middle, the code or the canvas of the designer
         if (!LayoutTools)
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
