@@ -34,12 +34,31 @@ internal sealed partial class HexScene
         treeRows.Clear();
         fileRows.Clear();
 
+        // The files when they were asked for, then the designer of a layout has the layout's components on the left
         if (browsing)
         {
             RebuildFiles();
             return;
         }
 
+        if (LayoutTools)
+        {
+            RebuildComponentTree();
+            return;
+        }
+
+        // What was found, or what is wrong, across the files, until it is put away
+        if (results is not null)
+        {
+            RebuildResults();
+            return;
+        }
+
+        RebuildOutline();
+    }
+
+    private void RebuildComponentTree()
+    {
         treeTitle.Text = "LAYOUT";
 
         var components = document.Walk().ToList();
@@ -139,6 +158,13 @@ internal sealed partial class HexScene
     /// </summary>
     private void RebuildFiles()
     {
+        // A workspace is a tree of its folders, without one it is the folder files are opened from
+        if (!workspace.IsEmpty)
+        {
+            RebuildExplorer();
+            return;
+        }
+
         treeTitle.Text = "OPEN A LAYOUT";
         treeScroll.Offset = 0;
 

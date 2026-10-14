@@ -20,6 +20,7 @@ internal sealed partial class HexScene
             name = $"layout{number}";
 
         var created = new HexDocument(name, stage.CreateModule()) { FallbackDirectory = browseDirectory };
+        PrepareEditor(created);
 
         // Laid out as if the canvas were the screen it is made for, and kept inside of it
         created.Module.Viewport = DesignScreen;
@@ -27,6 +28,7 @@ internal sealed partial class HexScene
 
         // An empty layout that nobody has touched has nothing to save
         created.SavedCode = created.GenerateCode();
+        SetCode(created, created.SavedCode, fresh: true);
 
         documents.Add(created);
         return created;
@@ -59,7 +61,17 @@ internal sealed partial class HexScene
 
         nameBox.Text = shown.Name;
         MarkSelection();
-        browsing = false;
+        // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
+        browsing = browsing && !workspace.IsEmpty;
+        runOutput.Clear();
+
+        // Its editor is the one in the code panel
+        foreach (var child in codeScroll.Children.ToArray())
+            codeScroll.Remove(child);
+        codeScroll.Add(shown.Editor);
+
+        ApplyView();
+        KeepWorkspace();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
     }
 
@@ -76,6 +88,13 @@ internal sealed partial class HexScene
             return false;
         }
 
+        // A workspace file is the workspace it describes, the way VS Code opens one
+        if (path.EndsWith(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
+        {
+            OpenWorkspaceFile(path);
+            return !workspace.IsEmpty;
+        }
+
         // Somebody who opens the same file twice wants to see it, not have it twice
         string full = Path.GetFullPath(path);
         if (documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path) == full) is { } already)
@@ -84,6 +103,17 @@ internal sealed partial class HexScene
             Say($"{already.Name} is open already");
             return true;
         }
+
+        // A file of code that isn't a layout (data, a language, a skin), or any other text, is edited as the text it is
+        string source = File.ReadAllText(path);
+        if (source.Contains('\0'))
+        {
+            Say($"{Path.GetFileName(path)} isn't text", error: true);
+            return false;
+        }
+
+        if (!Path.GetExtension(path).Equals(".hor", StringComparison.OrdinalIgnoreCase) || !Horizon.HIDL.Preprocessing.HIDLPreprocessor.IsLayout(source))
+            return OpenText(path, source);
 
         // Reusing the empty layout the editor starts with saves a tab
         HexDocument target = document.Path is null && !document.Module.Root.Children.Any() ? document : NewDocument();
@@ -94,7 +124,7 @@ internal sealed partial class HexScene
         // languages loaded. They are next to the layouts, a localisation folder somewhere up the path
         UseLanguagesNear(path);
 
-        var (success, message) = target.Load(File.ReadAllText(path), path);
+        var (success, message) = target.Load(source, path);
         Show(target);
 
         if (!success)
@@ -107,6 +137,8 @@ internal sealed partial class HexScene
 
         Remember(path);
         target.SavedCode = target.GenerateCode();
+        target.CodeEdited = false;
+        SetCode(target, target.SavedCode, fresh: true);
 
         bool faithful = CheckRoundTrip(target);
         int count = target.Walk().Count();
@@ -243,13 +275,18 @@ internal sealed partial class HexScene
 
         try
         {
+            // The code typed into a layout by hand goes into it first, what is saved is the layout
+            if (document.CodeEdited)
+                ApplyCode();
+
             string written = document.GenerateCode();
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(path, written);
+            File.WriteAllText(path, document.CrLf ? written.Replace("\n", "\r\n") : written);
 
             document.Path = path;
             document.SavedCode = written;
+            vocabulary = null;
             document.Modified = false;
 
             // Its templates are looked for next to it, which may be somewhere else now

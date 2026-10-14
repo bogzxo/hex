@@ -232,6 +232,15 @@ internal sealed partial class HexScene
 
     private void Undo()
     {
+        // The editor of code undoes its own typing (it is handed the key as well), a file of code has no layout to undo
+        if (compositor.Focus is CodeEditor)
+            return;
+        if (!LayoutTools)
+        {
+            code.Document.Undo();
+            return;
+        }
+
         if (document.Undo())
             Restored("undone");
         else
@@ -240,6 +249,14 @@ internal sealed partial class HexScene
 
     private void Redo()
     {
+        if (compositor.Focus is CodeEditor)
+            return;
+        if (!LayoutTools)
+        {
+            code.Document.Redo();
+            return;
+        }
+
         if (document.Redo())
             Restored("redone");
         else

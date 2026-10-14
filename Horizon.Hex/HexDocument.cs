@@ -14,6 +14,13 @@ namespace Horizon.Hex;
 /// and the code itself, which is written out of the components and never kept.
 /// What is on screen is the layout, so there is nothing for the two to disagree about.
 /// </summary>
+/// <summary>How a layout is looked at, its designer (the canvas and the tools of a layout) or its code.</summary>
+internal enum HexView
+{
+    Design,
+    Code
+}
+
 internal sealed class HexDocument
 {
     // Properties that aren't part of how a component is laid out: where it is in the tree (written as its parent),
@@ -53,6 +60,28 @@ internal sealed class HexDocument
 
     /// <summary>The module the layout lives in, shown in the canvas of the editor.</summary>
     public UIModule Module { get; }
+
+    /// <summary>
+    /// Whether this is a file of code and not a layout (a data file, a language, a skin), which is edited as the text it
+    /// is in <see cref="Editor"/> and has nothing in its module.
+    /// </summary>
+    public bool IsText { get; init; }
+
+    /// <summary>
+    /// The code, to edit by hand. For a text file it is the whole of it. For a layout it is what the layout is written
+    /// as, which a change to the layout writes again, and which goes back into the layout when it is applied (see
+    /// <see cref="CodeEdited"/>). Every document has its own, so its undo history goes with it.
+    /// </summary>
+    public CodeEditor Editor { get; } = new() { Fill = UIFill.Both };
+
+    /// <summary>Whether the file had its lines ended with \r\n, which saving keeps. The code itself is always \n.</summary>
+    public bool CrLf { get; init; }
+
+    /// <summary>Whether a layout is shown as its designer or as its code. A file of code is only ever its code.</summary>
+    public HexView View { get; set; } = HexView.Design;
+
+    /// <summary>Whether the code of a layout was changed by hand since it was last written out of the layout, and not applied yet.</summary>
+    public bool CodeEdited { get; set; }
 
     // What is selected, in the order it was picked: the last one is the one the inspector shows
     private readonly List<UIComponent> selection = [];
@@ -404,9 +433,17 @@ internal sealed class HexDocument
     /// </summary>
     public string GenerateCode()
     {
+        // A file of code is what is in its editor, there is no layout to write it out of
+        if (IsText)
+            return Editor.Text;
+
         var code = new StringBuilder();
         code.Append("// ").Append(Name).AppendLine(", laid out with Horizon.Hex.");
         code.AppendLine("// Load it with UILayout.Load, every component is there under the name it has here.");
+
+        // What says it is a layout, which is what an editor opens it with its designer by
+        code.Append('#').Append("define ").AppendLine(Horizon.HIDL.Preprocessing.HIDLPreprocessor.LAYOUT);
+        code.AppendLine();
         code.Append(GenerateBody());
 
         return code.ToString();

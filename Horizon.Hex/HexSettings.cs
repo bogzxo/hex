@@ -38,6 +38,9 @@ internal sealed class HexSettings
     /// <summary>Whether the editor starts with the layout that was worked on last.</summary>
     public bool ReopenLast;
 
+    /// <summary>The workspace file that was open last, empty for one that was never saved (kept next to the editor instead).</summary>
+    public string LastWorkspace = string.Empty;
+
     private readonly string? path;
 
     /// <param name="path">Where it is kept, null for settings that are never read or written (the editor testing itself).</param>
@@ -63,6 +66,7 @@ internal sealed class HexSettings
             Snap = Number(values, "snap", Snap);
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
+            if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
         }
         catch (Exception e)
         {
@@ -92,7 +96,8 @@ internal sealed class HexSettings
         text.AppendLine($"    layers_height: {Write(LayersHeight)},");
         text.AppendLine($"    snap: {Write(Snap)},");
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");
-        text.AppendLine($"    reopen_last: {Flag(ReopenLast)}");
+        text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
+        text.AppendLine($"    last_workspace: {HIDLWriter.Write(new StringValue(LastWorkspace.Replace('\\', '/')))}");
         text.AppendLine("};");
 
         try
