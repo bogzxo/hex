@@ -5,6 +5,19 @@ drawn by the same code a game draws them with, so what is in the canvas is the r
 palette, a tree of the layout, properties in sections that fold, the code it writes as it goes, undo, layers,
 templates, the skin's art to pick from, and a self test that clicks through the lot.
 
+It edits every other .hor as well. A file that doesn't build a layout (data, a language, a skin, a move set) opens as
+code, coloured, numbered, checked as it is typed, with its outline on the left. The code of a layout can be typed into
+and put back into it with Ctrl+Enter. Ctrl+F finds, Ctrl+H replaces, Ctrl+G goes to a line, Ctrl+P opens any file of
+the repository by a few letters of its name, Ctrl+Shift+F finds in all of them, F8 checks all of them for what doesn't
+parse, F5 runs a file and lists what it declares. Ctrl+/ comments lines, Alt+Up and Down move them, Ctrl+D duplicates.
+What is typed is completed (Ctrl+Space, or as it is typed), a component's properties inside its braces, the game's
+text keys after an @, the names of the whole workspace anywhere else. F12 goes to where something is declared,
+Shift+F12 finds everywhere it is used.
+
+The workspace is any number of folders (File, Open folder, Add folder), a tree in the explorer on the left
+(Ctrl+Shift+E, Ctrl+Shift+O for the outline) with new, rename and delete on the right click, saved as a
+.hex-workspace and opened again with File, Open workspace. The one that was open comes back when Hex starts.
+
 ```
 git clone --recursive https://github.com/bogzxo/hex
 dotnet build Hex.sln

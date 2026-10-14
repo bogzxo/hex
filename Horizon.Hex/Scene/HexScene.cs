@@ -119,9 +119,10 @@ internal sealed partial class HexScene : Scene
     // What is behind the layouts in the canvas, a module of the stage as big as the canvas
     private readonly UIModule backdrop;
     private static readonly Vector4 CanvasColor = new(0.02f, 0.02f, 0.03f, 1.0f);
-    private readonly ScrollPanel treeScroll, inspectorScroll, codeScroll;
+    private readonly ScrollPanel treeScroll, inspectorScroll;
+    private readonly Panel codeScroll;
+    private readonly Label codeTitle;
     private readonly Label status, treeTitle, coords;
-    private readonly CodeView code;
     
     // The layouts that were opened or saved last, the latest first
     private readonly List<string> recent = [];
@@ -197,7 +198,8 @@ internal sealed partial class HexScene : Scene
         left = layout.Get<StackPanel>("left");
         center = layout.Get<StackPanel>("center");
         right = layout.Get<StackPanel>("right");
-        codeScroll = layout.Get<ScrollPanel>("code_scroll");
+        codeScroll = layout.Get<Panel>("code_scroll");
+        codeTitle = layout.Get<Label>("code_title");
         menu = layout.Get<MenuBar>("menu");
         layers = layout.Get<StackPanel>("layers");
 
@@ -210,7 +212,6 @@ internal sealed partial class HexScene : Scene
         inspector = layout.Get<StackPanel>("inspector");
         inspectorScroll = layout.Get<ScrollPanel>("inspector_scroll");
         canvas = layout.Get<Panel>("canvas");
-        code = layout.Get<CodeView>("code");
         status = layout.Get<Label>("status");
         coords = layout.Get<Label>("coords");
 
@@ -237,9 +238,12 @@ internal sealed partial class HexScene : Scene
         BuildPalette();
         Show(NewDocument());
 
+        // The folders of last time and the files that were open in them, unless the editor was told what to open
+        RestoreWorkspace();
+
         if (options.Open is not null)
             Open(options.Open);
-        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse)
+        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && workspace.OpenFiles.Count == 0)
             Open(recent[0]);
 
         if (options.SelfTest)
@@ -292,8 +296,8 @@ internal sealed partial class HexScene : Scene
         UpdateCanvasPointer();
         UpdateHistory(dt);
 
-        // Whatever changed the code changed the layout
-        if (codeDirty)
+        // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
+        if (codeDirty && !document.IsText)
         {
             recordPending = true;
             settleTimer = SETTLE_TIME;
@@ -320,10 +324,13 @@ internal sealed partial class HexScene : Scene
     private void ShowCode()
     {
         string written = document.GenerateCode();
-        code.Text = written;
+
+        // A layout's code is written again out of the layout, unless it was edited by hand and not put back yet
+        if (!document.IsText && !document.CodeEdited)
+            SetCode(document, written, fresh: false);
 
         // The tab of a layout says so when there is something to save
-        bool modified = written != document.SavedCode;
+        bool modified = written != document.SavedCode || document.CodeEdited;
         if (modified != document.Modified)
         {
             document.Modified = modified;
@@ -338,6 +345,16 @@ internal sealed partial class HexScene : Scene
     private void UpdateCanvasPointer()
     {
         UIPointer pointer = compositor.Pointer;
+
+        // The code has no canvas to point at
+        if (!LayoutTools)
+        {
+            pointerWasDown = pointer.Down;
+            dragging = false;
+            coords.Text = string.Empty;
+            return;
+        }
+
         bool pressed = pointer.Down && !pointerWasDown;
         bool released = !pointer.Down && pointerWasDown;
         pointerWasDown = pointer.Down;

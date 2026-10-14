@@ -1,5 +1,6 @@
 // editor, laid out with Horizon.Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
+#define layout
 
 let root = compositor.stack({
     fill: "both",
@@ -190,6 +191,35 @@ let tabs = compositor.stack({
     direction: "horizontal"
 });
 
+// A layout is looked at as its designer or as its code, a file of code only as its code
+let views = compositor.stack({
+    parent: center,
+    anchor: "left",
+    pivot: "left",
+    spacing: 4,
+    direction: "horizontal"
+});
+
+let design_view = compositor.button({
+    parent: views,
+    label: "design (F7)",
+    style: "button_flat",
+    size: vec(0, 26),
+    lbl_scale: 0.125,
+    animated: false,
+    tooltip: "the canvas and everything for putting a layout together"
+});
+
+let code_view = compositor.button({
+    parent: views,
+    label: "code (F7)",
+    style: "button_flat",
+    size: vec(0, 26),
+    lbl_scale: 0.125,
+    animated: false,
+    tooltip: "the code the layout is written as, what is typed goes back into it on the way to the designer"
+});
+
 let canvas = compositor.panel({ parent: center, size: vec(884, 497) });
 
 let code_title = compositor.label({
@@ -201,20 +231,13 @@ let code_title = compositor.label({
     color: vec(0.46, 0.52, 0.64, 1)
 });
 
-let code_scroll = compositor.scroll({
+// Where the code of whatever is open is edited, the editor of the document that is showing goes in here
+let code_scroll = compositor.panel({
     parent: center,
     pos: vec(-1.642662, 119.91173),
     size: vec(884, 250),
-    padding: vec(10, 10, 10, 10),
     color: vec(0.055, 0.06, 0.08, 1),
     radius: 6
-});
-
-let code = compositor.code({
-    parent: code_scroll,
-    anchor: "top_left",
-    pivot: "top_left",
-    text_scale: 0.125
 });
 
 let right = compositor.stack({

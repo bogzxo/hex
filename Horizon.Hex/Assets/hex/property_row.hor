@@ -1,4 +1,5 @@
 // One row of the inspector: what the property is called, and room for whatever edits it.
+#define layout
 
 let row = compositor.stack({ anchor: "left", direction: "horizontal", spacing: 6 });
 let caption = compositor.label({

@@ -145,7 +145,10 @@ internal sealed partial class HexScene
             ? MathF.Min(settings.CanvasHeight, height - Spoken(center, canvas, codeScroll) - MIN_FLEXIBLE)
             : MathF.Min(centerWidth * DesignSize.Y / DesignSize.X, height * CANVAS_SHARE);
 
-        canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, canvasHeight));
-        codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas, codeScroll) - canvas.Size.Y));
+        // Whichever of the two is showing has the whole of the middle, the code or the canvas of the designer
+        if (!LayoutTools)
+            codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
+        else
+            canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas)));
     }
 }

@@ -1,4 +1,5 @@
 // One button of the palette, the editor makes one for every kind of component there is to add.
+#define layout
 
 let button = compositor.button({
     label: "kind",

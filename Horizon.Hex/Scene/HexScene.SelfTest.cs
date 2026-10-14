@@ -77,6 +77,7 @@ internal sealed partial class HexScene
         Func<Vector2> Part(string name, float x = 0.5f, float y = 0.5f) => At(() => layout.Get<UIComponent>(name), x, y);
         Func<Vector2> Kind(string kind) => At(() => paletteButtons[Array.IndexOf(Palette, kind)]);
         Func<Vector2> Row(Func<UIComponent?> of) => At(() => of() is { } component ? treeRows.GetValueOrDefault(component) : null);
+        Func<Vector2> Explorer(Func<string> path) => At(() => explorerRows.Find(row => row.Path == path()).Row);
         Func<Vector2> File(string name) => At(() => fileRows.Find(row => Path.GetFileName(row.Path) == name).Row);
 
         // A row of the list a dropdown of the inspector has open, and a point of one of the areas of a colour picker
@@ -994,6 +995,214 @@ internal sealed partial class HexScene
         test.Run(() => UISkins.Use(UISkins.DEFAULT));
         test.Settle(0.3f);
         test.Check("skins: and back to the one games come in", () => UISkins.Current.Name == UISkins.DEFAULT && stage.Skin is { Sheet: not null });
+
+        /* Code, the files that aren't layouts and the code of the ones that are */
+
+        string dataFile = Path.Combine(workspace, "selftest_data.hor");
+        string brokenFile = Path.Combine(workspace, "selftest_broken.hor");
+        const string DATA = "let speed = 3;\r\nlet names = {\r\n    first: \"one\"\r\n};\r\n";
+        string original = string.Empty;
+
+        test.Run(() =>
+        {
+            System.IO.File.WriteAllText(dataFile, DATA);
+            if (System.IO.File.Exists(brokenFile)) System.IO.File.Delete(brokenFile);
+            Open(dataFile);
+            original = code.Text;
+        });
+        test.Wait();
+        test.Check("code: a file that isn't a layout opens as the code it is, the middle to itself", () =>
+            document.IsText && code.Text.StartsWith("let speed") && !canvas.Visible && codeScroll.Children.Contains(code) && code.Bounds.Height > canvas.Size.Y * 0.5f);
+        test.Check("code: its outline lists what it declares and the keys in it", () =>
+            treeTitle.Text.StartsWith("OUTLINE") && tree.Children.Count == 3);
+        test.Check("code: what only a layout has is out of the way", () =>
+            !layout.Get<UIComponent>("palette").Visible && !layout.Get<UIComponent>("layers_scroll").Visible);
+
+        test.Click(At(() => code, 0.5f, 0.5f));
+        test.Check("code: a click gives it the keyboard", () => code.IsFocused);
+
+        test.Run(() =>
+        {
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("let broken = ;");
+        });
+        test.WaitFor(() => code.SyntaxError is not null, 2.0f);
+        test.Check("code: what doesn't parse is underlined, on the line it is on", () => code.SyntaxError is { Line: 4 } && document.Modified);
+        test.Run(() => code.Document.Undo());
+        test.WaitFor(() => code.SyntaxError is null, 2.0f);
+        test.Check("code: undone it parses again and has nothing to save", () => code.Text == original && !document.Modified);
+
+        test.Run(() =>
+        {
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("let added = 2;");
+            Save();
+        });
+        test.Wait();
+        test.Check("code: saved, it has what was typed and the line endings it came with", () =>
+            System.IO.File.ReadAllText(dataFile) is { } written && written.Contains("let added = 2;") && written.Contains("\r\n") && !written.Replace("\r\n", "").Contains('\n') && !document.Modified);
+
+        test.Run(() =>
+        {
+            lastFind = "names";
+            code.Document.MoveToStart(false);
+            FindAgain(forward: true);
+        });
+        test.Wait();
+        test.Check("code: finding selects what is found", () => code.Document.SelectedText == "names" && code.FoundCount == 1);
+
+        test.Run(RunCode);
+        test.Check("code: F5 runs it and lists what it declares", () =>
+            runOutput.Any(said => said.StartsWith("speed = 3")) && runOutput.Any(said => said.StartsWith("added = 2")));
+
+        test.Run(() =>
+        {
+            System.IO.File.WriteAllText(brokenFile, "let = 3;\n");
+            CheckAllFiles();
+        });
+        test.Wait();
+        test.Check("code: checking every file lists the one that doesn't parse, on the left", () =>
+            results is { } listed && listed.Any(result => result.Path == brokenFile) && treeTitle.Text.StartsWith("PROBLEMS"));
+        test.Run(() =>
+        {
+            CloseResults();
+            System.IO.File.Delete(brokenFile);
+        });
+
+        test.Run(() => Open(savedFile));
+        test.Wait();
+        test.Check("code: a layout has its canvas back, its code under it", () => !document.IsText && canvas.Visible && codeScroll.Children.Contains(code));
+        test.Run(() =>
+        {
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("\nlet from_code = compositor.label({ text: \"typed\" });");
+        });
+        test.Wait();
+        test.Check("code: typed into, a layout's code waits to be put into it", () => document.CodeEdited && document.Find("from_code") is null);
+        test.Run(ApplyCode);
+        test.Wait();
+        test.Check("code: put in, the layout has what was typed", () => !document.CodeEdited && document.Find("from_code") is Label && code.Text.Contains("from_code"));
+
+        /* Completing what is typed */
+
+        test.Run(() =>
+        {
+            code.Focus();
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("\nlet completed = compositor.label({ te");
+            code.Complete(typed: true);
+        });
+        test.Wait();
+        test.Check("complete: inside a component being made it offers that kind's properties", () =>
+            code.CompletionOpen && code.Completions.Any(item => item.Text == "text") && code.Completions.All(item => item.Text.Contains("te", StringComparison.OrdinalIgnoreCase)));
+        test.Run(() =>
+        {
+            int at = code.Completions.ToList().FindIndex(item => item.Text == "text");
+            code.MoveCompletion(at);
+            code.AcceptCompletion();
+        });
+        test.Check("complete: picked, it goes in with its colon", () => !code.CompletionOpen && code.Document.LineAt(code.Document.Caret.Line).EndsWith("compositor.label({ text: "));
+        test.Run(() =>
+        {
+            code.Document.Insert("\"x\" });\nlet other = compositor.");
+            code.Complete(typed: true);
+        });
+        test.Check("complete: after compositor. it offers the kinds of component", () =>
+            code.CompletionOpen && code.Completions.Any(item => item.Text == "button") && code.Completions.Any(item => item.Text == "collapsible"));
+        test.Run(() =>
+        {
+            code.CloseCompletion();
+            code.Document.Undo();
+            code.Document.Undo();
+            code.Document.Undo();
+            RevertCode();
+        });
+
+        /* The workspace, more than one folder, the explorer, a file of it, and going places across it */
+
+        string folderA = Path.Combine(workspace, "ws_a"), folderB = Path.Combine(workspace, "ws_b");
+        string workspaceFile = Path.Combine(workspace, "selftest.hex-workspace");
+
+        test.Run(() =>
+        {
+            foreach (string folder in new[] { folderA, folderB })
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+
+            Directory.CreateDirectory(Path.Combine(folderA, "inner"));
+            Directory.CreateDirectory(folderB);
+            System.IO.File.WriteAllText(Path.Combine(folderA, "a.hor"), "let alpha = 1;\n");
+            System.IO.File.WriteAllText(Path.Combine(folderA, "inner", "deep.hor"), "let deep = 0;\n");
+            System.IO.File.WriteAllText(Path.Combine(folderB, "b.hor"), "let beta = alpha + 1;\nlet names = { gamma: 2 };\n");
+
+            AddFolder(folderA);
+            AddFolder(folderB);
+        });
+        test.Wait();
+        test.Check("workspace: two folders added, the explorer has both", () =>
+            this.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("EXPLORER")
+            && explorerRows.Any(row => row.IsFolder && row.Path == folderA) && explorerRows.Any(row => row.IsFolder && row.Path == folderB)
+            && explorerRows.Any(row => row.Path == Path.Combine(folderA, "a.hor")) && explorerRows.Any(row => row.Path == Path.Combine(folderB, "b.hor")));
+        test.Check("workspace: a folder in one of them is shut until it is opened up", () =>
+            explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner")) && !explorerRows.Any(row => row.Path.EndsWith("deep.hor")));
+
+        test.Click(Explorer(() => Path.Combine(folderA, "inner")));
+        test.Wait();
+        test.Check("workspace: a click opens a folder up", () => explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner", "deep.hor")));
+        test.Click(Explorer(() => Path.Combine(folderB, "b.hor")));
+        test.Wait();
+        test.Check("workspace: a click on a file opens it", () => document.Path == Path.Combine(folderB, "b.hor") && document.IsText);
+
+        List<string> everyFile = [];
+        test.Run(() => everyFile = AllWorkspaceFiles());
+        test.Check("workspace: what is looked through is every folder of it", () =>
+            everyFile.Contains(Path.Combine(folderA, "inner", "deep.hor")) && everyFile.Contains(Path.Combine(folderB, "b.hor")));
+
+        test.Run(() =>
+        {
+            code.GoTo(0, 12);
+            GoToDefinition();
+        });
+        test.Wait();
+        test.Check("workspace: F12 on a name goes to its let in the other folder", () =>
+            document.Path == Path.Combine(folderA, "a.hor") && code.Document.Caret == new UITextPosition(0, 4));
+
+        test.Run(() =>
+        {
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("\nlet x = be");
+            code.Complete(typed: true);
+        });
+        test.Check("workspace: names of the other files are offered as they are typed", () => code.CompletionOpen && code.Completions.Any(item => item.Text == "beta"));
+        test.Run(() =>
+        {
+            code.CloseCompletion();
+            code.Document.Undo();
+        });
+
+        test.Run(() => MakeFile(Path.Combine(folderB, "made.hor")));
+        test.Wait();
+        test.Check("workspace: a file made in a folder is there and open", () =>
+            System.IO.File.Exists(Path.Combine(folderB, "made.hor")) && document.Path == Path.Combine(folderB, "made.hor") && explorerRows.Any(row => row.Path.EndsWith("made.hor")));
+
+        test.Run(() => SaveWorkspaceAs(workspaceFile));
+        test.Check("workspace: saved to a file, it reads back the same, its folders relative to it", () =>
+            System.IO.File.Exists(workspaceFile) && System.IO.File.ReadAllText(workspaceFile).Contains("\"ws_a\"")
+            && HexWorkspace.Load(workspaceFile) is { } read && read.Folders.SequenceEqual(this.workspace.Folders) && read.OpenFiles.Contains(Path.Combine(folderB, "made.hor")));
+
+        test.Run(() =>
+        {
+            CloseWorkspace();
+            OpenWorkspaceFile(workspaceFile);
+        });
+        test.Wait();
+        test.Check("workspace: closed and opened again from its file, its folders are back", () =>
+            this.workspace.Folders.Count == 2 && this.workspace.FilePath == workspaceFile && explorerRows.Count > 2);
+
+        test.Run(() => RemoveFolder(folderB));
+        test.Wait();
+        test.Check("workspace: a folder taken out is out of the explorer, its files where they were", () =>
+            this.workspace.Folders.Count == 1 && !explorerRows.Any(row => row.Path.StartsWith(folderB)) && System.IO.File.Exists(Path.Combine(folderB, "b.hor")));
+        test.Run(CloseWorkspace);
 
         test.Hover(Part("canvas", 0.04f, 0.06f));
     }

@@ -89,7 +89,7 @@ internal sealed partial class HexScene
         shortcuts.Add(Key.Z, Undo, control: true, whileTyping: true);
         shortcuts.Add(Key.Y, Redo, control: true, whileTyping: true);
         shortcuts.Add(Key.S, Save, control: true, whileTyping: true);
-        shortcuts.Add(Key.O, OpenPressed, control: true, whileTyping: true);
+        shortcuts.Add(Key.O, OpenPressed, control: true, whileTyping: true, shift: false);
         shortcuts.Add(Key.N, () => Show(NewDocument()), control: true, whileTyping: true);
         shortcuts.Add(Key.W, Close, control: true, whileTyping: true);
 
@@ -101,8 +101,27 @@ internal sealed partial class HexScene
         shortcuts.Add(Key.V, Paste, control: true);
         shortcuts.Add(Key.Comma, OpenSettings, control: true);
 
-        // Nothing types an F5, so it plays the entrances from a text box as well
-        shortcuts.Add(Key.F5, PlayIntros, whileTyping: true);
+        // Nothing types an F5, so it plays the entrances from a text box as well. A file of code is run instead
+        shortcuts.Add(Key.F5, () => { if (LayoutTools) PlayIntros(); else RunCode(); }, whileTyping: true);
+
+        // F7 flips a layout between its designer and its code, the way Visual Studio's designers go
+        shortcuts.Add(Key.F7, ToggleView, whileTyping: true);
+
+        // The code, in any file. These go while typing, the editor of code is where they are wanted most
+        shortcuts.Add(Key.Enter, ApplyCode, control: true, whileTyping: true);
+        shortcuts.Add(Key.F, FindInFile, control: true, whileTyping: true, shift: false);
+        shortcuts.Add(Key.F, FindInFiles, control: true, whileTyping: true, shift: true);
+        shortcuts.Add(Key.H, ReplaceInFile, control: true, whileTyping: true);
+        // Ctrl+G groups what is selected in a layout, it only goes to a line where there is code to go about in
+        shortcuts.Add(Key.G, () => { if (!LayoutTools || compositor.Focus is CodeEditor) GoToLine(); }, control: true, whileTyping: true, shift: false);
+        shortcuts.Add(Key.P, QuickOpen, control: true, whileTyping: true);
+        shortcuts.Add(Key.F3, () => FindAgain(forward: true), whileTyping: true, shift: false);
+        shortcuts.Add(Key.F3, () => FindAgain(forward: false), whileTyping: true, shift: true);
+        shortcuts.Add(Key.F8, CheckAllFiles, whileTyping: true);
+        shortcuts.Add(Key.F12, GoToDefinition, whileTyping: true, shift: false);
+        shortcuts.Add(Key.F12, FindReferences, whileTyping: true, shift: true);
+        shortcuts.Add(Key.E, ShowExplorer, control: true, whileTyping: true, shift: true);
+        shortcuts.Add(Key.O, ShowOutline, control: true, whileTyping: true, shift: true);
 
         // With control the arrows move it about the tree instead of about the canvas
         shortcuts.Add(Key.Up, () => MoveSelected(-1), control: true);
@@ -149,6 +168,34 @@ internal sealed partial class HexScene
         edit.Add("Select nothing", () => Select(null), "Esc").IsEnabled = () => document.Selected is not null;
 
         // Lining up is against each other with several things selected, against the container with one
+        // The code of whatever is open, a layout's or a file's
+        Menu codeMenu = menu.AddMenu("Code");
+        codeMenu.Add("Find...", FindInFile, "Ctrl+F");
+        codeMenu.Add("Find next", () => FindAgain(forward: true), "F3");
+        codeMenu.Add("Find the one before", () => FindAgain(forward: false), "Shift+F3");
+        codeMenu.Add("Replace...", ReplaceInFile, "Ctrl+H");
+        codeMenu.Add("Go to line...", GoToLine, "Ctrl+G");
+        codeMenu.AddSeparator();
+        codeMenu.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsEnabled = () => document.CodeEdited;
+        codeMenu.Add("Throw the typed code away", RevertCode).IsEnabled = () => document.CodeEdited;
+        codeMenu.Add("Run the file", RunCode, "F5").IsEnabled = () => !LayoutTools;
+        codeMenu.Add("Designer or code", ToggleView, "F7").IsEnabled = () => !document.IsText;
+        codeMenu.Add("Make this file a layout (#define layout)", MakeLayout).IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
+        codeMenu.AddSeparator();
+        codeMenu.Add("Open a file of the workspace...", QuickOpen, "Ctrl+P");
+        codeMenu.Add("Find in files...", FindInFiles, "Ctrl+Shift+F");
+        codeMenu.Add("Check every file", CheckAllFiles, "F8");
+        codeMenu.Add("Put the list of what was found away", CloseResults).IsEnabled = () => results is not null;
+        codeMenu.AddSeparator();
+        codeMenu.Add("Go to where it is declared", GoToDefinition, "F12");
+        codeMenu.Add("Find everywhere it is", FindReferences, "Shift+F12");
+        codeMenu.Add("Complete the word", () => { code.Focus(); code.Complete(); }, "Ctrl+Space");
+        codeMenu.AddSeparator();
+        codeMenu.Add("Comment lines in and out", () => code.Document.ToggleComment(), "Ctrl+/");
+        codeMenu.Add("Duplicate the line", () => code.Document.Duplicate(), "Ctrl+D");
+        codeMenu.Add("Move lines up", () => code.Document.MoveLines(-1), "Alt+Up");
+        codeMenu.Add("Move lines down", () => code.Document.MoveLines(1), "Alt+Down");
+
         Menu arrange = menu.AddMenu("Arrange");
         Func<bool> some = () => document.Selected is not null;
         arrange.Add("Left edges", () => Align(Edge.Left)).IsEnabled = some;
@@ -224,6 +271,15 @@ internal sealed partial class HexScene
         fileMenu.Add("Close", Close, "Ctrl+W");
         fileMenu.AddSeparator();
         fileMenu.Add("Settings...", OpenSettings, "Ctrl+,");
+        fileMenu.AddSeparator();
+        fileMenu.Add("Open folder...", () => AskFolder(OpenFolder));
+        fileMenu.Add("Add folder to the workspace...", () => AskFolder(AddFolder));
+        fileMenu.Add("Open workspace...", OpenWorkspacePressed);
+        fileMenu.Add("Save workspace", () => SaveWorkspacePressed(asNew: false)).IsEnabled = () => !workspace.IsEmpty;
+        fileMenu.Add("Save workspace as...", () => SaveWorkspacePressed(asNew: true)).IsEnabled = () => !workspace.IsEmpty;
+        fileMenu.Add("Close workspace", CloseWorkspace).IsEnabled = () => !workspace.IsEmpty;
+        fileMenu.Add("Explorer", ShowExplorer, "Ctrl+Shift+E");
+        fileMenu.Add("Outline, or the layout's components", ShowOutline, "Ctrl+Shift+O");
 
         if (recent.Count > 0)
         {

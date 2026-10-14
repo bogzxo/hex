@@ -16,6 +16,13 @@ internal sealed partial class HexScene
 
     private void RebuildInspector()
     {
+        // The code of a file (or of a layout) has no components, it has what is wrong with it and what running it came to
+        if (!LayoutTools)
+        {
+            RebuildCodeInspector();
+            return;
+        }
+
         editors.Clear();
         foreach (var child in inspector.Children.ToArray())
             inspector.Remove(child);
