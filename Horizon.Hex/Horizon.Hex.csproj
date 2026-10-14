@@ -11,6 +11,9 @@
 
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Where the engine is, its submodule unless a workspace said otherwise -->
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
   </PropertyGroup>
 
   <!--
@@ -54,9 +57,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The engine is a submodule at horizon/, the language a submodule inside of that -->
-    <ProjectReference Include="..\horizon\Horizon\Horizon.csproj" />
-    <ProjectReference Include="..\horizon\Horizon.HIDL\Horizon.HIDL.csproj" />
+    <!-- The engine is a submodule at horizon/, the language a submodule inside of that. A workspace above this repo
+         (Directory.Build.props) can say to use another checkout of the engine instead, see HorizonRoot -->
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
   </ItemGroup>
 
 </Project>
