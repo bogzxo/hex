@@ -411,3 +411,4 @@ Thumbs.db
 # Editors and their settings, which are whoever's machine's own
 .idea/
 .claudiaideconfig
+/docs/ide-plan.md
