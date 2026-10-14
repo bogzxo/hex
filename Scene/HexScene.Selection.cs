@@ -255,6 +255,14 @@ internal sealed partial class HexScene
         var shown = new Menu("component");
         Func<bool> any = () => document.Selection.Count > 0;
 
+        shown.Add("Move up", () => MoveSelected(-1), "Ctrl+Up").IsEnabled = any;
+        shown.Add("Move down", () => MoveSelected(1), "Ctrl+Down").IsEnabled = any;
+        shown.Add("Move out", () => MoveSelectedAcross(inwards: false), "Ctrl+Left").IsEnabled = any;
+        shown.Add("Move into", () => MoveSelectedAcross(inwards: true), "Ctrl+Right").IsEnabled = any;
+        shown.AddSeparator();
+        shown.Add("Cut", CutSelected, "Ctrl+X").IsEnabled = any;
+        shown.Add("Copy", CopySelected, "Ctrl+C").IsEnabled = any;
+        shown.Add("Paste", Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
         shown.Add("Duplicate", DuplicateSelected, "Ctrl+D").IsEnabled = any;
         shown.Add("Delete", DeleteAll, "Del").IsEnabled = any;
         shown.AddSeparator();

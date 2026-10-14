@@ -33,9 +33,22 @@ internal sealed partial class HexScene
             return;
         }
 
+        // With several things selected the rows are those of the one picked last, and what is changed in them is
+        // changed for all of them that have such a thing to change
+        if (document.Selection.Count > 1)
+        {
+            inspector.Add(new Label($"{document.Selection.Count} things selected, a change here goes to\nall of them that have the property")
+            {
+                Anchor = Origin.Left,
+                Align = Origin.TopLeft,
+                TextScale = EDITOR_TEXT,
+                Color = FolderColor
+            });
+        }
+
         var nameEditor = new TextBox(document.NameOf(selected))
         {
-            Size = new Vector2(EDITOR_WIDTH, EDITOR_HEIGHT),
+            Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
             TextScale = EDITOR_TEXT,
             MaxLength = 32,
             Padding = new UIEdges(8, 6)
@@ -57,7 +70,7 @@ internal sealed partial class HexScene
         {
             Align = Origin.Left,
             TextScale = EDITOR_TEXT,
-            Size = new Vector2(EDITOR_WIDTH, 24)
+            Size = new Vector2(EditorWidth, 24)
         });
 
         foreach (var (name, value) in HexDocument.ReadProperties(selected))
@@ -66,6 +79,13 @@ internal sealed partial class HexScene
                 AddRow(name, editor);
         }
     }
+
+    // The properties that name a piece of art of the skin, the look of anything that has one, a panel's backdrop,
+    // what an image shows, the handle of a slider
+    private static readonly HashSet<string> ArtProperties = ["style", "background", "region", "handle"];
+
+    // The menu of art that was opened last, for the self-test to find its tiles
+    private ArtPicker? artPicker;
 
     private void AddRow(string name, UIComponent editor)
     {
@@ -90,7 +110,7 @@ internal sealed partial class HexScene
                 NumberBox exact = null!;
                 var slider = row.Add(new Slider
                 {
-                    Size = new Vector2(EDITOR_WIDTH - 72, EDITOR_HEIGHT - 6),
+                    Size = new Vector2(EditorWidth - 72, EDITOR_HEIGHT - 6),
                     Min = min,
                     Max = max,
                     Value = number.Value
@@ -113,12 +133,12 @@ internal sealed partial class HexScene
             }
 
             case NumberValue number:
-                return NumberEditor(EDITOR_WIDTH, number.Value, changed => Set(target, name, new NumberValue(changed)));
+                return NumberEditor(EditorWidth, number.Value, changed => Set(target, name, new NumberValue(changed)));
 
             case BooleanValue boolean:
                 return new Selector("no", "yes")
                 {
-                    Size = new Vector2(EDITOR_WIDTH, EDITOR_HEIGHT),
+                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
                     TextScale = EDITOR_TEXT,
                     Value = boolean.Value ? "yes" : "no",
                     OnChanged = chosen => Set(target, name, new BooleanValue(chosen == "yes"))
@@ -127,30 +147,58 @@ internal sealed partial class HexScene
             case StringValue text when Choices.TryGetValue(name, out var choices):
                 return new Dropdown(choices)
                 {
-                    Size = new Vector2(EDITOR_WIDTH, EDITOR_HEIGHT),
+                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
                     TextScale = EDITOR_TEXT,
                     Value = text.Value,
                     OnChanged = chosen => Set(target, name, new StringValue(chosen))
                 };
 
             case StringValue text:
+            {
                 // A quote can't be written into a script, so one never gets as far as the component
-                return new TextBox(text.Value)
+                var box = new TextBox(text.Value)
                 {
-                    Size = new Vector2(EDITOR_WIDTH, EDITOR_HEIGHT),
+                    Size = new Vector2(EditorWidth, EDITOR_HEIGHT),
                     TextScale = EDITOR_TEXT,
                     MaxLength = 200,
                     Padding = new UIEdges(8, 6),
                     OnChanged = typed => Set(target, name, new StringValue(typed.Replace('"', '\'')))
                 };
 
+                // What names a piece of the skin's art gets a button that shows the lot of it to pick from, the
+                // art of the skin the layouts are shown in and not the plain one the editor wears
+                if (ArtProperties.Contains(name) && stage.Skin is { } art)
+                {
+                    box.ButtonLabel = "...";
+                    box.Tooltip = "the button shows every piece of art the skin has, to pick one by eye";
+                    box.OnButtonPressed = () => artPicker = ArtPicker.Show(chrome, art, box.Text, chosen =>
+                    {
+                        box.Text = chosen;
+                        Set(target, name, new StringValue(chosen));
+                        Say($"{name} is {chosen}");
+                    });
+                }
+
+                return box;
+            }
+
             case Vector2Value vector:
             {
                 Vector2 current = vector.Value;
                 var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4 };
 
-                row.Add(NumberEditor((EDITOR_WIDTH - 4) / 2, current.X, x => { current.X = x; Set(target, name, new Vector2Value(current)); }));
-                row.Add(NumberEditor((EDITOR_WIDTH - 4) / 2, current.Y, y => { current.Y = y; Set(target, name, new Vector2Value(current)); }));
+                // The rest of what is selected only takes the number that was changed, each keeps its other one.
+                // Setting the x of five things mustn't put them all at the same y
+                row.Add(NumberEditor((EditorWidth - 4) / 2, current.X, x =>
+                {
+                    current.X = x;
+                    Set(target, name, new Vector2Value(current), theirs => theirs is Vector2Value had ? new Vector2Value(had.Value with { X = x }) : null);
+                }));
+                row.Add(NumberEditor((EditorWidth - 4) / 2, current.Y, y =>
+                {
+                    current.Y = y;
+                    Set(target, name, new Vector2Value(current), theirs => theirs is Vector2Value had ? new Vector2Value(had.Value with { Y = y }) : null);
+                }));
                 return row;
             }
 
@@ -166,11 +214,18 @@ internal sealed partial class HexScene
                 for (int i = 0; i < 4; i++)
                 {
                     int component = i;
-                    numbers[i] = row.Add(NumberEditor((EDITOR_WIDTH - 12) / 4, current[i], changed =>
+                    numbers[i] = row.Add(NumberEditor((EditorWidth - 12) / 4, current[i], changed =>
                     {
                         current[component] = changed;
                         if (picker is not null) picker.Color = current;
-                        Set(target, name, new Vector4Value(current));
+                        Set(target, name, new Vector4Value(current), theirs =>
+                        {
+                            if (theirs is not Vector4Value had) return null;
+
+                            Vector4 kept = had.Value;
+                            kept[component] = changed;
+                            return new Vector4Value(kept);
+                        });
                     }));
                     numbers[i].DragStep = colour ? 0.02f : 1.0f;
                 }
@@ -182,7 +237,7 @@ internal sealed partial class HexScene
                 var both = new StackPanel { Spacing = 4 };
                 picker = both.Add(new ColorPicker
                 {
-                    Size = new Vector2(EDITOR_WIDTH, PICKER_HEIGHT),
+                    Size = new Vector2(EditorWidth, PICKER_HEIGHT),
                     Color = current,
                     OnChanged = picked =>
                     {
@@ -211,13 +266,41 @@ internal sealed partial class HexScene
         OnValueChanged = changed
     };
 
-    private void Set(UIComponent target, string name, IRuntimeValue value)
+    /// <summary>
+    /// Helper method to set a property of what the inspector shows, and of everything else that is selected and has
+    /// a property by that name, so a row changed with ten things selected is changed for the ten.
+    /// </summary>
+    /// <param name="forOthers">
+    /// What the rest of the selection gets, worked out of what each of them has now, for a change that is only to a
+    /// part of the value (one number of a position). Null from it leaves that one alone, left out they all get the value.
+    /// </param>
+    private void Set(UIComponent target, string name, IRuntimeValue value, Func<IRuntimeValue, IRuntimeValue?>? forOthers = null)
     {
         if (HexDocument.Write(target, name, value) is { } problem)
         {
             Say(problem, error: true);
             return;
         }
+
+        int others = 0;
+        foreach (var other in document.Selection)
+        {
+            if (other == target || !HexDocument.TryRead(other, name, out var theirs))
+                continue;
+
+            IRuntimeValue? wanted = forOthers is null ? value : forOthers(theirs);
+
+            // One that won't have it (a kind of value it doesn't take) is left as it was, the rest still get theirs
+            if (wanted is null || HexDocument.Write(other, name, wanted) is not null)
+                continue;
+
+            others++;
+            if (name.StartsWith("intro") || name == "stagger")
+                other.PlayIntro();
+        }
+
+        if (others > 0)
+            Say($"{name.Replace('_', ' ')} changed for {others + 1} things");
 
         codeDirty = true;
 
@@ -228,7 +311,8 @@ internal sealed partial class HexScene
         // An entrance is easier to set up when it is played back every time something about it changes
         if (name.StartsWith("intro") || name == "stagger")
         {
-            document.SettleIntros();
+            // The others were set off above, settling here would stop them again
+            if (others == 0) document.SettleIntros();
             target.PlayIntro();
         }
 
