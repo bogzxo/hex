@@ -27,7 +27,7 @@ internal sealed class HexSettings
     public float LeftWidth, RightWidth;
 
     /// <summary>How tall the canvas and the list of layers were dragged, 0 for what the editor works out by itself.</summary>
-    public float CanvasHeight, LayersHeight;
+    public float LayersHeight;
 
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
@@ -61,7 +61,6 @@ internal sealed class HexSettings
             if (values.TryGetValue("editor_theme", out var theme) && theme is StringValue themed) EditorTheme = themed.Value;
             LeftWidth = Number(values, "left_width", LeftWidth);
             RightWidth = Number(values, "right_width", RightWidth);
-            CanvasHeight = Number(values, "canvas_height", CanvasHeight);
             LayersHeight = Number(values, "layers_height", LayersHeight);
             Snap = Number(values, "snap", Snap);
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
@@ -92,7 +91,6 @@ internal sealed class HexSettings
         text.AppendLine($"    editor_theme: \"{EditorTheme}\",");
         text.AppendLine($"    left_width: {Write(LeftWidth)},");
         text.AppendLine($"    right_width: {Write(RightWidth)},");
-        text.AppendLine($"    canvas_height: {Write(CanvasHeight)},");
         text.AppendLine($"    layers_height: {Write(LayersHeight)},");
         text.AppendLine($"    snap: {Write(Snap)},");
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");

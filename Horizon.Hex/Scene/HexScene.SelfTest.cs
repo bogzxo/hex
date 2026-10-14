@@ -869,12 +869,8 @@ internal sealed partial class HexScene
             box!.Resizable == (UIResize.Right | UIResize.Bottom) && Code().Contains("resize: \"right, bottom\""));
         test.Check("resize: and writes back the same", () => CheckRoundTrip(document));
 
-        float listWide = 0, canvasTall = 0;
-        test.Run(() =>
-        {
-            listWide = treeScroll.Size.X;
-            canvasTall = canvas.Size.Y;
-        });
+        float listWide = 0;
+        test.Run(() => listWide = treeScroll.Size.X);
         test.Hover(InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)));
         test.Check("panels: the edge between the lists and the canvas lights up under the pointer", () => treeScroll.ActiveGrip == UIResize.Right);
         test.Drag(
@@ -908,24 +904,10 @@ internal sealed partial class HexScene
             editors["pos"] is StackPanel pair && Near(pair.Bounds.Width, editors["name"].Bounds.Width, 2)
             && editors["padding"] is StackPanel four && Near(four.Bounds.Width, editors["name"].Bounds.Width, 2));
 
-        // The canvas got narrower twice over and is the shape of a screen, so it is lower than it started as
-        float narrowTall = 0, narrowCode = 0;
-        Vector2 canvasEdge = default;
-        test.Run(() =>
-        {
-            narrowTall = canvas.Size.Y;
-            narrowCode = codeScroll.Size.Y;
-            canvasEdge = new Vector2(canvas.Bounds.Center.X, canvas.Bounds.Min.Y - 4);
-        });
-        test.Drag(InChrome(() => canvasEdge), InChrome(() => canvasEdge - new Vector2(0, 50)));
-        test.Wait();
-        test.Check("panels: the bottom of the canvas drags it taller, out of the room the code had", () =>
-            canvas.Size.Y > narrowTall + 30 && codeScroll.Size.Y < narrowCode - 30 && Fits());
-
         test.Run(ResetPanels);
         test.Wait();
         test.Check("panels: and they go back to what they come as", () =>
-            Near(treeScroll.Size.X, listWide, 1) && Near(canvas.Size.Y, canvasTall, 2) && settings.LeftWidth == 0.0f && Fits());
+            Near(treeScroll.Size.X, listWide, 1) && settings.LeftWidth == 0.0f && Fits());
 
         /* The settings, and the skins */
 
@@ -1069,19 +1051,55 @@ internal sealed partial class HexScene
             System.IO.File.Delete(brokenFile);
         });
 
+        /* A layout as its designer or its code, and what says it is one */
+
         test.Run(() => Open(savedFile));
         test.Wait();
-        test.Check("code: a layout has its canvas back, its code under it", () => !document.IsText && canvas.Visible && codeScroll.Children.Contains(code));
+        test.Check("views: a layout Hex saved says so at the top", () =>
+            System.IO.File.ReadAllText(savedFile).Contains("#define layout") && Horizon.HIDL.Preprocessing.HIDLPreprocessor.IsLayout(System.IO.File.ReadAllText(savedFile)));
+        test.Check("views: and opens as its designer, the canvas the whole of the middle and no code", () =>
+            !document.IsText && LayoutTools && canvas.Visible && !codeScroll.Visible && layout.Get<UIComponent>("views").Visible
+            && layout.Get<Button>("design_view").Selected && layout.Get<UIComponent>("palette").Visible);
+
+        test.Click(At(() => layout.Get<Button>("code_view")));
+        test.Wait();
+        test.Check("views: the code button shows its code instead, the middle to itself", () =>
+            document.View == HexView.Code && !canvas.Visible && codeScroll.Visible && codeScroll.Children.Contains(code)
+            && layout.Get<Button>("code_view").Selected && code.IsFocused);
+        test.Check("views: with the explorer and what is wrong with it round it, not the tools of a layout", () =>
+            !layout.Get<UIComponent>("palette").Visible && !layout.Get<UIComponent>("layers_scroll").Visible
+            && layout.Get<Label>("inspector_title").Text == "FILE" && !treeTitle.Text.StartsWith("LAYOUT"));
+
         test.Run(() =>
         {
             code.Document.MoveToEnd(false);
             code.Document.Insert("\nlet from_code = compositor.label({ text: \"typed\" });");
         });
         test.Wait();
-        test.Check("code: typed into, a layout's code waits to be put into it", () => document.CodeEdited && document.Find("from_code") is null);
-        test.Run(ApplyCode);
+        test.Check("views: typed into, a layout's code waits to be put into it", () => document.CodeEdited && document.Find("from_code") is null);
+
+        test.Click(At(() => layout.Get<Button>("design_view")));
         test.Wait();
-        test.Check("code: put in, the layout has what was typed", () => !document.CodeEdited && document.Find("from_code") is Label && code.Text.Contains("from_code"));
+        test.Check("views: back to the designer it goes in, the layout has what was typed", () =>
+            LayoutTools && canvas.Visible && !document.CodeEdited && document.Find("from_code") is Label && code.Text.Contains("from_code"));
+
+        test.Run(ToggleView);
+        test.Run(() =>
+        {
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("\nlet = ;");
+        });
+        test.Wait();
+        test.Run(ToggleView);
+        test.Wait();
+        test.Check("views: code that doesn't build keeps it on the code", () => document.View == HexView.Code && document.CodeEdited);
+        test.Run(() =>
+        {
+            code.Document.Undo();
+            ApplyCode();
+            SwitchView(HexView.Code);
+        });
+        test.Wait();
 
         /* Completing what is typed */
 
@@ -1203,6 +1221,62 @@ internal sealed partial class HexScene
         test.Check("workspace: a folder taken out is out of the explorer, its files where they were", () =>
             this.workspace.Folders.Count == 1 && !explorerRows.Any(row => row.Path.StartsWith(folderB)) && System.IO.File.Exists(Path.Combine(folderB, "b.hor")));
         test.Run(CloseWorkspace);
+
+        /* The x of a tab, and of the window, asking first */
+
+        UIComponent? CloseX() => tabButtons.FirstOrDefault(tab => tab.Selected)?.Parent?.Children[1];
+        Vector2 answer = Vector2.Zero;
+        void Answer(int button)
+        {
+            test.Settle(0.35f);
+            test.Run(() => answer = chrome.Dialog is { } asked ? chrome.ToWorld(asked.Buttons[button].Bounds.Center) : Vector2.Zero);
+            test.Click(() => answer);
+            test.Wait();
+        }
+
+        int openBefore = 0;
+        string dataBefore = string.Empty;
+        test.Run(() =>
+        {
+            Open(dataFile);
+            openBefore = documents.Count;
+            dataBefore = System.IO.File.ReadAllText(dataFile);
+        });
+        test.Wait();
+        test.Click(At(CloseX));
+        test.Wait();
+        test.Check("close x: a tab with nothing to save goes at once", () => chrome.Dialog is null && documents.Count == openBefore - 1 && !documents.Any(open => open.Path == dataFile));
+
+        test.Run(() =>
+        {
+            Open(dataFile);
+            openBefore = documents.Count;
+            code.Document.MoveToEnd(false);
+            code.Document.Insert("let unsaved = 1;");
+        });
+        test.Wait();
+        test.Click(At(CloseX));
+        test.Wait();
+        test.Check("close x: one with changes asks first", () => chrome.Dialog is { IsOpen: true } && documents.Count == openBefore);
+        Answer(2);
+        test.Check("close x: cancelled, it stays with what was typed", () => chrome.Dialog is null && documents.Count == openBefore && code.Text.Contains("let unsaved"));
+
+        bool mayClose = true;
+        test.Run(() => mayClose = Engine.WindowManager.CloseRequested!());
+        test.Wait();
+        test.Check("close window: with something unsaved the window stays and asks", () => !mayClose && chrome.Dialog is { IsOpen: true });
+        Answer(2);
+        test.Check("close window: cancelled, nothing goes", () => chrome.Dialog is null && !closeConfirmed && documents.Count == openBefore);
+
+        test.Click(At(CloseX));
+        test.Wait();
+        Answer(1);
+        test.Check("close x: told not to save, it goes and the file is as it was", () =>
+            chrome.Dialog is null && documents.Count == openBefore - 1 && System.IO.File.ReadAllText(dataFile) == dataBefore);
+
+        // Ends on a layout's designer, the canvas is where the pointer goes last
+        test.Run(() => Open(savedFile));
+        test.Wait();
 
         test.Hover(Part("canvas", 0.04f, 0.06f));
     }

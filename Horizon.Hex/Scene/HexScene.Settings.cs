@@ -56,7 +56,6 @@ internal sealed partial class HexScene
         Grip(treeScroll, UIResize.Right, new Vector2(MIN_SIDE, 0.0f), new Vector2(MAX_SIDE, 0.0f), size => settings.LeftWidth = size.X);
         Grip(inspectorScroll, UIResize.Left, new Vector2(MIN_SIDE, 0.0f), new Vector2(MAX_SIDE, 0.0f), size => settings.RightWidth = size.X);
         Grip(layersScroll, UIResize.Top, new Vector2(0.0f, MIN_LAYERS), new Vector2(0.0f, MAX_LAYERS), size => settings.LayersHeight = size.Y);
-        Grip(canvas, UIResize.Bottom, new Vector2(0.0f, MIN_FLEXIBLE), Vector2.Zero, size => settings.CanvasHeight = size.Y);
     }
 
     private void Grip(UIComponent panel, UIResize edge, Vector2 least, Vector2 most, Action<Vector2> keep)
@@ -187,7 +186,7 @@ internal sealed partial class HexScene
 
     private void ResetPanels()
     {
-        settings.LeftWidth = settings.RightWidth = settings.CanvasHeight = settings.LayersHeight = 0.0f;
+        settings.LeftWidth = settings.RightWidth = settings.LayersHeight = 0.0f;
         ApplyPanelSizes();
         SaveSettings();
         Say("the panels are the size they come at");
