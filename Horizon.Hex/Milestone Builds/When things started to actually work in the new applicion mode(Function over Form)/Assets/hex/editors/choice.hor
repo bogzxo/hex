@@ -1,0 +1,7 @@
+// The editor of a property that is one of a few words (an anchor, a fill), the words are the code's.
+#define layout
+
+let choice = compositor.dropdown({
+    size: vec(220, 28),
+    text_scale: 0.14
+});

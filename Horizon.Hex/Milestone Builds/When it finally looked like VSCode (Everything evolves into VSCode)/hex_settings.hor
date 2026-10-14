@@ -1,0 +1,16 @@
+// Written by the editor, change these in its settings (File, Settings) instead.
+let settings = {
+    editor_theme: "dark",
+    left_width: 457.00003,
+    right_width: 0,
+    layers_height: 0,
+    panel_height: 204.00003,
+    side_bar_hidden: true,
+    panel_hidden: false,
+    properties_hidden: false,
+    snap: 0,
+    code_zoom: 1,
+    canvas_handles: true,
+    reopen_last: false,
+    last_workspace: ""
+};

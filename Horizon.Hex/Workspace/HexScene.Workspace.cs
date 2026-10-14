@@ -245,17 +245,34 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The left back to what is in the document on screen, its components or its outline.</summary>
+    /// <summary>Ctrl+Shift+O, the outline of a file of code, or the toolbox, components and layers of a layout.</summary>
     private void ShowOutline()
     {
-        browsing = false;
-        results = null;
-        treeDirty = true;
+        left.Visible = true;
+        Side = HomeSide;
     }
 
+    /// <summary>Ctrl+Shift+E, the explorer, whatever is open.</summary>
     private void ShowExplorer()
     {
-        browsing = true;
-        results = null;
+        left.Visible = true;
+        Side = HexSide.Explorer;
+    }
+
+    /// <summary>Opens up every folder of the workspace a file is inside of, so the explorer shows it.</summary>
+    private void OpenUpTo(string path)
+    {
+        string full = Path.GetFullPath(path);
+        foreach (string root in workspace.Folders)
+        {
+            string top = Path.GetFullPath(root);
+            if (!full.StartsWith(top, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            for (string? at = Path.GetDirectoryName(full); at is not null && at.Length >= top.Length; at = Path.GetDirectoryName(at))
+                workspace.Expanded.Add(at);
+        }
+
         treeDirty = true;
     }
 
@@ -266,7 +283,7 @@ internal sealed partial class HexScene
     /// <summary>The folders of the workspace as a tree, folders that are opened up showing what is in them.</summary>
     private void RebuildExplorer()
     {
-        treeTitle.Text = $"EXPLORER, {workspace.Name.ToUpperInvariant()}";
+        treeTitle.Text = Said("side.explorer_of", ("workspace", workspace.Name.ToUpperInvariant()));
         explorerRows.Clear();
 
         var entries = new List<ExplorerEntry>();
@@ -286,12 +303,12 @@ internal sealed partial class HexScene
             if (entry.IsFolder)
             {
                 bool expanded = workspace.Expanded.Contains(entry.Path);
-                caption.Text = $"{(expanded ? "-" : "+")} {name}/";
+                caption.Text = $"$({(expanded ? "chevron-down" : "chevron-right")}) $({(expanded ? "folder-opened" : "folder")}) {Plain(name)}";
                 caption.Color = entry.IsRoot ? null : FolderColor;
             }
             else
             {
-                caption.Text = name;
+                caption.Text = $"$({FileIcon(entry.Path)}) {Plain(name)}";
                 caption.Color = IsEditable(entry.Path) ? null : DimColor;
             }
 
@@ -304,7 +321,7 @@ internal sealed partial class HexScene
         }
 
         if (entries.Count == 0)
-            tree.Add(new Label("no folders, File has Add folder") { Anchor = Origin.Left, Align = Origin.TopLeft, TextScale = EDITOR_TEXT, Color = DimColor });
+            Hint(tree, "no folders, File has Add folder");
     }
 
     private void AddEntries(List<ExplorerEntry> entries, string folder, int depth, bool root)

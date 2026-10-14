@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <OutputType>Exe</OutputType>
 
+    <!-- Hex's own version, what About says and the changelog (Help, What changed) goes up to -->
+    <Version>0.1.0</Version>
+
     <!-- The dialogs for opening and saving a layout are asked for from Windows directly, see HexDialogs.cs -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
@@ -51,7 +54,13 @@
   </Target>
 
   <ItemGroup>
-    <None Update="Assets\hex\*.hor">
+    <Compile Remove="Milestone Builds\**" />
+    <EmbeddedResource Remove="Milestone Builds\**" />
+    <None Remove="Milestone Builds\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\hex\**\*.hor">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

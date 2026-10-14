@@ -1,0 +1,2 @@
+C:\Users\bogda\source\repos\bogzxo\horizon\hex\Horizon.Hex\Assets\hex\editor.hor
+C:\Users\bogda\source\repos\bogzxo\horizon\hex\Horizon.Hex\Assets\hex\hello_dolly.hor

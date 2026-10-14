@@ -1,0 +1,9 @@
+// What goes into a dialog that asks for a line of text, a name, what to find, a line to go to.
+#define layout
+
+let answer = compositor.textbox({
+    size: vec(460, 32),
+    padding: vec(8, 6, 8, 6),
+    text_scale: 0.14,
+    max_length: 400
+});

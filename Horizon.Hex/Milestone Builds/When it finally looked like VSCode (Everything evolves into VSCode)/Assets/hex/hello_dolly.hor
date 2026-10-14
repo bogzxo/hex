@@ -1,0 +1,7 @@
+// Greeting messages inspired by that stupid American movie...
+let welcome_greetings = [
+	"You've been Hexxed :3",
+	"Are you sure this is a good idea?",
+	"You call that code??!",
+	"-_-"
+];

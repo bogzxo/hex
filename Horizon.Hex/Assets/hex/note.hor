@@ -1,0 +1,10 @@
+// What is said over the properties when something wants saying, several things selected say.
+#define layout
+
+let note = compositor.label({
+    anchor: "left",
+    text: "2 things selected",
+    text_scale: 0.14,
+    color: vec(0.38, 0.62, 1, 1),
+    align: "top_left"
+});

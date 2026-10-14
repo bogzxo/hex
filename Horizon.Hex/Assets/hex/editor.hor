@@ -1,138 +1,329 @@
 // editor, laid out with Horizon.Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
+// Hex's own window, VS Code's shape. The menus and a toolbar of icons along the top, the activity bar down the left
+// and the side bar next to it, the tabs and the editor (or the canvas of a layout) in the middle with the problems
+// and the output under it, the properties on the right, and the status bar along the bottom.
 #define layout
 
 let root = compositor.stack({
     fill: "both",
-    padding: vec(10, 12, 10, 8),
-    spacing: 8
+    spacing: 0
 });
+
+// The window's own title bar, Hex draws it (the window has no frame of the system's), with the menus in it like VS Code
+let top = compositor.title_bar({
+    parent: root,
+    icon: "layout",
+    title: "@window.title",
+    height: 34,
+    spacing: 0
+});
+
+let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });
 
 let toolbar = compositor.stack({
     parent: root,
-    size: vec(0, 28),
     anchor: "left",
     pivot: "left",
-    fill: "horizontal",
-    spacing: 14,
+    padding: vec(8, 2, 8, 4),
+    spacing: 2,
     direction: "horizontal"
 });
 
-let menu = compositor.menu_bar({ parent: toolbar, text_scale: 0.125 });
-
-let name_box = compositor.textbox({
+let new_file = compositor.button({
     parent: toolbar,
-    size: vec(220, 28),
-    padding: vec(8, 6, 8, 6),
-    placeholder: "name of the layout",
-    text_scale: 0.125,
-    max_length: 40
+    icon: "new-file",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.new_file"
 });
+
+let open_file = compositor.button({
+    parent: toolbar,
+    icon: "folder-opened",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.open_file"
+});
+
+let save_file = compositor.button({
+    parent: toolbar,
+    icon: "save",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.save"
+});
+
+let save_all = compositor.button({
+    parent: toolbar,
+    icon: "save-all",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.save_all"
+});
+
+let tools_rule1 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
+
+let undo_button = compositor.button({
+    parent: toolbar,
+    icon: "discard",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.undo"
+});
+
+let redo_button = compositor.button({
+    parent: toolbar,
+    icon: "redo",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.redo"
+});
+
+let tools_rule2 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
+
+// A layout is looked at as its designer or as its code, a file of code only as its code
+let views = compositor.stack({
+    parent: toolbar,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+    direction: "horizontal"
+});
+
+let design_view = compositor.button({
+    parent: views,
+    label: "@toolbar.design",
+    icon: "layout",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.design_tip"
+});
+
+let code_view = compositor.button({
+    parent: views,
+    label: "@toolbar.code",
+    icon: "code",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.code_tip"
+});
+
+let tools_rule3 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
 
 let play_button = compositor.button({
     parent: toolbar,
+    label: "@toolbar.run",
+    icon: "play",
+    style: "button_flat",
     size: vec(0, 28),
-    tooltip: "plays the entrances of the whole layout from the start, the way loading it in a program does (F5)",
-    label: "play intro animations",
-    lbl_scale: 0.125
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.run_tip"
 });
 
-let coords = compositor.label({
+let find_button = compositor.button({
     parent: toolbar,
-    size: vec(170, 28),
-    text_scale: 0.125,
-    color: vec(0.46, 0.52, 0.64, 1),
-    align: "left"
+    icon: "search",
+    style: "button_flat",
+    size: vec(30, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.find"
+});
+
+let name_box = compositor.textbox({
+    parent: toolbar,
+    size: vec(200, 26),
+    padding: vec(8, 5, 8, 5),
+    placeholder: "@toolbar.name_placeholder",
+    text_scale: 0.14,
+    max_length: 40,
+    tooltip: "@toolbar.name_tip"
 });
 
 let body = compositor.stack({
     parent: root,
     anchor: "left",
     pivot: "left",
-    spacing: 10,
+    spacing: 0,
     direction: "horizontal"
+});
+
+// The activity bar, which of the side bar's views is showing
+let activity = compositor.stack({
+    parent: body,
+    anchor: "top",
+    pivot: "top",
+    padding: vec(4, 4, 4, 4),
+    spacing: 4
+});
+
+let act_explorer = compositor.button({
+    parent: activity,
+    icon: "files",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.explorer"
+});
+
+let act_search = compositor.button({
+    parent: activity,
+    icon: "search",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.search"
+});
+
+let act_outline = compositor.button({
+    parent: activity,
+    icon: "list-tree",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.outline"
+});
+
+let act_design = compositor.button({
+    parent: activity,
+    icon: "layout",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.design"
+});
+
+let act_settings = compositor.button({
+    parent: activity,
+    icon: "settings-gear",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.settings"
 });
 
 let left = compositor.stack({
     parent: body,
     anchor: "top",
     pivot: "top",
+    padding: vec(6, 6, 6, 6),
     spacing: 6
-});
-
-let add_title = compositor.label({
-    parent: left,
-    anchor: "left",
-    pivot: "left",
-    text: "ADD",
-    text_scale: 0.125,
-    color: vec(0.46, 0.52, 0.64, 1)
-});
-
-let palette = compositor.grid({
-    parent: left,
-    template: "palette_button.hor",
-    preview_count: 19,
-    spacing: 4
 });
 
 let tree_title = compositor.label({
     parent: left,
     anchor: "left",
     pivot: "left",
-    text: "LAYOUT",
-    text_scale: 0.125,
+    text: "@side.explorer",
+    text_scale: 0.14,
     color: vec(0.46, 0.52, 0.64, 1)
+});
+
+let toolbox = compositor.collapsible({
+    parent: left,
+    anchor: "left",
+    pivot: "left",
+    title: "@side.toolbox",
+    text_scale: 0.13,
+    spacing: 4
+});
+
+// As tall as the side bar can spare, scrolled when there isn't room for all of it (the editor sizes it, see FitChrome)
+let palette_scroll = compositor.scroll({
+    parent: toolbox,
+    size: vec(280, 200)
+});
+
+let palette = compositor.grid({
+    parent: palette_scroll,
+    template: "palette_button.hor",
+    preview_count: 19,
+    spacing: 4
 });
 
 let tree_tools = compositor.stack({
     parent: left,
     anchor: "left",
     pivot: "left",
-    spacing: 3,
+    spacing: 2,
     direction: "horizontal"
 });
 
 let move_up = compositor.button({
     parent: tree_tools,
-    size: vec(44, 24),
-    label: "up",
-    lbl_scale: 0.125
+    icon: "arrow-up",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let move_down = compositor.button({
     parent: tree_tools,
-    size: vec(44, 24),
-    label: "down",
-    lbl_scale: 0.125
+    icon: "arrow-down",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let move_out = compositor.button({
     parent: tree_tools,
-    size: vec(44, 24),
-    label: "out",
-    lbl_scale: 0.125
+    icon: "arrow-left",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let move_in = compositor.button({
     parent: tree_tools,
-    size: vec(44, 24),
-    label: "in",
-    lbl_scale: 0.125
+    icon: "arrow-right",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let duplicate = compositor.button({
     parent: tree_tools,
-    size: vec(44, 24),
-    label: "copy",
-    lbl_scale: 0.125
+    icon: "copy",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let remove = compositor.button({
     parent: tree_tools,
-    size: vec(45, 24),
-    label: "del",
-    lbl_scale: 0.125
+    icon: "trash",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false
 });
 
 let tree_scroll = compositor.scroll({
@@ -150,17 +341,17 @@ let tree = compositor.stack({
     spacing: 1
 });
 
-let layers_title = compositor.label({
+let layers_section = compositor.collapsible({
     parent: left,
     anchor: "left",
     pivot: "left",
-    text: "LAYERS",
-    text_scale: 0.125,
-    color: vec(0.46, 0.52, 0.64, 1)
+    title: "@side.layers",
+    text_scale: 0.13,
+    spacing: 4
 });
 
 let layers_scroll = compositor.scroll({
-    parent: left,
+    parent: layers_section,
     size: vec(280, 96),
     padding: vec(4, 4, 4, 4),
     color: vec(0.1, 0.11, 0.145, 1),
@@ -178,72 +369,66 @@ let center = compositor.stack({
     parent: body,
     anchor: "top",
     pivot: "top",
-    spacing: 6
+    padding: vec(0, 6, 0, 0),
+    spacing: 0
 });
 
-let tabs = compositor.stack({
-    parent: center,
-    anchor: "left",
-    pivot: "left",
-    template: "tab.hor",
-    preview_count: 2,
-    spacing: 4,
-    direction: "horizontal"
-});
+let doc_tabs = compositor.tab_strip({ parent: center, size: vec(884, 0) });
 
-// A layout is looked at as its designer or as its code, a file of code only as its code
-let views = compositor.stack({
-    parent: center,
-    anchor: "left",
-    pivot: "left",
-    spacing: 4,
-    direction: "horizontal"
-});
-
-let design_view = compositor.button({
-    parent: views,
-    label: "design (F7)",
-    style: "button_flat",
-    size: vec(0, 26),
-    lbl_scale: 0.125,
-    animated: false,
-    tooltip: "the canvas and everything for putting a layout together"
-});
-
-let code_view = compositor.button({
-    parent: views,
-    label: "code (F7)",
-    style: "button_flat",
-    size: vec(0, 26),
-    lbl_scale: 0.125,
-    animated: false,
-    tooltip: "the code the layout is written as, what is typed goes back into it on the way to the designer"
-});
+let crumbs = compositor.breadcrumbs({ parent: center, size: vec(884, 0), padding: vec(6, 0, 6, 0) });
 
 let canvas = compositor.panel({ parent: center, size: vec(884, 497) });
-
-let code_title = compositor.label({
-    parent: center,
-    anchor: "left",
-    pivot: "left",
-    text: "CODE",
-    text_scale: 0.125,
-    color: vec(0.46, 0.52, 0.64, 1)
-});
 
 // Where the code of whatever is open is edited, the editor of the document that is showing goes in here
 let code_scroll = compositor.panel({
     parent: center,
-    pos: vec(-1.642662, 119.91173),
     size: vec(884, 250),
-    color: vec(0.055, 0.06, 0.08, 1),
-    radius: 6
+    color: vec(0.055, 0.06, 0.08, 1)
+});
+
+// The panel under the editor, what is wrong with the files and what Hex and the files that were run said
+let bottom = compositor.tabs({
+    parent: center,
+    size: vec(884, 180),
+    tabs: ["@panel.problems", "@panel.output"],
+    text_scale: 0.13,
+    spacing: 18,
+    resize: "top",
+    min_size: vec(0, 80),
+    max_size: vec(0, 600)
+});
+
+let problems_scroll = compositor.scroll({
+    parent: bottom,
+    fill: "both",
+    padding: vec(4, 4, 4, 4)
+});
+
+let problems = compositor.stack({
+    parent: problems_scroll,
+    template: "tree_row.hor",
+    preview_count: 2,
+    spacing: 1
+});
+
+let output_scroll = compositor.scroll({
+    parent: bottom,
+    fill: "both",
+    padding: vec(4, 4, 4, 4)
+});
+
+let output = compositor.stack({
+    parent: output_scroll,
+    template: "output_row.hor",
+    preview_count: 3,
+    spacing: 0
 });
 
 let right = compositor.stack({
     parent: body,
     anchor: "top",
     pivot: "top",
+    padding: vec(6, 6, 6, 6),
     spacing: 6
 });
 
@@ -251,14 +436,13 @@ let inspector_title = compositor.label({
     parent: right,
     anchor: "left",
     pivot: "left",
-    text: "PROPERTIES",
-    text_scale: 0.125,
+    text: "@properties.title",
+    text_scale: 0.14,
     color: vec(0.46, 0.52, 0.64, 1)
 });
 
 let inspector_scroll = compositor.scroll({
     parent: right,
-    pos: vec(1.888916, -3.2853088),
     size: vec(400, 789.7115),
     padding: vec(8, 8, 8, 8),
     color: vec(0.1, 0.11, 0.145, 1),
@@ -272,11 +456,4 @@ let inspector = compositor.stack({
     spacing: 5
 });
 
-let status = compositor.label({
-    parent: root,
-    size: vec(400, 18),
-    anchor: "left",
-    pivot: "left",
-    text_scale: 0.125,
-    align: "left"
-});
+let status_bar = compositor.status_bar({ parent: root, fill: "horizontal" });

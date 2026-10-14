@@ -20,17 +20,23 @@ internal sealed class HexSettings
     /// <summary>The grids there are to snap to, 0 being none.</summary>
     public static readonly float[] Grids = [0.0f, 2.0f, 4.0f, 8.0f, 16.0f];
 
-    /// <summary>Which theme of the flat skin the editor itself is drawn in.</summary>
-    public string EditorTheme = "dark";
+    /// <summary>Which skin the editor itself is drawn in (the flat one unless somebody fancies otherwise) and in which of its themes.</summary>
+    public string EditorSkin = "flat", EditorTheme = "dark";
 
     /// <summary>How wide the lists on the left and the properties on the right were dragged, 0 for as their layout has them.</summary>
     public float LeftWidth, RightWidth;
 
-    /// <summary>How tall the canvas and the list of layers were dragged, 0 for what the editor works out by itself.</summary>
-    public float LayersHeight;
+    /// <summary>How tall the list of layers and the panel under the editor were dragged, 0 for what the editor works out by itself.</summary>
+    public float LayersHeight, PanelHeight;
+
+    /// <summary>Whether the side bar, the panel under the editor and the properties were put away.</summary>
+    public bool SideBarHidden, PanelHidden, PropertiesHidden;
 
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
+
+    /// <summary>How big the code is drawn against the rest of the editor, 1 for the size it comes at.</summary>
+    public float CodeZoom = 1.0f;
 
     /// <summary>Whether what is selected in the canvas can be dragged bigger by its edges.</summary>
     public bool CanvasHandles = true;
@@ -58,11 +64,17 @@ internal sealed class HexSettings
                 throw new Exception(success ? "it has to declare an object called 'settings'" : message);
 
             var values = settings.Properties;
+            if (values.TryGetValue("editor_skin", out var skin) && skin is StringValue skinned) EditorSkin = skinned.Value;
             if (values.TryGetValue("editor_theme", out var theme) && theme is StringValue themed) EditorTheme = themed.Value;
             LeftWidth = Number(values, "left_width", LeftWidth);
             RightWidth = Number(values, "right_width", RightWidth);
             LayersHeight = Number(values, "layers_height", LayersHeight);
+            PanelHeight = Number(values, "panel_height", PanelHeight);
+            SideBarHidden = Flag(values, "side_bar_hidden", SideBarHidden);
+            PanelHidden = Flag(values, "panel_hidden", PanelHidden);
+            PropertiesHidden = Flag(values, "properties_hidden", PropertiesHidden);
             Snap = Number(values, "snap", Snap);
+            CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
             if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
@@ -76,6 +88,9 @@ internal sealed class HexSettings
     private static float Number(Dictionary<string, IRuntimeValue> values, string key, float otherwise) =>
         values.TryGetValue(key, out var value) && value is NumberValue number ? number.Value : otherwise;
 
+    private static bool Flag(Dictionary<string, IRuntimeValue> values, string key, bool otherwise) =>
+        values.TryGetValue(key, out var value) && value is BooleanValue flag ? flag.Value : otherwise;
+
     /// <summary>Writes the settings to their file. Says what went wrong if they couldn't be, null if they could.</summary>
     public string? Save()
     {
@@ -88,11 +103,17 @@ internal sealed class HexSettings
         var text = new StringBuilder();
         text.AppendLine("// Written by the editor, change these in its settings (File, Settings) instead.");
         text.AppendLine("let settings = {");
+        text.AppendLine($"    editor_skin: \"{EditorSkin}\",");
         text.AppendLine($"    editor_theme: \"{EditorTheme}\",");
         text.AppendLine($"    left_width: {Write(LeftWidth)},");
         text.AppendLine($"    right_width: {Write(RightWidth)},");
         text.AppendLine($"    layers_height: {Write(LayersHeight)},");
+        text.AppendLine($"    panel_height: {Write(PanelHeight)},");
+        text.AppendLine($"    side_bar_hidden: {Flag(SideBarHidden)},");
+        text.AppendLine($"    panel_hidden: {Flag(PanelHidden)},");
+        text.AppendLine($"    properties_hidden: {Flag(PropertiesHidden)},");
         text.AppendLine($"    snap: {Write(Snap)},");
+        text.AppendLine($"    code_zoom: {Write(CodeZoom)},");
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");
         text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
         text.AppendLine($"    last_workspace: {HIDLWriter.Write(new StringValue(LastWorkspace.Replace('\\', '/')))}");

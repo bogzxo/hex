@@ -1,6 +1,9 @@
 # Hex
 
-The layout editor of [Horizon](https://github.com/bogzxo/horizon). Its own UI is a layout like the ones it edits,
+The full suite of editong tools of [Horizon](https://github.com/bogzxo/horizon), and the IDE of HIDL. VS Code's shape, a title bar of
+its own with the menus in it, an activity bar and a side bar (the explorer, search, the outline, the designer's toolbox,
+components and layers), tabs and breadcrumbs over the editor, the problems and the output under it, the properties on
+the right and a status bar, icons throughout (Codicons). Ctrl+Shift+P is every command there is. Its own UI is a layout like the ones it edits,
 drawn by the same code a game draws them with, so what is in the canvas is the real thing. Components out of a
 palette, a tree of the layout, properties in sections that fold, the code it writes as it goes, undo, layers,
 templates, the skin's art to pick from, and a self test that clicks through the lot.

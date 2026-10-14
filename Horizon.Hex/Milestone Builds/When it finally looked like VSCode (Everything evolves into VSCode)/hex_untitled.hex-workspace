@@ -1,0 +1,9 @@
+// A workspace of Horizon.Hex, the folders it has open. Open it with File, Open workspace.
+let workspace = {
+    folders: [],
+    expanded: [],
+    open: [
+        "C:/Users/bogda/source/repos/bogzxo/horizon/hex/Horizon.Hex/Assets/hex/hello_dolly.hor",
+        "C:/Users/bogda/source/repos/bogzxo/horizon/hex/Horizon.Hex/Assets/hex/editor.hor"
+    ]
+};

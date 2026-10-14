@@ -1,0 +1,8 @@
+// The editor of a property that is a number, dragged across or typed.
+#define layout
+
+let number = compositor.number_box({
+    size: vec(220, 28),
+    padding: vec(6, 6, 6, 6),
+    text_scale: 0.14
+});

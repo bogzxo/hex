@@ -11,58 +11,36 @@ namespace Horizon.Hex;
 // The lists the editor fills in. The tabs, the tree of the layout, its layers, and the files of a folder when a layout is being opened.
 internal sealed partial class HexScene
 {
-    private void RebuildTabs()
-    {
-        tabButtons.Clear();
-        var items = layout.Populate(tabs, documents.Count);
-
-        for (int i = 0; i < items.Count; i++)
-        {
-            HexDocument shown = documents[i];
-            var tab = items[i].Get<Button>("tab");
-
-            // With a star for as long as it has changes that aren't in its file
-            tab.Label = shown.Modified ? $"{shown.Name} *" : shown.Name;
-            tab.Selected = shown == document;
-            tab.OnPressed = () => Show(shown);
-            items[i].Get<Button>("close").OnPressed = () => CloseDocument(shown);
-            tabButtons.Add(tab);
-        }
-    }
-
+    /// <summary>The list in the side bar, whatever its view is.</summary>
     private void RebuildTree()
     {
         treeRows.Clear();
         fileRows.Clear();
+        ApplySide();
 
-        // The files when they were asked for, then the designer of a layout has the layout's components on the left
-        if (browsing)
+        switch (Side)
         {
-            RebuildFiles();
-            return;
+            case HexSide.Explorer:
+                RebuildFiles();
+                break;
+            case HexSide.Search:
+                RebuildResults();
+                break;
+            case HexSide.Design:
+                RebuildComponentTree();
+                break;
+            default:
+                RebuildOutline();
+                break;
         }
-
-        if (LayoutTools)
-        {
-            RebuildComponentTree();
-            return;
-        }
-
-        // What was found, or what is wrong, across the files, until it is put away
-        if (results is not null)
-        {
-            RebuildResults();
-            return;
-        }
-
-        RebuildOutline();
     }
 
     private void RebuildComponentTree()
     {
-        treeTitle.Text = "LAYOUT";
+        treeTitle.Text = Said("side.designer");
 
         var components = document.Walk().ToList();
+        componentCount = components.Count;
         var items = layout.Populate(tree, components.Count);
 
         for (int i = 0; i < items.Count; i++)
@@ -72,7 +50,8 @@ internal sealed partial class HexScene
             var caption = items[i].Get<Label>("caption");
 
             // The text steps in with how deep in the layout the component is
-            caption.Text = $"{document.NameOf(component)}  ({UIModule.KindOf(component)})";
+            string kind = UIModule.KindOf(component);
+            caption.Text = $"$({KindIcon(kind)}) {document.NameOf(component)}  [color:#7f8a9e]{kind}[/color]";
             caption.Position = new Vector2(10 + depth * 14, 0);
             caption.Color = component.Visible && !component.IsHiddenByLayer ? null : DimColor;
 
@@ -89,13 +68,7 @@ internal sealed partial class HexScene
         }
 
         if (components.Count == 0)
-            tree.Add(new Label("nothing yet, add something\nwith one of the buttons above")
-            {
-                Anchor = Origin.Left,
-                Align = Origin.TopLeft,
-                TextScale = EDITOR_TEXT,
-                Color = DimColor
-            });
+            Hint(tree, "nothing yet, add something\nout of the toolbox above");
 
         RebuildLayers();
     }
@@ -119,7 +92,7 @@ internal sealed partial class HexScene
             var row = items[i].Get<Button>("row");
             var caption = items[i].Get<Label>("caption");
 
-            caption.Text = hidden ? $"{name}  (hidden)" : name;
+            caption.Text = hidden ? $"$(eye-closed) {Plain(name)}  (hidden)" : $"$(eye) {Plain(name)}";
             caption.Color = hidden ? DimColor : null;
 
             row.OnPressed = () => ToggleLayer(name);
@@ -128,13 +101,7 @@ internal sealed partial class HexScene
 
         if (names.Count == 0)
         {
-            layers.Add(new Label("none yet: a component gets one\nin its properties, under layer")
-            {
-                Anchor = Origin.Left,
-                Align = Origin.TopLeft,
-                TextScale = EDITOR_TEXT,
-                Color = DimColor
-            });
+            Hint(layers, "none yet, a component gets one\nin its properties, under layer");
         }
     }
 
@@ -166,7 +133,7 @@ internal sealed partial class HexScene
             return;
         }
 
-        treeTitle.Text = "OPEN A LAYOUT";
+        treeTitle.Text = Said("side.open_a_layout");
         treeScroll.Offset = 0;
 
         var entries = new List<(string Path, bool IsDirectory, string Text)>();
@@ -194,11 +161,35 @@ internal sealed partial class HexScene
             var row = items[i].Get<Button>("row");
             var caption = items[i].Get<Label>("caption");
 
-            caption.Text = text;
+            caption.Text = isDirectory ? $"$(folder) {Plain(text)}" : $"$({FileIcon(path)}) {Plain(text)}";
             caption.Color = isDirectory ? FolderColor : null;
             row.OnPressed = () => PickFile(path, isDirectory);
             fileRows.Add((path, isDirectory, row));
         }
+    }
+
+    /// <summary>The icon of a file in the explorer and the lists, by what it is.</summary>
+    private static string FileIcon(string path)
+    {
+        string name = Path.GetFileName(path);
+        string extension = Path.GetExtension(path).ToLowerInvariant();
+
+        if (extension == HexWorkspace.EXTENSION)
+            return "folder-library";
+        if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
+            return "paintcan";
+        if (extension == ".hor")
+            return Path.GetFileName(Path.GetDirectoryName(path))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true ? "globe" : "file-code";
+
+        return extension switch
+        {
+            ".png" or ".jpg" or ".jpeg" or ".aseprite" or ".ase" or ".gif" => "file-media",
+            ".ttf" or ".otf" or ".fnt" => "symbol-text",
+            ".md" or ".txt" => "book",
+            ".slang" or ".hlsl" or ".cs" or ".py" or ".lua" => "code",
+            ".json" or ".tmx" or ".tsx" or ".xml" => "json",
+            _ => "file"
+        };
     }
 
     private void PickFile(string path, bool isDirectory)

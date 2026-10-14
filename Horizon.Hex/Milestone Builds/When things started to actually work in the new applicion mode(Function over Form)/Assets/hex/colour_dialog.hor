@@ -1,0 +1,4 @@
+// What goes into the dialog a swatch of a colour in the code opens.
+#define layout
+
+let picker = compositor.color_picker({ size: vec(320, 180) });

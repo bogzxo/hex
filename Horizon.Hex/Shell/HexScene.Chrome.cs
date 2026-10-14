@@ -15,6 +15,30 @@ internal sealed partial class HexScene
 
     private static string DescribeScale(float scale) => $"{scale * 100:0}%";
 
+    // How big the menus in the title bar are written, at a scale of one
+    private const float MENU_TEXT = 0.14f;
+
+    /* The code's zoom, apart from the editor's scale */
+
+    private const float CODE_ZOOM_STEP = 1.1f;
+    private const float MIN_CODE_ZOOM = 0.5f, MAX_CODE_ZOOM = 3.0f;
+
+    /// <summary>Makes the code bigger or smaller by a factor, in every file that is open, 0 for the size it comes at.</summary>
+    private void ZoomCode(float factor)
+    {
+        float zoom = factor <= 0.0f ? 1.0f : Math.Clamp(settings.CodeZoom * factor, MIN_CODE_ZOOM, MAX_CODE_ZOOM);
+
+        // Close enough to the size it comes at is that size, a few steps in and out land back on it
+        if (MathF.Abs(zoom - 1.0f) < 0.02f) zoom = 1.0f;
+
+        settings.CodeZoom = zoom;
+        foreach (HexDocument open in documents)
+            open.Editor.TextScale = EDITOR_TEXT * zoom;
+
+        SaveSettings();
+        Say($"the code is at {zoom * 100.0f:0}%, Ctrl+0 puts it back");
+    }
+
     /// <summary>The size a window is best read at when nobody has said. Bigger on a bigger screen.</summary>
     private static float ScaleFor(Vector2 window) => window.Y switch
     {
@@ -46,6 +70,9 @@ internal sealed partial class HexScene
 
         // The two are one screen as far as anybody looking at it is concerned
         compositor.Scale = stage.Scale = scale;
+
+        // Except the title bar, which is the window's and the size of the system's whatever the editor is drawn at, its menus with it
+        menu.TextScale = MENU_TEXT / scale;
 
         if (!remember || options.SelfTest)
             return;
@@ -111,35 +138,71 @@ internal sealed partial class HexScene
         }
     }
 
+    // The most of the side bar's height the toolbox takes before it scrolls
+    private const float PALETTE_SHARE = 0.42f;
+
     private void FitChrome()
     {
         UIRect screen = chrome.Root.Bounds;
         if (screen.IsEmpty || toolbar.Bounds.IsEmpty)
             return;
 
-        float skinSpacing = compositor.Skin?.Spacing ?? 0.0f;
-        float rowGap = root.Spacing >= 0.0f ? root.Spacing : skinSpacing;
-        float columnGap = body.Spacing >= 0.0f ? body.Spacing : skinSpacing;
-
-        // Between the toolbar on top and the line the editor talks in at the bottom
-        float height = screen.Height - root.Padding.Total.Y - toolbar.Bounds.Height - status.Size.Y - rowGap * 2.0f;
+        // Between the menus and the toolbar on top and the status bar at the bottom
+        float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - toolbar.Bounds.Height - statusBar.Bounds.Height;
         float leftWidth = treeScroll.Size.X;
         float rightWidth = inspectorScroll.Size.X;
-        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - columnGap * 2.0f - leftWidth - rightWidth);
+        float sides = activity.Bounds.Width
+            + (left.Visible ? leftWidth + left.Padding.Total.X : 0.0f)
+            + (right.Visible ? rightWidth + right.Padding.Total.X : 0.0f);
+        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides);
 
-        // What a column needs for everything in it that isn't given its height here, as it was last laid out
-        float Spoken(StackPanel column, params UIComponent[] flexible) =>
-            column.Bounds.Height - flexible.Sum(part => part.Bounds.Height);
+        // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part
+        // given its height a column, a params array and a sum of it made garbage every tick
+        static float Spoken(StackPanel column, UIComponent flexible) => column.Bounds.Height - flexible.Bounds.Height;
 
-        // The layers under the list are as wide as the list, whichever way that was dragged
+        // The activity bar runs the height of the window, the colour of it with it
+        activity.Size = activity.Size with { Y = height };
+
+        // The layers under the list are as wide as the list, whichever way that was dragged, and only as tall as the side bar
+        // has room for with the list over them at its least. Dragged taller than that they pushed the whole editor down and
+        // the status bar off the window, now the drag stops there
         layersScroll.Size = layersScroll.Size with { X = leftWidth };
+        if (layersScroll.Visible && layersScroll.Parent is { Visible: true })
+        {
+            float spare = height - Spoken(left, treeScroll) - MIN_FLEXIBLE;
+            float most = Math.Clamp(layersScroll.Size.Y + spare, MIN_LAYERS, MAX_LAYERS);
+            layersScroll.MaxSize = new Vector2(0.0f, most);
+            if (layersScroll.Size.Y > most)
+                layersScroll.Size = layersScroll.Size with { Y = most };
+        }
+
+        // The toolbox is all of its buttons when there is room, and scrolls in no more than a share of the side bar when there isn't
+        var paletteScroll = layout.Get<ScrollPanel>("palette_scroll");
+        float paletteTall = layout.Get<UIComponent>("palette").DesiredSize.Y;
+        paletteScroll.Size = new Vector2(leftWidth, MathF.Min(paletteTall, MathF.Max(MIN_FLEXIBLE, height * PALETTE_SHARE)));
         treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
-        status.Size = new Vector2(screen.Width - root.Padding.Total.X, status.Size.Y);
 
         FitRows(leftWidth, rightWidth);
 
-        // Whichever of the two is showing has the whole of the middle, the code or the canvas of the designer
+        // The panel under the editor is as tall as it was dragged, as long as that leaves the editor or the canvas their least
+        if (bottom.Visible)
+        {
+            UIComponent shown = LayoutTools ? canvas : codeScroll;
+            float spare = height - Spoken(center, shown) - MIN_FLEXIBLE;
+            float most = Math.Clamp(bottom.Size.Y + spare, MIN_PANEL, MAX_PANEL);
+            bottom.MaxSize = new Vector2(0.0f, most);
+            if (bottom.Size.Y > most)
+                bottom.Size = bottom.Size with { Y = most };
+        }
+
+        // The tabs, the breadcrumbs and the panel are the width of the middle, the panel as tall as it was dragged
+        docTabs.Size = docTabs.Size with { X = centerWidth };
+        crumbs.Size = crumbs.Size with { X = centerWidth };
+        bottom.Size = bottom.Size with { X = centerWidth };
+        FitRowsTo(problems, problemsScroll);
+
+        // Whichever of the two is showing has the rest of the middle, the code or the canvas of the designer
         if (!LayoutTools)
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
         else

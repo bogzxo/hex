@@ -22,7 +22,6 @@ internal sealed partial class HexScene
 
     private HexSettings settings = null!;
     private ScrollPanel layersScroll = null!;
-    private UIDialog? settingsDialog;
 
     // The skin of the editor that its colours were last taken from, see ColourChrome
     private UISkin? colouredFor;
@@ -49,7 +48,7 @@ internal sealed partial class HexScene
         usualLayers = layersScroll.Size.Y;
 
         ApplyPanelSizes();
-        UseEditorTheme(settings.EditorTheme, save: false);
+        UseEditorSkin(settings.EditorSkin, settings.EditorTheme, save: false);
 
         // The edges between the parts of the editor, a tab on each to be found by. The hold is nearly all on the
         // outside, in the gap to the next panel, the inside of these edges is where their scroll bars are
@@ -75,6 +74,9 @@ internal sealed partial class HexScene
         treeScroll.Size = treeScroll.Size with { X = settings.LeftWidth > 0.0f ? Math.Clamp(settings.LeftWidth, MIN_SIDE, MAX_SIDE) : usualLeft };
         inspectorScroll.Size = inspectorScroll.Size with { X = settings.RightWidth > 0.0f ? Math.Clamp(settings.RightWidth, MIN_SIDE, MAX_SIDE) : usualRight };
         layersScroll.Size = layersScroll.Size with { Y = settings.LayersHeight > 0.0f ? Math.Clamp(settings.LayersHeight, MIN_LAYERS, MAX_LAYERS) : usualLayers };
+
+        left.Visible = !settings.SideBarHidden;
+        right.Visible = !settings.PropertiesHidden;
     }
 
     private void SaveSettings()
@@ -83,17 +85,54 @@ internal sealed partial class HexScene
             Say(problem, error: true);
     }
 
-    /// <summary>Helper method to draw the editor itself in another theme of its skin.</summary>
-    private void UseEditorTheme(string theme, bool save)
+    /// <summary>Helper method to draw the editor itself in another theme of the flat skin.</summary>
+    private void UseEditorTheme(string theme, bool save) => UseEditorSkin(TOOL_SKIN_NAME, theme, save);
+
+    /// <summary>
+    /// Helper method to draw the editor itself in any skin there is, in one of its themes (null for its usual), however
+    /// obnoxious. A skin that isn't there any more is the flat one.
+    /// </summary>
+    private void UseEditorSkin(string name, string? theme, bool save)
     {
-        settings.EditorTheme = theme;
-        compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, theme);
+        UISkinChoice? skin = UISkins.Find(name);
+        if (skin is null)
+        {
+            skin = UISkins.Find(TOOL_SKIN_NAME);
+            theme = null;
+        }
+
+        if (theme is not null && skin is not null && !skin.Has(theme))
+            theme = skin.UsualTheme;
+
+        settings.EditorSkin = skin?.Name ?? TOOL_SKIN_NAME;
+        settings.EditorTheme = theme ?? skin?.UsualTheme ?? string.Empty;
+
+        if (skin is null)
+            compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, theme);
+        else
+            compositor.SetSkin(skin.Directory, skin.File, theme);
 
         if (save)
         {
             SaveSettings();
-            Say($"the editor is in its {theme} theme");
+            Say(theme is null ? $"the editor is in {skin?.Title}" : $"the editor is in {skin?.Title}, {theme}");
         }
+    }
+
+    /// <summary>Every skin there is in every theme of it, the flat one first, as the dropdown of the editor's skin lists them.</summary>
+    private static List<(UISkinChoice Skin, string? Theme, string Text)> EditorSkins()
+    {
+        var all = new List<(UISkinChoice, string?, string)>();
+        foreach (UISkinChoice skin in UISkins.Available.OrderBy(skin => skin.Name == TOOL_SKIN_NAME ? 0 : 1))
+        {
+            if (skin.Themes.Count == 0)
+                all.Add((skin, null, skin.Title));
+
+            foreach (string theme in skin.Themes)
+                all.Add((skin, theme, $"{skin.Title}, {theme}"));
+        }
+
+        return all;
     }
 
     /// <summary>
@@ -111,82 +150,173 @@ internal sealed partial class HexScene
         Vector4 box = skin.PanelColor with { W = 1.0f };
         treeScroll.Color = layersScroll.Color = codeScroll.Color = inspectorScroll.Color = box;
 
-        // What the editor sits on, a little darker than its boxes
+        // What the editor sits on, a little darker than its boxes, and the activity bar darker again, VS Code's
         Engine.Graphics.ClearColor = new Vector4(box.X * 0.65f, box.Y * 0.65f, box.Z * 0.65f, 1.0f);
+        activity.Color = new Vector4(box.X * 0.5f, box.Y * 0.5f, box.Z * 0.5f, 1.0f);
+        top.Color = activity.Color;
+        bottom.Color = box;
+
+        // The status bar in the accent, dark enough for light words on it whichever theme
+        Vector4 accent = skin.AccentColor;
+        statusBar.Color = new Vector4(accent.X * 0.5f, accent.Y * 0.5f, accent.Z * 0.5f, 1.0f);
+        statusBar.TextColor = new Vector4(0.93f, 0.95f, 0.98f, 1.0f);
 
         treeDirty = inspectorDirty = true;
     }
 
-    /* The dialog */
+    /* The settings, a window of their own in the editor with a page for each part of it */
 
+    private const int SETTINGS_EDITOR = 0, SETTINGS_DESIGNER = 1, SETTINGS_FILES = 2, SETTINGS_EXTENSIONS = 3;
+
+    private const string SETTINGS_LAYOUT = "settings.hor";
+
+    // The window while it is up, its pages, and what sets each setting by a name of its own, for the self test to find
+    private WindowPanel? settingsWindow;
+    private TabPanel? settingsPages;
+    private readonly Dictionary<string, UIComponent> settingControls = [];
+
+    /// <summary>
+    /// Ctrl+, the settings, a window in the editor that is dragged about by its title bar and bigger by its corner, with a
+    /// page each for the editor, the designer, files and extensions. It is settings.hor, the code only finds what sets
+    /// each setting by its name and gives it its choices. Up already, it is brought to the front.
+    /// </summary>
     private void OpenSettings()
     {
-        var dialog = settingsDialog = UIDialog.Show(chrome, "Settings", string.Empty, new DialogChoice("Done"));
-        dialog.Closed = () => settingsDialog = null;
-
-        StackPanel Row(string name, string tooltip)
+        if (settingsWindow is { Visible: true } open)
         {
-            var row = dialog.Body.Add(new StackPanel { Anchor = Origin.Left, Direction = UIDirection.Horizontal, Spacing = 12.0f });
-            row.Add(new Label(name) { Size = new Vector2(SETTING_NAME_WIDTH, EDITOR_HEIGHT), Align = Origin.Left, TextScale = EDITOR_TEXT, Tooltip = tooltip });
-            return row;
+            open.BringToFront();
+            return;
         }
 
-        Selector Choice(StackPanel row, string[] choices, int chosen, Action<int> picked)
+        settingControls.Clear();
+        UILayout made = layout.Instantiate(SETTINGS_LAYOUT, chrome.Root);
+        var window = settingsWindow = made.Get<WindowPanel>("window");
+        window.OnClosed = CloseSettings;
+        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        settingsPages = made.Get<TabPanel>("pages");
+
+        Selector Choice(string key, string[] choices, int chosen, Action<int> picked)
         {
-            var selector = row.Add(new Selector(choices) { Size = new Vector2(SETTING_VALUE_WIDTH, EDITOR_HEIGHT), TextScale = EDITOR_TEXT, Index = chosen });
+            var selector = made.Get<Selector>(key);
+            selector.Options = choices;
+            selector.Index = chosen;
             selector.OnChanged = _ => picked(selector.Index);
+            settingControls[key] = selector;
             return selector;
         }
 
-        void Switch(string name, string tooltip, bool on, Action<bool> flipped)
+        void Switch(string key, bool on, Action<bool> flipped)
         {
-            ToggleButton toggle = null!;
-            toggle = Row(name, tooltip).Add(new ToggleButton(on ? "on" : "off", on) { LabelScale = EDITOR_TEXT });
+            var toggle = made.Get<ToggleButton>(key);
+            toggle.State = on;
+            toggle.Label = Said(on ? "settings.on" : "settings.off");
             toggle.OnPressed = () =>
             {
-                toggle.Label = toggle.State ? "on" : "off";
+                toggle.Label = Said(toggle.State ? "settings.on" : "settings.off");
                 flipped(toggle.State);
                 SaveSettings();
             };
+            settingControls[key] = toggle;
         }
 
-        // The editor itself
-        string[] themes = [.. UISkins.Find("flat")?.Themes ?? []];
-        if (themes.Length > 0)
+        // The editor itself, in any skin there is, every theme of every one of them
+        var editorSkins = EditorSkins();
+        var skinDropdown = made.Get<Dropdown>("theme");
+        skinDropdown.Options = [.. editorSkins.Select(choice => choice.Text)];
+        int wearing = editorSkins.FindIndex(choice => choice.Skin.Name == settings.EditorSkin && (choice.Theme ?? string.Empty) == settings.EditorTheme);
+        skinDropdown.Value = editorSkins[Math.Max(0, wearing)].Text;
+        skinDropdown.OnChanged = chosen =>
         {
-            Choice(Row("Editor theme", "The colours of the editor itself"), themes, Math.Max(0, Array.IndexOf(themes, settings.EditorTheme)),
-                index => UseEditorTheme(themes[index], save: true));
+            int index = editorSkins.FindIndex(choice => choice.Text == chosen);
+            if (index >= 0)
+                UseEditorSkin(editorSkins[index].Skin.Name, editorSkins[index].Theme, save: true);
+        };
+        settingControls["theme"] = skinDropdown;
+
+        Choice("size", [.. Scales.Select(DescribeScale)], Math.Max(0, Array.IndexOf(Scales, compositor.Scale)), index => SetScale(Scales[index], remember: true));
+
+        float[] codeZooms = [0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f];
+        Choice("code_zoom", [.. codeZooms.Select(zoom => $"{zoom * 100:0}%")], Math.Max(0, Array.FindIndex(codeZooms, zoom => MathF.Abs(zoom - settings.CodeZoom) < 0.03f)),
+            index => ZoomCode(codeZooms[index] / settings.CodeZoom));
+
+        var panels = made.Get<Button>("panels");
+        panels.OnPressed = ResetPanels;
+        settingControls["panels"] = panels;
+
+        // The designer. What the layouts are shown in is the game's setting and not the editor's own. The theme has a row
+        // of its own that is only there when the skin has themes, side by side they ran off the window
+        var skins = made.Get<Selector>("skin");
+        var layoutThemes = made.Get<Selector>("layout_theme");
+        var themeRow = made.Get<UIComponent>("layout_theme_row");
+        settingControls["skin"] = skins;
+        settingControls["layout_theme"] = layoutThemes;
+
+        bool showingSkin = false;
+        void ShowSkin()
+        {
+            showingSkin = true;
+            UISkinChoice current = UISkins.Current;
+            skins.Options = [.. UISkins.Available.Select(skin => skin.Title)];
+            skins.Index = Math.Max(0, UISkins.Available.ToList().FindIndex(skin => skin.Name == current.Name));
+
+            themeRow.Visible = current.Themes.Count > 0;
+            if (current.Themes.Count > 0)
+            {
+                layoutThemes.Options = [.. current.Themes];
+                layoutThemes.Index = Math.Max(0, current.Themes.ToList().IndexOf(UISkins.Theme ?? current.UsualTheme ?? current.Themes[0]));
+            }
+
+            showingSkin = false;
         }
 
-        string[] sizes = [.. Scales.Select(DescribeScale)];
-        Choice(Row("Editor size", "How big the editor draws itself and the layouts in it"), sizes, Math.Max(0, Array.IndexOf(Scales, compositor.Scale)),
-            index => SetScale(Scales[index], remember: true));
+        skins.OnChanged = _ =>
+        {
+            if (showingSkin || (uint)skins.Index >= (uint)UISkins.Available.Count)
+                return;
 
-        // What the layouts are shown in, which is the game's setting and not the editor's own
-        Row("Layouts are shown in", "The skin and the theme the layouts in the canvas are drawn in, the same as the Skin menu")
-            .Add(new SkinPicker { TextScale = EDITOR_TEXT });
+            // Another skin comes up in its usual theme
+            UseSkin(UISkins.Available[skins.Index], null);
+            ShowSkin();
+        };
+        layoutThemes.OnChanged = _ =>
+        {
+            if (showingSkin || UISkins.Current.Themes.Count == 0)
+                return;
 
-        string[] grids = [.. HexSettings.Grids.Select(grid => grid > 0.0f ? $"every {grid:0}" : "off")];
-        Choice(Row("Snap to a grid", "What positions and sizes land on when something is dragged in the canvas"), grids,
-            Math.Max(0, Array.IndexOf(HexSettings.Grids, settings.Snap)),
+            UseSkin(UISkins.Current, UISkins.Current.Themes[Math.Clamp(layoutThemes.Index, 0, UISkins.Current.Themes.Count - 1)]);
+        };
+        ShowSkin();
+
+        Choice("snap", [.. HexSettings.Grids.Select(grid => grid > 0.0f ? $"every {grid:0}" : "off")], Math.Max(0, Array.IndexOf(HexSettings.Grids, settings.Snap)),
             index =>
             {
                 settings.Snap = HexSettings.Grids[index];
                 SaveSettings();
             });
+        Switch("handles", settings.CanvasHandles, on => settings.CanvasHandles = on);
 
-        Switch("Resize handles", "Whether what is selected in the canvas can be dragged bigger by its edges", settings.CanvasHandles,
-            on => settings.CanvasHandles = on);
-        Switch("Open the last layout", "Whether the editor starts with the layout that was worked on last", settings.ReopenLast,
-            on => settings.ReopenLast = on);
+        // Files
+        Switch("reopen", settings.ReopenLast, on => settings.ReopenLast = on);
+        made.Get<Symbol>("extensions_icon").Color = compositor.Skin?.AccentColor;
 
-        Row("Panels", "The lists, the properties, the canvas and the layers, as wide and as tall as they come")
-            .Add(new Button("Put them back") { Size = new Vector2(SETTING_VALUE_WIDTH, EDITOR_HEIGHT), LabelScale = EDITOR_TEXT, OnPressed = ResetPanels });
+        settingsPages.Select(SETTINGS_EDITOR);
+    }
+
+    /// <summary>Takes the settings window down, the x of it or Escape.</summary>
+    private void CloseSettings()
+    {
+        if (settingsWindow is { } window)
+            window.Parent?.Remove(window);
+
+        settingsWindow = null;
+        settingsPages = null;
+        settingControls.Clear();
     }
 
     private void ResetPanels()
     {
-        settings.LeftWidth = settings.RightWidth = settings.LayersHeight = 0.0f;
+        settings.LeftWidth = settings.RightWidth = settings.LayersHeight = settings.PanelHeight = 0.0f;
+        bottom.Size = bottom.Size with { Y = 180.0f };
         ApplyPanelSizes();
         SaveSettings();
         Say("the panels are the size they come at");

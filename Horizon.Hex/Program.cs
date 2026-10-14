@@ -78,11 +78,19 @@ internal class Program
         {
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
-                WindowTitle = "Horizon Hex (Extended UI Editor & Dynamic Compositor)",
+                WindowTitle = "Hex",
+                CustomFrame = true,
+
+                // An editor and not a game. It draws when something changed, ticks a few times a second while nobody is
+                // touching it and waits for the system's events, so it costs next to nothing sitting there. Vsync stays on
+                // (FIFO), no tearing and not a frame drawn that nobody would see. Testing itself it runs as a game, the
+                // test goes by updates and wants every frame drawn behind them (see below)
+                Mode = selfTest ? RunMode.Game : RunMode.Application,
+                Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
                 Maximized = size is null,
                 VSync = true,
-                FramesPerSecond = 240,
+                FramesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0,
 
                 // The editor testing itself goes by updates (see HexPointerScript), so with nobody watching it gets
                 // twice as many a second and is done in half the time. More than that and the updates outrun the
