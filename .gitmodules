@@ -1,0 +1,4 @@
+[submodule "horizon"]
+	path = horizon
+	url = https://github.com/bogzxo/horizon
+	branch = development
