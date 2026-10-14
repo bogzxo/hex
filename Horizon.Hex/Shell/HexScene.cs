@@ -305,13 +305,13 @@ internal sealed partial class HexScene : Scene
         if (options.Check.Length > 0 && !checksDone)
             RunChecks();
 
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateDialog(); Probe("UpdateDialog", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateClosing(); Probe("UpdateClosing", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); ColourChrome(); Probe("ColourChrome", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); FitChrome(); Probe("FitChrome", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); PlaceCanvas(); Probe("PlaceCanvas", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateCanvasPointer(); Probe("UpdateCanvasPointer", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateHistory(dt); Probe("UpdateHistory", probeAt); } // PROBE
+        UpdateDialog();
+        UpdateClosing();
+        ColourChrome();
+        FitChrome();
+        PlaceCanvas();
+        UpdateCanvasPointer();
+        UpdateHistory(dt);
 
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
@@ -330,7 +330,7 @@ internal sealed partial class HexScene : Scene
             codeShown = true;
         }
 
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); RevealInTree(); Probe("RevealInTree", probeAt); } // PROBE
+        RevealInTree();
 
         if (tabsDirty) RebuildTabs();
         if (treeDirty) RebuildTree();
@@ -341,26 +341,13 @@ internal sealed partial class HexScene : Scene
             codeDirty = codeShown = false;
 
         UpdatePanel(dt);
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateStatusBar(); Probe("UpdateStatusBar", probeAt); } // PROBE
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); UpdateCrumbs(); Probe("UpdateCrumbs", probeAt); } // PROBE
+        UpdateStatusBar();
+        UpdateCrumbs();
 
-        { long probeAt = System.GC.GetAllocatedBytesForCurrentThread(); base.UpdateState(dt); Probe("base.UpdateState", probeAt); } // PROBE
+        base.UpdateState(dt);
 
         UpdateSelfTest(dt);
     }
-    // PROBE
-    private readonly Dictionary<string, long> probed = []; // PROBE
-    private double probeLast; // PROBE
-    private void Probe(string step, long at) // PROBE
-    { // PROBE
-        probed[step] = probed.GetValueOrDefault(step) + System.GC.GetAllocatedBytesForCurrentThread() - at; // PROBE
-        double now = System.Environment.TickCount64 / 1000.0; // PROBE
-        if (now - probeLast < 3.0) return; // PROBE
-        probeLast = now; // PROBE
-        System.Console.WriteLine("[PROBE] " + string.Join(", ", probed.Where(pair => pair.Value > 0).Select(pair => $"{pair.Key} {pair.Value}"))); // PROBE
-        probed.Clear(); // PROBE
-    } // PROBE
-
 
     /// <summary>
     /// Helper method to put the code of the layout on screen, and to work out whether it is still what is in its file.

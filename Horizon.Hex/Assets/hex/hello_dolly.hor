@@ -1,6 +1,7 @@
 // Greeting messages inspired by that stupid American movie...
 let welcome_greetings = [
 	"You've been Hex'd :3",
+	"Hello, Dolly!",
 	"Are you sure this is a good idea?",
 	"You call that code??!",
 	"-_-",
@@ -12,5 +13,8 @@ let welcome_greetings = [
 	"Guess who was single on Valentine's Day & Halloween :cry:",
 	"idk man, that does NOT look like good code to me!",
 	"A good project to learn Horizon is to implement a Super Ma- nintenDON'T SUE ME!",
-	"Honestly, man, I wrote this because the VSCode extension exhausted me."
+	"Honestly, man, I wrote this because the VSCode extension exhausted me.",
+	"Zopiclone doesn't work for my anymore, this sentance only took 2 minutes to type.",
+	"Caching icons referenced in labels ended up saving over 1MB/frame in allocations...",
+	"You should really take a break... Im getting worried..."
 ];
