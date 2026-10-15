@@ -1,6 +1,0 @@
-// The editor of two numbers, a position or a size, x and y.
-#define layout
-
-let row = compositor.stack({ direction: "horizontal", spacing: 4 });
-let x = compositor.number_box({ parent: row, size: vec(108, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
-let y = compositor.number_box({ parent: row, size: vec(108, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });

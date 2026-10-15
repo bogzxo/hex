@@ -1,9 +1,0 @@
-// The editor of a property that is a text. One that names a piece of the skin's art gets a ... button by the code.
-#define layout
-
-let box = compositor.textbox({
-    size: vec(220, 28),
-    padding: vec(8, 6, 8, 6),
-    text_scale: 0.14,
-    max_length: 200
-});
