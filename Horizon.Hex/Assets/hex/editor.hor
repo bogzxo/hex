@@ -3,7 +3,9 @@
 // Hex's own window, VS Code's shape. The menus in the title bar along the top, the activity bar down the left and the
 // side bar next to it, the tabs with what the file can do at their right end and the editor (the code, the canvas of a
 // layout or the table of a file) in the middle with the problems, the output and the console under it, the properties
-// or the values on the right, and the status bar along the bottom.
+// or the values on the right, and the status bar along the bottom. The parts that take turns (the code, the table and
+// an extension's view in place of the canvas, the side tree, the values) are hidden here and shown by the code, all of
+// them shown at once ran off the bottom of the screen opened in the designer. The sizes are what the code starts from.
 #define layout
 
 let root = compositor.stack({
@@ -226,6 +228,7 @@ let tree = compositor.stack({
 
 // The explorer, the outline and what was found, a tree the side bar paints itself, in place of the rows above for code
 let side_tree = compositor.tree_view({
+    visible: false,
     parent: left,
     size: vec(280, 380),
     text_scale: 0.14,
@@ -277,7 +280,7 @@ let tab_row = compositor.stack({
     direction: "horizontal"
 });
 
-let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(884, 0) });
+let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(500, 0) });
 
 let toolbar = compositor.stack({
     parent: tab_row,
@@ -354,35 +357,38 @@ let name_box = compositor.textbox({
 });
 
 
-let crumbs = compositor.breadcrumbs({ parent: center, size: vec(884, 0), padding: vec(6, 0, 6, 0) });
+let crumbs = compositor.breadcrumbs({ parent: center, size: vec(840, 0), padding: vec(6, 0, 6, 0) });
 
-let canvas = compositor.panel({ parent: center, size: vec(884, 497) });
+let canvas = compositor.panel({ parent: center, size: vec(840, 497) });
 
 // Where the code of whatever is open is edited, the editor of the document that is showing goes in here
 let code_scroll = compositor.panel({
+    visible: false,
     parent: center,
-    size: vec(884, 250),
+    size: vec(840, 250),
     color: vec(0.055, 0.06, 0.08, 1)
 });
 
 // A file of code as a table, an object of objects (moves, characters) or a file of texts with its languages side by side
 let data_table = compositor.table({
+    visible: false,
     parent: center,
-    size: vec(884, 250),
+    size: vec(840, 250),
     text_scale: 0.14
 });
 
 // Where the views extensions make for a file go, in place of its code, see HexScene.ExtensionUI
 let ext_view = compositor.panel({
+    visible: false,
     parent: center,
-    size: vec(884, 250),
+    size: vec(840, 250),
     clip: true
 });
 
 // The panel under the editor, what is wrong with the files and what Hex and the files that were run said
 let bottom = compositor.tabs({
     parent: center,
-    size: vec(884, 180),
+    size: vec(840, 180),
     tabs: ["@panel.problems", "@panel.output", "@panel.console"],
     text_scale: 0.13,
     spacing: 18,
@@ -430,7 +436,7 @@ let console_scroll = compositor.scroll({
     parent: console_page,
     anchor: "top_left",
     pivot: "top_left",
-    size: vec(860, 100)
+    size: vec(816, 100)
 });
 
 let console_lines = compositor.stack({
@@ -446,7 +452,7 @@ let console_input = compositor.textbox({
     parent: console_page,
     anchor: "left",
     pivot: "left",
-    size: vec(860, 26),
+    size: vec(816, 26),
     padding: vec(8, 5, 8, 5),
     placeholder: "@panel.console_placeholder",
     text_scale: 0.14,
@@ -507,6 +513,7 @@ let inspector = compositor.stack({
 
 // What a file of code comes to, in place of the properties while code is open
 let values_tree = compositor.tree_view({
+    visible: false,
     parent: right,
     size: vec(400, 600),
     text_scale: 0.14,

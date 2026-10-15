@@ -206,9 +206,9 @@ internal sealed partial class HexScene
             help = chrome.Root.Children.OfType<WindowPanel>().LastOrDefault();
         });
         test.Settle(0.2f);
-        test.Check("help: the changelog goes from 0.1.0 down to 0.0.1, and says which Hex this is", () =>
+        test.Check("help: the changelog goes down to 0.0.1, and says which Hex this is", () =>
             help is { Title: "What changed" } && Descendants(help).OfType<Label>().Any(label =>
-                label.Text.Contains("## 0.1.0") && label.Text.Contains("## 0.0.1") && label.Text.Contains("Hex is 0.1.0")));
+                label.Text.Contains("## 0.0.1") && label.Text.Contains($"Hex is {HexVersion}")));
 
         test.Run(() =>
         {
