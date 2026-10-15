@@ -97,10 +97,35 @@ internal sealed partial class HexScene
             && Part<DrawingPanel>("strip").SpriteCount == 4 && Part<Label>("frame_info").Text.StartsWith("7 of 10", StringComparison.Ordinal)
             && Part<Label>("data_text").Text.Contains("**startup**", StringComparison.Ordinal));
 
+        TestPlaying(test);
         TestMoveForms(test);
         TestPhaseEditing(test);
         TestMovesOfTheFighter(test);
         TestRedBoxesAndProblems(test);
+    }
+
+    // Space plays the move and pauses it. The view is only ticked while it plays (or fits its frame), sat still it costs nothing
+    private void TestPlaying(HexPointerScript test)
+    {
+        test.Settle(0.3f);
+        test.Check("moves: sat still, the view isn't ticked", () => MoveView() is { Tick: null });
+
+        test.Run(() => ExtensionKey("space"));
+        test.Settle(0.4f);
+        test.Check("moves: space plays it, the frames go by", () =>
+            MoveView() is { Tick: not null } && !Part<Label>("frame_info").Text.StartsWith("7 of 10", StringComparison.Ordinal));
+
+        test.Run(() => ExtensionKey("space"));
+        test.Wait();
+        test.Check("moves: and again pauses it, and it lets go of the ticks", () => MoveView() is { Tick: null });
+
+        // Back onto the jab's hit frame for what comes after, picking it again does that
+        test.Run(() =>
+        {
+            ExtensionKey("up");
+            ExtensionKey("down");
+        });
+        test.Wait();
     }
 
     // The Move tab's form, a key changed, put in, taken out and undone, and a reroute

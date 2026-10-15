@@ -14,14 +14,11 @@ internal sealed partial class HexScene
     {
         /* Code, the files that aren't layouts and the code of the ones that are */
 
-        dataFile = Path.Combine(testFolder, "selftest_data.hor");
-        brokenFile = Path.Combine(testFolder, "selftest_broken.hor");
-        const string DATA = "let speed = 3;\r\nlet names = {\r\n    first: \"one\"\r\n};\r\n";
         string original = string.Empty;
 
         test.Run(() =>
         {
-            System.IO.File.WriteAllText(dataFile, DATA);
+            System.IO.File.WriteAllText(dataFile, TEST_DATA);
             if (System.IO.File.Exists(brokenFile)) System.IO.File.Delete(brokenFile);
             Open(dataFile);
             original = code.Text;
