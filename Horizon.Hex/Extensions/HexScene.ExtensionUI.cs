@@ -259,20 +259,21 @@ internal sealed partial class HexScene
         if (viewsMade.Count == 0 && panelsMade.Count == 0 && windowsMade.Count == 0)
             return;
 
-        var number = new NumberValue(dt);
-        if (ShownView is { Tick: { } tick } view)
-            TickUI(view, tick, number);
+        // Made only when something ticks, a view with nothing going on costs nothing a frame
+        NumberValue? number = null;
+        if (ShownView is { } view)
+            TickUI(view, dt, ref number);
 
         for (int i = panelsMade.Count - 1; i >= 0; i--)
         {
-            if (panelsMade[i] is { Tick: { } pageTick } page && page.Root.Visible && bottom.Visible && bottom.SelectedPage == page.Root)
-                TickUI(page, pageTick, number);
+            if (panelsMade[i] is { } page && page.Root.Visible && bottom.Visible && bottom.SelectedPage == page.Root)
+                TickUI(page, dt, ref number);
         }
 
         for (int i = windowsMade.Count - 1; i >= 0; i--)
         {
-            if (windowsMade[i] is { Tick: { } windowTick } window && window.Root.Visible)
-                TickUI(window, windowTick, number);
+            if (windowsMade[i] is { } window && window.Root.Visible)
+                TickUI(window, dt, ref number);
         }
 
         // The keys go to the view on screen when nothing has the keyboard, or one of its own drawings does
@@ -287,10 +288,24 @@ internal sealed partial class HexScene
         }
     }
 
-    private void TickUI(ExtensionUI ui, IRuntimeValue tick, NumberValue dt)
+    /// <summary>A UI on screen told the room it has when that changed (on_resize), then how long the tick was (on_tick).</summary>
+    private void TickUI(ExtensionUI ui, float dt, ref NumberValue? number)
     {
         // One that went wrong is said about the once and left alone after, not every tick
-        if (ui.Owner.Failed is null && !ui.Owner.Invoke(tick, ui, dt))
+        if (ui.Owner.Failed is not null)
+            return;
+
+        if (ui.Resize is { } resize && ui.Room is var room && room != ui.Sized && room.X > 0 && room.Y > 0)
+        {
+            ui.Sized = room;
+            if (!ui.Owner.Invoke(resize, ui, new Vector2Value(room)))
+            {
+                ExtensionFailed(ui.Owner);
+                return;
+            }
+        }
+
+        if (ui.Tick is { } tick && !ui.Owner.Invoke(tick, ui, number ??= new NumberValue(dt)))
             ExtensionFailed(ui.Owner);
     }
 

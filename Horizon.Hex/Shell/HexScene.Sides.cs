@@ -7,7 +7,6 @@ using Horizon.UI.Skinning;
 
 namespace Horizon.Hex;
 
-// What the editor is set to (HexSettings), the dialog it is set in, and the edges of its panels that can be dragged.
 // The sides of the editor and the panels in them, how wide they were left, the grips they are dragged by and a side
 // put away by a drag past its least.
 internal sealed partial class HexScene

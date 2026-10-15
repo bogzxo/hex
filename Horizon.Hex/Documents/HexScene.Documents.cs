@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
@@ -11,6 +11,13 @@ namespace Horizon.Hex;
 // Making, opening, saving and closing layouts. Windows asks where, the editor testing itself (which can't click in a dialog of Windows) uses the list on the left to open and its workspace to save.
 internal sealed partial class HexScene
 {
+    // Whether the stage is showing its layouts in the font of the editor, which it does for the editor's own
+    private bool stagePlain;
+
+    // A dialog of Windows that is open, and what to do with the file that is picked in it
+    private Task<string?>? dialog;
+    private Action<string>? dialogPicked;
+
     /* Documents */
 
     private HexDocument NewDocument()
@@ -314,6 +321,7 @@ internal sealed partial class HexScene
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             File.WriteAllText(path, document.CrLf ? written.Replace("\n", "\r\n") : written);
+            UILayout.Forget(path);
 
             document.Path = path;
             document.SavedCode = written;
@@ -371,6 +379,9 @@ internal sealed partial class HexScene
         Show(documents.Count > 0 ? documents[^1] : NewDocument());
     }
 
+    // Where the languages of the files of a folder are, by the folder, null for nowhere
+    private readonly Dictionary<string, string?> languagesNear = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Helper method to load the languages of whatever game a layout belongs to, the default one if there is one and
     /// the first there is otherwise, so the texts it names by key read the way they do in the game. Nothing changes
@@ -378,7 +389,16 @@ internal sealed partial class HexScene
     /// </summary>
     private void UseLanguagesNear(string path)
     {
-        if (Horizon.Content.Localisation.FindNear(path) is not { } folder || folder == Horizon.Content.Localisation.Folder)
+        if (!Path.GetExtension(path).Equals(".hor", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // Looking lists every folder next to every folder up the path, which in somewhere like Temp is thousands of them
+        // and was 60 ms an open, so what was found for a folder is kept until something changes in the workspace
+        string from = Path.GetDirectoryName(Path.GetFullPath(path)) ?? path;
+        if (!languagesNear.TryGetValue(from, out string? folder))
+            languagesNear[from] = folder = Horizon.Content.Localisation.FindNear(path);
+
+        if (folder is null || folder == Horizon.Content.Localisation.Folder)
             return;
 
         var languages = Horizon.Content.Localisation.Available(folder);

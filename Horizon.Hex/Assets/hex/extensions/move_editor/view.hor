@@ -35,7 +35,10 @@ func make(hex, ui, file) {
         // Ctrl+Z and Ctrl+Y, see edits.hor
         history: [], redo: [],
 
-        playing: false, clock: 0, traces: {}, drag: null, timeline_drag: null, confirm_delete: null,
+        // Playing it, and what Hex calls every tick while it plays (see wake)
+        playing: false, clock: 0, ticker: null,
+
+        traces: {}, drag: null, timeline_drag: null, confirm_delete: null,
         sized: vec(0, 0), fit: 2, right: hex.setting("right_width") ?? 300, reroutes_for: ""
     };
 
@@ -84,7 +87,7 @@ func pick_fighter(state, name) {
     state.traces = {};
     state.art = hex.exists(chosen.sprites) ? hex.sprite(chosen.sprites) : null;
     if (state.art != null) { hex.watch(chosen.sprites); }
-    state.fit = 2;
+    fit_soon(state);
     read_boxes(state);
 
     let animations = state.art == null ? [] : keys(state.art.animations).sort();
@@ -184,28 +187,37 @@ func save_boxes(state) {
     refresh(state);
 }
 
-/* Every tick, the room the view has and playing the move */
+/* The room the view has, and ticking while the move plays */
 
 // How fast the speed selector says it plays, against the fighter's frame rate
 func speed_of(said) { return said == "half" ? 0.5 : said == "a quarter" ? 0.25 : 1; }
 
-func tick(state, dt) {
-    let ui = state.ui;
-    let size = ui.size;
-    if (size.x != state.sized.x || size.y != state.sized.y) {
-        state.sized = size;
-        columns.lay_out(state, size);
-        state.fit = 2;
-        refresh(state);
-    }
+// @doc The view given another size by Hex (on_resize), everything laid out to it and the frame fitted once that's settled
+func resized(state, size) {
+    state.sized = size;
+    columns.lay_out(state, size);
+    refresh(state);
+    fit_soon(state);
+}
 
-    // The frame filling the drawing, once it is the size it's going to be
+// The frame fitted to the drawing in a couple of ticks, once the drawing is the size it's going to be
+func fit_soon(state) {
+    state.fit = 2;
+    wake(state);
+}
+
+// A tick is a call into this every frame, so the view only asks for them while something's going on (the frame waiting
+// to be fitted, the move playing) and lets go of them after, sat still it costs Hex nothing
+func wake(state) { state.ui.on_tick = state.ticker; }
+
+func tick(state, dt) {
     if (state.fit > 0) {
         state.fit = state.fit - 1;
         if (state.fit == 0) { fit_frame(state); }
     }
 
     if (state.playing && len(state.laid.frames) > 0) { play(state, dt); }
+    if (state.fit == 0 && !state.playing) { state.ui.on_tick = null; }
 }
 
 func fit_frame(state) {
@@ -249,6 +261,7 @@ func show_frame(state, index) {
 func toggle_playing(state) {
     state.playing = !state.playing;
     state.clock = 0;
+    wake(state);
     let button = state.ui.get("play");
     button.label = state.playing ? "Pause" : "Play";
     button.icon = state.playing ? "debug-pause" : "play";

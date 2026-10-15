@@ -11,6 +11,9 @@ namespace Horizon.Hex;
 // How big the editor draws itself and how it shares the window out between its parts.
 internal sealed partial class HexScene
 {
+    // Where the editor keeps how big it was last asked to draw itself, next to its executable.
+    private const string SCALE_FILE = "hex_ui_scale.txt";
+
     /* How big the editor draws itself */
 
     private static string DescribeScale(float scale) => $"{scale * 100:0}%";

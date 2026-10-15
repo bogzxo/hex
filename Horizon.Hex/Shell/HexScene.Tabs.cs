@@ -7,6 +7,8 @@ namespace Horizon.Hex;
 // the caret is in it, or in the designer what the selected component is inside of.
 internal sealed partial class HexScene
 {
+    private readonly List<Button> tabButtons = [];
+
     private TabStrip docTabs = null!;
 
     private Breadcrumbs crumbs = null!;

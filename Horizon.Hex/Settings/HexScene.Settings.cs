@@ -7,7 +7,9 @@ using Horizon.UI.Skinning;
 
 namespace Horizon.Hex;
 
-// What the editor is set to (HexSettings), the dialog it is set in, and the edges of its panels that can be dragged.
+// What the editor is set to (HexSettings), read as it starts and saved as it changes, and the settings window it's
+// set in, a page of Hex's own and a tab for every extension with something to set. Its skin is in EditorSkin, the
+// edges of its panels in Sides.
 internal sealed partial class HexScene
 {
     // How wide a row of the settings is, what it is called and what it is set with
@@ -76,31 +78,47 @@ internal sealed partial class HexScene
         window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         settingsPages = made.Get<TabPanel>("pages");
 
-        Selector Choice(string key, string[] choices, int chosen, Action<int> picked)
-        {
-            var selector = made.Get<Selector>(key);
-            selector.Options = choices;
-            selector.Index = chosen;
-            selector.OnChanged = _ => picked(selector.Index);
-            settingControls[key] = selector;
-            return selector;
-        }
+        FillEditorPage(made);
+        FillDesignerPage(made);
 
-        void Switch(string key, bool on, Action<bool> flipped)
-        {
-            var toggle = made.Get<ToggleButton>(key);
-            toggle.State = on;
-            toggle.Label = Said(on ? "settings.on" : "settings.off");
-            toggle.OnPressed = () =>
-            {
-                toggle.Label = Said(toggle.State ? "settings.on" : "settings.off");
-                flipped(toggle.State);
-                SaveSettings();
-            };
-            settingControls[key] = toggle;
-        }
+        // Files
+        SettingSwitch(made, "reopen", settings.ReopenLast, on => settings.ReopenLast = on);
+        made.Get<Symbol>("extensions_icon").Color = compositor.Skin?.AccentColor;
+        FillExtensionsPage(made);
+        AddExtensionTabs(made);
 
-        // The editor itself, in any skin there is, every theme of every one of them
+        settingsPages.Select(SETTINGS_EDITOR);
+    }
+
+    /// <summary>A selector of the settings given its choices, which one is chosen and what picking another does.</summary>
+    private Selector SettingChoice(UILayout made, string key, string[] choices, int chosen, Action<int> picked)
+    {
+        var selector = made.Get<Selector>(key);
+        selector.Options = choices;
+        selector.Index = chosen;
+        selector.OnChanged = _ => picked(selector.Index);
+        settingControls[key] = selector;
+        return selector;
+    }
+
+    /// <summary>A toggle of the settings that says on or off, saved as it's flipped.</summary>
+    private void SettingSwitch(UILayout made, string key, bool on, Action<bool> flipped)
+    {
+        var toggle = made.Get<ToggleButton>(key);
+        toggle.State = on;
+        toggle.Label = Said(on ? "settings.on" : "settings.off");
+        toggle.OnPressed = () =>
+        {
+            toggle.Label = Said(toggle.State ? "settings.on" : "settings.off");
+            flipped(toggle.State);
+            SaveSettings();
+        };
+        settingControls[key] = toggle;
+    }
+
+    /// <summary>The editor's page, the skin it's drawn in (every theme of every skin there is), how big, the code's zoom, its panels.</summary>
+    private void FillEditorPage(UILayout made)
+    {
         var editorSkins = EditorSkins();
         var skinDropdown = made.Get<Dropdown>("theme");
         skinDropdown.Options = [.. editorSkins.Select(choice => choice.Text)];
@@ -114,18 +132,23 @@ internal sealed partial class HexScene
         };
         settingControls["theme"] = skinDropdown;
 
-        Choice("size", [.. Scales.Select(DescribeScale)], Math.Max(0, Array.IndexOf(Scales, compositor.Scale)), index => SetScale(Scales[index], remember: true));
+        SettingChoice(made, "size", [.. Scales.Select(DescribeScale)], Math.Max(0, Array.IndexOf(Scales, compositor.Scale)), index => SetScale(Scales[index], remember: true));
 
         float[] codeZooms = [0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f];
-        Choice("code_zoom", [.. codeZooms.Select(zoom => $"{zoom * 100:0}%")], Math.Max(0, Array.FindIndex(codeZooms, zoom => MathF.Abs(zoom - settings.CodeZoom) < 0.03f)),
+        SettingChoice(made, "code_zoom", [.. codeZooms.Select(zoom => $"{zoom * 100:0}%")], Math.Max(0, Array.FindIndex(codeZooms, zoom => MathF.Abs(zoom - settings.CodeZoom) < 0.03f)),
             index => ZoomCode(codeZooms[index] / settings.CodeZoom));
 
         var panels = made.Get<Button>("panels");
         panels.OnPressed = ResetPanels;
         settingControls["panels"] = panels;
+    }
 
-        // The designer. What the layouts are shown in is the game's setting and not the editor's own. The theme has a row
-        // of its own that is only there when the skin has themes, side by side they ran off the window
+    /// <summary>
+    /// The designer's page. What the layouts are shown in is the game's setting and not the editor's own. The theme has a
+    /// row of its own that is only there when the skin has themes, side by side they ran off the window.
+    /// </summary>
+    private void FillDesignerPage(UILayout made)
+    {
         var skins = made.Get<Selector>("skin");
         var layoutThemes = made.Get<Selector>("layout_theme");
         var themeRow = made.Get<UIComponent>("layout_theme_row");
@@ -168,21 +191,13 @@ internal sealed partial class HexScene
         };
         ShowSkin();
 
-        Choice("snap", [.. HexSettings.Grids.Select(grid => grid > 0.0f ? $"every {grid:0}" : "off")], Math.Max(0, Array.IndexOf(HexSettings.Grids, settings.Snap)),
+        SettingChoice(made, "snap", [.. HexSettings.Grids.Select(grid => grid > 0.0f ? $"every {grid:0}" : "off")], Math.Max(0, Array.IndexOf(HexSettings.Grids, settings.Snap)),
             index =>
             {
                 settings.Snap = HexSettings.Grids[index];
                 SaveSettings();
             });
-        Switch("handles", settings.CanvasHandles, on => settings.CanvasHandles = on);
-
-        // Files
-        Switch("reopen", settings.ReopenLast, on => settings.ReopenLast = on);
-        made.Get<Symbol>("extensions_icon").Color = compositor.Skin?.AccentColor;
-        FillExtensionsPage(made);
-        AddExtensionTabs(made);
-
-        settingsPages.Select(SETTINGS_EDITOR);
+        SettingSwitch(made, "handles", settings.CanvasHandles, on => settings.CanvasHandles = on);
     }
 
     /// <summary>Takes the settings window down, the x of it or Escape.</summary>

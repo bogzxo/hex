@@ -234,6 +234,7 @@ internal sealed partial class HexScene
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, text);
+        Horizon.UI.UILayout.Forget(path);
     }
 
     /// <summary>The nearest folder at or over a path that has something of a name in it, null for none.</summary>

@@ -87,6 +87,32 @@ pages name in `settings.hor`, `extension_tab.hor`), a row for each of them there
 was told (or its default), `hex.set_setting(name, value)` changes it, and Hex keeps the lot in `hex_settings.hor` under
 `extension_settings`. A change made on its tab is told to the extension, `on_setting(hex, name, value)`.
 
+## Finding your way round the code
+
+Hex is one scene, `HexScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
+`Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name) and its
+`UpdateState` is a tick of the whole editor in seven steps, read that first. Every part of the class says what it is in
+a comment at its top.
+
+- `Shell/` the frame round everything, the size of things (Chrome), the menus and keys, the command palette, the side
+  bar and its trees, the tabs and breadcrumbs, the panel under the editor, the status bar, which view is on screen
+  (Views), the welcome, Hex's own texts, and `HexProfiler`.
+- `Designer/` a layout's designer, the canvas and the pointer on it, the handles, selecting, editing and arranging, the
+  palette of components and what's in it (Catalog), the inspector, the tree and layers (Lists).
+- `Documents/` an open file (`HexDocument`, a layout with its history and code, or text), opening, saving and closing,
+  the recent files.
+- `Code/` a file as code, its values, the console, completion, hints, finding, the outline, the lints and the table.
+- `Editing/` changing a .hor file's text by what's in it (a key set, renamed, taken out) and keeping the rest as written,
+  which the extensions' `hex.edit` and friends are.
+- `Extensions/` loading extensions and everything `hex` is to them, their views, panels and windows.
+- `Workspace/` the folders open, the explorer, the trash, and the work done on other threads over all of the files.
+- `Settings/` `hex_settings.hor`, the settings window and the skin Hex is drawn in.
+- `Platform/` the dialogs of Windows, opening, saving and picking a folder.
+- `Testing/` the self test, a file per part of Hex, and `--check`.
+
+`HEX_PROFILE=20` (or any number of milliseconds) has Hex write out every tick that took longer than that with the steps
+that took it, and when it's closed what every step cost altogether. See `docs/performance.md`.
+
 ## Building
 
 ```
