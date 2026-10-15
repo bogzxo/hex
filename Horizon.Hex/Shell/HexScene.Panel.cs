@@ -54,7 +54,7 @@ internal sealed partial class HexScene
         problemsScroll = layout.Get<ScrollPanel>("problems_scroll");
         outputScroll = layout.Get<ScrollPanel>("output_scroll");
 
-        bottom.Visible = !settings.PanelHidden;
+        bottom.Show(!settings.PanelHidden, instantly: true);
         if (settings.PanelHeight > 0.0f)
             bottom.Size = bottom.Size with { Y = Math.Clamp(settings.PanelHeight, MIN_PANEL, MAX_PANEL) };
 
@@ -68,15 +68,15 @@ internal sealed partial class HexScene
 
     private void TogglePanel()
     {
-        bottom.Visible = !bottom.Visible;
-        settings.PanelHidden = !bottom.Visible;
+        bottom.ToggleShown();
+        settings.PanelHidden = !bottom.Shown;
         SaveSettings();
     }
 
     /// <summary>Brings the panel up on one of its pages.</summary>
     private void ShowPanel(int page)
     {
-        if (!bottom.Visible)
+        if (!bottom.Shown)
             TogglePanel();
 
         bottom.Select(page);

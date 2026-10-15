@@ -247,14 +247,14 @@ internal sealed partial class HexScene
     /// <summary>Ctrl+Shift+O, the outline of a file of code, or the toolbox, components and layers of a layout.</summary>
     private void ShowOutline()
     {
-        left.Visible = true;
+        left.Show(true);
         Side = HomeSide;
     }
 
     /// <summary>Ctrl+Shift+E, the explorer, whatever is open.</summary>
     private void ShowExplorer()
     {
-        left.Visible = true;
+        left.Show(true);
         Side = HexSide.Explorer;
     }
 

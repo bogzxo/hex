@@ -31,7 +31,7 @@ internal sealed partial class HexScene
         usualRight = inspectorScroll.Size.X;
         usualLayers = layersScroll.Size.Y;
 
-        ApplyPanelSizes();
+        ApplyPanelSizes(instantly: true);
         UseEditorSkin(settings.EditorSkin, settings.EditorTheme, save: false);
 
         // The edges between the parts of the editor, a tab on each to be found by. The hold is nearly all on the

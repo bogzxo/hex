@@ -133,8 +133,8 @@ internal sealed partial class HexScene
             return;
 
         sidesFor = shown;
-        left.Visible = !settings.SideBarHidden && (shown?.Left ?? true);
-        right.Visible = !settings.PropertiesHidden && (shown?.Right ?? true);
+        left.Show(!settings.SideBarHidden && (shown?.Left ?? true));
+        right.Show(!settings.PropertiesHidden && (shown?.Right ?? true));
     }
 
     /// <summary>Makes a view of a file out of its layout, and hands it to the extension's open(ui, file).</summary>

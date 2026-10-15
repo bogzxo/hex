@@ -148,12 +148,12 @@ internal sealed partial class HexScene
             bool shown = args.Bool(1, true);
             switch (args.Text(0))
             {
-                case "left": if (left.Visible != shown) ToggleSideBar(); break;
-                case "right": if (right.Visible != shown) ToggleProperties(); break;
+                case "left": if (left.Shown != shown) ToggleSideBar(); break;
+                case "right": if (right.Shown != shown) ToggleProperties(); break;
                 default: throw args.Wrong("the sides are \"left\" and \"right\".");
             }
         })),
-        ("side_shown", Natives.Function("side_shown", args => Values.Bool(args.Text(0) == "left" ? left.Visible : right.Visible)))
+        ("side_shown", Natives.Function("side_shown", args => Values.Bool(args.Text(0) == "left" ? left.Shown : right.Shown)))
     ];
 
     /// <summary>A program started, a game to try what was edited in, with its arguments and the folder it starts in.</summary>

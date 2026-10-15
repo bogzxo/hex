@@ -65,7 +65,10 @@ let new_layout = compositor.button({
     icon: "new-file",
     label: "@welcome.new_layout",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let open_file = compositor.button({
@@ -75,7 +78,10 @@ let open_file = compositor.button({
     icon: "go-to-file",
     label: "@welcome.open_file",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let open_folder = compositor.button({
@@ -85,7 +91,10 @@ let open_folder = compositor.button({
     icon: "folder-opened",
     label: "@welcome.open_folder",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let commands = compositor.button({
@@ -95,7 +104,10 @@ let commands = compositor.button({
     icon: "symbol-misc",
     label: "@welcome.commands",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let help_gap = compositor.spacer({ parent: start, size: vec(0, 14) });
@@ -116,7 +128,10 @@ let keys = compositor.button({
     icon: "keyboard",
     label: "@welcome.keys",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let language = compositor.button({
@@ -126,7 +141,10 @@ let language = compositor.button({
     icon: "book",
     label: "@welcome.language",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let changes = compositor.button({
@@ -136,7 +154,10 @@ let changes = compositor.button({
     icon: "history",
     label: "@welcome.changes",
     style: "button_flat",
-    lbl_scale: 0.15
+    lbl_scale: 0.15,
+    hover: "nudge",
+    hover_amount: 4,
+    hover_time: 0.08
 });
 
 let recent_column = compositor.stack({

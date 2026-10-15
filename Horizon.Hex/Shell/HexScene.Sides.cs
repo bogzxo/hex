@@ -60,7 +60,7 @@ internal sealed partial class HexScene
         float width = Math.Clamp(settings.LeftWidth > 0.0f ? settings.LeftWidth : usualLeft, MIN_SIDE, MAX_SIDE);
         treeScroll.Size = treeScroll.Size with { X = width };
         sideTree.Size = sideTree.Size with { X = width };
-        if (left.Visible)
+        if (left.Shown)
             ToggleSideBar();
     }
 
@@ -70,7 +70,7 @@ internal sealed partial class HexScene
         float width = Math.Clamp(settings.RightWidth > 0.0f ? settings.RightWidth : usualRight, MIN_SIDE, MAX_SIDE);
         inspectorScroll.Size = inspectorScroll.Size with { X = width };
         valuesTree.Size = valuesTree.Size with { X = width };
-        if (right.Visible)
+        if (right.Shown)
             ToggleProperties();
     }
 
@@ -85,15 +85,18 @@ internal sealed partial class HexScene
         panel.OnResizeEnded = _ => SaveSettings();
     }
 
-    /// <summary>Helper method to give the panels the sizes the settings have for them, the layout's own where they have none.</summary>
-    private void ApplyPanelSizes()
+    /// <summary>
+    /// Helper method to give the panels the sizes the settings have for them, the layout's own where they have none, and
+    /// the sides shown or not. At once as Hex starts, sliding after.
+    /// </summary>
+    private void ApplyPanelSizes(bool instantly = false)
     {
         treeScroll.Size = treeScroll.Size with { X = settings.LeftWidth > 0.0f ? Math.Clamp(settings.LeftWidth, MIN_SIDE, MAX_SIDE) : usualLeft };
         inspectorScroll.Size = inspectorScroll.Size with { X = settings.RightWidth > 0.0f ? Math.Clamp(settings.RightWidth, MIN_SIDE, MAX_SIDE) : usualRight };
         layersScroll.Size = layersScroll.Size with { Y = settings.LayersHeight > 0.0f ? Math.Clamp(settings.LayersHeight, MIN_LAYERS, MAX_LAYERS) : usualLayers };
 
-        left.Visible = !settings.SideBarHidden;
-        right.Visible = !settings.PropertiesHidden;
+        left.Show(!settings.SideBarHidden, instantly);
+        right.Show(!settings.PropertiesHidden, instantly);
     }
 
     private void ResetPanels()

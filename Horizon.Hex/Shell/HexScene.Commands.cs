@@ -61,8 +61,8 @@ internal sealed partial class HexScene
 
     private void ToggleProperties()
     {
-        right.Visible = !right.Visible;
-        settings.PropertiesHidden = !right.Visible;
+        right.ToggleShown();
+        settings.PropertiesHidden = !right.Shown;
         SaveSettings();
     }
 

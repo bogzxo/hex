@@ -326,9 +326,11 @@ internal sealed partial class HexDocument
         previews.Clear();
         selection.Clear();
 
-        // What the layout is made for is part of the code, which is about to be built again
+        // What the layout is made for is part of the code, which is about to be built again, and so are the layers it
+        // starts with hidden
         Module.DesignSize = null;
         Module.Fit = UIFit.Contain;
+        Module.ShowAllLayers();
     }
 
     private string FreeName(string kind, ICollection<string>? taken = null)

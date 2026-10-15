@@ -76,6 +76,13 @@ internal sealed partial class HexScene
         var test = selfTest = new HexPointerScript { Pace = options.Watch ? 8 : 1 };
         compositor.PointerSource = () => test.Pointer;
 
+        // The sides go at once, a check straight after a toggle isn't waiting for a slide. Watched they slide, and
+        // TestSlidingSides puts it back for its own checks
+        if (!options.Watch)
+        {
+            left.SlideTime = right.SlideTime = bottom.SlideTime = 0.0f;
+        }
+
         testFolder = Path.GetFullPath(options.Workspace);
         savedFile = Path.Combine(testFolder, "selftest_menu.hor");
         dataFile = Path.Combine(testFolder, "selftest_data.hor");
@@ -134,6 +141,7 @@ internal sealed partial class HexScene
             TestTabs(test);
             TestClosingWithChanges(test);
             TestDraggingEdges(test);
+            TestSlidingSides(test);
             TestSettings(test);
         }),
         ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>

@@ -9,7 +9,9 @@ let window = compositor.window({
     padding: vec(8, 8, 8, 8),
     min_size: vec(520, 320),
     title: "@settings.title",
-    icon: "settings-gear"
+    icon: "settings-gear",
+    intro: "pop",
+    intro_time: 0.18
 });
 
 let pages = compositor.tabs({

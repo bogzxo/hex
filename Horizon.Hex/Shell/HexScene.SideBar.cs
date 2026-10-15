@@ -84,20 +84,20 @@ internal sealed partial class HexScene
         if (side == HexSide.Outline && LayoutTools) side = HexSide.Design;
         if (side == HexSide.Design && !LayoutTools) side = HexSide.Outline;
 
-        if (Side == side && left.Visible && !options.SelfTest)
+        if (Side == side && left.Shown && !options.SelfTest)
         {
             ToggleSideBar();
             return;
         }
 
-        left.Visible = true;
+        left.Show(true);
         Side = side;
     }
 
     private void ToggleSideBar()
     {
-        left.Visible = !left.Visible;
-        settings.SideBarHidden = !left.Visible;
+        left.ToggleShown();
+        settings.SideBarHidden = !left.Shown;
         settings.Save();
     }
 

@@ -58,7 +58,7 @@ internal sealed partial class HexScene
         if (line.Length == 0)
             return;
 
-        if (bottom.Selected != CONSOLE_PAGE || !bottom.Visible)
+        if (bottom.Selected != CONSOLE_PAGE || !bottom.Shown)
             ShowPanel(CONSOLE_PAGE);
 
         HIDLRuntime runtime = values is { } shown && valuesOf == document ? shown.Runtime : consoleRuntime ??= new HIDLRuntime { BaseDirectory = FolderOf(document) };
