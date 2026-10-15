@@ -163,6 +163,14 @@ internal sealed partial class HexDocument
             WriteComponent(code, component);
         }
 
+        // The layers hidden in the designer are the ones the layout starts with hidden, in the order the layout names them
+        string[] hidden = [.. Module.Layers.Where(Module.IsLayerHidden)];
+        if (hidden.Length > 0)
+        {
+            code.AppendLine();
+            code.Append("compositor.hidden_layers(").Append(HIDLWriter.Write(new ListValue([.. hidden.Select(layer => (IRuntimeValue)new StringValue(layer))]))).AppendLine(");");
+        }
+
         return code.ToString();
     }
 

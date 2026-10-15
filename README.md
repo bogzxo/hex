@@ -91,7 +91,7 @@ was told (or its default), `hex.set_setting(name, value)` changes it, and Hex ke
 
 Hex is one scene, `HexScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
 `Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name) and its
-`UpdateState` is a tick of the whole editor in seven steps, read that first. Every part of the class says what it is in
+`UpdateState` is a tick of the whole editor in a handful of steps, read that first. Every part of the class says what it is in
 a comment at its top.
 
 - `Shell/` the frame round everything, the size of things (Chrome), the menus and keys, the command palette, the side

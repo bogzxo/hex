@@ -120,7 +120,7 @@ internal sealed partial class HexScene
         else
             OpenUpTo(path);
 
-        left.Visible = true;
+        left.Show(true);
         Side = HexSide.Explorer;
     }
 

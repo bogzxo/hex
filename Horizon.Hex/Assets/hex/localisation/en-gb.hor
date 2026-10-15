@@ -225,6 +225,8 @@ let strings = {
             "- Extensions can edit a file by what is in it (a key set, renamed, taken out) and the rest of it stays as it was written",
             "- Extensions have settings of their own, a tab each in the settings, and can put Hex's sides away when their view doesn't want them",
             "- The right side drags wider and narrower and folds away to the right like the left one, Ctrl+Alt+B",
+            "- The sides and the panel under the editor slide in and out, and the buttons notice the pointer, a little grow here, a lift there",
+            "- A layout says which of its layers start hidden, and the layers hidden in the designer are saved that way. Hex's own views are layers, so every one of them can be edited in Hex",
             "- A double click selects a word, keep holding and drag to pick word by word",
             "- Open folder is the dialog Explorer has, address bar and all, and not that little tree from 1998",
             "- The version is in the title bar, so you know which Hex is misbehaving",

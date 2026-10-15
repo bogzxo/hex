@@ -134,6 +134,12 @@ internal sealed partial class HexScene : Scene
         chrome.ShowInLayoutDebugger = false;
         layout = chrome.LoadLayout(EDITOR_LAYOUT);
 
+        // The editor's views take turns on layers of their own, hidden in the file so they can be shown one at a time in the
+        // designer and worked on. Running, which of them is up is the code's to say with Visible, so what the file starts
+        // hidden starts out of sight that way and every layer is shown
+        HideLayersByVisible(chrome.Root);
+        chrome.ShowAllLayers();
+
         root = layout.Get<StackPanel>("root");
         top = layout.Get<StackPanel>("top");
         toolbar = layout.Get<StackPanel>("toolbar");
@@ -220,6 +226,18 @@ internal sealed partial class HexScene : Scene
     }
 
 
+    /// <summary>Everything on a hidden layer of the editor's own module made invisible instead, see the constructor.</summary>
+    private void HideLayersByVisible(UIComponent under)
+    {
+        foreach (UIComponent child in under.Children)
+        {
+            if (child.Layer.Length > 0 && chrome.IsLayerHidden(child.Layer))
+                child.Visible = false;
+            else
+                HideLayersByVisible(child);
+        }
+    }
+
     public override void PostInit()
     {
         base.PostInit();
@@ -260,9 +278,9 @@ internal sealed partial class HexScene : Scene
     internal static readonly HexProfiler Profile = new();
 
     /// <summary>
-    /// A tick of the editor, in the order it goes. The window and what's round the canvas, the designer, the lists that were
+    /// A tick of the editor, in the order it goes. The window and the canvas, the designer, the lists that were
     /// marked to be made again, what finished on other threads, the extensions, the panel and the bars, then the components
-    /// of both UIs. With HEX_PROFILE set what each of those cost is kept (see HexProfiler), which is why they're in groups.
+    /// of both UIs and the editor fitted round the canvas. With HEX_PROFILE set what each of those cost is kept (see HexProfiler), which is why they're in groups.
     /// </summary>
     public override void UpdateState(float dt)
     {
@@ -302,18 +320,23 @@ internal sealed partial class HexScene : Scene
 
         base.UpdateState(dt);
         Profile.Mark("components");
+
+        // The editor fitted round the canvas last, after the components moved along, a side sliding in or out has taken
+        // its step by now and the middle is sized to what it will be laid out as. Fitted first, it was a step behind and
+        // the right side shook a few pixels to and fro for as long as the slide took
+        FitChrome();
+        Profile.Mark("fit");
         Profile.End();
 
         UpdateSelfTest(dt);
     }
 
-    /// <summary>A dialog that was answered, the x of the window, and the editor fitted round the canvas.</summary>
+    /// <summary>A dialog that was answered, the x of the window, its colours and the canvas put where it is.</summary>
     private void UpdateWindow()
     {
         UpdateDialog();
         UpdateClosing();
         ColourChrome();
-        FitChrome();
         PlaceCanvas();
     }
 

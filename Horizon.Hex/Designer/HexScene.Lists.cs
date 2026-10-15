@@ -76,7 +76,8 @@ internal sealed partial class HexScene
 
     /* Layers: parts of a layout that are shown and hidden together, so what is laid over something else can be put
        out of the way while that is worked on. Which layer a component is on is one of its properties and goes into
-       the file, which of them are hidden right now is only how the editor is looking at the layout. */
+       the file, and so do the ones that are hidden, as the layers the layout starts with hidden (compositor.hidden_layers),
+       the screens of a menu that aren't the first, the views of Hex that take turns. */
 
     private void RebuildLayers()
     {
@@ -111,15 +112,15 @@ internal sealed partial class HexScene
         bool show = document.Module.IsLayerHidden(name);
         document.Module.SetLayerVisible(name, show);
 
-        // The tree greys out what is out of sight
-        treeDirty = true;
-        Say(show ? $"showing the layer {name}" : $"hid the layer {name}, it is still in the layout and in the file");
+        // The tree greys out what is out of sight, and the code says which layers the layout starts with hidden
+        treeDirty = codeDirty = true;
+        Say(show ? $"showing the layer {name}" : $"hid the layer {name}, the layout starts with it hidden, everything on it is still in the file");
     }
 
     private void ShowAllLayers()
     {
         document.Module.ShowAllLayers();
-        treeDirty = true;
+        treeDirty = codeDirty = true;
     }
     /// <summary>The icon of a file in the explorer and the lists, by what it is.</summary>
     private static string FileIcon(string path)

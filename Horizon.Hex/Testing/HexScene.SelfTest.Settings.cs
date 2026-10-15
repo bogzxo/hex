@@ -134,4 +134,29 @@ internal sealed partial class HexScene
         test.Settle(0.3f);
         test.Check("skins: and back to the one games come in", () => UISkins.Current.Name == UISkins.DEFAULT && stage.Skin is { Sheet: not null });
     }
+
+    // The side bar slides away and back, the middle widening and narrowing with it, rather than popping
+    private void TestSlidingSides(HexPointerScript test)
+    {
+        float wide = 0.0f, during = 0.0f, after = 0.0f, time = left.SlideTime;
+        test.Run(() =>
+        {
+            left.SlideTime = UIComponent.DEFAULT_SLIDE_TIME;
+            wide = center.Bounds.Width;
+            ToggleSideBar();
+        });
+        test.Settle(UIComponent.DEFAULT_SLIDE_TIME * 0.4f);
+        test.Run(() => during = center.Bounds.Width);
+        test.Check("slide: the side bar goes out sliding, there on screen still and the middle on its way wider", () =>
+            !left.Shown && left.Visible && left.Sliding && during > wide);
+
+        test.Settle(UIComponent.DEFAULT_SLIDE_TIME * 1.5f);
+        test.Run(() => after = center.Bounds.Width);
+        test.Check("slide: and is gone once it's out, the middle all the wider", () => !left.Visible && !left.Sliding && after > during);
+
+        test.Run(ToggleSideBar);
+        test.Settle(UIComponent.DEFAULT_SLIDE_TIME * 1.5f);
+        test.Check("slide: and comes back the way it went", () => left.Visible && left.Shown && !left.Sliding && Near(center.Bounds.Width, wide, 2));
+        test.Run(() => left.SlideTime = time);
+    }
 }

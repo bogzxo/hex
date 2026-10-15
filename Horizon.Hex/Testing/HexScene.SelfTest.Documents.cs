@@ -86,6 +86,26 @@ internal sealed partial class HexScene
         test.Check("bootstrap: and writes it back the same", () => CheckRoundTrip(document));
         test.Check("bootstrap: with stand-ins where it fills things in itself", () => document.PreviewCount >= 20);
 
+        // The parts that take turns are on layers, all but the designer's hidden as it opens, and running Hex shows them all
+        string[] startHidden = ["files", "code", "table", "extension", "values"];
+        test.Check("layers: the editor's views are on layers, the ones that take turns with the designer's hidden", () =>
+            document.Module.Layers.Count == 8 && document.Module.HiddenLayers.Count == startHidden.Length
+            && startHidden.All(document.Module.IsLayerHidden) && chrome.HiddenLayers.Count == 0);
+
+        // The list of layers is short, the row scrolled to first the way somebody would
+        test.Run(() => layersScroll.ScrollIntoView(layerRows["code"]));
+        test.Wait();
+        test.Click(At(() => layerRows.GetValueOrDefault("code")));
+        test.Wait();
+        test.Check("layers: a click on one shows it to work on, and the code says the layout starts with the rest hidden", () =>
+            !document.Module.IsLayerHidden("code") && Code().Contains("compositor.hidden_layers([\"files\", \"table\", \"extension\", \"values\"]);"));
+
+        test.Run(() => layersScroll.ScrollIntoView(layerRows["code"]));
+        test.Wait();
+        test.Click(At(() => layerRows.GetValueOrDefault("code")));
+        test.Wait();
+        test.Check("layers: and another hides it again", () => document.Module.IsLayerHidden("code") && Code().Contains("\"code\""));
+
         Pick("File", () => "Save");
         test.Wait();
         test.Check("bootstrap: saving it makes a copy rather than touch the file the editor runs on", () =>

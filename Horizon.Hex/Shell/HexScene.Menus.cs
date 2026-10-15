@@ -147,9 +147,9 @@ internal sealed partial class HexScene
         view.Add("Problems", () => ShowPanel(PROBLEMS_PAGE), icon: "error");
         view.Add("Output", () => ShowPanel(OUTPUT_PAGE), icon: "output");
         view.AddSeparator();
-        view.Add("Side bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left").IsChecked = () => left.Visible;
-        view.Add("Panel", TogglePanel, "Ctrl+J", "layout-panel").IsChecked = () => bottom.Visible;
-        view.Add("Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right").IsChecked = () => right.Visible;
+        view.Add("Side bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left").IsChecked = () => left.Shown;
+        view.Add("Panel", TogglePanel, "Ctrl+J", "layout-panel").IsChecked = () => bottom.Shown;
+        view.Add("Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right").IsChecked = () => right.Shown;
         view.AddSeparator();
         view.Add("Designer or code", ToggleView, "F7", "layout").IsEnabled = () => !document.IsText;
         view.Add("Zoom in", () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;

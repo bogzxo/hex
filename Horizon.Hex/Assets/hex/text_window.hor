@@ -9,7 +9,9 @@ let window = compositor.window({
     padding: vec(8, 8, 8, 8),
     min_size: vec(360, 220),
     title: "Hex",
-    icon: "book"
+    icon: "book",
+    intro: "pop",
+    intro_time: 0.18
 });
 
 let text_scroll = compositor.scroll({

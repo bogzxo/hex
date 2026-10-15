@@ -177,9 +177,10 @@ internal sealed partial class HexScene
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
         float leftWidth = treeScroll.Size.X;
         float rightWidth = inspectorScroll.Size.X;
+        // A side sliding in or out takes as much of its room as is out, so the middle widens and narrows with it
         float sides = activity.Bounds.Width
-            + (left.Visible ? leftWidth + left.Padding.Total.X : 0.0f)
-            + (right.Visible ? rightWidth + right.Padding.Total.X : 0.0f);
+            + (leftWidth + left.Padding.Total.X) * left.SlideAmount
+            + (rightWidth + right.Padding.Total.X) * right.SlideAmount;
         float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides);
 
         // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part

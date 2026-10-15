@@ -396,7 +396,7 @@ internal sealed partial class HexScene
     {
         results = found;
         resultsTitle = title;
-        left.Visible = true;
+        left.Show(true);
         Side = HexSide.Search;
         treeScroll.Offset = 0;
     }
