@@ -103,7 +103,8 @@ internal sealed partial class HexScene
             {
                 HexExtension from = extension;
                 IRuntimeValue called = function;
-                yield return ($"{extension.Name}: {name}", () =>
+                string key = extension.CommandKeys.FirstOrDefault(command => command.Name == name).Key ?? string.Empty;
+                yield return ($"{extension.Name}: {name}{(key.Length > 0 ? $"   ({key})" : string.Empty)}", () =>
                 {
                     if (!from.Invoke(called, HexOf(from)))
                         ExtensionFailed(from);

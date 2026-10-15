@@ -3,6 +3,7 @@
 // same id, so which move a fighter really has, and which file it is written in, is worked out here.
 
 let schema = include("schema.hor");
+let rules = include("rules.hor");
 
 func key_of(path) {
     if (path == null) { return ""; }
@@ -43,8 +44,20 @@ func fighter_of(root, id, character) {
         name: character.pretty_name ?? id,
         sprites: `{root}/{character.sprites}`,
         frame_rate: character.frame_rate ?? 12,
-        files: files
+        files: files,
+
+        // How it moves, its movement block over the defaults (rules.movement_of), and whether it has one written yet
+        movement: rules.movement_of(character),
+        has_movement: character.movement != null
     };
+}
+
+// @doc A fighter of the game by its id, null for one characters.hor hasn't got
+func fighter_by_id(hex, root, id) {
+    let read = root == null || id == null ? null : hex.try_load(`{root}/Assets/data/characters.hor`);
+    if (read == null || read.values == null) { return null; }
+    let characters = read.values.characters ?? {};
+    return has(characters, id) ? fighter_of(root, id, characters[id]) : null;
 }
 
 // @doc

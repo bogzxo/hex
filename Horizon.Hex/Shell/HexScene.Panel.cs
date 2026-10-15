@@ -8,7 +8,8 @@ namespace Horizon.Hex;
 
 // The panel under the editor, put away and brought back with Ctrl+J. Problems is everything wrong with the file that is
 // open and, after F8, with every file of the workspace, a row a problem, a click goes there. Output is everything Hex has
-// said (the status bar only has the last of it) and what running a file printed.
+// said (the status bar only has the last of it) and what running a file printed. With nothing wrong and the problems the
+// page on it, it folds down to its tabs, "nothing wrong with this file" took a seventh of the window every time.
 internal sealed partial class HexScene
 {
     private const int PROBLEMS_PAGE = 0, OUTPUT_PAGE = 1;
@@ -42,6 +43,11 @@ internal sealed partial class HexScene
     // How many errors and how many warnings there are, for the status bar and the panel's tab
     private int errorCount, warningCount;
 
+    // Whether the panel is folded down to its tabs, and how it could be dragged before it was
+    private bool panelFolded;
+    private UIResize panelResize;
+    private float panelOpenHeight;
+
     /// <summary>One problem, where it is, what it is, and whether it is only a warning.</summary>
     private readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning);
     private readonly List<HexProblem> problemList = [];
@@ -64,6 +70,30 @@ internal sealed partial class HexScene
         bottom.GripReach = 8.0f;
         bottom.OnResized = size => settings.PanelHeight = size.Y;
         bottom.OnResizeEnded = _ => SaveSettings();
+    }
+
+    /// <summary>
+    /// The panel folded down to its tabs (nothing on the page it's on) or opened back up to the height it was dragged to.
+    /// Folded it can't be dragged, a click on another tab opens it.
+    /// </summary>
+    private void FoldPanel(bool fold)
+    {
+        panelFolded = fold;
+        if (fold)
+        {
+            panelResize = bottom.Resizable;
+            panelOpenHeight = bottom.Size.Y;
+            bottom.Resizable = UIResize.None;
+            float folded = bottom.Bounds.Max.Y - bottom.HeaderBounds.Min.Y + bottom.Spacing * 0.5f + bottom.Padding.Bottom;
+            bottom.MinSize = new Vector2(0.0f, folded);
+            bottom.Size = bottom.Size with { Y = folded };
+        }
+        else
+        {
+            bottom.Resizable = panelResize;
+            bottom.MinSize = new Vector2(0.0f, MIN_PANEL);
+            bottom.Size = bottom.Size with { Y = Math.Clamp(panelOpenHeight, MIN_PANEL, MAX_PANEL) };
+        }
     }
 
     private void TogglePanel()
@@ -105,6 +135,10 @@ internal sealed partial class HexScene
             bottom.Tabs = PanelTabs(problemList.Count > 0 ? Said("panel.problems_count", ("count", problemList.Count.ToString())) : Said("panel.problems"));
             problemRowsStale = true;
         }
+
+        bool fold = bottom.Selected == PROBLEMS_PAGE && problemList.Count == 0;
+        if (fold != panelFolded)
+            FoldPanel(fold);
 
         panelRowsWait -= dt;
         if (!bottom.Visible || panelRowsWait > 0.0f)
@@ -203,7 +237,7 @@ internal sealed partial class HexScene
         else
         {
             for (int i = said.Count - (int)fresh; i < said.Count; i++)
-                FillOutputLine(layout.Instantiate(output.Template, output), said[i]);
+                FillOutputLine(layout.Item(output), said[i]);
 
             while (output.Children.Count > MAX_OUTPUT)
                 output.Remove(output.Children[0]);

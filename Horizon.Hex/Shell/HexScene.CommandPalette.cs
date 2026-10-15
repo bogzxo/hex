@@ -109,6 +109,21 @@ internal sealed partial class HexScene
             shown.Close();
             PickChosen();
         };
+
+        // The arrows and the pages go up and down the list while the box has the keyboard
+        box.OnKey = key =>
+        {
+            int step = key switch
+            {
+                UIKeyboard.UP or UIKeyboard.SELECT_UP => -1,
+                UIKeyboard.DOWN or UIKeyboard.SELECT_DOWN => 1,
+                UIKeyboard.PAGE_UP or UIKeyboard.SELECT_PAGE_UP => -Math.Max(1, list.Rows - 1),
+                UIKeyboard.PAGE_DOWN or UIKeyboard.SELECT_PAGE_DOWN => Math.Max(1, list.Rows - 1),
+                _ => 0
+            };
+            if (step != 0 && list.Items.Length > 0)
+                list.Choose(Math.Clamp(list.Index + step, 0, list.Items.Length - 1));
+        };
         list.OnActivated = _ =>
         {
             shown.Close();

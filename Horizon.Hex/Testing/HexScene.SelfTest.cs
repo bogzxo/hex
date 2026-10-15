@@ -106,9 +106,12 @@ internal sealed partial class HexScene
             if (!asked.Contains(name))
                 continue;
 
-            test.Run(() => Console.WriteLine($"[Hex self-test] {name}"));
+            // How long each part takes is said after it, the slow ones are the ones to look at
+            var took = new System.Diagnostics.Stopwatch();
+            test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
             MakeTestFiles();
             run(test);
+            test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
         }
     }
 
@@ -147,13 +150,16 @@ internal sealed partial class HexScene
         ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>
         {
             TestCode(test);
+            TestFindBar(test);
+            TestPlaces(test);
+            TestEditingRound(test);
             TestValuesAndConsole(test);
             TestDocs(test);
             TestTable(test);
             TestLayoutAsCode(test);
             TestCompletion(test);
         }),
-        ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences", test =>
+        ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
             // The explorer is the side bar of a file of code, which the code's part leaves on screen
             OnCode(test, dataFile);
@@ -161,6 +167,9 @@ internal sealed partial class HexScene
             TestClosingTabs(test);
             TestHelpWindows(test);
             TestConveniences(test);
+            TestKeys(test);
+            TestDiskChanges(test);
+            TestBackups(test);
         }),
         ("extensions", "editing files by their values, extensions, the move editor, their settings tabs", test =>
         {
@@ -169,6 +178,7 @@ internal sealed partial class HexScene
             TestMoveEditor(test);
             TestMoveEditorLayout(test);
             TestExtensionTabs(test);
+            TestExtensionPrompts(test);
         }),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {

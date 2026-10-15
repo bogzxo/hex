@@ -78,6 +78,8 @@ internal sealed partial class HexScene
         shown.Add("Close the saved ones", () => CloseAll(onlySaved: true));
         shown.Add("Close all", () => CloseAll(), icon: "close-all");
         shown.AddSeparator();
+        shown.Add("Open to the side", () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
+        shown.AddSeparator();
         shown.Add("Copy the path", () => UIClipboard.Copy(tab.Path ?? tab.Name), icon: "copy").IsEnabled = () => tab.Path is not null;
         shown.Add("Reveal in the explorer", () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);

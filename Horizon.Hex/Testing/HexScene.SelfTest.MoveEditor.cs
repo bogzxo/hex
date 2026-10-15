@@ -7,8 +7,9 @@ using Horizon.UI.Components;
 namespace Horizon.Hex;
 
 // The self test, the move editor (the extension in Assets/hex/extensions/move_editor) on a game of one fighter whose moves
-// are in a shared file and one of its own. Every kind of edit made through the view and checked in the files' text, one
-// step to undo, the timeline dragged, the red boxes, the problems, and the view laid out to whatever room it has.
+// are in a shared file and one of its own, in Fighter2D's second format (game frames and world units). Every kind of edit
+// made through the view and checked in the files' text, one step to undo, the timeline dragged, the frame meter, the combo
+// window, an old key said the new way, the red boxes, the problems, and the view laid out to whatever room it has.
 internal sealed partial class HexScene
 {
     private const string MOVE_VIEW = "move_editor.moves";
@@ -26,6 +27,15 @@ internal sealed partial class HexScene
         MoveView()?.Owner.Runtime?.UserScope.Lookup("views") is ObjectValue views && views.Properties.Values.FirstOrDefault() is ObjectValue state ? state : null;
 
     private string? EditorText(string key) => EditorState()?.Properties.GetValueOrDefault(key) is StringValue text ? text.Value : null;
+
+    // A number of what the extension keeps, down a path of its objects ("meter_was.numbers.advantage"), NaN for none
+    private float EditorNumber(string path)
+    {
+        IRuntimeValue? at = EditorState();
+        foreach (string key in path.Split('.'))
+            at = at is ObjectValue inside ? inside.Properties.GetValueOrDefault(key) : null;
+        return at is NumberValue number ? number.Value : float.NaN;
+    }
 
     // A move of the list picked by stepping up and down it the way the keys do, a few dozen steps at the most, the
     // test froze for good once when the move it went looking for wasn't there
@@ -57,11 +67,12 @@ internal sealed partial class HexScene
 
         System.IO.File.WriteAllText(Path.Combine(data, "characters.hor"),
             "let characters = { tester: { pretty_name: \"Tester\", sprites: \"Assets/art/sprites.hor\", frame_rate: 12, "
+            + "movement: { gravity: 4000, hitstun_gravity: 0.5 }, "
             + "moves: { shared: \"Assets/data/shared_moves.hor\", own: \"Assets/data/tester_moves.hor\" } } };\n");
         System.IO.File.WriteAllText(sharedMoves, "let moves = {\n"
             + "    idle: { phases: { stand: { animation: \"cursor_wait\", loop_while: \"always\" } } },\n"
-            + "    // a kick everybody has\n"
-            + "    kick: { input: \"B\", trigger: \"pressed\", priority: 30, damage: 7, phases: { swing: { animation: \"cursor_wait\", frames: 8, hit: 3 } } }\n};\n");
+            + "    // a kick everybody has, still saying its knockback the old way\n"
+            + "    kick: { input: \"B\", trigger: \"pressed\", priority: 30, damage: 7, knockback: vec(300, 0), phases: { swing: { animation: \"cursor_wait\", frames: 8, hit: 3 } } }\n};\n");
         System.IO.File.WriteAllText(ownMoves, "#define fight_move\n\nlet moves = {\n"
             + "    jab: {\n        input: \"Y\",\n        priority: 34,\n        damage: 5,\n        phases: {\n"
             + "            windup: { animation: \"cursor_wait\", frames: 4 },\n            swing: { frames: 6, hit: 2 }\n        }\n    },\n"
@@ -97,11 +108,95 @@ internal sealed partial class HexScene
             && Part<DrawingPanel>("strip").SpriteCount == 4 && Part<Label>("frame_info").Text.StartsWith("7 of 10", StringComparison.Ordinal)
             && Part<Label>("data_text").Text.Contains("**startup**", StringComparison.Ordinal));
 
+        TestTheLayout(test);
+        TestFrameMeter(test);
         TestPlaying(test);
         TestMoveForms(test);
+        TestComboWindow(test);
         TestPhaseEditing(test);
+        TestOldFormat(test);
         TestMovesOfTheFighter(test);
         TestRedBoxesAndProblems(test);
+    }
+
+    // The list as tall as the column, the toolbar of overlays over the frame, the frame fitted to the fighter with a floor
+    // under him, the header saying what's on screen, and what went wrong on a card in the corner
+    private void TestTheLayout(HexPointerScript test)
+    {
+        test.Settle(0.3f);
+        test.Check("moves: the list takes the height of its column, far more than the four rows it had", () =>
+            Part<ListBox>("moves") is var list && list.Rows >= 14 && list.Bounds.Min.Y >= extensionViews.Bounds.Min.Y - 1
+            && list.Bounds.Min.Y - extensionViews.Bounds.Min.Y < 60);
+        test.Check("moves: the fighter, the move, the phase and the file in a header over the frame", () =>
+            Part<Dropdown>("fighter").Value == "Tester" && Part<Label>("written_in").Text is var said
+            && said.Contains("**jab**", StringComparison.Ordinal) && said.Contains("swing", StringComparison.Ordinal)
+            && said.Contains("tester_moves.hor", StringComparison.Ordinal));
+
+        // Fitted to what's drawn rather than to the frame, so never smaller than the frame fitted whole, and the floor found
+        test.Check("moves: the frame fitted to the fighter, with a floor where his idle's feet are", () =>
+        {
+            var canvas = Part<DrawingPanel>("canvas");
+            float whole = MathF.Min((canvas.Bounds.Width - 56) / FrameSide(), (canvas.Bounds.Height - 56) / FrameSide());
+            return !float.IsNaN(EditorNumber("floor")) && canvas.Zoom >= whole * 0.99f;
+        });
+
+        test.Check("moves: the overlays are a toolbar over the frame, lit while they're on", () =>
+            Part<Button>("show_hurtbox").Selected && Part<Button>("show_traced").Selected && !Part<Button>("show_onion").Selected
+            && Part<Button>("show_path").Selected && Part<UIComponent>("toolbar").Bounds.Min.Y >= Part<DrawingPanel>("canvas").Bounds.Max.Y);
+        int shapes = 0;
+        test.Run(() => shapes = Part<DrawingPanel>("canvas").ShapeCount);
+        test.Click(MovePart("show_hurtbox"));
+        test.Wait();
+        test.Check("moves: and a press turns one off, the frame drawn without it", () =>
+            !Part<Button>("show_hurtbox").Selected && Part<DrawingPanel>("canvas").ShapeCount < shapes);
+        test.Click(MovePart("show_hurtbox"));
+        test.Wait();
+
+        test.Click(MovePart("new_move"));
+        test.Wait();
+        test.Check("moves: New with no name typed says so on a card in the corner and under the frame, not in a grey line nobody reads", () =>
+            toasts.Shown.Any(card => card.Text.Contains("type a name for it first", StringComparison.Ordinal))
+            && Part<Label>("status").Text == "type a name for it first");
+        test.Run(() =>
+        {
+            foreach (UINotification card in toasts.Shown)
+                card.Close();
+        });
+        test.Wait();
+    }
+
+    // How big a frame of the test's art is, the skin's sheet
+    private float FrameSide() => EditorState()?.Properties.GetValueOrDefault("art") is Horizon.UI.Drawing.UISprite art
+        ? MathF.Max(art.FrameSize.X, art.FrameSize.Y) : 128.0f;
+
+    // The frame meter over the timeline, the jab's on hit and on block where the Data tab says they are, the row of them
+    // swapped by a click on its name
+    private void TestFrameMeter(HexPointerScript test)
+    {
+        // 6 frames of startup, 1 active and 3 after it (the game's recovery of 4 counts the active one), hitstun guessed at
+        // the least of 12 and blockstun at 8 out of it
+        test.Check("moves: the meter counts you and them, the advantage where you're both free the same as the frame data's on hit", () =>
+            EditorNumber("meter_was.numbers.startup") == 6 && EditorNumber("meter_was.numbers.active") == 1
+            && EditorNumber("meter_was.numbers.recovery") == 3 && EditorNumber("meter_was.numbers.stun") == 12
+            && EditorNumber("meter_was.numbers.advantage") == 8 && Part<Label>("data_text").Text.Contains("**on hit** +8", StringComparison.Ordinal)
+            && Part<DrawingPanel>("timeline").ShapeCount > 30);
+
+        test.Click(() => TimelineGutter(31.5f));
+        test.Wait();
+        test.Check("moves: a click on their name and it's on block", () =>
+            EditorText("meter_on") == "block" && EditorNumber("meter_was.numbers.stun") == 8
+            && EditorNumber("meter_was.numbers.advantage") == 4 && Part<Label>("data_text").Text.Contains("**on block** +4", StringComparison.Ordinal));
+        test.Click(() => TimelineGutter(31.5f));
+        test.Wait();
+        test.Check("moves: and another back on hit, picking nothing", () =>
+            EditorText("meter_on") == "hit" && EditorText("move") == "jab" && EditorText("phase") == "swing");
+    }
+
+    // A point of the timeline left of its cells, where the meter's rows are named, so high in the drawing, in the world
+    private Vector2 TimelineGutter(float y)
+    {
+        var timeline = Part<DrawingPanel>("timeline");
+        return timeline.Module!.ToWorld(timeline.ToScreen(new Vector2(EditorNumber("timeline_at.left") - 20.0f, y)));
     }
 
     // Space plays the move and pauses it. The view is only ticked while it plays (or fits its frame), sat still it costs nothing
@@ -158,6 +253,90 @@ internal sealed partial class HexScene
             code.Text.Contains("stance_reroutes: { crouching: \"walk\" }", StringComparison.Ordinal));
     }
 
+    // The Data tab's combo window, a launch put on the jab moving the arc and the numbers under it, hitstun, the launch's
+    // growth and a hit cancel moving them again, and all of it taken back
+    private void TestComboWindow(HexPointerScript test)
+    {
+        test.Run(() =>
+        {
+            Part<TabPanel>("tabs").Select(3);
+            Part<FormPanel>("move_form").Enter("launch", Values.Vector([20.0f, 90.0f]));
+        });
+        test.Wait();
+        test.Check("moves: a launch written in world units, the combo window working out the arc and when the attacker's free", () =>
+            code.Text.Contains("launch: vec(20, 90)", StringComparison.Ordinal)
+            && Part<Label>("combo_text").Text is var said && said.Contains("**Combo window**", StringComparison.Ordinal)
+            && said.Contains("they're 35.6 up", StringComparison.Ordinal)
+            && said.Contains("Free 4 frames after the hit at the end of the move, **8 frames before they recover**", StringComparison.Ordinal)
+            && Part<DrawingPanel>("combo_arc").ShapeCount > 10);
+        test.Check("moves: the jab's 5 damage freezes them Smash's 9 frames, 13 on a counter and 6 blocked, and DI's cone round the launch", () =>
+            Part<Label>("data_text").Text.Contains("Both freeze **9** on the hit (5 damage * 0.65 + 6, 30 at most), 13 on a counter and 6 on a block", StringComparison.Ordinal)
+            && Part<Label>("combo_text").Text.Contains("DI turns it up to 9.74 degrees either way", StringComparison.Ordinal));
+
+        test.Run(() => Part<FormPanel>("move_form").Enter("hitstun", new NumberValue(40)));
+        test.Wait();
+        test.Check("moves: an exact hitstun moves when they recover, long enough they get to the top of the launch, and the counter hit is 4 on top", () =>
+            Part<Label>("combo_text").Text.Contains("Their hitstun runs out on frame 40", StringComparison.Ordinal)
+            && Part<Label>("combo_text").Text.Contains("The top is 90 up", StringComparison.Ordinal)
+            && Part<Label>("data_text").Text.Contains("**counter hit** 44", StringComparison.Ordinal));
+        test.Check("moves: and the meter says what its numbers were, lit, ticking until they go out", () =>
+            EditorNumber("meter_was.numbers.stun") == 40 && EditorNumber("lit.stun.from") == 12
+            && EditorNumber("lit.advantage.from") == 8 && EditorNumber("meter_was.numbers.advantage") == 36 && MoveView() is { Tick: not null });
+        test.WaitFor(() => float.IsNaN(EditorNumber("lit.stun.from")) && MoveView() is { Tick: null }, 4.0f);
+        test.Check("moves: a couple of seconds on they've gone out and the ticks are let go of", () =>
+            float.IsNaN(EditorNumber("lit.stun.from")) && MoveView() is { Tick: null });
+
+        test.Run(() => Part<FormPanel>("move_form").Enter("launch_growth", Values.Vector([2.0f, 5.0f])));
+        test.Wait();
+        test.Check("moves: launch_growth says where the launch goes as they lose health, 6 and 15 further with 30 gone", () =>
+            code.Text.Contains("launch_growth: vec(2, 5)", StringComparison.Ordinal)
+            && Part<Label>("data_text").Text.Contains("then 26 along and 105 up with 30 lost", StringComparison.Ordinal));
+
+        test.Run(() => Part<FormPanel>("move_form").Enter("hit_cancel", new StringValue("jump | special")));
+        test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("has no jump to cancel into", StringComparison.Ordinal)), 3.0f);
+        test.Check("moves: a hit cancel written as a list, free the frame after the hit, a move it names that isn't there and a kind nobody is in the problems", () =>
+            code.Text.Contains("hit_cancel: [\"jump\", \"special\"]", StringComparison.Ordinal)
+            && Part<Label>("combo_text").Text.Contains("Free 1 frame after the hit by hit_cancel", StringComparison.Ordinal)
+            && problemList.Any(problem => problem.Text.Contains("has no jump to cancel into, and it isn't a kind of move", StringComparison.Ordinal))
+            && problemList.Any(problem => problem.Text.Contains("has no special moves", StringComparison.Ordinal)));
+
+        test.Run(() =>
+        {
+            ExtensionKey("undo");
+            ExtensionKey("undo");
+            ExtensionKey("undo");
+            ExtensionKey("undo");
+        });
+        test.Wait();
+        test.Check("moves: and four undos take the four of them back", () =>
+            !code.Text.Contains("launch", StringComparison.Ordinal) && !code.Text.Contains("hit_cancel", StringComparison.Ordinal)
+            && !code.Text.Contains("hitstun", StringComparison.Ordinal));
+    }
+
+    // The kick in the shared file says knockback, which the game won't load any more, the problems say so and the Move tab
+    // says it the new way
+    private void TestOldFormat(HexPointerScript test)
+    {
+        test.Run(() =>
+        {
+            Part<TabPanel>("tabs").Select(0);
+            PickMove("kick");
+        });
+        test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("knockback isn't a thing any more", StringComparison.Ordinal)), 3.0f);
+        test.Check("moves: a key of the old format is an error, and the Move tab offers to say it the new way", () =>
+            problemList.Any(problem => problem.Text.Contains("knockback isn't a thing any more", StringComparison.Ordinal) && !problem.Warning)
+            && Part<UIComponent>("upgrade_row").Visible);
+
+        test.Click(MovePart("upgrade"));
+        test.Wait();
+        test.Check("moves: a knockback that stays on the ground turned into a push through the old curve, where it was written", () =>
+            FileText(sharedMoves) is var shared && shared.Contains("damage: 7, push: 37, phases", StringComparison.Ordinal)
+            && !shared.Contains("knockback:", StringComparison.Ordinal) && !Part<UIComponent>("upgrade_row").Visible);
+
+        test.Run(() => PickMove("jab"));
+        test.Wait();
+    }
+
     // The Phase tab and the timeline
     private void TestPhaseEditing(HexPointerScript test)
     {
@@ -190,35 +369,66 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("moves: the end of a phase dragged along the timeline, how long it is written once it's let go of", () =>
             code.Text.Contains("swing: { frames: 10, hit: 2 }", StringComparison.Ordinal));
+
+        // The end of the active bar dragged from the hit two cells on, the hit out for three frames
+        test.Run(() =>
+        {
+            from = TimelineActiveEnd("swing", 0);
+            to = TimelineActiveEnd("swing", 2);
+        });
+        test.Drag(() => from, () => to);
+        test.Wait();
+        test.Check("moves: the active bar's handle dragged, how long the hit's out for written on the phase with it", () =>
+            code.Text.Contains("swing: { frames: 10, hit: 2, active: 3 }", StringComparison.Ordinal));
+
+        // The swing carries on a frame of art, 5 game frames at 12 a second and 10 at half of that, which is what it says.
+        // A click on its block picks it
+        test.Run(() => from = TimelineEnd("swing", -3));
+        test.Click(() => from);
+        test.Wait();
+        test.Check("moves: the length a phase's art gives it, at the fighter's frame rate", () =>
+            EditorText("phase") == "swing" && Part<Label>("phase_head").Text.Contains("its art would make it 5", StringComparison.Ordinal));
+        test.Run(() => Part<FormPanel>("phase_form").Enter("art_speed", new NumberValue(0.5f)));
+        test.Wait();
+        test.Check("moves: and at half the art speed, twice that", () =>
+            code.Text.Contains("art_speed: 0.5", StringComparison.Ordinal) && !Part<Label>("phase_head").Text.Contains("its art would make it", StringComparison.Ordinal));
+        test.Run(() => ExtensionKey("undo"));
+        test.Wait();
     }
 
-    // Where the end of a phase's block is on the timeline, in the world, and how wide a cell is in the drawing
-    private float TimelineCell()
-    {
-        var timeline = Part<DrawingPanel>("timeline");
-        int count = EditorState()?.Properties["laid"] is ObjectValue laid && laid.Properties["frames"] is ListValue frames ? frames.Count : 1;
-        return MathF.Min(22, MathF.Max(4, (timeline.Bounds.Width / timeline.Zoom - 20) / count));
-    }
-
+    // Where the end of a phase's block is on the timeline, in the world. Where the cells start and how wide they are is the
+    // extension's to say, the meter decides how many frames they span
     private Vector2 TimelineEnd(string phase, int cellsOn)
     {
         var timeline = Part<DrawingPanel>("timeline");
         if (EditorState()?.Properties["laid"] is not ObjectValue laid || laid.Properties["phases"] is not ListValue phases)
             return Vector2.Zero;
 
-        int count = laid.Properties["frames"] is ListValue frames ? frames.Count : 1;
-        float cell = TimelineCell();
+        float left = EditorNumber("timeline_at.left"), cell = EditorNumber("timeline_at.cell");
         foreach (IRuntimeValue item in phases.Items)
         {
             if (item is ObjectValue block && block.Properties["name"] is StringValue { Value: var name } && name == phase
                 && block.Properties["first"] is NumberValue first && block.Properties["length"] is NumberValue length)
             {
-                float x = -cell * count / 2.0f + cell * (first.Value + length.Value + cellsOn);
-                return timeline.Module!.ToWorld(timeline.ToScreen(new Vector2(x, 22.0f)));
+                float x = left + cell * (first.Value + length.Value + cellsOn);
+                return timeline.Module!.ToWorld(timeline.ToScreen(new Vector2(x, 0.0f)));
             }
         }
 
         return Vector2.Zero;
+    }
+
+    // Where the handle at the end of a phase's active bar is on the timeline, so many cells on, in the world
+    private Vector2 TimelineActiveEnd(string phase, int cellsOn)
+    {
+        var timeline = Part<DrawingPanel>("timeline");
+        if (EditorState()?.Properties["laid"] is not ObjectValue laid || laid.Properties["hit"] is not NumberValue hit
+            || laid.Properties["active"] is not NumberValue active)
+            return Vector2.Zero;
+
+        float left = EditorNumber("timeline_at.left"), cell = EditorNumber("timeline_at.cell");
+        float x = left + cell * (hit.Value + active.Value - 1 + cellsOn) + cell * 0.5f;
+        return timeline.Module!.ToWorld(timeline.ToScreen(new Vector2(x, 19.5f)));
     }
 
     // Moves written in the shared file, new ones, renamed and taken out
@@ -244,7 +454,7 @@ internal sealed partial class HexScene
         test.Click(MovePart("new_move"));
         test.Wait();
         test.Check("moves: a new move out of a template, after the one picked, and picked", () =>
-            code.Text.Contains("uppercut: {", StringComparison.Ordinal) && code.Text.Contains("knockback: vec(300, 2000)", StringComparison.Ordinal)
+            code.Text.Contains("uppercut: {", StringComparison.Ordinal) && code.Text.Contains("launch: vec(20, 90)", StringComparison.Ordinal)
             && EditorText("move") == "uppercut");
 
         test.Run(() =>
@@ -349,6 +559,9 @@ internal sealed partial class HexScene
 
         test.Run(() =>
         {
+            // the cards the editor put up (press delete again) go with it, the garbage sweep after doesn't want them fading
+            foreach (UINotification card in toasts.Shown)
+                card.Close();
             CloseNow();
             if (OpenDocument(Path.GetFullPath(sharedMoves)) is { } shared)
             {

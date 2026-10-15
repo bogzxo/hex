@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Horizon.Content;
 using Horizon.HIDL;
@@ -43,47 +44,6 @@ internal sealed partial class HexScene
         box.Focus();
         box.SelectAll();
         textDialog = shown;
-    }
-
-    private void FindInFile()
-    {
-        string start = code.Document.HasSelection && code.Document.SelectionStart.Line == code.Document.SelectionEnd.Line ? code.Document.SelectedText : lastFind;
-        AskText("Find", "Look for in this file, F3 finds the next, Shift+F3 the one before", start, "Find", query =>
-        {
-            lastFind = query;
-            code.FindQuery = query;
-            bool any = code.FindNext();
-            code.Focus();
-            Say(any ? $"'{query}', {CountIn(code.Text, query)} of it" : $"no '{query}' in {document.Name}", error: !any);
-        });
-    }
-
-    private void FindAgain(bool forward)
-    {
-        if (lastFind.Length == 0)
-        {
-            FindInFile();
-            return;
-        }
-
-        code.FindQuery = lastFind;
-        if (!code.FindNext(forward))
-            Say($"no '{lastFind}' in {document.Name}", error: true);
-    }
-
-    private void ReplaceInFile()
-    {
-        AskText("Replace", "Look for what, then what goes in its place", lastFind, "Next", query =>
-        {
-            lastFind = query;
-            AskText("Replace with", $"Every '{query}' in {document.Name} becomes", string.Empty, "Replace all", with =>
-            {
-                code.FindQuery = query;
-                int count = code.ReplaceAll(with);
-                code.Focus();
-                Say(count > 0 ? $"replaced {count} of '{query}', Ctrl+Z puts them back" : $"no '{query}' in {document.Name}", error: count == 0);
-            });
-        });
     }
 
     private static int CountIn(string text, string query)
@@ -264,10 +224,11 @@ internal sealed partial class HexScene
         return true;
     }
 
-    /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left.</summary>
+    /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left, as the find bar's toggles say.</summary>
     private void FindInFiles()
     {
-        AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}", lastFind, "Find", query =>
+        string how = DescribeFindOptions(findOptions);
+        AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}{how}", lastFind, "Find", query =>
         {
             if (query.Length == 0)
                 return;
@@ -275,9 +236,10 @@ internal sealed partial class HexScene
             lastFind = query;
             List<string> roots = WorkspaceRoots();
             string where = DescribeRoots();
+            UIFindOptions options = findOptions;
 
             // Every file read off the editor's thread, the results come in when they are all there
-            InBackground($"looking for '{query}' in {where}...", () => FindIn(roots, query, wholeWord: false), found =>
+            InBackground($"looking for '{query}' in {where}...", () => FindIn(roots, query, options), found =>
             {
                 ShowResults($"FOUND '{query}' ({found.Count})", found);
                 Say(found.Count > 0 ? $"'{query}' is in {found.Select(result => result.Path).Distinct().Count()} files, {found.Count} lines" : $"no '{query}' in {where}", error: found.Count == 0);
@@ -286,30 +248,71 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
-    private List<HexResult> FindEverywhere(string query, bool wholeWord) => FindIn(WorkspaceRoots(), query, wholeWord);
+    private List<HexResult> FindEverywhere(string query, bool wholeWord) => FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
-    /// <summary>Every line something is on in the files under some folders. Reads nothing of the editor, for the background.</summary>
-    private static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, bool wholeWord)
+    /// <summary>
+    /// Every line something is on in the files under some folders, the first place on each, the case, whole words and a
+    /// regex as the options say. Reads nothing of the editor, for the background. A regex that doesn't build finds nothing.
+    /// </summary>
+    private static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, UIFindOptions options)
     {
         var found = new List<HexResult>();
+        Regex? pattern = null;
+        if (options.Regex)
+        {
+            try { pattern = new Regex(query, (options.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); }
+            catch (ArgumentException) { return found; }
+        }
 
         foreach (string file in FilesUnder(roots))
         {
             string[] lines = ReadLines(file);
             for (int line = 0; line < lines.Length && found.Count < 2000; line++)
             {
-                for (int at = lines[line].IndexOf(query, StringComparison.OrdinalIgnoreCase); at >= 0; at = lines[line].IndexOf(query, at + query.Length, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (wholeWord && !IsWholeWord(lines[line], at, query.Length))
-                        continue;
-
+                if (FirstMatch(lines[line], query, options, pattern) is { } at)
                     found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}"));
-                    break;
-                }
             }
         }
 
         return found;
+    }
+
+    // Where something is first on a line as the options say, null for nowhere
+    private static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
+    {
+        if (pattern is not null)
+        {
+            try
+            {
+                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
+                {
+                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
+                        return match.Index;
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+            }
+            return null;
+        }
+
+        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
+        {
+            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
+                return at;
+        }
+        return null;
+    }
+
+    // The toggles of the find bar that are on, said after what's asked, empty for none
+    private static string DescribeFindOptions(UIFindOptions options)
+    {
+        var on = new List<string>();
+        if (options.MatchCase) on.Add("the case matching");
+        if (options.WholeWord) on.Add("whole words");
+        if (options.Regex) on.Add("as a regex");
+        return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
     }
 
     private static bool IsWholeWord(string line, int at, int length) =>

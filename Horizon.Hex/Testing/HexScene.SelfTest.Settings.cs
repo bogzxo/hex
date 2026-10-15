@@ -78,6 +78,27 @@ internal sealed partial class HexScene
             compositor.Skin is { Theme: "light", PanelColor.X: > 0.8f, TextColor.X: < 0.3f } && DimColor.X < 0.3f);
         test.Run(() => UseEditorTheme("dark", save: false));
 
+        // The picture behind the code, the girl unless told otherwise, moved, sized and made fainter as it's dragged
+        SettingsPage(SETTINGS_BACKDROP);
+        test.Wait();
+        test.Check("settings: a page for the picture behind the code, the one Hex comes with in every editor", () =>
+            settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null
+            && Setting("backdrop_scale") is Slider && Setting("backdrop_across") is Slider && Setting("backdrop_up") is Slider && Setting("backdrop_opacity") is Slider);
+        test.Run(() =>
+        {
+            ((Slider)Setting("backdrop_scale")).OnChanged!(0.8f);
+            ((Slider)Setting("backdrop_across")).OnChanged!(40.0f);
+            ((Slider)Setting("backdrop_opacity")).OnChanged!(0.5f);
+        });
+        test.Wait();
+        test.Check("settings: and its sliders move it, size it and make it fainter in the code there and then", () =>
+            code.BackdropScale == 0.8f && code.BackdropOffset.X == 40.0f && code.BackdropOpacity == 0.5f);
+        test.Click(At(() => Setting("backdrop"), 0.1f));
+        test.Wait();
+        test.Check("settings: and it goes when switched off", () => !settings.BackdropOn && code.Backdrop is null);
+        test.Click(At(() => Setting("backdrop"), 0.1f));
+        test.Wait();
+
         SettingsPage(SETTINGS_DESIGNER);
         test.Wait();
         test.Click(At(() => Setting("snap"), 0.9f));
@@ -87,7 +108,7 @@ internal sealed partial class HexScene
 
         test.Click(At(() => Setting("handles"), 0.1f));
         test.Wait();
-        test.Check("settings: the resize handles switch off", () => !settings.CanvasHandles && Setting("handles") is ToggleButton { State: false, Label: "off" });
+        test.Check("settings: the resize handles switch off", () => !settings.CanvasHandles && Setting("handles") is ToggleButton { State: false, Label: "Off" });
         test.Click(At(() => Setting("handles"), 0.1f));
         test.Wait();
         test.Check("settings: and on again", () => settings.CanvasHandles);

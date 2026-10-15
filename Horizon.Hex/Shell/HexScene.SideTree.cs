@@ -25,6 +25,7 @@ internal sealed partial class HexScene
     {
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
+        sideTree.FocusLine = true;
         sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnActivated = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);

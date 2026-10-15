@@ -319,6 +319,20 @@ internal sealed partial class HexScene
 
     /* The right click menu */
 
+    /// <summary>The file an include names, opened to edit, what's inside the include isn't edited here.</summary>
+    private void OpenIncluded()
+    {
+        if (document.Selected is not Include { File.Length: > 0 } include)
+            return;
+
+        string directory = document.Path is { } path ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)) ?? string.Empty : document.FallbackDirectory;
+        string file = System.IO.Path.Combine(directory, include.File);
+        if (File.Exists(file))
+            Open(file);
+        else
+            Say($"there's no {include.File} next to the layout", error: true);
+    }
+
     private Menu ComponentMenu()
     {
         var shown = new Menu("component");
@@ -332,14 +346,15 @@ internal sealed partial class HexScene
         shown.AddSeparator();
 
         // What goes inside of the one selected, a menu of the kinds
-        Menu inside = shown.AddMenu("Add inside", "add");
+        Menu inside = shown.AddMenu("Add Inside", "add");
         foreach (string kind in Palette)
             inside.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
 
         AddMoveMenu(shown.AddMenu("Move", "arrow-swap"), any);
         AddArrangeMenu(shown.AddMenu("Arrange", "layers"), any);
-        AddAlignMenu(shown.AddMenu("Line up", "symbol-ruler"), any);
+        AddAlignMenu(shown.AddMenu("Align", "symbol-ruler"), any);
         shown.AddSeparator();
+        shown.Add("Open Included File", OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
         shown.Add("Group", GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
         shown.Add("Ungroup", UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
 

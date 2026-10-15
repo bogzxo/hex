@@ -49,7 +49,7 @@ internal sealed partial class HexScene
 
     /* The settings, a window of their own in the editor with a page for each part of it */
 
-    private const int SETTINGS_EDITOR = 0, SETTINGS_DESIGNER = 1, SETTINGS_FILES = 2, SETTINGS_EXTENSIONS = 3;
+    private const int SETTINGS_EDITOR = 0, SETTINGS_BACKDROP = 1, SETTINGS_DESIGNER = 2, SETTINGS_FILES = 3, SETTINGS_EXTENSIONS = 4;
 
     private const string SETTINGS_LAYOUT = "settings.hor";
 
@@ -79,6 +79,7 @@ internal sealed partial class HexScene
         settingsPages = made.Get<TabPanel>("pages");
 
         FillEditorPage(made);
+        FillBackdropPage(made);
         FillDesignerPage(made);
 
         // Files

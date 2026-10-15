@@ -1,19 +1,29 @@
 // The frame on screen, the art with its boxes over it (blue the hurtbox, yellow the hitbox the game traces, red the one
-// drawn by hand, solid on its active frames and a ghost on the others), where the knockback sends whoever it hits, and the
-// red box taken hold of with the pointer, drawn, moved and sized.
+// drawn by hand, solid on its active frames and a ghost on the others), where the launch sends whoever it hits, and the
+// red box taken hold of with the pointer, drawn, moved and sized. The red boxes are spread evenly over the active frames,
+// so a box is the one of every active frame that hits with it.
+//
+// The frame is fitted to what's drawn on every frame of the move and the idle, not to the frame of the art, which was
+// mostly air, and the fighter stands on a line where his feet are in his idle, so a jump and a launch have a ground to be
+// measured from. The idle is in it so the fighter stays the size he is from one move to the next, only a move that
+// reaches further than he stands takes more room.
 
 let timing = include("timing.hor");
 let tracer = include("tracer.hor");
 let boxes_of = include("boxes.hor");
 let rules = include("rules.hor");
 let edits = include("edits.hor");
+let combo_view = include("combo_view.hor");
 
 let HURT = vec(0.3, 0.55, 1.0, 1.0);
 let TRACED = vec(1.0, 0.85, 0.2, 1.0);
 let DRAWN = vec(1.0, 0.3, 0.3, 1.0);
 let PATH = vec(0.6, 0.9, 1.0, 0.8);
+let FREE = vec(0.5, 1.0, 0.55, 1.0);
+let FLOOR = vec(0.75, 0.78, 0.85, 0.35);
+let UNDER_FLOOR = vec(1, 1, 1, 0.025);
 
-// A fighter is about this many of the game's units tall, which is what the knockback is measured against
+// A fighter is about this many of the game's units tall, which is how world units are put on the art
 let FIGHTER_UNITS = 73;
 
 func drawn(state) { return state.move == null ? null : state.boxes[state.move]; }
@@ -33,25 +43,94 @@ func draw(state) {
     let size = boxes_of.frame_size(state.art);
     let half = vec(size.x / 2, size.y / 2);
     draw_frame_lines(canvas, half);
+    draw_floor(state, canvas);
     draw_art(state, canvas, at, half);
 
     let traced = tracer.trace(state.art, state.traces, at.animation, at.shown);
     if (traced != null) { draw_traced(state, canvas, traced, at); }
     draw_red_box(state, canvas);
-    if (traced != null && state.ui.get("show_path").state) { draw_knockback(state, canvas, traced); }
+    if (traced != null && state.overlays.show_path) { draw_launch(state, canvas, traced); }
 }
 
 func draw_frame_lines(canvas, half) {
-    canvas.frame(vec(-half.x, -half.y), half, 1, vec(1, 1, 1, 0.08));
-    canvas.line(vec(-half.x, 0), vec(half.x, 0), 1, vec(1, 1, 1, 0.06));
-    canvas.line(vec(0, -half.y), vec(0, half.y), 1, vec(1, 1, 1, 0.06));
+    canvas.frame(vec(-half.x, -half.y), half, 1, vec(1, 1, 1, 0.05));
+    canvas.line(vec(0, -half.y), vec(0, half.y), 1, vec(1, 1, 1, 0.05));
+}
+
+// The ground, a line where the feet are and the dark under it, far enough either way that no pan finds its end
+func draw_floor(state, canvas) {
+    let floor = floor_of(state);
+    if (floor == null) { return; }
+    canvas.rect(vec(-8000, floor - 8000), vec(8000, floor), UNDER_FLOOR);
+    canvas.line(vec(-8000, floor), vec(8000, floor), 1, FLOOR);
+}
+
+// @doc
+// Where the fighter's feet are, in pixels of the frame from its middle. The bottom of what's drawn on the first frame of
+// the idle, or of the frame on screen when there's no idle, kept until the fighter or the art changes
+func floor_of(state) {
+    if (state.floor != null) { return state.floor; }
+    if (state.art == null) { return null; }
+
+    let traced = state.art.has("idle") ? tracer.trace(state.art, state.traces, "idle", 0) : null;
+    if (traced == null) {
+        let at = frame_on_screen(state);
+        traced = at == null ? null : tracer.trace(state.art, state.traces, at.animation, at.shown);
+    }
+    if (traced == null) { return null; }
+    state.floor = boxes_of.to_pixels(state.art, traced.hurt).min.y;
+    return state.floor;
+}
+
+// @doc
+// The frame fitted to the move, the box round what's drawn on every one of its frames, the first of the idle and its red
+// boxes, down to the floor. The whole frame for a move with nothing drawn on it
+func fit(state) {
+    let canvas = state.ui.get("canvas");
+    let around = drawn_around(state);
+    if (around == null) {
+        let frame = boxes_of.frame_size(state.art);
+        canvas.fit(vec(-frame.x / 2, -frame.y / 2), vec(frame.x / 2, frame.y / 2), 20);
+    } else {
+        canvas.fit(around.min, around.max, 28);
+    }
+    draw(state);
+}
+
+func drawn_around(state) {
+    if (state.art == null || len(state.laid.frames) == 0) { return null; }
+    let around = null;
+    let seen = {};
+    for (frame in state.laid.frames) {
+        let key = `{frame.animation}:{frame.shown}`;
+        if (!has(seen, key)) {
+            seen[key] = true;
+            let traced = tracer.trace(state.art, state.traces, frame.animation, frame.shown);
+            if (traced != null) { around = grown(around, boxes_of.to_pixels(state.art, traced.hurt)); }
+        }
+    }
+
+    let idle = state.art.has("idle") ? tracer.trace(state.art, state.traces, "idle", 0) : null;
+    if (idle != null) { around = grown(around, boxes_of.to_pixels(state.art, idle.hurt)); }
+    for (box in drawn(state) ?? []) { around = grown(around, boxes_of.to_pixels(state.art, box)); }
+    let floor = floor_of(state);
+    if (around != null && floor != null) { around = grown(around, { min: vec(around.min.x, floor), max: vec(around.max.x, floor) }); }
+    return around;
+}
+
+func grown(around, box) {
+    if (around == null) { return { min: box.min, max: box.max }; }
+    return {
+        min: vec(math.min(around.min.x, box.min.x), math.min(around.min.y, box.min.y)),
+        max: vec(math.max(around.max.x, box.max.x), math.max(around.max.y, box.max.y))
+    };
 }
 
 // The art, and the frames either side faintly when asked, for seeing a limb come and go
 func draw_art(state, canvas, at, half) {
     if (state.art == null) { return; }
 
-    if (state.ui.get("show_onion").state) {
+    if (state.overlays.show_onion) {
         for (step in [-1, 1]) {
             let near = state.frame + step;
             if (near >= 0 && near < len(state.laid.frames)) {
@@ -65,13 +144,13 @@ func draw_art(state, canvas, at, half) {
 }
 
 func draw_traced(state, canvas, traced, at) {
-    if (state.ui.get("show_hurtbox").state) {
+    if (state.overlays.show_hurtbox) {
         let hurt = boxes_of.to_pixels(state.art, traced.hurt);
         canvas.rect(hurt.min, hurt.max, vec(HURT.x, HURT.y, HURT.z, 0.12));
         canvas.frame(hurt.min, hurt.max, 1, HURT);
     }
 
-    if (state.ui.get("show_traced").state && at.kind == "active") {
+    if (state.overlays.show_traced && at.kind == "active") {
         let hit = boxes_of.to_pixels(state.art, traced.hit);
         canvas.frame(hit.min, hit.max, 1, TRACED);
     }
@@ -93,25 +172,33 @@ func draw_red_box(state, canvas) {
     }
 }
 
-// Roughly where the knockback sends whoever is hit, an arc from the front of the hit to where they land, measured
-// against the fighter's height on the art. On the hit frame only, it's what happens there
-func draw_knockback(state, canvas, traced) {
-    let move = state.moves[state.move].move;
-    if (state.frame != state.laid.hit || move == null) { return; }
+// Where the launch sends whoever is hit, the whole flight from the front of the hit to where they land, world units put
+// on the art by the fighter's height. On the hit frame only, it's what happens there. The same flight as the combo
+// window's, with where they are when the attacker is free marked
+func draw_launch(state, canvas, traced) {
+    if (state.frame != state.laid.hit) { return; }
+    let combo = combo_view.window(state);
+    if (combo == null || len(combo.flown.points) < 2) { return; }
 
     let hurt = boxes_of.to_pixels(state.art, traced.hurt);
     let hit = boxes_of.to_pixels(state.art, traced.hit);
     let scale = (hurt.max.y - hurt.min.y) / FIGHTER_UNITS;
-    let reach = rules.knockback_reach(move.knockback ?? vec(0, 0));
     let from = vec(hit.max.x, hurt.min.y);
-    let last = from;
-    for (step in range(1, 17)) {
-        let t = step / 16;
-        let next = vec(from.x + reach.away * scale * t, from.y + reach.up * scale * 4 * t * (1 - t));
-        canvas.line(last, next, 2, PATH);
-        last = next;
+    let points = combo.flown.points;
+    for (f in range(1, len(points))) {
+        let a = points[f - 1];
+        let b = points[f];
+        canvas.line(vec(from.x + a.x * scale, from.y + a.y * scale), vec(from.x + b.x * scale, from.y + b.y * scale), 2, f <= combo.data.hitstun ? PATH : vec(PATH.x, PATH.y, PATH.z, 0.3));
     }
-    canvas.text(reach.up > 0 ? `up {math.round(reach.up)}, {math.round(reach.away)} away` : `{math.round(reach.away)} away`, vec(last.x + 4, last.y + 4), 0.1, PATH);
+
+    let free = rules.flight_at(combo.flown, combo.act);
+    let at = vec(from.x + free.x * scale, from.y + free.y * scale);
+    canvas.rect(vec(at.x - 2, at.y - 2), vec(at.x + 2, at.y + 2), FREE);
+
+    let last = points[len(points) - 1];
+    let top = rules.flight_top(combo.flown);
+    let said = combo.flown.launched ? `up {rules.units(top.y)}, {rules.units(top.x)} along at the top` : `{rules.units(last.x)} along`;
+    canvas.text(said, vec(from.x + last.x * scale + 4, from.y + 4), 0.1, PATH);
 }
 
 /* The pointer, drawing, moving and sizing the red box. A drag is one step to undo, recorded as it's let go of */
@@ -156,9 +243,8 @@ func drag_to(state, at) {
     }
 
     let box = drawn(state);
-    let boxes = box == null ? boxes_of.box_list(1, made) : box.copy();
-    boxes[timing.shown_index(state.laid, state.frame, len(boxes))] = made;
-    state.boxes[state.move] = boxes;
+    let index = box == null ? 0 : timing.shown_index(state.laid, state.frame, len(box));
+    state.boxes[state.move] = boxes_of.with_box(box, index, made);
     drag.moved = true;
     draw(state);
 }

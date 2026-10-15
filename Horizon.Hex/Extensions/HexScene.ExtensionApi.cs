@@ -20,7 +20,7 @@ internal sealed partial class HexScene
         {
             hexObjects[extension] = hex = Natives.Object(
             [
-                .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension),
+                .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension), .. Prompting(extension),
                 .. Sides(), .. Programs(extension), .. About(extension), .. Edits(extension), .. Problems(extension),
                 .. Watching(extension)
             ]);
@@ -42,11 +42,17 @@ internal sealed partial class HexScene
         ("notify", Natives.Action("notify", args => Notify($"{extension.Name}: {args.Text(0, string.Empty)}", error: args.Bool(1, false)))),
         ("command", Natives.Action("command", args =>
         {
-            // In the command palette under the extension's name, as long as it is switched on
+            // In the command palette under the extension's name, as long as it is switched on, and on a key if it says one
             string name = args.Text(0);
             IRuntimeValue function = args.Callable(1);
+            string key = args.Text(2, string.Empty);
+            if (key.Length > 0 && ReadKey(key) is null)
+                throw args.Wrong($"no key called {key}, they're written like Ctrl+Shift+K.");
             extension.Commands.RemoveAll(command => command.Name == name);
             extension.Commands.Add((name, function));
+            extension.CommandKeys.RemoveAll(command => command.Name == name);
+            if (key.Length > 0)
+                extension.CommandKeys.Add((name, key));
         }))
     ];
 
@@ -321,6 +327,10 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Starts a program for an extension, false (and said why in the output) if it wouldn't.</summary>
+    // How many programs extensions started are still running, and the name of the last one
+    private int programsRunning;
+    private string runningName = string.Empty;
+
     private bool StartProgram(HexExtension extension, string program, string[] arguments, string? folder)
     {
         if (!File.Exists(program))
@@ -339,7 +349,20 @@ internal sealed partial class HexScene
 
         try
         {
-            System.Diagnostics.Process.Start(start)?.Dispose();
+            // Kept count of while it runs, the status bar says a game started from here reloads what's saved
+            var process = System.Diagnostics.Process.Start(start);
+            if (process is not null)
+            {
+                Interlocked.Increment(ref programsRunning);
+                runningName = Path.GetFileNameWithoutExtension(program);
+                process.EnableRaisingEvents = true;
+                process.Exited += (_, _) =>
+                {
+                    Interlocked.Decrement(ref programsRunning);
+                    process.Dispose();
+                    Engine.WindowManager.Wake();
+                };
+            }
             return true;
         }
         catch (Exception e)

@@ -166,26 +166,6 @@ internal sealed partial class HexScene
         return window;
     }
 
-    /// <summary>Every key Hex has, read out of its menus so it is never out of date, and the ones that aren't in a menu.</summary>
-    private void ShowKeys()
-    {
-        ReadStrings();
-        var text = new StringBuilder(Said("keys.heading")).Append('\n');
-        foreach (Menu bar in menu.Menus)
-        {
-            var keyed = bar.Everything().Where(pair => pair.Item.Shortcut.Length > 0).ToList();
-            if (keyed.Count == 0)
-                continue;
-
-            text.Append("\n## ").Append(bar.Title).Append('\n');
-            foreach (var (item, _) in keyed)
-                text.Append("- `").Append(item.Shortcut).Append("`  ").Append(item.Label.TrimEnd('.')).Append('\n');
-        }
-
-        text.Append('\n').Append(Said("keys.not_in_a_menu"));
-        ShowText(Said("keys.title"), text.ToString());
-    }
-
     /// <summary>Help, What changed. The changelog, out of Hex's texts like the rest of the help.</summary>
     private void ShowChangelog()
     {

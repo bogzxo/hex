@@ -21,7 +21,9 @@ the repository by a few letters of its name, Ctrl+Shift+F finds in all of them, 
 parse, F5 runs a file and lists what it declares. Ctrl+/ comments lines, Alt+Up and Down move them, Ctrl+D duplicates.
 What is typed is completed (Ctrl+Space, or as it is typed), a component's properties inside its braces, the game's
 text keys after an @, the names of the whole workspace anywhere else. F12 goes to where something is declared,
-Shift+F12 finds everywhere it is used.
+Shift+F12 finds everywhere it is used. Every key is in Help, Keyboard Shortcuts, a list typed into to narrow it
+down, enter on a command to press a new key for it and delete to take its key off, kept in `keys.hor` next to
+`hex_settings.hor`, and the command palette and every chooser go up and down with the arrows.
 
 HIDL is a language of values first, so the right side of a file of code is what it comes to (Values), run a moment after
 it was last typed into on a thread of its own, the way the game that reads it would see it, as a tree. A click on a
@@ -56,11 +58,19 @@ func on_start(hex) {
 
 What `hex` has for now. `hex.title_note(text)` puts a few words after Hex in the title bar, in brackets. `hex.say(text)`
 says something in the status bar, `hex.notify(text)` puts a card up in the corner (`hex.notify(text, true)` an error
-that stays). `hex.command(name, func(hex) { ... })` puts a command in the command palette under the extension's name.
+that stays). `hex.command(name, func(hex) { ... })` puts a command in the command palette under the extension's name,
+and `hex.command(name, func(hex) { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
 `hex.file()` is the path of the file on screen. `hex.version`, `hex.name` and `hex.folder` are Hex's version, the
 extension's name and its folder. Besides `on_start(hex)`, an extension hears about `on_open(hex, file)` and
-`on_save(hex, file)`. What it prints goes in the output with its name in front. An extension runs in a runtime of its
-own, a second at the most for anything it does.
+`on_save(hex, file)`, and `on_change(hex, file)` a moment after a file is typed into. What it prints goes in the output
+with its name in front. An extension runs in a runtime of its own, a second at the most for anything it does, and it is
+read again by itself when a `.hor` of its folder changes, its views back on the files that had them up, so writing one
+is save and look rather than starting Hex again.
+
+It can ask things. `hex.menu([{ label, icon, key, on_pressed, enabled }, "-", { label, items: [...] }])` puts a menu up at
+the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, func(hex,
+pressed) { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, func(hex, typed) {
+... })` a line of text.
 
 It can have a UI too, a view of a file (`hex.view`, offered on the files that say its `#define` and opened on them by
 itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
@@ -90,7 +100,9 @@ was told (or its default), `hex.set_setting(name, value)` changes it, and Hex ke
 ## Finding your way round the code
 
 Hex is one scene, `HexScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
-`Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name) and its
+`Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
+`editor.hor` is the skeleton that includes the parts in `Assets/hex/shell/`, the activity bar, the side bar, the tabs,
+the panel and the properties, each a layout of its own that opens on its own in Hex) and its
 `UpdateState` is a tick of the whole editor in a handful of steps, read that first. Every part of the class says what it is in
 a comment at its top.
 

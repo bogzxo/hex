@@ -46,7 +46,7 @@ internal sealed partial class HexScene
             made.Get<Button>("open_file").OnPressed = OpenPressed;
             made.Get<Button>("open_folder").OnPressed = () => AskFolder(OpenFolder);
             made.Get<Button>("commands").OnPressed = CommandPalette;
-            made.Get<Button>("keys").OnPressed = ShowKeys;
+            made.Get<Button>("keys").OnPressed = OpenKeysWindow;
             made.Get<Button>("language").OnPressed = ShowLanguageHelp;
             made.Get<Button>("changes").OnPressed = ShowChangelog;
             made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexVersion));

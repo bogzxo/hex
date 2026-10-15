@@ -152,7 +152,8 @@ internal sealed partial class HexScene
         shown.Add("Select all", () => editor.Document.SelectAll(), "Ctrl+A");
         shown.AddSeparator();
         shown.Add("Comment lines in and out", () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
-        shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+D", "copy");
+        shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
+        shown.Add("The next one as well", () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
         shown.AddSeparator();
         shown.Add("Run the file", RunCode, "F5", "play").IsVisible = () => document.IsText;
         shown.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
@@ -162,7 +163,11 @@ internal sealed partial class HexScene
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
-    /// <summary>F2, a name renamed everywhere it is in the file as a word of its own, one step to undo.</summary>
+    /// <summary>
+    /// F2, a name renamed everywhere it is in the file as a word of its own, one step to undo. When other files of the
+    /// workspace have it too (a key of an included file, the shared moves and a fighter's own), it asks whether to rename
+    /// it in them as well, each opened behind with the rename as one step of its undo and nothing saved.
+    /// </summary>
     private void RenameSymbol()
     {
         var (start, end) = code.Document.WordAt(code.Document.Caret);
@@ -173,6 +178,7 @@ internal sealed partial class HexScene
         }
 
         string name = code.Document.LineAt(code.Document.Caret.Line)[start..end];
+        HexDocument here = document;
         AskText("Rename", $"Every {name} in {document.Name} as a word of its own becomes", name, "Rename", renamed =>
         {
             if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
@@ -181,11 +187,80 @@ internal sealed partial class HexScene
                 return;
             }
 
-            string pattern = $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}(?![A-Za-z0-9_])";
-            int count = Regex.Matches(code.Text, pattern).Count;
-            code.Document.Replace(Regex.Replace(code.Text, pattern, renamed));
-            Say($"renamed {name} to {renamed}, {count} places");
+            // The other files with it, looked for off the editor's thread, a question only if there are any
+            List<string> roots = WorkspaceRoots();
+            string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
+            InBackground($"looking for {name} in the other files...", () => FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
+                .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), others =>
+            {
+                if (!documents.Contains(here))
+                    return;
+
+                if (others.Count == 0)
+                {
+                    RenameIn(here, name, renamed);
+                    return;
+                }
+
+                string listed = string.Join(", ", others.Take(5).Select(Path.GetFileName)) + (others.Count > 5 ? $" and {others.Count - 5} more" : string.Empty);
+                UIDialog.Show(chrome, "Rename", $"{name} is in {others.Count} other {(others.Count == 1 ? "file" : "files")} of the workspace as well, {listed}. Each is opened with the rename one step to undo, nothing is saved.",
+                    new DialogChoice("Every file", () => RenameEverywhere(here, others, name, renamed)),
+                    new DialogChoice("This file only", () => RenameIn(here, name, renamed)),
+                    new DialogChoice("Cancel"));
+            }, quiet: true);
         });
+    }
+
+    // A name as a word of its own
+    private static string NamePattern(string name) => $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}(?![A-Za-z0-9_])";
+
+    /// <summary>A name renamed in one document as one step of its undo, how many places it was.</summary>
+    private int RenameIn(HexDocument target, string name, string renamed, bool say = true)
+    {
+        string pattern = NamePattern(name);
+        string text = target.Editor.Text;
+        int count = Regex.Matches(text, pattern).Count;
+        if (count > 0)
+            Rewrite(target, Regex.Replace(text, pattern, renamed));
+        if (say)
+            Say($"renamed {name} to {renamed}, {count} places");
+        return count;
+    }
+
+    private void RenameEverywhere(HexDocument here, List<string> others, string name, string renamed)
+    {
+        int places = documents.Contains(here) ? RenameIn(here, name, renamed, say: false) : 0;
+        int files = places > 0 ? 1 : 0;
+        var skipped = new List<string>();
+
+        foreach (string file in others)
+        {
+            // A layout open in its designer is written out of the layout, its code isn't the place to rename in
+            HexDocument? open = OpenDocument(file);
+            if (open is { IsText: false })
+            {
+                skipped.Add(Path.GetFileName(file));
+                continue;
+            }
+
+            if (open is null)
+            {
+                if (!File.Exists(file))
+                    continue;
+                OpenText(file, File.ReadAllText(file), show: false);
+                open = OpenDocument(file);
+            }
+
+            if (open is not null && RenameIn(open, name, renamed, say: false) is > 0 and var count)
+            {
+                places += count;
+                files++;
+            }
+        }
+
+        tabsDirty = true;
+        string left = skipped.Count > 0 ? $", not in {string.Join(", ", skipped)} (open in the designer, rename it there)" : string.Empty;
+        Say($"renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}");
     }
 
     /* Swatches */

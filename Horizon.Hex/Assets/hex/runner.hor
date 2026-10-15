@@ -1,0 +1,35 @@
+// The runner, a little window for calling a function of the file tick after tick the way a game calls a behaviour. Which
+// function, the view it's handed (HIDL, an object with a tick in it is told which tick it is), how many ticks, and a tick
+// at a time or all of them, what came back each tick going into the console. See HexScene.Runner.
+#define layout
+
+let window = compositor.window({
+    size: vec(560, 250),
+    z: 10,
+    padding: vec(10, 10, 10, 10),
+    min_size: vec(420, 220),
+    title: "Runner",
+    icon: "debug-alt",
+    intro: "pop",
+    intro_time: 0.18
+});
+
+let rows = compositor.stack({ parent: window, anchor: "top_left", pivot: "top_left", spacing: 8 });
+
+let function_row = compositor.stack({ parent: rows, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let function_name = compositor.label({ parent: function_row, size: vec(90, 28), text: "Function", text_scale: 0.14, align: "left" });
+let runner_function = compositor.dropdown({ parent: function_row, size: vec(400, 28), options: ["none"], text_scale: 0.14, max_rows: 12 });
+
+let view_row = compositor.stack({ parent: rows, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let view_name = compositor.label({ parent: view_row, size: vec(90, 28), text: "View", text_scale: 0.14, align: "left", tooltip: "what the function is handed every tick, HIDL, { tick: 0, distance: 120 } say" });
+let runner_view = compositor.textbox({ parent: view_row, size: vec(400, 28), text_scale: 0.14, placeholder: "{ tick: 0 }", max_length: 2000 });
+
+let ticks_row = compositor.stack({ parent: rows, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let ticks_name = compositor.label({ parent: ticks_row, size: vec(90, 28), text: "Ticks", text_scale: 0.14, align: "left" });
+let runner_ticks = compositor.number_box({ parent: ticks_row, size: vec(100, 28), text_scale: 0.14 });
+let runner_at = compositor.label({ parent: ticks_row, size: vec(290, 28), text: "", text_scale: 0.13, color: vec(0.6, 0.62, 0.68, 1), align: "left" });
+
+let buttons = compositor.stack({ parent: rows, anchor: "left", pivot: "left", spacing: 6, direction: "horizontal" });
+let runner_step = compositor.button({ parent: buttons, size: vec(130, 30), icon: "debug-step-over", label: "One tick", lbl_scale: 0.14, tooltip: "calls it once, the view as it is now" });
+let runner_run = compositor.button({ parent: buttons, size: vec(150, 30), icon: "run-all", label: "Run them", lbl_scale: 0.14, tooltip: "calls it as many ticks as it says" });
+let runner_reset = compositor.button({ parent: buttons, size: vec(150, 30), icon: "debug-restart", label: "Start over", lbl_scale: 0.14, tooltip: "runs the file again, its state as it starts, from tick 0" });

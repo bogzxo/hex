@@ -1,5 +1,6 @@
-// The art of the phase picked on the timeline, every frame of its animation in a row, the ones it plays lit and the one
-// it starts on marked. A click on a frame starts the phase there (start), for a phase that has an animation of its own.
+// The art of the phase picked on the timeline, every frame of its animation in a row, the ones it plays lit, the one it
+// starts on marked, and the one drawn on the game frame on screen underlined. A click on a frame starts the phase there
+// (start), for a phase that has an animation of its own.
 
 let edits = include("edits.hor");
 
@@ -31,15 +32,24 @@ func draw(state) {
     if (animation == null || state.art == null || !state.art.has(animation.name)) { return; }
 
     let at = geometry(state, state.art.frames(animation.name));
+    let on_screen = shown_now(state, animation.name);
     for (i in range(at.count)) {
         let x0 = at.left + i * at.size;
         let lit = i >= animation.start;
         strip.sprite(state.art, animation.name, i, vec(x0, -at.size / 2), vec(x0 + at.size - 2, at.size / 2), vec(1, 1, 1, lit ? 1 : 0.3));
         if (i == animation.start) { strip.frame(vec(x0 - 1, -at.size / 2 - 1), vec(x0 + at.size - 1, at.size / 2 + 1), 2, vec(0.95, 0.75, 0.3, 1)); }
+        if (i == on_screen) { strip.rect(vec(x0, -at.size / 2 - 4), vec(x0 + at.size - 2, -at.size / 2 - 2), vec(1, 1, 1, 0.9)); }
     }
 
     let own = animation.own ? "" : ", carried on from the phase before";
     strip.text(`{animation.name}{own}`, vec(at.left, at.size / 2 + 2), 0.09, vec(1, 1, 1, 0.6));
+}
+
+// The art frame the game frame on screen draws, when it's of this animation, -1 otherwise
+func shown_now(state, animation) {
+    if (len(state.laid.frames) == 0) { return -1; }
+    let frame = state.laid.frames[math.clamp(state.frame, 0, len(state.laid.frames) - 1)];
+    return frame.animation == animation ? frame.shown : -1;
 }
 
 func pointer(state, e) {
@@ -47,7 +57,7 @@ func pointer(state, e) {
     let animation = animation_of(state);
     if (animation == null || state.art == null || !state.art.has(animation.name)) { return; }
     if (!animation.own) {
-        state.say(`{state.phase} carries on the art of the phase before, give it an animation of its own to start it somewhere`);
+        state.warn(`{state.phase} carries on the art of the phase before, give it an animation of its own to start it somewhere`);
         return;
     }
 

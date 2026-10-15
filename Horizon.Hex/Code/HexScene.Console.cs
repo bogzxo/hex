@@ -112,7 +112,7 @@ internal sealed partial class HexScene
 
     private void ConsoleLine(string text, Vector4? color)
     {
-        var label = layout.Instantiate(consoleLines.Template, consoleLines).Get<Label>("line");
+        var label = layout.Item(consoleLines).Get<Label>("line");
         label.Text = text;
         label.Color = color;
         label.Wrap = true;

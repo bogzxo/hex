@@ -197,7 +197,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void AddRow(UIComponent section, string name, Func<StackPanel, UIComponent?> make)
     {
-        var row = layout.Instantiate(inspector.Template, section);
+        var row = layout.Item(inspector, section);
 
         var caption = row.Get<Label>("caption");
         caption.Text = name.Replace('_', ' ');
@@ -430,7 +430,7 @@ internal sealed partial class HexScene
         }
 
         // What a container is shown filled with is up to these two
-        if (name is "template" or "preview_count" && document.RefreshPreviews() is { } missing)
+        if (name is "template" or "preview_count" or "file" && document.RefreshPreviews() is { } missing)
             Say(missing, error: true);
     }
 }

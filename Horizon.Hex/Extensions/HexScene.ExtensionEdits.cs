@@ -215,7 +215,8 @@ internal sealed partial class HexScene
             return null;
         }
 
-        OpenText(full, File.ReadAllText(full).ReplaceLineEndings("\n"), show: false);
+        // As it is on the disk, line endings and all, the editor keeps them and its save writes them back the same
+        OpenText(full, File.ReadAllText(full), show: false);
         return OpenDocument(full);
     }
 }
