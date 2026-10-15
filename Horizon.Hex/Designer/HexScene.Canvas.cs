@@ -61,14 +61,20 @@ internal sealed partial class HexScene
     /// </summary>
     private void PlaceCanvas()
     {
-        UIRect area = canvas.Bounds;
-        if (area.IsEmpty)
-            return;
+        // The dark behind the layouts, exactly what the middle shows. A hidden canvas isn't laid out any more, so with the
+        // code up it kept the size it had, and dragging the panel up had the dark show through the panel where the
+        // canvas used to be
+        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : dataTable.Visible ? dataTable : codeScroll;
+        if (!middle.Bounds.IsEmpty)
+        {
+            backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, middle.Bounds.Size);
+            backdrop.Position = middle.Bounds.Center;
+            backdrop.Scale = Vector2.One;
+        }
 
-        // The dark behind the layouts, exactly the canvas
-        backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, area.Size);
-        backdrop.Position = area.Center;
-        backdrop.Scale = Vector2.One;
+        UIRect area = canvas.Bounds;
+        if (!canvas.Visible || area.IsEmpty)
+            return;
 
         UIRect screen = PreviewScreen();
         float scale = CanvasFit(area, screen) * canvasZoom;
@@ -171,19 +177,19 @@ internal sealed partial class HexScene
             : "made for any screen: laid out against whatever it's shown on");
     }
 
-    private static string DescribeDesign(Vector2 size) => $"Made for {size.X:0} x {size.Y:0}";
+    private static string DescribeDesign(Vector2 size) => $"Design for {size.X:0} x {size.Y:0}";
 
     /// <summary>What screen the layout is made for, how it goes on another one, and what it is previewed on, the Layout menu's Screen.</summary>
     private void FillScreenMenu(Menu made)
     {
-        made.Add("Made for any screen", () => SetDesign(null, document.Fit)).IsChecked = () => document.Design is null;
+        made.Add("Any Screen", () => SetDesign(null, document.Fit)).IsChecked = () => document.Design is null;
         foreach (Vector2 size in Designs)
             made.Add(DescribeDesign(size), () => SetDesign(size, document.Fit)).IsChecked = () => document.Design == size;
 
         made.AddSeparator();
-        made.Add("Keep its shape (contain)", () => SetDesign(document.Design ?? DesignSize, UIFit.Contain)).IsChecked =
+        made.Add("Contain", () => SetDesign(document.Design ?? DesignSize, UIFit.Contain)).IsChecked =
             () => document.Design is not null && document.Fit == UIFit.Contain;
-        made.Add("Take the whole screen (stretch)", () => SetDesign(document.Design ?? DesignSize, UIFit.Stretch)).IsChecked =
+        made.Add("Stretch", () => SetDesign(document.Design ?? DesignSize, UIFit.Stretch)).IsChecked =
             () => document.Design is not null && document.Fit == UIFit.Stretch;
 
         made.AddSeparator();

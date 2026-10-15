@@ -183,7 +183,7 @@ internal sealed partial class HexScene
         });
         test.Settle(0.3f);
         test.Check("help: the language's page comes out of Hex's texts, not its key", () =>
-            help is { Title: "HIDL" } && page is { Text: var said } && said.StartsWith("# HIDL") && !said.Contains("@language"));
+            help is { Title: "HIDL Reference" } && page is { Text: var said } && said.StartsWith("# HIDL") && !said.Contains("@language"));
 
         test.Run(() =>
         {
@@ -207,8 +207,8 @@ internal sealed partial class HexScene
         });
         test.Settle(0.2f);
         test.Check("help: the changelog goes down to 0.0.1, and says which Hex this is", () =>
-            help is { Title: "What changed" } && Descendants(help).OfType<Label>().Any(label =>
-                label.Text.Contains("## 0.0.1") && label.Text.Contains($"Hex is {HexVersion}")));
+            help is { Title: "Release Notes" } && Descendants(help).OfType<Label>().Any(label =>
+                label.Text.Contains("## 0.0.1") && label.Text.Contains($"This is Hex {HexVersion}")));
 
         test.Run(() =>
         {

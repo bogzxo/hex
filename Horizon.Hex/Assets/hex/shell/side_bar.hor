@@ -1,0 +1,177 @@
+// side_bar, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// The side bar of Hex, the designer's toolbox, tree and layers on the components layer, and the explorer, the outline
+// and search as one tree on the files layer. Included by editor.hor, which says which layers start hidden.
+#define layout
+
+let left = compositor.stack({
+    anchor: "top",
+    pivot: "top",
+    padding: vec(6, 6, 6, 6),
+    spacing: 6,
+    slide: "left"
+});
+
+let tree_title = compositor.label({
+    parent: left,
+    anchor: "left",
+    pivot: "left",
+    text: "@side.explorer",
+    text_scale: 0.14,
+    color: vec(0.46, 0.52, 0.64, 1)
+});
+
+let toolbox = compositor.collapsible({
+    layer: "components",
+    parent: left,
+    anchor: "left",
+    pivot: "left",
+    title: "@side.toolbox",
+    text_scale: 0.13,
+    spacing: 4
+});
+
+// As tall as the side bar can spare, scrolled when there isn't room for all of it (the editor sizes it, see FitChrome)
+let palette_scroll = compositor.scroll({
+    parent: toolbox,
+    size: vec(280, 200)
+});
+
+let palette = compositor.grid({
+    parent: palette_scroll,
+    template: "palette_button.hor",
+    preview_count: 19,
+    spacing: 4
+});
+
+let tree_tools = compositor.stack({
+    layer: "components",
+    parent: left,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+    direction: "horizontal"
+});
+
+let move_up = compositor.button({
+    parent: tree_tools,
+    icon: "arrow-up",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let move_down = compositor.button({
+    parent: tree_tools,
+    icon: "arrow-down",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let move_out = compositor.button({
+    parent: tree_tools,
+    icon: "arrow-left",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let move_in = compositor.button({
+    parent: tree_tools,
+    icon: "arrow-right",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let duplicate = compositor.button({
+    parent: tree_tools,
+    icon: "copy",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let remove = compositor.button({
+    parent: tree_tools,
+    icon: "trash",
+    style: "button_flat",
+    size: vec(30, 26),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let tree_scroll = compositor.scroll({
+    layer: "components",
+    parent: left,
+    size: vec(280, 380),
+    padding: vec(4, 4, 4, 4),
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
+let tree = compositor.stack({
+    parent: tree_scroll,
+    template: "tree_row.hor",
+    preview_count: 5,
+    spacing: 1
+});
+
+// The explorer, the outline and what was found, a tree the side bar paints itself, in place of the rows above for code
+let side_tree = compositor.tree_view({
+    layer: "files",
+    parent: left,
+    size: vec(280, 380),
+    text_scale: 0.14,
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
+let layers_section = compositor.collapsible({
+    layer: "components",
+    parent: left,
+    anchor: "left",
+    pivot: "left",
+    title: "@side.layers",
+    text_scale: 0.13,
+    spacing: 4
+});
+
+let layers_scroll = compositor.scroll({
+    parent: layers_section,
+    size: vec(280, 96),
+    padding: vec(4, 4, 4, 4),
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
+let layers = compositor.stack({
+    parent: layers_scroll,
+    template: "tree_row.hor",
+    preview_count: 2,
+    spacing: 1
+});

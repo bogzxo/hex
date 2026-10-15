@@ -9,7 +9,104 @@ the editor, comments and spacing kept, and the editor is a view of it like the c
 Built, in `Assets/hex/extensions/move_editor/`, a part a file (the comment on top of `extension.hor` says which does
 what). What isn't, yet, is the shapes (HIDL hasn't got them) and `--practice` with the parity test in Fighter2D. The
 fight does reload what Hex saves by itself now, `Content/ContentWatcher.cs` there, for a game started with `--content`,
-which Fight! does. The C# hitbox editor is gone. The plan as it was written follows.
+which Fight! does. The C# hitbox editor is gone.
+
+The screen has been through the first two steps of `move-editor-ux.md` since, the list as tall as its column, the
+fighter in a header over the frame with a toolbar of the overlays, the frame fitted to the fighter on a floor, refusals
+on cards in the corner, and Street Fighter 6's frame meter over the timeline. That doc says how far it's got.
+
+It reads Fighter2D's second move format now, the one that came with the Smash style movement, see "The second
+format" just below. The plan as it was first written
+follows that, with the tables of keys brought up to date and the rest left as it was.
+
+## The second format
+
+Every time in a move file is in game frames, 60 a second whatever the fighter's art plays at, and every distance is in
+world units, so `hitstun: 20` is a third of a second and `launch: vec(20, 90)` is 90 up. There's nothing left to convert,
+so `rules.hor` lost its ticks per frame and does sums straight off the file. It all mirrors Fighter2D's own code as it
+ended up, which in a few places isn't what the plan said, and the game is the truth.
+
+The art of a phase goes along `art_speed * frame_rate / 60` frames of art every game frame from `start` (MovePlayback),
+`art_speed` being a share of the fighter's frame rate, 0.5 for art drawn at half of it (what `hold: 2` was). With
+`stretch` and `frames` what's left of the art is spread evenly over the phase instead. A phase without `frames` lasts
+`ceil((art frames - start) * 60 / (frame_rate * art_speed))`. `timing.hor` lays a move out that way, a cell of the
+timeline is a game frame, and the cells have a tick where the art moves on (numbered when there's room). The strip under
+the timeline underlines the art frame drawn on the frame on screen.
+
+How long the hit stays out is `active` on the phase with the hit, a bar over the timeline with a handle at its end that
+drags it, into the phases after if it wants. Without one it's how many red boxes the hitbox file has for the move (its
+`active`), or 1. The red boxes are spread evenly over the active frames, active frame k hitting with box
+`floor(k * boxes / active)`, however many of either there are (PlayerBoxes.Hitbox).
+
+The rules mirror `CombatRules`. `hitstun` is exact and a later hit replaces what's left, a counter hit adds
+`COUNTER_HITSTUN_BONUS` (4) and the Data tab says so on a line of its own. A move that doesn't say its hitstun gets the
+old guess out of its startup, never under `GUESSED_MIN_HITSTUN` (12), and a guessed blockstun never under
+`GUESSED_MIN_BLOCKSTUN` (7), only the guesses have floors. Hitstop is the move's, else Smash's hitlag,
+`floor(damage * 0.65 + 6)` and never more than 30, a block 0.67 of it, a counter hit 4 more, the K.O. 36, and the Data tab
+says which it came out of. A hit that doesn't launch slides them `push` (or `PUSH`, 16) along the ground, the attacker going back
+half of it (`ATTACKER_RECOIL`, never off a launcher), and pops them `AIR_HIT_POP` (14) up in the air.
+
+What keeps a juggle finite is gravity. The victim falls on their share of it in hitstun, the move's `hitstun_gravity` or
+their character's, and every hit of a juggle adds `JUGGLE_GRAVITY_STEP` (0.1), up to all of it
+(`hitstun_gravity_after`, HitResolver.GravityShareOf). `launch_velocity` is HitResolver.Send, `vy` the
+`speed_to_reach` of the height on that share of gravity, which is `sqrt(2 g h)` plus half a physics step of gravity
+for the engine's integrator, and `vx = away / (vy / g)`. `flight` steps the engine's way, 120 a second, sped up by
+gravity and then moved, on the share of gravity while the hitstun lasts and all of it after, never falling faster than
+their fall speed, and that's what puts Blocky's uppercut at 90.0 up and 19.9 along, the same as the game measured.
+
+The rest of what the game learned on 2026-10-15 is in `rules.hor` with the names CombatRules gives it, `DI_MAX_ANGLE`,
+`SDI_DISTANCE` and `SDI_INTERVAL`, `TECH_WINDOW` and `TECH_LOCKOUT`, `STALE_STEPS`, `PARRY_TICKS` and `PARRY_STUN`. Hex only
+draws or says the ones a move's numbers change. `launch_at` is HitResolver.Send's knockback that grows, `launch_growth`
+more for every 10 health lost and `100 / weight` of that (the character's `weight` sits in `DEFAULT_MOVEMENT` with the
+rest of the movement), so the Data tab says where a launch with growth goes with 30, 60 and 90 gone. `kind_of` is
+MoveFileReader's default kind, half the meter or more a super, any meter a special. The Data tab says the kind, the
+`whiff_lag` and what the damage comes down to with one, two and three stale copies of the move in the queue.
+`tech` and `tech_roll` are the game's moves now.
+
+A fighter's `movement` block in `characters.hor` is read by `game.hor` into `fighter.movement`, the way
+CharacterMovement.Read does it, laid over its defaults (`rules.DEFAULT_MOVEMENT`, copied from it). Without one the
+defaults stand and an old `walk_speed` at the top of the character is taken down to the 0.213 of it it used to walk at.
+The jump squat isn't a number of the block, it's the phases of the fighter's `jump` move before the one that says
+`jump`, which is `full`, `short`, `hop` (full if the input's still held as the phase starts, short if it was let go of,
+which is what makes a tap a short hop) or `double`.
+
+### The combo window
+
+On the Data tab, under the frame data, is where the feel of a launcher gets edited. The arc of where the hit sends them,
+solid while they're in hitstun and faint after, and under it in words the frame the attacker can act again (a
+`hit_cancel` the frame after the hit, a cancel frame after it, or the end of the move), how high the victim is then,
+when their hitstun runs out and how high that is, and when they land. "Free 4 frames after the hit, 36 frames before they
+recover, they're 70 up" is the kind of thing it says. When the move can be jump cancelled it works out where a full jump
+straight away tops out (the squat of the fighter's jump move and then the rise) and where the victim is by then, which is
+whether the follow up reaches. The victim is the opponent of the extension's settings when `characters.hor` has them,
+the fighter itself otherwise. It's all worked out again every time the move changes, so typing a new `launch`,
+`hitstun` or `hitstun_gravity` moves the arc at once. A hitstun that runs out before the top of the launch shows,
+they come down on all of their gravity from there and never get as high as the launch says. The same flight is drawn
+over the frame on the hit frame, with where they are when the attacker's free marked. Hitstop is left out of it, both
+of them are frozen for it, so it moves nothing. Round a launch is DI's cone, the launch turned `DI_MAX_ANGLE` (9.74
+degrees) each way as two faint lines out of the hit and the flights they make, worked out by `flight_turned`, the
+victim holding a direction square on to it the whole way (PlayerController.Influence). The words say where the top of
+the arc can end up and how high they can be when you're free, which is the bit DI takes off a combo. SDI isn't drawn,
+it's a few units a press and depends on how fast somebody mashes.
+
+### The keys that went
+
+`knockback`, `steering`, `walk_scale`, `cancellable` (and `interruptible`) and a phase's `hold` are in `schema.GONE`,
+MoveFileReader's RetiredKeys, which it throws on. So each is an error in the problems, saying what to say instead. A
+move that still has any of them gets a line on the Move tab and a button, "Say it the new way" (`edits.upgrade`), which
+does it as one step to undo. knockback goes to `launch` through the old curve the comment of `fighting_moves.hor` gave
+(or to `push` when it never left the ground), steering and walk_scale to `walk`, cancellable to `cancel: 0` on the first
+phase, and hold to `art_speed` (`hold: 2` is 0.5). It takes the rest of the move's numbers as game frames already,
+which is what the migration script in Fighter2D leaves them as, so it's for a stray old key, not for a whole file of the
+first format. That's the script's job.
+
+The new checks are a hit, cancel or commit frame past its phase (that was there, in game frames now), `active` on a
+phase without a hit or running past the end of the move, more red boxes than active frames, `hit_cancel` naming
+something that's neither a move the fighter has nor a kind (an error, the game never matches it) or a kind the fighter
+has no move of (a warning), a `kind` that isn't one, `landing_lag` on a move that can't be started in the air, `walk` and `drift` outside 0 to 1,
+`hitstun_gravity` and `art_speed` outside what the game clamps them to, a `launch` that doesn't go up, a `push` on a
+move that launches, and `stretch` without `frames`. The Inputs tab knows `landing` is the game's and draws the hit
+cancels and the landing an aerial goes into as routes.
 
 ## What a move is, all of it
 
@@ -25,14 +122,21 @@ The move.
 | `priority` | whole number, lowest matched first | -1 |
 | `stances` | flags of `standing`, `crouching`, `jumping`, `falling` | `standing` |
 | `damage` | whole number of 100 | 0 |
-| `knockback` | `vec(away, up)` | none |
-| `hitstun`, `blockstun` | frames of the move's animation | worked out (CombatRules) |
+| `hitstun`, `blockstun` | game frames, exact | a guess (CombatRules) |
+| `hitstop` | game frames | `floor(damage * 0.65 + 6)`, 30 at most |
+| `launch` | `vec(away, up)` in world units, up the top of the arc | none |
+| `launch_growth` | `vec(away, up)` more for every 10 health lost, over `weight / 100` | none |
+| `push` | world units along the ground | 16 |
+| `hitstun_gravity` | a share of the victim's gravity, 0.05 to 2 | the victim's, 0.5 |
+| `hit_cancel` | move ids or kinds, a list or `"a \| b"`, or `"any"` | none |
+| `kind` | `normal`, `special`, `super` | out of `meter_cost`, 50 or more super, more than 0 special |
+| `whiff_lag` | game frames the last frame is held for on a whiff | none |
 | `level` | `mid`, `low`, `overhead` | `mid` |
 | `knockdown` | flag | no |
 | `meter_cost` | whole number of 100 | 0 |
-| `cancellable`, `steering` | flags | yes |
-| `turning` | flag | what `steering` is |
-| `walk_scale` | 0 to 4 | 1 |
+| `walk`, `drift` | 0 to 1 of the walk speed and the air speed | 1 |
+| `turning` | flag | yes when walk is more than 0 |
+| `landing_lag` | game frames of `landing` | none |
 | `status` | `attacking`, `blocking`, `invulnerable` | none |
 | `stance`, `stance_after` | a stance | none |
 | `warns` | flag | yes when it does damage |
@@ -46,19 +150,22 @@ A phase.
 | --- | --- | --- |
 | `animation` | a tag of the character's .ase | the one before carries on |
 | `start` | frame of the animation | 0 |
-| `hold` | frames of the move a frame of art is held for | 1 with an animation, the one before's without |
-| `frames` | how long the phase is | what's left of the animation |
-| `hit`, `cancel`, `commit` | frame of the phase | none |
-| `status`, `status_frame` | a status and when it starts | none, 0 |
+| `art_speed` | a share of the fighter's frame rate, 0.01 to 16 | 1 |
+| `frames` | game frames the phase lasts | as long as what's left of the art takes |
+| `stretch` | flag, the rest of the art spread over `frames` | no, the art plays at its own pace |
+| `hit`, `cancel`, `commit` | game frame of the phase | none |
+| `active` | game frames the hit is out for | the red boxes' `active`, or 1 |
+| `status`, `status_frame` | a status and the game frame it starts on | none, 0 |
 | `loop_while`, `until` | a condition | none |
-| `impulse` | `vec(facing, up)` | none |
+| `jump` | `full`, `short`, `hop`, `double` | none |
+| `impulse` | `vec(facing, up)` in units a second | none |
 | `effect`, `effect_frames` | `jump`, `roll`, `haze` and how long | none, 1 |
 
-The conditions are `none`, `held`, `hitstun`, `jumping`, `falling`, `always`. The old names `stun`, `interruptible`,
-`interrupt` and `lock` still read (as `hitstun`, `cancellable`, `cancel`, `commit`), the editor writes the new ones and
-offers to rename the old ones. Eight ids mean something to the game (`idle`, `hit_stun`, `knocked_out`, `heavy_land`,
+The conditions are `none`, `held`, `hitstun`, `jumping`, `falling`, `landing`, `always`. The old names `stun`,
+`interrupt` and `lock` still read (as `hitstun`, `cancel`, `commit`), the editor writes the new ones and offers to rename
+the old ones. Nine ids mean something to the game (`idle`, `hit_stun`, `knocked_out`, `heavy_land`, `landing`,
 `knocked_down`, `get_up`, `victory`, `run`, see `MoveIds.cs`) and `idle` has to be there. The red boxes live apart, in
-`Assets/data/hitboxes/<character>.hor`, a box per active frame.
+`Assets/data/hitboxes/<character>.hor`, spread over the active frames.
 
 A character takes its moves from a list of files (`moves` in `characters.hor`), a later file's move replacing the earlier
 one of the same id. The Male is `mannequin_moves.hor` with `the_male_moves.hor` over it. So which move a character really

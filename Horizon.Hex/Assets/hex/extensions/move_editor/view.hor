@@ -1,7 +1,9 @@
 // A view of a file of moves, its state and what keeps it up to date. The state is one object every part takes (see the
 // fields in make), with a few functions on it the parts call back through, reload() reads the fighter's files again,
 // refresh() draws everything and fills the tabs in, relayout() lays the move out again after a change shown before it's
-// written, say(text) puts a line under the moves. wiring.hor connects the layout to all of it.
+// written, say(text) puts a line under the frame for what just happened and warn(text) puts it on a card in Hex's corner
+// as well, for what didn't (a refusal said in a grey line nobody looks at is a refusal nobody sees). fit_soon() fits the
+// frame to the fighter again. wiring.hor connects the layout to all of it.
 
 let game = include("game.hor");
 let timing = include("timing.hor");
@@ -23,6 +25,9 @@ func make(hex, ui, file) {
         hex: hex, ui: ui, file: file,
         root: null, fighters: [], fighter: null, art: null,
 
+        // Who the combo window throws about, the opponent of the settings or the fighter itself
+        victim: null,
+
         // The fighter's moves merged (game.load_moves), every id and the ones listed
         moves: {}, ids_all: [], ids: [],
 
@@ -38,11 +43,27 @@ func make(hex, ui, file) {
         // Playing it, and what Hex calls every tick while it plays (see wake)
         playing: false, clock: 0, ticker: null,
 
+        // Which overlays of the frame are on, by the name of their button on the toolbar
+        overlays: { show_hurtbox: true, show_traced: true, show_onion: false, show_path: true },
+
+        // The frame meter (timeline_view.hor), on hit or on block, the numbers it showed last and the ones lit for having
+        // changed, each with how long it has left
+        meter_on: "hit", meter_was: null, lit: {},
+
+        // Where the feet are in the art, in pixels of the frame from its middle, the line the fighter stands on
+        floor: null,
+
         traces: {}, drag: null, timeline_drag: null, confirm_delete: null,
         sized: vec(0, 0), fit: 2, right: hex.setting("right_width") ?? 300, reroutes_for: ""
     };
 
     state.say = func(said) { ui.get("status").text = said; };
+    state.warn = func(said) {
+        ui.get("status").text = said;
+        hex.notify(said);
+    };
+    state.fit_soon = func() { fit_soon(state); };
+    state.wake = func() { wake(state); };
     state.reload = func() { reload(state); };
     state.refresh = func() { refresh(state); };
     state.relayout = func() { relayout(state); };
@@ -58,7 +79,7 @@ func load_game(state) {
     let hex = state.hex;
     state.root = game.find_root(hex, state.file);
     if (state.root == null) {
-        state.say("no Assets/data/characters.hor over this file, there's no game to find the fighters of");
+        state.warn("no Assets/data/characters.hor over this file, there's no game to find the fighters of");
         return;
     }
 
@@ -84,7 +105,9 @@ func pick_fighter(state, name) {
 
     let hex = state.hex;
     state.fighter = chosen;
+    state.victim = game.fighter_by_id(hex, state.root, hex.setting("opponent")) ?? chosen;
     state.traces = {};
+    state.floor = null;
     state.art = hex.exists(chosen.sprites) ? hex.sprite(chosen.sprites) : null;
     if (state.art != null) { hex.watch(chosen.sprites); }
     fit_soon(state);
@@ -95,7 +118,7 @@ func pick_fighter(state, name) {
     reload(state);
 
     let art = state.art == null ? "no art" : `{state.art.width} by {state.art.height} frames`;
-    state.say(`{chosen.name}, {art}, {chosen.frame_rate} frames a second, its moves out of {len(chosen.files)} files`);
+    state.say(`{chosen.name}, {art} at {chosen.frame_rate} a second, its moves out of {len(chosen.files)} files and counted in game frames`);
 }
 
 /* Reading the files again, after an edit, an undo or the file being typed into */
@@ -115,6 +138,7 @@ func reload(state) {
     if (ids_key != state.reroutes_for) {
         state.reroutes_for = ids_key;
         state.ui.get("reroute_form").fields = schema.reroute_fields(merged.ids);
+        state.ui.get("move_form").fields = schema.move_fields(merged.ids);
     }
 
     moves_list.list_moves(state);
@@ -129,7 +153,7 @@ func report(state, merged) {
     for (i in range(len(files))) {
         let file = files[i];
         if (has(merged.by_file, file)) {
-            let found = checks.check_file(file, merged.by_file[file], merged, state.art, state.boxes, state.fighter.name);
+            let found = checks.check_file(file, merged.by_file[file], merged, state.art, state.boxes, state.fighter.name, frame_rate(state));
             if (i == len(files) - 1) {
                 for (more in checks.check_fighter(merged)) { found.push(more); }
             }
@@ -146,7 +170,7 @@ func relayout(state) {
     }
 
     let box = state.boxes[state.move];
-    state.laid = timing.lay_out(state.art, state.moves[state.move].move, box == null ? 1 : len(box));
+    state.laid = timing.lay_out(state.art, state.moves[state.move].move, frame_rate(state), box == null ? 0 : len(box));
     state.frame = math.clamp(state.frame, 0, math.max(0, len(state.laid.frames) - 1));
     if (state.phase == null || timing.first_of(state.laid, state.phase) < 0) { state.phase = timing.phase_at(state.laid, state.frame); }
     state.boxes_changed = boxes_of.file_text(state.fighter.id, state.boxes) != state.boxes_saved;
@@ -162,6 +186,9 @@ func refresh(state) {
     panels.show_all(state);
 }
 
+// @doc The frame rate the fighter's art plays at, what a game frame's art is worked out from
+func frame_rate(state) { return state.fighter == null ? 12 : state.fighter.frame_rate; }
+
 /* The red boxes and their file */
 
 func read_boxes(state) {
@@ -174,7 +201,7 @@ func read_boxes(state) {
 func save_boxes(state) {
     let file = game.hitbox_file(state.root, state.fighter);
     if (file == null) {
-        state.say("no fighter, nowhere to save the red boxes");
+        state.warn("no fighter, nowhere to save the red boxes");
         return;
     }
 
@@ -189,7 +216,7 @@ func save_boxes(state) {
 
 /* The room the view has, and ticking while the move plays */
 
-// How fast the speed selector says it plays, against the fighter's frame rate
+// How fast the speed selector says it plays, against the game's 60 frames a second
 func speed_of(said) { return said == "half" ? 0.5 : said == "a quarter" ? 0.25 : 1; }
 
 // @doc The view given another size by Hex (on_resize), everything laid out to it and the frame fitted once that's settled
@@ -207,28 +234,24 @@ func fit_soon(state) {
 }
 
 // A tick is a call into this every frame, so the view only asks for them while something's going on (the frame waiting
-// to be fitted, the move playing) and lets go of them after, sat still it costs Hex nothing
+// to be fitted, the move playing, a number of the meter lit for having changed) and lets go of them after, sat still it
+// costs Hex nothing
 func wake(state) { state.ui.on_tick = state.ticker; }
 
 func tick(state, dt) {
     if (state.fit > 0) {
         state.fit = state.fit - 1;
-        if (state.fit == 0) { fit_frame(state); }
+        if (state.fit == 0) { frame_view.fit(state); }
     }
 
     if (state.playing && len(state.laid.frames) > 0) { play(state, dt); }
-    if (state.fit == 0 && !state.playing) { state.ui.on_tick = null; }
-}
-
-func fit_frame(state) {
-    let frame = boxes_of.frame_size(state.art);
-    state.ui.get("canvas").fit(vec(-frame.x / 2, -frame.y / 2), vec(frame.x / 2, frame.y / 2), 20);
-    frame_view.draw(state);
+    if (len(keys(state.lit)) > 0 && timeline_view.fade(state, dt)) { timeline_view.draw(state); }
+    if (state.fit == 0 && !state.playing && len(keys(state.lit)) == 0) { state.ui.on_tick = null; }
 }
 
 func play(state, dt) {
     let speed = speed_of(state.ui.get("speed").value);
-    let frame_time = 1 / math.max(1, (state.fighter == null ? 12 : state.fighter.frame_rate) * speed);
+    let frame_time = 1 / (timing.TICK_RATE * speed);
     state.clock = state.clock + dt;
     let moved = false;
     while (state.clock >= frame_time) {

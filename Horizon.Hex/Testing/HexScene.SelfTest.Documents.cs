@@ -28,7 +28,7 @@ internal sealed partial class HexScene
         test.Check("save: the file is the code that is on screen", () =>
             System.IO.File.Exists(savedFile) && System.IO.File.ReadAllText(savedFile) == saved && document.Path == savedFile);
 
-        Pick("File", () => "New layout");
+        Pick("File", () => "New Layout");
         test.Wait();
         test.Check("tabs: a new layout has a tab of its own and is the one on screen", () =>
             documents.Count == 2 && docTabs.Tabs.Count == 2 && docTabs.Selected == 1 && !documents[0].Module.Enabled && documents[1].Module.Enabled && treeRows.Count == 0);
@@ -80,11 +80,14 @@ internal sealed partial class HexScene
 
         string own = System.IO.File.ReadAllText(EDITOR_LAYOUT);
 
-        Pick("Help", () => "The editor's own UI");
+        Pick("Help", () => "Open Hex's Own Layout");
         test.Settle(0.4f);
-        test.Check("bootstrap: the editor opens its own UI", () => document.Name == "editor" && documents.Count == 2 && document.Walk().Count() == layout.Parts.Count);
+        test.Check("bootstrap: the editor opens its own UI, its parts in files of their own included", () =>
+            document.Name == "editor" && documents.Count == 2 && document.Walk().Count() == layout.Parts.Count(pair => !HexDocument.InsideInclude(pair.Value))
+            && document.Walk().Count(pair => pair.Component is Include) == 5);
         test.Check("bootstrap: and writes it back the same", () => CheckRoundTrip(document));
-        test.Check("bootstrap: with stand-ins where it fills things in itself", () => document.PreviewCount >= 20);
+        test.Check("bootstrap: with stand-ins where it fills things in itself, inside the included files too", () =>
+            document.PreviewCount >= 5 && document.Find("side_bar") is Include side && Descendants(side).OfType<GridPanel>().Any(grid => grid.Children.Count == 19));
 
         // The parts that take turns are on layers, all but the designer's hidden as it opens, and running Hex shows them all
         string[] startHidden = ["files", "code", "table", "extension", "values"];
@@ -149,10 +152,10 @@ internal sealed partial class HexScene
         test.Check("scale: the menu draws the editor and the layouts at the next size", () =>
             compositor.Scale == scaleAfter && compositor.UIScale == scaleAfter && stage.UIScale == scaleAfter);
         test.Check("scale: and the columns make do with the room that leaves", Fits);
-        Pick("View", () => "Layout debugger");
+        Pick("View", () => "Layout Debugger");
         test.Wait();
         test.Check("scale: buttons are still where they are drawn", () => layoutDebugger.IsOn);
-        Pick("View", () => "Layout debugger");
+        Pick("View", () => "Layout Debugger");
         Pick("View", () => DescribeScale(scaleBefore));
         test.Settle(0.4f);
         test.Check("scale: and back", () => compositor.UIScale == scaleBefore && Fits());
@@ -162,7 +165,7 @@ internal sealed partial class HexScene
     {
         /* The layout debugger */
 
-        Pick("View", () => "Layout debugger");
+        Pick("View", () => "Layout Debugger");
         test.Wait();
         test.Check("debugger: the menu switches the layout debugger on", () => layoutDebugger.IsOn && stage.LayoutOverlay == layoutDebugger.Options);
 
@@ -175,7 +178,7 @@ internal sealed partial class HexScene
             && Near(cut.Height * document.Module.Scale.Y, canvas.Bounds.Height, 1.0f) && document.Module.Frame.Width * document.Module.Scale.X > canvas.Bounds.Width);
         test.Run(ZoomToFit);
         test.Wait();
-        Pick("View", () => "Layout debugger");
+        Pick("View", () => "Layout Debugger");
         test.Wait();
         test.Check("debugger: and off again", () => !layoutDebugger.IsOn && stage.LayoutOverlay is null);
     }

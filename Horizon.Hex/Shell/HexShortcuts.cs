@@ -38,6 +38,31 @@ internal sealed class HexShortcuts
     }
 
     /// <summary>
+    /// Takes a key away, every shortcut on it (one that doesn't care about shift among them), for a key that was rebound
+    /// in keys.hor. Null if nothing was on it, otherwise whether what was on it went off while typing.
+    /// </summary>
+    public bool? Remove(Key key, bool control, bool shift, bool alt)
+    {
+        bool? whileTyping = null;
+        for (int i = shortcuts.Count - 1; i >= 0; i--)
+        {
+            if (On(shortcuts[i], key, control, shift, alt))
+            {
+                whileTyping = shortcuts[i].WhileTyping || (whileTyping ?? false);
+                shortcuts.RemoveAt(i);
+            }
+        }
+
+        return whileTyping;
+    }
+
+    /// <summary>Whether anything is on a key, held exactly so.</summary>
+    public bool Has(Key key, bool control, bool shift, bool alt) => shortcuts.Exists(shortcut => On(shortcut, key, control, shift, alt));
+
+    private static bool On(Shortcut shortcut, Key key, bool control, bool shift, bool alt) =>
+        shortcut.Key == key && shortcut.Control == control && shortcut.Alt == alt && (shortcut.Shift is not { } wanted || wanted == shift);
+
+    /// <summary>
     /// Called every update to set off whatever was pressed since the last one.
     /// </summary>
     /// <param name="typing">Whether the keyboard is busy with a text box right now.</param>

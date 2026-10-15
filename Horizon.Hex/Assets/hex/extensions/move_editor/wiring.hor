@@ -17,6 +17,7 @@ let templates = include("templates.hor");
 func wire(state, view) {
     wire_left(state, view);
     wire_middle(state, view);
+    wire_toolbar(state);
     wire_move_tab(state);
     wire_phase_tab(state);
     wire_box_tab(state);
@@ -63,7 +64,10 @@ func wire_move_tab(state) {
     let ui = state.ui;
     let form = ui.get("move_form");
     form.fields = schema.MOVE_FIELDS;
-    form.on_changed = func(key, value) { edits.set_key(state, state.move, key, value); };
+    form.on_changed = func(key, value) { set_move_key(state, key, value); };
+    ui.get("upgrade").on_pressed = func() {
+        if (state.move != null && edits.upgrade(state, state.move, view_rate(state))) { state.say(`{state.move} says it the new way now`); }
+    };
     form.on_cleared = func(key) { edits.clear_key(state, state.move, key); };
 
     let reroutes = ui.get("reroute_form");
@@ -76,6 +80,23 @@ func wire_move_tab(state) {
         edits.clear_reroute(state, state.move, parts[0], parts[1]);
     };
 }
+
+// A key of the Move form written, hit_cancel's flags going in as the list (or "any") the game reads
+func set_move_key(state, key, value) {
+    if (key != "hit_cancel") {
+        edits.set_key(state, state.move, key, value);
+        return;
+    }
+
+    let made = schema.hit_cancel_value(value);
+    if (made == null) {
+        edits.clear_key(state, state.move, key);
+    } else {
+        edits.set_key(state, state.move, key, made);
+    }
+}
+
+func view_rate(state) { return state.fighter == null ? 12 : state.fighter.frame_rate; }
 
 func wire_phase_tab(state) {
     let ui = state.ui;
@@ -122,9 +143,21 @@ func wire_box_tab(state) {
             state.refresh();
         }
     };
-    for (toggle in ["show_hurtbox", "show_traced", "show_onion", "show_path"]) {
-        ui.get(toggle).on_pressed = func() { frame_view.draw(state); };
-    }
+}
+
+// The overlays along the top of the frame, each a button lit while it's on
+func wire_toolbar(state) {
+    for (name in keys(state.overlays)) { wire_overlay(state, name); }
+}
+
+func wire_overlay(state, name) {
+    let button = state.ui.get(name);
+    button.selected = state.overlays[name];
+    button.on_pressed = func() {
+        state.overlays[name] = !state.overlays[name];
+        button.selected = state.overlays[name];
+        frame_view.draw(state);
+    };
 }
 
 func wire_data_tab(state) {
@@ -140,15 +173,17 @@ func wire_data_tab(state) {
 func from_trace(state) {
     if (state.move == null || state.art == null) { return; }
     if (state.laid.hit < 0) {
-        state.say(`{state.move} doesn't hit anybody, there's no hit frame to take a box from`);
+        state.warn(`{state.move} doesn't hit anybody, there's no hit frame to take a box from`);
         return;
     }
 
+    // As many boxes as there are (or one an active frame), each traced off the first active frame it hits on
     let box = state.boxes[state.move];
-    let active = box == null ? 1 : len(box);
+    let count = box == null ? state.laid.active : len(box);
     let made = [];
-    for (i in range(active)) {
-        let at = state.laid.frames[math.min(state.laid.hit + i, len(state.laid.frames) - 1)];
+    for (i in range(count)) {
+        let frame = state.laid.hit + math.ceil(i * state.laid.active / count);
+        let at = state.laid.frames[math.min(frame, len(state.laid.frames) - 1)];
         let traced = tracer.trace(state.art, state.traces, at.animation, at.shown);
         if (traced != null) {
             let pixels = boxes_of.to_pixels(state.art, traced.hit);
@@ -159,12 +194,12 @@ func from_trace(state) {
     }
 
     if (len(made) == 0) {
-        state.say(`the art of {state.move} has nothing traced on its active frames`);
+        state.warn(`the art of {state.move} has nothing traced on its active frames`);
         return;
     }
 
-    while (len(made) < active) { made.insert(0, made[0]); }
+    while (len(made) < count) { made.insert(0, made[0]); }
     edits.change_boxes(state, state.move, made);
-    state.say(`{state.move} has red hitboxes now, where the trace puts one on each of its {active} active frames`);
+    state.say(`{state.move} has red hitboxes now, {count} of them traced off the art over its {state.laid.active} active frames`);
     state.refresh();
 }

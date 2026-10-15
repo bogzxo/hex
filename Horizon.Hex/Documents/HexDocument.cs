@@ -50,6 +50,12 @@ internal sealed partial class HexDocument
     /// <summary>Whether the layout has been changed since it was opened or saved. The editor keeps this up, see HexScene.UpdateState.</summary>
     public bool Modified { get; set; }
 
+    /// <summary>
+    /// The file's text as it was on the disk when Hex last read or wrote it, line endings and all. Something else writing
+    /// the file (the game, git, Syncthing) is told apart from Hex's own save by it, see HexScene.DiskChanges.
+    /// </summary>
+    public string? DiskText { get; set; }
+
     /// <summary>Where templates are looked for while the layout has no file of its own to be next to.</summary>
     public string FallbackDirectory { get; set; } = string.Empty;
 

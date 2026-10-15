@@ -168,6 +168,10 @@ internal sealed partial class HexScene : Scene
         LoadSettings();
         BuildStatusBar();
         BuildPanel();
+        BuildFindBar();
+        BuildPlaces();
+        BuildQuiet();
+        BuildSplit();
         BuildConsole();
         BuildValuesTree();
         BuildSideTree();
@@ -180,6 +184,7 @@ internal sealed partial class HexScene : Scene
         BuildMenus();
         BuildShortcuts();
         BuildSelectionShortcuts();
+        LoadKeys();
         WireViews();
         WireToolbar();
         WireActivityBar();
@@ -210,8 +215,15 @@ internal sealed partial class HexScene : Scene
         else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && workspace.OpenFiles.Count == 0)
             Open(recent[0]);
 
+        // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own
+        if (options.SelfTest)
+            Backups.DropAll();
+        else
+            RestoreBackups();
+
         // Last, an extension's on_start finds the editor up and a file open
         LoadExtensions();
+        WatchExtensions();
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
@@ -383,6 +395,13 @@ internal sealed partial class HexScene : Scene
     {
         TakeFinishedWork();
         UpdateWelcome();
+        UpdateDiskChanges();
+        UpdateBackups(dt);
+        UpdateFindBar();
+        UpdatePlaces();
+        UpdateBackdrop();
+        UpdateSplit();
+        UpdateRunningItem();
 
         // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
         if (folders.TakeChanges())
@@ -418,6 +437,7 @@ internal sealed partial class HexScene : Scene
     private void Quit(int failures)
     {
         System.Environment.ExitCode = failures == 0 ? 0 : 1;
+        Backups.DropAll();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

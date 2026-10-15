@@ -58,6 +58,7 @@ internal sealed class HexExtension
     public bool Load(ObjectValue hex, Action<string> printed)
     {
         Commands.Clear();
+        CommandKeys.Clear();
         Settings.Clear();
         Failed = null;
         Runtime = new HIDLRuntime { BaseDirectory = Folder, Output = printed };
@@ -103,6 +104,9 @@ internal sealed class HexExtension
 
     /// <summary>The commands it added to the command palette, by what they are called.</summary>
     public List<(string Name, IRuntimeValue Function)> Commands { get; } = [];
+
+    /// <summary>The keys its commands said they're on, as they were written ("Ctrl+Shift+K").</summary>
+    public List<(string Name, string Key)> CommandKeys { get; } = [];
 
     /// <summary>Calls one of its functions if it has one by that name. False if it went wrong, which switches it off.</summary>
     public bool Raise(string name, params IRuntimeValue[] arguments)

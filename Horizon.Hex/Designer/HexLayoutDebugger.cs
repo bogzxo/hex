@@ -32,7 +32,7 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
     /// <param name="toggled">Called after the debugger was switched on or off from the menu, for whoever has something to say about it.</param>
     public void AddTo(Menu menu, Action? toggled = null)
     {
-        menu.Add("Layout debugger", () =>
+        menu.Add("Layout Debugger", () =>
         {
             Toggle();
             toggled?.Invoke();

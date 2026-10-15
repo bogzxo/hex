@@ -1,6 +1,7 @@
 // How a fighter's moves fit together. Which move every button starts in every stance, in the order the game tries them
 // (priority, then the trigger, then whether there's the meter for it), the ones that can never come out because another
-// always gets there first, and where every move goes from (stance_reroutes, finish_reroutes, repeat).
+// always gets there first, and where every move goes from (stance_reroutes, finish_reroutes, repeat, a hit cancel and the
+// landing an aerial's landing lag puts them in). landing comes out of the game by itself, an aerial touching down.
 
 let schema = include("schema.hor");
 
@@ -67,7 +68,7 @@ func shadowed(cells) {
     return found;
 }
 
-// @doc Where every move goes, { from, to, how } a line, how being the stance of a reroute or "repeat"
+// @doc Where every move goes, { from, to, how } a line, how being the stance of a reroute, "repeat", a hit cancel or the landing
 func routes(merged) {
     let found = [];
     for (id in merged.moves) {
@@ -79,6 +80,10 @@ func routes(merged) {
             }
         }
         if (move.repeat != null) { found.push({ from: id, to: id, how: `again while {move.repeat}` }); }
+        for (to in schema.hit_cancels(move.hit_cancel)) {
+            if (to != "any") { found.push({ from: id, to: to, how: "cancelled into on hit" }); }
+        }
+        if (move.landing_lag != null) { found.push({ from: id, to: "landing", how: `touching down, {move.landing_lag} frames of it` }); }
     }
     return found;
 }
@@ -127,6 +132,14 @@ func describe(merged) {
     for (route in found_routes) {
         let missing = has(merged.moves, route.to) ? "" : " (there's no such move)";
         lines.push(`- {route.from} to {route.to}, {route.how}{missing}`);
+    }
+
+    if (has(merged.moves, "landing")) {
+        lines.push("");
+        lines.push("**landing** is what an aerial with landing_lag lands in, for as long as it says.");
+    } else if (len(found_routes.filter(func(route) { return route.to == "landing"; })) > 0) {
+        lines.push("");
+        lines.push("No **landing**, and an aerial says landing_lag, it has nothing to land in.");
     }
 
     let lonely = unreached(merged, found_routes);

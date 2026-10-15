@@ -1,0 +1,45 @@
+// The keyboard shortcuts window (Help, Keyboard Shortcuts). Every command Hex has with the key it's on, a box that
+// narrows them down as it's typed into, the arrows go up and down the list and enter (or a double click) waits for a
+// new key for the one chosen, delete takes its key off. See HexScene.Keys.
+#define layout
+
+let window = compositor.window({
+    size: vec(640, 520),
+    z: 10,
+    padding: vec(10, 10, 10, 10),
+    min_size: vec(420, 300),
+    title: "Keyboard Shortcuts",
+    icon: "keyboard",
+    resize: "right, bottom",
+    intro: "pop",
+    intro_time: 0.18
+});
+
+let rows = compositor.stack({ parent: window, fill: "both", spacing: 8 });
+
+let keys_filter = compositor.textbox({
+    parent: rows,
+    anchor: "left",
+    pivot: "left",
+    size: vec(620, 28),
+    padding: vec(8, 5, 8, 5),
+    placeholder: "@keys.filter",
+    text_scale: 0.14,
+    max_length: 80
+});
+
+// The commands, the editor sizes this to the window, see FitKeysWindow
+let keys_tree = compositor.tree_view({
+    parent: rows,
+    anchor: "left",
+    pivot: "left",
+    size: vec(620, 380),
+    text_scale: 0.14,
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6,
+    guides: false
+});
+
+let keys_foot = compositor.stack({ parent: rows, anchor: "left", pivot: "left", spacing: 8, direction: "horizontal" });
+let keys_hint = compositor.label({ parent: keys_foot, size: vec(440, 28), text: "@keys.hint", text_scale: 0.13, color: vec(0.6, 0.62, 0.68, 1), align: "left" });
+let keys_reset = compositor.button({ parent: keys_foot, size: vec(170, 28), icon: "discard", label: "@keys.reset", lbl_scale: 0.14, tooltip: "@keys.reset_tip" });

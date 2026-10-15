@@ -257,6 +257,8 @@ internal sealed partial class HexScene
 
     private void QuitNow()
     {
+        // What wasn't saved was saved or thrown away when asked, there's nothing to bring back next time
+        Backups.DropAll();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

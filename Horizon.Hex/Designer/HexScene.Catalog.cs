@@ -9,7 +9,7 @@ internal sealed partial class HexScene
     [
         "stack", "collapsible", "grid", "panel", "scroll", "label", "button", "toggle", "textbox", "number_box", "selector",
         "dropdown", "list", "slider", "color_picker", "progress_bar", "image", "tabs", "divider", "spacer",
-        "readout", "meter", "graph", "segments"
+        "readout", "meter", "graph", "segments", "include"
     ];
 
     // The properties that are one of a few words, and the words.

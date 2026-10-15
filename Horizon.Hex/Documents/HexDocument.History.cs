@@ -36,6 +36,12 @@ internal sealed partial class HexDocument
         return true;
     }
 
+    /// <summary>
+    /// The layout as it was last noted as a step, a new string whenever it changes and the same one until then, so
+    /// whether a layout has changed since is a reference compared and nothing written out.
+    /// </summary>
+    public string Recorded => recorded;
+
     /// <summary>Forgets every step there was to go back to. The layout as it is now is where it starts.</summary>
     public void ResetHistory()
     {

@@ -328,11 +328,11 @@ internal sealed partial class HexScene
         test.Run(() => Select(label));
         test.Wait();
 
-        Pick("Layout", () => "Up");
+        Pick("Layout", () => "Move Up");
         test.Wait();
         test.Check("reorder: up puts it before its sibling, in the layout and in the code", () =>
             stack!.Children[0] == label && Code().IndexOf("label1") < Code().IndexOf("start_button ="));
-        Pick("Layout", () => "Down");
+        Pick("Layout", () => "Move Down");
         test.Wait();
         test.Check("reorder: and down puts it back", () => stack!.Children[1] == label);
 
@@ -342,26 +342,26 @@ internal sealed partial class HexScene
         test.Click(Part("move_down"));
         test.Wait();
         test.Check("reorder: there and back", () => stack!.Children[1] == label);
-        Pick("Layout", () => "Down");
+        Pick("Layout", () => "Move Down");
         test.Wait();
         test.Check("reorder: the last one stays the last one", () => stack!.Children[^1] == label);
 
         test.RightClick(Row(() => label));
-        PickFromMenu("Up");
+        PickFromMenu("Move Up");
         test.Wait();
         test.Check("reorder: the right click menu of a row moves it up", () => stack!.Children[0] == label);
         test.RightClick(Row(() => label));
-        PickFromMenu("Down");
+        PickFromMenu("Move Down");
         test.Wait();
         test.Check("reorder: and down again", () => stack!.Children[1] == label);
 
-        Pick("Layout", () => "Out of its container");
+        Pick("Layout", () => "Move Out");
         test.Wait();
         test.Check("reparent: out puts it after the container it was in", () =>
             label!.Parent == document.Module.Root
             && document.Module.Root.Children.ToList().IndexOf(label) == document.Module.Root.Children.ToList().IndexOf(stack!) + 1
             && document.Selected == label);
-        Pick("Layout", () => "Into the one before it");
+        Pick("Layout", () => "Move In");
         test.Wait();
         test.Check("reparent: and into puts it back in, at the end", () => label!.Parent == stack && stack!.Children[^1] == label && CheckRoundTrip(document));
 

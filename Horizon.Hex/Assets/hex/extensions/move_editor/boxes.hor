@@ -1,6 +1,8 @@
 // The red boxes, the hitboxes drawn by hand, and the file the game reads them out of (Assets/data/hitboxes/<fighter>.hor,
-// Fighter2D's CustomHitboxes). A move's boxes are a list, one for each frame the hit is out for from the hit frame on. In
-// here a box is a share of the frame from its middle like the game keeps it, on screen it's pixels of the art.
+// Fighter2D's CustomHitboxes). A move's boxes are a list spread evenly over its active frames from the hit frame on
+// (PlayerBoxes.Hitbox), however many of either there are. How many there are is how long the hit is out for when the
+// phase with the hit doesn't say active. In here a box is a share of the frame from its middle like the game keeps it,
+// on screen it's pixels of the art.
 
 // @doc How big a frame of the art is, in pixels
 func frame_size(art) {
@@ -50,11 +52,19 @@ func same_throughout(boxes, index) {
     return box_list(len(boxes), boxes[math.clamp(index, 0, len(boxes) - 1)]);
 }
 
-// @doc As many boxes as there are active frames, new ones the box of the last one there was
-func resized(boxes, active) {
+// @doc The boxes with one of them set, CustomHitbox.WithBox, the first one made when there were none
+func with_box(boxes, index, box) {
+    if (boxes == null) { return [box]; }
     let made = boxes.copy();
-    while (len(made) < active) { made.push(made[len(made) - 1]); }
-    while (len(made) > math.max(1, active)) { made.pop(); }
+    made[math.clamp(index, 0, len(made) - 1)] = box;
+    return made;
+}
+
+// @doc So many boxes, CustomHitbox.WithActive, new ones the box of the last one there was
+func resized(boxes, count) {
+    let made = boxes.copy();
+    while (len(made) < count) { made.push(made[len(made) - 1]); }
+    while (len(made) > math.max(1, count)) { made.pop(); }
     return made;
 }
 
@@ -99,7 +109,7 @@ func file_text(fighter_id, boxes) {
     let lines = [
         `// The hand drawn hitboxes of {fighter_id}, written by the move editor (Hex). A move that isn't here hits with whatever`,
         "// limb its art has sticking out. min and max are a share of the frame from its middle, x the way the character",
-        "// faces and y up, active is how many frames of the move the box stays out for from the hit frame. A move whose box",
+        "// faces and y up, active is how many frames of the fight (60 a second) the box stays out for from the hit frame. A move whose box",
         "// changes from one active frame to the next has frames, a box for every one of them from the hit frame on.",
         "",
         "let hitboxes = {"

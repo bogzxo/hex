@@ -32,14 +32,14 @@ func game_exe(hex, root) {
 func fight(state, save) {
     let hex = state.hex;
     if (state.root == null || state.fighter == null) {
-        state.say("no game or no fighter, nothing to fight with");
+        state.warn("no game or no fighter, nothing to fight with");
         return;
     }
 
     let exe = game_exe(hex, state.root);
     if (exe == null || !hex.exists(exe)) {
         let where = exe == null ? "anywhere in the game's bin folder" : exe;
-        state.say(`no Fighter2D at {where}, say where it is on the move editor's tab of the settings (Ctrl+,)`);
+        state.warn(`no Fighter2D at {where}, say where it is on the move editor's tab of the settings (Ctrl+,)`);
         return;
     }
 
@@ -52,9 +52,11 @@ func fight(state, save) {
         "--dummy", hex.setting("dummy"),
         "--windowed"
     ]);
-    state.say(started
-        ? `fighting as {state.fighter.name} on {hex.setting("map")} against {hex.setting("opponent")}, who'll {hex.setting("dummy")}. Saved changes reload in the fight`
-        : "the game wouldn't start, the output says why");
+    if (started) {
+        state.say(`fighting as {state.fighter.name} on {hex.setting("map")} against {hex.setting("opponent")}, who'll {hex.setting("dummy")}. Saved changes reload in the fight`);
+    } else {
+        state.warn("the game wouldn't start, the output says why");
+    }
 }
 
 /* The tab of the settings, move_settings.hor */

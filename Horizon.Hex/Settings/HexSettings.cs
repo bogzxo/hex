@@ -44,6 +44,17 @@ internal sealed class HexSettings
     /// <summary>Whether the editor starts with the layout that was worked on last.</summary>
     public bool ReopenLast;
 
+    /// <summary>
+    /// The picture behind the code (see HexScene.Backdrop), whether it's there, which (empty for the girl that comes with
+    /// Hex), how big against its pixels, how far from the bottom right corner it is, along and up, and how much of it shows.
+    /// </summary>
+    public bool BackdropOn = true;
+
+    /// <summary>Whether long lines of code are wrapped at the edge of the editor (Alt+Z).</summary>
+    public bool WrapCode;
+    public string BackdropImage = string.Empty;
+    public float BackdropScale = 0.55f, BackdropAcross, BackdropUp, BackdropOpacity = 0.22f;
+
     /// <summary>The workspace file that was open last, empty for one that was never saved (kept next to the editor instead).</summary>
     public string LastWorkspace = string.Empty;
 
@@ -84,6 +95,13 @@ internal sealed class HexSettings
             CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
+            BackdropOn = Flag(values, "backdrop", BackdropOn);
+            WrapCode = Flag(values, "wrap_code", WrapCode);
+            if (values.TryGetValue("backdrop_image", out var picture) && picture is StringValue pictured) BackdropImage = pictured.Value;
+            BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 4.0f);
+            BackdropAcross = Number(values, "backdrop_across", BackdropAcross);
+            BackdropUp = Number(values, "backdrop_up", BackdropUp);
+            BackdropOpacity = Math.Clamp(Number(values, "backdrop_opacity", BackdropOpacity), 0.0f, 1.0f);
             if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
             if (values.TryGetValue("disabled_extensions", out var disabled) && disabled is ListValue off)
             {
@@ -137,6 +155,13 @@ internal sealed class HexSettings
         text.AppendLine($"    code_zoom: {Write(CodeZoom)},");
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");
         text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
+        text.AppendLine($"    backdrop: {Flag(BackdropOn)},");
+        text.AppendLine($"    wrap_code: {Flag(WrapCode)},");
+        text.AppendLine($"    backdrop_image: {HIDLWriter.Write(new StringValue(BackdropImage.Replace('\\', '/')))},");
+        text.AppendLine($"    backdrop_scale: {Write(BackdropScale)},");
+        text.AppendLine($"    backdrop_across: {Write(BackdropAcross)},");
+        text.AppendLine($"    backdrop_up: {Write(BackdropUp)},");
+        text.AppendLine($"    backdrop_opacity: {Write(BackdropOpacity)},");
         text.AppendLine($"    last_workspace: {HIDLWriter.Write(new StringValue(LastWorkspace.Replace('\\', '/')))},");
         text.AppendLine($"    disabled_extensions: {HIDLWriter.Write(Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))},");
         text.AppendLine("    extension_settings: {");

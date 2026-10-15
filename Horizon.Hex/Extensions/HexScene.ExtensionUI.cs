@@ -256,6 +256,9 @@ internal sealed partial class HexScene
     /// </summary>
     private void UpdateExtensionUI(float dt)
     {
+        UpdateCommandKeys();
+        UpdateExtensionChange(dt);
+        UpdateExtensionReloads();
         if (viewsMade.Count == 0 && panelsMade.Count == 0 && windowsMade.Count == 0)
             return;
 
@@ -280,10 +283,19 @@ internal sealed partial class HexScene
         if (ShownView is { Key: not null } keyed && (compositor.Focus is null || (compositor.Focus is DrawingPanel && IsInside(compositor.Focus, keyed.Root))))
         {
             var keyboard = Engine.Input.Keyboard;
-            foreach (var (key, name) in ExtensionKeys)
+            if (!keyboard.Control)
             {
-                if (keyboard.WasPressed(key) && !keyboard.Control)
-                    ExtensionKey(name);
+                foreach (var (key, name) in ExtensionKeys)
+                {
+                    if (keyboard.WasPressed(key))
+                        ExtensionKeyHeld(name, keyboard.Shift, keyboard.Alt);
+                }
+
+                foreach (var (key, name) in MoreViewKeys)
+                {
+                    if (keyboard.WasPressed(key))
+                        ExtensionKeyHeld(name, keyboard.Shift, keyboard.Alt);
+                }
             }
         }
     }

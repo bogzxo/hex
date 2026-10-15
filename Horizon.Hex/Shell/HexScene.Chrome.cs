@@ -223,7 +223,7 @@ internal sealed partial class HexScene
         {
             UIComponent shown = LayoutTools ? canvas : codeScroll;
             float spare = height - Spoken(center, shown) - MIN_FLEXIBLE;
-            float most = Math.Clamp(bottom.Size.Y + spare, MIN_PANEL, MAX_PANEL);
+            float most = Math.Clamp(bottom.Size.Y + spare, panelFolded ? bottom.MinSize.Y : MIN_PANEL, MAX_PANEL);
             bottom.MaxSize = new Vector2(0.0f, most);
             if (bottom.Size.Y > most)
                 bottom.Size = bottom.Size with { Y = most };
@@ -245,7 +245,10 @@ internal sealed partial class HexScene
         else if (extensionViews.Visible)
             extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews)));
         else if (!LayoutTools)
+        {
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
+            FitSplit();
+        }
         else
             canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas)));
     }

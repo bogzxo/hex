@@ -16,7 +16,8 @@ internal sealed partial class HexScene
     private StatusItem problemsItem = null!, messageItem = null!;
     private StatusItem caretItem = null!, selectionItem = null!, indentItem = null!, endingsItem = null!, languageItem = null!;
     private StatusItem coordsItem = null!, componentsItem = null!, zoomItem = null!, skinItem = null!, screenItem = null!;
-    private StatusItem codeZoomItem = null!;
+    private StatusItem codeZoomItem = null!, runningItem = null!;
+    private string runningShown = string.Empty;
     private float codeZoomShown = -1.0f;
 
     // What the skin and the kind of file were last written for. Every tick wrote them anew, garbage a tick for nothing
@@ -41,6 +42,10 @@ internal sealed partial class HexScene
 
         problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: "What is wrong, click for the list (F8 checks every file)");
         messageItem = statusBar.Add(string.Empty, pressed: () => ShowPanel(OUTPUT_PAGE), tooltip: "What Hex said last, click for all of it");
+
+        // A game started from here (Fight!) reads what's saved as it changes, Defold's hot reload, said while it runs
+        runningItem = statusBar.Add(string.Empty, right: true, tooltip: "A game started from Hex is running, and reads every file it uses again when it's saved here, Ctrl+S and look");
+        runningItem.IsVisible = () => Volatile.Read(ref programsRunning) > 0;
 
         caretItem = statusBar.Add("Ln 1, Col 1", right: true, pressed: GoToLine, tooltip: "Go to a line (Ctrl+G)");
         caretItem.IsVisible = Code;
@@ -67,6 +72,16 @@ internal sealed partial class HexScene
         screenItem.IsVisible = Design;
 
         caretItem.MinWidth = 120.0f;
+    }
+
+    /// <summary>The name of the running game said once, when it changes.</summary>
+    private void UpdateRunningItem()
+    {
+        if (ReferenceEquals(runningShown, runningName))
+            return;
+
+        runningShown = runningName;
+        runningItem.Text = $"$(run) {runningName} running, saves reload in it";
     }
 
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>

@@ -1,5 +1,5 @@
 // The fighter's moves down the left, all of them merged from its files, a kind of them or the ones with something in their
-// name. A move written in another file than the one on screen says which, one with red boxes says (drawn). Under the list
+// name. A move written in another file than the one on screen says which, one with red boxes says (drawn). Over the list
 // a new move out of a template, a copy, a new name and taking one out, all through edits.hor.
 
 let game = include("game.hor");
@@ -57,14 +57,8 @@ func pick(state, index) {
     state.relayout();
     state.frame = state.laid.hit >= 0 ? state.laid.hit : 0;
     state.phase = timing.phase_at(state.laid, state.frame);
-    say_where(state);
     state.refresh();
-}
-
-func say_where(state) {
-    let at = state.moves[state.move];
-    let replaces = at.replaces == null ? "" : ` over the one in {game.file_name(at.replaces)}`;
-    state.ui.get("written_in").text = `in **{game.file_name(at.file)}**{replaces}`;
+    state.fit_soon();
 }
 
 /* What's done to moves */
@@ -73,11 +67,11 @@ func say_where(state) {
 func typed_name(state) {
     let name = state.ui.get("move_name").text.trim().replace(" ", "_");
     if (name == "") {
-        state.say("type a name for it first");
+        state.warn("type a name for it first");
         return null;
     }
     if (has(state.moves, name)) {
-        state.say(`there's a {name} already`);
+        state.warn(`there's a {name} already`);
         return null;
     }
     return name;
@@ -121,7 +115,7 @@ func delete_move(state) {
             }
         }
         let more = len(pointing) > 0 ? `, {pointing.join(", ")} go to it` : "";
-        state.say(`press delete again to take {state.move} out{more}`);
+        state.warn(`press delete again to take {state.move} out{more}`);
         return;
     }
 

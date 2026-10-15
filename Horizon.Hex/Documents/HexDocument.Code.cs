@@ -31,17 +31,22 @@ internal sealed partial class HexDocument
         return result;
     }
 
+    // Where the code was said to be from when it isn't a file of its own yet (a round trip check), for its templates and includes
+    private string? builtFrom;
+
     private (bool Success, string Message) Build(string code, string? path)
     {
+        builtFrom = path;
 
         try
         {
             // The same way a program loads it, so what the editor shows is what the program will get
             var layout = UILayout.LoadCode(Module, code, null, path ?? string.Empty);
 
+            // What an included file made has names of its own in that file, not this one
             foreach (var (name, component) in layout.Parts)
             {
-                if (component.Module == Module)
+                if (component.Module == Module && !InsideInclude(component))
                     names.Set(component, name);
             }
         }
@@ -68,18 +73,69 @@ internal sealed partial class HexDocument
             preview.Parent?.Remove(preview);
         previews.Clear();
 
-        string directory = Path is not null
-            ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path)) ?? string.Empty
+        string directory = (Path ?? builtFrom) is { Length: > 0 } from
+            ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(from)) ?? string.Empty
             : FallbackDirectory;
 
         string? problem = null;
         foreach (var (component, _) in Walk().ToArray())
         {
-            if (component is Panel { Template.Length: > 0, PreviewCount: > 0 } container)
+            if (component is Include include)
+                problem = FillInclude(include, directory) ?? problem;
+            else if (component is Panel { Template.Length: > 0, PreviewCount: > 0 } container)
                 problem = FillPreview(container, directory, 0) ?? problem;
         }
 
         return problem;
+    }
+
+    // What an include builds is shown and not edited, stand-ins the way a template's items are, the file it names is
+    // edited on its own
+    private string? FillInclude(Include include, string directory)
+    {
+        for (int i = include.Children.Count - 1; i >= 0; i--)
+            include.Remove(include.Children[i]);
+
+        if (include.File.Length == 0)
+            return null;
+
+        string file = System.IO.Path.Combine(directory, include.File);
+        if (!File.Exists(file))
+            return $"the included '{include.File}' isn't next to the layout";
+
+        string? problem = null;
+        try
+        {
+            UILayout inner = UILayout.Load(Module, file, include);
+            foreach (var root in inner.Roots)
+                previews.Add(root);
+
+            // What the included file fills in from templates is shown filled too, the way its own designer would
+            string innerDirectory = System.IO.Path.GetDirectoryName(file) ?? string.Empty;
+            foreach (var part in inner.Parts.Values)
+            {
+                if (part is Panel { Template.Length: > 0, PreviewCount: > 0 } nested && inner.OwnerOf(nested) == inner)
+                    problem = FillPreview(nested, innerDirectory, 1) ?? problem;
+            }
+        }
+        catch (Exception e)
+        {
+            return e.Message;
+        }
+
+        return problem;
+    }
+
+    /// <summary>Whether a component is inside of an include, part of another file.</summary>
+    public static bool InsideInclude(UIComponent component)
+    {
+        for (UIComponent? at = component.Parent; at is not null; at = at.Parent)
+        {
+            if (at is Include)
+                return true;
+        }
+
+        return false;
     }
 
     private string? FillPreview(Panel container, string directory, int depth)

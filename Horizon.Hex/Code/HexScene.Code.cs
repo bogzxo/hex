@@ -54,6 +54,10 @@ internal sealed partial class HexScene
         editor.TextScale = EDITOR_TEXT * settings.CodeZoom;
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
+        editor.FocusLine = true;
+        editor.WordWrap = settings.WrapCode;
+        editor.SignatureSource = (name, argument) => SignatureOf(editor, name, argument);
+        ShowBackdrop(editor);
         editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
         editor.CompletionSource = Completions;
@@ -197,7 +201,8 @@ internal sealed partial class HexScene
             Path = path,
             FallbackDirectory = browseDirectory,
             CrLf = source.Contains("\r\n", StringComparison.Ordinal),
-            SavedCrLf = source.Contains("\r\n", StringComparison.Ordinal)
+            SavedCrLf = source.Contains("\r\n", StringComparison.Ordinal),
+            DiskText = source
         };
 
         opened.Module.Interactive = false;
@@ -213,6 +218,7 @@ internal sealed partial class HexScene
         documents.Add(opened);
         if (!show)
         {
+            WatchOpenFiles();
             tabsDirty = true;
             Console.WriteLine($"[Hex] Opened '{path}' as code behind the file on screen.");
             return true;

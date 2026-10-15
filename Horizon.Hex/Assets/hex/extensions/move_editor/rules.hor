@@ -1,30 +1,65 @@
-// What a hit is worth, the way the game works it out. A copy of Fighter2D's Combat/CombatRules.cs and Moves/MoveFrameData.cs
-// with the numbers named the same, change one there and change it here (the parity test in the plan is what's meant to
-// catch it when somebody doesn't). Times are ticks of the fight, 60 a second, not frames of a fighter's animation.
+// What a hit is worth, the way the game works it out. A copy of Fighter2D's Combat/CombatRules.cs, Moves/MoveFrameData.cs,
+// the sending of whoever gets hit out of Combat/HitResolver.cs (Send, GravityShareOf) and the numbers of
+// Fighters/Characters/CharacterMovement.cs, named the same, change one there and change it here. Every time is in game
+// frames, 60 a second, and every distance in world units, the same as a move file says them, so there's nothing to
+// convert any more.
+//
+// The physics is the engine's, a body sped up by its gravity and then moved, 120 steps a second, which is what flight
+// steps through, so where a launch sends somebody comes out the way the game has it (Blocky's uppercut, launch
+// vec(20, 90), measured 90.0 up and 19.9 along in the game).
 
 let timing = include("timing.hor");
 
 let TICK_RATE = 60;
+let PHYSICS_STEP = 1 / 120;
+
 let BASE_DISADVANTAGE = 4;
 let STARTUP_REWARD = 0.75;
 let MAX_ADVANTAGE = 24;
-let MIN_HITSTUN = 12;
 let HITSTUN_PER_DAMAGE = 0.6;
+let GUESSED_MIN_HITSTUN = 12;
 let BLOCKSTUN_SCALE = 0.7;
-let MIN_BLOCKSTUN = 7;
+let GUESSED_MIN_BLOCKSTUN = 7;
 let CHIP_DAMAGE_SCALE = 0.12;
+let BLOCK_PUSH = 23;
+let PUSH = 16;
+let ATTACKER_RECOIL = 0.5;
+let AIR_HIT_POP = 14;
 let COMBO_DAMAGE_SCALE = 0.88;
 let MIN_COMBO_DAMAGE_SCALE = 0.35;
-let COUNTER_HITSTUN_SCALE = 1.5;
+let COUNTER_HITSTUN_BONUS = 4;
 let COUNTER_DAMAGE_SCALE = 1.25;
-let JUGGLE_EXTENSION = 10;
-let JUGGLE_DECAY = 2;
-let MIN_JUGGLE_EXTENSION = 2;
+let JUGGLE_GRAVITY_STEP = 0.1;
 let KNOCKDOWN_TICKS = 55;
-let HITSTOP = 4;
-let HEAVY_HITSTOP = 8;
-let COUNTER_HITSTOP = 11;
-let BLOCK_HITSTOP = 2;
+
+// Hitlag, Smash Ultimate's. damage * 0.65 + 6 frames, never more than 30, a block 0.67 of it and a counter hit 4 more,
+// the K.O. 36 whatever the move. The launch waits for the end of it
+let HITLAG_PER_DAMAGE = 0.65;
+let HITLAG_BASE = 6;
+let MAX_HITLAG = 30;
+let BLOCK_HITLAG_SCALE = 0.67;
+let COUNTER_HITLAG_BONUS = 4;
+let KO_HITSTOP = 36;
+
+// DI turns a launch up to this many radians either way (9.74 degrees), SDI shoves the victim this far a press, a press
+// counted every SDI_INTERVAL frames at most
+let DI_MAX_ANGLE = 0.17;
+let SDI_DISTANCE = 4;
+let SDI_INTERVAL = 4;
+
+// Block pressed in the last 11 frames before landing out of a knockdown techs it, a press too early locks it out for 40
+let TECH_WINDOW = 11;
+let TECH_LOCKOUT = 40;
+
+// The last 9 moves that landed, newest first, every copy of this one in there takes its step off the damage
+let STALE_STEPS = [0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01];
+
+// A block up this few frames before the hit is a parry, and the attacker is stuck for PARRY_STUN
+let PARRY_TICKS = 5;
+let PARRY_STUN = 20;
+
+// How much meter there is, a move costing half of it or more is a super unless it says (Player.MAX_METER)
+let MAX_METER = 100;
 let METER_PER_DAMAGE_DEALT = 1.0;
 let METER_PER_DAMAGE_TAKEN = 0.6;
 let METER_ON_BLOCK = 3;
@@ -32,32 +67,76 @@ let METER_ON_BLOCKED = 2;
 let METER_ON_WHIFF = 1;
 
 // @doc
-// The frame data of a move, MoveFrameData.Of. null for a move that doesn't hit, otherwise { startup, active, recovery,
-// hitstun, blockstun, on_hit, on_block, total } in ticks. active is how many frames the red box stays out for
-func frame_data(art, move, frame_rate, active) {
-    let ticks = TICK_RATE / math.max(1, frame_rate);
-    let total = 0;
-    let hit = -1;
-    for (name in move.phases ?? {}) {
-        let phase = move.phases[name];
-        if (hit < 0 && phase.hit != null) { hit = total + phase.hit; }
-        total = total + timing.phase_length(art, phase);
+// A fighter's movement block in characters.hor, what it is when the block doesn't say (CharacterMovement's defaults).
+// World units and seconds, hitstun_gravity a share of gravity
+let DEFAULT_MOVEMENT = {
+    walk_speed: 420, ground_acceleration: 4000, traction: 2800,
+    air_speed: 330, air_acceleration: 1600, air_friction: 500,
+    gravity: 3000, fall_speed: 620, fast_fall_speed: 950,
+    jump_height: 134, short_hop_height: 60, double_jumps: 1, double_jump_height: 100,
+    hitstun_gravity: 0.5, weight: 100
+};
+
+// How much of the old walk_speed a character actually walked at against the drag, for one without a movement block yet
+let OLD_WALK_SHARE = 0.213;
+
+// @doc A fighter's movement out of its character, CharacterMovement.Read, the block over the defaults or an old walk_speed taken down
+func movement_of(character) {
+    let block = character.movement;
+    if (block == null) {
+        if (character.walk_speed == null) { return DEFAULT_MOVEMENT; }
+        return merge(DEFAULT_MOVEMENT, { walk_speed: character.walk_speed * OLD_WALK_SHARE });
     }
 
+    let made = {};
+    for (key in DEFAULT_MOVEMENT) { made[key] = math.max(0, block[key] ?? DEFAULT_MOVEMENT[key]); }
+    made.gravity = math.max(1, made.gravity);
+    made.double_jumps = math.floor(made.double_jumps);
+    made.hitstun_gravity = math.clamp(made.hitstun_gravity, 0.05, 2);
+    made.weight = math.max(1, made.weight);
+    return made;
+}
+
+// @doc How fast something has to leave the ground to get so high on a share of the gravity, CharacterMovement.SpeedToReach
+func speed_to_reach(movement, height, share) {
+    if (height <= 0) { return 0; }
+    let gravity = movement.gravity * share;
+    return math.sqrt(2 * gravity * height) + gravity * PHYSICS_STEP * 0.5;
+}
+
+// @doc How fast something has to be going along the ground to slide so far before the traction stops it
+func speed_to_slide(movement, distance) {
+    return math.sqrt(2 * movement.traction * math.max(0, distance));
+}
+
+/* Frame data */
+
+// @doc
+// The frame data of a move, MoveFrameData.Of. null for a move that doesn't hit, otherwise { startup, active, recovery,
+// hitstun, blockstun, on_hit, on_block, total, hitstun_said } in game frames, laid being the move laid out (timing.lay_out)
+func frame_data(laid, move) {
+    let hit = laid.hit;
     if (hit < 0) { return null; }
 
-    let startup = hit * ticks;
-    let recovery = math.max(1, total - hit - (active - 1)) * ticks;
+    let total = 0;
+    for (phase in laid.phases) { total = total + phase.length; }
+
+    let active = math.max(1, laid.active);
+    let startup = hit;
+    let recovery = math.max(1, total - hit - (active - 1));
     let damage = move.damage ?? 0;
+
+    // What it says, or the guess out of its startup
     let hitstun = move.hitstun != null
-        ? move.hitstun * ticks
-        : recovery + math.min(MAX_ADVANTAGE, startup * STARTUP_REWARD - BASE_DISADVANTAGE) + damage * HITSTUN_PER_DAMAGE;
-    hitstun = math.max(MIN_HITSTUN, hitstun);
-    let blockstun = move.blockstun != null ? move.blockstun * ticks : hitstun * BLOCKSTUN_SCALE;
+        ? math.round(move.hitstun)
+        : math.round(math.max(GUESSED_MIN_HITSTUN, recovery + math.min(MAX_ADVANTAGE, startup * STARTUP_REWARD - BASE_DISADVANTAGE) + damage * HITSTUN_PER_DAMAGE));
+    let blockstun = move.blockstun != null
+        ? math.round(move.blockstun)
+        : math.max(GUESSED_MIN_BLOCKSTUN, math.round(hitstun * BLOCKSTUN_SCALE));
 
     let data = {
-        startup: math.round(startup), active: active, recovery: math.round(recovery), total: math.round(total * ticks),
-        hitstun: math.round(hitstun), blockstun: math.max(MIN_BLOCKSTUN, math.round(blockstun))
+        startup: startup, active: active, recovery: recovery, total: total,
+        hitstun: hitstun, blockstun: blockstun, hitstun_said: move.hitstun != null
     };
     data.on_hit = data.hitstun - data.recovery;
     data.on_block = data.blockstun - data.recovery;
@@ -71,37 +150,200 @@ func damage_of(move, hits_before, counter) {
     return math.max(1, math.round((move.damage ?? 0) * scale));
 }
 
+// @doc Whether a move sends whoever it hits into the air, FightingMove.Launches
+func launches(move) {
+    return move.launch != null && move.launch.y > 0;
+}
+
+// @doc How long both freeze on the hit, CombatRules.HitstopOf, what it says or Smash's hitlag for its damage
+func hitstop_of(move) {
+    if (move.hitstop != null) { return math.round(move.hitstop); }
+    return math.min(MAX_HITLAG, math.floor((move.damage ?? 0) * HITLAG_PER_DAMAGE + HITLAG_BASE));
+}
+
+// @doc How long both freeze when it's blocked, CombatRules.BlockHitstopOf, 0.67 of the hit's
+func block_hitstop_of(move) {
+    return math.floor(hitstop_of(move) * BLOCK_HITLAG_SCALE);
+}
+
+// @doc
+// What kind of move it is, normal, special or super, FightingMove.Kind. What it says, or out of its meter cost, half the
+// meter or more a super and any at all a special
+func kind_of(move) {
+    if (move.kind != null) { return move.kind; }
+    let cost = move.meter_cost ?? 0;
+    return cost >= MAX_METER / 2 ? "super" : cost > 0 ? "special" : "normal";
+}
+
+// @doc What a hit takes off landed again with so many copies of it in the stale queue, the newest ones, HitResolver.DamageOf
+func stale_damage(move, copies) {
+    let scale = 1;
+    for (place in range(math.min(copies, len(STALE_STEPS)))) { scale = scale - STALE_STEPS[place]; }
+    return math.max(1, math.round((move.damage ?? 0) * scale));
+}
+
+// @doc How far a hit that doesn't launch slides them, what it says or PUSH
+func push_of(move) { return move.push ?? PUSH; }
+
 // @doc The rest of what a hit is worth, the numbers the Data tab shows under the frame data
-func worth(move, data) {
+func worth(move, data, victim) {
     let damage = move.damage ?? 0;
-    let knockback = move.knockback ?? vec(0, 0);
-    let launches = knockback.y > 0;
+    let share = gravity_share(move, victim);
     return {
-        counter_hitstun: math.round(data.hitstun * COUNTER_HITSTUN_SCALE),
+        counter_hitstun: data.hitstun + COUNTER_HITSTUN_BONUS,
         counter_damage: damage_of(move, 0, true),
         combo: [damage_of(move, 0, false), damage_of(move, 1, false), damage_of(move, 2, false), damage_of(move, 4, false)],
-        hitstop: knockback.x != 0 || knockback.y != 0 ? HEAVY_HITSTOP : HITSTOP,
-        counter_hitstop: COUNTER_HITSTOP,
-        block_hitstop: BLOCK_HITSTOP,
+        hitstop: hitstop_of(move),
+        hitstop_said: move.hitstop != null,
+        counter_hitstop: hitstop_of(move) + COUNTER_HITLAG_BONUS,
+        block_hitstop: block_hitstop_of(move),
+        kind: kind_of(move),
+        whiff_lag: math.max(0, move.whiff_lag ?? 0),
+        stale: [stale_damage(move, 1), stale_damage(move, 2), stale_damage(move, 3)],
         chip: math.round(damage * CHIP_DAMAGE_SCALE),
         meter_on_hit: math.round(damage * METER_PER_DAMAGE_DEALT),
         meter_taken: math.round(damage * METER_PER_DAMAGE_TAKEN),
         meter_on_block: METER_ON_BLOCK,
         meter_on_whiff: METER_ON_WHIFF,
-        launches: launches,
-        juggle: [JUGGLE_EXTENSION, math.max(MIN_JUGGLE_EXTENSION, JUGGLE_EXTENSION - JUGGLE_DECAY), math.max(MIN_JUGGLE_EXTENSION, JUGGLE_EXTENSION - JUGGLE_DECAY * 2)],
+        launches: launches(move),
+        juggle: [hitstun_gravity_after(share, 0), hitstun_gravity_after(share, 1), hitstun_gravity_after(share, 2), hitstun_gravity_after(share, 4)],
         knockdown: move.knockdown == true ? KNOCKDOWN_TICKS : 0
     };
 }
 
+/* Where a hit sends them */
+
+// @doc The share of their gravity the victim falls on in hitstun from this move, its own or the victim's
+func gravity_share(move, victim) {
+    if (move.hitstun_gravity != null) { return math.clamp(move.hitstun_gravity, 0.05, 2); }
+    return victim.hitstun_gravity ?? DEFAULT_MOVEMENT.hitstun_gravity;
+}
+
 // @doc
-// Roughly where knockback sends whoever gets hit, in the game's units, out of the numbers in the comment on top of
-// fighting_moves.hor (100 away is about 6 units and no knockback 19, 1100 up lifts them about 30, 1500 about 50 and 2000 75).
-// { away, up } where up is the top of the arc, 0 for a shove along the ground. Rough on purpose, the game has the exact ones
-func knockback_reach(knockback) {
-    let away = 19 + math.max(0, knockback.x) * 0.06;
-    let up = knockback.y <= 500 ? 0 : (knockback.y - 500) * 0.05;
-    return { away: away, up: up };
+// The share of gravity of a hit of a juggle, HitResolver.GravityShareOf. juggle_hits is which hit of the juggle it is,
+// 0 for the hit that sent them up there (not a juggle), 1 for the first that caught them in the air, and so on. Every
+// one adds JUGGLE_GRAVITY_STEP, up to all of their gravity (or what the share was, when that was more already)
+func hitstun_gravity_after(share, juggle_hits) {
+    if (juggle_hits <= 0) { return share; }
+    return math.min(math.max(1, share), share + JUGGLE_GRAVITY_STEP * juggle_hits);
+}
+
+// @doc
+// The launch a move sends somebody on who has lost so much health this round (this hit's damage among it), HitResolver.Send.
+// launch_growth more for every 10 lost, less for somebody heavier than 100. At full health it's exactly launch
+func launch_at(move, victim, health_lost) {
+    if (move.launch == null || move.launch_growth == null) { return move.launch; }
+    let weight = victim.weight ?? DEFAULT_MOVEMENT.weight;
+    return move.launch + move.launch_growth * (health_lost / 10) * (100 / weight);
+}
+
+// @doc A speed turned by so many radians, anticlockwise for more than 0, the way DI turns a launch (PlayerController.Influence)
+func turned(velocity, angle) {
+    let c = math.cos(angle);
+    let s = math.sin(angle);
+    return vec(velocity.x * c - velocity.y * s, velocity.x * s + velocity.y * c);
+}
+
+// @doc
+// The speed a launch sets, HitResolver.Send, vec(away, up) in world units a second for a victim of that movement falling
+// on so much of their gravity. null for a launch that doesn't go up
+func launch_velocity(launch, movement, share) {
+    if (launch == null || launch.y <= 0) { return null; }
+    let gravity = movement.gravity * share;
+    let up = speed_to_reach(movement, launch.y, share);
+    return vec(launch.x / (up / gravity), up);
+}
+
+// @doc Where a launch has them t game frames after the hit while it lasts, from where they were hit, closed form
+func arc(velocity, gravity, t) {
+    let s = t / TICK_RATE;
+    return vec(velocity.x * s, velocity.y * s - 0.5 * gravity * s * s);
+}
+
+// @doc
+// Where whoever a move hits goes, a game frame at a time from the hit to when they land (or ten seconds). { points, peak,
+// landed, launched, share, velocity } with points where they are on every game frame after the hit, peak the frame of the
+// top, landed the frame they're back down (-1 for never). Stepped the way the engine steps a body, 120 a second, sped up
+// by gravity and then moved, never falling faster than their fall speed. In hitstun they fall on their share of gravity
+// with nothing slowing them sideways, after it on all of it with their air friction braking them (nobody's holding
+// anything). A hit that doesn't launch slides them along the ground until the traction stops them
+func flight(move, victim, hitstun, juggle_hits) {
+    return flight_turned(move, victim, hitstun, juggle_hits, 0);
+}
+
+// @doc
+// The same flight with the launch turned by DI, so many radians (DI_MAX_ANGLE at most either way, the victim holding a
+// direction square on to it). A slide along the ground isn't turned, DI is for whoever is sent up
+func flight_turned(move, victim, hitstun, juggle_hits, turn) {
+    let share = hitstun_gravity_after(gravity_share(move, victim), juggle_hits);
+    let velocity = launch_velocity(move.launch, victim, share);
+    if (velocity != null && turn != 0) { velocity = turned(velocity, turn); }
+    let points = [vec(0, 0)];
+    let dt = PHYSICS_STEP;
+    let steps = math.round(1 / (TICK_RATE * dt));
+
+    if (velocity == null) {
+        let speed = speed_to_slide(victim, push_of(move));
+        let x = 0;
+        for (f in range(600)) {
+            if (speed <= 0) { break; }
+            for (s in range(steps)) {
+                speed = math.max(0, speed - victim.traction * dt);
+                x = x + speed * dt;
+            }
+            points.push(vec(x, 0));
+        }
+        return { points: points, peak: 0, landed: 0, launched: false, share: share, velocity: vec(0, 0) };
+    }
+
+    let x = 0;
+    let y = 0;
+    let vx = velocity.x;
+    let vy = velocity.y;
+    let peak = 0;
+    let landed = -1;
+    for (f in range(1, 601)) {
+        let gravity = f <= hitstun ? victim.gravity * share : victim.gravity;
+        for (s in range(steps)) {
+            let rising = vy > 0;
+            vy = math.max(-victim.fall_speed, vy - gravity * dt);
+            if (f > hitstun) { vx = vx > 0 ? math.max(0, vx - victim.air_friction * dt) : math.min(0, vx + victim.air_friction * dt); }
+            x = x + vx * dt;
+            y = y + vy * dt;
+            if (rising && vy <= 0) { peak = f; }
+        }
+
+        if (y <= 0) {
+            points.push(vec(x, 0));
+            landed = f;
+            break;
+        }
+        points.push(vec(x, y));
+    }
+    return { points: points, peak: peak, landed: landed, launched: true, share: share, velocity: velocity };
+}
+
+// @doc Where they are on a frame of a flight, the last point once it's over
+func flight_at(flown, frame) {
+    let points = flown.points;
+    return points[math.clamp(frame, 0, len(points) - 1)];
+}
+
+// @doc The highest a flight gets
+func flight_top(flown) {
+    let top = vec(0, 0);
+    for (point in flown.points) {
+        if (point.y > top.y) { top = point; }
+    }
+    return top;
+}
+
+// @doc How many game frames a jump of so high takes to get to the top, out of the speed it leaves the ground at
+func rise_frames(movement, height) {
+    return math.round(speed_to_reach(movement, height, 1) / movement.gravity * TICK_RATE);
 }
 
 func signed(value) { return value > 0 ? `+{value}` : `{value}`; }
+
+// @doc A number of world units for saying, to a tenth
+func units(value) { return math.round(value, 1); }

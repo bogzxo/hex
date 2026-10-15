@@ -48,7 +48,10 @@ internal sealed partial class HexScene
             document.Record();
         recordPending = false;
 
+        HexDocument? was = document;
         document = shown;
+        if (was is not null)
+            SplitFollows(was, shown);
 
         // The editor's own layouts are made for the skin of the editor, everything else for the one games have
         bool plain = shown.Path is { } path && SameDirectory(path, EDITOR_LAYOUT);
@@ -73,13 +76,12 @@ internal sealed partial class HexScene
         runOutput.Clear();
         consoleRuntime = null;
 
-        // Its editor is the one in the code panel
-        foreach (var child in codeScroll.Children.ToArray())
-            codeScroll.Remove(child);
-        codeScroll.Add(shown.Editor);
+        // Its editor is the one in the code panel (or one of the two side by side), the find bar stays over whichever it is
+        PlaceEditors();
 
         ApplyView();
         KeepWorkspace();
+        WatchOpenFiles();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
     }
 
@@ -145,6 +147,7 @@ internal sealed partial class HexScene
 
         Remember(path);
         RaiseExtensions("on_open", new StringValue(Path.GetFullPath(path)));
+        target.DiskText = source;
         target.SavedCode = target.GenerateCode();
         target.CodeEdited = false;
         SetCode(target, target.SavedCode, fresh: true);
@@ -177,7 +180,8 @@ internal sealed partial class HexScene
 
         try
         {
-            return scratch.Load(written).Success && scratch.GenerateCode() == written;
+            // From where the file is, its templates and the files it includes are looked for next to it
+            return scratch.Load(written, checkedDocument.Path).Success && scratch.GenerateCode() == written;
         }
         finally
         {
@@ -311,6 +315,10 @@ internal sealed partial class HexScene
         if (SameDirectory(path, EDITOR_LAYOUT))
             path = Path.Combine(Path.GetFullPath(options.Workspace), document.Name + "_edited.hor");
 
+        // Something else wrote the file since Hex read it, that isn't written over without asking
+        if (!SafeToSave(path))
+            return;
+
         try
         {
             // The code typed into a layout by hand goes into it first, what is saved is the layout
@@ -320,10 +328,12 @@ internal sealed partial class HexScene
             string written = document.GenerateCode();
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(path, document.CrLf ? written.Replace("\n", "\r\n") : written);
+            string onDisk = document.CrLf ? written.Replace("\n", "\r\n") : written;
+            File.WriteAllText(path, onDisk);
             UILayout.Forget(path);
 
             document.Path = path;
+            document.DiskText = onDisk;
             document.SavedCode = written;
             document.SavedCrLf = document.CrLf;
             ForgetVocabulary();
@@ -333,6 +343,7 @@ internal sealed partial class HexScene
             document.RefreshPreviews();
             tabsDirty = treeDirty = true;
             Remember(path);
+            WatchOpenFiles();
             RaiseExtensions("on_save", new StringValue(Path.GetFullPath(path)));
 
             Console.WriteLine($"[Hex] Saved '{path}'.");
@@ -374,6 +385,7 @@ internal sealed partial class HexScene
         stage.RemoveModule(document.Module);
         documents.Remove(document);
         ForgetExtensionViews(document);
+        DropBackup(document);
         recordPending = false;
 
         Show(documents.Count > 0 ? documents[^1] : NewDocument());

@@ -6,15 +6,18 @@
 //
 // It's in parts, each a file of functions taking the state of a view. view.hor is a view and what keeps it up to date,
 // wiring.hor connects its layout (move_view.hor), game.hor finds the game and merges a fighter's moves, schema.hor is
-// every key of a move, timing.hor plays a move a frame at a time, rules.hor is the game's combat rules, edits.hor changes
-// moves, boxes.hor and tracer.hor are the red boxes and the traced ones, checks.hor and inputs.hor look the moves over,
-// panels.hor, frame_view.hor, timeline_view.hor, strip_view.hor and moves_list.hor are what's on screen, columns.hor
-// sizes it, templates.hor is what a new move starts as and fight.hor starts the game. See hex/docs/move-editor.md.
+// every key of a move, timing.hor plays a move a game frame at a time, rules.hor is the game's combat rules and how a
+// fighter moves, edits.hor changes moves, boxes.hor and tracer.hor are the red boxes and the traced ones, checks.hor and
+// inputs.hor look the moves over, panels.hor, combo_view.hor, frame_view.hor, timeline_view.hor, strip_view.hor and
+// moves_list.hor are what's on screen, columns.hor sizes it, templates.hor is what a new move starts as and fight.hor
+// starts the game. See hex/docs/move-editor.md.
+//
+// It reads Fighter2D's second move format, every time in game frames (60 a second) and every distance in world units.
 
 let extension = {
     name: "Move editor",
     description: "Fighter2D's moves, all of them. A move file with #define fight_move opens on a view of its moves, their phases, art, hitboxes and frame data.",
-    version: "2.0.0",
+    version: "3.0.0",
     author: "bogz",
 
     // Its tab of Hex's settings, move_settings.hor, filled in by on_settings. Hex keeps what these are told in
@@ -80,6 +83,7 @@ func on_file_changed(hex, path) {
         if (state.fighter != null && game.same_path(state.fighter.sprites, path)) {
             state.art = hex.sprite(path);
             state.traces = {};
+            state.floor = null;
             view.refresh(state);
         }
     }

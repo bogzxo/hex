@@ -294,7 +294,10 @@ internal sealed partial class HexScene
         // A text box of the editor, or one of the layout that is being tried out in the canvas
         // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
         bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
-        shortcuts.Update(Engine.Input.Keyboard, typing);
+
+        // While Change a key waits for one, the key is for that and nothing else
+        if (!UpdateKeyCapture())
+            shortcuts.Update(Engine.Input.Keyboard, typing);
     }
 
     /// <summary>

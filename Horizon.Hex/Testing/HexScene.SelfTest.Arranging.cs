@@ -25,7 +25,7 @@ internal sealed partial class HexScene
         Func<Vector2> MenuItem(string item) => () => chrome.ToWorld(contextMenu!.ItemBounds(item).Center);
         Func<Vector2> Nothing() => Part("canvas", 0.04f, 0.5f);
 
-        Pick("File", () => "New layout");
+        Pick("File", () => "New Layout");
         test.Settle(0.3f);
         test.Click(Kind("label"));
         test.Wait();
@@ -88,11 +88,11 @@ internal sealed partial class HexScene
         });
         test.Wait();
 
-        Pick("Layout", () => "Left edges");
+        Pick("Layout", () => "Align Left");
         test.Wait();
         test.Check("arrange: left edges puts two things on the one line", () =>
             Near(first!.Bounds.Min.X, second!.Bounds.Min.X, 0.6f) && !Near(first.Bounds.Center.Y, second.Bounds.Center.Y, 20) && document.Selection.Count == 2);
-        Pick("Layout", () => "Centres across");
+        Pick("Layout", () => "Align Centre");
         test.Wait();
         test.Check("arrange: and centres across puts their middles on it", () => Near(first!.Bounds.Center.X, second!.Bounds.Center.X, 0.6f));
 
@@ -162,13 +162,13 @@ internal sealed partial class HexScene
 
         test.RightClick(Row(() => first));
         test.Wait();
-        PickFromMenu("Bring to front");
+        PickFromMenu("Bring to Front");
         test.Wait();
         test.Check("order: the menu of a row of the tree brings it to the front", () =>
             document.Selected == first && document.Module.Root.Children[^1] == first);
         test.RightClick(At(() => first));
         test.Wait();
-        PickFromMenu("Send to back");
+        PickFromMenu("Send to Back");
         test.Wait();
         test.Check("order: and the one on the canvas sends it to the back, code and all", () =>
             document.Module.Root.Children[0] == first && Code().IndexOf($"let {document.NameOf(first!)} ") < Code().IndexOf($"let {document.NameOf(second!)} "));
@@ -188,21 +188,21 @@ internal sealed partial class HexScene
         test.Check("design: on an ultrawide it keeps its shape, in the middle", () =>
             document.Module.Viewport is { } seen && Near(seen.Width / seen.Height, 21.0f / 9.0f, 0.01f)
             && Near(document.Module.Frame.Width, 1600) && Near(document.Module.Frame.Height, 900) && Near(document.Module.Frame.Center.X, seen.Center.X));
-        Pick("Layout", () => "Take the whole screen (stretch)");
+        Pick("Layout", () => "Stretch");
         test.Wait();
         test.Check("design: stretched it takes the lot", () =>
             document.Fit == UIFit.Stretch && Near(document.Module.Frame.Width, document.Module.Viewport!.Value.Width) && Code().Contains("fit: \"stretch\""));
         Pick("Layout", () => "Preview on its own shape");
-        Pick("Layout", () => "Made for any screen");
+        Pick("Layout", () => "Any Screen");
         test.Wait();
         test.Check("design: made for any screen there's nothing about it in the code", () => document.Design is null && !Code().Contains("compositor.design"));
 
         float fitted = 0;
         test.Run(() => fitted = document.Module.Scale.X);
-        Pick("View", () => "Zoom in");
+        Pick("View", () => "Zoom In");
         test.Wait();
         test.Check("zoom: the view menu zooms the canvas in", () => canvasZoom > 1.0f && document.Module.Scale.X > fitted * 1.2f);
-        Pick("View", () => "Zoom to fit");
+        Pick("View", () => "Zoom to Fit");
 
         // Waited on rather than given a few updates, a busy machine took longer than that now and then
         test.WaitFor(() => canvasZoom == 1.0f && Near(document.Module.Scale.X, fitted, 0.001f), 2.0f);
@@ -214,7 +214,7 @@ internal sealed partial class HexScene
         /* Tabs */
 
         TabPanel? tabbed = null;
-        Pick("Layout", () => "Select nothing");
+        Pick("Layout", () => "Deselect All");
         test.Click(Kind("tabs"));
         test.Wait();
         test.Check("tabs: come with a page for each tab", () =>
@@ -258,7 +258,7 @@ internal sealed partial class HexScene
         Func<Vector2> InLayout(Func<Vector2> point) => () => document.Module.ToWorld(point());
 
         Vector2 boxSize = default, boxAt = default;
-        Pick("File", () => "New layout");
+        Pick("File", () => "New Layout");
         test.Settle(0.3f);
         test.Click(Kind("panel"));
         test.Wait();

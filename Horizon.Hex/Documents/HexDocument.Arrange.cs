@@ -320,7 +320,7 @@ internal sealed partial class HexDocument
         if (into is TabPanel tabs)
             into = tabs.Selected >= 0 && tabs.Selected < tabs.Children.Count ? tabs.Children[tabs.Selected] : null;
 
-        if (into is not Panel || previews.Contains(into))
+        if (into is not Panel || into is Include || previews.Contains(into))
         {
             problem = $"what comes before {NameOf(component)} isn't something things go into, move it under a stack or a panel first";
             return false;

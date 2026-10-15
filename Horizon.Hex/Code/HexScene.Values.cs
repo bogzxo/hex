@@ -49,6 +49,10 @@ internal sealed partial class HexScene
     {
         if (evaluation.TakeFinished() is { } done)
         {
+            // What went wrong says the name it most likely meant, when it named one a letter or two off
+            if (done.Error is { } failed && valuesAsked.Document is { } asked)
+                done = done with { Error = failed + LikelyFix(failed, asked.Editor.Text) };
+
             // A file seen for the first time comes open a level, when it declares few enough things for that to be the
             // way into it (a move list is one let of forty moves)
             if (valuesAsked.Document != valuesOf && done.Declared.Count <= FEW_DECLARED)
@@ -69,6 +73,7 @@ internal sealed partial class HexScene
             if (valuesOf is { } ran)
             {
                 ShowDiagnostics(ran);
+                ShowInlineValues(ran, done);
                 if (ran.Path is { } runPath && done.Error is null)
                     RaiseExtensions("on_run", new StringValue(Path.GetFullPath(runPath)));
             }
@@ -93,6 +98,30 @@ internal sealed partial class HexScene
             valuesAsked = now;
             evaluation.Run(code.Text, document.Path is { } path ? Path.GetFullPath(path) : null, FolderOf(document), OpenTexts());
         }
+    }
+
+    /// <summary>
+    /// The value every let of the file that was worked out came to, written faintly at the end of its line (Light Table's
+    /// inline results), `let reach = base * 1.5;   = 96`. A let written as its value already, a text or a number, says
+    /// nothing, and an object or a list is the values' to show.
+    /// </summary>
+    private void ShowInlineValues(HexDocument ran, HexValues done)
+    {
+        string? own = ran.Path is { } path ? Path.GetFullPath(path) : null;
+        var hints = new List<UICodeHint>();
+        foreach (var (name, value) in done.Declared)
+        {
+            if (!done.Sources.TryGetDeclaration(name, out var at) || at.Literal || !at.Span.IsKnown)
+                continue;
+            if (at.File is { } file && own is not null && !Path.GetFullPath(file).Equals(own, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (value is ObjectValue or ListValue or FunctionValue or AnonymousFunctionValue)
+                continue;
+
+            hints.Add(new UICodeHint(at.Span.Line - 1, $"= {Summarise(value)}"));
+        }
+
+        ran.Editor.InlineHints = hints;
     }
 
     /// <summary>The folder a document's includes are looked for in.</summary>
@@ -247,6 +276,7 @@ internal sealed partial class HexScene
     {
         valuesTree = layout.Get<TreeView>("values_tree");
         valuesTree.Visible = false;
+        valuesTree.FocusLine = true;
 
         // Dragged wider by its edge like the properties, the two are the one side
         SideGrip(valuesTree, UIResize.Left, left: false);
