@@ -7,7 +7,6 @@ using Horizon.UI.Skinning;
 
 namespace Horizon.Hex;
 
-// What the editor is set to (HexSettings), the dialog it is set in, and the edges of its panels that can be dragged.
 // What is selected in the canvas dragged bigger by its edges, and moves landing on the grid.
 internal sealed partial class HexScene
 {

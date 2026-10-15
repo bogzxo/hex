@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Numerics;
 
 using Horizon.Core;
@@ -100,6 +100,9 @@ internal class Program
 
         engine.SetScene(new HexScene(options));
         engine.Run();
+
+        // Where the time went, with HEX_PROFILE set
+        HexScene.Profile.Report();
     }
 
     private static string? ValueOf(string[] args, string name)

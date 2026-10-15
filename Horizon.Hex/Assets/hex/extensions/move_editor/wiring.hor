@@ -25,7 +25,9 @@ func wire(state, view) {
     let ui = state.ui;
     ui.get("right").on_resize = func(size) { view.resize_right(state, size.x); };
     ui.get("right").on_resize_end = func(size) { state.hex.set_setting("right_width", state.right); };
-    ui.on_tick = func(shown, dt) { view.tick(state, dt); };
+    ui.on_resize = func(shown, size) { view.resized(state, size); };
+    state.ticker = func(shown, dt) { view.tick(state, dt); };
+    view.wake(state);
     ui.on_key = func(shown, key) { return view.key_pressed(state, key); };
 }
 

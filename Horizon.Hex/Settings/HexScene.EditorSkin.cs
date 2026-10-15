@@ -7,7 +7,6 @@ using Horizon.UI.Skinning;
 
 namespace Horizon.Hex;
 
-// What the editor is set to (HexSettings), the dialog it is set in, and the edges of its panels that can be dragged.
 // What the editor itself is drawn in, any skin there is in any of its themes, and the colours of its own layout taken
 // from that skin.
 internal sealed partial class HexScene

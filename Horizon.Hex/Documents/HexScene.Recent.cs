@@ -11,6 +11,10 @@ namespace Horizon.Hex;
 // The layouts that were worked on last, kept in a file next to the editor between runs.
 internal sealed partial class HexScene
 {
+    // Where it keeps the layouts that were worked on last (one path a line, the latest first), and how many of them
+    private const string RECENT_FILE = "hex_recent.txt";
+    private const int MAX_RECENT = 8;
+
     /* The layouts that were worked on last */
 
     private static string RecentPath => Path.Combine(AppContext.BaseDirectory, RECENT_FILE);

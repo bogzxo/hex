@@ -40,6 +40,9 @@ internal sealed partial class HexScene
 
         canvas.Visible = tools;
         codeScroll.Visible = !tools && !table && !extension;
+
+        // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
+        document.Module.Enabled = tools;
         dataTable.Visible = table;
         tabledFrom = null;
 

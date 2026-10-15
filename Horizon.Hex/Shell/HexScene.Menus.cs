@@ -11,45 +11,13 @@ using Key = Silk.NET.Input.Key;
 
 namespace Horizon.Hex;
 
-// The palette, the toolbar, the keys and the menu bar, which is everything there is to do that isn't done to something
-// on screen directly. Only what means something for what is open is on the bar, the Layout menu is the designer's, and
-// the command palette (Ctrl+Shift+P) is every item of every menu in a list that narrows as it is typed into.
+// The toolbar, the keys and the menu bar, which is everything there is to do that isn't done to something on screen
+// directly. Only what means something for what is open is on the bar, the Layout menu is the designer's. The palette of
+// components is Designer/HexScene.Palette, every item of every menu in a list is CommandPalette.
 internal sealed partial class HexScene
 {
-    private void BuildPalette()
-    {
-        // One button per kind of component, each made from the template the palette names
-        var items = layout.Populate("palette", Palette.Length);
+    private Menu fileMenu = null!;
 
-        for (int i = 0; i < items.Count; i++)
-        {
-            string kind = Palette[i];
-            var button = items[i].Get<Button>("button");
-
-            button.Label = kind.Replace('_', ' ');
-            button.Icon = KindIcon(kind);
-            button.Tooltip = Describe(kind);
-            button.OnPressed = () => AddComponentOf(kind);
-            paletteButtons.Add(button);
-        }
-
-        // The buttons over the tree, the things done to it most without going up to a menu for them
-        void Tool(string name, string tip, Action pressed)
-        {
-            var button = layout.Get<Button>(name);
-            button.Tooltip = tip;
-            button.OnPressed = pressed;
-        }
-
-        Tool("move_up", "Move up the tree, earlier among its siblings (Ctrl+Up)", () => MoveSelected(-1));
-        Tool("move_down", "Move down the tree, later among its siblings (Ctrl+Down)", () => MoveSelected(1));
-        Tool("move_out", "Move out of the container it is in (Ctrl+Left)", () => MoveSelectedAcross(inwards: false));
-        Tool("move_in", "Move into the container before it (Ctrl+Right)", () => MoveSelectedAcross(inwards: true));
-        Tool("duplicate", "Make a copy next to it (Ctrl+D)", DuplicateSelected);
-        Tool("remove", "Delete it and everything in it (Del)", DeleteAll);
-    }
-
-    /// <summary>What the file on screen can do, at the right end of the tabs.</summary>
     private void WireToolbar()
     {
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
@@ -61,79 +29,6 @@ internal sealed partial class HexScene
         if (LayoutTools) PlayIntros();
         else RunCode();
     }
-
-    /// <summary>
-    /// Helper method for what a kind of component is for, the line the palette shows when the pointer rests on its button.
-    /// </summary>
-    private static string Describe(string kind) => kind switch
-    {
-        "stack" => "A row or a column of things, with a gap between them",
-        "grid" => "Cells in rows and columns, so many across",
-        "collapsible" => "A stack under a bar with a title, which folds it away",
-        "panel" => "A box to put things in, or a backdrop",
-        "scroll" => "A panel that scrolls when there is more than fits",
-        "label" => "A piece of text, which can wrap",
-        "button" => "A button with a label, pressed by a click or the navigator",
-        "toggle" => "A box that is ticked or isn't",
-        "textbox" => "A line somebody types into",
-        "number_box" => "A number, dragged across or typed",
-        "selector" => "One of a few options, stepped through with arrows",
-        "dropdown" => "One of a list, which drops down",
-        "list" => "A list of texts in a box, one chosen",
-        "slider" => "A number between two ends, slid along",
-        "color_picker" => "A colour, picked by hue, shade and how solid it is",
-        "progress_bar" => "How full something is, a health bar say",
-        "image" => "A picture, a sprite of the skin or a file",
-        "tabs" => "Pages with a strip of tabs along the top",
-        "divider" => "A line between things",
-        "spacer" => "Nothing, of a size, for a gap",
-        "readout" => "A number that changes all the time, and what it is counted in",
-        "meter" => "A thin line that says how full something is",
-        "graph" => "The last so many of something as bars",
-        "segments" => "One bar cut up by how much of a whole things are",
-        "symbol" => "One of the icons every skin has, on its own",
-        "status_bar" => "The strip along the bottom of an editor, pieces on the left and the right",
-        "tab_strip" => "A row of tabs for documents, with an x on each",
-        "breadcrumbs" => "Where something is, as a path of pieces",
-        _ => string.Empty
-    };
-
-    /// <summary>The icon of a kind of component, in the toolbox, the tree and the breadcrumbs.</summary>
-    private static string KindIcon(string kind) => kind switch
-    {
-        "stack" => "list-flat",
-        "collapsible" => "fold",
-        "grid" => "table",
-        "panel" => "window",
-        "scroll" => "list-selection",
-        "label" => "symbol-text",
-        "button" => "symbol-event",
-        "toggle" => "check",
-        "textbox" => "symbol-string",
-        "number_box" => "symbol-number",
-        "selector" => "arrow-swap",
-        "dropdown" => "chevron-down",
-        "list" => "list-unordered",
-        "slider" => "settings",
-        "color_picker" => "symbol-color",
-        "progress_bar" => "loading",
-        "image" => "file-media",
-        "tabs" => "window",
-        "divider" => "dash",
-        "spacer" => "whitespace",
-        "readout" => "dashboard",
-        "meter" => "pulse",
-        "graph" => "graph",
-        "segments" => "symbol-ruler",
-        "menu_bar" => "menu",
-        "code" or "code_editor" => "code",
-        "group" => "group-by-ref-type",
-        "symbol" => "smiley",
-        "status_bar" => "info",
-        "tab_strip" => "files",
-        "breadcrumbs" => "chevron-right",
-        _ => "symbol-misc"
-    };
 
     /// <summary>
     /// Helper method to set up the keys of the editor. The ones with control work whatever is going on,
@@ -408,108 +303,5 @@ internal sealed partial class HexScene
         fileMenu.AddSeparator();
         // Through the window manager, on the window's thread, asking first like its x does
         fileMenu.Add("Exit", () => Engine.WindowManager.Close(), "Alt+F4", "close");
-    }
-
-    /* The command palette */
-
-    /// <summary>
-    /// Ctrl+Shift+P, every item of every menu there is right now in a list that narrows as it is typed into, with the
-    /// menus it is in and its keys, the way VS Code's does.
-    /// </summary>
-    private void CommandPalette() =>
-        ChooseFrom("Command palette", "Everything Hex can do right now, a few letters narrow it down", AllCommands());
-
-    /// <summary>Every item of every menu that means something right now, and what the extensions added.</summary>
-    private List<(string Text, Action Picked)> AllCommands()
-    {
-        var commands = new List<(string Text, Action Picked)>();
-        foreach (Menu bar in menu.Menus)
-        {
-            if (bar.IsVisible is { } shown && !shown())
-                continue;
-
-            foreach (var (item, path) in bar.Everything())
-            {
-                if ((item.IsVisible?.Invoke() ?? true) && (item.IsEnabled?.Invoke() ?? true))
-                    commands.Add(($"{path}: {item.Label}{(item.Shortcut.Length > 0 ? $"   ({item.Shortcut})" : string.Empty)}", item.OnPicked!));
-            }
-        }
-
-        commands.AddRange(ExtensionCommands());
-        return commands;
-    }
-
-    /// <summary>
-    /// Helper method to ask for one of a list of things in a dialog (choose.hor), narrowed down by what is typed (the
-    /// letters in order, the way quick open goes), enter, the first button or a double click picks.
-    /// </summary>
-    /// <param name="shortestFirst">Whether what is left is put shortest first, the nearest to what was typed for a file's name.</param>
-    /// <param name="prefixed">
-    /// Other lists for what is typed starting with a character of their own, VS Code's quick open (> for commands, @ for
-    /// something in the file), null for the list the dialog started with. The rest of what is typed narrows them down.
-    /// </param>
-    private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false,
-        Func<char, List<(string Text, Action Picked)>?>? prefixed = null)
-    {
-        string[] texts = [];
-        var byText = new Dictionary<string, Action>();
-        char showing = '\uffff';
-
-        // The list that is being narrowed down, the one the dialog started with or another for a prefix
-        void Use(char prefix, List<(string Text, Action Picked)> from)
-        {
-            showing = prefix;
-            texts = [.. from.Select(choice => choice.Text)];
-            byText.Clear();
-            foreach (var (text, picked) in from)
-                byText.TryAdd(text, picked);
-        }
-
-        Use('\0', choices);
-
-        if (textDialog is { IsOpen: true })
-            textDialog.Close();
-
-        ListBox list = null!;
-        void PickChosen()
-        {
-            if (list.Index >= 0 && list.Index < list.Items.Length && byText.TryGetValue(list.Items[list.Index], out Action? picked))
-                picked();
-        }
-
-        UIDialog shown = textDialog = UIDialog.Show(chrome, title, message, new DialogChoice("Go", PickChosen), new DialogChoice("Cancel"));
-        UILayout made = layout.Instantiate(CHOOSE_TEMPLATE, shown.Body);
-        TextBox box = made.Get<TextBox>("answer");
-        list = made.Get<ListBox>("choices");
-
-        list.Items = texts;
-        if (texts.Length > 0) list.Choose(0);
-
-        box.OnChanged = typed =>
-        {
-            char prefix = typed.Length > 0 && prefixed?.Invoke(typed[0]) is not null ? typed[0] : '\0';
-            if (prefix != showing)
-                Use(prefix, prefix == '\0' ? choices : prefixed!(prefix)!);
-
-            string query = prefix == '\0' ? typed : typed[1..];
-            var left = texts.Where(text => Matches(text, query));
-            if (shortestFirst && prefix == '\0')
-                left = left.OrderBy(text => Path.GetFileName(text).Length);
-
-            list.Items = [.. left.Take(300)];
-            if (list.Items.Length > 0) list.Choose(0);
-        };
-        box.OnSubmitted = _ =>
-        {
-            shown.Close();
-            PickChosen();
-        };
-        list.OnActivated = _ =>
-        {
-            shown.Close();
-            PickChosen();
-        };
-
-        box.Focus();
     }
 }

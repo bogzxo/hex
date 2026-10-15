@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
@@ -25,15 +25,8 @@ internal sealed partial class HexScene : Scene
     private const string TOOL_SKIN = "skin.hor";
     private const string TOOL_SKIN_NAME = "flat";
 
-    // Where the editor keeps how big it was last asked to draw itself, next to its executable.
-    private const string SCALE_FILE = "hex_ui_scale.txt";
-
-    // Where it keeps the layouts that were worked on last (one path a line, the latest first), and how many of them
-    private const string RECENT_FILE = "hex_recent.txt";
-
     // Which skin the layouts were shown in the last time, see the Skin menu
     private const string SKIN_FILE = "hex_skin.txt";
-    private const int MAX_RECENT = 8;
 
     // The screen the layouts being edited are made for, scaled to whatever room the canvas has.
     private static readonly Vector2 DesignSize = new(1600, 900);
@@ -70,12 +63,10 @@ internal sealed partial class HexScene : Scene
     private readonly StackPanel tree, inspector, layers;
     private readonly MenuBar menu;
     private readonly HexLayoutDebugger layoutDebugger;
-    private Menu fileMenu = null!;
     private readonly Panel canvas;
 
     // What is behind the layouts in the canvas, a module of the stage as big as the canvas
     private readonly UIModule backdrop;
-    private static readonly Vector4 CanvasColor = new(0.02f, 0.02f, 0.03f, 1.0f);
     private readonly ScrollPanel treeScroll, inspectorScroll;
     private readonly Panel codeScroll;
     private readonly UIComponent rightHead, activityGap, palette;
@@ -84,13 +75,6 @@ internal sealed partial class HexScene : Scene
     
     // The layouts that were opened or saved last, the latest first
     private readonly List<string> recent = [];
-
-    // Whether the stage is showing its layouts in the font of the editor, which it does for the editor's own
-    private bool stagePlain;
-
-    // A dialog of Windows that is open, and what to do with the file that is picked in it
-    private Task<string?>? dialog;
-    private Action<string>? dialogPicked;
 
     // A change that hasn't been noted as a step to come back to yet, and how long it has to rest still
     private bool recordPending;
@@ -119,16 +103,7 @@ internal sealed partial class HexScene : Scene
     private readonly List<(string Path, bool IsDirectory, UITreeItem Row)> fileRows = [];
     private readonly Dictionary<UIComponent, Button> treeRows = [];
     private readonly Dictionary<string, Button> layerRows = [];
-    private readonly List<Button> tabButtons = [];
     private readonly Dictionary<string, UIComponent> editors = [];
-
-    // Dragging a component around the canvas
-    private bool pointerWasDown;
-    private bool dragging, dragMoved;
-    private Vector2 dragLast;
-
-    // Something that was selected already and pressed on: it's all that's selected if it isn't dragged
-    private UIComponent? clickedSelected;
 
     // Layouts that are only opened to be tested, and how that went
     private bool checksDone;
@@ -281,8 +256,18 @@ internal sealed partial class HexScene : Scene
 
     /* Every frame */
 
+    // Where the time of a tick goes, with HEX_PROFILE set, see HexProfiler
+    internal static readonly HexProfiler Profile = new();
+
+    /// <summary>
+    /// A tick of the editor, in the order it goes. The window and what's round the canvas, the designer, the lists that were
+    /// marked to be made again, what finished on other threads, the extensions, the panel and the bars, then the components
+    /// of both UIs. With HEX_PROFILE set what each of those cost is kept (see HexProfiler), which is why they're in groups.
+    /// </summary>
     public override void UpdateState(float dt)
     {
+        Profile.Begin();
+
         // A unit of the camera per pixel of the window, whatever the window is resized to. The UI does the scaling
         Vector2 viewport = Engine.WindowManager.ViewportSize;
         if (viewport != camera.ViewSize && viewport.X > 0 && viewport.Y > 0)
@@ -291,11 +276,50 @@ internal sealed partial class HexScene : Scene
         if (options.Check.Length > 0 && !checksDone)
             RunChecks();
 
+        UpdateWindow();
+        Profile.Mark("window");
+        UpdateDesigner(dt);
+        Profile.Mark("designer");
+        RebuildMarked();
+        Profile.Mark("lists");
+        UpdateWork(dt);
+        Profile.Mark("work");
+
+        UpdateExtensionUI(dt);
+        UpdateWatchedFiles();
+        ApplyAskedView();
+        Profile.Mark("extensions");
+
+        UpdateTable();
+        UpdateConsole();
+        RunAskedConsole();
+        UpdatePanel(dt);
+        Profile.Mark("panel");
+
+        UpdateStatusBar();
+        UpdateCrumbs();
+        Profile.Mark("bars");
+
+        base.UpdateState(dt);
+        Profile.Mark("components");
+        Profile.End();
+
+        UpdateSelfTest(dt);
+    }
+
+    /// <summary>A dialog that was answered, the x of the window, and the editor fitted round the canvas.</summary>
+    private void UpdateWindow()
+    {
         UpdateDialog();
         UpdateClosing();
         ColourChrome();
         FitChrome();
         PlaceCanvas();
+    }
+
+    /// <summary>The pointer on the canvas, the steps to come back to, and the code of a layout written again after a change.</summary>
+    private void UpdateDesigner(float dt)
+    {
         UpdateCanvasPointer();
         UpdateHistory(dt);
 
@@ -315,7 +339,11 @@ internal sealed partial class HexScene : Scene
             codeWait = HIDDEN_CODE_EVERY;
             codeShown = true;
         }
+    }
 
+    /// <summary>The tabs, the tree and the inspector made again if something marked them, once a tick however many times it did.</summary>
+    private void RebuildMarked()
+    {
         RevealInTree();
 
         if (tabsDirty) RebuildTabs();
@@ -325,29 +353,23 @@ internal sealed partial class HexScene : Scene
         tabsDirty = treeDirty = inspectorDirty = false;
         if (codeShown)
             codeDirty = codeShown = false;
+    }
 
+    /// <summary>What was done on other threads taken in, the folders of the workspace and the values of the file on screen.</summary>
+    private void UpdateWork(float dt)
+    {
         TakeFinishedWork();
         UpdateWelcome();
 
-        // Something changed in a folder of the workspace, the explorer reads that folder again
-        if (folders.TakeChanges() && Side == HexSide.Explorer)
-            treeDirty = true;
+        // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
+        if (folders.TakeChanges())
+        {
+            languagesNear.Clear();
+            treeDirty |= Side == HexSide.Explorer;
+        }
 
         UpdateValues(dt);
         UpdateValueBox();
-        UpdateExtensionUI(dt);
-        UpdateWatchedFiles();
-        ApplyAskedView();
-        UpdateTable();
-        UpdateConsole();
-        RunAskedConsole();
-        UpdatePanel(dt);
-        UpdateStatusBar();
-        UpdateCrumbs();
-
-        base.UpdateState(dt);
-
-        UpdateSelfTest(dt);
     }
 
     /// <summary>
@@ -368,134 +390,6 @@ internal sealed partial class HexScene : Scene
             document.Modified = modified;
             tabsDirty = true;
         }
-    }
-
-    /// <summary>
-    /// Clicking in the canvas selects what is there (on top of what already is with ctrl or shift), dragging moves all
-    /// of it. The wheel zooms, the middle button (or space) pans, and a click on a tab opens its page.
-    /// </summary>
-    private void UpdateCanvasPointer()
-    {
-        UIPointer pointer = compositor.Pointer;
-
-        // The code has no canvas to point at
-        if (!LayoutTools)
-        {
-            pointerWasDown = pointer.Down;
-            dragging = false;
-            ShowCoords(false, default);
-            return;
-        }
-
-        bool pressed = pointer.Down && !pointerWasDown;
-        bool released = !pointer.Down && pointerWasDown;
-        pointerWasDown = pointer.Down;
-
-        // Where the pointer is in the editor, and in the layout that is being edited however big that is drawn
-        Vector2 inChrome = chrome.ToLocal(pointer.Position);
-        Vector2 inLayout = document.Module.ToLocal(pointer.Position);
-
-        // Not over the canvas if a menu of the editor is in the way of it
-        // Nor if a question or the menu of art is up over it, a click on those is not a click on the layout
-        // Nor on the bottom edge of the canvas itself, which is dragged to make it taller
-        bool overCanvas = PointerOnCanvas(pointer.Position) && chrome.Popup is null && chrome.Dialog is null && artPicker is not { IsOpen: true }
-            && canvas.ActiveGrip == UIResize.None && !canvas.IsResizing;
-
-        // Where the pointer is in the layout, in its own units, for lining things up by number
-        ShowCoords(overCanvas, inLayout);
-
-        // The hover of what is pointed at, so it can be seen while it is set up. Not while it is being dragged about
-        HoldHover(overCanvas && !dragging ? document.Module.FindAt(pointer.Position) : null);
-
-        if (UpdateCanvasView(inChrome, overCanvas, pressed))
-        {
-            dragging = false;
-            return;
-        }
-
-        // An edge of what is selected, dragged to make it bigger, before the press is taken for anything else
-        if (!dragging && UpdateCanvasHandles(pointer, inLayout, overCanvas, pressed))
-            return;
-
-        if (pressed && overCanvas)
-        {
-            UIComponent? under = document.Module.FindAt(pointer.Position);
-
-            // A tab in the canvas opens its page, the way it would in a game, and selects the tabs
-            if (TabUnder(under, inLayout) is var (tabs, index))
-            {
-                tabs.Selected = index;
-                Select(document.OwnerOf(tabs) ?? tabs);
-                return;
-            }
-
-            // What stands in for the items of a container is the container as far as selecting goes
-            UIComponent? hit = ResolveClick(document.OwnerOf(under));
-
-            // Pressing on something that's selected already drags all of the selection, a click without a drag
-            // selects only it (see below)
-            clickedSelected = hit is not null && document.IsSelected(hit) && !Modifier() ? hit : null;
-            if (clickedSelected is null)
-                Pick(hit);
-
-            dragging = document.Selection.Count > 0 && (hit is null || document.IsSelected(hit));
-            dragMoved = false;
-            dragLast = inLayout;
-        }
-        else if (dragging && pointer.Down)
-        {
-            // On the grid if there is one, what the pointer moved past the last line of it waits for the next
-            Vector2 moved = Snapped(inLayout - dragLast);
-            if (moved != Vector2.Zero)
-            {
-                foreach (var selected in document.TopSelection())
-                    selected.Position += moved;
-
-                dragLast += moved;
-                dragMoved = true;
-                codeDirty = true;
-            }
-        }
-
-        if (released && dragging)
-        {
-            dragging = false;
-
-            if (!dragMoved && clickedSelected is { } only)
-                Select(only);
-            clickedSelected = null;
-
-            // The numbers in the inspector are from before the drag
-            inspectorDirty = true;
-        }
-    }
-
-    // Where the pointer was last said to be, in whole units of the layout, null for off the canvas
-    private (int X, int Y)? coordsShown;
-
-    /// <summary>Says where the pointer is in the layout, made into text only when it has moved a whole unit.</summary>
-    private void ShowCoords(bool over, Vector2 at)
-    {
-        (int X, int Y)? now = over ? ((int)MathF.Round(at.X), (int)MathF.Round(at.Y)) : null;
-        if (now == coordsShown)
-            return;
-
-        coordsShown = now;
-        coordsItem.Text = now is var (x, y) ? $"$(location) {x}, {y}" : string.Empty;
-    }
-
-    /// <summary>
-    /// Whether a point is on the canvas with nothing of the editor's own over it. The canvas is a hole in the editor its
-    /// layouts are seen through, the innermost thing of the editor there is the canvas itself, and anything else found
-    /// there (a little window like the settings, what is in it) is in front of it and has the pointer, not the layout under it.
-    /// </summary>
-    private bool PointerOnCanvas(Vector2 world)
-    {
-        if (!canvas.Bounds.Contains(chrome.ToLocal(world)))
-            return false;
-
-        UIComponent? over = chrome.FindAt(world);
-        return over is null || over == canvas;
     }
 
     private void Quit(int failures)
