@@ -64,6 +64,9 @@ internal sealed partial class HexScene
        to ask about later. They were locals of one method two thousand lines long, the sections are methods of their own
        now, in the files next to this one by what they are about, and they run in the order StartSelfTest calls them */
 
+    // The parts of the test this run is running, see SelfTestSuites
+    private HashSet<string> suitesAsked = [];
+
     private string testFolder = string.Empty, savedFile = string.Empty, dataFile = string.Empty, brokenFile = string.Empty, game = string.Empty;
     private UIComponent? stack, button, label, panel, box;
     private Vector2 grab, last;
@@ -75,6 +78,14 @@ internal sealed partial class HexScene
 
         testFolder = Path.GetFullPath(options.Workspace);
         savedFile = Path.Combine(testFolder, "selftest_menu.hor");
+        dataFile = Path.Combine(testFolder, "selftest_data.hor");
+        brokenFile = Path.Combine(testFolder, "selftest_broken.hor");
+
+        if (!AskedSuites(out HashSet<string> asked))
+        {
+            test.Check("self-test: the parts asked for are parts of it", () => false);
+            return;
+        }
 
         // The first layout has to have happened before there is anything to point at, and a window that starts
         // out maximised takes a moment to get there
@@ -82,44 +93,134 @@ internal sealed partial class HexScene
         test.WaitFor(() => Near(chrome.Root.Bounds.Width * compositor.UIScale, Engine.WindowManager.ViewportSize.X, 1), 3.0f);
         test.Settle(0.3f);
 
-        TestEditorItself(test);
-        TestAdding(test);
-        TestSelecting(test);
-        TestEditingProperties(test);
-        TestEntrances(test);
-        TestUndoing(test);
-        TestCanvas(test);
-        TestReordering(test);
-        TestColours(test);
-        TestSectionsAndKeys(test);
-        TestTemplates(test);
-        TestSavingAndOpening(test);
-        TestOwnLayout(test);
-        TestScrolling(test);
-        TestEditorSize(test);
-        TestLayoutDebugger(test);
-        TestMultipleSelection(test);
-        TestDesignSize(test);
-        TestTabs(test);
-        TestClosingWithChanges(test);
-        TestDraggingEdges(test);
-        TestSettings(test);
-        TestCode(test);
-        TestValuesAndConsole(test);
-        TestDocs(test);
-        TestTable(test);
-        TestLayoutAsCode(test);
-        TestCompletion(test);
-        TestWorkspace(test);
-        TestClosingTabs(test);
-        TestHelpWindows(test);
-        TestConveniences(test);
-        TestEdits(test);
-        TestExtensions(test);
-        TestMoveEditor(test);
-        TestMoveEditorLayout(test);
-        TestExtensionTabs(test);
-        TestGarbage(test);
+        suitesAsked = asked;
+        foreach (var (name, _, run) in SelfTestSuites)
+        {
+            if (!asked.Contains(name))
+                continue;
+
+            test.Run(() => Console.WriteLine($"[Hex self-test] {name}"));
+            MakeTestFiles();
+            run(test);
+        }
+    }
+
+    /// <summary>
+    /// The parts of the self-test, in the order they run, any of them on its own with <c>--selftest name</c>. The
+    /// designer's is the slow one. A part that wants a file an earlier part makes gets a stand-in for it, see MakeTestFiles.
+    /// </summary>
+    private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
+    [
+        ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs, settings", test =>
+        {
+            TestEditorItself(test);
+            TestAdding(test);
+            TestSelecting(test);
+            TestEditingProperties(test);
+            TestEntrances(test);
+            TestUndoing(test);
+            TestCanvas(test);
+            TestReordering(test);
+            TestColours(test);
+            TestSectionsAndKeys(test);
+            TestTemplates(test);
+            TestSavingAndOpening(test);
+            TestOwnLayout(test);
+            TestScrolling(test);
+            TestEditorSize(test);
+            TestLayoutDebugger(test);
+            TestMultipleSelection(test);
+            TestDesignSize(test);
+            TestTabs(test);
+            TestClosingWithChanges(test);
+            TestDraggingEdges(test);
+            TestSettings(test);
+        }),
+        ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>
+        {
+            TestCode(test);
+            TestValuesAndConsole(test);
+            TestDocs(test);
+            TestTable(test);
+            TestLayoutAsCode(test);
+            TestCompletion(test);
+        }),
+        ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences", test =>
+        {
+            // The explorer is the side bar of a file of code, which the code's part leaves on screen
+            OnCode(test, dataFile);
+            TestWorkspace(test);
+            TestClosingTabs(test);
+            TestHelpWindows(test);
+            TestConveniences(test);
+        }),
+        ("extensions", "editing files by their values, extensions, the move editor, their settings tabs", test =>
+        {
+            TestEdits(test);
+            TestExtensions(test);
+            TestMoveEditor(test);
+            TestMoveEditorLayout(test);
+            TestExtensionTabs(test);
+        }),
+        ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
+        {
+            // The first hover over a word makes what's kept for every hover after (the docs of the library), the first
+            // look at a file's code its values, none of which is garbage of a tick. After the code's part they're made
+            // already, on its own every sweep goes over its points once before it's measured
+            TestGarbage(test, warmUp: !suitesAsked.Contains("code"));
+        })
+    ];
+
+    /// <summary>A file on screen as its code, unless what's on screen is code already.</summary>
+    private void OnCode(HexPointerScript test, string path)
+    {
+        test.Run(() =>
+        {
+            if (document.IsText)
+                return;
+
+            Open(path);
+            SwitchView(HexView.Code);
+        });
+        test.Wait();
+    }
+
+    /// <summary>
+    /// The parts that were asked for, all of them when none were. One that doesn't exist ends the test with the list of
+    /// the ones that do, rather than a pass of nothing.
+    /// </summary>
+    private bool AskedSuites(out HashSet<string> asked)
+    {
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Select(suite => suite.Name)];
+        string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
+        if (unknown.Length == 0)
+            return true;
+
+        Console.WriteLine($"[Hex self-test] there is no {string.Join(", ", unknown)}, the parts are");
+        foreach (var (name, about, _) in SelfTestSuites)
+            Console.WriteLine($"[Hex self-test]   {name,-11} {about}");
+        return false;
+    }
+
+    // What a part finds in place of the layout the designer's part saves and the data the code's part writes, when it is
+    // run without them. Written only where the file isn't, so a whole run uses what the parts before it left
+    // The layout is written the way Hex writes it, one that isn't is changed as it opens and that isn't what's tested
+    private const string STAND_IN_LAYOUT = "// selftest_menu, laid out with Horizon.Hex.\n"
+        + "// Load it with UILayout.Load, every component is there under the name it has here.\n#define layout\n\n\n"
+        + "let stack1 = compositor.stack({\n    padding: vec(16, 16, 16, 16),\n    color: vec(0.1, 0.12, 0.17, 0.9)\n});\n\n"
+        + "let start_button = compositor.button({\n    parent: stack1,\n    size: vec(40, 0),\n    label: \"Fight\"\n});\n\n"
+        + "let panel1 = compositor.panel({\n    pos: vec(225.88235, -112.94118),\n    size: vec(240, 160),\n    color: vec(0.1, 0.12, 0.17, 0.9)\n});\n";
+    private const string TEST_DATA = "let speed = 3;\r\nlet names = {\r\n    first: \"one\"\r\n};\r\n";
+
+    private void MakeTestFiles()
+    {
+        selfTest!.Run(() =>
+        {
+            if (!System.IO.File.Exists(savedFile))
+                System.IO.File.WriteAllText(savedFile, STAND_IN_LAYOUT);
+            if (!System.IO.File.Exists(dataFile))
+                System.IO.File.WriteAllText(dataFile, TEST_DATA);
+        });
     }
 
     /* Helpers of the sections */

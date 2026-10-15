@@ -10,7 +10,8 @@ namespace Horizon.Hex;
 // The self test, how much garbage sweeping the pointer over the editor makes.
 internal sealed partial class HexScene
 {
-    private void TestGarbage(HexPointerScript test)
+    /// <param name="warmUp">Whether every sweep goes over its points once before it's measured, for a run of this on its own.</param>
+    private void TestGarbage(HexPointerScript test, bool warmUp = false)
     {
         /* Garbage. The pointer swept over every part of the editor, the designer's and the code's, as somebody moving the
            mouse about would, and what the editor's thread allocated for it counted. A frame of it used to make a
@@ -19,6 +20,17 @@ internal sealed partial class HexScene
         long sweptFrom = 0, sweptTicks = 0;
         void Sweep(params Func<Vector2>[] over)
         {
+            if (warmUp)
+            {
+                foreach (Func<Vector2> point in over)
+                {
+                    test.Hover(point);
+                    test.Wait();
+                }
+
+                test.Settle(0.5f);
+            }
+
             test.Run(() =>
             {
                 sweptFrom = GC.GetAllocatedBytesForCurrentThread();

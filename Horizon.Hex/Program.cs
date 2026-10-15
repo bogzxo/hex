@@ -35,7 +35,8 @@ internal class Program
     /// <item><c>--check a.hor folder</c> opens every layout named (or in the folders named) and prints whether it writes back the same.</item>
     /// <item><c>--exercise</c> also edits, saves, reopens and undoes every layout that is checked. It writes over them, so point it at copies.</item>
     /// <item><c>--scale 1.25</c> draws the editor that much bigger, rather than as big as it was left the last time (the selector in its toolbar).</item>
-    /// <item><c>--selftest</c> has the editor click through itself and print how that went, <c>--wheel</c> makes it wait for the real mouse wheel as well.</item>
+    /// <item><c>--selftest</c> has the editor click through itself and print how that went, <c>--wheel</c> makes it wait for the real mouse wheel as well.
+    /// <c>--selftest code</c> (or layout, workspace, extensions, garbage, any of them) runs only those parts of it.</item>
     /// <item><c>--watch</c> has the self-test go slowly enough to follow by eye, left to itself it is over in a few seconds.</item>
     /// <item><c>--view table</c> brings the file of <c>--open</c> up in a view of its own, design, code or table, once it can be.</item>
     /// <item><c>--console "moves.jab" "len(keys(moves))"</c> runs lines in the HIDL console once the file's values are in.</item>
@@ -74,6 +75,7 @@ internal class Program
             Watch: args.Contains(ARGUMENT_WATCH),
             View: ValueOf(args, ARGUMENT_VIEW),
             Console: ValuesOf(args, ARGUMENT_CONSOLE) is { Length: > 0 } lines ? lines : null,
+            Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);
 

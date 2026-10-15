@@ -15,4 +15,5 @@ namespace Horizon.Hex;
 /// <param name="Watch">Whether the self-test goes slowly enough to follow, it is over in a few seconds otherwise.</param>
 /// <param name="View">Which view the file that is opened comes up in, design, code or table, null for its usual.</param>
 /// <param name="Console">Lines to run in the HIDL console once the file's values are in, the console up with them.</param>
-internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null);
+/// <param name="Suites">Which parts of the self-test to run (layout, code, workspace, extensions, garbage), empty for all of them.</param>
+internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null);

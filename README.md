@@ -121,5 +121,9 @@ dotnet build Hex.sln
 Horizon.Hex/bin/Debug/net10.0/Horizon.Hex --selftest --exit --size 1600x900
 ```
 
+The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`
+(the designer, the minute and more of it), `code`, `workspace`, `extensions` and `garbage`, as many as you like. A part
+that wants a file an earlier part makes is given a stand-in for it.
+
 The engine is a submodule at `horizon/` (on its `development`), with the language inside it. Work on
 `development`, `master` is what's released.
