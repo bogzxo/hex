@@ -106,12 +106,12 @@ internal sealed partial class HexScene
 
     /* Folders in and out */
 
-    /// <summary>Asks for a folder, the shell's picker of folders where there is one and a line to type it into otherwise.</summary>
+    /// <summary>Asks for a folder, Explorer's picker of folders where there is one, opened where the explorer is, and a line to type it into otherwise.</summary>
     private void AskFolder(Action<string> picked)
     {
         if (OperatingSystem.IsWindows() && !options.SelfTest)
         {
-            Ask(HexDialogs.PickFolder(WindowHandle), picked);
+            Ask(HexDialogs.PickFolder(browseDirectory, WindowHandle), picked);
             return;
         }
 
