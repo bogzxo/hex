@@ -11,10 +11,11 @@ namespace Horizon.Hex;
 /// </summary>
 internal sealed class HexShortcuts
 {
-    private sealed class Shortcut(Key key, bool control, bool? shift, bool whileTyping, Action pressed)
+    private sealed class Shortcut(Key key, bool control, bool? shift, bool alt, bool whileTyping, Action pressed)
     {
         public Key Key { get; } = key;
         public bool Control { get; } = control;
+        public bool Alt { get; } = alt;
 
         // Null for "don't care", which is what the arrows want (shift makes them go further, they still go)
         public bool? Shift { get; } = shift;
@@ -30,9 +31,10 @@ internal sealed class HexShortcuts
     /// </summary>
     /// <param name="control">Whether control has to be held as well. A key that doesn't want it doesn't go off while it is held.</param>
     /// <param name="whileTyping">Whether it also goes off while something is being typed into. Delete and the arrows mean something else in a text box.</param>
-    public void Add(Key key, Action pressed, bool control = false, bool whileTyping = false, bool? shift = null)
+    /// <param name="alt">Whether alt has to be held as well, Ctrl+Alt+B being another key than Ctrl+B.</param>
+    public void Add(Key key, Action pressed, bool control = false, bool whileTyping = false, bool? shift = null, bool alt = false)
     {
-        shortcuts.Add(new Shortcut(key, control, shift, whileTyping, pressed));
+        shortcuts.Add(new Shortcut(key, control, shift, alt, whileTyping, pressed));
     }
 
     /// <summary>
@@ -43,10 +45,11 @@ internal sealed class HexShortcuts
     {
         bool control = keyboard.IsDown(Key.ControlLeft) || keyboard.IsDown(Key.ControlRight);
         bool shift = keyboard.IsDown(Key.ShiftLeft) || keyboard.IsDown(Key.ShiftRight);
+        bool alt = keyboard.IsDown(Key.AltLeft) || keyboard.IsDown(Key.AltRight);
 
         foreach (Shortcut shortcut in shortcuts)
         {
-            bool down = keyboard.IsDown(shortcut.Key) && control == shortcut.Control && (shortcut.Shift is not { } wanted || wanted == shift);
+            bool down = keyboard.IsDown(shortcut.Key) && control == shortcut.Control && alt == shortcut.Alt && (shortcut.Shift is not { } wanted || wanted == shift);
             bool pressed = down && !shortcut.WasDown;
             shortcut.WasDown = down;
 

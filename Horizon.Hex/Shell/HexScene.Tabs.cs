@@ -9,31 +9,6 @@ internal sealed partial class HexScene
 {
     private TabStrip docTabs = null!;
 
-    // The greeting after Hex in the title bar, one of hello_dolly.hor's, picked as the editor starts
-    private const string GREETINGS_FILE = "Assets/hex/hello_dolly.hor";
-    private readonly string greeting = PickGreeting();
-
-    /// <summary>One of the greetings of hello_dolly.hor at random, nothing if there is no file or nothing in it.</summary>
-    private static string PickGreeting()
-    {
-        try
-        {
-            if (!File.Exists(GREETINGS_FILE))
-                return string.Empty;
-
-            var runtime = new Horizon.HIDL.HIDLRuntime { Output = null };
-            var (success, _) = runtime.Evaluate(File.ReadAllText(GREETINGS_FILE));
-            if (!success || runtime.UserScope.Lookup("welcome_greetings") is not Horizon.HIDL.Runtime.ListValue { Count: > 0 } greetings)
-                return string.Empty;
-
-            return greetings[Random.Shared.Next(greetings.Count)] is Horizon.HIDL.Runtime.StringValue { Value: var said } ? said : string.Empty;
-        }
-        catch (Exception)
-        {
-            // A greeting that won't come is no reason for the editor not to
-            return string.Empty;
-        }
-    }
     private Breadcrumbs crumbs = null!;
 
     // The breadcrumbs' pieces and what a click on each does
@@ -89,8 +64,8 @@ internal sealed partial class HexScene
 
         // The window says what is open, with a dot while it has changes, VS Code's way
         string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
-        ((TitleBar)top).Title = $"{name}{(document.Modified || document.CodeEdited ? " *" : string.Empty)}  -  Hex{(greeting.Length > 0 ? $" ({greeting})" : string.Empty)}";
-        Engine.WindowManager.Title = $"{name} - Hex";
+        ((TitleBar)top).Title = $"{name}{(document.Modified || document.CodeEdited ? " *" : string.Empty)}  -  Hex {HexVersion}{(titleNote.Length > 0 ? $" ({titleNote})" : string.Empty)}";
+        Engine.WindowManager.Title = $"{name} - Hex {HexVersion}";
     }
 
     private void ShowTabMenu(HexDocument tab)

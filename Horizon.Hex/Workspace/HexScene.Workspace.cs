@@ -20,7 +20,7 @@ internal sealed partial class HexScene
     private bool workspaceRestored;
 
     // The rows of the explorer, for the self-test to find
-    private readonly List<(string Path, bool IsFolder, Button Row)> explorerRows = [];
+    private readonly List<(string Path, bool IsFolder, UITreeItem Row)> explorerRows = [];
 
     // The most rows the explorer lists, a folder of thousands of files would have the list take seconds to make
     private const int MAX_EXPLORER_ROWS = 4000;
@@ -143,7 +143,7 @@ internal sealed partial class HexScene
         browsing = true;
         results = null;
         treeDirty = true;
-        vocabulary = null;
+        ForgetVocabulary();
         KeepWorkspace();
         Say($"added {folder}, the workspace has {workspace.Folders.Count} folders");
     }
@@ -161,7 +161,7 @@ internal sealed partial class HexScene
             return;
 
         treeDirty = true;
-        vocabulary = null;
+        ForgetVocabulary();
         KeepWorkspace();
         Say($"{Path.GetFileName(folder)} is out of the workspace, nothing in it was touched");
     }
@@ -181,7 +181,7 @@ internal sealed partial class HexScene
         browsing = true;
         results = null;
         treeDirty = true;
-        vocabulary = null;
+        ForgetVocabulary();
 
         foreach (string file in workspace.OpenFiles.ToArray())
         {
@@ -216,7 +216,7 @@ internal sealed partial class HexScene
         workspace = new HexWorkspace();
         browsing = false;
         treeDirty = true;
-        vocabulary = null;
+        ForgetVocabulary();
         KeepWorkspace();
         Say("the workspace is closed, no folders");
     }
@@ -277,90 +277,6 @@ internal sealed partial class HexScene
     }
 
     /* The explorer */
-
-    private readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
-
-    /// <summary>The folders of the workspace as a tree, folders that are opened up showing what is in them.</summary>
-    private void RebuildExplorer()
-    {
-        treeTitle.Text = Said("side.explorer_of", ("workspace", workspace.Name.ToUpperInvariant()));
-        explorerRows.Clear();
-
-        var entries = new List<ExplorerEntry>();
-        foreach (string folder in workspace.Folders)
-            AddEntries(entries, folder, 0, root: true);
-
-        var items = layout.Populate(tree, entries.Count);
-        string? open = document.Path is { } path ? Path.GetFullPath(path) : null;
-
-        for (int i = 0; i < items.Count; i++)
-        {
-            ExplorerEntry entry = entries[i];
-            var row = items[i].Get<Button>("row");
-            var caption = items[i].Get<Label>("caption");
-            string name = Path.GetFileName(entry.Path.TrimEnd('\\', '/'));
-
-            if (entry.IsFolder)
-            {
-                bool expanded = workspace.Expanded.Contains(entry.Path);
-                caption.Text = $"$({(expanded ? "chevron-down" : "chevron-right")}) $({(expanded ? "folder-opened" : "folder")}) {Plain(name)}";
-                caption.Color = entry.IsRoot ? null : FolderColor;
-            }
-            else
-            {
-                caption.Text = $"$({FileIcon(entry.Path)}) {Plain(name)}";
-                caption.Color = IsEditable(entry.Path) ? null : DimColor;
-            }
-
-            caption.Position = new Vector2(10 + entry.Depth * 14, 0);
-            row.Selected = !entry.IsFolder && string.Equals(entry.Path, open, StringComparison.OrdinalIgnoreCase);
-            row.Tooltip = entry.Path;
-            row.OnPressed = () => ExplorerPressed(entry);
-            row.OnContextMenu = _ => ShowExplorerMenu(entry);
-            explorerRows.Add((entry.Path, entry.IsFolder, row));
-        }
-
-        if (entries.Count == 0)
-            Hint(tree, "no folders, File has Add folder");
-    }
-
-    private void AddEntries(List<ExplorerEntry> entries, string folder, int depth, bool root)
-    {
-        if (entries.Count >= MAX_EXPLORER_ROWS)
-            return;
-
-        entries.Add(new ExplorerEntry(folder, true, depth, root));
-        if (!workspace.Expanded.Contains(folder))
-            return;
-
-        try
-        {
-            foreach (string inside in Directory.GetDirectories(folder).Order(StringComparer.OrdinalIgnoreCase))
-            {
-                string name = Path.GetFileName(inside);
-                if (SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~"))
-                    continue;
-
-                AddEntries(entries, inside, depth + 1, root: false);
-            }
-
-            foreach (string file in Directory.GetFiles(folder).Order(StringComparer.OrdinalIgnoreCase))
-            {
-                string name = Path.GetFileName(file);
-                if (name.StartsWith("~syncthing~") || name.StartsWith('.') || name.Contains(".sync-conflict"))
-                    continue;
-                if (entries.Count >= MAX_EXPLORER_ROWS)
-                    return;
-
-                entries.Add(new ExplorerEntry(file, false, depth + 1, false));
-            }
-        }
-        catch (Exception)
-        {
-            // A folder that can't be read shows as one with nothing in it
-        }
-    }
-
     // The files the editor opens, .hor first of all, and anything else that is text by the look of its name
     private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -588,7 +504,7 @@ internal sealed partial class HexScene
         }
 
         tabsDirty = treeDirty = true;
-        vocabulary = null;
+        ForgetVocabulary();
         KeepWorkspace();
         Say($"{Path.GetFileName(full)} is in the trash");
     }

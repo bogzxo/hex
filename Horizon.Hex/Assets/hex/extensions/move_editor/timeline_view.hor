@@ -1,0 +1,183 @@
+// The timeline under the frame, where the phases are edited. A cell a frame coloured startup, active or recovery, the
+// phases as blocks over them with their names, the hit, cancel and commit frames as markers over those, and the status of
+// a phase as a band under the cells. Dragging the end of a block changes how long it is, dragging a marker moves it,
+// dragging a block onto another plays it there, and a click goes to a frame and picks its phase. A drag is shown on the
+// move as it goes and written to the file once it's let go of, one step to undo.
+
+let edits = include("edits.hor");
+
+let STARTUP = vec(0.35, 0.75, 0.45, 1.0);
+let ACTIVE = vec(1.0, 0.35, 0.35, 1.0);
+let RECOVERY = vec(0.35, 0.55, 0.95, 1.0);
+let NEUTRAL = vec(0.45, 0.47, 0.52, 1.0);
+let PICKED = vec(0.95, 0.75, 0.3, 1.0);
+let DIM = vec(1.0, 1.0, 1.0, 0.35);
+let MARKERS = { hit: vec(1, 1, 1, 0.95), cancel: vec(0.5, 0.9, 1.0, 0.95), commit: vec(1.0, 0.6, 0.3, 0.95) };
+
+// Where the rows are, the drawing's middle being 0 and up being up
+let CELLS = { bottom: -12, top: 12 };
+let BLOCKS = { bottom: 16, top: 30 };
+let MARKS = { bottom: 32, top: 42 };
+let STATUS = { bottom: -22, top: -16 };
+
+// How near the end of a block the pointer has to be to take hold of it, in units of the drawing
+let GRAB = 4;
+
+// @doc Where the cells go, { left, cell, count }, null for a move with no frames
+func geometry(state) {
+    let count = len(state.laid.frames);
+    if (count == 0) { return null; }
+    let width = state.ui.get("timeline").view_size.x;
+    let cell = math.min(22, math.max(4, (width - 20) / count));
+    return { left: -cell * count / 2, cell: cell, count: count };
+}
+
+func cell_x(at, index) { return at.left + index * at.cell; }
+
+func draw(state) {
+    let timeline = state.ui.get("timeline");
+    timeline.clear();
+    let at = geometry(state);
+    if (at == null) { return; }
+
+    draw_cells(state, timeline, at);
+    for (phase in state.laid.phases) { draw_phase(state, timeline, at, phase); }
+}
+
+func draw_cells(state, timeline, at) {
+    for (i in range(at.count)) {
+        let frame = state.laid.frames[i];
+        let x0 = cell_x(at, i);
+        let x1 = x0 + at.cell - 1;
+        let colour = frame.kind == "startup" ? STARTUP : frame.kind == "active" ? ACTIVE : frame.kind == "recovery" ? RECOVERY : NEUTRAL;
+        timeline.rect(vec(x0, CELLS.bottom), vec(x1, CELLS.top), colour);
+        if (i == state.frame) { timeline.frame(vec(x0 - 1, CELLS.bottom - 1), vec(x1 + 1, CELLS.top + 1), 2, vec(1, 1, 1, 1)); }
+    }
+}
+
+// A phase's block, its name, where its art would end it, its markers and its status
+func draw_phase(state, timeline, at, phase) {
+    let x0 = cell_x(at, phase.first);
+    let x1 = cell_x(at, phase.first + phase.length) - 1;
+    let picked = phase.name == state.phase;
+    timeline.rect(vec(x0, BLOCKS.bottom), vec(x1, BLOCKS.top), picked ? vec(PICKED.x, PICKED.y, PICKED.z, 0.35) : vec(1, 1, 1, 0.08));
+    timeline.frame(vec(x0, BLOCKS.bottom), vec(x1, BLOCKS.top), 1, picked ? PICKED : DIM);
+    timeline.rect(vec(x1 - 1, BLOCKS.bottom), vec(x1 + 1, BLOCKS.top), picked ? PICKED : DIM);
+
+    let note = phase.loops ? " (loops)" : phase.waits ? " (until)" : "";
+    timeline.text(`{phase.name}{note}`, vec(x0 + 3, BLOCKS.bottom + 2), 0.095, vec(1, 1, 1, 0.85));
+
+    let written = state.moves[state.move].move.phases[phase.name];
+    for (marker in ["hit", "cancel", "commit"]) {
+        let frame = written[marker];
+        if (frame != null) {
+            let x = cell_x(at, phase.first + frame);
+            timeline.rect(vec(x, MARKS.bottom), vec(x + at.cell - 1, MARKS.top), MARKERS[marker]);
+        }
+    }
+
+    if (written.status != null) {
+        let from = cell_x(at, phase.first + (written.status_frame ?? 0));
+        timeline.rect(vec(from, STATUS.bottom), vec(cell_x(at, at.count) - 1, STATUS.top), vec(0.8, 0.5, 1.0, 0.6));
+        timeline.text(written.status, vec(from + 2, STATUS.bottom - 10), 0.085, vec(0.8, 0.5, 1.0, 0.9));
+    }
+}
+
+/* The pointer */
+
+func pointer(state, e) {
+    let at = geometry(state);
+    if (at == null || state.move == null) { return; }
+
+    // A drag keeps where the cells were as it started, they're centred and a phase growing under the pointer moved them
+    // out from under it, and the drag ran away to twice the length
+    if (e.kind == "down") {
+        state.timeline_drag = merge(what_is_at(state, at, e.at), { at: at });
+        if (state.timeline_drag.kind == "frame") { go_to(state, at, e.at.x); }
+    } else if (e.kind == "drag" && state.timeline_drag != null) {
+        drag_to(state, state.timeline_drag.at, e.at);
+    } else if (e.kind == "up" && state.timeline_drag != null) {
+        let drag = state.timeline_drag;
+        state.timeline_drag = null;
+        let_go(state, drag.at, drag, e.at);
+    }
+}
+
+// What the pointer took hold of, the end of a block, a marker, a block, or a frame
+func what_is_at(state, at, point) {
+    for (phase in state.laid.phases) {
+        let x0 = cell_x(at, phase.first);
+        let x1 = cell_x(at, phase.first + phase.length);
+        if (point.y >= BLOCKS.bottom && point.y <= MARKS.top && math.abs(point.x - x1) <= GRAB) {
+            return { kind: "end", phase: phase.name, first: phase.first, frames: phase.length };
+        }
+
+        let written = state.moves[state.move].move.phases[phase.name];
+        for (marker in ["hit", "cancel", "commit"]) {
+            let frame = written[marker];
+            if (frame != null && point.y >= MARKS.bottom && point.y <= MARKS.top + 4) {
+                let x = cell_x(at, phase.first + frame);
+                if (point.x >= x - 2 && point.x <= x + at.cell + 2) { return { kind: "marker", marker: marker, phase: phase.name, first: phase.first, frames: phase.length }; }
+            }
+        }
+
+        if (point.y >= BLOCKS.bottom && point.y <= BLOCKS.top && point.x >= x0 && point.x < x1) {
+            state.phase = phase.name;
+            return { kind: "block", phase: phase.name };
+        }
+    }
+    return { kind: "frame" };
+}
+
+func frame_under(at, x) { return math.clamp(math.floor((x - at.left) / at.cell), 0, at.count - 1); }
+
+func go_to(state, at, x) {
+    state.frame = frame_under(at, x);
+    state.phase = state.laid.frames[state.frame].phase_name;
+    state.refresh();
+}
+
+// A drag shown on the move as it goes, the loaded move changed and laid out again
+func drag_to(state, at, point) {
+    let drag = state.timeline_drag;
+    let phase = drag.phase == null ? null : state.moves[state.move].move.phases[drag.phase];
+    if (drag.kind == "frame") {
+        go_to(state, at, point.x);
+    } else if (drag.kind == "end") {
+        phase.frames = math.max(1, math.round((point.x - cell_x(at, drag.first)) / at.cell));
+        state.relayout();
+    } else if (drag.kind == "marker") {
+        phase[drag.marker] = math.clamp(frame_under(at, point.x) - drag.first, 0, drag.frames - 1);
+        state.relayout();
+    }
+}
+
+// Let go of, what the drag came to written to the file
+func let_go(state, at, drag, point) {
+    if (drag.kind == "end") {
+        let phase = state.moves[state.move].move.phases[drag.phase];
+        edits.set_phase_key(state, state.move, drag.phase, "frames", phase.frames);
+    } else if (drag.kind == "marker") {
+        let phase = state.moves[state.move].move.phases[drag.phase];
+        edits.set_phase_key(state, state.move, drag.phase, drag.marker, phase[drag.marker]);
+    } else if (drag.kind == "block") {
+        drop_block(state, at, drag.phase, point);
+    } else {
+        state.refresh();
+    }
+}
+
+// A block dropped on another plays where that one did
+func drop_block(state, at, name, point) {
+    let onto = state.laid.frames[frame_under(at, point.x)].phase_name;
+    if (onto == name) {
+        state.refresh();
+        return;
+    }
+
+    let order = keys(state.moves[state.move].move.phases);
+    let to = order.index_of(onto);
+    order.remove_at(order.index_of(name));
+    order.insert(to, name);
+    edits.reorder_phases(state, state.move, order);
+}

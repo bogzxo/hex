@@ -47,6 +47,13 @@ internal sealed class HexSettings
     /// <summary>The workspace file that was open last, empty for one that was never saved (kept next to the editor instead).</summary>
     public string LastWorkspace = string.Empty;
 
+    // The extensions that are switched off, by the name of their folder
+    public readonly HashSet<string> DisabledExtensions = new(StringComparer.OrdinalIgnoreCase);
+
+    // What every extension was told on its page of the settings, by the name of its folder and then of the setting.
+    // Kept for one that isn't there any more as well, it might come back
+    public readonly Dictionary<string, Dictionary<string, IRuntimeValue>> ExtensionSettings = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly string? path;
 
     /// <param name="path">Where it is kept, null for settings that are never read or written (the editor testing itself).</param>
@@ -78,6 +85,20 @@ internal sealed class HexSettings
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
             if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
+            if (values.TryGetValue("disabled_extensions", out var disabled) && disabled is ListValue off)
+            {
+                foreach (IRuntimeValue name in off.Items)
+                    if (name is StringValue { Value: { } named }) DisabledExtensions.Add(named);
+            }
+
+            if (values.TryGetValue("extension_settings", out var told) && told is ObjectValue byExtension)
+            {
+                foreach (var (id, its) in byExtension.Properties)
+                {
+                    if (its is ObjectValue settingsOf)
+                        ExtensionSettings[id] = new Dictionary<string, IRuntimeValue>(settingsOf.Properties, StringComparer.OrdinalIgnoreCase);
+                }
+            }
         }
         catch (Exception e)
         {
@@ -116,7 +137,18 @@ internal sealed class HexSettings
         text.AppendLine($"    code_zoom: {Write(CodeZoom)},");
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");
         text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
-        text.AppendLine($"    last_workspace: {HIDLWriter.Write(new StringValue(LastWorkspace.Replace('\\', '/')))}");
+        text.AppendLine($"    last_workspace: {HIDLWriter.Write(new StringValue(LastWorkspace.Replace('\\', '/')))},");
+        text.AppendLine($"    disabled_extensions: {HIDLWriter.Write(Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))},");
+        text.AppendLine("    extension_settings: {");
+        var ids = ExtensionSettings.Where(told => told.Value.Count > 0).Select(told => told.Key).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        for (int i = 0; i < ids.Count; i++)
+        {
+            var its = ExtensionSettings[ids[i]];
+            string each = string.Join(", ", its.Keys.Order(StringComparer.OrdinalIgnoreCase).Select(key => $"{key}: {HIDLWriter.Write(its[key])}"));
+            text.AppendLine($"        {ids[i]}: {{ {each} }}{(i < ids.Count - 1 ? "," : string.Empty)}");
+        }
+
+        text.AppendLine("    }");
         text.AppendLine("};");
 
         try

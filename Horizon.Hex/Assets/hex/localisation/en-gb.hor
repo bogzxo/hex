@@ -26,6 +26,8 @@ let strings = {
         play_tip: "Plays the entrances of the whole layout from the start, the way loading it does (F5)",
         run: "Run",
         run_tip: "Runs the file and lists what it declares in the output (F5)",
+        table: "Table",
+        table_tip: "What the file comes to as a table, an object of objects a row each, a file of texts with its languages side by side (F7)",
         find: "Find in every file (Ctrl+Shift+F)",
         name_placeholder: "name of the layout",
         name_tip: "What the layout is called, which is the name of its file"
@@ -37,6 +39,7 @@ let strings = {
         search: "Search, what was found in every file (Ctrl+Shift+F)",
         outline: "Outline, what the file declares (Ctrl+Shift+O)",
         design: "The designer's toolbox, components and layers (Ctrl+Shift+O)",
+        extensions: "Extensions, HIDL that drives Hex",
         settings: "Settings (Ctrl+,)"
     },
 
@@ -56,13 +59,73 @@ let strings = {
     panel: {
         problems: "$(error) PROBLEMS",
         problems_count: "$(error) PROBLEMS  {count}",
-        output: "$(output) OUTPUT"
+        output: "$(output) OUTPUT",
+        console: "$(terminal) HIDL",
+        console_placeholder: "HIDL to run in what the file came to, moves.jab or len(keys(strings))",
+        console_tip: "Runs in what the file on screen came to the last time it ran. Enter runs it, Up and Down go back through what was typed"
+    },
+
+    // The console, the third page of the panel
+    console: {
+        welcome: "Type HIDL and press enter, it runs in what the file on screen comes to. What it declares stays for the next lines.",
+        busy: "the console is still running the last line"
+    },
+
+    // What Hex says is wrong with a file from what it comes to
+    lint: {
+        typo: "only {name} has {key}, {count} of the {of} next to it have {meant}, a typo?",
+        no_file: "there is no {path} from here or any folder over it"
+    },
+
+    // A file of code as a table
+    table: {
+        nothing: "nothing in this file is a table, an object of objects or a let strings",
+        key: "key",
+        missing: "missing",
+        missing_in: "{language} hasn't got this one",
+        shown: "{file} as a table, F7 goes back to its code, a double click edits a value written as itself"
+    },
+
+    // What Hex opens on when nothing is open
+    welcome: {
+        title: "Hex",
+        subtitle: "the custom IDE of HIDL & Horizon, {version}\nFeatures a proper code driven WYSIWYG hybrid layout editor.",
+        start: "Start",
+        new_layout: "A new layout",
+        open_file: "Open a file...",
+        open_folder: "Open a folder...",
+        commands: "Every command (Ctrl+Shift+P)",
+        help: "Help",
+        keys: "The keys",
+        language: "HIDL, the language",
+        changes: "What changed",
+        recent: "Worked on lately",
+        no_recent: "nothing yet"
     },
 
     // The column on the right
     properties: {
         title: "PROPERTIES",
-        file: "FILE"
+        file: "VALUES",
+        hide: "puts the side away to the right (Ctrl+Alt+B), View brings it back"
+    },
+
+    // The column on the right for code, what the file comes to when it is run
+    values: {
+        running: "running it...",
+        summary: "{count} declared, ran in {time} ms",
+        nothing: "it declares nothing, a let at the top of the file shows up here",
+        too_many: "and more, open less of it",
+        not_hidl: "not HIDL, there is nothing to run",
+        layout: "a layout, what it comes to is its components, F7 for the designer",
+        copy_path: "Copy the path",
+        copy_value: "Copy the value as HIDL",
+        in_console: "Look at it in the console",
+        worked_out: "that value is worked out, change it in the code (a double click edits a value written as itself)",
+        elsewhere: "that value is written in another file, it is open now",
+        behind: "the values are a moment behind the code, try again once they have caught up",
+        not_a_value: "{text} isn't a value of HIDL, nothing was changed",
+        changed: "the code says {text} there now, Ctrl+Z puts it back"
     },
 
     // The search view before anything was looked for
@@ -133,9 +196,20 @@ let strings = {
         extensions: {
             page: [
                 "## Extensions",
-                "Work in progress. One day Hex will take extensions of its own here."
+                "HIDL that drives Hex. A folder with an `extension.hor` in it, the ones that come with Hex are in `Assets/hex/extensions` and your own go in an `extensions` folder next to Hex. Switched on, one starts straight away, switched off it stops what it did that Hex can take back."
             ]
         }
+    },
+
+    // Extensions, said about in the output and on their page of the settings
+    extensions: {
+        failed: "the extension {name} went wrong and is stopped, {why}",
+        a_path: "a path, absolute or from where the extension says",
+        none: "no extensions, put a folder with an extension.hor in it in the extensions folder next to Hex",
+        by: "by {author}",
+        built_in: "comes with Hex",
+        own: "yours, from the extensions folder",
+        open: "Extensions"
     },
 
     // The windows of the Help menu
@@ -144,6 +218,22 @@ let strings = {
         page: [
             "# What changed",
             "The newest first. Hex is {version}.",
+            "",
+            "## 0.2.0, in the works",
+            "- The right side of a file of code is what it comes to, run as it is typed, as a tree, a click goes to where a value was written",
+            "- What goes wrong running a file is underlined where it went wrong, and the comment over a key is its tooltip",
+            "- The HIDL console under the editor, a line run in what the file came to",
+            "- Extensions, HIDL that drives Hex, switched on and off in the settings. Hello Dolly is the first",
+            "- The outline, the explorer and search are trees that open and close, with guides and icons by what things are",
+            "- The explorer reads a folder once and watches it, F8 and finding in files don't freeze Hex any more...",
+            "- Cards in the corner for what the status bar can't hold, a welcome page when nothing is open",
+            "- The tabs of the panel under the editor can be read...",
+            "- HIDL has ?? and ?., templates in backticks, merge, and errors that say their line",
+            "- A file of moves or characters is a table too (F7), a row each and a column for every key, a file of texts with its languages side by side",
+            "- A value written as itself is edited where it is shown, in the values or the table, and goes into the code in its place",
+            "- A key only one move has that is a letter off one the others have is underlined, and so is a path to a file that isn't there",
+            "- Every mistake in a file is underlined, not only the first^.^",
+            "- The row of buttons under the menus is gone, what a type of file can do is at the right end of its tabs ;)",
             "",
             "## 0.1.0",
             "- The close button asks once about unsaved files and can be answered, it used to ask again every moment",

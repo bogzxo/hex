@@ -67,11 +67,18 @@ internal sealed partial class HexScene
                 ? "$(layout) **#define layout**\n\nThe file is a layout, Hex opens it with its designer, which writes the whole file anew every time it is saved from there."
                 : $"$(symbol-constant) **{word}**, a directive. Read before the rest of the file, `defined(\"name\")` asks after a name.";
 
-        // A name made in this file, or in another of the workspace
+        // A name made in this file, with what it is documented as wherever that is
         if (FindDeclaration(editor.Text, word) is { } declared)
         {
             string declaration = editor.Document.LineAt(declared.Line).Trim();
-            return $"$(symbol-variable) **{word}**, made on line {declared.Line + 1}\n\n```\n{Shorten(declaration, 120)}\n```";
+            return $"$(symbol-variable) **{word}**, made on line {declared.Line + 1}\n\n```\n{Shorten(declaration, 120)}\n```{DocHint(word)}";
+        }
+
+        // Made somewhere else, an included file or anywhere in the workspace, or a key of an object, and documented there
+        if (DocOf(word) is { } doc)
+        {
+            string icon = after.StartsWith(':') || before.EndsWith('.') ? "symbol-field" : "symbol-variable";
+            return $"$({icon}) **{word}**\n\n{Literal(doc.Doc)}{(doc.Where is { } where ? $"\n\n*{where}*" : string.Empty)}";
         }
 
         return null;

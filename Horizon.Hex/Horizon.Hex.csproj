@@ -7,7 +7,7 @@
     <OutputType>Exe</OutputType>
 
     <!-- Hex's own version, what About says and the changelog (Help, What changed) goes up to -->
-    <Version>0.1.0</Version>
+    <Version>0.2.5</Version>
 
     <!-- The dialogs for opening and saving a layout are asked for from Windows directly, see HexDialogs.cs -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

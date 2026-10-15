@@ -1,0 +1,117 @@
+// The move editor's view of a file of moves. The fighter and its moves down the left, the frame, the phases along the
+// timeline and the art of the phase under it in the middle, and on the right tabs for the move, the phase, the red box,
+// the frame data and the inputs. The extension sizes the columns to the room the view has (columns.hor) and fills the
+// rest in (panels.hor, frame_view.hor, timeline_view.hor).
+#define layout
+
+let root = compositor.stack({
+    anchor: "top_left",
+    pivot: "top_left",
+    padding: vec(10, 8, 10, 8),
+    spacing: 10,
+    direction: "horizontal"
+});
+
+/* The left column, the fighter, its moves and what's done to them */
+
+let left = compositor.stack({ parent: root, anchor: "top", pivot: "top", spacing: 6 });
+
+let fighter_title = compositor.label({ parent: left, anchor: "left", pivot: "left", text: "FIGHTER", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1), align: "left" });
+let fighter = compositor.dropdown({ parent: left, size: vec(230, 28), options: ["none"], text_scale: 0.13 });
+
+let moves_title = compositor.label({ parent: left, anchor: "left", pivot: "left", text: "MOVES", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1), align: "left" });
+let filter_row = compositor.stack({ parent: left, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let group = compositor.dropdown({ parent: filter_row, size: vec(96, 26), options: ["all", "attacks", "specials", "movement", "the game's"], text_scale: 0.12, tooltip: "which of its moves are listed" });
+let filter = compositor.textbox({ parent: filter_row, size: vec(130, 26), text_scale: 0.12, placeholder: "filter", tooltip: "only the moves with this in their name" });
+
+let moves = compositor.list({ parent: left, size: vec(230, 0), rows: 14, text_scale: 0.125 });
+let written_in = compositor.label({ parent: left, size: vec(230, 0), text: "", text_scale: 0.11, color: vec(0.58, 0.6, 0.66, 1), wrap: true, markdown: true, align: "top_left" });
+
+let name_row = compositor.stack({ parent: left, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let move_name = compositor.textbox({ parent: name_row, size: vec(130, 26), text_scale: 0.12, placeholder: "a name", tooltip: "the name of a new move, or what Rename calls the one selected" });
+let template = compositor.dropdown({ parent: name_row, size: vec(96, 26), options: ["jab"], text_scale: 0.12, tooltip: "what a new move starts out as" });
+
+let move_buttons = compositor.stack({ parent: left, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal" });
+let new_move = compositor.button({ parent: move_buttons, size: vec(56, 26), icon: "add", label: "New", lbl_scale: 0.12, style: "button_flat", tooltip: "a new move out of the template, named what's typed, after the one selected" });
+let duplicate_move = compositor.button({ parent: move_buttons, size: vec(56, 26), icon: "copy", label: "Copy", lbl_scale: 0.12, style: "button_flat", tooltip: "a copy of the move selected, named what's typed" });
+let rename_move = compositor.button({ parent: move_buttons, size: vec(62, 26), icon: "edit", label: "Name", lbl_scale: 0.12, style: "button_flat", tooltip: "renames the move to what's typed, and every reroute to it in every file of the fighter" });
+let delete_move = compositor.button({ parent: move_buttons, size: vec(52, 26), icon: "trash", lbl_scale: 0.12, style: "button_flat", tooltip: "takes the move out, a second press to be sure" });
+
+let save = compositor.button({ parent: left, anchor: "left", pivot: "left", size: vec(230, 28), icon: "save", label: "Save the hitboxes", lbl_scale: 0.13, style: "button_flat", tooltip: "into Assets/data/hitboxes, the way the game reads them. Saving the move file (Ctrl+S) saves them too" });
+let fight = compositor.button({ parent: left, anchor: "left", pivot: "left", size: vec(230, 28), icon: "run", label: "Fight!", lbl_scale: 0.13, style: "button_flat", tooltip: "saves, then starts Fighter2D straight into a fight as this fighter, against the dummy of the move editor's settings (Ctrl+,)" });
+let status = compositor.label({ parent: left, size: vec(230, 0), text: "", text_scale: 0.115, color: vec(0.58, 0.6, 0.66, 1), wrap: true, align: "top_left" });
+
+/* The middle, the frame, the timeline of the phases and the art of the phase */
+
+let middle = compositor.stack({ parent: root, anchor: "top", pivot: "top", spacing: 6 });
+
+let canvas = compositor.drawing({ parent: middle, size: vec(640, 400), color: vec(0.05, 0.055, 0.07, 1), tooltip: "Drag in the red box to move it, a corner to size it, nothing to draw one. The wheel zooms, the right button pans" });
+let timeline = compositor.drawing({ parent: middle, size: vec(640, 92), navigable: false, color: vec(0.08, 0.085, 0.11, 1), tooltip: "A block a phase, a cell a frame. Drag the end of a block to make the phase longer or shorter, drag a block onto another to move it, drag a marker (hit, cancel, commit) along. A click goes to a frame and picks its phase" });
+let strip = compositor.drawing({ parent: middle, size: vec(640, 60), navigable: false, color: vec(0.07, 0.075, 0.095, 1), tooltip: "The art of the phase picked, every frame of its animation. A click starts the phase there" });
+
+let controls = compositor.stack({ parent: middle, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let first_frame = compositor.button({ parent: controls, size: vec(32, 26), icon: "debug-step-back", lbl_scale: 0.13, style: "button_flat", tooltip: "the first frame (Home)" });
+let previous_frame = compositor.button({ parent: controls, size: vec(32, 26), icon: "chevron-left", lbl_scale: 0.13, style: "button_flat", tooltip: "a frame back (Left)" });
+let play = compositor.button({ parent: controls, size: vec(76, 26), icon: "play", label: "Play", lbl_scale: 0.13, style: "button_flat", tooltip: "plays the move at the fighter's frame rate (Space)" });
+let next_frame = compositor.button({ parent: controls, size: vec(32, 26), icon: "chevron-right", lbl_scale: 0.13, style: "button_flat", tooltip: "a frame on (Right)" });
+let last_frame = compositor.button({ parent: controls, size: vec(32, 26), icon: "debug-step-over", lbl_scale: 0.13, style: "button_flat", tooltip: "the last frame (End)" });
+let speed = compositor.selector({ parent: controls, size: vec(110, 26), options: ["full speed", "half", "a quarter"], text_scale: 0.12, tooltip: "how fast it plays" });
+
+let frame_info = compositor.label({ parent: middle, size: vec(640, 22), text_scale: 0.125, align: "left" });
+
+/* The right column, a tab for each of what there is to edit */
+
+let right = compositor.stack({ parent: root, anchor: "top", pivot: "top", spacing: 4, resize: "left", min_size: vec(240, 120), max_size: vec(680, 4000) });
+let tabs = compositor.tabs({ parent: right, size: vec(300, 500), tabs: ["Move", "Phase", "Hitbox", "Data", "Inputs"], text_scale: 0.12, spacing: 12 });
+
+// Move, every key of it in a form and where it goes after
+let move_scroll = compositor.scroll({ parent: tabs, size: vec(300, 460) });
+let move_page = compositor.stack({ parent: move_scroll, anchor: "top_left", pivot: "top_left", spacing: 6 });
+let move_head = compositor.label({ parent: move_page, size: vec(280, 0), text: "", text_scale: 0.125, wrap: true, markdown: true, align: "top_left" });
+let move_form = compositor.form({ parent: move_page, row_width: 280, caption_width: 104, text_scale: 0.12 });
+let reroute_form = compositor.form({ parent: move_page, row_width: 280, caption_width: 104, text_scale: 0.12 });
+
+// Phase, the one picked on the timeline
+let phase_scroll = compositor.scroll({ parent: tabs, size: vec(300, 460) });
+let phase_page = compositor.stack({ parent: phase_scroll, anchor: "top_left", pivot: "top_left", spacing: 6 });
+let phase_head = compositor.label({ parent: phase_page, size: vec(280, 0), text: "", text_scale: 0.125, wrap: true, markdown: true, align: "top_left" });
+let phase_buttons = compositor.stack({ parent: phase_page, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal" });
+let phase_before = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "arrow-left", style: "button_flat", tooltip: "a new phase before this one" });
+let phase_after = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "arrow-right", style: "button_flat", tooltip: "a new phase after this one" });
+let phase_copy = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "copy", style: "button_flat", tooltip: "a copy of this phase after it" });
+let phase_earlier = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "chevron-left", style: "button_flat", tooltip: "plays a phase sooner" });
+let phase_later = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "chevron-right", style: "button_flat", tooltip: "plays a phase later" });
+let phase_delete = compositor.button({ parent: phase_buttons, size: vec(30, 26), icon: "trash", style: "button_flat", tooltip: "takes the phase out" });
+let phase_name_row = compositor.stack({ parent: phase_page, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let phase_name = compositor.textbox({ parent: phase_name_row, size: vec(180, 26), text_scale: 0.12, placeholder: "its name" });
+let phase_rename = compositor.button({ parent: phase_name_row, size: vec(80, 26), icon: "edit", label: "Name", lbl_scale: 0.12, style: "button_flat", tooltip: "gives the phase the name typed" });
+let phase_form = compositor.form({ parent: phase_page, row_width: 280, caption_width: 104, text_scale: 0.12 });
+
+// Hitbox, the red box of the frame
+let box_scroll = compositor.scroll({ parent: tabs, size: vec(300, 460) });
+let box_page = compositor.stack({ parent: box_scroll, anchor: "top_left", pivot: "top_left", spacing: 6 });
+let box_title = compositor.label({ parent: box_page, size: vec(280, 0), text: "RED HITBOX, pixels of the frame from its middle", text_scale: 0.115, color: vec(0.58, 0.6, 0.66, 1), wrap: true, align: "top_left" });
+let box_form = compositor.form({ parent: box_page, row_width: 280, caption_width: 104, text_scale: 0.12 });
+let box_info = compositor.label({ parent: box_page, size: vec(280, 0), text: "", text_scale: 0.115, color: vec(0.58, 0.6, 0.66, 1), wrap: true, align: "top_left" });
+let box_buttons = compositor.stack({ parent: box_page, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let from_trace = compositor.button({ parent: box_buttons, size: vec(140, 28), icon: "wand", label: "From the trace", lbl_scale: 0.12, style: "button_flat", tooltip: "the hitbox the game traces off the art, on every active frame, to start from" });
+let delete_box = compositor.button({ parent: box_buttons, size: vec(90, 28), icon: "trash", label: "Delete", lbl_scale: 0.12, style: "button_flat", tooltip: "no red box, the move hits with the traced one again (Delete)" });
+let same_throughout = compositor.button({ parent: box_page, anchor: "left", pivot: "left", size: vec(260, 28), icon: "copy", label: "This box on every active frame", lbl_scale: 0.12, style: "button_flat" });
+let show_hurtbox = compositor.toggle({ parent: box_page, anchor: "left", pivot: "left", label: "the hurtbox (blue)", state: true, lbl_scale: 0.12 });
+let show_traced = compositor.toggle({ parent: box_page, anchor: "left", pivot: "left", label: "the traced hitbox (yellow)", state: true, lbl_scale: 0.12 });
+let show_onion = compositor.toggle({ parent: box_page, anchor: "left", pivot: "left", label: "the frames either side, faintly", state: false, lbl_scale: 0.12 });
+let show_path = compositor.toggle({ parent: box_page, anchor: "left", pivot: "left", label: "where the knockback sends them", state: true, lbl_scale: 0.12 });
+
+// Data, what the game works out of the move, and the fighter's moves side by side
+let data_scroll = compositor.scroll({ parent: tabs, size: vec(300, 460) });
+let data_page = compositor.stack({ parent: data_scroll, anchor: "top_left", pivot: "top_left", spacing: 6 });
+let data_text = compositor.label({ parent: data_page, size: vec(280, 0), text: "", text_scale: 0.12, wrap: true, markdown: true, align: "top_left" });
+let table_row = compositor.stack({ parent: data_page, anchor: "left", pivot: "left", spacing: 4, direction: "horizontal" });
+let sort_by = compositor.dropdown({ parent: table_row, size: vec(150, 26), options: ["by name", "by startup", "by on hit", "by on block", "by damage"], text_scale: 0.12, tooltip: "what the table of the fighter's moves is in the order of" });
+let copy_table = compositor.button({ parent: table_row, size: vec(110, 26), icon: "copy", label: "Copy", lbl_scale: 0.12, style: "button_flat", tooltip: "the table as markdown, for a wiki or a patch note" });
+let table_text = compositor.label({ parent: data_page, size: vec(280, 0), text: "", text_scale: 0.11, markdown: true, align: "top_left" });
+
+// Inputs, what every button starts in every stance, and where the moves go after
+let inputs_scroll = compositor.scroll({ parent: tabs, size: vec(300, 460) });
+let inputs_page = compositor.stack({ parent: inputs_scroll, anchor: "top_left", pivot: "top_left", spacing: 6 });
+let inputs_text = compositor.label({ parent: inputs_page, size: vec(280, 0), text: "", text_scale: 0.11, markdown: true, align: "top_left" });

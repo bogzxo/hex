@@ -23,7 +23,8 @@ let pages = compositor.tabs({
     "@settings.tabs.extensions"
 ],
     text_scale: 0.14,
-    spacing: 22
+    spacing: 22,
+    template: "extension_tab.hor"
 });
 
 let editor_page = compositor.stack({
@@ -313,9 +314,17 @@ let extensions_page = compositor.stack({
     spacing: 12
 });
 
-let extensions_icon = compositor.symbol({
+let extensions_heading = compositor.stack({
     parent: extensions_page,
-    size: vec(64, 64),
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let extensions_icon = compositor.symbol({
+    parent: extensions_heading,
+    size: vec(48, 48),
     hover: "pulse",
     hover_amount: 0.25,
     icon: "extensions",
@@ -323,10 +332,19 @@ let extensions_icon = compositor.symbol({
 });
 
 let extensions_note = compositor.label({
-    parent: extensions_page,
-    size: vec(440, 0),
+    parent: extensions_heading,
+    size: vec(560, 0),
     text: "@settings.extensions.page",
     text_scale: 0.14,
     wrap: true,
-    markdown: true
+    markdown: true,
+    align: "top_left"
+});
+
+// A row an extension, put in by the editor, see extension_row.hor
+let extensions_list = compositor.stack({
+    parent: extensions_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 14
 });

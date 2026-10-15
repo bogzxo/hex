@@ -13,25 +13,7 @@ internal sealed partial class HexScene
     // How wide a row of the settings is, what it is called and what it is set with
     private const float SETTING_NAME_WIDTH = 210.0f, SETTING_VALUE_WIDTH = 250.0f;
 
-    // The least and the most the panels can be dragged to, in the editor's units
-    private const float MIN_SIDE = 180.0f, MAX_SIDE = 640.0f;
-    private const float MIN_LAYERS = 40.0f, MAX_LAYERS = 360.0f;
-
-    // How near an edge of what is selected in the canvas the pointer has hold of it, inside and out, in the layout's units
-    private const float HANDLE_INSIDE = 7.0f, HANDLE_OUTSIDE = 5.0f;
-
     private HexSettings settings = null!;
-    private ScrollPanel layersScroll = null!;
-
-    // The skin of the editor that its colours were last taken from, see ColourChrome
-    private UISkin? colouredFor;
-
-    // The sizes the layout gives the panels, which is what resetting them goes back to
-    private float usualLeft, usualRight, usualLayers;
-
-    // What is being dragged bigger in the canvas, null for nothing
-    private UIComponent? resizing;
-
     /// <summary>
     /// Helper method to read the settings and put them in force, the theme of the editor, the sizes its panels were
     /// left at, and to give the panels the edges they are dragged by. Once, as the editor is made.
@@ -52,116 +34,15 @@ internal sealed partial class HexScene
 
         // The edges between the parts of the editor, a tab on each to be found by. The hold is nearly all on the
         // outside, in the gap to the next panel, the inside of these edges is where their scroll bars are
-        Grip(treeScroll, UIResize.Right, new Vector2(MIN_SIDE, 0.0f), new Vector2(MAX_SIDE, 0.0f), size => settings.LeftWidth = size.X);
-        Grip(inspectorScroll, UIResize.Left, new Vector2(MIN_SIDE, 0.0f), new Vector2(MAX_SIDE, 0.0f), size => settings.RightWidth = size.X);
+        SideGrip(treeScroll, UIResize.Right, left: true);
+        SideGrip(inspectorScroll, UIResize.Left, left: false);
         Grip(layersScroll, UIResize.Top, new Vector2(0.0f, MIN_LAYERS), new Vector2(0.0f, MAX_LAYERS), size => settings.LayersHeight = size.Y);
-    }
-
-    private void Grip(UIComponent panel, UIResize edge, Vector2 least, Vector2 most, Action<Vector2> keep)
-    {
-        panel.Resizable = edge;
-        panel.MinSize = least;
-        panel.MaxSize = most;
-        panel.GripSize = 2.0f;
-        panel.GripReach = 8.0f;
-        panel.OnResized = keep;
-        panel.OnResizeEnded = _ => SaveSettings();
-    }
-
-    /// <summary>Helper method to give the panels the sizes the settings have for them, the layout's own where they have none.</summary>
-    private void ApplyPanelSizes()
-    {
-        treeScroll.Size = treeScroll.Size with { X = settings.LeftWidth > 0.0f ? Math.Clamp(settings.LeftWidth, MIN_SIDE, MAX_SIDE) : usualLeft };
-        inspectorScroll.Size = inspectorScroll.Size with { X = settings.RightWidth > 0.0f ? Math.Clamp(settings.RightWidth, MIN_SIDE, MAX_SIDE) : usualRight };
-        layersScroll.Size = layersScroll.Size with { Y = settings.LayersHeight > 0.0f ? Math.Clamp(settings.LayersHeight, MIN_LAYERS, MAX_LAYERS) : usualLayers };
-
-        left.Visible = !settings.SideBarHidden;
-        right.Visible = !settings.PropertiesHidden;
     }
 
     private void SaveSettings()
     {
         if (settings.Save() is { } problem)
             Say(problem, error: true);
-    }
-
-    /// <summary>Helper method to draw the editor itself in another theme of the flat skin.</summary>
-    private void UseEditorTheme(string theme, bool save) => UseEditorSkin(TOOL_SKIN_NAME, theme, save);
-
-    /// <summary>
-    /// Helper method to draw the editor itself in any skin there is, in one of its themes (null for its usual), however
-    /// obnoxious. A skin that isn't there any more is the flat one.
-    /// </summary>
-    private void UseEditorSkin(string name, string? theme, bool save)
-    {
-        UISkinChoice? skin = UISkins.Find(name);
-        if (skin is null)
-        {
-            skin = UISkins.Find(TOOL_SKIN_NAME);
-            theme = null;
-        }
-
-        if (theme is not null && skin is not null && !skin.Has(theme))
-            theme = skin.UsualTheme;
-
-        settings.EditorSkin = skin?.Name ?? TOOL_SKIN_NAME;
-        settings.EditorTheme = theme ?? skin?.UsualTheme ?? string.Empty;
-
-        if (skin is null)
-            compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, theme);
-        else
-            compositor.SetSkin(skin.Directory, skin.File, theme);
-
-        if (save)
-        {
-            SaveSettings();
-            Say(theme is null ? $"the editor is in {skin?.Title}" : $"the editor is in {skin?.Title}, {theme}");
-        }
-    }
-
-    /// <summary>Every skin there is in every theme of it, the flat one first, as the dropdown of the editor's skin lists them.</summary>
-    private static List<(UISkinChoice Skin, string? Theme, string Text)> EditorSkins()
-    {
-        var all = new List<(UISkinChoice, string?, string)>();
-        foreach (UISkinChoice skin in UISkins.Available.OrderBy(skin => skin.Name == TOOL_SKIN_NAME ? 0 : 1))
-        {
-            if (skin.Themes.Count == 0)
-                all.Add((skin, null, skin.Title));
-
-            foreach (string theme in skin.Themes)
-                all.Add((skin, theme, $"{skin.Title}, {theme}"));
-        }
-
-        return all;
-    }
-
-    /// <summary>
-    /// Helper method to take the colours the editor's layout has written into it (the boxes of its lists, what is
-    /// behind everything) from its skin once that has changed, a layout can only say a colour, not "whatever the
-    /// skin has for a panel". Every update, it does nothing until the skin is another one.
-    /// </summary>
-    private void ColourChrome()
-    {
-        if (compositor.Skin is not { } skin || ReferenceEquals(skin, colouredFor))
-            return;
-
-        colouredFor = skin;
-
-        Vector4 box = skin.PanelColor with { W = 1.0f };
-        treeScroll.Color = layersScroll.Color = codeScroll.Color = inspectorScroll.Color = box;
-
-        // What the editor sits on, a little darker than its boxes, and the activity bar darker again, VS Code's
-        Engine.Graphics.ClearColor = new Vector4(box.X * 0.65f, box.Y * 0.65f, box.Z * 0.65f, 1.0f);
-        activity.Color = new Vector4(box.X * 0.5f, box.Y * 0.5f, box.Z * 0.5f, 1.0f);
-        top.Color = activity.Color;
-        bottom.Color = box;
-
-        // The status bar in the accent, dark enough for light words on it whichever theme
-        Vector4 accent = skin.AccentColor;
-        statusBar.Color = new Vector4(accent.X * 0.5f, accent.Y * 0.5f, accent.Z * 0.5f, 1.0f);
-        statusBar.TextColor = new Vector4(0.93f, 0.95f, 0.98f, 1.0f);
-
-        treeDirty = inspectorDirty = true;
     }
 
     /* The settings, a window of their own in the editor with a page for each part of it */
@@ -298,6 +179,8 @@ internal sealed partial class HexScene
         // Files
         Switch("reopen", settings.ReopenLast, on => settings.ReopenLast = on);
         made.Get<Symbol>("extensions_icon").Color = compositor.Skin?.AccentColor;
+        FillExtensionsPage(made);
+        AddExtensionTabs(made);
 
         settingsPages.Select(SETTINGS_EDITOR);
     }
@@ -311,66 +194,7 @@ internal sealed partial class HexScene
         settingsWindow = null;
         settingsPages = null;
         settingControls.Clear();
+        ForgetExtensionTabs();
     }
 
-    private void ResetPanels()
-    {
-        settings.LeftWidth = settings.RightWidth = settings.LayersHeight = settings.PanelHeight = 0.0f;
-        bottom.Size = bottom.Size with { Y = 180.0f };
-        ApplyPanelSizes();
-        SaveSettings();
-        Say("the panels are the size they come at");
-    }
-
-    /* Dragging what is selected in the canvas bigger */
-
-    /// <summary>
-    /// Helper method to let the one thing that is selected be dragged bigger by its edges, the tabs on them are the
-    /// compositor's to draw. Returns whether the pointer is busy with that, in which case it is nobody else's.
-    /// </summary>
-    private bool UpdateCanvasHandles(UIPointer pointer, Vector2 inLayout, bool overCanvas, bool pressed)
-    {
-        if (resizing is { } held)
-        {
-            if (pointer.Down)
-            {
-                if (held.DragResize(inLayout, settings.Snap))
-                    codeDirty = true;
-            }
-            else
-            {
-                held.EndResize();
-                resizing = null;
-
-                // The numbers in the inspector are from before the drag
-                inspectorDirty = true;
-                stage.HighlightLitGrips = UIResize.None;
-            }
-
-            return true;
-        }
-
-        UIComponent? only = settings.CanvasHandles && document.Selection.Count == 1 ? document.Selected : null;
-        stage.HighlightGrips = only is null ? UIResize.None : UIResize.All;
-
-        UIResize on = only is not null && overCanvas ? only.EdgesAt(inLayout, UIResize.All, HANDLE_INSIDE, HANDLE_OUTSIDE) : UIResize.None;
-        stage.HighlightLitGrips = on;
-
-        if (!pressed || on == UIResize.None)
-            return false;
-
-        only!.BeginResize(on, inLayout);
-        stage.HighlightLitGrips = on;
-        resizing = only;
-        return true;
-    }
-
-    /// <summary>Helper method to have a move land on the grid, if there is one. What is left over stays with the pointer.</summary>
-    private Vector2 Snapped(Vector2 moved)
-    {
-        if (settings.Snap <= 0.0f)
-            return moved;
-
-        return new Vector2(MathF.Truncate(moved.X / settings.Snap), MathF.Truncate(moved.Y / settings.Snap)) * settings.Snap;
-    }
 }

@@ -1,0 +1,166 @@
+// What Hex opens on when nothing is open, over the canvas of the empty layout it starts with. Gone the moment anything
+// is added to that layout or a file is opened. The recent files are put in by the editor, see HexScene.Welcome.
+#define layout
+
+let welcome = compositor.panel({
+    fill: "both",
+    color: vec(0.065, 0.07, 0.092, 1)
+});
+
+let page = compositor.stack({
+    parent: welcome,
+    anchor: "top_left",
+    pivot: "top_left",
+    pos: vec(64, -56),
+    spacing: 18
+});
+
+let title = compositor.label({
+    parent: page,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.title",
+    text_scale: 0.5,
+    align: "left"
+});
+
+let subtitle = compositor.label({
+    parent: page,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.subtitle",
+    text_scale: 0.16,
+    color: vec(0.58, 0.6, 0.66, 1),
+    align: "left"
+});
+
+let columns = compositor.stack({
+    parent: page,
+    anchor: "top_left",
+    pivot: "top_left",
+    spacing: 64,
+    direction: "horizontal"
+});
+
+let start = compositor.stack({
+    parent: columns,
+    anchor: "top",
+    pivot: "top",
+    spacing: 4
+});
+
+let start_title = compositor.label({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.start",
+    text_scale: 0.17,
+    align: "left"
+});
+
+let new_layout = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "new-file",
+    label: "@welcome.new_layout",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let open_file = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "go-to-file",
+    label: "@welcome.open_file",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let open_folder = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "folder-opened",
+    label: "@welcome.open_folder",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let commands = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "symbol-misc",
+    label: "@welcome.commands",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let help_gap = compositor.spacer({ parent: start, size: vec(0, 14) });
+
+let help_title = compositor.label({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.help",
+    text_scale: 0.17,
+    align: "left"
+});
+
+let keys = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "keyboard",
+    label: "@welcome.keys",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let language = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "book",
+    label: "@welcome.language",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let changes = compositor.button({
+    parent: start,
+    anchor: "left",
+    pivot: "left",
+    icon: "history",
+    label: "@welcome.changes",
+    style: "button_flat",
+    lbl_scale: 0.15
+});
+
+let recent_column = compositor.stack({
+    parent: columns,
+    anchor: "top",
+    pivot: "top",
+    spacing: 4
+});
+
+let recent_title = compositor.label({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.recent",
+    text_scale: 0.17,
+    align: "left"
+});
+
+// A button a file that was worked on lately, put in by the editor
+let recent = compositor.stack({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    template: "link.hor",
+    preview_count: 3,
+    spacing: 2
+});

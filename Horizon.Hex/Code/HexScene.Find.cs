@@ -132,11 +132,14 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every .hor of every folder looked through, once each.</summary>
-    private List<string> AllWorkspaceFiles()
+    private List<string> AllWorkspaceFiles() => FilesUnder(WorkspaceRoots());
+
+    /// <summary>Every .hor under some folders, once each. Reads nothing of the editor, for the background.</summary>
+    private static List<string> FilesUnder(IReadOnlyList<string> roots)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
-        foreach (string root in WorkspaceRoots())
+        foreach (string root in roots)
         {
             foreach (string file in WorkspaceFiles(root))
             {
@@ -184,9 +187,11 @@ internal sealed partial class HexScene
     }
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
-    private string Relative(string path)
+    private string Relative(string path) => RelativeTo(WorkspaceRoots(), path);
+
+    /// <summary>A path as it is inside of the folders looked through, for the background.</summary>
+    private static string RelativeTo(IReadOnlyList<string> roots, string path)
     {
-        var roots = WorkspaceRoots();
         string full = Path.GetFullPath(path);
         string? root = roots.Where(folder => full.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).OrderByDescending(folder => folder.Length).FirstOrDefault();
         if (root is null)
@@ -205,9 +210,43 @@ internal sealed partial class HexScene
             byName[Relative(file)] = file;
         string[] names = [.. byName.Keys];
 
-        ChooseFrom("Open a file", $"{names.Length} files in {DescribeRoots()}, a few letters of the name narrow them down",
+        ChooseFrom("Open a file", $"{names.Length} files in {DescribeRoots()}, a few letters narrow them down. > for a command, @ for something in the file, : for a line, # for a text",
             [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))],
-            shortestFirst: true);
+            shortestFirst: true, prefixed: QuickOpenPrefix);
+    }
+
+    /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
+    private List<(string Text, Action Picked)>? QuickOpenPrefix(char prefix)
+    {
+        switch (prefix)
+        {
+            case '>':
+                return AllCommands();
+
+            case '@':
+                return [.. Outline(code.Text).Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => GoToCode(entry.Line, entry.Column))))];
+
+            case ':':
+                // A line of every ten, a few letters of the number find the one, and the end of the file
+                var lines = new List<(string Text, Action Picked)>();
+                int count = code.Document.LineCount;
+                for (int line = 1; line <= count; line++)
+                {
+                    int at = line - 1;
+                    lines.Add(($"{line}", () =>
+                    {
+                        if (document.View == HexView.Table) SwitchView(HexView.Code);
+                        GoToCode(at, 0);
+                    }));
+                }
+                return lines;
+
+            case '#':
+                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {Shorten(Localisation.Get(key), 60)}", (Action)(() => GoToKey(key))))];
+
+            default:
+                return null;
+        }
     }
 
     // Whether a name has the letters typed in it in order, the way every editor's quick open goes
@@ -234,19 +273,27 @@ internal sealed partial class HexScene
                 return;
 
             lastFind = query;
-            List<HexResult> found = FindEverywhere(query, wholeWord: false);
+            List<string> roots = WorkspaceRoots();
+            string where = DescribeRoots();
 
-            ShowResults($"FOUND '{query}' ({found.Count})", found);
-            Say(found.Count > 0 ? $"'{query}' is in {found.Select(result => result.Path).Distinct().Count()} files, {found.Count} lines" : $"no '{query}' in {DescribeRoots()}", error: found.Count == 0);
+            // Every file read off the editor's thread, the results come in when they are all there
+            InBackground($"looking for '{query}' in {where}...", () => FindIn(roots, query, wholeWord: false), found =>
+            {
+                ShowResults($"FOUND '{query}' ({found.Count})", found);
+                Say(found.Count > 0 ? $"'{query}' is in {found.Select(result => result.Path).Distinct().Count()} files, {found.Count} lines" : $"no '{query}' in {where}", error: found.Count == 0);
+            });
         });
     }
 
     /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
-    private List<HexResult> FindEverywhere(string query, bool wholeWord)
+    private List<HexResult> FindEverywhere(string query, bool wholeWord) => FindIn(WorkspaceRoots(), query, wholeWord);
+
+    /// <summary>Every line something is on in the files under some folders. Reads nothing of the editor, for the background.</summary>
+    private static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, bool wholeWord)
     {
         var found = new List<HexResult>();
 
-        foreach (string file in AllWorkspaceFiles())
+        foreach (string file in FilesUnder(roots))
         {
             string[] lines = ReadLines(file);
             for (int line = 0; line < lines.Length && found.Count < 2000; line++)
@@ -256,7 +303,7 @@ internal sealed partial class HexScene
                     if (wholeWord && !IsWholeWord(lines[line], at, query.Length))
                         continue;
 
-                    found.Add(new HexResult(file, line, at, $"{Relative(file)}:{line + 1}  {lines[line].Trim()}"));
+                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}"));
                     break;
                 }
             }
@@ -271,8 +318,31 @@ internal sealed partial class HexScene
     /// <summary>Every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game hasn't got.</summary>
     private void CheckAllFiles()
     {
-        List<string> files = AllWorkspaceFiles();
+        List<string> roots = WorkspaceRoots();
+        string where = DescribeRoots();
+
+        InBackground($"checking every file in {where}...", () => CheckFiles(roots), checkedFiles =>
+        {
+            var (files, problems) = checkedFiles;
+
+            // Into the problems under the editor, the file that is open goes on being said about as it is now
+            workspaceProblems = problems;
+            problemsDirty = true;
+            ShowPanel(PROBLEMS_PAGE);
+            Console.WriteLine($"[Hex] Checked {files} files in {where}, {problems.Count} problems.");
+            foreach (var problem in problems)
+                Console.WriteLine($"[Hex]   {problem.Text}");
+
+            Say(problems.Count == 0 ? $"all {files} files in {where} parse" : $"{problems.Count} problems in {files} files, listed under the editor", error: problems.Count > 0);
+        });
+    }
+
+    /// <summary>Every .hor under some folders parsed, and what names a text the game hasn't got. For the background.</summary>
+    private static (int Files, List<HexResult> Problems) CheckFiles(IReadOnlyList<string> roots)
+    {
+        List<string> files = FilesUnder(roots);
         var problems = new List<HexResult>();
+        string Relative(string path) => RelativeTo(roots, path);
 
         foreach (string file in files)
         {
@@ -304,15 +374,7 @@ internal sealed partial class HexScene
                 problems.Add(new HexResult(file, missing.Line, missing.Column, $"{Relative(file)}:{missing.Line + 1}  {missing.Message}"));
         }
 
-        // Into the problems under the editor, the file that is open goes on being said about as it is now
-        workspaceProblems = problems;
-        problemsDirty = true;
-        ShowPanel(PROBLEMS_PAGE);
-        Console.WriteLine($"[Hex] Checked {files.Count} files in {DescribeRoots()}, {problems.Count} problems.");
-        foreach (var problem in problems)
-            Console.WriteLine($"[Hex]   {problem.Text}");
-
-        Say(problems.Count == 0 ? $"all {files.Count} files in {DescribeRoots()} parse" : $"{problems.Count} problems in {files.Count} files, listed under the editor", error: problems.Count > 0);
+        return (files.Count, problems);
     }
 
     private static string[] ReadLines(string file)
@@ -345,37 +407,5 @@ internal sealed partial class HexScene
         if (Side == HexSide.Search)
             Side = HomeSide;
         treeDirty = true;
-    }
-
-    /// <summary>Helper method to list the places something was found, a row each, a click goes there.</summary>
-    private void RebuildResults()
-    {
-        // Nothing looked for yet, the way to look
-        if (results is null)
-        {
-            treeTitle.Text = Said("side.search");
-            layout.Populate(tree, 0);
-            layout.Instantiate(SEARCH_EMPTY_TEMPLATE, tree).Get<Button>("find").OnPressed = FindInFiles;
-            return;
-        }
-
-        treeTitle.Text = resultsTitle;
-        var items = layout.Populate(tree, results.Count);
-
-        for (int i = 0; i < items.Count; i++)
-        {
-            HexResult result = results[i];
-            var row = items[i].Get<Button>("row");
-            var caption = items[i].Get<Label>("caption");
-
-            caption.Text = $"$(file-code) {Plain(result.Text)}";
-            caption.Position = new Vector2(10, 0);
-            caption.Color = null;
-            row.Tooltip = result.Path;
-            row.OnPressed = () => OpenAt(result.Path, result.Line, result.Column);
-        }
-
-        if (results.Count == 0)
-            Hint(tree, "nothing");
     }
 }

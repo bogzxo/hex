@@ -1,0 +1,73 @@
+// Where the game finds a fighter's body and the limb doing the hitting on a frame of its art, Fighter2D's SpriteBoxTracer
+// written again on the masks Hex hands out (hex.sprite, art.mask). The hurtbox is everything drawn, the hitbox is what is
+// drawn in front of the body. Boxes come out the way the game keeps them, a share of the frame from its middle, y up.
+
+let SOLID = 32;
+let BODY_SMOOTHING = 2;
+let BODY_SHARE = 0.5;
+let LIMB_PIXELS = 12;
+let FALLBACK_SHARE = 1 / 3;
+
+// @doc The traced boxes of a frame, { hurt, hit }, null for a frame with nothing drawn on it. Kept in cache by frame
+func trace(art, cache, animation, frame) {
+    let key = `{animation}:{frame}`;
+    if (has(cache, key)) { return cache[key]; }
+    if (art == null || animation == null || !art.has(animation)) { return null; }
+
+    let mask = art.mask(animation, frame, SOLID);
+    let all = mask == null ? null : mask.bounds();
+    cache[key] = all == null ? null : trace_mask(mask, all);
+    return cache[key];
+}
+
+func trace_mask(mask, all) {
+    let columns = mask.columns();
+    let front = body_front(columns, all);
+
+    // Whatever is drawn in front of the body is the limb doing the hitting, a frame without one hits with its front third
+    let limb = mask.bounds_in(front + 1, all.y0, all.x1, all.y1);
+    let hit = null;
+    if (limb == null || limb.count < LIMB_PIXELS) {
+        let from = all.x1 + 1 - math.max(4, math.floor((all.x1 + 1 - all.x0) * FALLBACK_SHARE));
+        hit = share(from, all.y0, all.x1, all.y1, mask.width, mask.height);
+    } else {
+        hit = share(limb.x0, limb.y0, limb.x1, limb.y1, mask.width, mask.height);
+    }
+
+    return { hurt: share(all.x0, all.y0, all.x1, all.y1, mask.width, mask.height), hit: hit };
+}
+
+// The front of the body, from the fullest column on for as long as the columns are about as full
+func body_front(columns, all) {
+    let peak = all.x0;
+    let fullest = 0;
+    for (x in range(all.x0, all.x1 + 1)) {
+        let amount = smoothed(columns, x);
+        if (amount > fullest) {
+            fullest = amount;
+            peak = x;
+        }
+    }
+
+    let front = peak;
+    while (front + 1 <= all.x1 && smoothed(columns, front + 1) >= fullest * BODY_SHARE) { front = front + 1; }
+    return front;
+}
+
+func smoothed(columns, at) {
+    let sum = 0;
+    let count = 0;
+    for (x in range(math.max(0, at - BODY_SMOOTHING), math.min(len(columns) - 1, at + BODY_SMOOTHING) + 1)) {
+        sum = sum + columns[x];
+        count = count + 1;
+    }
+    return sum / count;
+}
+
+// Pixels from the top left going down, as a share of the frame from its middle going up
+func share(x0, y0, x1, y1, width, height) {
+    return {
+        min: vec(x0 / width - 0.5, 0.5 - (y1 + 1) / height),
+        max: vec((x1 + 1) / width - 0.5, 0.5 - y0 / height)
+    };
+}

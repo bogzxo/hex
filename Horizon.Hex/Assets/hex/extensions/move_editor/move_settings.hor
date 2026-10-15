@@ -1,0 +1,59 @@
+// The move editor's tab of Hex's settings. Where Fighter2D's exe is, for Fight! in the view, and who and where it
+// fights. What is typed is kept by Hex (hex.set_setting in extension.hor's on_settings), in hex_settings.hor.
+#define layout
+
+let settings = compositor.stack({
+    anchor: "left",
+    pivot: "left",
+    spacing: 8
+});
+
+let game_row = compositor.stack({ parent: settings, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let game_name = compositor.label({
+    parent: game_row,
+    size: vec(150, 28),
+    text: "Fighter2D's exe",
+    text_scale: 0.13,
+    align: "left",
+    tooltip: "The game Fight! starts, or the folder it's in. Absolute, or from the game's folder (the one with Assets/data/characters.hor in it). Left empty it's looked for in the game's bin folder, the newest build there. Look picks it with Windows' dialog"
+});
+let game_path = compositor.textbox({
+    parent: game_row,
+    size: vec(330, 28),
+    text_scale: 0.13,
+    placeholder: "bin/x64/Debug/net10.0/Fighter2D.exe",
+    button: "Look",
+    button_width: 56
+});
+
+let found = compositor.label({
+    parent: settings,
+    size: vec(500, 0),
+    text: "",
+    text_scale: 0.12,
+    color: vec(0.58, 0.6, 0.66, 1),
+    wrap: true,
+    align: "top_left"
+});
+
+let map_row = compositor.stack({ parent: settings, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let map_name = compositor.label({ parent: map_row, size: vec(150, 28), text: "Map", text_scale: 0.13, align: "left", tooltip: "the map Fight! fights on, by its name in maps.hor" });
+let map = compositor.dropdown({ parent: map_row, size: vec(220, 28), options: ["japan"], text_scale: 0.13 });
+
+let opponent_row = compositor.stack({ parent: settings, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let opponent_name = compositor.label({ parent: opponent_row, size: vec(150, 28), text: "Opponent", text_scale: 0.13, align: "left", tooltip: "who stands there and takes it, by its name in characters.hor" });
+let opponent = compositor.dropdown({ parent: opponent_row, size: vec(220, 28), options: ["the_man"], text_scale: 0.13 });
+
+let dummy_row = compositor.stack({ parent: settings, anchor: "left", pivot: "left", spacing: 10, direction: "horizontal" });
+let dummy_name = compositor.label({ parent: dummy_row, size: vec(150, 28), text: "The dummy", text_scale: 0.13, align: "left", tooltip: "what the opponent does, the game's --dummy" });
+let dummy = compositor.selector({ parent: dummy_row, size: vec(220, 28), options: ["stand", "crouch", "block", "fight"], text_scale: 0.13 });
+
+let note = compositor.label({
+    parent: settings,
+    size: vec(500, 0),
+    text: "The maps and the opponents are the last game a move file was opened in, open one to fill them.",
+    text_scale: 0.12,
+    color: vec(0.58, 0.6, 0.66, 1),
+    wrap: true,
+    align: "top_left"
+});
