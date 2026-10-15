@@ -32,13 +32,24 @@ internal sealed partial class HexScene
         }
 
         bool tools = LayoutTools;
+        bool table = document.IsText && document.View == HexView.Table;
+
+        // A view an extension made for the file goes where the code is, see HexScene.ExtensionUI
+        ApplyExtensionViews();
+        bool extension = document.View == HexView.Extension;
 
         canvas.Visible = tools;
-        codeScroll.Visible = !tools;
+        codeScroll.Visible = !tools && !table && !extension;
+        dataTable.Visible = table;
+        tabledFrom = null;
 
-        layout.Get<UIComponent>("views").Visible = !document.IsText;
+        // A layout is its designer or its code, a file of code its code or its table when it has one
+        layout.Get<UIComponent>("views").Visible = !document.IsText || HasTable || viewButtons.Count > 0;
+        layout.Get<Button>("design_view").Visible = !document.IsText;
+        layout.Get<Button>("table_view").Visible = document.IsText;
         layout.Get<Button>("design_view").Selected = tools;
-        layout.Get<Button>("code_view").Selected = !tools;
+        layout.Get<Button>("code_view").Selected = !tools && !table && !extension;
+        layout.Get<Button>("table_view").Selected = table;
         nameBox.Visible = !document.IsText;
         layout.Get<Label>("inspector_title").Text = Said(tools ? "properties.title" : "properties.file");
 
@@ -46,7 +57,7 @@ internal sealed partial class HexScene
         play.Label = Said(tools ? "toolbar.play" : "toolbar.run");
         play.Tooltip = Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
 
-        if (tools)
+        if (tools || table || extension)
             code.Unfocus();
         else
             code.Focus();
@@ -59,8 +70,17 @@ internal sealed partial class HexScene
     /// <summary>Shows a layout as its designer or as its code. The code typed into goes into the layout on its way to the designer.</summary>
     private void SwitchView(HexView view)
     {
-        if (document.IsText || document.View == view)
+        // A file of code has no designer, a layout no table
+        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table))
             return;
+
+        if (document.IsText)
+        {
+            document.View = view;
+            ApplyView();
+            Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : $"the code of {document.Name}");
+            return;
+        }
 
         // What was typed has to build, or the designer would show the layout as it was before it
         if (view == HexView.Design && document.CodeEdited)
@@ -75,7 +95,29 @@ internal sealed partial class HexScene
         Say(view == HexView.Design ? $"the designer of {document.Name}" : $"the code of {document.Name}, F7 goes back to the designer");
     }
 
-    private void ToggleView() => SwitchView(document.View == HexView.Design ? HexView.Code : HexView.Design);
+    // F7, the designer and the code of a layout, the code and the table of a file of code that has one
+    private void ToggleView()
+    {
+        if (document.IsText)
+        {
+            // Round the views a file of code has, its code, its table if it has one, the views of extensions for it
+            var round = new List<(HexView View, string? Id)> { (HexView.Code, null) };
+            if (HasTable) round.Add((HexView.Table, null));
+            round.AddRange(ViewsFor(document).Select(kind => (HexView.Extension, (string?)kind.Id)));
+            if (round.Count < 2)
+                return;
+
+            int at = round.FindIndex(view => view.View == document.View && (view.View != HexView.Extension || view.Id == document.ExtensionView));
+            var (next, id) = round[(at + 1) % round.Count];
+            if (next == HexView.Extension)
+                SwitchToExtensionView(id!);
+            else
+                SwitchView(next);
+            return;
+        }
+
+        SwitchView(document.View == HexView.Design ? HexView.Code : HexView.Design);
+    }
 
     private void WireViews()
     {
@@ -214,5 +256,39 @@ internal sealed partial class HexScene
     {
         closeConfirmed = true;
         Engine.WindowManager.Close();
+    }
+
+    // The view --view asked for, until the file can show it
+    private string? viewAsked;
+    private bool viewAskedRead;
+
+    private void ApplyAskedView()
+    {
+        if (!viewAskedRead)
+        {
+            viewAskedRead = true;
+            viewAsked = options.View;
+        }
+
+        if (viewAsked is null)
+            return;
+
+        HexView? wanted = viewAsked.ToLowerInvariant() switch
+        {
+            "design" => HexView.Design,
+            "code" => HexView.Code,
+            "table" => HexView.Table,
+            _ => null
+        };
+
+        if (wanted is not { } view || (view == HexView.Table && !HasTable))
+        {
+            if (wanted is null)
+                viewAsked = null;
+            return;
+        }
+
+        viewAsked = null;
+        SwitchView(view);
     }
 }

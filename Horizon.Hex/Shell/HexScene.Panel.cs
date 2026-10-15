@@ -102,7 +102,7 @@ internal sealed partial class HexScene
         {
             problemsDirty = false;
             GatherProblems();
-            bottom.Tabs = [problemList.Count > 0 ? Said("panel.problems_count", ("count", problemList.Count.ToString())) : Said("panel.problems"), Said("panel.output")];
+            bottom.Tabs = PanelTabs(problemList.Count > 0 ? Said("panel.problems_count", ("count", problemList.Count.ToString())) : Said("panel.problems"));
             problemRowsStale = true;
         }
 
@@ -135,7 +135,7 @@ internal sealed partial class HexScene
         problemList.Clear();
 
         string here = document.Path ?? document.Name;
-        if (code.SyntaxError is { } error)
+        foreach (UICodeDiagnostic error in code.SyntaxErrors)
             problemList.Add(new HexProblem(here, error.Line, error.Column, error.Message, false));
 
         foreach (UICodeDiagnostic diagnostic in code.Diagnostics)
@@ -152,6 +152,9 @@ internal sealed partial class HexScene
                 problemList.Add(new HexProblem(result.Path, result.Line, result.Column, result.Text, result.Text.Contains("hasn't got", StringComparison.Ordinal)));
             }
         }
+
+        foreach (var (file, problem) in ExtensionProblemsElsewhere())
+            problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning));
 
         errorCount = problemList.Count(problem => !problem.Warning);
         warningCount = problemList.Count - errorCount;

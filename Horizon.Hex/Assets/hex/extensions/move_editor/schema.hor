@@ -1,0 +1,115 @@
+// Everything a move and a phase of Fighter2D can say, once. What Moves/MoveFileReader.cs reads, with what the comment on
+// top of Assets/data/fighting_moves.hor says each one means. The forms of the editor are made out of these (a field is
+// what compositor.form takes), so are the checks. When HIDL has shapes this is shape FightMove and shape FightPhase.
+
+let STANCES = ["standing", "crouching", "jumping", "falling"];
+let CONDITIONS = ["held", "hitstun", "jumping", "falling", "always"];
+let STATUSES = ["attacking", "blocking", "invulnerable"];
+let EFFECTS = ["jump", "roll", "haze"];
+let LEVELS = ["mid", "low", "overhead"];
+let TRIGGERS = ["held", "pressed", "double_tap"];
+let BUTTONS = ["A", "B", "X", "Y", "DPadUp", "DPadDown", "DPadLeft", "DPadRight", "LeftBumper", "RightBumper", "LeftTrigger", "RightTrigger"];
+
+// @doc The ids the game does something with by itself (Moves/MoveIds.cs), idle has to be there
+let GAME_MOVES = ["idle", "hit_stun", "knocked_out", "heavy_land", "knocked_down", "get_up", "victory", "run"];
+
+// @doc Names the game still reads but doesn't write any more, and what they are now
+let RENAMED = { stun: "hitstun", interruptible: "cancellable", interrupt: "cancel", lock: "commit" };
+
+// @doc The keys of a move, in the order a move is written, phases and the reroutes last
+let MOVE_FIELDS = [
+    { key: "input", kind: "text", unset: "none, only rerouted to", group: "input", help: "the buttons that start it, \"A + B\" both together, \"DPadLeft | DPadRight\" either. A, B, X, Y, DPadUp, DPadDown, DPadLeft, DPadRight, LeftBumper, RightBumper, LeftTrigger and RightTrigger" },
+    { key: "trigger", kind: "choice", choices: TRIGGERS, default: "held", group: "input", help: "how the input has to be entered, held for as long as it is, pressed once a press, double_tap twice in a row" },
+    { key: "priority", kind: "whole", default: -1, group: "input", help: "the order the inputs are matched in, lowest first. A move that needs more than another goes before it (double tap left before left)" },
+    { key: "stances", kind: "flags", choices: STANCES, default: "standing", group: "input", help: "the stances it can be started from" },
+    { key: "meter_cost", kind: "whole", default: 0, group: "input", help: "how much of the super meter it burns, out of 100. Without the meter for it the input goes on to the next move" },
+    { key: "damage", kind: "whole", default: 0, group: "hit", help: "how much health a hit takes, out of 100" },
+    { key: "knockback", kind: "vec", default: vec(0, 0), step: 10, group: "hit", help: "the shove whoever gets hit is given, away and up. 100 away is about 6 units, up 1100 is off their feet, 2000 juggle height, past 2500 over everybody's head" },
+    { key: "level", kind: "choice", choices: LEVELS, default: "mid", group: "hit", help: "where the hit comes in, mid (blocked standing or crouching), low (only crouching) or overhead (only standing)" },
+    { key: "knockdown", kind: "flag", default: false, group: "hit", help: "whether whoever gets hit ends up on the floor, where nothing hits them until they get up" },
+    { key: "hitstun", kind: "number", unset: "worked out from the startup", group: "hit", help: "how long whoever gets hit loses the controls for, in frames of this move's animation" },
+    { key: "blockstun", kind: "number", unset: "a share of the hitstun", group: "hit", help: "how long whoever blocks it is stuck in the block, in frames of this move's animation" },
+    { key: "warns", kind: "flag", unset: "yes when it does damage", group: "hit", help: "whether the opponent gets a heads up it is coming, the dummy blocks on it" },
+    { key: "cancellable", kind: "flag", default: true, group: "movement", help: "whether it can be cancelled into another move at all, its phases say from which frame" },
+    { key: "steering", kind: "flag", default: true, group: "movement", help: "whether the player can walk during it" },
+    { key: "walk_scale", kind: "number", default: 1, step: 0.05, group: "movement", help: "how fast they walk during it against the walk speed of the character" },
+    { key: "turning", kind: "flag", unset: "what steering is", group: "movement", help: "whether the player can turn round during it" },
+    { key: "status", kind: "choice", choices: STATUSES, unset: "none", group: "status", help: "what the player is while it lasts, attacking, blocking (hits from the front bounce off) or invulnerable (they go straight through)" },
+    { key: "stance", kind: "choice", choices: STANCES, unset: "none", group: "status", help: "the stance it puts the player in" },
+    { key: "stance_after", kind: "choice", choices: STANCES, unset: "none", group: "status", help: "the stance it leaves the player in" },
+    { key: "repeat", kind: "choice", choices: CONDITIONS, unset: "none", group: "status", help: "a condition under which the move starts over after its last phase" }
+];
+
+// @doc The keys of a phase, the animation's choices are filled in from the fighter's art
+let PHASE_FIELDS = [
+    { key: "animation", kind: "choice", choices: [], unset: "the one before carries on", group: "art", help: "the animation it plays, a tag of the fighter's .ase" },
+    { key: "start", kind: "whole", default: 0, group: "art", help: "the frame of the animation it starts on" },
+    { key: "hold", kind: "whole", unset: "1, or the one before's", group: "art", help: "how many frames of the move every frame of the art is held for, 2 for art drawn at half the frame rate" },
+    { key: "frames", kind: "whole", unset: "what's left of the animation", group: "timing", help: "how many frames it lasts" },
+    { key: "hit", kind: "whole", unset: "none", group: "timing", help: "the frame the hit comes out on, from 0. Before it is startup, after it recovery" },
+    { key: "cancel", kind: "whole", unset: "none", group: "timing", help: "the frame from which the move can be cancelled into another" },
+    { key: "commit", kind: "whole", unset: "none", group: "timing", help: "the frame from which the player is committed and can't cancel any more" },
+    { key: "loop_while", kind: "choice", choices: CONDITIONS, unset: "none", group: "timing", help: "it starts over for as long as this holds" },
+    { key: "until", kind: "choice", choices: CONDITIONS, unset: "none", group: "timing", help: "it ends the frame this starts holding" },
+    { key: "status", kind: "choice", choices: STATUSES, unset: "none", group: "status", help: "a status the player takes on in this phase, until the move is over" },
+    { key: "status_frame", kind: "whole", default: 0, group: "status", help: "the frame of the phase the status starts on" },
+    { key: "impulse", kind: "vec", default: vec(0, 0), step: 10, group: "movement", help: "a shove the player gets as the phase starts, the way they face and up" },
+    { key: "effect", kind: "choice", choices: EFFECTS, unset: "none", group: "movement", help: "a bit of eye candy, jump, roll or haze" },
+    { key: "effect_frames", kind: "whole", default: 1, group: "movement", help: "how many frames the effect keeps coming for, 0 for all of them" }
+];
+
+// @doc Every key a move can have, the ones the forms don't show among them
+func move_keys() {
+    let all = [];
+    for (field in MOVE_FIELDS) { all.push(field.key); }
+    for (last in ["stance_reroutes", "finish_reroutes", "phases"]) { all.push(last); }
+    return all;
+}
+
+func phase_keys() {
+    let all = [];
+    for (field in PHASE_FIELDS) { all.push(field.key); }
+    return all;
+}
+
+// @doc The fields of a phase with the animations of a fighter's art to choose from
+func phase_fields(animations) {
+    let fields = [];
+    for (field in PHASE_FIELDS) {
+        if (field.key == "animation") {
+            fields.push(merge(field, { choices: animations }));
+        } else {
+            fields.push(field);
+        }
+    }
+    return fields;
+}
+
+// @doc The fields of the reroutes of a move, a row a stance for each kind, the moves of the fighter to choose from
+func reroute_fields(ids) {
+    let fields = [];
+    for (kind in ["stance_reroutes", "finish_reroutes"]) {
+        let group = kind == "stance_reroutes" ? "instead, by stance" : "after, by stance";
+        for (stance in STANCES) {
+            fields.push({ key: `{kind}.{stance}`, title: stance, kind: "choice", choices: ids, unset: "none", group: group,
+                help: kind == "stance_reroutes" ? `the move done instead when the input comes {stance}` : `the move carried on with when this is over and they're {stance}` });
+        }
+    }
+    return fields;
+}
+
+// @doc Where a field's key goes in a move, after which of the keys it already has, so a file keeps the order above
+func key_after(move, key) {
+    let order = move_keys();
+    let at = order.index_of(key);
+    let after = null;
+    let nearest = -1;
+    for (other in move) {
+        let place = order.index_of(other);
+        if (place >= 0 && place < at && place > nearest) {
+            after = other;
+            nearest = place;
+        }
+    }
+    return after;
+}

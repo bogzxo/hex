@@ -31,7 +31,7 @@ internal sealed partial class HexScene
     // What was last looked for, to look for again
     private string lastFind = string.Empty;
 
-    // What running a file of code last came to, shown in the properties
+    // What running a file of code last came to, put in the output
     private readonly List<string> runOutput = [];
 
     // The folders never looked in for files of a workspace, what gets built, git's own and old builds kept on purpose
@@ -106,7 +106,8 @@ internal sealed partial class HexScene
     /// <summary>After the code of a document was parsed, what it says about the texts of the game it names by key.</summary>
     private void CodeChecked(HexDocument checkedDocument)
     {
-        checkedDocument.Editor.Diagnostics = LocalisationDiagnostics(checkedDocument.Editor.Text);
+        localisationFound[checkedDocument] = LocalisationDiagnostics(checkedDocument.Editor.Text);
+        ShowDiagnostics(checkedDocument);
 
         if (checkedDocument == document)
         {
@@ -114,6 +115,45 @@ internal sealed partial class HexScene
             if (checkedDocument.Editor.SyntaxError is { } error)
                 Say($"line {error.Line + 1}: {error.Message}", error: true);
         }
+    }
+
+    // The run the lints were last worked out of, and what they said
+    private HexValues? linted;
+    private List<UICodeDiagnostic> lints = [];
+
+    // What the localisation check last found in each document, kept to go with what running it found
+    private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> localisationFound = [];
+
+    /// <summary>
+    /// Helper method to put what is wrong with a document under its code. The texts it names that the game hasn't got,
+    /// and where running it went wrong, if that was in this file.
+    /// </summary>
+    private void ShowDiagnostics(HexDocument of)
+    {
+        var found = new List<UICodeDiagnostic>(localisationFound.GetValueOrDefault(of) ?? []);
+
+        // What the values of the last run of it say, worked out once a run
+        if (values is { Error: null } clean && valuesOf == of)
+        {
+            if (!ReferenceEquals(linted, clean))
+            {
+                linted = clean;
+                lints = Lint(clean, of);
+            }
+
+            found.AddRange(lints);
+        }
+
+        if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran && valuesOf == of
+            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))))
+        {
+            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
+        }
+
+        found.AddRange(ExtensionProblemsOf(of.Path));
+        of.Editor.Diagnostics = found;
+        if (of == document)
+            problemsDirty = true;
     }
 
     /// <summary>
@@ -141,10 +181,11 @@ internal sealed partial class HexScene
     /* Text documents */
 
     /// <summary>Opens a file of code that isn't a layout, as the code it is.</summary>
-    private bool OpenText(string path, string source)
+    /// <param name="show">Whether it comes to the front, an extension editing a file opens it behind the one on screen.</param>
+    private bool OpenText(string path, string source, bool show = true)
     {
         // The empty layout the editor starts with is put away, nobody wants it next to a file
-        if (document is { Path: null, IsText: false } && !document.Module.Root.Children.Any() && !document.Modified)
+        if (show && document is { Path: null, IsText: false } && !document.Module.Root.Children.Any() && !document.Modified)
         {
             stage.RemoveModule(document.Module);
             documents.Remove(document);
@@ -170,9 +211,20 @@ internal sealed partial class HexScene
         opened.SavedCode = opened.Editor.Text;
 
         documents.Add(opened);
+        if (!show)
+        {
+            tabsDirty = true;
+            Console.WriteLine($"[Hex] Opened '{path}' as code behind the file on screen.");
+            return true;
+        }
+
         UseLanguagesNear(path);
         Show(opened);
         Remember(path);
+        RaiseExtensions("on_open", new StringValue(Path.GetFullPath(path)));
+
+        // A file an extension has a view for by its #define comes up on it
+        OpenOnExtensionView(opened);
 
         Console.WriteLine($"[Hex] Opened '{path}' as code: {opened.Editor.Document.LineCount} lines.");
         Say($"opened {opened.Name}, {opened.Editor.Document.LineCount} lines of code");
@@ -233,69 +285,6 @@ internal sealed partial class HexScene
         Say("the code is what the layout says again");
     }
 
-    /* What the properties show for a file of code, what is wrong with it and what running it came to */
-
-    private void RebuildCodeInspector()
-    {
-        foreach (var child in inspector.Children.ToArray())
-            inspector.Remove(child);
-
-        Label Line(string text, Vector4? color = null)
-        {
-            Label line = Hint(inspector, Plain(text));
-            line.Color = color ?? DimColor;
-            line.Wrap = true;
-            line.Size = new Vector2(MathF.Max(120, inspectorScroll.Size.X - 30), 0);
-            return line;
-        }
-
-        Button Link(string text, Action pressed)
-        {
-            var link = layout.Instantiate(LINK_TEMPLATE, inspector).Get<Button>("link");
-            link.Label = Plain(text);
-            link.OnPressed = pressed;
-            return link;
-        }
-
-        Line(document.Path ?? document.Name, null);
-        Line($"{code.Document.LineCount} lines, {(document.CrLf ? "CRLF" : "LF")}");
-
-        if (code.SyntaxError is { } error)
-        {
-            Link($"line {error.Line + 1}: {error.Message}", () =>
-            {
-                code.GoTo(error.Line, error.Column);
-                code.Focus();
-            }).Icon = "error";
-        }
-        else
-        {
-            Line("parses", new Vector4(0.45f, 0.85f, 0.5f, 1.0f));
-        }
-
-        foreach (UICodeDiagnostic warning in code.Diagnostics)
-        {
-            Link($"line {warning.Line + 1}: {warning.Message}", () =>
-            {
-                code.GoTo(warning.Line, warning.Column);
-                code.Focus();
-            }).Icon = "warning";
-        }
-
-        if (runOutput.Count > 0)
-        {
-            Line(string.Empty);
-            Line("WHAT RUNNING IT CAME TO (F5)", new Vector4(0.46f, 0.52f, 0.64f, 1.0f));
-            foreach (string said in runOutput)
-                Line(said, null);
-        }
-        else
-        {
-            Line(string.Empty);
-            Line("F5 runs it and lists what it declares, Ctrl+F finds, Ctrl+G goes to a line, Ctrl+P opens any file, Ctrl+Shift+F finds in all of them");
-        }
-    }
-
     /// <summary>
     /// F5 on a file of code. It is run the way a game loads it, includes looked for next to it, and what it declares is
     /// listed with what each comes to, or what went wrong. Nothing a game would hand it (a compositor) is there.
@@ -306,11 +295,16 @@ internal sealed partial class HexScene
 
         var runtime = new HIDLRuntime
         {
-            BaseDirectory = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : browseDirectory,
+            BaseDirectory = FolderOf(document),
             Output = line => runOutput.Add($"print: {line}")
         };
 
+        // Run here and now, somebody asked for it, but not for ever
+        using var cancel = new CancellationTokenSource(1000);
+        runtime.Interpreter.Cancellation = cancel.Token;
         var (success, result) = runtime.Evaluate(code.Text);
+        runtime.Interpreter.Cancellation = CancellationToken.None;
+
         if (!success)
         {
             runOutput.Add($"didn't run, {result}");
@@ -321,23 +315,20 @@ internal sealed partial class HexScene
             foreach (var (name, value) in runtime.UserScope.Variables)
                 runOutput.Add($"{name} = {Shorten(Describe(value), 240)}");
 
-            Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, listed on the right");
+            Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, see the output");
         }
 
+        // What it printed and what it declared go in the output, which comes up
+        foreach (string line in runOutput)
+            Note(line);
+        ShowPanel(OUTPUT_PAGE);
+
+        // And the console works in what it left behind
+        consoleRuntime = runtime;
         inspectorDirty = true;
     }
 
-    private static string Describe(IRuntimeValue value)
-    {
-        try
-        {
-            return HIDLWriter.CanWrite(value) ? HIDLWriter.Write(value) : value.ToString() ?? string.Empty;
-        }
-        catch (Exception)
-        {
-            return value.ToString() ?? string.Empty;
-        }
-    }
+    private static string Describe(IRuntimeValue value) => HexEvaluation.Describe(value);
 
     private static string Shorten(string text, int most)
     {

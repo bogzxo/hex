@@ -13,4 +13,6 @@ namespace Horizon.Hex;
 /// <param name="Scale">How big the editor draws itself, null for what it was left at the last time.</param>
 /// <param name="Browse">Whether the editor starts by asking which layout to open.</param>
 /// <param name="Watch">Whether the self-test goes slowly enough to follow, it is over in a few seconds otherwise.</param>
-internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false);
+/// <param name="View">Which view the file that is opened comes up in, design, code or table, null for its usual.</param>
+/// <param name="Console">Lines to run in the HIDL console once the file's values are in, the console up with them.</param>
+internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null);

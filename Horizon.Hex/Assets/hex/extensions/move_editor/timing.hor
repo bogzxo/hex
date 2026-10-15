@@ -1,0 +1,106 @@
+// How the game plays a move a frame at a time, the way Moves/MovePlayback.cs does. The phases one after the other, an
+// animation carrying on through a phase without one, held for as many frames of the move as hold says, and what each
+// frame of the move is (startup before the hit, active for as long as the red box says, recovery after).
+
+// @doc How many frames an animation of the art has, 1 for none or no art
+func frame_count(art, animation) {
+    if (animation == null || art == null || !art.has(animation)) { return 1; }
+    return math.max(1, art.frames(animation));
+}
+
+// @doc How many frames a phase lasts, MovePhase.LengthFor
+func phase_length(art, phase) {
+    if ((phase.frames ?? 0) > 0) { return phase.frames; }
+    let length = phase.animation == null ? 1 : frame_count(art, phase.animation);
+    let start = phase.start ?? 0;
+    return math.max(1, length > start ? length - start : 1) * math.max(1, phase.hold ?? 0);
+}
+
+// @doc How long a phase is when frames doesn't say, what its art gives it, for marking on the timeline
+func natural_length(art, phase) {
+    return phase_length(art, merge(phase, { frames: 0 }));
+}
+
+// @doc
+// A move laid out a frame at a time. { frames, hit, phases }, every frame { phase, phase_name, animation, shown, kind,
+// hit, loops }, phases { name, first, length, animation, loops, waits } where first is the frame it starts on, hit the frame
+// the hit comes out on (-1 for none). active is how many frames the hit stays out for, the number of red boxes or 1
+func lay_out(art, move, active) {
+    let frames = [];
+    let phases = [];
+    let animation = "idle";
+    let shown_start = 0;
+    let steps = 0;
+    let hold = 1;
+    let hit = -1;
+    let index = 0;
+
+    for (name in move.phases ?? {}) {
+        let phase = move.phases[name];
+        let phase_hold = phase.hold ?? 0;
+        if (phase.animation != null) {
+            animation = phase.animation;
+            shown_start = phase.start ?? 0;
+            steps = 0;
+            hold = math.max(1, phase_hold);
+        } else if (phase_hold > 0 && phase_hold != hold) {
+            // The same animation carries on at another pace, from the frame it's on
+            shown_start = shown_start + math.floor(steps / hold);
+            steps = 0;
+            hold = phase_hold;
+        }
+
+        let length = phase_length(art, phase);
+        let last = frame_count(art, animation) - 1;
+        let loops = phase.loop_while != null;
+        phases.push({ name: name, first: len(frames), length: length, animation: animation, loops: loops, waits: phase.until != null });
+
+        for (f in range(length)) {
+            let is_hit = hit < 0 && phase.hit != null && f == phase.hit;
+            if (is_hit) { hit = len(frames); }
+            frames.push({
+                phase: index, phase_name: name, animation: animation,
+                shown: math.min(shown_start + math.floor(steps / hold), last),
+                kind: "neutral", hit: is_hit, loops: loops
+            });
+            steps = steps + 1;
+        }
+        index = index + 1;
+    }
+
+    if (hit >= 0) {
+        let end = hit + active;
+        for (i in range(len(frames))) {
+            frames[i].kind = i < hit ? "startup" : i < end ? "active" : "recovery";
+        }
+    }
+
+    return { frames: frames, hit: hit, phases: phases };
+}
+
+// @doc The phase a frame of the move is in, by name, null for none
+func phase_at(laid, frame) {
+    if (frame < 0 || frame >= len(laid.frames)) { return null; }
+    return laid.frames[frame].phase_name;
+}
+
+// @doc The frame a phase starts on, -1 for a phase the move hasn't got
+func first_of(laid, name) {
+    for (phase in laid.phases) {
+        if (phase.name == name) { return phase.first; }
+    }
+    return -1;
+}
+
+// @doc Which active frame a frame of the move is, from 0, -1 when it isn't one
+func active_index(laid, frame) {
+    if (laid.hit < 0 || frame < 0 || frame >= len(laid.frames)) { return -1; }
+    return laid.frames[frame].kind == "active" ? frame - laid.hit : -1;
+}
+
+// @doc Which of a move's boxes a frame shows, its own on an active frame, the first before the hit and the last after
+func shown_index(laid, frame, count) {
+    let active = active_index(laid, frame);
+    if (active >= 0) { return math.min(active, count - 1); }
+    return frame < laid.hit ? 0 : count - 1;
+}

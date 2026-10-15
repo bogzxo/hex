@@ -1,0 +1,35 @@
+// One extension on the extensions page of the settings, switched on and off, and what it is. What it can be told is on
+// a tab of its own, extension_tab.hor.
+#define layout
+
+let row = compositor.stack({
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let enabled = compositor.toggle({
+    parent: row,
+    anchor: "top",
+    pivot: "top",
+    label: "@settings.on",
+    lbl_scale: 0.14
+});
+
+let body = compositor.stack({
+    parent: row,
+    anchor: "top",
+    pivot: "top",
+    spacing: 6
+});
+
+let about = compositor.label({
+    parent: body,
+    size: vec(520, 0),
+    text: "**Name** 1.0.0\nwhat it does",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});

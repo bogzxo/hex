@@ -138,17 +138,40 @@ internal sealed partial class HexScene
         }
     }
 
+    /// <summary>Helper method to make the gap in the activity bar take what its buttons leave, so Settings is at the bottom.</summary>
+    private void FitActivityGap(float height)
+    {
+        var gap = activityGap;
+        float taken = activity.Padding.Total.Y;
+        int shown = 0;
+        var children = activity.Children;
+        for (int i = 0; i < children.Count; i++)
+        {
+            if (!children[i].Visible || children[i] == gap)
+                continue;
+
+            taken += children[i].Bounds.Height;
+            shown++;
+        }
+
+        // A gap either side of the gap
+        taken += activity.Spacing * shown;
+        float wanted = MathF.Max(0.0f, MathF.Floor(height - taken));
+        if (gap.Size.Y != wanted)
+            gap.Size = gap.Size with { Y = wanted };
+    }
+
     // The most of the side bar's height the toolbox takes before it scrolls
     private const float PALETTE_SHARE = 0.42f;
 
     private void FitChrome()
     {
         UIRect screen = chrome.Root.Bounds;
-        if (screen.IsEmpty || toolbar.Bounds.IsEmpty)
+        if (screen.IsEmpty || top.Bounds.IsEmpty)
             return;
 
-        // Between the menus and the toolbar on top and the status bar at the bottom
-        float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - toolbar.Bounds.Height - statusBar.Bounds.Height;
+        // Between the title bar with the menus on top and the status bar at the bottom
+        float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
         float leftWidth = treeScroll.Size.X;
         float rightWidth = inspectorScroll.Size.X;
         float sides = activity.Bounds.Width
@@ -160,8 +183,9 @@ internal sealed partial class HexScene
         // given its height a column, a params array and a sum of it made garbage every tick
         static float Spoken(StackPanel column, UIComponent flexible) => column.Bounds.Height - flexible.Bounds.Height;
 
-        // The activity bar runs the height of the window, the colour of it with it
+        // The activity bar runs the height of the window, the colour of it with it, and its gap pushes Settings to the bottom
         activity.Size = activity.Size with { Y = height };
+        FitActivityGap(height);
 
         // The layers under the list are as wide as the list, whichever way that was dragged, and only as tall as the side bar
         // has room for with the list over them at its least. Dragged taller than that they pushed the whole editor down and
@@ -177,11 +201,16 @@ internal sealed partial class HexScene
         }
 
         // The toolbox is all of its buttons when there is room, and scrolls in no more than a share of the side bar when there isn't
-        var paletteScroll = layout.Get<ScrollPanel>("palette_scroll");
-        float paletteTall = layout.Get<UIComponent>("palette").DesiredSize.Y;
+        float paletteTall = palette.DesiredSize.Y;
         paletteScroll.Size = new Vector2(leftWidth, MathF.Min(paletteTall, MathF.Max(MIN_FLEXIBLE, height * PALETTE_SHARE)));
-        treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
+        if (treeScroll.Visible)
+            treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
+        if (sideTree.Visible)
+            sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
+        rightHead.Size = new Vector2(rightWidth, 24.0f);
+        if (valuesTree.Visible)
+            valuesTree.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, valuesTree)));
 
         FitRows(leftWidth, rightWidth);
 
@@ -197,13 +226,21 @@ internal sealed partial class HexScene
         }
 
         // The tabs, the breadcrumbs and the panel are the width of the middle, the panel as tall as it was dragged
-        docTabs.Size = docTabs.Size with { X = centerWidth };
+        docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, centerWidth - toolbar.Bounds.Width) };
         crumbs.Size = crumbs.Size with { X = centerWidth };
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);
+        FitConsole();
 
         // Whichever of the two is showing has the rest of the middle, the code or the canvas of the designer
-        if (!LayoutTools)
+        // The table's sideways bar runs along its bottom, which is where the panel's drag tab reaches up to, so it runs that
+        // much higher
+        dataTable.BarInset = bottom.Visible ? bottom.GripReach : 0.0f;
+        if (dataTable.Visible)
+            dataTable.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, dataTable)));
+        else if (extensionViews.Visible)
+            extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews)));
+        else if (!LayoutTools)
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
         else
             canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas)));

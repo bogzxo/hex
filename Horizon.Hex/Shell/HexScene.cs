@@ -50,54 +50,6 @@ internal sealed partial class HexScene : Scene
     // How long a layout has to be left alone before how it is now is a step to come back to
     private const float SETTLE_TIME = 0.3f;
 
-    // What can be added, in the order the buttons for it come.
-    private static readonly string[] Palette =
-    [
-        "stack", "collapsible", "grid", "panel", "scroll", "label", "button", "toggle", "textbox", "number_box", "selector",
-        "dropdown", "list", "slider", "color_picker", "progress_bar", "image", "tabs", "divider", "spacer",
-        "readout", "meter", "graph", "segments"
-    ];
-
-    // The properties that are one of a few words, and the words.
-    private static readonly string[] Origins = ["center", "top_left", "top", "top_right", "left", "right", "bottom_left", "bottom", "bottom_right"];
-    private static readonly Dictionary<string, string[]> Choices = new()
-    {
-        ["anchor"] = Origins,
-        ["pivot"] = Origins,
-        ["align"] = Origins,
-        ["fill"] = ["none", "horizontal", "vertical", "both"],
-        ["direction"] = ["vertical", "horizontal"],
-        ["intro"] = ["none", "pop", "fade", "slide"],
-        ["hover"] = ["none", "grow", "shrink", "lift", "nudge", "pulse", "glow"]
-    };
-
-    // The numbers that have a slider next to them, and what its ends are.
-    private static readonly Dictionary<string, (float Min, float Max)> Ranges = new()
-    {
-        ["progress"] = (0.0f, 1.0f),
-        ["intro_time"] = (0.0f, 2.0f),
-        ["intro_delay"] = (0.0f, 2.0f),
-        ["stagger"] = (0.0f, 0.5f),
-        ["hover_time"] = (0.0f, 0.5f),
-        ["collapse_time"] = (0.0f, 0.5f)
-    };
-
-    // How wide what a property is set with is, which is whatever the properties have left next to what it is
-    // called. They can be dragged wider (see HexScene.Settings). What is taken off is the padding either side (8
-    // and 8), the name and the gap after it (CaptionWidth and 6), and the scroll bar with the gap it keeps (6 and 6).
-    // It was 14 short of that once and every editor ran on under the bar
-    private const float EDITOR_MARGIN = 34;
-    private const float MIN_EDITOR_WIDTH = 96;
-
-    // The name of a property takes a share of the row and the editor the rest, the name had a fixed 128 once and the
-    // editors were squeezed into what a narrow panel had left, the way round nobody wants it
-    private const float CAPTION_SHARE = 0.3f, MIN_CAPTION = 70, MAX_CAPTION = 112;
-    private float CaptionWidth => MathF.Round(Math.Clamp(inspectorScroll.Size.X * CAPTION_SHARE, MIN_CAPTION, MAX_CAPTION));
-    private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN - CaptionWidth);
-    private const float EDITOR_HEIGHT = 28;
-    private const float EDITOR_TEXT = 0.14f;
-    private const float PICKER_HEIGHT = 112;
-
     // What is said quietly, the colour the editor's skin writes in turned down. Not a colour of its own, the
     // editor comes in a light theme as well
     private Vector4 DimColor => (compositor.Skin?.TextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 1.0f)) with { W = 0.62f };
@@ -126,6 +78,8 @@ internal sealed partial class HexScene : Scene
     private static readonly Vector4 CanvasColor = new(0.02f, 0.02f, 0.03f, 1.0f);
     private readonly ScrollPanel treeScroll, inspectorScroll;
     private readonly Panel codeScroll;
+    private readonly UIComponent rightHead, activityGap, palette;
+    private readonly ScrollPanel paletteScroll;
     private readonly Label treeTitle;
     
     // The layouts that were opened or saved last, the latest first
@@ -162,7 +116,7 @@ internal sealed partial class HexScene : Scene
 
     // What the lists on screen are showing right now, by what they stand for
     private readonly List<Button> paletteButtons = [];
-    private readonly List<(string Path, bool IsDirectory, Button Row)> fileRows = [];
+    private readonly List<(string Path, bool IsDirectory, UITreeItem Row)> fileRows = [];
     private readonly Dictionary<UIComponent, Button> treeRows = [];
     private readonly Dictionary<string, Button> layerRows = [];
     private readonly List<Button> tabButtons = [];
@@ -224,11 +178,21 @@ internal sealed partial class HexScene : Scene
         inspector = layout.Get<StackPanel>("inspector");
         inspectorScroll = layout.Get<ScrollPanel>("inspector_scroll");
         canvas = layout.Get<Panel>("canvas");
+        rightHead = layout.Get<UIComponent>("right_head");
+        activityGap = layout.Get<UIComponent>("activity_gap");
+        palette = layout.Get<UIComponent>("palette");
+        paletteScroll = layout.Get<ScrollPanel>("palette_scroll");
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         BuildStatusBar();
         BuildPanel();
+        BuildConsole();
+        BuildValuesTree();
+        BuildSideTree();
+        BuildTable();
+        BuildExtensionViews();
+        toasts = layout.Get<Notifications>("toasts");
         BuildTabs();
 
         recent.AddRange(ReadRecent());
@@ -255,6 +219,7 @@ internal sealed partial class HexScene : Scene
 
         BuildPalette();
         Show(NewDocument());
+        startedWith = document;
 
         // The folders of last time and the files that were open in them, unless the editor was told what to open
         RestoreWorkspace();
@@ -264,6 +229,13 @@ internal sealed partial class HexScene : Scene
         else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && workspace.OpenFiles.Count == 0)
             Open(recent[0]);
 
+        // Last, an extension's on_start finds the editor up and a file open
+        LoadExtensions();
+
+        // The file open by now was opened before any extension said what views it has, so it's asked again
+        if (document.IsText)
+            OpenOnExtensionView(document);
+
         if (options.SelfTest)
             StartSelfTest();
         else if (options.Check.Length == 0)
@@ -271,6 +243,7 @@ internal sealed partial class HexScene : Scene
         else if (options.Browse)
             OpenPressed();
     }
+
 
     public override void PostInit()
     {
@@ -280,11 +253,24 @@ internal sealed partial class HexScene : Scene
         Engine.Graphics.ClearColor = new Vector4(0.065f, 0.07f, 0.092f, 1.0f);
     }
 
-    /// <summary>Says something in the status bar, and keeps it in the output under the editor.</summary>
     // When Hex last said something, and how long that stays in the status bar
     private long saidAt;
     private const long SAID_FOR = 10_000;
 
+    // The cards in the corner, for what the status bar can't hold
+    private Notifications toasts = null!;
+
+    /// <summary>
+    /// Puts a card up in the corner, for what somebody has to read or do something about, and says it in the output too.
+    /// An error stays until it is closed.
+    /// </summary>
+    private UINotification Notify(string message, bool error = false, params (string Label, Action Pressed)[] actions)
+    {
+        Note(message, error);
+        return toasts.Show(message, error ? "error" : "info", error ? ErrorColor : null, error ? 0.0f : 8.0f, actions);
+    }
+
+    /// <summary>Says something in the status bar, and keeps it in the output under the editor.</summary>
     private void Say(string message, bool error = false)
     {
         saidAt = System.Environment.TickCount64;
@@ -340,6 +326,21 @@ internal sealed partial class HexScene : Scene
         if (codeShown)
             codeDirty = codeShown = false;
 
+        TakeFinishedWork();
+        UpdateWelcome();
+
+        // Something changed in a folder of the workspace, the explorer reads that folder again
+        if (folders.TakeChanges() && Side == HexSide.Explorer)
+            treeDirty = true;
+
+        UpdateValues(dt);
+        UpdateValueBox();
+        UpdateExtensionUI(dt);
+        UpdateWatchedFiles();
+        ApplyAskedView();
+        UpdateTable();
+        UpdateConsole();
+        RunAskedConsole();
         UpdatePanel(dt);
         UpdateStatusBar();
         UpdateCrumbs();

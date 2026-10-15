@@ -12,16 +12,11 @@ namespace Horizon.Hex;
 /// <summary>
 /// One layout being edited. A module of the UI holding the real components, the names they go by in the code,
 /// and the code itself, which is written out of the components and never kept.
-/// What is on screen is the layout, so there is nothing for the two to disagree about.
+/// What is on screen is the layout, so there is nothing for the two to disagree about. It's in parts, this one is the
+/// layout's components, their names and what is selected, HexDocument.Code reads and writes it, HexDocument.History
+/// is undo and the entrances, HexDocument.Arrange groups, copies and moves things about.
 /// </summary>
-/// <summary>How a layout is looked at, its designer (the canvas and the tools of a layout) or its code.</summary>
-internal enum HexView
-{
-    Design,
-    Code
-}
-
-internal sealed class HexDocument
+internal sealed partial class HexDocument
 {
     // Properties that aren't part of how a component is laid out: where it is in the tree (written as its parent),
     // other names for the same thing, and what only changes while the UI is in use.
@@ -33,7 +28,7 @@ internal sealed class HexDocument
     // How many steps back there are to take
     private const int MAX_HISTORY = 200;
 
-    private readonly Dictionary<UIComponent, string> names = [];
+    private readonly HexNames names = new();
 
     // What stands in for the items a program will make. Built from the templates the containers of the layout
     // name, shown in the canvas and nowhere else. They aren't part of the layout and never get written.
@@ -83,6 +78,9 @@ internal sealed class HexDocument
     /// <summary>Whether a layout is shown as its designer or as its code. A file of code is only ever its code.</summary>
     public HexView View { get; set; } = HexView.Design;
 
+    /// <summary>Which view of an extension the file is shown in, while <see cref="View"/> is Extension.</summary>
+    public string? ExtensionView { get; set; }
+
     /// <summary>Whether the code of a layout was changed by hand since it was last written out of the layout, and not applied yet.</summary>
     public bool CodeEdited { get; set; }
 
@@ -119,11 +117,24 @@ internal sealed class HexDocument
     /// </summary>
     public List<UIComponent> TopSelection()
     {
-        var order = Walk().Select(pair => pair.Component).ToList();
-        return selection
-            .Where(component => !HasSelectedAncestor(component))
-            .OrderBy(order.IndexOf)
-            .ToList();
+        var top = new List<UIComponent>(selection.Count);
+        foreach (UIComponent component in selection)
+        {
+            if (!HasSelectedAncestor(component))
+                top.Add(component);
+        }
+
+        // One of them (a drag, every tick of it) is in the order already, more go by where they are in the layout, which
+        // was a walk of the lot and an IndexOf through it for every one
+        if (top.Count > 1)
+        {
+            var order = new Dictionary<UIComponent, int>();
+            foreach (var (component, _) in Walk())
+                order[component] = order.Count;
+            top.Sort((a, b) => order.GetValueOrDefault(a, int.MaxValue).CompareTo(order.GetValueOrDefault(b, int.MaxValue)));
+        }
+
+        return top;
     }
 
     private bool HasSelectedAncestor(UIComponent component)
@@ -210,12 +221,15 @@ internal sealed class HexDocument
 
     /// <summary>The name a component goes by in the code.</summary>
     /// <summary>The component that goes by a name in the code, null if none does.</summary>
-    public UIComponent? Find(string name) => names.FirstOrDefault(pair => pair.Value == name).Key;
+    public UIComponent? Find(string name) => names.Find(name);
 
     public string NameOf(UIComponent component)
     {
-        if (!names.TryGetValue(component, out string? name))
-            names[component] = name = FreeName(UIModule.KindOf(component) ?? "component");
+        if (!names.TryGetName(component, out string name))
+        {
+            name = FreeName(UIModule.KindOf(component) ?? "component");
+            names.Set(component, name);
+        }
 
         return name;
     }
@@ -229,13 +243,10 @@ internal sealed class HexDocument
         if (!HIDLWriter.IsIdentifier(name) || name == "compositor")
             return false;
 
-        foreach (var (other, taken) in names)
-        {
-            if (taken == name && other != component)
-                return false;
-        }
+        if (names.Find(name) is { } other && other != component)
+            return false;
 
-        names[component] = name;
+        names.Set(component, name);
         return true;
     }
 
@@ -320,761 +331,13 @@ internal sealed class HexDocument
         Module.Fit = UIFit.Contain;
     }
 
-    /// <summary>
-    /// Replaces the layout with what a script builds. The names the script gave its components are kept.
-    /// </summary>
-    /// <param name="path">Where the script is from, which is where its templates are looked for.</param>
-    /// <returns>Whether the script ran, and what it had to say if it didn't.</returns>
-    public (bool Success, string Message) Load(string code, string? path = null, bool keepHistory = false)
-    {
-        Clear();
-
-        var result = Build(code, path);
-
-        // A layout that was just opened has nothing to go back to
-        if (!keepHistory)
-            ResetHistory();
-
-        return result;
-    }
-
-    private (bool Success, string Message) Build(string code, string? path)
-    {
-
-        try
-        {
-            // The same way a program loads it, so what the editor shows is what the program will get
-            var layout = UILayout.LoadCode(Module, code, null, path ?? string.Empty);
-
-            foreach (var (name, component) in layout.Parts)
-            {
-                if (component.Module == Module)
-                    names[component] = name;
-            }
-        }
-        catch (Exception e)
-        {
-            return (false, e.Message);
-        }
-
-        // Whatever the script made without keeping it in a variable still needs a name to be written under.
-        foreach (var (component, _) in Walk())
-            NameOf(component);
-
-        return (true, RefreshPreviews() ?? string.Empty);
-    }
-
-    /// <summary>
-    /// Shows every container that names a template with as many items made from it as it asks to be previewed
-    /// with, in place of the ones that were shown before.
-    /// </summary>
-    /// <returns>What was wrong with a template, null if nothing was.</returns>
-    public string? RefreshPreviews()
-    {
-        foreach (var preview in previews)
-            preview.Parent?.Remove(preview);
-        previews.Clear();
-
-        string directory = Path is not null
-            ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(Path)) ?? string.Empty
-            : FallbackDirectory;
-
-        string? problem = null;
-        foreach (var (component, _) in Walk().ToArray())
-        {
-            if (component is Panel { Template.Length: > 0, PreviewCount: > 0 } container)
-                problem = FillPreview(container, directory, 0) ?? problem;
-        }
-
-        return problem;
-    }
-
-    private string? FillPreview(Panel container, string directory, int depth)
-    {
-        string file = System.IO.Path.Combine(directory, container.Template);
-        if (!File.Exists(file))
-            return $"the template '{container.Template}' isn't next to the layout";
-
-        for (int i = 0; i < Math.Min(container.PreviewCount, MAX_PREVIEW); i++)
-        {
-            UILayout item;
-            try
-            {
-                // One after the other if the container says so, the way a program filling it would have them
-                item = UILayout.Load(Module, file, container, i * container.Stagger);
-            }
-            catch (Exception e)
-            {
-                return e.Message;
-            }
-
-            foreach (var root in item.Roots)
-            {
-                // Only the top of an item is noted, what is inside of it goes wherever it goes
-                if (depth == 0)
-                    previews.Add(root);
-            }
-
-            // An item can have containers of its own to fill, but a template that names itself would never end
-            if (depth >= 2)
-                continue;
-
-            string itemDirectory = System.IO.Path.GetDirectoryName(file) ?? string.Empty;
-            foreach (var part in item.Parts.Values)
-            {
-                if (part is Panel { Template.Length: > 0, PreviewCount: > 0 } nested)
-                    FillPreview(nested, itemDirectory, depth + 1);
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Writes the layout as the script that builds it. One component after the other, each inside of the one
-    /// before it that it belongs to, with everything about it that isn't how it starts out anyway.
-    /// </summary>
-    public string GenerateCode()
-    {
-        // A file of code is what is in its editor, there is no layout to write it out of
-        if (IsText)
-            return Editor.Text;
-
-        var code = new StringBuilder();
-        code.Append("// ").Append(Name).AppendLine(", laid out with Horizon.Hex.");
-        code.AppendLine("// Load it with UILayout.Load, every component is there under the name it has here.");
-
-        // What says it is a layout, which is what an editor opens it with its designer by
-        code.Append('#').Append("define ").AppendLine(Horizon.HIDL.Preprocessing.HIDLPreprocessor.LAYOUT);
-        code.AppendLine();
-        code.Append(GenerateBody());
-
-        return code.ToString();
-    }
-
-    // The components without the lines on top, which say what the layout is called and nothing about what is in it.
-    private string GenerateBody()
-    {
-        var code = new StringBuilder();
-
-        if (Design is { } design)
-        {
-            code.AppendLine();
-            code.Append("compositor.design({ size: ").Append(HIDLWriter.Write(new Vector2Value(design)))
-                .Append(", fit: \"").Append(Fit.ToString().ToLowerInvariant()).AppendLine("\" });");
-        }
-
-        foreach (var (component, _) in Walk())
-        {
-            code.AppendLine();
-            WriteComponent(code, component);
-        }
-
-        return code.ToString();
-    }
-
-    /* Undoing */
-
-    /// <summary>
-    /// Notes how the layout is now as something to come back to, if it has changed since the last time. The
-    /// editor calls this whenever a change has come to rest, so dragging something across the canvas is one
-    /// step back rather than a hundred.
-    /// </summary>
-    /// <returns>Whether there was anything new to note.</returns>
-    public bool Record()
-    {
-        string now = GenerateBody();
-        if (now == recorded)
-            return false;
-
-        undone.Add(recorded);
-        if (undone.Count > MAX_HISTORY)
-            undone.RemoveAt(0);
-
-        // What was undone before this change was undone from a layout that is no more.
-        redone.Clear();
-        recorded = now;
-        return true;
-    }
-
-    /// <summary>Forgets every step there was to go back to. The layout as it is now is where it starts.</summary>
-    public void ResetHistory()
-    {
-        undone.Clear();
-        redone.Clear();
-        recorded = GenerateBody();
-    }
-
-    /// <summary>Takes the last change back.</summary>
-    /// <returns>Whether there was one.</returns>
-    public bool Undo() => Step(undone, redone);
-
-    /// <summary>Makes the change that was last taken back again.</summary>
-    /// <returns>Whether there was one.</returns>
-    public bool Redo() => Step(redone, undone);
-
-    private bool Step(List<string> from, List<string> to)
-    {
-        // A change that hasn't come to rest yet is a step of its own, and the one that is taken back first.
-        if (from == undone)
-            Record();
-
-        if (from.Count == 0)
-            return false;
-
-        to.Add(recorded);
-        recorded = from[^1];
-        from.RemoveAt(from.Count - 1);
-
-        // Whatever was selected is selected again if it is still there, components are found by their names.
-        var selected = selection.Select(component => names.GetValueOrDefault(component)).OfType<string>().ToList();
-
-        Load(recorded, Path, keepHistory: true);
-
-        foreach (string name in selected)
-        {
-            if (Find(name) is { } found)
-                selection.Add(found);
-        }
-
-        // Going back and forth is not the time for everything to make its entrance again.
-        SettleIntros();
-        return true;
-    }
-
-    /* Entrances */
-
-    /// <summary>Plays the entrance of everything in the layout that has one, the way loading it in a program does.</summary>
-    public void PlayIntros()
-    {
-        SettleIntros();
-        Module.Root.PlayIntro();
-    }
-
-    /// <summary>Stops whatever is still on its way in and shows everything where it belongs.</summary>
-    public void SettleIntros() => Settle(Module.Root);
-
-    private static void Settle(UIComponent component)
-    {
-        component.Tweens.KillAll();
-        component.VisualOffset = System.Numerics.Vector2.Zero;
-        component.VisualScale = System.Numerics.Vector2.One;
-        component.Opacity = 1.0f;
-
-        foreach (var child in component.Children)
-            Settle(child);
-    }
-
-    private void WriteComponent(StringBuilder code, UIComponent component, Func<UIComponent, string>? nameOf = null, UIComponent? top = null)
-    {
-        nameOf ??= NameOf;
-
-        string? kind = UIModule.KindOf(component);
-        if (kind is null)
-        {
-            code.Append("// A ").Append(component.GetType().Name).AppendLine(" can't be made by a script, it was left out.");
-            return;
-        }
-
-        var properties = new List<string>();
-
-        if (component != top && component.Parent is { } parent && parent != Module.Root)
-            properties.Add($"parent: {nameOf(parent)}");
-
-        // Only what was changed is written, against a component of the same kind nobody has touched.
-        UIComponent untouched = UIModule.CreateDetached(kind)!;
-        bool hasHandlers = false;
-
-        foreach (var (name, value) in ReadProperties(component))
-        {
-            if (value is FunctionValue or AnonymousFunctionValue or NativeFunctionValue)
-            {
-                hasHandlers = true;
-                continue;
-            }
-
-            if (!HIDLWriter.CanWrite(value))
-                continue;
-
-            string written = HIDLWriter.Write(value);
-            if (TryRead(untouched, name, out var usual) && HIDLWriter.CanWrite(usual) && HIDLWriter.Write(usual) == written)
-                continue;
-
-            properties.Add($"{name}: {written}");
-        }
-
-        if (hasHandlers)
-            code.AppendLine("// The handlers this component had were functions, which can't be written back out.");
-
-        code.Append("let ").Append(nameOf(component)).Append(" = compositor.").Append(kind).Append('(');
-
-        if (properties.Count == 0)
-        {
-            code.AppendLine(");");
-        }
-        else if (properties.Count <= 2 && properties.Sum(property => property.Length) < 70)
-        {
-            code.Append("{ ").Append(string.Join(", ", properties)).AppendLine(" });");
-        }
-        else
-        {
-            code.AppendLine("{");
-            for (int i = 0; i < properties.Count; i++)
-                code.Append("    ").Append(properties[i]).AppendLine(i < properties.Count - 1 ? "," : string.Empty);
-            code.AppendLine("});");
-        }
-    }
-
-    /// <summary>
-    /// Everything about a component a script can set, by name, as it is right now. This is what the inspector
-    /// shows and what the code is written from.
-    /// </summary>
-    public static IEnumerable<(string Name, IRuntimeValue Value)> ReadProperties(UIComponent component)
-    {
-        foreach (var (name, property) in component.Object.Properties)
-        {
-            if (Unwritten.Contains(name) || property is not NativeValue native)
-                continue;
-
-            IRuntimeValue value;
-            try
-            {
-                value = native.AccessorCallback();
-            }
-            catch
-            {
-                continue;
-            }
-
-            yield return (name, value);
-        }
-    }
-
-    public static bool TryRead(UIComponent component, string name, out IRuntimeValue value)
-    {
-        if (component.Object.Properties.TryGetValue(name, out var property) && property is NativeValue native)
-        {
-            value = native.AccessorCallback();
-            return true;
-        }
-
-        value = new NullValue();
-        return false;
-    }
-
-    /// <summary>
-    /// Sets a property of a component the way a script would.
-    /// </summary>
-    /// <returns>What went wrong, null if nothing did.</returns>
-    public static string? Write(UIComponent component, string name, IRuntimeValue value)
-    {
-        if (!component.Object.Properties.TryGetValue(name, out var property) || property is not NativeValue native)
-            return $"There is no property called '{name}'.";
-
-        try
-        {
-            native.MutatorCallback(value);
-            return null;
-        }
-        catch (Exception e)
-        {
-            return e.Message;
-        }
-    }
-
     private string FreeName(string kind, ICollection<string>? taken = null)
     {
         for (int number = 1; ; number++)
         {
             string name = $"{kind}{number}";
-            if (!names.ContainsValue(name) && taken?.Contains(name) != true)
+            if (!names.Has(name) && taken?.Contains(name) != true)
                 return name;
         }
-    }
-
-    /* Rearranging: grouping, copying, and what goes on top of what */
-
-    /// <summary>
-    /// Puts components into a new <see cref="Group"/>, keeping every one of them exactly where it is on screen. They
-    /// have to be in the same container (or all on the screen). Each one is placed from the middle of the group from
-    /// then on, whatever it was anchored to before, which is what makes the group one thing you can move about.
-    /// </summary>
-    /// <returns>The group, null with the reason why if it can't be done.</returns>
-    public Group? Group(IReadOnlyList<UIComponent> components, out string problem)
-    {
-        problem = string.Empty;
-        if (components.Count == 0)
-        {
-            problem = "select something to group first";
-            return null;
-        }
-
-        UIComponent parent = components[0].Parent ?? Module.Root;
-        if (components.Any(component => (component.Parent ?? Module.Root) != parent))
-        {
-            problem = "only things in the same container can be grouped, they'd jump about otherwise";
-            return null;
-        }
-
-        var ordered = components.OrderBy(component => IndexIn(parent, component)).ToList();
-
-        UIRect union = ordered[0].Bounds;
-        foreach (var component in ordered.Skip(1))
-            union = new UIRect(Vector2.Min(union.Min, component.Bounds.Min), Vector2.Max(union.Max, component.Bounds.Max));
-
-        UIRect area = parent.Bounds.Shrink(parent.Padding);
-        var group = new Group { Anchor = Origin.Center, Position = union.Center - area.Center };
-        parent.Insert(IndexIn(parent, ordered[0]), group);
-
-        foreach (var component in ordered)
-        {
-            Vector2 center = component.Bounds.Center;
-
-            // Stretching to fill the group would make it as big as the group is, which is as big as they are: round and round
-            if (component.Fill != UIFill.None)
-            {
-                component.Size = component.Bounds.Size;
-                component.Fill = UIFill.None;
-            }
-
-            component.Anchor = Origin.Center;
-            component.Pivot = null;
-            component.Position = center - union.Center;
-            group.Add(component);
-        }
-
-        NameOf(group);
-        return group;
-    }
-
-    /// <summary>Whether a component holds other components, which is what can be changed into another kind that does.</summary>
-    public static bool IsContainer(UIComponent component) => component is Panel or TabPanel;
-
-    /// <summary>
-    /// Changes a container into another kind of container, a group into a stack, a stack into a grid or tabs. It keeps its
-    /// name, its place in the tree, where it is and how big, its look where the new kind has one, and everything in it in
-    /// the same order. Into tabs, everything in it is a page, its name the tab.
-    /// </summary>
-    /// <param name="across">For a stack, whether it runs across rather than down.</param>
-    /// <returns>The new one, null with the reason why if it can't be done.</returns>
-    public UIComponent? Convert(UIComponent container, string kind, bool across, out string problem)
-    {
-        problem = string.Empty;
-        if (!IsContainer(container))
-        {
-            problem = $"{NameOf(container)} doesn't hold anything to put in something else";
-            return null;
-        }
-
-        if (UIModule.CreateDetached(kind) is not { } made || !IsContainer(made))
-        {
-            problem = $"a {kind} can't hold other components";
-            return null;
-        }
-
-        UIComponent parent = container.Parent ?? Module.Root;
-        int index = IndexIn(parent, container);
-        string name = NameOf(container);
-
-        // Where it is and what it is to the layout
-        made.Anchor = container.Anchor;
-        made.Pivot = container.Pivot;
-        made.Position = container.Position;
-        made.Size = container.Size;
-        made.Fill = container.Fill;
-        made.Padding = container.Padding;
-        made.Visible = container.Visible;
-        made.Enabled = container.Enabled;
-        made.Layer = container.Layer;
-        made.Tooltip = container.Tooltip;
-
-        // Its look, and what it is filled with, where both are panels
-        if (container is Panel was && made is Panel panel)
-        {
-            panel.Color = was.Color;
-            panel.Background = was.Background;
-            panel.Radius = was.Radius;
-            panel.Outline = was.Outline;
-            panel.Template = was.Template;
-            panel.PreviewCount = was.PreviewCount;
-            panel.Stagger = was.Stagger;
-        }
-
-        if (made is StackPanel stack)
-        {
-            stack.Direction = across ? UIDirection.Horizontal : UIDirection.Vertical;
-            if (container is StackPanel stacked)
-                stack.Spacing = stacked.Spacing;
-        }
-
-        if (made is Collapsible section)
-            section.Title = name.Replace('_', ' ');
-
-        // What was in it, in its order. Stand-ins for a template's items aren't the layout's, the new one makes its own
-        var moving = container.Children.Where(child => !previews.Contains(child)).ToList();
-        parent.Insert(index, made);
-        foreach (var child in moving)
-            made.Add(child);
-
-        if (made is TabPanel tabs)
-            tabs.Tabs = [.. moving.Select(page => NameOf(page).Replace('_', ' '))];
-
-        parent.Remove(container);
-        names.Remove(container);
-        selection.Remove(container);
-        names[made] = name;
-
-        RefreshPreviews();
-        return made;
-    }
-
-    /// <summary>
-    /// Takes a group apart: what was in it goes into the group's container where the group was, everything staying where
-    /// it is on screen.
-    /// </summary>
-    /// <returns>What was in it.</returns>
-    public List<UIComponent> Ungroup(Group group)
-    {
-        UIComponent parent = group.Parent ?? Module.Root;
-        UIRect area = parent.Bounds.Shrink(parent.Padding);
-        int index = IndexIn(parent, group);
-
-        var freed = group.Children.ToList();
-        foreach (var component in freed)
-        {
-            Vector2 center = component.Bounds.Center;
-
-            component.Anchor = Origin.Center;
-            component.Pivot = null;
-            component.Position = center - area.Center;
-            parent.Insert(index++, component);
-        }
-
-        parent.Remove(group);
-        names.Remove(group);
-        selection.Remove(group);
-        return freed;
-    }
-
-    /// <summary>
-    /// Makes a copy of a component and everything in it, next to it and nudged down and to the right so it can be seen.
-    /// Made the way a layout file is loaded, so the copy is everything the original would be written out as.
-    /// </summary>
-    public UIComponent? Duplicate(UIComponent original, out string problem)
-    {
-        problem = string.Empty;
-
-        var subtree = new List<(UIComponent, int)>();
-        Collect(original, 0, subtree);
-
-        // Fresh names for the lot, none of them taken and none of them the same as each other
-        var fresh = new Dictionary<UIComponent, string>();
-        foreach (var (component, _) in subtree)
-            fresh[component] = FreeName(UIModule.KindOf(component) ?? "component", fresh.Values);
-
-        var code = new StringBuilder();
-        foreach (var (component, _) in subtree)
-            WriteComponent(code, component, component => fresh.TryGetValue(component, out var name) ? name : NameOf(component), top: original);
-
-        UIComponent? parent = original.Parent is { } owner && owner != Module.Root ? owner : null;
-
-        UILayout made;
-        try
-        {
-            made = UILayout.LoadCode(Module, code.ToString(), parent, Path ?? string.Empty);
-        }
-        catch (Exception e)
-        {
-            problem = e.Message;
-            return null;
-        }
-
-        foreach (var (name, part) in made.Parts)
-            names[part] = name;
-
-        if (!made.Parts.TryGetValue(fresh[original], out var copy))
-        {
-            problem = "the copy came out without its top, which shouldn't be possible";
-            return null;
-        }
-
-        UIComponent container = copy.Parent ?? Module.Root;
-        container.MoveChild(copy, IndexIn(container, original) + 1);
-        copy.Position += new Vector2(16, -16);
-
-        SettleIntros();
-        RefreshPreviews();
-        return copy;
-    }
-
-    /// <summary>Where a component goes among its siblings, which is the order they're drawn in (the last one on top).</summary>
-    public enum Order { Front, Forward, Backward, Back }
-
-    /// <summary>Moves a component up or down the order it is drawn in among its siblings.</summary>
-    public bool Reorder(UIComponent component, Order order)
-    {
-        if (component.Parent is not { } parent)
-            return false;
-
-        int index = IndexIn(parent, component);
-        int last = parent.Children.Count - 1;
-
-        return parent.MoveChild(component, order switch
-        {
-            Order.Front => last,
-            Order.Forward => Math.Min(last, index + 1),
-            Order.Backward => Math.Max(0, index - 1),
-            _ => 0
-        });
-    }
-
-    /// <summary>
-    /// Moves components a place up or down among their siblings, which is the order the tree lists them in and a
-    /// stack lays them out in. Ones that are next to each other move together and keep their order, and one that
-    /// is at the end already stays there.
-    /// </summary>
-    /// <param name="by">Less than nothing for up (towards the first), more for down.</param>
-    /// <returns>Whether anything moved.</returns>
-    public bool Move(IReadOnlyList<UIComponent> components, int by)
-    {
-        bool moved = false;
-
-        // The ones nearest the way they are going go first, or they would be in the way of the ones behind them
-        var ordered = by < 0 ? components : components.Reverse();
-        foreach (var component in ordered)
-        {
-            if (component.Parent is not { } parent)
-                continue;
-
-            int index = IndexIn(parent, component);
-            int target = index + Math.Sign(by);
-            if (target < 0 || target >= parent.Children.Count)
-                continue;
-
-            // Not past one that is moving as well and got stuck at the end, they keep their order
-            UIComponent neighbour = parent.Children[target];
-            if (components.Contains(neighbour) || previews.Contains(neighbour))
-                continue;
-
-            moved |= parent.MoveChild(component, target);
-        }
-
-        return moved;
-    }
-
-    /// <summary>
-    /// Takes a component out of the container it is in and puts it after that container, in whatever that is in.
-    /// </summary>
-    /// <returns>Whether it could be done, with the reason why not if it couldn't.</returns>
-    public bool MoveOut(UIComponent component, out string problem)
-    {
-        problem = string.Empty;
-        if (component.Parent is not { } parent || parent == Module.Root)
-        {
-            problem = $"{NameOf(component)} is on the screen already, there is nothing to take it out of";
-            return false;
-        }
-
-        if (parent is TabPanel || parent.Parent is TabPanel)
-        {
-            problem = "a page belongs to its tabs, and what goes next to a page would be a page without a tab";
-            return false;
-        }
-
-        UIComponent outer = parent.Parent ?? Module.Root;
-        outer.Insert(IndexIn(outer, parent) + 1, component);
-        return true;
-    }
-
-    /// <summary>
-    /// Puts a component into the container that comes right before it among its siblings, at the end of it, which
-    /// is where it would be had it been listed a step further in. For tabs that is the page that is open.
-    /// </summary>
-    public bool MoveInto(UIComponent component, out string problem)
-    {
-        problem = string.Empty;
-        UIComponent parent = component.Parent ?? Module.Root;
-        int index = IndexIn(parent, component);
-
-        UIComponent? into = index > 0 ? parent.Children[index - 1] : null;
-        if (into is TabPanel tabs)
-            into = tabs.Selected >= 0 && tabs.Selected < tabs.Children.Count ? tabs.Children[tabs.Selected] : null;
-
-        if (into is not Panel || previews.Contains(into))
-        {
-            problem = $"what comes before {NameOf(component)} isn't something things go into, move it under a stack or a panel first";
-            return false;
-        }
-
-        into.Add(component);
-        return true;
-    }
-
-    /// <summary>
-    /// Writes components and everything in them as the code that makes them, the way a layout file has them, for
-    /// putting them down somewhere else (<see cref="Paste"/>), in this layout or another.
-    /// </summary>
-    public string Copy(IReadOnlyList<UIComponent> components)
-    {
-        var code = new StringBuilder();
-        foreach (var top in components)
-        {
-            var subtree = new List<(UIComponent, int)>();
-            Collect(top, 0, subtree);
-
-            foreach (var (component, _) in subtree)
-                WriteComponent(code, component, top: top);
-        }
-
-        return code.ToString();
-    }
-
-    /// <summary>
-    /// Makes what <see cref="Copy"/> wrote, in a container or on the screen. Everything keeps the name it had
-    /// where that is free and gets a new one where it isn't.
-    /// </summary>
-    /// <returns>The tops of what was made, empty with the reason why if the code wouldn't run.</returns>
-    public List<UIComponent> Paste(string code, UIComponent? parent, out string problem)
-    {
-        problem = string.Empty;
-
-        UILayout made;
-        try
-        {
-            made = UILayout.LoadCode(Module, code, parent, Path ?? string.Empty);
-        }
-        catch (Exception e)
-        {
-            problem = e.Message;
-            return [];
-        }
-
-        foreach (var (name, part) in made.Parts)
-            names[part] = names.ContainsValue(name) ? FreeName(UIModule.KindOf(part) ?? "component") : name;
-
-        var tops = made.Roots.ToList();
-        foreach (var top in tops)
-        {
-            NameOf(top);
-
-            // Nudged so a copy put down on top of what it was copied from can be seen to be there
-            top.Position += new Vector2(16, -16);
-        }
-
-        SettleIntros();
-        RefreshPreviews();
-        return tops;
-    }
-
-    private static int IndexIn(UIComponent parent, UIComponent child)
-    {
-        var children = parent.Children;
-        for (int i = 0; i < children.Count; i++)
-        {
-            if (children[i] == child)
-                return i;
-        }
-
-        return -1;
     }
 }

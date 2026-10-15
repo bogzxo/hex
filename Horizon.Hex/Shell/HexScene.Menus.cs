@@ -49,17 +49,10 @@ internal sealed partial class HexScene
         Tool("remove", "Delete it and everything in it (Del)", DeleteAll);
     }
 
-    /// <summary>The buttons along the top under the menus.</summary>
+    /// <summary>What the file on screen can do, at the right end of the tabs.</summary>
     private void WireToolbar()
     {
-        layout.Get<Button>("new_file").OnPressed = () => Show(NewDocument());
-        layout.Get<Button>("open_file").OnPressed = OpenPressed;
-        layout.Get<Button>("save_file").OnPressed = Save;
-        layout.Get<Button>("save_all").OnPressed = SaveAll;
-        layout.Get<Button>("undo_button").OnPressed = Undo;
-        layout.Get<Button>("redo_button").OnPressed = Redo;
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
-        layout.Get<Button>("find_button").OnPressed = FindInFiles;
     }
 
     /// <summary>F5, the file run, or the entrances of a layout played in its designer.</summary>
@@ -172,6 +165,7 @@ internal sealed partial class HexScene
 
         // The window, VS Code's keys for the side bar, the panel and the command palette
         shortcuts.Add(Key.B, ToggleSideBar, control: true, whileTyping: true);
+        shortcuts.Add(Key.B, ToggleProperties, control: true, whileTyping: true, alt: true);
         shortcuts.Add(Key.J, TogglePanel, control: true, whileTyping: true);
         shortcuts.Add(Key.P, CommandPalette, control: true, whileTyping: true, shift: true);
 
@@ -260,7 +254,7 @@ internal sealed partial class HexScene
         view.AddSeparator();
         view.Add("Side bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left").IsChecked = () => left.Visible;
         view.Add("Panel", TogglePanel, "Ctrl+J", "layout-panel").IsChecked = () => bottom.Visible;
-        view.Add("Properties", ToggleProperties, icon: "layout-sidebar-right").IsChecked = () => right.Visible;
+        view.Add("Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right").IsChecked = () => right.Visible;
         view.AddSeparator();
         view.Add("Designer or code", ToggleView, "F7", "layout").IsEnabled = () => !document.IsText;
         view.Add("Zoom in", () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
@@ -422,7 +416,11 @@ internal sealed partial class HexScene
     /// Ctrl+Shift+P, every item of every menu there is right now in a list that narrows as it is typed into, with the
     /// menus it is in and its keys, the way VS Code's does.
     /// </summary>
-    private void CommandPalette()
+    private void CommandPalette() =>
+        ChooseFrom("Command palette", "Everything Hex can do right now, a few letters narrow it down", AllCommands());
+
+    /// <summary>Every item of every menu that means something right now, and what the extensions added.</summary>
+    private List<(string Text, Action Picked)> AllCommands()
     {
         var commands = new List<(string Text, Action Picked)>();
         foreach (Menu bar in menu.Menus)
@@ -437,7 +435,8 @@ internal sealed partial class HexScene
             }
         }
 
-        ChooseFrom("Command palette", "Everything Hex can do right now, a few letters narrow it down", commands);
+        commands.AddRange(ExtensionCommands());
+        return commands;
     }
 
     /// <summary>
@@ -445,12 +444,28 @@ internal sealed partial class HexScene
     /// letters in order, the way quick open goes), enter, the first button or a double click picks.
     /// </summary>
     /// <param name="shortestFirst">Whether what is left is put shortest first, the nearest to what was typed for a file's name.</param>
-    private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false)
+    /// <param name="prefixed">
+    /// Other lists for what is typed starting with a character of their own, VS Code's quick open (> for commands, @ for
+    /// something in the file), null for the list the dialog started with. The rest of what is typed narrows them down.
+    /// </param>
+    private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false,
+        Func<char, List<(string Text, Action Picked)>?>? prefixed = null)
     {
-        string[] texts = [.. choices.Select(choice => choice.Text)];
+        string[] texts = [];
         var byText = new Dictionary<string, Action>();
-        foreach (var (text, picked) in choices)
-            byText.TryAdd(text, picked);
+        char showing = '\uffff';
+
+        // The list that is being narrowed down, the one the dialog started with or another for a prefix
+        void Use(char prefix, List<(string Text, Action Picked)> from)
+        {
+            showing = prefix;
+            texts = [.. from.Select(choice => choice.Text)];
+            byText.Clear();
+            foreach (var (text, picked) in from)
+                byText.TryAdd(text, picked);
+        }
+
+        Use('\0', choices);
 
         if (textDialog is { IsOpen: true })
             textDialog.Close();
@@ -472,8 +487,13 @@ internal sealed partial class HexScene
 
         box.OnChanged = typed =>
         {
-            var left = texts.Where(text => Matches(text, typed));
-            if (shortestFirst)
+            char prefix = typed.Length > 0 && prefixed?.Invoke(typed[0]) is not null ? typed[0] : '\0';
+            if (prefix != showing)
+                Use(prefix, prefix == '\0' ? choices : prefixed!(prefix)!);
+
+            string query = prefix == '\0' ? typed : typed[1..];
+            var left = texts.Where(text => Matches(text, query));
+            if (shortestFirst && prefix == '\0')
                 left = left.OrderBy(text => Path.GetFileName(text).Length);
 
             list.Items = [.. left.Take(300)];

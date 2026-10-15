@@ -1,0 +1,39 @@
+// What a new move starts out as, a few of the kinds of move a fighter has. The animation is the one picked in the art strip
+// (or idle) and the numbers are a place to start from, close to what Fighter2D's own moves of the kind say.
+
+// @doc The names of the templates, in the order the dropdown has them
+let NAMES = ["jab", "heavy", "launcher", "sweep", "overhead", "special", "dash", "block"];
+
+func phase(animation, frames, hit) {
+    let made = { animation: animation, frames: frames };
+    if (hit != null) { made.hit = hit; }
+    return made;
+}
+
+// @doc A move of a template, the art playing animation
+func make(name, animation) {
+    if (name == "heavy") {
+        return { input: "B", trigger: "pressed", priority: 30, stances: "standing", damage: 12, knockback: vec(620, 0), cancellable: false, steering: false, status: "attacking", phases: { swing: phase(animation, 30, 14) } };
+    }
+    if (name == "launcher") {
+        return { input: "Y + B", trigger: "pressed", priority: 20, stances: "standing", damage: 10, knockback: vec(300, 2000), cancellable: false, steering: false, status: "attacking", phases: { swing: phase(animation, 28, 12) } };
+    }
+    if (name == "sweep") {
+        return { input: "B", trigger: "pressed", priority: 30, stances: "crouching", damage: 8, knockback: vec(400, 1100), level: "low", knockdown: true, cancellable: false, steering: false, status: "attacking", stance: "crouching", phases: { swing: phase(animation, 26, 11) } };
+    }
+    if (name == "overhead") {
+        return { input: "LeftBumper + B", trigger: "pressed", priority: 15, stances: "standing", damage: 9, level: "overhead", cancellable: false, steering: false, status: "attacking", phases: { swing: phase(animation, 32, 18) } };
+    }
+    if (name == "special") {
+        return { input: "A + B", trigger: "pressed", priority: 5, stances: "standing | crouching", damage: 16, knockback: vec(950, 1600), knockdown: true, meter_cost: 25, cancellable: false, steering: false, status: "attacking", phases: { wind: phase(animation, 12, null), strike: { frames: 26, hit: 4, impulse: vec(900, 0) } } };
+    }
+    if (name == "dash") {
+        return { input: "DPadRight", trigger: "double_tap", priority: 10, stances: "standing", cancellable: false, steering: false, phases: { dash: { animation: animation, frames: 14, impulse: vec(1600, 0), effect: "haze" } } };
+    }
+    if (name == "block") {
+        return { input: "LeftTrigger", trigger: "held", priority: 40, stances: "standing | crouching", status: "blocking", turning: false, phases: { hold: { animation: animation, loop_while: "held" } } };
+    }
+
+    // A jab, quick and a little minus
+    return { input: "Y", trigger: "pressed", priority: 34, stances: "standing | crouching", damage: 5, cancellable: true, steering: false, status: "attacking", phases: { swing: phase(animation, 16, 6) } };
+}

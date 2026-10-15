@@ -23,9 +23,71 @@ What is typed is completed (Ctrl+Space, or as it is typed), a component's proper
 text keys after an @, the names of the whole workspace anywhere else. F12 goes to where something is declared,
 Shift+F12 finds everywhere it is used.
 
+HIDL is a language of values first, so the right side of a file of code is what it comes to (Values), run a moment after
+it was last typed into on a thread of its own, the way the game that reads it would see it, as a tree. A click on a
+value goes to where it was written, in whichever file that was, the comment over a key is its tooltip, and what went
+wrong running it is underlined where it went wrong. Under the editor, next to the problems and the output, is the HIDL
+console, a line typed in runs in what the file came to (`moves.jab.phases`, `len(keys(strings))`, a behaviour called
+with a made up view), what it declares kept for the next lines, Up and Down for what was typed before.
+
 The workspace is any number of folders (File, Open folder, Add folder), a tree in the explorer on the left
 (Ctrl+Shift+E, Ctrl+Shift+O for the outline) with new, rename and delete on the right click, saved as a
 .hex-workspace and opened again with File, Open workspace. The one that was open comes back when Hex starts.
+
+## Extensions
+
+An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The ones that come with Hex are in
+`Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are switched on and off on their page
+of the settings (the puzzle piece on the activity bar), and one that goes wrong is switched off for the rest of the run
+and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the first of them.
+
+```
+let extension = { name: "Hello Dolly", description: "...", version: "1.0.0", author: "bogz" };
+let welcome_greetings = ["Hello, Dolly!", "..."];
+
+// Called once Hex is up, with what an extension may do to it
+func on_start(hex) {
+    hex.title_note(math.pick(welcome_greetings));
+    hex.command("Another greeting", func(hex) {
+        hex.title_note(math.pick(welcome_greetings));
+    });
+}
+```
+
+What `hex` has for now. `hex.title_note(text)` puts a few words after Hex in the title bar, in brackets. `hex.say(text)`
+says something in the status bar, `hex.notify(text)` puts a card up in the corner (`hex.notify(text, true)` an error
+that stays). `hex.command(name, func(hex) { ... })` puts a command in the command palette under the extension's name.
+`hex.file()` is the path of the file on screen. `hex.version`, `hex.name` and `hex.folder` are Hex's version, the
+extension's name and its folder. Besides `on_start(hex)`, an extension hears about `on_open(hex, file)` and
+`on_save(hex, file)`. What it prints goes in the output with its name in front. An extension runs in a runtime of its
+own, a second at the most for anything it does.
+
+It can have a UI too, a view of a file (`hex.view`, offered on the files that say its `#define` and opened on them by
+itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
+doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
+and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
+for a file or a folder with Windows' dialogs (`hex.pick_file({ title, folder, filter: ["Programs (*.exe)", "*.exe"] },
+func(path) { ... })`, `hex.pick_folder(func(path) { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
+error }`, for a file that may be half typed.
+
+It can change a file by the paths of its values, written where they are in the text with the file's comments and spacing
+kept, one step of the file's undo a call (null when it went, why it didn't as a text). `hex.edit(file, ["moves", "jab",
+"damage"], 8)`, `hex.insert(file, path, key, value, after)`, `hex.remove(file, path)`, `hex.rename(file, path, key)`,
+`hex.reorder(file, path, keys)`, `hex.edits(file, [{ edit: path, value }, { insert: path, key, value }, ...])` for several
+as one step, and `hex.undo_file(file)` and `hex.redo_file(file)`. A file that isn't open is opened behind the one on screen.
+`hex.problems(file, [{ path or line, message, warning }])` puts what it finds wrong in Hex's problems, `hex.watch(path)`
+has it told `on_file_changed(hex, path)`, `hex.open(file, path)` opens a file at a value, `hex.copy(text)` puts text on
+the clipboard. See `docs/extensions.md`, the move editor (Fighter2D's moves, `extensions/move_editor`) is all of it at
+once.
+
+What an extension can be told goes in its extension object, `settings: { game: { title, about, kind, default } }`, the
+kind being text, path, number or flag. It gets a tab of its own in the settings (made from the template the settings'
+pages name in `settings.hor`, `extension_tab.hor`), a row for each of them there, or its own layout for the tab if it says
+`settings_layout: "file.hor"`, which Hex hands to `on_settings(hex, ui)` once it's made. `hex.setting(name)` is what it
+was told (or its default), `hex.set_setting(name, value)` changes it, and Hex keeps the lot in `hex_settings.hor` under
+`extension_settings`. A change made on its tab is told to the extension, `on_setting(hex, name, value)`.
+
+## Building
 
 ```
 git clone --recursive https://github.com/bogzxo/hex

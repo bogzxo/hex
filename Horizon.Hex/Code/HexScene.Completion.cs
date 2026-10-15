@@ -18,17 +18,66 @@ internal sealed partial class HexScene
 {
     /* Completing what is typed, by what it is being typed into */
 
-    // Every name and key of every file of the workspace, made the first time anything is completed and again once
-    // something changes the files (null until then)
+    // Every name and key of every file of the workspace, gathered off the editor's thread the first time anything is
+    // completed and again once something changes the files (null until then). It read up to two thousand files on the
+    // editor's thread, the first completion of a big workspace froze Hex
     private HashSet<string>? vocabulary;
+    private bool gathering;
 
+    // What the files of the workspace document, by name, gathered with the names (see HexScene.Docs)
+    private Dictionary<string, WorkspaceDoc>? docIndex;
+
+    // Which gathering is the one that counts, a change of the workspace while one is going makes it out of date
+    private int vocabularyGeneration;
+
+    /// <summary>Lets go of the names, the files they came from changed.</summary>
+    private void ForgetVocabulary()
+    {
+        vocabulary = null;
+        docIndex = null;
+        gathering = false;
+        vocabularyGeneration++;
+    }
+
+    private static readonly HashSet<string> NoVocabulary = [];
+
+    /// <summary>The names of the workspace, nothing while they are still being gathered.</summary>
     private HashSet<string> Vocabulary()
     {
         if (vocabulary is not null)
             return vocabulary;
 
-        vocabulary = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string file in AllWorkspaceFiles().Take(2000))
+        if (!gathering)
+        {
+            gathering = true;
+            List<string> roots = WorkspaceRoots();
+            int generation = vocabularyGeneration;
+            InBackground("gathering the names of the workspace...", () => Gather(roots), gathered =>
+            {
+                if (generation != vocabularyGeneration)
+                    return;
+
+                (vocabulary, docIndex) = gathered;
+                gathering = false;
+
+                // Whatever was being typed was completed without them, or found nothing and closed
+                if (code.IsFocused || code.CompletionOpen)
+                    code.Complete(typed: true);
+            }, quiet: true);
+        }
+
+        return NoVocabulary;
+    }
+
+    /// <summary>
+    /// Every name in the files under some folders, the first two thousand of them, and what the documented ones say. For
+    /// the background.
+    /// </summary>
+    private static (HashSet<string> Names, Dictionary<string, WorkspaceDoc> Docs) Gather(IReadOnlyList<string> roots)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var docs = new Dictionary<string, WorkspaceDoc>(StringComparer.Ordinal);
+        foreach (string file in FilesUnder(roots).Take(2000))
         {
             string source;
             try
@@ -40,14 +89,18 @@ internal sealed partial class HexScene
                 continue;
             }
 
-            foreach (Token token in Lexer.Tokenize(source, lenient: true))
+            Token[] tokens = Lexer.Tokenize(source, lenient: true);
+            foreach (Token token in tokens)
             {
                 if (token.Type == TokenType.Identifier && token.Value.Length > 1)
-                    vocabulary.Add(token.Value);
+                    names.Add(token.Value);
             }
+
+            foreach (HidlDoc doc in HIDLDocs.Read(tokens))
+                docs.TryAdd(doc.Name, new WorkspaceDoc(doc.Doc, file, doc.Line - 1, doc.Column - 1));
         }
 
-        return vocabulary;
+        return (names, docs);
     }
 
     /// <summary>

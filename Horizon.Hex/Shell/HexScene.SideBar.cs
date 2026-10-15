@@ -71,6 +71,11 @@ internal sealed partial class HexScene
         layout.Get<Button>("act_outline").OnPressed = () => ShowSide(HexSide.Outline);
         layout.Get<Button>("act_design").OnPressed = () => ShowSide(HexSide.Design);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
+        layout.Get<Button>("act_extensions").OnPressed = () =>
+        {
+            OpenSettings();
+            settingsPages?.Select(SETTINGS_EXTENSIONS);
+        };
     }
 
     /// <summary>Shows a view of the side bar, bringing the side bar back if it was put away. The view that is showing again puts it away, the way VS Code does.</summary>

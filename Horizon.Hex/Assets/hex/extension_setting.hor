@@ -1,0 +1,37 @@
+// One thing an extension can be told, on its row of the extensions page of the settings. A text box for text and
+// paths, a number box for a number, a toggle for a flag, the two that aren't wanted hidden.
+#define layout
+
+let setting = compositor.stack({
+    anchor: "left",
+    pivot: "left",
+    spacing: 10,
+    direction: "horizontal"
+});
+
+let title = compositor.label({
+    parent: setting,
+    size: vec(170, 28),
+    text: "Setting",
+    text_scale: 0.13,
+    align: "left"
+});
+
+let text_value = compositor.textbox({
+    parent: setting,
+    size: vec(340, 28),
+    text_scale: 0.13
+});
+
+let number_value = compositor.number_box({
+    parent: setting,
+    size: vec(120, 28)
+});
+
+let flag_value = compositor.toggle({
+    parent: setting,
+    anchor: "left",
+    pivot: "left",
+    label: "",
+    lbl_scale: 0.13
+});

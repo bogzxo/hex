@@ -19,6 +19,8 @@ internal class Program
     private const string ARGUMENT_SCALE = "--scale";
     private const string ARGUMENT_BROWSE = "--browse";
     private const string ARGUMENT_WATCH = "--watch";
+    private const string ARGUMENT_VIEW = "--view";
+    private const string ARGUMENT_CONSOLE = "--console";
 
     // Where layouts go when nobody says otherwise, next to the editor
     private const string DEFAULT_WORKSPACE = "layouts";
@@ -35,6 +37,8 @@ internal class Program
     /// <item><c>--scale 1.25</c> draws the editor that much bigger, rather than as big as it was left the last time (the selector in its toolbar).</item>
     /// <item><c>--selftest</c> has the editor click through itself and print how that went, <c>--wheel</c> makes it wait for the real mouse wheel as well.</item>
     /// <item><c>--watch</c> has the self-test go slowly enough to follow by eye, left to itself it is over in a few seconds.</item>
+    /// <item><c>--view table</c> brings the file of <c>--open</c> up in a view of its own, design, code or table, once it can be.</item>
+    /// <item><c>--console "moves.jab" "len(keys(moves))"</c> runs lines in the HIDL console once the file's values are in.</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
     /// </list>
     /// </summary>
@@ -68,6 +72,8 @@ internal class Program
             Exercise: args.Contains(ARGUMENT_EXERCISE),
             Browse: args.Contains(ARGUMENT_BROWSE),
             Watch: args.Contains(ARGUMENT_WATCH),
+            View: ValueOf(args, ARGUMENT_VIEW),
+            Console: ValuesOf(args, ARGUMENT_CONSOLE) is { Length: > 0 } lines ? lines : null,
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);
 
@@ -81,21 +87,13 @@ internal class Program
                 WindowTitle = "Hex",
                 CustomFrame = true,
 
-                // An editor and not a game. It draws when something changed, ticks a few times a second while nobody is
-                // touching it and waits for the system's events, so it costs next to nothing sitting there. Vsync stays on
-                // (FIFO), no tearing and not a frame drawn that nobody would see. Testing itself it runs as a game, the
-                // test goes by updates and wants every frame drawn behind them (see below)
+
                 Mode = selfTest ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
                 Maximized = size is null,
                 VSync = true,
                 FramesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0,
-
-                // The editor testing itself goes by updates (see HexPointerScript), so with nobody watching it gets
-                // twice as many a second and is done in half the time. More than that and the updates outrun the
-                // frames, which is where a skin stitches its art in and a dialog goes away, and checks start
-                // failing for no fault of the editor
                 UpdatesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0
             }
         });

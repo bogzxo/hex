@@ -232,6 +232,10 @@ internal sealed partial class HexScene
 
     private void Undo()
     {
+        // The view of an extension undoes its own changes, if it takes the key
+        if (ExtensionKey("undo"))
+            return;
+
         // The editor of code undoes its own typing (it is handed the key as well), a file of code has no layout to undo
         if (compositor.Focus is CodeEditor)
             return;
@@ -249,6 +253,9 @@ internal sealed partial class HexScene
 
     private void Redo()
     {
+        if (ExtensionKey("redo"))
+            return;
+
         if (compositor.Focus is CodeEditor)
             return;
         if (!LayoutTools)
@@ -285,7 +292,8 @@ internal sealed partial class HexScene
         }
 
         // A text box of the editor, or one of the layout that is being tried out in the canvas
-        bool typing = compositor.Focus is not null || stage.Focus is not null;
+        // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
+        bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
         shortcuts.Update(Engine.Input.Keyboard, typing);
     }
 

@@ -1,0 +1,107 @@
+// What a hit is worth, the way the game works it out. A copy of Fighter2D's Combat/CombatRules.cs and Moves/MoveFrameData.cs
+// with the numbers named the same, change one there and change it here (the parity test in the plan is what's meant to
+// catch it when somebody doesn't). Times are ticks of the fight, 60 a second, not frames of a fighter's animation.
+
+let timing = include("timing.hor");
+
+let TICK_RATE = 60;
+let BASE_DISADVANTAGE = 4;
+let STARTUP_REWARD = 0.75;
+let MAX_ADVANTAGE = 24;
+let MIN_HITSTUN = 12;
+let HITSTUN_PER_DAMAGE = 0.6;
+let BLOCKSTUN_SCALE = 0.7;
+let MIN_BLOCKSTUN = 7;
+let CHIP_DAMAGE_SCALE = 0.12;
+let COMBO_DAMAGE_SCALE = 0.88;
+let MIN_COMBO_DAMAGE_SCALE = 0.35;
+let COUNTER_HITSTUN_SCALE = 1.5;
+let COUNTER_DAMAGE_SCALE = 1.25;
+let JUGGLE_EXTENSION = 10;
+let JUGGLE_DECAY = 2;
+let MIN_JUGGLE_EXTENSION = 2;
+let KNOCKDOWN_TICKS = 55;
+let HITSTOP = 4;
+let HEAVY_HITSTOP = 8;
+let COUNTER_HITSTOP = 11;
+let BLOCK_HITSTOP = 2;
+let METER_PER_DAMAGE_DEALT = 1.0;
+let METER_PER_DAMAGE_TAKEN = 0.6;
+let METER_ON_BLOCK = 3;
+let METER_ON_BLOCKED = 2;
+let METER_ON_WHIFF = 1;
+
+// @doc
+// The frame data of a move, MoveFrameData.Of. null for a move that doesn't hit, otherwise { startup, active, recovery,
+// hitstun, blockstun, on_hit, on_block, total } in ticks. active is how many frames the red box stays out for
+func frame_data(art, move, frame_rate, active) {
+    let ticks = TICK_RATE / math.max(1, frame_rate);
+    let total = 0;
+    let hit = -1;
+    for (name in move.phases ?? {}) {
+        let phase = move.phases[name];
+        if (hit < 0 && phase.hit != null) { hit = total + phase.hit; }
+        total = total + timing.phase_length(art, phase);
+    }
+
+    if (hit < 0) { return null; }
+
+    let startup = hit * ticks;
+    let recovery = math.max(1, total - hit - (active - 1)) * ticks;
+    let damage = move.damage ?? 0;
+    let hitstun = move.hitstun != null
+        ? move.hitstun * ticks
+        : recovery + math.min(MAX_ADVANTAGE, startup * STARTUP_REWARD - BASE_DISADVANTAGE) + damage * HITSTUN_PER_DAMAGE;
+    hitstun = math.max(MIN_HITSTUN, hitstun);
+    let blockstun = move.blockstun != null ? move.blockstun * ticks : hitstun * BLOCKSTUN_SCALE;
+
+    let data = {
+        startup: math.round(startup), active: active, recovery: math.round(recovery), total: math.round(total * ticks),
+        hitstun: math.round(hitstun), blockstun: math.max(MIN_BLOCKSTUN, math.round(blockstun))
+    };
+    data.on_hit = data.hitstun - data.recovery;
+    data.on_block = data.blockstun - data.recovery;
+    return data;
+}
+
+// @doc What a hit takes off as the nth hit of a combo (0 the first), and on a counter hit, HitResolver.DamageOf
+func damage_of(move, hits_before, counter) {
+    let scale = math.max(MIN_COMBO_DAMAGE_SCALE, math.pow(COMBO_DAMAGE_SCALE, hits_before));
+    if (counter) { scale = scale * COUNTER_DAMAGE_SCALE; }
+    return math.max(1, math.round((move.damage ?? 0) * scale));
+}
+
+// @doc The rest of what a hit is worth, the numbers the Data tab shows under the frame data
+func worth(move, data) {
+    let damage = move.damage ?? 0;
+    let knockback = move.knockback ?? vec(0, 0);
+    let launches = knockback.y > 0;
+    return {
+        counter_hitstun: math.round(data.hitstun * COUNTER_HITSTUN_SCALE),
+        counter_damage: damage_of(move, 0, true),
+        combo: [damage_of(move, 0, false), damage_of(move, 1, false), damage_of(move, 2, false), damage_of(move, 4, false)],
+        hitstop: knockback.x != 0 || knockback.y != 0 ? HEAVY_HITSTOP : HITSTOP,
+        counter_hitstop: COUNTER_HITSTOP,
+        block_hitstop: BLOCK_HITSTOP,
+        chip: math.round(damage * CHIP_DAMAGE_SCALE),
+        meter_on_hit: math.round(damage * METER_PER_DAMAGE_DEALT),
+        meter_taken: math.round(damage * METER_PER_DAMAGE_TAKEN),
+        meter_on_block: METER_ON_BLOCK,
+        meter_on_whiff: METER_ON_WHIFF,
+        launches: launches,
+        juggle: [JUGGLE_EXTENSION, math.max(MIN_JUGGLE_EXTENSION, JUGGLE_EXTENSION - JUGGLE_DECAY), math.max(MIN_JUGGLE_EXTENSION, JUGGLE_EXTENSION - JUGGLE_DECAY * 2)],
+        knockdown: move.knockdown == true ? KNOCKDOWN_TICKS : 0
+    };
+}
+
+// @doc
+// Roughly where knockback sends whoever gets hit, in the game's units, out of the numbers in the comment on top of
+// fighting_moves.hor (100 away is about 6 units and no knockback 19, 1100 up lifts them about 30, 1500 about 50 and 2000 75).
+// { away, up } where up is the top of the arc, 0 for a shove along the ground. Rough on purpose, the game has the exact ones
+func knockback_reach(knockback) {
+    let away = 19 + math.max(0, knockback.x) * 0.06;
+    let up = knockback.y <= 500 ? 0 : (knockback.y - 500) * 0.05;
+    return { away: away, up: up };
+}
+
+func signed(value) { return value > 0 ? `+{value}` : `{value}`; }

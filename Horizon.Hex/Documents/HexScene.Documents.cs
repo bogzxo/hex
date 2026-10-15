@@ -64,6 +64,7 @@ internal sealed partial class HexScene
         // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
         browsing = browsing && !workspace.IsEmpty;
         runOutput.Clear();
+        consoleRuntime = null;
 
         // Its editor is the one in the code panel
         foreach (var child in codeScroll.Children.ToArray())
@@ -136,6 +137,7 @@ internal sealed partial class HexScene
         }
 
         Remember(path);
+        RaiseExtensions("on_open", new StringValue(Path.GetFullPath(path)));
         target.SavedCode = target.GenerateCode();
         target.CodeEdited = false;
         SetCode(target, target.SavedCode, fresh: true);
@@ -316,20 +318,21 @@ internal sealed partial class HexScene
             document.Path = path;
             document.SavedCode = written;
             document.SavedCrLf = document.CrLf;
-            vocabulary = null;
+            ForgetVocabulary();
             document.Modified = false;
 
             // Its templates are looked for next to it, which may be somewhere else now
             document.RefreshPreviews();
             tabsDirty = treeDirty = true;
             Remember(path);
+            RaiseExtensions("on_save", new StringValue(Path.GetFullPath(path)));
 
             Console.WriteLine($"[Hex] Saved '{path}'.");
             Say($"saved {path}");
         }
         catch (Exception e)
         {
-            Say($"couldn't save {path}: {e.Message}", error: true);
+            Notify($"couldn't save {path}: {e.Message}", error: true, ("Save as...", SaveAs));
         }
     }
 
@@ -362,6 +365,7 @@ internal sealed partial class HexScene
 
         stage.RemoveModule(document.Module);
         documents.Remove(document);
+        ForgetExtensionViews(document);
         recordPending = false;
 
         Show(documents.Count > 0 ? documents[^1] : NewDocument());

@@ -23,6 +23,9 @@ internal sealed partial class HexScene
             return;
         }
 
+        valuesTree.Visible = false;
+        inspectorScroll.Visible = true;
+
         editors.Clear();
         foreach (var child in inspector.Children.ToArray())
             inspector.Remove(child);

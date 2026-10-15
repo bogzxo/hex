@@ -1,8 +1,9 @@
 // editor, laid out with Horizon.Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
-// Hex's own window, VS Code's shape. The menus and a toolbar of icons along the top, the activity bar down the left
-// and the side bar next to it, the tabs and the editor (or the canvas of a layout) in the middle with the problems
-// and the output under it, the properties on the right, and the status bar along the bottom.
+// Hex's own window, VS Code's shape. The menus in the title bar along the top, the activity bar down the left and the
+// side bar next to it, the tabs with what the file can do at their right end and the editor (the code, the canvas of a
+// layout or the table of a file) in the middle with the problems, the output and the console under it, the properties
+// or the values on the right, and the status bar along the bottom.
 #define layout
 
 let root = compositor.stack({
@@ -20,143 +21,6 @@ let top = compositor.title_bar({
 });
 
 let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });
-
-let toolbar = compositor.stack({
-    parent: root,
-    anchor: "left",
-    pivot: "left",
-    padding: vec(8, 2, 8, 4),
-    spacing: 2,
-    direction: "horizontal"
-});
-
-let new_file = compositor.button({
-    parent: toolbar,
-    icon: "new-file",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.new_file"
-});
-
-let open_file = compositor.button({
-    parent: toolbar,
-    icon: "folder-opened",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.open_file"
-});
-
-let save_file = compositor.button({
-    parent: toolbar,
-    icon: "save",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.save"
-});
-
-let save_all = compositor.button({
-    parent: toolbar,
-    icon: "save-all",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.save_all"
-});
-
-let tools_rule1 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
-
-let undo_button = compositor.button({
-    parent: toolbar,
-    icon: "discard",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.undo"
-});
-
-let redo_button = compositor.button({
-    parent: toolbar,
-    icon: "redo",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.redo"
-});
-
-let tools_rule2 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
-
-// A layout is looked at as its designer or as its code, a file of code only as its code
-let views = compositor.stack({
-    parent: toolbar,
-    anchor: "left",
-    pivot: "left",
-    spacing: 2,
-    direction: "horizontal"
-});
-
-let design_view = compositor.button({
-    parent: views,
-    label: "@toolbar.design",
-    icon: "layout",
-    style: "button_flat",
-    size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.design_tip"
-});
-
-let code_view = compositor.button({
-    parent: views,
-    label: "@toolbar.code",
-    icon: "code",
-    style: "button_flat",
-    size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.code_tip"
-});
-
-let tools_rule3 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
-
-let play_button = compositor.button({
-    parent: toolbar,
-    label: "@toolbar.run",
-    icon: "play",
-    style: "button_flat",
-    size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.run_tip"
-});
-
-let find_button = compositor.button({
-    parent: toolbar,
-    icon: "search",
-    style: "button_flat",
-    size: vec(30, 28),
-    lbl_scale: 0.14,
-    animated: false,
-    tooltip: "@toolbar.find"
-});
-
-let name_box = compositor.textbox({
-    parent: toolbar,
-    size: vec(200, 26),
-    padding: vec(8, 5, 8, 5),
-    placeholder: "@toolbar.name_placeholder",
-    text_scale: 0.14,
-    max_length: 40,
-    tooltip: "@toolbar.name_tip"
-});
 
 let body = compositor.stack({
     parent: root,
@@ -177,6 +41,7 @@ let activity = compositor.stack({
 
 let act_explorer = compositor.button({
     parent: activity,
+    indicator: "left",
     icon: "files",
     style: "button_flat",
     size: vec(38, 38),
@@ -187,6 +52,7 @@ let act_explorer = compositor.button({
 
 let act_search = compositor.button({
     parent: activity,
+    indicator: "left",
     icon: "search",
     style: "button_flat",
     size: vec(38, 38),
@@ -197,6 +63,7 @@ let act_search = compositor.button({
 
 let act_outline = compositor.button({
     parent: activity,
+    indicator: "left",
     icon: "list-tree",
     style: "button_flat",
     size: vec(38, 38),
@@ -207,6 +74,7 @@ let act_outline = compositor.button({
 
 let act_design = compositor.button({
     parent: activity,
+    indicator: "left",
     icon: "layout",
     style: "button_flat",
     size: vec(38, 38),
@@ -215,8 +83,23 @@ let act_design = compositor.button({
     tooltip: "@activity.design"
 });
 
+let act_extensions = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "extensions",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.extensions"
+});
+
+// Settings at the bottom of the bar, the editor sizes this to push it there
+let activity_gap = compositor.spacer({ parent: activity, size: vec(38, 0) });
+
 let act_settings = compositor.button({
     parent: activity,
+    indicator: "left",
     icon: "settings-gear",
     style: "button_flat",
     size: vec(38, 38),
@@ -341,6 +224,15 @@ let tree = compositor.stack({
     spacing: 1
 });
 
+// The explorer, the outline and what was found, a tree the side bar paints itself, in place of the rows above for code
+let side_tree = compositor.tree_view({
+    parent: left,
+    size: vec(280, 380),
+    text_scale: 0.14,
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
 let layers_section = compositor.collapsible({
     parent: left,
     anchor: "left",
@@ -373,7 +265,94 @@ let center = compositor.stack({
     spacing: 0
 });
 
-let doc_tabs = compositor.tab_strip({ parent: center, size: vec(884, 0) });
+// The tabs of the files that are open, and at the right end of them what the file on screen can do, VS Code's editor
+// actions. Its views (the designer and the code of a layout, the code and the table of a file of code), playing or
+// running it, and the name of a layout. New, open, save, undo and redo are the menus' and their keys', the row of them
+// that was under the menus is gone and the code has its room
+let tab_row = compositor.stack({
+    parent: center,
+    anchor: "left",
+    pivot: "left",
+    spacing: 0,
+    direction: "horizontal"
+});
+
+let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(884, 0) });
+
+let toolbar = compositor.stack({
+    parent: tab_row,
+    anchor: "right",
+    pivot: "right",
+    padding: vec(6, 2, 6, 2),
+    spacing: 2,
+    direction: "horizontal"
+});
+
+// A layout is looked at as its designer or as its code, a file of code only as its code
+let views = compositor.stack({
+    parent: toolbar,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+    direction: "horizontal"
+});
+
+let design_view = compositor.button({
+    parent: views,
+    label: "@toolbar.design",
+    icon: "layout",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.design_tip"
+});
+
+let code_view = compositor.button({
+    parent: views,
+    label: "@toolbar.code",
+    icon: "code",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.code_tip"
+});
+
+let table_view = compositor.button({
+    parent: views,
+    label: "@toolbar.table",
+    icon: "table",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.table_tip"
+});
+
+let tools_rule3 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
+
+let play_button = compositor.button({
+    parent: toolbar,
+    label: "@toolbar.run",
+    icon: "play",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    tooltip: "@toolbar.run_tip"
+});
+
+let name_box = compositor.textbox({
+    parent: toolbar,
+    size: vec(160, 24),
+    padding: vec(8, 5, 8, 5),
+    placeholder: "@toolbar.name_placeholder",
+    text_scale: 0.14,
+    max_length: 40,
+    tooltip: "@toolbar.name_tip"
+});
+
 
 let crumbs = compositor.breadcrumbs({ parent: center, size: vec(884, 0), padding: vec(6, 0, 6, 0) });
 
@@ -386,11 +365,25 @@ let code_scroll = compositor.panel({
     color: vec(0.055, 0.06, 0.08, 1)
 });
 
+// A file of code as a table, an object of objects (moves, characters) or a file of texts with its languages side by side
+let data_table = compositor.table({
+    parent: center,
+    size: vec(884, 250),
+    text_scale: 0.14
+});
+
+// Where the views extensions make for a file go, in place of its code, see HexScene.ExtensionUI
+let ext_view = compositor.panel({
+    parent: center,
+    size: vec(884, 250),
+    clip: true
+});
+
 // The panel under the editor, what is wrong with the files and what Hex and the files that were run said
 let bottom = compositor.tabs({
     parent: center,
     size: vec(884, 180),
-    tabs: ["@panel.problems", "@panel.output"],
+    tabs: ["@panel.problems", "@panel.output", "@panel.console"],
     text_scale: 0.13,
     spacing: 18,
     resize: "top",
@@ -424,6 +417,43 @@ let output = compositor.stack({
     spacing: 0
 });
 
+// The console, HIDL typed in and run in what the file on screen came to. What was asked and answered scrolls above, the
+// line it is typed on stays along the bottom, a terminal's way. The editor sizes the two to the page, see FitConsole
+let console_page = compositor.stack({
+    parent: bottom,
+    fill: "both",
+    padding: vec(4, 4, 4, 4),
+    spacing: 4
+});
+
+let console_scroll = compositor.scroll({
+    parent: console_page,
+    anchor: "top_left",
+    pivot: "top_left",
+    size: vec(860, 100)
+});
+
+let console_lines = compositor.stack({
+    parent: console_scroll,
+    anchor: "top_left",
+    pivot: "top_left",
+    template: "output_row.hor",
+    preview_count: 2,
+    spacing: 0
+});
+
+let console_input = compositor.textbox({
+    parent: console_page,
+    anchor: "left",
+    pivot: "left",
+    size: vec(860, 26),
+    padding: vec(8, 5, 8, 5),
+    placeholder: "@panel.console_placeholder",
+    text_scale: 0.14,
+    max_length: 400,
+    tooltip: "@panel.console_tip"
+});
+
 let right = compositor.stack({
     parent: body,
     anchor: "top",
@@ -432,13 +462,32 @@ let right = compositor.stack({
     spacing: 6
 });
 
-let inspector_title = compositor.label({
+// The name of the side and the button that puts it away to the right, the way the left one goes (Ctrl+Alt+B, or drag
+// its edge past its least)
+let right_head = compositor.panel({
     parent: right,
+    size: vec(400, 24)
+});
+
+let inspector_title = compositor.label({
+    parent: right_head,
     anchor: "left",
     pivot: "left",
     text: "@properties.title",
     text_scale: 0.14,
     color: vec(0.46, 0.52, 0.64, 1)
+});
+
+let hide_right = compositor.button({
+    parent: right_head,
+    anchor: "right",
+    pivot: "right",
+    icon: "chevron-right",
+    style: "button_flat",
+    size: vec(26, 22),
+    lbl_scale: 0.13,
+    animated: false,
+    tooltip: "@properties.hide"
 });
 
 let inspector_scroll = compositor.scroll({
@@ -456,4 +505,22 @@ let inspector = compositor.stack({
     spacing: 5
 });
 
+// What a file of code comes to, in place of the properties while code is open
+let values_tree = compositor.tree_view({
+    parent: right,
+    size: vec(400, 600),
+    text_scale: 0.14,
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
 let status_bar = compositor.status_bar({ parent: root, fill: "horizontal" });
+
+// What wants more than the status bar, cards in the bottom right corner over everything else, see Notify
+let toasts = compositor.notifications({
+    anchor: "bottom_right",
+    pivot: "bottom_right",
+    pos: vec(-14, 36),
+    width: 400,
+    text_scale: 0.14
+});
