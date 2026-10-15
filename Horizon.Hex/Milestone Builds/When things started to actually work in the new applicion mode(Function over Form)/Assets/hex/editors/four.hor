@@ -1,8 +1,0 @@
-// The editor of four numbers, edges in pixels (padding) or a colour's red, green, blue and how solid it is.
-#define layout
-
-let row = compositor.stack({ direction: "horizontal", spacing: 4 });
-let a = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
-let b = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
-let c = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });
-let d = compositor.number_box({ parent: row, size: vec(52, 28), padding: vec(6, 6, 6, 6), text_scale: 0.14 });

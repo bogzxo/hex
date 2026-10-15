@@ -1,9 +1,0 @@
-// A line that goes somewhere when it is clicked, a problem in the panel of a file's code say.
-#define layout
-
-let link = compositor.button({
-    anchor: "left",
-    label: "line 1: something",
-    style: "button_flat",
-    lbl_scale: 0.14
-});
