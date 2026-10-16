@@ -6,10 +6,9 @@ using Horizon.UI.Components;
 
 namespace Horizon.Hex;
 
-// The picture behind the code, in the bottom right corner of the editor, faint, the code written over it. Bogz's idea and
-// the girl in Assets/hex/images is his pick, any picture can be had instead on the Behind the code page of the settings,
-// where it's moved, made bigger or smaller and made fainter. With the code wrapped (Alt+Z) the lines run round her rather
-// than over her, the shape of what is drawn in the picture worked out once from its file (UIWrapShape).
+// The picture behind the code, in the bottom right corner of the editor, faint, the code written over it.
+// With the code wrapped (Alt+Z) the lines run round it rather
+// than over it, the shape of what is drawn in the picture worked out once from its file (UIWrapShape).
 internal sealed partial class HexScene
 {
     public const string USUAL_BACKDROP = "Assets/hex/images/background_icon.png";
@@ -28,16 +27,22 @@ internal sealed partial class HexScene
     private void ApplyBackdrop()
     {
         backdropPicture = settings.BackdropOn && File.Exists(BackdropPath) ? Texture.Load(BackdropPath, smooth: true) : null;
-        backdropShape = backdropPicture is not null && settings.BackdropWrap ? UIWrapShape.FromFile(BackdropPath) : null;
+        MakeBackdropShape();
         foreach (HexDocument open in documents)
             ShowBackdrop(open.Editor);
     }
+
+    // The shape the wrapped code runs round, the outline of what is drawn in the picture's file to the pixel
+    private void MakeBackdropShape() =>
+        backdropShape = backdropPicture is not null && settings.BackdropWrap ? UIWrapShape.FromFile(BackdropPath) : null;
 
     private void ShowBackdrop(CodeEditor editor)
     {
         // The editor draws it once the texture is made, which can be a frame after it's asked for
         editor.Backdrop = backdropPicture;
         editor.BackdropShape = backdropShape;
+        editor.BackdropMargin = settings.BackdropWrapMargin;
+        editor.FlowRate = settings.WrapFlow;
         editor.BackdropScale = settings.BackdropScale;
         editor.BackdropOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
         editor.BackdropOpacity = settings.BackdropOpacity;
@@ -97,8 +102,16 @@ internal sealed partial class HexScene
         };
         settingControls["backdrop_usual"] = usual;
 
+        // How far the code keeps off her, every editor shown it as it's dragged
+        BackdropSlider(made, "backdrop_wrap_margin", settings.BackdropWrapMargin, value => settings.BackdropWrapMargin = value, value => $"{value:0} px");
+
+        // How quickly the words glide, said as about how long one takes to get there (95% of the way), or that it snaps
+        BackdropSlider(made, "wrap_flow", settings.WrapFlow, value => settings.WrapFlow = value,
+            value => value <= 0.0f ? Said("settings.backdrop.flow_off") : $"{3000.0f / value:0} ms");
+
         BackdropSlider(made, "backdrop_scale", settings.BackdropScale, value => settings.BackdropScale = value, value => $"{value * 100:0}%");
-        BackdropSlider(made, "backdrop_across", settings.BackdropAcross, value => settings.BackdropAcross = value, value => $"{value:0}");
+        // The slider goes the way the picture does, the setting is how far in from the right edge it is (the old way round)
+        BackdropSlider(made, "backdrop_across", -settings.BackdropAcross, value => settings.BackdropAcross = -value, value => $"{value:0}");
         BackdropSlider(made, "backdrop_up", settings.BackdropUp, value => settings.BackdropUp = value, value => $"{value:0}");
         BackdropSlider(made, "backdrop_opacity", settings.BackdropOpacity, value => settings.BackdropOpacity = value, value => $"{value * 100:0}%");
     }
