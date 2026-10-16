@@ -121,7 +121,8 @@ internal sealed partial class HexScene
 
         test.Hover(Part("tree_scroll"));
         test.Run(() => compositor.Scroll(-3));
-        test.Settle(0.2f);
+        // Eased there a few pixels a tick (UIScrollEase), not jumped
+        test.WaitFor(() => Near(treeScroll.Offset, 3 * treeScroll.WheelStep), 2.0f);
         test.Check("scroll: the wheel scrolls the list under the pointer", () => Near(treeScroll.Offset, 3 * treeScroll.WheelStep));
 
         if (options.Wheel)

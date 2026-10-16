@@ -215,6 +215,71 @@ let backdrop_wrap = compositor.toggle({
     state: true
 });
 
+let backdrop_wrap_margin_row = compositor.stack({
+    parent: backdrop_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let backdrop_wrap_margin_name = compositor.label({
+    parent: backdrop_wrap_margin_row,
+    size: vec(210, 28),
+    tooltip: "@settings.backdrop.margin_tip",
+    text: "@settings.backdrop.margin",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let backdrop_wrap_margin = compositor.slider({
+    parent: backdrop_wrap_margin_row,
+    size: vec(200, 28),
+    max: 60,
+    step: 1,
+    value: 8
+});
+
+let backdrop_wrap_margin_value = compositor.label({
+    parent: backdrop_wrap_margin_row,
+    size: vec(60, 28),
+    text_scale: 0.13,
+    align: "left"
+});
+
+let wrap_flow_row = compositor.stack({
+    parent: backdrop_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let wrap_flow_name = compositor.label({
+    parent: wrap_flow_row,
+    size: vec(210, 28),
+    tooltip: "@settings.backdrop.flow_tip",
+    text: "@settings.backdrop.flow",
+    text_scale: 0.14,
+    align: "left"
+});
+
+// Right is quicker, 0 at the left snaps
+let wrap_flow = compositor.slider({
+    parent: wrap_flow_row,
+    size: vec(200, 28),
+    max: 40,
+    step: 1,
+    value: 16
+});
+
+let wrap_flow_value = compositor.label({
+    parent: wrap_flow_row,
+    size: vec(60, 28),
+    text_scale: 0.13,
+    align: "left"
+});
+
 let backdrop_picture_row = compositor.stack({
     parent: backdrop_page,
     anchor: "left",
@@ -304,11 +369,12 @@ let backdrop_across_name = compositor.label({
     align: "left"
 });
 
+// Right of the slider is right on screen, past 0 the picture goes off the right edge and is cut off there
 let backdrop_across = compositor.slider({
     parent: backdrop_across_row,
     size: vec(200, 28),
-    progress: 0.00083333335,
-    max: 1200,
+    min: -1600,
+    max: 400,
     step: 10,
     value: 0
 });
@@ -337,11 +403,12 @@ let backdrop_up_name = compositor.label({
     align: "left"
 });
 
+// Below 0 the picture goes off the bottom edge and is cut off there
 let backdrop_up = compositor.slider({
     parent: backdrop_up_row,
     size: vec(200, 28),
-    progress: 0.001,
-    max: 1000,
+    min: -400,
+    max: 1200,
     step: 10,
     value: 0
 });

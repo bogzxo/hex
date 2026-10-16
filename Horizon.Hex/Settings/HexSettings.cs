@@ -53,6 +53,12 @@ internal sealed class HexSettings
     /// <summary>Whether wrapped code runs round what is drawn in the picture instead of over it (see CodeEditor.BackdropShape).</summary>
     public bool BackdropWrap = true;
 
+    /// <summary>How far the wrapped code keeps off what is drawn in the picture, in the editor's pixels, round every edge.</summary>
+    public float BackdropWrapMargin = 8.0f;
+
+    /// <summary>How quickly a word the wrap moves glides to its new line (CodeEditor.FlowRate), 0 to snap.</summary>
+    public float WrapFlow = Horizon.UI.Components.CodeEditor.FLOW_RATE;
+
     /// <summary>Whether long lines of code are wrapped at the edge of the editor (Alt+Z).</summary>
     public bool WrapCode;
     public string BackdropImage = string.Empty;
@@ -100,6 +106,8 @@ internal sealed class HexSettings
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
             BackdropOn = Flag(values, "backdrop", BackdropOn);
             BackdropWrap = Flag(values, "backdrop_wrap", BackdropWrap);
+            BackdropWrapMargin = Math.Clamp(Number(values, "backdrop_wrap_margin", BackdropWrapMargin), 0.0f, 80.0f);
+            WrapFlow = Math.Clamp(Number(values, "wrap_flow", WrapFlow), 0.0f, 60.0f);
             WrapCode = Flag(values, "wrap_code", WrapCode);
             if (values.TryGetValue("backdrop_image", out var picture) && picture is StringValue pictured) BackdropImage = pictured.Value;
             BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 4.0f);
@@ -161,6 +169,8 @@ internal sealed class HexSettings
         text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
         text.AppendLine($"    backdrop: {Flag(BackdropOn)},");
         text.AppendLine($"    backdrop_wrap: {Flag(BackdropWrap)},");
+        text.AppendLine($"    backdrop_wrap_margin: {Write(BackdropWrapMargin)},");
+        text.AppendLine($"    wrap_flow: {Write(WrapFlow)},");
         text.AppendLine($"    wrap_code: {Flag(WrapCode)},");
         text.AppendLine($"    backdrop_image: {HIDLWriter.Write(new StringValue(BackdropImage.Replace('\\', '/')))},");
         text.AppendLine($"    backdrop_scale: {Write(BackdropScale)},");

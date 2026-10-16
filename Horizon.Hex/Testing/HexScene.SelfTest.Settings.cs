@@ -83,17 +83,54 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("settings: a page for the picture behind the code, the one Hex comes with in every editor", () =>
             settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null
-            && code.BackdropShape is { Rows: > 0 } && Setting("backdrop_wrap") is ToggleButton { State: true }
+            && code.BackdropShape is { Rows: > 0 } && Setting("backdrop_wrap") is ToggleButton { State: true } && Setting("backdrop_wrap_margin") is Slider
             && Setting("backdrop_scale") is Slider && Setting("backdrop_across") is Slider && Setting("backdrop_up") is Slider && Setting("backdrop_opacity") is Slider);
         test.Run(() =>
         {
             ((Slider)Setting("backdrop_scale")).OnChanged!(0.8f);
-            ((Slider)Setting("backdrop_across")).OnChanged!(40.0f);
+            ((Slider)Setting("backdrop_across")).OnChanged!(-40.0f);
             ((Slider)Setting("backdrop_opacity")).OnChanged!(0.5f);
         });
         test.Wait();
         test.Check("settings: and its sliders move it, size it and make it fainter in the code there and then", () =>
             code.BackdropScale == 0.8f && code.BackdropOffset.X == 40.0f && code.BackdropOpacity == 0.5f);
+        test.Run(() =>
+        {
+            ((Slider)Setting("backdrop_across")).OnChanged!(120.0f);
+            ((Slider)Setting("backdrop_up")).OnChanged!(-80.0f);
+        });
+        test.Wait();
+        test.Check("settings: and past the right and the bottom edge as well, the slider the way the picture goes", () =>
+            code.BackdropOffset == new Vector2(-120.0f, -80.0f));
+        test.Run(() =>
+        {
+            ((Slider)Setting("backdrop_across")).OnChanged!(-40.0f);
+            ((Slider)Setting("backdrop_up")).OnChanged!(0.0f);
+        });
+
+        // How far the code keeps off her, every editor told as it's dragged
+        float margin = 0.0f;
+        test.Run(() =>
+        {
+            margin = settings.BackdropWrapMargin;
+            ((Slider)Setting("backdrop_wrap_margin")).OnChanged!(20.0f);
+        });
+        test.Wait();
+        test.Check("settings: the margin slider says how far the code keeps off her", () =>
+            settings.BackdropWrapMargin == 20.0f && code.BackdropMargin == 20.0f);
+        test.Run(() => ((Slider)Setting("backdrop_wrap_margin")).OnChanged!(margin));
+
+        // How quickly the words glide, every editor told
+        float flowRate = 0.0f;
+        test.Run(() =>
+        {
+            flowRate = settings.WrapFlow;
+            ((Slider)Setting("wrap_flow")).OnChanged!(30.0f);
+        });
+        test.Wait();
+        test.Check("settings: the flow slider says how quickly the words glide, and 0 snaps", () =>
+            settings.WrapFlow == 30.0f && code.FlowRate == 30.0f && Said("settings.backdrop.flow_off").Length > 0);
+        test.Run(() => ((Slider)Setting("wrap_flow")).OnChanged!(flowRate));
         test.Click(At(() => Setting("backdrop"), 0.1f));
         test.Wait();
         test.Check("settings: and it goes when switched off", () => !settings.BackdropOn && code.Backdrop is null);
