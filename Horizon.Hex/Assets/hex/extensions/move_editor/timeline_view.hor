@@ -61,8 +61,8 @@ func text_width(text, scale) { return len(text) * scale * 58; }
 // the meter covers, the longer of the two. data is null for a move that doesn't hit, which has only your row
 func meter(state) {
     let total = len(state.laid.frames);
-    if (state.move == null || total == 0) { return null; }
-    let data = rules.frame_data(state.laid, state.moves[state.move].move);
+    if (state.move == null || total == 0 || state.rules == null) { return null; }
+    let data = rules.frame_data(state.rules, state.laid, state.moves[state.move].move);
     if (data == null) { return { total: total, hit: -1, last: -1, stun: 0, them_free: total, span: total, data: null }; }
 
     let last = state.laid.hit + data.active - 1;

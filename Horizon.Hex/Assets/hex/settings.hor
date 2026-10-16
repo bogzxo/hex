@@ -7,11 +7,11 @@ let window = compositor.window({
     size: vec(700, 480),
     z: 10,
     padding: vec(8, 8, 8, 8),
+    intro: "pop",
+    intro_time: 0.18,
     min_size: vec(520, 320),
     title: "@settings.title",
-    icon: "settings-gear",
-    intro: "pop",
-    intro_time: 0.18
+    icon: "settings-gear"
 });
 
 let pages = compositor.tabs({
@@ -25,6 +25,7 @@ let pages = compositor.tabs({
     "@settings.tabs.files",
     "@settings.tabs.extensions"
 ],
+    selected: 4,
     text_scale: 0.14,
     spacing: 22,
     template: "extension_tab.hor"
@@ -184,8 +185,34 @@ let backdrop = compositor.toggle({
     anchor: "left",
     pivot: "left",
     label: "on",
-    state: true,
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
+    state: true
+});
+
+let backdrop_wrap_row = compositor.stack({
+    parent: backdrop_page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 12,
+    direction: "horizontal"
+});
+
+let backdrop_wrap_name = compositor.label({
+    parent: backdrop_wrap_row,
+    size: vec(210, 28),
+    text: "@settings.backdrop.wrap",
+    tooltip: "@settings.backdrop.wrap_tip",
+    text_scale: 0.14,
+    align: "left"
+});
+
+let backdrop_wrap = compositor.toggle({
+    parent: backdrop_wrap_row,
+    anchor: "left",
+    pivot: "left",
+    label: "on",
+    lbl_scale: 0.14,
+    state: true
 });
 
 let backdrop_picture_row = compositor.stack({
@@ -207,7 +234,6 @@ let backdrop_picture_name = compositor.label({
 let backdrop_file = compositor.label({
     parent: backdrop_picture_row,
     size: vec(170, 28),
-    text: "",
     text_scale: 0.13,
     align: "left"
 });
@@ -222,7 +248,7 @@ let backdrop_choose = compositor.button({
 
 let backdrop_usual = compositor.button({
     parent: backdrop_picture_row,
-    size: vec(90, 28),
+    size: vec(120, 28),
     label: "@settings.backdrop.put_back",
     icon: "discard",
     lbl_scale: 0.13
@@ -248,6 +274,7 @@ let backdrop_scale_name = compositor.label({
 let backdrop_scale = compositor.slider({
     parent: backdrop_scale_row,
     size: vec(200, 28),
+    progress: 0.4736842,
     min: 0.1,
     max: 2,
     step: 0.05
@@ -256,7 +283,6 @@ let backdrop_scale = compositor.slider({
 let backdrop_scale_value = compositor.label({
     parent: backdrop_scale_row,
     size: vec(60, 28),
-    text: "",
     text_scale: 0.13,
     align: "left"
 });
@@ -281,15 +307,15 @@ let backdrop_across_name = compositor.label({
 let backdrop_across = compositor.slider({
     parent: backdrop_across_row,
     size: vec(200, 28),
-    min: 0,
+    progress: 0.00083333335,
     max: 1200,
-    step: 10
+    step: 10,
+    value: 0
 });
 
 let backdrop_across_value = compositor.label({
     parent: backdrop_across_row,
     size: vec(60, 28),
-    text: "",
     text_scale: 0.13,
     align: "left"
 });
@@ -314,15 +340,15 @@ let backdrop_up_name = compositor.label({
 let backdrop_up = compositor.slider({
     parent: backdrop_up_row,
     size: vec(200, 28),
-    min: 0,
+    progress: 0.001,
     max: 1000,
-    step: 10
+    step: 10,
+    value: 0
 });
 
 let backdrop_up_value = compositor.label({
     parent: backdrop_up_row,
     size: vec(60, 28),
-    text: "",
     text_scale: 0.13,
     align: "left"
 });
@@ -348,18 +374,15 @@ let backdrop_opacity = compositor.slider({
     parent: backdrop_opacity_row,
     size: vec(200, 28),
     min: 0.05,
-    max: 1,
     step: 0.01
 });
 
 let backdrop_opacity_value = compositor.label({
     parent: backdrop_opacity_row,
     size: vec(60, 28),
-    text: "",
     text_scale: 0.13,
     align: "left"
 });
-
 
 let designer_page = compositor.stack({
     parent: pages,
@@ -561,7 +584,6 @@ let extensions_note = compositor.label({
     align: "top_left"
 });
 
-// A row an extension, put in by the editor, see extension_row.hor
 let extensions_list = compositor.stack({
     parent: extensions_page,
     anchor: "left",

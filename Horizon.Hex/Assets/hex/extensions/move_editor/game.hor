@@ -21,12 +21,13 @@ func find_root(hex, file) {
 func fighters_of(hex, root, file) {
     let read = hex.try_load(`{root}/Assets/data/characters.hor`);
     if (read.values == null) { return []; }
+    let n = rules.load(hex, root);
 
     let using = [];
     let everybody = [];
     let characters = read.values.characters ?? {};
     for (id in characters) {
-        let fighter = fighter_of(root, id, characters[id]);
+        let fighter = fighter_of(n, root, id, characters[id]);
         everybody.push(fighter);
         for (file_of in fighter.files) {
             if (same_path(file_of, file)) { using.push(fighter); }
@@ -36,7 +37,7 @@ func fighters_of(hex, root, file) {
     return len(using) > 0 ? using : everybody;
 }
 
-func fighter_of(root, id, character) {
+func fighter_of(n, root, id, character) {
     let files = [];
     for (which in character.moves ?? {}) { files.push(`{root}/{character.moves[which]}`); }
     return {
@@ -47,7 +48,7 @@ func fighter_of(root, id, character) {
         files: files,
 
         // How it moves, its movement block over the defaults (rules.movement_of), and whether it has one written yet
-        movement: rules.movement_of(character),
+        movement: n == null ? null : rules.movement_of(n, character),
         has_movement: character.movement != null
     };
 }
@@ -57,7 +58,7 @@ func fighter_by_id(hex, root, id) {
     let read = root == null || id == null ? null : hex.try_load(`{root}/Assets/data/characters.hor`);
     if (read == null || read.values == null) { return null; }
     let characters = read.values.characters ?? {};
-    return has(characters, id) ? fighter_of(root, id, characters[id]) : null;
+    return has(characters, id) ? fighter_of(rules.load(hex, root), root, id, characters[id]) : null;
 }
 
 // @doc

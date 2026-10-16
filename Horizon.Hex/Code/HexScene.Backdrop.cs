@@ -8,12 +8,14 @@ namespace Horizon.Hex;
 
 // The picture behind the code, in the bottom right corner of the editor, faint, the code written over it. Bogz's idea and
 // the girl in Assets/hex/images is his pick, any picture can be had instead on the Behind the code page of the settings,
-// where it's moved, made bigger or smaller and made fainter.
+// where it's moved, made bigger or smaller and made fainter. With the code wrapped (Alt+Z) the lines run round her rather
+// than over her, the shape of what is drawn in the picture worked out once from its file (UIWrapShape).
 internal sealed partial class HexScene
 {
     public const string USUAL_BACKDROP = "Assets/hex/images/background_icon.png";
 
     private Texture? backdropPicture;
+    private UIWrapShape? backdropShape;
 
     // Whether the picture has been read the first time, which waits for the first tick, there's no graphics device as
     // the editor is made
@@ -26,6 +28,7 @@ internal sealed partial class HexScene
     private void ApplyBackdrop()
     {
         backdropPicture = settings.BackdropOn && File.Exists(BackdropPath) ? Texture.Load(BackdropPath, smooth: true) : null;
+        backdropShape = backdropPicture is not null && settings.BackdropWrap ? UIWrapShape.FromFile(BackdropPath) : null;
         foreach (HexDocument open in documents)
             ShowBackdrop(open.Editor);
     }
@@ -34,6 +37,7 @@ internal sealed partial class HexScene
     {
         // The editor draws it once the texture is made, which can be a frame after it's asked for
         editor.Backdrop = backdropPicture;
+        editor.BackdropShape = backdropShape;
         editor.BackdropScale = settings.BackdropScale;
         editor.BackdropOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
         editor.BackdropOpacity = settings.BackdropOpacity;
@@ -56,6 +60,12 @@ internal sealed partial class HexScene
         SettingSwitch(made, "backdrop", settings.BackdropOn, on =>
         {
             settings.BackdropOn = on;
+            ApplyBackdrop();
+        });
+
+        SettingSwitch(made, "backdrop_wrap", settings.BackdropWrap, on =>
+        {
+            settings.BackdropWrap = on;
             ApplyBackdrop();
         });
 

@@ -47,6 +47,27 @@ internal sealed partial class HexScene
 
     private string FileText(string path) => OpenDocument(Path.GetFullPath(path))?.Editor.Text ?? System.IO.File.ReadAllText(path);
 
+    // A combat_rules.hor for the pretend game, every key the move editor reads
+    private const string CombatRulesOfTheGame = """
+        let rules = {
+            base_disadvantage: 4, startup_reward: 0.75, max_advantage: 24, hitstun_per_damage: 0.6, guessed_min_hitstun: 12,
+            blockstun_scale: 0.7, guessed_min_blockstun: 7, chip_damage_scale: 0.12, block_push: 23,
+            push: 16, attacker_recoil: 0.5, air_hit_pop: 14,
+            combo_damage_scale: 0.88, min_combo_damage_scale: 0.35, counter_hitstun_bonus: 4, counter_damage_scale: 1.25,
+            hit_movement_cancel: 4, juggle_gravity_step: 0.1, knockdown_ticks: 55,
+            hitlag_per_damage: 0.65, hitlag_base: 6, max_hitlag: 30, block_hitlag_scale: 0.67, counter_hitlag_bonus: 4, ko_hitstop: 36,
+            di_max_angle: 0.17, sdi_distance: 4, sdi_interval: 4, tech_window: 11, tech_lockout: 40,
+            stale_steps: [0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01],
+            parry_ticks: 5, parry_stun: 20,
+            meter_per_damage_dealt: 1.0, meter_per_damage_taken: 0.6, meter_on_block: 3, meter_on_blocked: 2, meter_on_whiff: 1,
+            movement: {
+                walk_speed: 420, ground_acceleration: 4000, traction: 2800, air_speed: 330, air_acceleration: 1600, air_friction: 500,
+                gravity: 3000, fall_speed: 620, fast_fall_speed: 950, jump_height: 134, short_hop_height: 60, double_jumps: 1,
+                double_jump_height: 100, hitstun_gravity: 0.5, weight: 100
+            }
+        };
+        """;
+
     private void MakeFightGame()
     {
         game = Path.Combine(testFolder, "fight_game");
@@ -64,6 +85,10 @@ internal sealed partial class HexScene
             System.IO.File.Copy(file, Path.Combine(art, Path.GetFileName(file)), overwrite: true);
         if (System.IO.File.Exists(hitboxFile))
             System.IO.File.Delete(hitboxFile);
+
+        // The game's combat rules, which the move editor reads out of the game it is editing the moves of (Fighter2D keeps
+        // its in Assets/data/combat_rules.hor). These are the numbers the game shipped with when the editor learnt to read them
+        System.IO.File.WriteAllText(Path.Combine(data, "combat_rules.hor"), CombatRulesOfTheGame);
 
         System.IO.File.WriteAllText(Path.Combine(data, "characters.hor"),
             "let characters = { tester: { pretty_name: \"Tester\", sprites: \"Assets/art/sprites.hor\", frame_rate: 12, "

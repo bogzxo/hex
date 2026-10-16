@@ -1,8 +1,8 @@
-// What a hit is worth, the way the game works it out. A copy of Fighter2D's Combat/CombatRules.cs, Moves/MoveFrameData.cs,
-// the sending of whoever gets hit out of Combat/HitResolver.cs (Send, GravityShareOf) and the numbers of
-// Fighters/Characters/CharacterMovement.cs, named the same, change one there and change it here. Every time is in game
-// frames, 60 a second, and every distance in world units, the same as a move file says them, so there's nothing to
-// convert any more.
+// What a hit is worth, the way the game works it out. The working out is a copy of Fighter2D's Data/MoveFrameData.cs,
+// the sending of whoever gets hit out of Simulation/HitResolver.cs (Send, GravityShareOf) and CharacterMovement's sums,
+// change one there and change it here. The numbers aren't, they are the game's own Assets/data/combat_rules.hor, read
+// by load() out of the game the moves are in and handed to every function that needs them (n). Every time is in game
+// frames, 60 a second, and every distance in world units, the same as a move file says them.
 //
 // The physics is the engine's, a body sped up by its gravity and then moved, 120 steps a second, which is what flight
 // steps through, so where a launch sends somebody comes out the way the game has it (Blocky's uppercut, launch
@@ -13,83 +13,34 @@ let timing = include("timing.hor");
 let TICK_RATE = 60;
 let PHYSICS_STEP = 1 / 120;
 
-let BASE_DISADVANTAGE = 4;
-let STARTUP_REWARD = 0.75;
-let MAX_ADVANTAGE = 24;
-let HITSTUN_PER_DAMAGE = 0.6;
-let GUESSED_MIN_HITSTUN = 12;
-let BLOCKSTUN_SCALE = 0.7;
-let GUESSED_MIN_BLOCKSTUN = 7;
-let CHIP_DAMAGE_SCALE = 0.12;
-let BLOCK_PUSH = 23;
-let PUSH = 16;
-let ATTACKER_RECOIL = 0.5;
-let AIR_HIT_POP = 14;
-let COMBO_DAMAGE_SCALE = 0.88;
-let MIN_COMBO_DAMAGE_SCALE = 0.35;
-let COUNTER_HITSTUN_BONUS = 4;
-let COUNTER_DAMAGE_SCALE = 1.25;
-let JUGGLE_GRAVITY_STEP = 0.1;
-let KNOCKDOWN_TICKS = 55;
-
-// Hitlag, Smash Ultimate's. damage * 0.65 + 6 frames, never more than 30, a block 0.67 of it and a counter hit 4 more,
-// the K.O. 36 whatever the move. The launch waits for the end of it
-let HITLAG_PER_DAMAGE = 0.65;
-let HITLAG_BASE = 6;
-let MAX_HITLAG = 30;
-let BLOCK_HITLAG_SCALE = 0.67;
-let COUNTER_HITLAG_BONUS = 4;
-let KO_HITSTOP = 36;
-
-// DI turns a launch up to this many radians either way (9.74 degrees), SDI shoves the victim this far a press, a press
-// counted every SDI_INTERVAL frames at most
-let DI_MAX_ANGLE = 0.17;
-let SDI_DISTANCE = 4;
-let SDI_INTERVAL = 4;
-
-// Block pressed in the last 11 frames before landing out of a knockdown techs it, a press too early locks it out for 40
-let TECH_WINDOW = 11;
-let TECH_LOCKOUT = 40;
-
-// The last 9 moves that landed, newest first, every copy of this one in there takes its step off the damage
-let STALE_STEPS = [0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01];
-
-// A block up this few frames before the hit is a parry, and the attacker is stuck for PARRY_STUN
-let PARRY_TICKS = 5;
-let PARRY_STUN = 20;
-
-// How much meter there is, a move costing half of it or more is a super unless it says (Player.MAX_METER)
+// How much meter there is, a move costing half of it or more is a super unless it says (Player.MAX_METER, a fact of
+// the game and not a number to tune)
 let MAX_METER = 100;
-let METER_PER_DAMAGE_DEALT = 1.0;
-let METER_PER_DAMAGE_TAKEN = 0.6;
-let METER_ON_BLOCK = 3;
-let METER_ON_BLOCKED = 2;
-let METER_ON_WHIFF = 1;
 
 // @doc
-// A fighter's movement block in characters.hor, what it is when the block doesn't say (CharacterMovement's defaults).
-// World units and seconds, hitstun_gravity a share of gravity
-let DEFAULT_MOVEMENT = {
-    walk_speed: 420, ground_acceleration: 4000, traction: 2800,
-    air_speed: 330, air_acceleration: 1600, air_friction: 500,
-    gravity: 3000, fall_speed: 620, fast_fall_speed: 950,
-    jump_height: 134, short_hop_height: 60, double_jumps: 1, double_jump_height: 100,
-    hitstun_gravity: 0.5, weight: 100
-};
+// The game's combat rules, out of its Assets/data/combat_rules.hor, the one place the numbers are (the game reads the
+// same file). { base_disadvantage, ..., movement } named the way the file names them, null for a game without one.
+// Every function in here that works something out of the rules is handed these first
+func load(hex, root) {
+    if (root == null) { return null; }
+    let read = hex.try_load(`{root}/Assets/data/combat_rules.hor`);
+    if (read == null || read.values == null || read.values.rules == null) { return null; }
+    return read.values.rules;
+}
 
 // How much of the old walk_speed a character actually walked at against the drag, for one without a movement block yet
 let OLD_WALK_SHARE = 0.213;
 
 // @doc A fighter's movement out of its character, CharacterMovement.Read, the block over the defaults or an old walk_speed taken down
-func movement_of(character) {
+func movement_of(n, character) {
     let block = character.movement;
     if (block == null) {
-        if (character.walk_speed == null) { return DEFAULT_MOVEMENT; }
-        return merge(DEFAULT_MOVEMENT, { walk_speed: character.walk_speed * OLD_WALK_SHARE });
+        if (character.walk_speed == null) { return n.movement; }
+        return merge(n.movement, { walk_speed: character.walk_speed * OLD_WALK_SHARE });
     }
 
     let made = {};
-    for (key in DEFAULT_MOVEMENT) { made[key] = math.max(0, block[key] ?? DEFAULT_MOVEMENT[key]); }
+    for (key in n.movement) { made[key] = math.max(0, block[key] ?? n.movement[key]); }
     made.gravity = math.max(1, made.gravity);
     made.double_jumps = math.floor(made.double_jumps);
     made.hitstun_gravity = math.clamp(made.hitstun_gravity, 0.05, 2);
@@ -114,7 +65,7 @@ func speed_to_slide(movement, distance) {
 // @doc
 // The frame data of a move, MoveFrameData.Of. null for a move that doesn't hit, otherwise { startup, active, recovery,
 // hitstun, blockstun, on_hit, on_block, total, hitstun_said } in game frames, laid being the move laid out (timing.lay_out)
-func frame_data(laid, move) {
+func frame_data(n, laid, move) {
     let hit = laid.hit;
     if (hit < 0) { return null; }
 
@@ -129,10 +80,10 @@ func frame_data(laid, move) {
     // What it says, or the guess out of its startup
     let hitstun = move.hitstun != null
         ? math.round(move.hitstun)
-        : math.round(math.max(GUESSED_MIN_HITSTUN, recovery + math.min(MAX_ADVANTAGE, startup * STARTUP_REWARD - BASE_DISADVANTAGE) + damage * HITSTUN_PER_DAMAGE));
+        : math.round(math.max(n.guessed_min_hitstun, recovery + math.min(n.max_advantage, startup * n.startup_reward - n.base_disadvantage) + damage * n.hitstun_per_damage));
     let blockstun = move.blockstun != null
         ? math.round(move.blockstun)
-        : math.max(GUESSED_MIN_BLOCKSTUN, math.round(hitstun * BLOCKSTUN_SCALE));
+        : math.max(n.guessed_min_blockstun, math.round(hitstun * n.blockstun_scale));
 
     let data = {
         startup: startup, active: active, recovery: recovery, total: total,
@@ -144,9 +95,9 @@ func frame_data(laid, move) {
 }
 
 // @doc What a hit takes off as the nth hit of a combo (0 the first), and on a counter hit, HitResolver.DamageOf
-func damage_of(move, hits_before, counter) {
-    let scale = math.max(MIN_COMBO_DAMAGE_SCALE, math.pow(COMBO_DAMAGE_SCALE, hits_before));
-    if (counter) { scale = scale * COUNTER_DAMAGE_SCALE; }
+func damage_of(n, move, hits_before, counter) {
+    let scale = math.max(n.min_combo_damage_scale, math.pow(n.combo_damage_scale, hits_before));
+    if (counter) { scale = scale * n.counter_damage_scale; }
     return math.max(1, math.round((move.damage ?? 0) * scale));
 }
 
@@ -156,14 +107,14 @@ func launches(move) {
 }
 
 // @doc How long both freeze on the hit, CombatRules.HitstopOf, what it says or Smash's hitlag for its damage
-func hitstop_of(move) {
+func hitstop_of(n, move) {
     if (move.hitstop != null) { return math.round(move.hitstop); }
-    return math.min(MAX_HITLAG, math.floor((move.damage ?? 0) * HITLAG_PER_DAMAGE + HITLAG_BASE));
+    return math.min(n.max_hitlag, math.floor((move.damage ?? 0) * n.hitlag_per_damage + n.hitlag_base));
 }
 
 // @doc How long both freeze when it's blocked, CombatRules.BlockHitstopOf, 0.67 of the hit's
-func block_hitstop_of(move) {
-    return math.floor(hitstop_of(move) * BLOCK_HITLAG_SCALE);
+func block_hitstop_of(n, move) {
+    return math.floor(hitstop_of(n, move) * n.block_hitlag_scale);
 }
 
 // @doc
@@ -176,64 +127,64 @@ func kind_of(move) {
 }
 
 // @doc What a hit takes off landed again with so many copies of it in the stale queue, the newest ones, HitResolver.DamageOf
-func stale_damage(move, copies) {
+func stale_damage(n, move, copies) {
     let scale = 1;
-    for (place in range(math.min(copies, len(STALE_STEPS)))) { scale = scale - STALE_STEPS[place]; }
+    for (place in range(math.min(copies, len(n.stale_steps)))) { scale = scale - n.stale_steps[place]; }
     return math.max(1, math.round((move.damage ?? 0) * scale));
 }
 
-// @doc How far a hit that doesn't launch slides them, what it says or PUSH
-func push_of(move) { return move.push ?? PUSH; }
+// @doc How far a hit that doesn't launch slides them, what it says or n.push
+func push_of(n, move) { return move.push ?? n.push; }
 
 // @doc The rest of what a hit is worth, the numbers the Data tab shows under the frame data
-func worth(move, data, victim) {
+func worth(n, move, data, victim) {
     let damage = move.damage ?? 0;
-    let share = gravity_share(move, victim);
+    let share = gravity_share(n, move, victim);
     return {
-        counter_hitstun: data.hitstun + COUNTER_HITSTUN_BONUS,
-        counter_damage: damage_of(move, 0, true),
-        combo: [damage_of(move, 0, false), damage_of(move, 1, false), damage_of(move, 2, false), damage_of(move, 4, false)],
-        hitstop: hitstop_of(move),
+        counter_hitstun: data.hitstun + n.counter_hitstun_bonus,
+        counter_damage: damage_of(n, move, 0, true),
+        combo: [damage_of(n, move, 0, false), damage_of(n, move, 1, false), damage_of(n, move, 2, false), damage_of(n, move, 4, false)],
+        hitstop: hitstop_of(n, move),
         hitstop_said: move.hitstop != null,
-        counter_hitstop: hitstop_of(move) + COUNTER_HITLAG_BONUS,
-        block_hitstop: block_hitstop_of(move),
+        counter_hitstop: hitstop_of(n, move) + n.counter_hitlag_bonus,
+        block_hitstop: block_hitstop_of(n, move),
         kind: kind_of(move),
         whiff_lag: math.max(0, move.whiff_lag ?? 0),
-        stale: [stale_damage(move, 1), stale_damage(move, 2), stale_damage(move, 3)],
-        chip: math.round(damage * CHIP_DAMAGE_SCALE),
-        meter_on_hit: math.round(damage * METER_PER_DAMAGE_DEALT),
-        meter_taken: math.round(damage * METER_PER_DAMAGE_TAKEN),
-        meter_on_block: METER_ON_BLOCK,
-        meter_on_whiff: METER_ON_WHIFF,
+        stale: [stale_damage(n, move, 1), stale_damage(n, move, 2), stale_damage(n, move, 3)],
+        chip: math.round(damage * n.chip_damage_scale),
+        meter_on_hit: math.round(damage * n.meter_per_damage_dealt),
+        meter_taken: math.round(damage * n.meter_per_damage_taken),
+        meter_on_block: n.meter_on_block,
+        meter_on_whiff: n.meter_on_whiff,
         launches: launches(move),
-        juggle: [hitstun_gravity_after(share, 0), hitstun_gravity_after(share, 1), hitstun_gravity_after(share, 2), hitstun_gravity_after(share, 4)],
-        knockdown: move.knockdown == true ? KNOCKDOWN_TICKS : 0
+        juggle: [hitstun_gravity_after(n, share, 0), hitstun_gravity_after(n, share, 1), hitstun_gravity_after(n, share, 2), hitstun_gravity_after(n, share, 4)],
+        knockdown: move.knockdown == true ? n.knockdown_ticks : 0
     };
 }
 
 /* Where a hit sends them */
 
 // @doc The share of their gravity the victim falls on in hitstun from this move, its own or the victim's
-func gravity_share(move, victim) {
+func gravity_share(n, move, victim) {
     if (move.hitstun_gravity != null) { return math.clamp(move.hitstun_gravity, 0.05, 2); }
-    return victim.hitstun_gravity ?? DEFAULT_MOVEMENT.hitstun_gravity;
+    return victim.hitstun_gravity ?? n.movement.hitstun_gravity;
 }
 
 // @doc
 // The share of gravity of a hit of a juggle, HitResolver.GravityShareOf. juggle_hits is which hit of the juggle it is,
 // 0 for the hit that sent them up there (not a juggle), 1 for the first that caught them in the air, and so on. Every
-// one adds JUGGLE_GRAVITY_STEP, up to all of their gravity (or what the share was, when that was more already)
-func hitstun_gravity_after(share, juggle_hits) {
+// one adds n.juggle_gravity_step, up to all of their gravity (or what the share was, when that was more already)
+func hitstun_gravity_after(n, share, juggle_hits) {
     if (juggle_hits <= 0) { return share; }
-    return math.min(math.max(1, share), share + JUGGLE_GRAVITY_STEP * juggle_hits);
+    return math.min(math.max(1, share), share + n.juggle_gravity_step * juggle_hits);
 }
 
 // @doc
 // The launch a move sends somebody on who has lost so much health this round (this hit's damage among it), HitResolver.Send.
 // launch_growth more for every 10 lost, less for somebody heavier than 100. At full health it's exactly launch
-func launch_at(move, victim, health_lost) {
+func launch_at(n, move, victim, health_lost) {
     if (move.launch == null || move.launch_growth == null) { return move.launch; }
-    let weight = victim.weight ?? DEFAULT_MOVEMENT.weight;
+    let weight = victim.weight ?? n.movement.weight;
     return move.launch + move.launch_growth * (health_lost / 10) * (100 / weight);
 }
 
@@ -267,15 +218,15 @@ func arc(velocity, gravity, t) {
 // by gravity and then moved, never falling faster than their fall speed. In hitstun they fall on their share of gravity
 // with nothing slowing them sideways, after it on all of it with their air friction braking them (nobody's holding
 // anything). A hit that doesn't launch slides them along the ground until the traction stops them
-func flight(move, victim, hitstun, juggle_hits) {
-    return flight_turned(move, victim, hitstun, juggle_hits, 0);
+func flight(n, move, victim, hitstun, juggle_hits) {
+    return flight_turned(n, move, victim, hitstun, juggle_hits, 0);
 }
 
 // @doc
-// The same flight with the launch turned by DI, so many radians (DI_MAX_ANGLE at most either way, the victim holding a
+// The same flight with the launch turned by DI, so many radians (n.di_max_angle at most either way, the victim holding a
 // direction square on to it). A slide along the ground isn't turned, DI is for whoever is sent up
-func flight_turned(move, victim, hitstun, juggle_hits, turn) {
-    let share = hitstun_gravity_after(gravity_share(move, victim), juggle_hits);
+func flight_turned(n, move, victim, hitstun, juggle_hits, turn) {
+    let share = hitstun_gravity_after(n, gravity_share(n, move, victim), juggle_hits);
     let velocity = launch_velocity(move.launch, victim, share);
     if (velocity != null && turn != 0) { velocity = turned(velocity, turn); }
     let points = [vec(0, 0)];
@@ -283,7 +234,7 @@ func flight_turned(move, victim, hitstun, juggle_hits, turn) {
     let steps = math.round(1 / (TICK_RATE * dt));
 
     if (velocity == null) {
-        let speed = speed_to_slide(victim, push_of(move));
+        let speed = speed_to_slide(victim, push_of(n, move));
         let x = 0;
         for (f in range(600)) {
             if (speed <= 0) { break; }

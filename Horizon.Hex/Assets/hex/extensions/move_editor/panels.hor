@@ -139,7 +139,7 @@ func frame_rate(state) { return state.fighter == null ? 12 : state.fighter.frame
 // The frame data of any move of the fighter, laid out at the fighter's frame rate
 func data_of(state, id) {
     let move = state.moves[id].move;
-    return rules.frame_data(timing.lay_out(state.art, move, frame_rate(state), drawn_of(state, id)), move);
+    return state.rules == null ? null : rules.frame_data(state.rules, timing.lay_out(state.art, move, frame_rate(state), drawn_of(state, id)), move);
 }
 
 // @doc How many red boxes a move has in the hitbox file, 0 for none
@@ -158,9 +158,10 @@ func show_data(state) {
     }
 
     let move = state.moves[state.move].move;
-    let data = rules.frame_data(state.laid, move);
+    if (state.rules == null) { return; }
+    let data = rules.frame_data(state.rules, state.laid, move);
     let victim = state.victim ?? state.fighter;
-    ui.get("data_text").text = data == null ? `**{state.move}** doesn't hit anybody, there's no frame data to it.` : describe(move, data, victim == null ? rules.DEFAULT_MOVEMENT : victim.movement);
+    ui.get("data_text").text = data == null ? `**{state.move}** doesn't hit anybody, there's no frame data to it.` : describe(state.rules, move, data, victim == null || victim.movement == null ? state.rules.movement : victim.movement);
 
     let combo = combo_view.window(state);
     ui.get("combo_text").text = combo_view.describe(combo);
@@ -170,21 +171,21 @@ func show_data(state) {
 }
 
 // The frame data of a move and what it comes out of, markdown
-func describe(move, data, victim) {
-    let worth = rules.worth(move, data, victim);
+func describe(n, move, data, victim) {
+    let worth = rules.worth(n, move, data, victim);
     let lines = [
         `**startup** {data.startup}, **active** {data.active}, **recovery** {data.recovery}, {data.total} in all`,
         `**on hit** {rules.signed(data.on_hit)}, **on block** {rules.signed(data.on_block)}`,
         `**hitstun** {data.hitstun}, **blockstun** {data.blockstun}` + (data.hitstun_said ? ", as it says" : ", out of the startup and the damage"),
-        `**counter hit** {worth.counter_hitstun}, the hitstun and {rules.COUNTER_HITSTUN_BONUS} more`,
+        `**counter hit** {worth.counter_hitstun}, the hitstun and {n.counter_hitstun_bonus} more`,
         "",
         `A counter hit takes {worth.counter_damage}. In a combo it takes {worth.combo.join(", ")} as the first, second, third and fifth hit. Gone stale it's {worth.stale.join(", ")} with one, two and three of it among the last nine that landed.`,
-        hitlag_line(move, worth),
+        hitlag_line(n, move, worth),
         `It builds {worth.meter_on_hit} meter on hit and gives whoever takes it {worth.meter_taken}, {worth.meter_on_block} on a block and {worth.meter_on_whiff} on a whiff.`,
         kind_line(move, worth)
     ];
     if (worth.whiff_lag > 0) { lines.push(`Whiffed, it holds its last frame {worth.whiff_lag} longer and its cancel frames don't count.`); }
-    let growth = growth_line(move, victim);
+    let growth = growth_line(n, move, victim);
     if (growth != "") { lines.push(growth); }
     if (worth.launches) {
         lines.push(`Juggled, they fall on {math.round(worth.juggle[0], 2)} of their gravity, then {math.round(worth.juggle[1], 2)}, {math.round(worth.juggle[2], 2)} and {math.round(worth.juggle[3], 2)} by the fifth air hit, which is what drops a long juggle.`);
@@ -196,9 +197,9 @@ func describe(move, data, victim) {
 }
 
 // How long they freeze, the way the game works it out when the move doesn't say
-func hitlag_line(move, worth) {
-    let why = worth.hitstop_said ? "as it says" : `{move.damage ?? 0} damage * {rules.HITLAG_PER_DAMAGE} + {rules.HITLAG_BASE}, {rules.MAX_HITLAG} at most`;
-    return `Both freeze **{worth.hitstop}** on the hit ({why}), {worth.counter_hitstop} on a counter and {worth.block_hitstop} on a block, {rules.KO_HITSTOP} if it's the K.O. Blocked it chips {worth.chip}.`;
+func hitlag_line(n, move, worth) {
+    let why = worth.hitstop_said ? "as it says" : `{move.damage ?? 0} damage * {n.hitlag_per_damage} + {n.hitlag_base}, {n.max_hitlag} at most`;
+    return `Both freeze **{worth.hitstop}** on the hit ({why}), {worth.counter_hitstop} on a counter and {worth.block_hitstop} on a block, {n.ko_hitstop} if it's the K.O. Blocked it chips {worth.chip}.`;
 }
 
 func kind_line(move, worth) {
@@ -207,14 +208,14 @@ func kind_line(move, worth) {
 }
 
 // Where launch_growth has the launch go as the health goes, "" for a move without any
-func growth_line(move, victim) {
+func growth_line(n, move, victim) {
     if (move.launch_growth == null || (move.launch_growth.x == 0 && move.launch_growth.y == 0) || !rules.launches(move)) { return ""; }
     let at = [];
     for (lost in [30, 60, 90]) {
-        let launch = rules.launch_at(move, victim, lost);
+        let launch = rules.launch_at(n, move, victim, lost);
         at.push(`{rules.units(launch.x)} along and {rules.units(launch.y)} up with {lost} lost`);
     }
-    let weight = victim.weight ?? rules.DEFAULT_MOVEMENT.weight;
+    let weight = victim.weight ?? n.movement.weight;
     return `It grows with the damage they've taken, {rules.units(move.launch.x)} along and {rules.units(move.launch.y)} up at full health, then {at.join(", ")} (weight {weight}).`;
 }
 

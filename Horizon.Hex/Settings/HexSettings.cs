@@ -50,6 +50,9 @@ internal sealed class HexSettings
     /// </summary>
     public bool BackdropOn = true;
 
+    /// <summary>Whether wrapped code runs round what is drawn in the picture instead of over it (see CodeEditor.BackdropShape).</summary>
+    public bool BackdropWrap = true;
+
     /// <summary>Whether long lines of code are wrapped at the edge of the editor (Alt+Z).</summary>
     public bool WrapCode;
     public string BackdropImage = string.Empty;
@@ -96,6 +99,7 @@ internal sealed class HexSettings
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
             if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
             BackdropOn = Flag(values, "backdrop", BackdropOn);
+            BackdropWrap = Flag(values, "backdrop_wrap", BackdropWrap);
             WrapCode = Flag(values, "wrap_code", WrapCode);
             if (values.TryGetValue("backdrop_image", out var picture) && picture is StringValue pictured) BackdropImage = pictured.Value;
             BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 4.0f);
@@ -156,6 +160,7 @@ internal sealed class HexSettings
         text.AppendLine($"    canvas_handles: {Flag(CanvasHandles)},");
         text.AppendLine($"    reopen_last: {Flag(ReopenLast)},");
         text.AppendLine($"    backdrop: {Flag(BackdropOn)},");
+        text.AppendLine($"    backdrop_wrap: {Flag(BackdropWrap)},");
         text.AppendLine($"    wrap_code: {Flag(WrapCode)},");
         text.AppendLine($"    backdrop_image: {HIDLWriter.Write(new StringValue(BackdropImage.Replace('\\', '/')))},");
         text.AppendLine($"    backdrop_scale: {Write(BackdropScale)},");

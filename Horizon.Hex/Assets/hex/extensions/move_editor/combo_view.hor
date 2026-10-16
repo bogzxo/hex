@@ -24,22 +24,23 @@ let CONE = vec(0.6, 0.9, 1.0, 0.25);
 // many frames that is before their hitstun ends (minus for after), jump where a full jump straight away gets to and di
 // the two flights at the edges of DI's cone, [up, down], null for a hit that doesn't launch
 func window(state) {
-    if (state.move == null || state.laid.hit < 0) { return null; }
+    if (state.move == null || state.laid.hit < 0 || state.rules == null) { return null; }
+    let n = state.rules;
     let move = state.moves[state.move].move;
-    let data = rules.frame_data(state.laid, move);
+    let data = rules.frame_data(n, state.laid, move);
     if (data == null) { return null; }
 
     let victim = state.victim ?? state.fighter;
-    let movement = victim == null ? rules.DEFAULT_MOVEMENT : victim.movement;
-    let flown = rules.flight(move, movement, data.hitstun, 0);
+    let movement = victim == null || victim.movement == null ? n.movement : victim.movement;
+    let flown = rules.flight(n, move, movement, data.hitstun, 0);
     let di = null;
     if (flown.launched) {
-        di = [rules.flight_turned(move, movement, data.hitstun, 0, rules.DI_MAX_ANGLE), rules.flight_turned(move, movement, data.hitstun, 0, -rules.DI_MAX_ANGLE)];
+        di = [rules.flight_turned(n, move, movement, data.hitstun, 0, n.di_max_angle), rules.flight_turned(n, move, movement, data.hitstun, 0, -n.di_max_angle)];
     }
     let acts = timing.actionable(state.laid, move);
     let act = acts.frame - state.laid.hit;
     return {
-        move: move, data: data, victim: victim, movement: movement, flown: flown, di: di,
+        move: move, data: data, victim: victim, movement: movement, flown: flown, di: di, rules: n,
         act: act, how: acts.how, at: rules.flight_at(flown, act), free: data.hitstun - act,
         jump: jump_of(state, move, act, flown)
     };
@@ -52,7 +53,7 @@ func jump_of(state, move, act, flown) {
     let into = schema.hit_cancels(move.hit_cancel);
     if (into.index_of("jump") < 0 && into.index_of("any") < 0) { return null; }
 
-    let own = state.fighter == null ? rules.DEFAULT_MOVEMENT : state.fighter.movement;
+    let own = state.fighter == null || state.fighter.movement == null ? state.rules.movement : state.fighter.movement;
     let jump = state.moves["jump"];
     let rate = state.fighter == null ? 12 : state.fighter.frame_rate;
     let squat = jump == null ? 0 : math.max(0, timing.jump_frame(state.art, jump.move, rate));
@@ -70,9 +71,9 @@ func describe(combo) {
 
     if (!flown.launched) {
         let slide = len(flown.points) - 1;
-        let push = rules.push_of(move);
-        let said = move.push == null ? `, the {rules.PUSH} every hit gives` : "";
-        lines.push(`It pushes {who} {rules.units(push)} along the ground{said}, a slide of {count(slide)}, and the attacker {rules.units(push * rules.ATTACKER_RECOIL)} back. In the air it pops them {rules.AIR_HIT_POP} up.`);
+        let push = rules.push_of(combo.rules, move);
+        let said = move.push == null ? `, the {combo.rules.push} every hit gives` : "";
+        lines.push(`It pushes {who} {rules.units(push)} along the ground{said}, a slide of {count(slide)}, and the attacker {rules.units(push * combo.rules.attacker_recoil)} back. In the air it pops them {combo.rules.air_hit_pop} up.`);
         lines.push(free_line(combo));
     } else {
         let v = flown.velocity;
@@ -82,7 +83,7 @@ func describe(combo) {
 
         let end = rules.flight_at(flown, combo.data.hitstun);
         let landing = flown.landed >= 0 ? `they land on frame {flown.landed}` : "they're still up there after ten seconds";
-        lines.push(`Their hitstun runs out on frame {combo.data.hitstun}, {rules.units(end.y)} up, and {landing}. A counter hit holds them {rules.COUNTER_HITSTUN_BONUS} longer.`);
+        lines.push(`Their hitstun runs out on frame {combo.data.hitstun}, {rules.units(end.y)} up, and {landing}. A counter hit holds them {combo.rules.counter_hitstun_bonus} longer.`);
         lines.push(di_line(combo));
 
         if (combo.jump != null) {
@@ -105,10 +106,10 @@ func di_line(combo) {
     let down = first ? combo.di[1] : combo.di[0];
     let high = rules.flight_top(up);
     let low = rules.flight_top(down);
-    let degrees = math.round(rules.DI_MAX_ANGLE * 180 / math.pi, 2);
+    let degrees = math.round(combo.rules.di_max_angle * 180 / math.pi, 2);
     let free_up = rules.flight_at(up, combo.act);
     let free_down = rules.flight_at(down, combo.act);
-    return `DI turns it up to {degrees} degrees either way, the top anywhere from {rules.units(low.y)} up and {rules.units(low.x)} along to {rules.units(high.y)} up and {rules.units(high.x)} along, and when you're free they're between {rules.units(math.min(free_down.y, free_up.y))} and {rules.units(math.max(free_down.y, free_up.y))} up. SDI shoves them {rules.SDI_DISTANCE} a press during the hitlag on top.`;
+    return `DI turns it up to {degrees} degrees either way, the top anywhere from {rules.units(low.y)} up and {rules.units(low.x)} along to {rules.units(high.y)} up and {rules.units(high.x)} along, and when you're free they're between {rules.units(math.min(free_down.y, free_up.y))} and {rules.units(math.max(free_down.y, free_up.y))} up. SDI shoves them {combo.rules.sdi_distance} a press during the hitlag on top.`;
 }
 
 func free_line(combo) {
@@ -160,7 +161,7 @@ func draw(state, combo) {
 func cone(drawing, combo, origin, scale) {
     let along = combo.flown.velocity;
     let reach = rules.flight_top(combo.flown).y * scale * 0.8;
-    for (turn in [rules.DI_MAX_ANGLE, -rules.DI_MAX_ANGLE]) {
+    for (turn in [combo.rules.di_max_angle, -combo.rules.di_max_angle]) {
         let edge = rules.turned(along, turn);
         let length = math.sqrt(edge.x * edge.x + edge.y * edge.y);
         drawing.line(origin, vec(origin.x + edge.x / length * reach, origin.y + edge.y / length * reach), 1, CONE);
