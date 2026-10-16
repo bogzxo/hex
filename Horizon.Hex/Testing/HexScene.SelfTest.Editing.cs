@@ -34,6 +34,29 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("editing: Alt+Z wraps the long line over more than one row, kept in the settings", () =>
             settings.WrapCode && code.WordWrap && code.RowCount > code.Document.LineCount);
+
+        // A shape over the right of the code, the long line runs round it in more rows, and back when it goes. The
+        // picture's own shape is out of the way for it, whatever picture the settings have might be in the way already
+        int wrappedRows = 0;
+        Horizon.UI.UIWrapShape? pictureShape = null;
+        test.Run(() =>
+        {
+            pictureShape = code.BackdropShape;
+            code.BackdropShape = null;
+        });
+        test.Wait();
+        test.Run(() =>
+        {
+            wrappedRows = code.RowCount;
+            float width = code.Bounds.Width;
+            code.WrapAreas.Add(new Horizon.UI.UIWrapArea(Horizon.UI.UIWrapShape.Box(), new Horizon.UI.UIRect(new Vector2(width * 0.45f, -10000.0f), new Vector2(width * 2.0f, 10000.0f))));
+        });
+        test.Wait();
+        test.Check("editing: wrapped code runs round a shape in its way, in more rows than without", () => code.RowCount > wrappedRows);
+        test.Run(() => code.WrapAreas.Clear());
+        test.Wait();
+        test.Check("editing: and back to as it was when the shape goes", () => code.RowCount == wrappedRows);
+        test.Run(() => code.BackdropShape = pictureShape);
         test.Run(ToggleWrap);
         test.Wait();
         test.Check("editing: and again doesn't", () => !code.WordWrap && code.RowCount == code.Document.LineCount);

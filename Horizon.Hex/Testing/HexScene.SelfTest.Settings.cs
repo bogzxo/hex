@@ -83,6 +83,7 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("settings: a page for the picture behind the code, the one Hex comes with in every editor", () =>
             settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null
+            && code.BackdropShape is { Rows: > 0 } && Setting("backdrop_wrap") is ToggleButton { State: true }
             && Setting("backdrop_scale") is Slider && Setting("backdrop_across") is Slider && Setting("backdrop_up") is Slider && Setting("backdrop_opacity") is Slider);
         test.Run(() =>
         {
@@ -96,6 +97,11 @@ internal sealed partial class HexScene
         test.Click(At(() => Setting("backdrop"), 0.1f));
         test.Wait();
         test.Check("settings: and it goes when switched off", () => !settings.BackdropOn && code.Backdrop is null);
+        test.Click(At(() => Setting("backdrop_wrap"), 0.1f));
+        test.Wait();
+        test.Check("settings: the code stops running round her when that's switched off", () => !settings.BackdropWrap && code.BackdropShape is null);
+        test.Click(At(() => Setting("backdrop_wrap"), 0.1f));
+        test.Wait();
         test.Click(At(() => Setting("backdrop"), 0.1f));
         test.Wait();
 

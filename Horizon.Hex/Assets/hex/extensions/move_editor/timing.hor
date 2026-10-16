@@ -1,4 +1,4 @@
-// How the game plays a move a frame at a time, the way Moves/MovePlayback.cs does. Every frame here is a game frame, 60
+// How the game plays a move a frame at a time, the way Simulation/MovePlayback.cs does. Every frame here is a game frame, 60
 // a second whatever the fighter's art plays at. The phases go one after the other, the art of a phase going along
 // art_speed * rate / 60 frames of art every game frame from its start, or spread evenly over the phase when it says
 // stretch (and how many frames). A phase without an animation carries on the one before from where it got to. Each frame

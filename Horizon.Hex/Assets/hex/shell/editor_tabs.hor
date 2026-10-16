@@ -1,12 +1,8 @@
 // editor_tabs, laid out with Horizon.Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
-// The tabs of the files that are open, and at the right end of them what the file on screen can do, VS Code's editor
-// actions. Its views (the designer and the code of a layout, the code and the table of a file of code), playing or
-// running it, and the name of a layout. New, open, save, undo and redo are the menus' and their keys'. The breadcrumbs
-// under them. Included by editor.hor over the middle.
 #define layout
 
-// The tabs over the breadcrumbs, an include is a group and would lay the two over each other
+
 let tabs_head = compositor.stack({
     anchor: "left",
     pivot: "left",
@@ -15,6 +11,7 @@ let tabs_head = compositor.stack({
 
 let tab_row = compositor.stack({
     parent: tabs_head,
+    size: vec(0, 24),
     anchor: "left",
     pivot: "left",
     spacing: 0,
@@ -32,7 +29,6 @@ let toolbar = compositor.stack({
     direction: "horizontal"
 });
 
-// A layout is looked at as its designer or as its code, a file of code only as its code
 let views = compositor.stack({
     parent: toolbar,
     anchor: "left",
@@ -43,70 +39,78 @@ let views = compositor.stack({
 
 let design_view = compositor.button({
     parent: views,
-    label: "@toolbar.design",
-    icon: "layout",
-    style: "button_flat",
     size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
     tooltip: "@toolbar.design_tip",
     hover: "lift",
     hover_amount: 1.5,
-    hover_time: 0.08
+    hover_time: 0.08,
+    label: "@toolbar.design",
+    icon: "layout",
+    lbl_scale: 0.14,
+    style: "button_flat",
+    animated: false
 });
 
 let code_view = compositor.button({
     parent: views,
-    label: "@toolbar.code",
-    icon: "code",
-    style: "button_flat",
     size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
     tooltip: "@toolbar.code_tip",
     hover: "lift",
     hover_amount: 1.5,
-    hover_time: 0.08
+    hover_time: 0.08,
+    label: "@toolbar.code",
+    icon: "code",
+    lbl_scale: 0.14,
+    style: "button_flat",
+    animated: false
 });
 
 let table_view = compositor.button({
     parent: views,
-    label: "@toolbar.table",
-    icon: "table",
-    style: "button_flat",
     size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
     tooltip: "@toolbar.table_tip",
     hover: "lift",
     hover_amount: 1.5,
-    hover_time: 0.08
+    hover_time: 0.08,
+    label: "@toolbar.table",
+    icon: "table",
+    lbl_scale: 0.14,
+    style: "button_flat",
+    animated: false
 });
 
-let tools_rule3 = compositor.divider({ parent: toolbar, size: vec(1, 20), direction: "vertical" });
+let tools_rule3 = compositor.divider({
+    parent: toolbar,
+    size: vec(1, 20),
+    direction: "vertical"
+});
 
 let play_button = compositor.button({
     parent: toolbar,
-    label: "@toolbar.run",
-    icon: "play",
-    style: "button_flat",
     size: vec(0, 28),
-    lbl_scale: 0.14,
-    animated: false,
     tooltip: "@toolbar.run_tip",
     hover: "lift",
     hover_amount: 1.5,
-    hover_time: 0.08
+    hover_time: 0.08,
+    label: "@toolbar.run",
+    icon: "play",
+    lbl_scale: 0.14,
+    style: "button_flat",
+    animated: false
 });
 
 let name_box = compositor.textbox({
     parent: toolbar,
     size: vec(160, 24),
+    tooltip: "@toolbar.name_tip",
     padding: vec(8, 5, 8, 5),
     placeholder: "@toolbar.name_placeholder",
     text_scale: 0.14,
-    max_length: 40,
-    tooltip: "@toolbar.name_tip"
+    max_length: 40
 });
 
-let crumbs = compositor.breadcrumbs({ parent: tabs_head, size: vec(840, 0), padding: vec(6, 0, 6, 0) });
+let crumbs = compositor.breadcrumbs({
+    parent: tabs_head,
+    size: vec(840, 0),
+    padding: vec(6, 0, 6, 0)
+});

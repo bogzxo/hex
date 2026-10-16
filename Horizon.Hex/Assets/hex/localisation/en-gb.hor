@@ -190,6 +190,8 @@ let strings = {
                 "An image drawn faintly in the bottom-right corner of the code editor, behind the text."
             ],
             shown: "Show backdrop",
+            wrap: "Wrap code around it",
+            wrap_tip: "With word wrap on (Alt+Z), lines run around what is drawn in the image instead of over it",
             picture: "Image",
             usual: "Default image",
             choose: "Browse...",

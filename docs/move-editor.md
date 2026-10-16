@@ -54,8 +54,11 @@ for the engine's integrator, and `vx = away / (vy / g)`. `flight` steps the engi
 gravity and then moved, on the share of gravity while the hitstun lasts and all of it after, never falling faster than
 their fall speed, and that's what puts Blocky's uppercut at 90.0 up and 19.9 along, the same as the game measured.
 
-The rest of what the game learned on 2026-10-15 is in `rules.hor` with the names CombatRules gives it, `DI_MAX_ANGLE`,
-`SDI_DISTANCE` and `SDI_INTERVAL`, `TECH_WINDOW` and `TECH_LOCKOUT`, `STALE_STEPS`, `PARRY_TICKS` and `PARRY_STUN`. Hex only
+The rest of what the game learned on 2026-10-15 is in the game's own `Assets/data/combat_rules.hor`, which `rules.load`
+reads out of the game the moves are in (`state.rules`, and every sum in `rules.hor` that needs a number is handed it
+first), `di_max_angle`, `sdi_distance` and `sdi_interval`, `tech_window` and `tech_lockout`, `stale_steps`, `parry_ticks`
+and `parry_stun`. Since 2026-10-16 there is no copy of the numbers in Hex, a game without the file gets a warning and no
+frame data. Hex only
 draws or says the ones a move's numbers change. `launch_at` is HitResolver.Send's knockback that grows, `launch_growth`
 more for every 10 health lost and `100 / weight` of that (the character's `weight` sits in `DEFAULT_MOVEMENT` with the
 rest of the movement), so the Data tab says where a launch with growth goes with 30, 60 and 90 gone. `kind_of` is
@@ -110,7 +113,7 @@ cancels and the landing an aerial goes into as routes.
 
 ## What a move is, all of it
 
-Out of `Moves/MoveFileReader.cs`, which is the only thing that counts, and the comment on top of `fighting_moves.hor`,
+Out of `Data/MoveFileReader.cs`, which is the only thing that counts, and the comment on top of `fighting_moves.hor`,
 which says what each means. Anything the editor offers has to read back through `MoveFileReader.ReadOne` the same.
 
 The move.
@@ -277,7 +280,7 @@ Playing is the same as now, plus slowed (a half, a quarter) and the loop of a ph
 ### Data, everything the game works out
 
 What `MoveFrameData` works out (startup, active, recovery, hitstun, blockstun, on hit, on block) is there already. The
-rest of `CombatRules` comes in the same way, mirrored in HIDL with the numbers named the same as in the C#. The counter
+rest of `CombatRules` comes in the same way, its sums mirrored in HIDL, its numbers the game's file. The counter
 hit (hitstun and damage scaled), the hitstop of a hit, a heavy hit, a counter and a block, the chip damage, the meter the
 move builds on hit, on block and on a whiff, the damage of it as the second, third and fifth hit of a combo, and juggle
 (when the knockback launches, how much hitstun it adds each time). A line per number of what it comes out of, so changing

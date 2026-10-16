@@ -1,4 +1,4 @@
-// Everything a move and a phase of Fighter2D can say, once. What Moves/MoveFileReader.cs reads, with what the comment on
+// Everything a move and a phase of Fighter2D can say, once. What Data/MoveFileReader.cs reads, with what the comment on
 // top of Assets/data/fighting_moves.hor says each one means. The forms of the editor are made out of these (a field is
 // what compositor.form takes), so are the checks. When HIDL has shapes this is shape FightMove and shape FightPhase.
 //
@@ -16,7 +16,7 @@ let JUMPS = ["full", "short", "hop", "double"];
 let KINDS = ["normal", "special", "super"];
 let BUTTONS = ["A", "B", "X", "Y", "DPadUp", "DPadDown", "DPadLeft", "DPadRight", "LeftBumper", "RightBumper", "LeftTrigger", "RightTrigger"];
 
-// @doc The ids the game does something with by itself (Moves/MoveIds.cs), idle has to be there
+// @doc The ids the game does something with by itself (Data/MoveIds.cs), idle has to be there
 let GAME_MOVES = ["idle", "hit_stun", "knocked_out", "heavy_land", "landing", "knocked_down", "get_up", "tech", "tech_roll", "victory", "run"];
 
 // @doc What hit_cancel takes besides the moves themselves, a kind of move or any (FightingMove.HitCancelsInto)

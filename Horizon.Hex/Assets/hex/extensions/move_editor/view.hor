@@ -12,6 +12,7 @@ let boxes_of = include("boxes.hor");
 let checks = include("checks.hor");
 let columns = include("columns.hor");
 let panels = include("panels.hor");
+let rules = include("rules.hor");
 let frame_view = include("frame_view.hor");
 let timeline_view = include("timeline_view.hor");
 let strip_view = include("strip_view.hor");
@@ -84,6 +85,13 @@ func load_game(state) {
     }
 
     if (hex.setting("last_game") != state.root) { hex.set_setting("last_game", state.root); }
+
+    // The game's combat rules, which everything worked out of a move goes by
+    state.rules = rules.load(hex, state.root);
+    if (state.rules == null) {
+        state.warn("no Assets/data/combat_rules.hor in the game, there are no rules to work the frame data out by");
+        return;
+    }
     state.fighters = game.fighters_of(hex, state.root, state.file);
 
     let names = [];
