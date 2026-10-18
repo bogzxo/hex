@@ -13,6 +13,9 @@ old one) and opens as its designer, the canvas the whole of the middle, the pale
 properties round it. F7, or the two buttons over the middle, turns it into its code instead, with the explorer and
 what is wrong with the file round it, and what was typed goes into the layout on the way back (code that doesn't
 build keeps it on the code).
+A save keeps the comments somebody wrote into the file, the ones over the header and over each declaration, and writes
+them back over the same declaration, renamed or moved (a comment inside the braces of one is lost). A drag lands on
+tenths of a pixel, so a position in the code reads 26.8 and not whatever the zoom made of the pointer.
 
 It edits every other .hor as well. A file that doesn't build a layout (data, a language, a skin, a move set) opens as
 code, coloured, numbered, checked as it is typed, with its outline on the left. Every tab has an x, and closing a

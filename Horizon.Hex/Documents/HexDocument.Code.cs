@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
@@ -21,6 +22,7 @@ internal sealed partial class HexDocument
     public (bool Success, string Message) Load(string code, string? path = null, bool keepHistory = false)
     {
         Clear();
+        ReadNotes(code);
 
         var result = Build(code, path);
 
@@ -192,10 +194,12 @@ internal sealed partial class HexDocument
         var code = new StringBuilder();
         code.Append("// ").Append(Name).AppendLine(", laid out with Horizon.Hex.");
         code.AppendLine("// Load it with UILayout.Load, every component is there under the name it has here.");
+        foreach (string note in headerNotes)
+            code.AppendLine(note);
 
-        // What says it is a layout, which is what an editor opens it with its designer by
+        // What says it is a layout, which is what an editor opens it with its designer by (the body starts with the
+        // blank line after it)
         code.Append('#').Append("define ").AppendLine(Horizon.HIDL.Preprocessing.HIDLPreprocessor.LAYOUT);
-        code.AppendLine();
         code.Append(GenerateBody());
 
         return code.ToString();
@@ -209,6 +213,7 @@ internal sealed partial class HexDocument
         if (Design is { } design)
         {
             code.AppendLine();
+            WriteNotes(code, NOTE_DESIGN);
             code.Append("compositor.design({ size: ").Append(HIDLWriter.Write(new Vector2Value(design)))
                 .Append(", fit: \"").Append(Fit.ToString().ToLowerInvariant()).AppendLine("\" });");
         }
@@ -216,6 +221,7 @@ internal sealed partial class HexDocument
         foreach (var (component, _) in Walk())
         {
             code.AppendLine();
+            WriteNotes(code, NameOf(component));
             WriteComponent(code, component);
         }
 
@@ -224,10 +230,103 @@ internal sealed partial class HexDocument
         if (hidden.Length > 0)
         {
             code.AppendLine();
+            WriteNotes(code, NOTE_HIDDEN);
             code.Append("compositor.hidden_layers(").Append(HIDLWriter.Write(new ListValue([.. hidden.Select(layer => (IRuntimeValue)new StringValue(layer))]))).AppendLine(");");
         }
 
         return code.ToString();
+    }
+
+    // The comments somebody wrote into the file, the ones over the header and the ones over each declaration, kept by
+    // the name of what they sit over (NOTE_DESIGN and NOTE_HIDDEN for the two calls that have no name). The code is
+    // written out of the components and never kept, so without these every save threw away whatever the last person
+    // had written about the layout. A comment inside a declaration (between its braces) isn't kept, there is nothing
+    // of the component it could hang off
+    private readonly Dictionary<string, string[]> notes = new(StringComparer.Ordinal);
+    private readonly List<string> headerNotes = [];
+    private const string NOTE_DESIGN = "design", NOTE_HIDDEN = "hidden_layers";
+
+    private static readonly Regex Declaration = new(@"^let\s+([A-Za-z_]\w*)\s*=", RegexOptions.Compiled);
+
+    /// <summary>The comments written over a declaration of the layout, by the name it is declared under, for whoever writes code of their own out of it.</summary>
+    public IReadOnlyList<string> NotesOver(string name) => notes.GetValueOrDefault(name, []);
+
+    private void ReadNotes(string code)
+    {
+        notes.Clear();
+        headerNotes.Clear();
+
+        var pending = new List<string>();
+        bool inHeader = true, inString = false;
+        int depth = 0;
+
+        foreach (string raw in code.Split('\n'))
+        {
+            string line = raw.Trim();
+
+            if (depth == 0 && line.StartsWith("//", StringComparison.Ordinal))
+            {
+                if (!IsGeneratedNote(line))
+                    pending.Add(line);
+                continue;
+            }
+
+            if (inHeader && line.StartsWith("#define", StringComparison.Ordinal))
+            {
+                headerNotes.AddRange(pending);
+                pending.Clear();
+                inHeader = false;
+                continue;
+            }
+
+            if (depth == 0 && pending.Count > 0 && KeyOf(line) is { } key)
+            {
+                notes[key] = [.. pending];
+                pending.Clear();
+            }
+
+            // How deep in brackets the line leaves us, a comment inside a declaration isn't one over the next
+            for (int i = 0; i < line.Length; i++)
+            {
+                char at = line[i];
+                if (inString)
+                {
+                    if (at == '\\') i++;
+                    else if (at == '"') inString = false;
+                }
+                else if (at == '"') inString = true;
+                else if (at == '/' && i + 1 < line.Length && line[i + 1] == '/') break;
+                else if (at is '{' or '(' or '[') depth++;
+                else if (at is '}' or ')' or ']') depth = Math.Max(0, depth - 1);
+            }
+        }
+    }
+
+    private static string? KeyOf(string line)
+    {
+        if (Declaration.Match(line) is { Success: true } declared)
+            return declared.Groups[1].Value;
+        if (line.StartsWith("compositor.design(", StringComparison.Ordinal))
+            return NOTE_DESIGN;
+        if (line.StartsWith("compositor.hidden_layers(", StringComparison.Ordinal))
+            return NOTE_HIDDEN;
+        return null;
+    }
+
+    // The lines the writer puts in by itself, which it would write twice if they were kept as well
+    private static bool IsGeneratedNote(string line) =>
+        line.Contains(", laid out with Horizon.Hex.", StringComparison.Ordinal)
+        || line.StartsWith("// Load it with UILayout.Load", StringComparison.Ordinal)
+        || line.StartsWith("// The handlers this component had", StringComparison.Ordinal)
+        || line.EndsWith("can't be made by a script, it was left out.", StringComparison.Ordinal);
+
+    private void WriteNotes(StringBuilder code, string key)
+    {
+        if (!notes.TryGetValue(key, out string[]? lines))
+            return;
+
+        foreach (string line in lines)
+            code.AppendLine(line);
     }
 
     private void WriteComponent(StringBuilder code, UIComponent component, Func<UIComponent, string>? nameOf = null, UIComponent? top = null)

@@ -27,7 +27,12 @@ internal sealed partial class HexScene
             if (pointer.Down)
             {
                 if (held.DragResize(inLayout, settings.Snap))
+                {
+                    // The pointer is wherever the zoom put it, the code shouldn't read 318.39996 for it
+                    held.Position = Tenths(held.Position);
+                    held.Size = Tenths(held.Size);
                     codeDirty = true;
+                }
             }
             else
             {
@@ -57,12 +62,18 @@ internal sealed partial class HexScene
         return true;
     }
 
-    /// <summary>Helper method to have a move land on the grid, if there is one. What is left over stays with the pointer.</summary>
+    /// <summary>
+    /// Helper method to have a move land on the grid, if there is one, and on tenths of a pixel if there isn't (the
+    /// pointer is wherever the zoom put it, and a position of 26.770752 in the code helps nobody). What is left over
+    /// stays with the pointer.
+    /// </summary>
     private Vector2 Snapped(Vector2 moved)
     {
         if (settings.Snap <= 0.0f)
-            return moved;
+            return Tenths(moved);
 
         return new Vector2(MathF.Truncate(moved.X / settings.Snap), MathF.Truncate(moved.Y / settings.Snap)) * settings.Snap;
     }
+
+    private static Vector2 Tenths(Vector2 value) => new(MathF.Round(value.X, 1), MathF.Round(value.Y, 1));
 }

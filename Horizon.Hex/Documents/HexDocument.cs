@@ -252,6 +252,10 @@ internal sealed partial class HexDocument
         if (names.Find(name) is { } other && other != component)
             return false;
 
+        // Whatever was written over it in the code goes with it
+        if (names.TryGetName(component, out string was) && notes.Remove(was, out string[]? kept))
+            notes[name] = kept;
+
         names.Set(component, name);
         return true;
     }

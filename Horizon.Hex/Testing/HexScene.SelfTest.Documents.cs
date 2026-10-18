@@ -74,6 +74,44 @@ internal sealed partial class HexScene
         test.Check("open: pressing open again goes back to the layout", () => !browsing && treeRows.Count == 3);
     }
 
+    // A layout somebody wrote notes into, over the header, the design, a component, and one inside a component
+    private const string NOTED_LAYOUT = "// noted_menu, laid out with Horizon.Hex.\n"
+        + "// Load it with UILayout.Load, every component is there under the name it has here.\n"
+        + "// The menu of the test, with notes in it that a save has to keep.\n// Two lines of them.\n#define layout\n\n"
+        + "// The screen it was made for\ncompositor.design({ size: vec(1600, 900), fit: \"contain\" });\n\n"
+        + "// The box everything sits in\nlet box = compositor.stack({\n    padding: vec(16, 16, 16, 16),\n    color: vec(0.1, 0.12, 0.17, 0.9)\n});\n\n"
+        + "let go = compositor.button({\n    parent: box,\n    // one inside a declaration, which goes\n    label: \"Go { not a brace }\"\n});\n";
+
+    private void TestNotes(HexPointerScript test)
+    {
+        HexDocument? noted = null;
+        string written = string.Empty;
+
+        test.Run(() =>
+        {
+            noted = new HexDocument("noted_menu", stage.CreateModule());
+            noted.Module.Enabled = false;
+            noted.Load(NOTED_LAYOUT);
+            written = noted.GenerateCode().ReplaceLineEndings("\n");
+        });
+        test.Check("notes: the comments over the header and over each declaration are written back where they were", () =>
+            written.Contains("// The menu of the test, with notes in it that a save has to keep.\n// Two lines of them.\n#define layout\n\n// The screen it was made for\ncompositor.design(")
+            && written.Contains("\n\n// The box everything sits in\nlet box = compositor.stack(")
+            && written.Contains("\n\nlet go = compositor.button(")
+            && !written.Contains("one inside"));
+        test.Check("notes: the two lines of the header are written once", () => written.Split("laid out with Horizon.Hex").Length == 2 && written.Split("Load it with UILayout.Load").Length == 2);
+
+        test.Run(() =>
+        {
+            noted!.Find("box")!.Position += new Vector2(10, 0);
+            noted.Rename(noted.Find("go")!, "start");
+            written = noted.GenerateCode().ReplaceLineEndings("\n");
+        });
+        test.Check("notes: moved and renamed, the notes are still over what they were over", () =>
+            written.Contains("// The box everything sits in\nlet box = compositor.stack(") && written.Contains("let start = compositor.button(") && CheckRoundTrip(noted!));
+        test.Run(() => stage.RemoveModule(noted!.Module));
+    }
+
     private void TestOwnLayout(HexPointerScript test)
     {
         /* The editor in itself */

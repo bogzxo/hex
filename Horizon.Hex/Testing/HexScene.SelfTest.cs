@@ -135,6 +135,7 @@ internal sealed partial class HexScene
             TestSectionsAndKeys(test);
             TestTemplates(test);
             TestSavingAndOpening(test);
+            TestNotes(test);
             TestOwnLayout(test);
             TestScrolling(test);
             TestEditorSize(test);
