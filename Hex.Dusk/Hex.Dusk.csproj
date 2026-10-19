@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dusk, the terminal of Hex, a library the Hex program starts with dusk (Hex/Program.cs). It was bogzxo/dusk's
+       Horizon.Dusk, copied in, its history to follow by a subtree merge. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+
+    <!-- Dusk's own version, what About says -->
+    <Version>0.3.0</Version>
+
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Where the engine is, its submodule unless a workspace said otherwise (the Directory.Build.props over bogzxo/horizon) -->
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hex.Dusk.Tests" />
+    <InternalsVisibleTo Include="Hex" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\dusk\**\*.hor">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
+    <!-- The engine is a submodule at horizon/, the language a submodule inside of that -->
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
+  </ItemGroup>
+
+</Project>

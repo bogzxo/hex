@@ -1,0 +1,14 @@
+// Dusk's window, what only Dusk has, quitting it.
+#define dusk
+
+let plugin = {
+    name: "Window",
+    description: "Dusk's own window, its settings, quitting it.",
+    version: "0.1.0",
+    author: "bogz"
+};
+
+dusk.command("quit", "Quit", func(dusk) { dusk.quit(); }, "Ctrl+Shift+F4");
+dusk.command("settings", "Settings", func(dusk) { dusk.settings(); }, "Ctrl+,");
+dusk.command("quake", "Drop down from the top of the screen, and back up", func(dusk) { dusk.quake(); }, "");
+dusk.command("dawn_mode", "Dawn, the editor, in this window", func(dusk) { dusk.dawn_mode(); }, "Ctrl+Alt+D");

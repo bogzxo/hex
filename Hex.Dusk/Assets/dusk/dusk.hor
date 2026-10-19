@@ -1,0 +1,40 @@
+// dusk, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// Dusk's window. The title bar with the menus in it along the top (the window has no frame of the system's), the
+// panel of tabs and splits taking the middle (the code sizes it to what the bars leave) and the status bar along
+// the bottom.
+#define layout
+
+let root = compositor.stack({
+    fill: "both",
+    spacing: 0
+});
+
+let top = compositor.title_bar({
+    parent: root,
+    icon: "terminal",
+    title: "Dusk",
+    height: 34,
+    spacing: 0
+});
+
+let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });
+
+let terminal = compositor.terminal_panel({
+    parent: root,
+    anchor: "top",
+    pivot: "top",
+    size: vec(1600, 820),
+    min_pane: 48
+});
+
+let status = compositor.status_bar({ parent: root, fill: "horizontal", text_scale: 0.13 });
+
+// Cards in the bottom right corner for what wants more than the status bar, see Notify
+let toasts = compositor.notifications({
+    anchor: "bottom_right",
+    pivot: "bottom_right",
+    pos: vec(-14, 36),
+    width: 400,
+    text_scale: 0.14
+});

@@ -1,0 +1,103 @@
+// The three columns of the view sized to the room it has. The moves 230 wide (180 when there's little room), the tabs on
+// the right what they were dragged to, the frame and the timeline the rest and at least 340 (the row of controls under
+// the timeline is that wide). Short of room the tabs give some back first (down to 240), then the moves go (up and down
+// still pick one), then the tabs, the frame is what's being edited and the last to go.
+
+let LEAST_MIDDLE = 340;
+let LEAST_RIGHT = 240;
+let TABS_HEADER = 34;
+let FORM_MARGIN = 24;
+
+// @doc How tall the timeline is, the frame meter and the phases
+let TIMELINE_HEIGHT = 104;
+
+// A row of the move list at its text scale when the list hasn't said yet (its row_height, which the skin decides, 28
+// in the flat one), and what the column has over the list (the title, the three rows of buttons, names and filters,
+// the gaps)
+let LIST_ROW = 28;
+let LEFT_REST = 16 + 26 * 3 + 6 * 4 + 8;
+
+// @doc How wide the three are in a view so wide, { left, right, middle }, 0 for one that's put away
+func widths(wanted_right, width) {
+    let left = width < 1000 ? 180 : 230;
+    let right = math.min(wanted_right, math.max(LEAST_RIGHT, width - left - LEAST_MIDDLE - 20));
+    if (width < left + LEAST_MIDDLE + right + 20) { left = 0; }
+    if (width < LEAST_MIDDLE + right + 10) { right = 0; }
+    let gaps = (left > 0 ? 10 : 0) + (right > 0 ? 10 : 0);
+    return { left: left, right: right, middle: math.max(160, width - left - right - gaps) };
+}
+
+// @doc The widest the tabs can be dragged in a view so wide, the frame keeping what it needs with the moves beside it
+func most_right(width) {
+    return math.max(LEAST_RIGHT, width - (width < 1000 ? 180 : 230) - LEAST_MIDDLE - 20);
+}
+
+// @doc Everything sized to the room the view has
+func lay_out(state, room) {
+    let width = room.x - 20;
+    let height = room.y - 16;
+    let sized = widths(state.right, width);
+    let ui = state.ui;
+
+    ui.get("left").visible = sized.left > 0;
+    ui.get("right").visible = sized.right > 0;
+    size_middle(ui, sized.middle, height);
+    if (sized.right > 0) { size_right(ui, sized.right, height); }
+    if (sized.left > 0) { size_left(ui, sized.left, height); }
+}
+
+// What the middle has other than the canvas, the header and the toolbar over it, the line under it, the timeline, the
+// art, the controls and the frame line, and the gaps between the nine of them
+let MIDDLE_REST = 26 + 24 + 18 + TIMELINE_HEIGHT + 60 + 26 + 22 + 6 * 8;
+
+func size_middle(ui, width, height) {
+    ui.get("canvas").size = vec(width, math.max(120, height - MIDDLE_REST));
+    ui.get("timeline").size = vec(width, TIMELINE_HEIGHT);
+    ui.get("strip").size = vec(width, 60);
+    ui.get("frame_info").size = vec(width, 22);
+    ui.get("status").size = vec(width, 18);
+    ui.get("written_in").size = vec(math.max(40, width - 158), 26);
+
+    // The overlays say what they are while there's room for it, the icons do after
+    let narrow = width < 500;
+    let words = { show_hurtbox: "hurtbox", show_traced: "traced", show_onion: "onion", show_path: "launch" };
+    for (button in keys(words)) {
+        ui.get(button).size = vec(narrow ? 30 : 84, 24);
+        ui.get(button).label = narrow ? "" : words[button];
+    }
+}
+
+func size_right(ui, width, height) {
+    ui.get("right").size = vec(width, height);
+    ui.get("tabs").size = vec(width, height);
+    let inside = width - FORM_MARGIN;
+    for (page in ["move_scroll", "phase_scroll", "box_scroll", "data_scroll", "inputs_scroll"]) {
+        ui.get(page).size = vec(width, math.max(80, height - TABS_HEADER));
+    }
+    for (form in ["move_form", "reroute_form", "phase_form", "box_form"]) { ui.get(form).row_width = inside; }
+    for (label in ["move_head", "upgrade_info", "phase_head", "box_title", "box_info", "data_text", "combo_text", "table_text", "inputs_text"]) {
+        ui.get(label).size = vec(inside, 0);
+    }
+    ui.get("combo_arc").size = vec(inside, 140);
+}
+
+func size_left(ui, width, height) {
+    ui.get("filter").size = vec(width - 100, 26);
+    ui.get("move_name").size = vec(width - 100, 26);
+
+    // The buttons over the moves share the column, their words go when it's narrow and the icons say it
+    let narrow = width < 220;
+    let each = (width - 6) / 4;
+    let words = { new_move: "New", duplicate_move: "Copy", rename_move: "Name", delete_move: "" };
+    for (button in keys(words)) {
+        ui.get(button).size = vec(each, 26);
+        ui.get(button).label = narrow ? "" : words[button];
+    }
+
+    // Everything else of the column is the list, it's what's picked from every few seconds. It used to share the column
+    // with the fighter, Save and Fight! and came out four rows tall at 1600 by 900
+    let moves = ui.get("moves");
+    moves.size = vec(width, 0);
+    let row = moves.row_height > 0 ? moves.row_height : LIST_ROW;
+    moves.rows = math.max(3, math.floor((height - LEFT_REST) / row));
+}

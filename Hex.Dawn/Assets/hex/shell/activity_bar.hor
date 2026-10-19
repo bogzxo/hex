@@ -1,0 +1,112 @@
+// activity_bar, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// The activity bar down the left of Hex, which of the side bar's views is showing. Included by editor.hor.
+#define layout
+
+let activity = compositor.stack({
+    anchor: "top",
+    pivot: "top",
+    padding: vec(4, 4, 4, 4),
+    spacing: 4
+});
+
+let act_explorer = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "files",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.explorer",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let act_search = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "search",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.search",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let act_outline = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "list-tree",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.outline",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let act_design = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "layout",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.design",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let act_debug = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "debug-alt",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.debug",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let act_extensions = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "extensions",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.extensions",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+// Settings at the bottom of the bar, the editor sizes this to push it there
+let activity_gap = compositor.spacer({ parent: activity, size: vec(38, 0) });
+
+let act_settings = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "settings-gear",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.settings",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});

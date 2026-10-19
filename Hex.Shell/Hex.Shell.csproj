@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What Dawn and Dusk are both drawn with and both are, the window's identity, the settings page, the chrome they share -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+
+  <!-- Hex's icon, the one both modes' windows and the exe have, Dusk is Hex too -->
+  <ItemGroup>
+    <None Update="Assets\hex_icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,50 @@
+// panel, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// The panel under the editor, what is wrong with the files, what Hex and the files that were run said, and the HIDL
+// console. Included by editor.hor under the middle.
+#define layout
+
+let bottom = compositor.tabs({
+    size: vec(840, 180),
+    tabs: ["@panel.problems", "@panel.output", "@panel.console"],
+    text_scale: 0.13,
+    spacing: 18,
+    resize: "top",
+    min_size: vec(0, 80),
+    max_size: vec(0, 600),
+    slide: "down"
+});
+
+let problems_scroll = compositor.scroll({
+    parent: bottom,
+    fill: "both",
+    padding: vec(4, 4, 4, 4)
+});
+
+let problems = compositor.stack({
+    parent: problems_scroll,
+    template: "tree_row.hor",
+    preview_count: 2,
+    spacing: 1
+});
+
+let output_scroll = compositor.scroll({
+    parent: bottom,
+    fill: "both",
+    padding: vec(4, 4, 4, 4)
+});
+
+let output = compositor.stack({
+    parent: output_scroll,
+    template: "output_row.hor",
+    preview_count: 3,
+    spacing: 0
+});
+
+// The terminal, Dusk's (the engine's TerminalPanel), tabs of shells split however they're wanted, the console being one
+// of its profiles, HIDL run in what the file on screen came to. See HexScene.Terminal
+let terminal = compositor.terminal_panel({
+    parent: bottom,
+    fill: "both",
+    min_pane: 40
+});

@@ -1,0 +1,67 @@
+// Dusk's settings as a form, a view of settings.hor next to its code (F7 between the two). Every setting of the
+// terminal a row, in sections, with what it does under the pointer, what the file doesn't say greyed at what it comes
+// as, an x to take one back out. A change is an edit of the file where the setting is written (hex.edit), so the code
+// says the same, undo takes it back, and Dusk takes it in the moment it is saved.
+let extension = {
+    name: "Dusk settings",
+    description: "Dusk's settings.hor as a form, next to its code.",
+    version: "0.1.0",
+    author: "bogz"
+};
+
+// @doc The form of every file that has its view open, by the file
+let views = {};
+
+func on_start(hex) {
+    hex.view({
+        id: "form",
+        title: "Settings",
+        icon: "settings-gear",
+        layout: "settings_view.hor",
+        when: "dusk_settings",
+        open: func(ui, file) { open_form(hex, ui, file); },
+        right: false
+    });
+}
+
+func open_form(hex, ui, file) {
+    let form = ui.get("form");
+    let described = hex.terminal_settings(file);
+    form.fields = described.fields;
+    form.values = described.values;
+    views[file] = form;
+
+    form.on_changed = func(key, said) {
+        // Edited where it is written, the terminal's section of the file (or the top of one from before the sections),
+        // put in at the end of the section when the file doesn't say it yet, a list's flags as a list
+        let value = hex.terminal_setting_value(key, said);
+        let why = hex.edit(file, ["settings", "terminal", key], value);
+        if (why != null) {
+            why = hex.edit(file, ["settings", key], value);
+        }
+        if (why != null) {
+            why = hex.insert(file, ["settings", "terminal"], key, value);
+        }
+        if (why != null) {
+            why = hex.insert(file, ["settings"], key, value);
+        }
+        if (why != null) {
+            hex.say(`{key} couldn't be written, {why}`);
+        }
+    };
+
+    form.on_cleared = func(key) {
+        if (hex.remove(file, ["settings", "terminal", key]) != null) {
+            hex.remove(file, ["settings", key]);
+        }
+    };
+}
+
+// The file typed into (or edited by the form), the form says what it says now
+func on_run(hex, file) {
+    for (let each in views) {
+        if (each == file) {
+            views[each].values = hex.terminal_settings(file).values;
+        }
+    }
+}

@@ -1,0 +1,56 @@
+using Hex.Shell;
+
+using Horizon.UI;
+using Horizon.UI.Components;
+
+namespace Hex.Dusk;
+
+// The settings (Ctrl+,), Hex's one window of them, the terminal's section put in force as it changes and the editor's
+// written to the file for Dawn to take in (its effects and its picture are Dusk's too and put in force here). The same
+// window Dawn shows, one search over all of it.
+internal sealed partial class DuskScene
+{
+    private HexSettingsView? settingsView;
+
+    /// <summary>The page while it is up, for the self test.</summary>
+    internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
+
+    private void ShowSettings()
+    {
+        if (chooser is { IsOpen: true })
+            chooser.Close();
+
+        if (settingsView is { Window.Parent: not null } open)
+        {
+            open.Window.BringToFront();
+            open.Page.Search.Focus();
+            return;
+        }
+
+        // The editor's section, written for Dawn, the effects and the picture of it put in force here as they change
+        var editor = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Settings, EditorSettingsCatalog.Usual);
+        editor.Pressed = (key, which) => SettingPressed(editor, key, which);
+        editor.Changed = () =>
+        {
+            ReadEffects();
+            ReadBackdrop();
+        };
+
+        settingsView = new HexSettingsView([new TerminalSettingsSource(host), editor], CloseSettings);
+        settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        chrome.Root.Add(settingsView.Window);
+        settingsView.Page.Search.Focus();
+    }
+
+    private void CloseSettings()
+    {
+        if (settingsView?.Window is { Parent: { } parent } window)
+            parent.Remove(window);
+        settingsView = null;
+        panel.FocusedView?.Focus();
+
+        // The editor's section has the effects and the picture, which are Dusk's too
+        ReadEffects();
+        ReadBackdrop();
+    }
+}

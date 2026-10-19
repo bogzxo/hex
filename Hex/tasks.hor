@@ -1,0 +1,16 @@
+// The tasks of this folder, each a command line Dawn runs in a terminal tab of its own. Run Task in the Run menu
+// picks one, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task. What a compiler
+// says in one goes in the Problems panel.
+
+let tasks = {
+    build: {
+        // The command line, run by the usual shell.
+        command: "dotnet run",
+        // Where it runs, from the workspace's folder. The folder itself when it doesn't say.
+        folder: ".",
+        // build, test or run. Ctrl+Shift+B runs the build one, F5 on a file that isn't HIDL the run one.
+        group: "build",
+        // Whether it is the one of its group run without asking, the first of a group is when none says.
+        default: true
+    }
+};
