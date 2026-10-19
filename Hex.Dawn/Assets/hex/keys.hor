@@ -1,0 +1,70 @@
+// keys, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+#define layout
+
+
+let window = compositor.window({
+    size: vec(640, 520),
+    z: 10,
+    padding: vec(10, 10, 10, 10),
+    intro: "pop",
+    intro_time: 0.18,
+    resize: "right, bottom",
+    min_size: vec(420, 300),
+    title: "Keyboard Shortcuts",
+    icon: "keyboard"
+});
+
+let rows = compositor.stack({
+    parent: window,
+    fill: "both",
+    spacing: 8
+});
+
+let keys_filter = compositor.textbox({
+    parent: rows,
+    size: vec(620, 28),
+    anchor: "left",
+    pivot: "left",
+    padding: vec(8, 5, 8, 5),
+    placeholder: "@keys.filter",
+    text_scale: 0.14,
+    max_length: 80
+});
+
+let keys_tree = compositor.tree_view({
+    parent: rows,
+    size: vec(620, 380),
+    anchor: "left",
+    pivot: "left",
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6,
+    text_scale: 0.14,
+    guides: false
+});
+
+let keys_foot = compositor.stack({
+    parent: rows,
+    anchor: "left",
+    pivot: "left",
+    spacing: 8,
+    direction: "horizontal"
+});
+
+let keys_hint = compositor.label({
+    parent: keys_foot,
+    size: vec(440, 28),
+    text: "@keys.hint",
+    text_scale: 0.13,
+    color: vec(0.6, 0.62, 0.68, 1),
+    align: "left"
+});
+
+let keys_reset = compositor.button({
+    parent: keys_foot,
+    size: vec(170, 28),
+    tooltip: "@keys.reset_tip",
+    label: "@keys.reset",
+    icon: "discard",
+    lbl_scale: 0.14
+});

@@ -1,0 +1,11 @@
+// The keys of Dusk's own commands, over the ones every terminal has (the engine's Assets/terminal/keys.hor), and under
+// the user's keys.hor in Dusk's folder. A command by its name and the key it is on, "" for none.
+#define dusk
+
+let keys = {
+    theme_next: "Ctrl+Shift+F9",
+    animations: "",
+    quit: "Ctrl+Shift+F4",
+    settings: "Ctrl+,",
+    quake: ""
+};

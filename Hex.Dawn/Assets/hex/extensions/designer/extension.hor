@@ -1,0 +1,10 @@
+// The designer, a layout (a .hor file that says #define layout) on a canvas, its components dragged about, its
+// properties on the right, its layers and its entrances, F7 between it and the code. It is C# underneath (native says
+// which), this file is what the extensions page knows it by. Switch it off and a layout opens as the HIDL it is.
+let extension = {
+    name: "Layout designer",
+    description: "Layouts on a canvas, dragged about and set in the properties, F7 to their code and back.",
+    version: "1.0.0",
+    author: "bogz",
+    native: "designer"
+};

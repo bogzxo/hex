@@ -1,0 +1,185 @@
+// Everything a move and a phase of Fighter2D can say, once. What Data/MoveFileReader.cs reads, with what the comment on
+// top of Assets/data/fighting_moves.hor says each one means. The forms of the editor are made out of these (a field is
+// what compositor.form takes), so are the checks. When HIDL has shapes this is shape FightMove and shape FightPhase.
+//
+// This is the second format, the one where every time is in game frames (60 a second, whatever the fighter's art plays
+// at) and every distance in world units, so a number in a move file means what it says. The keys the first one had
+// and this one hasn't are in GONE, with what took over from them (MoveFileReader's RetiredKeys, which it throws on).
+
+let STANCES = ["standing", "crouching", "jumping", "falling"];
+let CONDITIONS = ["held", "hitstun", "jumping", "falling", "landing", "always"];
+let STATUSES = ["attacking", "blocking", "invulnerable"];
+let EFFECTS = ["jump", "roll", "haze"];
+let LEVELS = ["mid", "low", "overhead"];
+let TRIGGERS = ["held", "pressed", "double_tap"];
+let JUMPS = ["full", "short", "hop", "double"];
+let KINDS = ["normal", "special", "super"];
+let BUTTONS = ["A", "B", "X", "Y", "DPadUp", "DPadDown", "DPadLeft", "DPadRight", "LeftBumper", "RightBumper", "LeftTrigger", "RightTrigger"];
+
+// @doc The ids the game does something with by itself (Data/MoveIds.cs), idle has to be there
+let GAME_MOVES = ["idle", "hit_stun", "knocked_out", "heavy_land", "landing", "knocked_down", "get_up", "tech", "tech_roll", "victory", "run"];
+
+// @doc What hit_cancel takes besides the moves themselves, a kind of move or any (FightingMove.HitCancelsInto)
+let HIT_CANCEL_WORDS = ["any", ...KINDS];
+
+// @doc Names the game still reads but doesn't write any more, and what they are now
+let RENAMED = { stun: "hitstun", interrupt: "cancel", lock: "commit" };
+
+// @doc
+// Keys of the first format the second hasn't got, and what to say instead, MoveFileReader's RetiredKeys. The game won't
+// load a move with one, so each is an error, with the move tab offering to say it the new way (upgrade in edits.hor)
+let GONE = {
+    knockback: "launch, how far away and how high in world units",
+    cancellable: "the cancel frame of a phase, a move without one can't be cancelled",
+    interruptible: "the cancel frame of a phase, a move without one can't be cancelled",
+    steering: "walk and drift, 0 to 1",
+    walk_scale: "walk, 0 to 1",
+    hold: "art_speed, 0.5 for what hold: 2 was"
+};
+
+// @doc The keys of a move, in the order a move is written, phases and the reroutes last
+let MOVE_FIELDS = [
+    { key: "input", kind: "text", unset: "none, only rerouted to", group: "input", help: "the buttons that start it, \"A + B\" both together, \"DPadLeft | DPadRight\" either. A, B, X, Y, DPadUp, DPadDown, DPadLeft, DPadRight, LeftBumper, RightBumper, LeftTrigger and RightTrigger" },
+    { key: "trigger", kind: "choice", choices: TRIGGERS, default: "held", group: "input", help: "how the input has to be entered, held for as long as it is, pressed once a press, double_tap twice in a row" },
+    { key: "priority", kind: "whole", default: -1, group: "input", help: "the order the inputs are matched in, lowest first. A move that needs more than another goes before it (double tap left before left)" },
+    { key: "stances", kind: "flags", choices: STANCES, default: "standing", group: "input", help: "the stances it can be started from" },
+    { key: "meter_cost", kind: "whole", default: 0, group: "input", help: "how much of the super meter it burns, out of 100. Without the meter for it the input goes on to the next move" },
+    { key: "kind", kind: "choice", choices: KINDS, unset: "out of its meter cost", group: "input", help: "normal, special or super, what a hit_cancel by kind goes by. Left out a move that costs meter is a special, half the meter or more a super, anything else a normal" },
+    { key: "damage", kind: "whole", default: 0, group: "hit", help: "how much health a hit takes, out of 100" },
+    { key: "hitstun", kind: "whole", unset: "a guess out of the startup", group: "hit", help: "game frames (60 a second) whoever gets hit loses the controls for, exactly. A later hit replaces what's left of it, a counter hit adds 4. Left out the game guesses, the Data tab says what" },
+    { key: "blockstun", kind: "whole", unset: "a share of the hitstun", group: "hit", help: "game frames (60 a second) whoever blocks it is stuck in the block for" },
+    { key: "hitstop", kind: "whole", unset: "damage * 0.65 + 6, 30 at most", group: "hit", help: "game frames (60 a second) both of them freeze for on the hit, Smash's hitlag. A block freezes them for 0.67 of it, a counter hit 4 more. The launch waits for the end of it, and whoever got hit can SDI during it and DI as it ends" },
+    { key: "launch", kind: "vec", default: vec(0, 0), step: 5, group: "hit", help: "world units. up is how high over where they were hit the top of the arc is, away how far along they are by then. 30 is off their feet, 75 a fighter's height. Nothing up is no launch. Whoever is launched turns it up to 9.74 degrees either way by the direction they hold (DI)" },
+    { key: "launch_growth", kind: "vec", default: vec(0, 0), step: 1, group: "hit", help: "world units the launch goes further for every 10 health they've lost, away and up, less for a heavier fighter (weight in characters.hor, 100 the usual, 200 half). At full health the launch is exactly launch, Smash's knockback scaling" },
+    { key: "push", kind: "number", unset: "16", step: 2, group: "hit", help: "world units a hit that doesn't launch slides them along the ground, the attacker going back half of it. In the air it pops them 14 up and pushes them that far" },
+    { key: "hitstun_gravity", kind: "number", unset: "the victim's, half their gravity", step: 0.05, group: "hit", help: "the share of their gravity whoever gets hit falls on while in hitstun, this hit's own (0.05 to 2). Every hit of a juggle adds a tenth" },
+    { key: "hit_cancel", kind: "flags", choices: HIT_CANCEL_WORDS, unset: "none", group: "hit", help: "the moves it can be cancelled into from the frame after its hit lands (or is blocked), whatever its cancel frames say, by name or by kind. jump for following a launcher up, special and super on a normal for Street Fighter's cancel, or any" },
+    { key: "whiff_lag", kind: "whole", unset: "none", group: "hit", help: "game frames the move holds its last frame longer when its hit came out and missed, its cancel frames not counting then either. Rivals of Aether's whifflag" },
+    { key: "level", kind: "choice", choices: LEVELS, default: "mid", group: "hit", help: "where the hit comes in, mid (blocked standing or crouching), low (only crouching) or overhead (only standing)" },
+    { key: "knockdown", kind: "flag", default: false, group: "hit", help: "whether whoever gets hit ends up on the floor, where nothing hits them until they get up" },
+    { key: "warns", kind: "flag", unset: "yes when it does damage", group: "hit", help: "whether the opponent gets a heads up it is coming, the dummy blocks on it" },
+    { key: "walk", kind: "number", unset: "1", step: 0.05, group: "movement", help: "0 to 1, how much of the fighter's walk speed they can walk at on the ground during it. An attack on the ground plants you with 0, creeping crouched is 0.4" },
+    { key: "drift", kind: "number", unset: "1", step: 0.05, group: "movement", help: "0 to 1, how much of the fighter's air speed they keep in the air during it, aerials keep all of it" },
+    { key: "turning", kind: "flag", unset: "yes when it walks", group: "movement", help: "whether the player can turn round during it, yes if walk is more than 0" },
+    { key: "landing_lag", kind: "whole", unset: "none", group: "movement", help: "game frames (60 a second) of the landing move whoever comes down in the middle of it is stuck in, for an aerial" },
+    { key: "status", kind: "choice", choices: STATUSES, unset: "none", group: "status", help: "what the player is while it lasts, attacking, blocking (hits from the front bounce off) or invulnerable (they go straight through)" },
+    { key: "stance", kind: "choice", choices: STANCES, unset: "none", group: "status", help: "the stance it puts the player in" },
+    { key: "stance_after", kind: "choice", choices: STANCES, unset: "none", group: "status", help: "the stance it leaves the player in" },
+    { key: "repeat", kind: "choice", choices: CONDITIONS, unset: "none", group: "status", help: "a condition under which the move starts over after its last phase" }
+];
+
+// @doc The keys of a phase, the animation's choices are filled in from the fighter's art
+let PHASE_FIELDS = [
+    { key: "animation", kind: "choice", choices: [], unset: "the one before carries on", group: "art", help: "the animation it plays, a tag of the fighter's .ase" },
+    { key: "start", kind: "whole", default: 0, group: "art", help: "the frame of the animation it starts on" },
+    { key: "art_speed", kind: "number", default: 1, step: 0.05, group: "art", help: "how fast the art plays against the fighter's frame rate, 0.5 for art drawn at half of it" },
+    { key: "stretch", kind: "flag", default: false, group: "art", help: "spreads what's left of the animation evenly over frames, instead of playing it at its own pace. Only with frames" },
+    { key: "frames", kind: "whole", unset: "as long as its art takes", group: "timing", help: "game frames (60 a second) it lasts" },
+    { key: "hit", kind: "whole", unset: "none", group: "timing", help: "the game frame the hit comes out on, from 0. Before it is startup, after it recovery" },
+    { key: "active", kind: "whole", unset: "the red boxes' count, or 1", group: "timing", help: "game frames the hitbox stays out for from the hit frame, ahead of what the hitbox file says. The red boxes are spread evenly over them" },
+    { key: "cancel", kind: "whole", unset: "none", group: "timing", help: "the game frame from which the move can be cancelled into another, and not before" },
+    { key: "commit", kind: "whole", unset: "none", group: "timing", help: "the game frame from which the player is committed and can't cancel any more" },
+    { key: "loop_while", kind: "choice", choices: CONDITIONS, unset: "none", group: "timing", help: "it starts over for as long as this holds" },
+    { key: "until", kind: "choice", choices: CONDITIONS, unset: "none", group: "timing", help: "it ends the frame this starts holding" },
+    { key: "status", kind: "choice", choices: STATUSES, unset: "none", group: "status", help: "a status the player takes on in this phase, until the move is over" },
+    { key: "status_frame", kind: "whole", default: 0, group: "status", help: "the game frame of the phase the status starts on" },
+    { key: "jump", kind: "choice", choices: JUMPS, unset: "none", group: "movement", help: "a jump as the phase starts, as high as the fighter's movement says. full, short, hop (full if the input is still held, short if it was let go of, so a tap is a short hop) or double" },
+    { key: "impulse", kind: "vec", default: vec(0, 0), step: 10, group: "movement", help: "the speed the player is shoved at as the phase starts, units a second the way they face and up. On the ground the traction takes it off again" },
+    { key: "effect", kind: "choice", choices: EFFECTS, unset: "none", group: "movement", help: "a bit of eye candy, jump, roll or haze" },
+    { key: "effect_frames", kind: "whole", default: 1, group: "movement", help: "game frames the effect keeps coming for, 0 for all of them" }
+];
+
+// @doc Every key a move can have, the ones the forms don't show among them
+func move_keys() {
+    let all = [];
+    for (field in MOVE_FIELDS) { all.push(field.key); }
+    for (last in ["stance_reroutes", "finish_reroutes", "phases"]) { all.push(last); }
+    return all;
+}
+
+func phase_keys() {
+    let all = [];
+    for (field in PHASE_FIELDS) { all.push(field.key); }
+    return all;
+}
+
+// @doc The fields of a move with the fighter's moves to cancel into on a hit
+func move_fields(ids) {
+    let fields = [];
+    for (field in MOVE_FIELDS) {
+        if (field.key == "hit_cancel") {
+            fields.push(merge(field, { choices: [...HIT_CANCEL_WORDS, ...ids] }));
+        } else {
+            fields.push(field);
+        }
+    }
+    return fields;
+}
+
+// @doc The fields of a phase with the animations of a fighter's art to choose from
+func phase_fields(animations) {
+    let fields = [];
+    for (field in PHASE_FIELDS) {
+        if (field.key == "animation") {
+            fields.push(merge(field, { choices: animations }));
+        } else {
+            fields.push(field);
+        }
+    }
+    return fields;
+}
+
+// @doc The fields of the reroutes of a move, a row a stance for each kind, the moves of the fighter to choose from
+func reroute_fields(ids) {
+    let fields = [];
+    for (kind in ["stance_reroutes", "finish_reroutes"]) {
+        let group = kind == "stance_reroutes" ? "instead, by stance" : "after, by stance";
+        for (stance in STANCES) {
+            fields.push({ key: `{kind}.{stance}`, title: stance, kind: "choice", choices: ids, unset: "none", group: group,
+                help: kind == "stance_reroutes" ? `the move done instead when the input comes {stance}` : `the move carried on with when this is over and they're {stance}` });
+        }
+    }
+    return fields;
+}
+
+// @doc
+// What hit_cancel says as a list of ids, or ["any"]. The file has a list or "any", the form's flags have "jump | any"
+func hit_cancels(value) {
+    if (value == null) { return []; }
+    if (typeof(value) == "list") { return value; }
+    let made = [];
+    for (part in text(value).split("|")) {
+        if (part.trim() != "") { made.push(part.trim()); }
+    }
+    return made;
+}
+
+// @doc What the form's flags of hit_cancel come to in the file, "any" on its own or a list of the ids, null for none
+func hit_cancel_value(said) {
+    let ids = hit_cancels(said);
+    if (ids.index_of("any") >= 0) { return "any"; }
+    return len(ids) == 0 ? null : ids;
+}
+
+// @doc Where a field's key goes in a move, after which of the keys it already has, so a file keeps the order above
+func key_after(move, key) {
+    let order = move_keys();
+    let at = order.index_of(key);
+    let after = null;
+    let nearest = -1;
+    for (other in move) {
+        let place = order.index_of(other);
+        if (place >= 0 && place < at && place > nearest) {
+            after = other;
+            nearest = place;
+        }
+    }
+    return after;
+}
+
+// @doc Whether a move can be started in the air
+func airborne(move) {
+    let stances = move.stances ?? "standing";
+    let said = typeof(stances) == "list" ? stances.join("|") : text(stances);
+    return said.contains("jumping") || said.contains("falling");
+}

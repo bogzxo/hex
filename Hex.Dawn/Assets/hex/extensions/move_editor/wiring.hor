@@ -1,0 +1,205 @@
+// The layout of the view connected to the parts. Each function wires one part of move_view.hor, nothing in here works
+// anything out, it says which function a control calls. What is drawn and filled in is the parts' business.
+
+let schema = include("schema.hor");
+let edits = include("edits.hor");
+let panels = include("panels.hor");
+let tracer = include("tracer.hor");
+let boxes_of = include("boxes.hor");
+let timing = include("timing.hor");
+let frame_view = include("frame_view.hor");
+let timeline_view = include("timeline_view.hor");
+let strip_view = include("strip_view.hor");
+let moves_list = include("moves_list.hor");
+let templates = include("templates.hor");
+
+// @doc Everything of the layout connected. view is view.hor, handed in so it isn't included twice round
+func wire(state, view) {
+    wire_left(state, view);
+    wire_middle(state, view);
+    wire_toolbar(state);
+    wire_move_tab(state);
+    wire_phase_tab(state);
+    wire_box_tab(state);
+    wire_data_tab(state);
+
+    let ui = state.ui;
+    ui.get("right").on_resize = func(size) { view.resize_right(state, size.x); };
+    ui.get("right").on_resize_end = func(size) { state.hex.set_setting("right_width", state.right); };
+    ui.on_resize = func(shown, size) { view.resized(state, size); };
+    state.ticker = func(shown, dt) { view.tick(state, dt); };
+    view.wake(state);
+    ui.on_key = func(shown, key) { return view.key_pressed(state, key); };
+}
+
+func wire_left(state, view) {
+    let ui = state.ui;
+    ui.get("fighter").on_changed = func(name) { state.pick_fighter(name); };
+    ui.get("group").on_changed = func(kind) { moves_list.list_moves(state); };
+    ui.get("filter").on_changed = func(typed) { moves_list.list_moves(state); };
+    ui.get("moves").on_changed = func(value) { moves_list.pick(state, ui.get("moves").index); };
+    ui.get("template").options = templates.NAMES;
+    ui.get("new_move").on_pressed = func() { moves_list.new_move(state); };
+    ui.get("duplicate_move").on_pressed = func() { moves_list.duplicate_move(state); };
+    ui.get("rename_move").on_pressed = func() { moves_list.rename_move(state); };
+    ui.get("delete_move").on_pressed = func() { moves_list.delete_move(state); };
+    ui.get("save").on_pressed = func() { state.save_boxes(); };
+    ui.get("fight").on_pressed = func() { view.fight(state); };
+}
+
+func wire_middle(state, view) {
+    let ui = state.ui;
+    ui.get("canvas").on_pointer = func(e) { frame_view.pointer(state, e); };
+    ui.get("timeline").on_pointer = func(e) { timeline_view.pointer(state, e); };
+    ui.get("strip").on_pointer = func(e) { strip_view.pointer(state, e); };
+    ui.get("first_frame").on_pressed = func() { view.show_frame(state, 0); };
+    ui.get("previous_frame").on_pressed = func() { view.show_frame(state, state.frame - 1); };
+    ui.get("next_frame").on_pressed = func() { view.show_frame(state, state.frame + 1); };
+    ui.get("last_frame").on_pressed = func() { view.show_frame(state, len(state.laid.frames) - 1); };
+    ui.get("play").on_pressed = func() { view.toggle_playing(state); };
+}
+
+// The Move tab, a key typed in is written into the move's file, one cleared is taken out
+func wire_move_tab(state) {
+    let ui = state.ui;
+    let form = ui.get("move_form");
+    form.fields = schema.MOVE_FIELDS;
+    form.on_changed = func(key, value) { set_move_key(state, key, value); };
+    ui.get("upgrade").on_pressed = func() {
+        if (state.move != null && edits.upgrade(state, state.move, view_rate(state))) { state.say(`{state.move} says it the new way now`); }
+    };
+    form.on_cleared = func(key) { edits.clear_key(state, state.move, key); };
+
+    let reroutes = ui.get("reroute_form");
+    reroutes.on_changed = func(key, value) {
+        let parts = key.split(".");
+        edits.set_reroute(state, state.move, parts[0], parts[1], value);
+    };
+    reroutes.on_cleared = func(key) {
+        let parts = key.split(".");
+        edits.clear_reroute(state, state.move, parts[0], parts[1]);
+    };
+}
+
+// A key of the Move form written, hit_cancel's flags going in as the list (or "any") the game reads
+func set_move_key(state, key, value) {
+    if (key != "hit_cancel") {
+        edits.set_key(state, state.move, key, value);
+        return;
+    }
+
+    let made = schema.hit_cancel_value(value);
+    if (made == null) {
+        edits.clear_key(state, state.move, key);
+    } else {
+        edits.set_key(state, state.move, key, made);
+    }
+}
+
+func view_rate(state) { return state.fighter == null ? 12 : state.fighter.frame_rate; }
+
+func wire_phase_tab(state) {
+    let ui = state.ui;
+    let form = ui.get("phase_form");
+    form.on_changed = func(key, value) { edits.set_phase_key(state, state.move, state.phase, key, value); };
+    form.on_cleared = func(key) { edits.clear_phase_key(state, state.move, state.phase, key); };
+
+    ui.get("phase_before").on_pressed = func() { edits.add_phase(state, state.move, state.phase, true, { frames: 4 }); };
+    ui.get("phase_after").on_pressed = func() { edits.add_phase(state, state.move, state.phase, false, { frames: 4 }); };
+    ui.get("phase_copy").on_pressed = func() { edits.copy_phase(state, state.move, state.phase); };
+    ui.get("phase_earlier").on_pressed = func() { edits.move_phase(state, state.move, state.phase, -1); };
+    ui.get("phase_later").on_pressed = func() { edits.move_phase(state, state.move, state.phase, 1); };
+    ui.get("phase_delete").on_pressed = func() { edits.delete_phase(state, state.move, state.phase); };
+    ui.get("phase_rename").on_pressed = func() {
+        let name = ui.get("phase_name").text.trim().replace(" ", "_");
+        if (name != "" && name != state.phase) { edits.rename_phase(state, state.move, state.phase, name); }
+    };
+}
+
+// The Hitbox tab, the numbers of the red box and what's done to it
+func wire_box_tab(state) {
+    let ui = state.ui;
+    let form = ui.get("box_form");
+    form.fields = panels.BOX_FIELDS;
+    form.on_changed = func(key, value) {
+        let made = panels.box_from_form(state, key, value);
+        if (made != null) {
+            edits.change_boxes(state, state.move, made);
+            state.refresh();
+        }
+    };
+
+    ui.get("from_trace").on_pressed = func() { from_trace(state); };
+    ui.get("delete_box").on_pressed = func() {
+        if (state.move != null && has(state.boxes, state.move)) {
+            edits.change_boxes(state, state.move, null);
+            state.refresh();
+        }
+    };
+    ui.get("same_throughout").on_pressed = func() {
+        let box = state.boxes[state.move];
+        if (box != null) {
+            edits.change_boxes(state, state.move, boxes_of.same_throughout(box, timing.shown_index(state.laid, state.frame, len(box))));
+            state.refresh();
+        }
+    };
+}
+
+// The overlays along the top of the frame, each a button lit while it's on
+func wire_toolbar(state) {
+    for (name in keys(state.overlays)) { wire_overlay(state, name); }
+}
+
+func wire_overlay(state, name) {
+    let button = state.ui.get(name);
+    button.selected = state.overlays[name];
+    button.on_pressed = func() {
+        state.overlays[name] = !state.overlays[name];
+        button.selected = state.overlays[name];
+        frame_view.draw(state);
+    };
+}
+
+func wire_data_tab(state) {
+    let ui = state.ui;
+    ui.get("sort_by").on_changed = func(by) { panels.show_data(state); };
+    ui.get("copy_table").on_pressed = func() {
+        state.hex.copy(panels.table_markdown(state));
+        state.say("the table of the fighter's frame data is on the clipboard, as markdown");
+    };
+}
+
+// The red boxes of every active frame out of what the game traces off the art, to start from
+func from_trace(state) {
+    if (state.move == null || state.art == null) { return; }
+    if (state.laid.hit < 0) {
+        state.warn(`{state.move} doesn't hit anybody, there's no hit frame to take a box from`);
+        return;
+    }
+
+    // As many boxes as there are (or one an active frame), each traced off the first active frame it hits on
+    let box = state.boxes[state.move];
+    let count = box == null ? state.laid.active : len(box);
+    let made = [];
+    for (i in range(count)) {
+        let frame = state.laid.hit + math.ceil(i * state.laid.active / count);
+        let at = state.laid.frames[math.min(frame, len(state.laid.frames) - 1)];
+        let traced = tracer.trace(state.art, state.traces, at.animation, at.shown);
+        if (traced != null) {
+            let pixels = boxes_of.to_pixels(state.art, traced.hit);
+            made.push(boxes_of.from_pixels(state.art, pixels.min, pixels.max));
+        } else if (len(made) > 0) {
+            made.push(made[len(made) - 1]);
+        }
+    }
+
+    if (len(made) == 0) {
+        state.warn(`the art of {state.move} has nothing traced on its active frames`);
+        return;
+    }
+
+    while (len(made) < count) { made.insert(0, made[0]); }
+    edits.change_boxes(state, state.move, made);
+    state.say(`{state.move} has red hitboxes now, {count} of them traced off the art over its {state.laid.active} active frames`);
+    state.refresh();
+}

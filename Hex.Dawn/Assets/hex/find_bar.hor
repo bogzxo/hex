@@ -1,0 +1,34 @@
+// The find bar, laid over the top right of the code (VS Code's, Lite XL's). What to look for, whether the case has to
+// match, whole words only and a regex, how many there are and which is the one selected, the one before and the next,
+// and a row under it for replacing them, which the chevron (or Ctrl+H) opens. See HexScene.FindBar.
+#define layout
+
+let find_bar = compositor.panel({
+    anchor: "top_right",
+    pivot: "top_right",
+    pos: vec(-18, -4),
+    padding: vec(6, 5, 6, 5),
+    z: 20,
+    radius: 4,
+    color: vec(0.12, 0.13, 0.17, 0.98),
+    outline: vec(0.3, 0.33, 0.42, 1)
+});
+
+let find_rows = compositor.stack({ parent: find_bar, anchor: "top_left", pivot: "top_left", spacing: 4 });
+
+let find_row = compositor.stack({ parent: find_rows, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal" });
+let find_expand = compositor.button({ parent: find_row, size: vec(22, 26), icon: "chevron-right", style: "button_flat", tooltip: "replace as well (Ctrl+H)" });
+let find_query = compositor.textbox({ parent: find_row, size: vec(220, 26), text_scale: 0.13, placeholder: "find", max_length: 400 });
+let find_case = compositor.button({ parent: find_row, size: vec(28, 26), icon: "case-sensitive", style: "button_flat", tooltip: "the case has to match (Alt+C)" });
+let find_word = compositor.button({ parent: find_row, size: vec(28, 26), icon: "whole-word", style: "button_flat", tooltip: "whole words only (Alt+W)" });
+let find_regex = compositor.button({ parent: find_row, size: vec(28, 26), icon: "regex", style: "button_flat", tooltip: "a regular expression, matched a line at a time (Alt+R)" });
+let find_count = compositor.label({ parent: find_row, size: vec(84, 26), text: "", text_scale: 0.115, color: vec(0.7, 0.72, 0.78, 1), align: "left" });
+let find_previous = compositor.button({ parent: find_row, size: vec(26, 26), icon: "arrow-up", style: "button_flat", tooltip: "the one before (Shift+Enter, Shift+F3)" });
+let find_next = compositor.button({ parent: find_row, size: vec(26, 26), icon: "arrow-down", style: "button_flat", tooltip: "the next (Enter, F3)" });
+let find_close = compositor.button({ parent: find_row, size: vec(26, 26), icon: "close", style: "button_flat", tooltip: "Escape" });
+
+let replace_row = compositor.stack({ parent: find_rows, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal", visible: false });
+let replace_gap = compositor.spacer({ parent: replace_row, size: vec(22, 0) });
+let replace_with = compositor.textbox({ parent: replace_row, size: vec(220, 26), text_scale: 0.13, placeholder: "replace", max_length: 400 });
+let replace_one = compositor.button({ parent: replace_row, size: vec(28, 26), icon: "replace", style: "button_flat", tooltip: "this one, then on to the next (Enter in the box)" });
+let replace_all = compositor.button({ parent: replace_row, size: vec(28, 26), icon: "replace-all", style: "button_flat", tooltip: "every one, one step to undo (Ctrl+Alt+Enter)" });

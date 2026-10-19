@@ -1,0 +1,43 @@
+// What a new move starts out as, a few of the kinds of move a fighter has. The animation is the one picked in the art strip
+// (or idle) and the numbers are a place to start from, close to what Fighter2D's own moves of the kind say. Game frames,
+// 60 a second, and world units.
+
+// @doc The names of the templates, in the order the dropdown has them
+let NAMES = ["jab", "heavy", "launcher", "sweep", "overhead", "aerial", "special", "dash", "block"];
+
+func phase(animation, frames, hit) {
+    let made = { animation: animation, frames: frames };
+    if (hit != null) { made.hit = hit; }
+    return made;
+}
+
+// @doc A move of a template, the art playing animation
+func make(name, animation) {
+    if (name == "heavy") {
+        return { input: "B", trigger: "pressed", priority: 30, stances: "standing", damage: 12, hitstun: 30, push: 55, status: "attacking", phases: { swing: phase(animation, 30, 14) } };
+    }
+    if (name == "launcher") {
+        return { input: "Y + B", trigger: "pressed", priority: 20, stances: "standing", damage: 10, hitstun: 40, launch: vec(20, 90), hit_cancel: ["jump"], status: "attacking", phases: { swing: { animation: animation, frames: 28, hit: 12, active: 4, cancel: 20 } } };
+    }
+    if (name == "sweep") {
+        return { input: "B", trigger: "pressed", priority: 30, stances: "crouching", damage: 8, hitstun: 30, launch: vec(40, 30), level: "low", knockdown: true, status: "attacking", stance: "crouching", phases: { swing: phase(animation, 26, 11) } };
+    }
+    if (name == "overhead") {
+        return { input: "LeftBumper + B", trigger: "pressed", priority: 15, stances: "standing", damage: 9, hitstun: 26, push: 30, level: "overhead", status: "attacking", phases: { swing: phase(animation, 32, 18) } };
+    }
+    if (name == "aerial") {
+        return { input: "Y", trigger: "pressed", priority: 33, stances: "jumping | falling", damage: 6, hitstun: 24, launch: vec(20, 25), drift: 1, landing_lag: 6, status: "attacking", phases: { swing: { animation: animation, frames: 22, hit: 6, active: 4 } } };
+    }
+    if (name == "special") {
+        return { input: "A + B", trigger: "pressed", priority: 5, stances: "standing | crouching", damage: 16, hitstun: 45, launch: vec(75, 55), knockdown: true, meter_cost: 25, status: "attacking", phases: { wind: phase(animation, 12, null), strike: { frames: 26, hit: 4, impulse: vec(900, 0) } } };
+    }
+    if (name == "dash") {
+        return { input: "DPadRight", trigger: "double_tap", priority: 10, stances: "standing", walk: 0, phases: { dash: { animation: animation, frames: 14, impulse: vec(1600, 0), effect: "haze" } } };
+    }
+    if (name == "block") {
+        return { input: "LeftTrigger", trigger: "held", priority: 40, stances: "standing | crouching", status: "blocking", turning: false, phases: { hold: { animation: animation, loop_while: "held" } } };
+    }
+
+    // A jab, quick and a little minus
+    return { input: "Y", trigger: "pressed", priority: 34, stances: "standing | crouching", damage: 5, hitstun: 14, push: 20, status: "attacking", phases: { swing: { animation: animation, frames: 16, hit: 6, active: 2, cancel: 0 } } };
+}

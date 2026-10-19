@@ -1,0 +1,30 @@
+// The themes and the animations, as commands. A command a theme ("Theme: Horizon"), the next one round, and the
+// animations on and off, which is one setting (animations) the panel and the terminals all go by.
+#define dusk
+
+let plugin = {
+    name: "Themes",
+    description: "A command for every theme, the next one round, and the animations on and off.",
+    version: "0.1.0",
+    author: "bogz"
+};
+
+for (let theme in dusk.themes()) {
+    dusk.command(`theme_{theme}`, `Theme: {theme}`, func(dusk) { dusk.theme(theme); }, "");
+}
+
+dusk.command("theme_next", "Next theme", func(dusk) { dusk.next_theme(); }, "Ctrl+Shift+F9");
+
+dusk.command("animations", "Animations on and off", func(dusk) {
+    let on = dusk.setting("animations") == false;
+    dusk.set_setting("animations", on);
+    if (on) {
+        dusk.say("the animations are on");
+    } else {
+        dusk.say("the animations are off");
+    }
+}, "");
+
+func on_theme(dusk, name) {
+    dusk.say(`theme {name}`);
+}

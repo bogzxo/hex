@@ -1,0 +1,56 @@
+let extension = {
+    name: "Goodbye, Dolly!",
+    description: "A random greeting in the title bar, every time Hex starts.",
+    version: "1.1.0",
+    author: "bogz"
+};
+
+// Greeting messages inspired by that stupid American movie...
+// @doc The list of greetings
+let welcome_greetings = [
+	"You've been Hex'd :3",
+	"Hello, Dolly!",
+	"I wonder if you'll ever notice this, speed?",
+	"Do you guys remember SLI & CrossFire?",
+	"Are you sure this is a good idea?",
+	"With Hex you won't need to worry about dedocated wam.",
+	"You call that code??!",
+	"-_-",
+	"'Rounded IDE cables provide no better performance.'",
+	"Dilapidated",
+	"On a Friday?",
+	"A little bit choppy but overall not too bad!",
+	"One line forward, two allocations backward.",
+	"It's happy hour somewhere..",
+	"Its like a Dell optiplex, but not really (i forgot where i was going with that)",
+	"Vibecoder? I hardly know her!",
+	"Does anyone wanna implement Doom in HIDL?",
+	"Yeah I ran out of ideas to put here...",
+	"Optimising this made me implement tick skipping into Horizon...",
+	"UI Compositing got my brain composting...",
+	"Fuck it... UwU",
+	"Fuck it... NuWu",
+	"Guess who was single on Valentine's Day & Halloween :cry:",
+	"idk man, that does NOT look like good code to me!",
+	"A good project to learn Horizon is to implement a Super Ma- nintenDON'T SUE ME!",
+	"Honestly, man, I wrote this because the VSCode extension exhausted me.",
+	"Zopiclone doesn't work for my anymore, this sentence only took 2 minutes to type.",
+	"Caching icons referenced in labels ended up saving over 1MB/frame in allocations...",
+	"You should really take a break... I'm getting worried...",
+	"This project started after a RAM consumption induced panic attack caused by VSCode.",
+	"A muon hit my brain cell and then this code diarrhea happened...",
+	"Nothing to be done.",
+	"Damn, I should implement a generic Form contro- no.. w- winforms.. :skull:",
+	"I blame Vyvanse for this.",
+	"asdf",
+	"qwertyuiop",
+	"Did you know: the original Xbox had, at least, 3 internal cables?"
+];
+
+// Hex calls this once it starts up, with what it lets an extension do. A greeting, and a command in the palette for another
+func on_start(hex) {
+	hex.title_note(math.pick(welcome_greetings));
+	hex.command("Another greeting", func(hex) {
+		hex.title_note(math.pick(welcome_greetings));
+	});
+}

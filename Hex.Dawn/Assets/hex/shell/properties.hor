@@ -1,0 +1,70 @@
+// properties, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// The right side of Hex, the properties of what is selected in the designer on the properties layer, and what a file of
+// code comes to on the values layer. Included by editor.hor.
+#define layout
+
+let right = compositor.stack({
+    anchor: "top",
+    pivot: "top",
+    padding: vec(6, 6, 6, 6),
+    spacing: 6,
+    slide: "right"
+});
+
+// The name of the side and the button that puts it away to the right, the way the left one goes (Ctrl+Alt+B, or drag
+// its edge past its least)
+let right_head = compositor.panel({
+    parent: right,
+    size: vec(400, 24)
+});
+
+let inspector_title = compositor.label({
+    parent: right_head,
+    anchor: "left",
+    pivot: "left",
+    text: "@properties.title",
+    text_scale: 0.14,
+    color: vec(0.46, 0.52, 0.64, 1)
+});
+
+let hide_right = compositor.button({
+    parent: right_head,
+    anchor: "right",
+    pivot: "right",
+    icon: "chevron-right",
+    style: "button_flat",
+    size: vec(26, 22),
+    lbl_scale: 0.13,
+    animated: false,
+    tooltip: "@properties.hide",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
+let inspector_scroll = compositor.scroll({
+    layer: "properties",
+    parent: right,
+    size: vec(400, 789.7115),
+    padding: vec(8, 8, 8, 8),
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});
+
+let inspector = compositor.stack({
+    parent: inspector_scroll,
+    template: "property_row.hor",
+    preview_count: 6,
+    spacing: 5
+});
+
+// What a file of code comes to, in place of the properties while code is open
+let values_tree = compositor.tree_view({
+    layer: "values",
+    parent: right,
+    size: vec(400, 600),
+    text_scale: 0.14,
+    color: vec(0.1, 0.11, 0.145, 1),
+    radius: 6
+});

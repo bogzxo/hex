@@ -1,0 +1,171 @@
+// How the game plays a move a frame at a time, the way Simulation/MovePlayback.cs does. Every frame here is a game frame, 60
+// a second whatever the fighter's art plays at. The phases go one after the other, the art of a phase going along
+// art_speed * rate / 60 frames of art every game frame from its start, or spread evenly over the phase when it says
+// stretch (and how many frames). A phase without an animation carries on the one before from where it got to. Each frame
+// is startup before the hit, active for as long as the hit is out, and recovery after.
+
+let TICK_RATE = 60;
+
+// @doc How many frames an animation of the art has, 1 for none or no art
+func frame_count(art, animation) {
+    if (animation == null || art == null || !art.has(animation)) { return 1; }
+    return math.max(1, art.frames(animation));
+}
+
+// @doc How many game frames a phase lasts, MovePhase.LengthFor. Its frames, or as long as what's left of its art takes
+func phase_length(art, phase, rate) {
+    if ((phase.frames ?? 0) > 0) { return phase.frames; }
+    let length = phase.animation == null ? 1 : frame_count(art, phase.animation);
+    let start = phase.start ?? 0;
+    let left = length > start ? length - start : 1;
+    return math.max(1, math.ceil(left * TICK_RATE / math.max(1, rate * art_speed(phase))));
+}
+
+// @doc How fast the art of a phase plays against the fighter's frame rate, MovePhase.ArtSpeed
+func art_speed(phase) { return math.clamp(phase.art_speed ?? 1, 0.01, 16); }
+
+// @doc How long a phase is when frames doesn't say, what its art gives it, for marking on the timeline
+func natural_length(art, phase, rate) {
+    return phase_length(art, merge(phase, { frames: 0 }), rate);
+}
+
+// How far along its art a phase goes every game frame from a frame of the art on, MovePlayback.RateOf
+func rate_of(art, phase, animation, from, rate) {
+    if (phase.stretch != true || (phase.frames ?? 0) <= 0) { return rate / TICK_RATE * art_speed(phase); }
+    return math.max(1, frame_count(art, animation) - from) / phase.frames;
+}
+
+// @doc
+// The hit's active frames, MoveList.Bake. What the phase with the hit says, or how many red boxes the hitbox file has
+// for the move (its active), or 1
+func active_frames(move, drawn) {
+    for (name in move.phases ?? {}) {
+        let phase = move.phases[name];
+        if (phase.hit != null) {
+            if ((phase.active ?? 0) > 0) { return phase.active; }
+            break;
+        }
+    }
+    return drawn > 0 ? drawn : 1;
+}
+
+// @doc
+// A move laid out a frame at a time. { frames, hit, active, phases, marks }. Every frame is { phase, phase_name,
+// animation, shown, kind, hit, loops } where shown is the art frame drawn on it. phases are { name, first, length,
+// animation, loops, waits, stretch } with first the frame it starts on. hit is the frame the hit comes out on (-1 for
+// none), active how many it stays out for, marks every hit, cancel and commit as { kind, frame, phase } in order. drawn is
+// how many red boxes the move has in the hitbox file, 0 for none
+func lay_out(art, move, rate, drawn) {
+    let frames = [];
+    let phases = [];
+    let marks = [];
+    let animation = "idle";
+    let at = 0;
+    let hit = -1;
+    let index = 0;
+
+    for (name in move.phases ?? {}) {
+        let phase = move.phases[name];
+        if (phase.animation != null) {
+            animation = phase.animation;
+            at = phase.start ?? 0;
+        }
+
+        let pace = rate_of(art, phase, animation, at, rate);
+        let length = phase_length(art, phase, rate);
+        let last = frame_count(art, animation) - 1;
+        let loops = phase.loop_while != null;
+        let first = len(frames);
+        phases.push({ name: name, first: first, length: length, animation: animation, loops: loops, waits: phase.until != null, stretch: phase.stretch == true });
+
+        for (kind in ["hit", "cancel", "commit"]) {
+            if (phase[kind] != null) { marks.push({ kind: kind, frame: first + phase[kind], phase: name }); }
+        }
+
+        for (f in range(length)) {
+            let is_hit = hit < 0 && phase.hit != null && f == phase.hit;
+            if (is_hit) { hit = len(frames); }
+            frames.push({
+                phase: index, phase_name: name, animation: animation, shown: math.min(math.floor(at), last),
+                kind: "neutral", hit: is_hit, loops: loops
+            });
+            at = at + pace;
+        }
+        index = index + 1;
+    }
+
+    let active = active_frames(move, drawn);
+    if (hit >= 0) {
+        let end = hit + active;
+        for (i in range(len(frames))) {
+            frames[i].kind = i < hit ? "startup" : i < end ? "active" : "recovery";
+        }
+    }
+
+    return { frames: frames, hit: hit, active: active, phases: phases, marks: marks };
+}
+
+// @doc The phase a frame of the move is in, by name, null for none
+func phase_at(laid, frame) {
+    if (frame < 0 || frame >= len(laid.frames)) { return null; }
+    return laid.frames[frame].phase_name;
+}
+
+// @doc The frame a phase starts on, -1 for a phase the move hasn't got
+func first_of(laid, name) {
+    for (phase in laid.phases) {
+        if (phase.name == name) { return phase.first; }
+    }
+    return -1;
+}
+
+// @doc Which active frame a frame of the move is, from 0, -1 when it isn't one
+func active_index(laid, frame) {
+    if (laid.hit < 0 || frame < 0 || frame >= len(laid.frames)) { return -1; }
+    return laid.frames[frame].kind == "active" ? frame - laid.hit : -1;
+}
+
+// @doc
+// Which of so many red boxes a frame hits with, PlayerBoxes.Hitbox. The boxes are spread evenly over the active frames,
+// however many of either there are. -1 off the active frames
+func box_index(laid, frame, count) {
+    let active = active_index(laid, frame);
+    if (active < 0) { return -1; }
+    return math.clamp(math.floor(active * count / math.max(1, laid.active)), 0, count - 1);
+}
+
+// @doc Which of a move's boxes a frame shows, its own on an active frame, the first before the hit and the last after
+func shown_index(laid, frame, count) {
+    let box = box_index(laid, frame, count);
+    if (box >= 0) { return box; }
+    return frame < laid.hit ? 0 : count - 1;
+}
+
+// @doc
+// The first frame after the hit the attacker can do something else, out of the cancel and commit frames and hit_cancel,
+// or the end of the move. { frame, how }, how being "hit_cancel", "cancel" or "the end"
+func actionable(laid, move) {
+    let total = len(laid.frames);
+    if (laid.hit < 0) { return { frame: total, how: "the end" }; }
+    if (move.hit_cancel != null && len(move.hit_cancel) > 0) { return { frame: laid.hit + 1, how: "hit_cancel" }; }
+
+    // Cancellable from a cancel frame on, until a commit frame
+    let open = false;
+    for (f in range(total)) {
+        for (mark in laid.marks) {
+            if (mark.frame == f && mark.kind == "cancel") { open = true; }
+            if (mark.frame == f && mark.kind == "commit") { open = false; }
+        }
+        if (open && f > laid.hit) { return { frame: f, how: "cancel" }; }
+    }
+    return { frame: total, how: "the end" };
+}
+
+// @doc The frame a move's phase with a jump in it starts on, the squat before it, -1 for a move without one
+func jump_frame(art, move, rate) {
+    let laid = lay_out(art, move, rate, 0);
+    for (phase in laid.phases) {
+        if (move.phases[phase.name].jump != null) { return phase.first; }
+    }
+    return -1;
+}

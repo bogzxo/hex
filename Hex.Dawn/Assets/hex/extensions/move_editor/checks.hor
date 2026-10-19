@@ -1,0 +1,211 @@
+// What's wrong with a fighter's moves, for Hex's problems (hex.problems), each by the path of what it's about. First what
+// MoveFileReader would throw for, so a file the game wouldn't load is red in Hex first, then what the first format said
+// that the second doesn't, then what loads but is wrong. Every frame is a game frame, 60 a second.
+
+let schema = include("schema.hor");
+let timing = include("timing.hor");
+let rules = include("rules.hor");
+
+func problem(path, message, warning) { return { path: path, message: message, warning: warning }; }
+
+// @doc
+// The problems of one file of a fighter. moves is what the file declares as moves, merged every move of the fighter
+// (game.load_moves), art the fighter's art (null for none), boxes its red boxes, who the fighter is called, for saying
+// whose art a length is of (a shared file's move can be fine for one and not for another), and rate its frame rate
+func check_file(file, moves, merged, art, boxes, who, rate) {
+    let found = [];
+    for (id in moves) {
+        let move = moves[id];
+        let at = ["moves", id];
+        check_keys(found, at, move, schema.move_keys(), "a move");
+        check_move_values(found, at, move);
+        check_reroutes(found, at, move, merged);
+        check_hit_cancel(found, at, move, merged);
+        check_hit(found, at, id, move, art, boxes, who, rate);
+
+        for (name in move.phases ?? {}) {
+            let phase = move.phases[name];
+            let phase_at = [...at, "phases", name];
+            check_keys(found, phase_at, phase, schema.phase_keys(), "a phase");
+            check_phase(found, phase_at, phase, art, who, rate);
+        }
+    }
+    return found;
+}
+
+// @doc What's wrong with a fighter's moves as a whole, put on the last of its files (its own)
+func check_fighter(merged) {
+    let found = [];
+    if (!has(merged.moves, "idle")) {
+        found.push(problem(["moves"], "the fighter has no idle, the game needs one for when nothing is done", false));
+    }
+    return found;
+}
+
+/* What the game wouldn't load */
+
+func check_keys(found, at, object, known, what) {
+    for (key in object) {
+        if (has(schema.RENAMED, key)) {
+            found.push(problem([...at, key], `{key} is what {schema.RENAMED[key]} was called, it still reads but say {schema.RENAMED[key]}`, true));
+        } else if (has(schema.GONE, key)) {
+            found.push(problem([...at, key], `{key} isn't a thing any more, the game won't load it. Say {schema.GONE[key]}, the Move tab's "Say it the new way" does it`, false));
+        } else if (known.index_of(key) < 0) {
+            found.push(problem([...at, key], `{what} hasn't got a {key}, the game won't load it`, false));
+        }
+    }
+}
+
+func check_choice(found, at, object, key, choices) {
+    let value = object[key];
+    if (value != null && choices.index_of(value) < 0) {
+        found.push(problem([...at, key], `{value} isn't a {key}, it's one of {choices.join(", ")}`, false));
+    }
+}
+
+func check_move_values(found, at, move) {
+    check_choice(found, at, move, "trigger", schema.TRIGGERS);
+    check_choice(found, at, move, "level", schema.LEVELS);
+    check_choice(found, at, move, "status", schema.STATUSES);
+    check_choice(found, at, move, "stance", schema.STANCES);
+    check_choice(found, at, move, "stance_after", schema.STANCES);
+    check_choice(found, at, move, "repeat", schema.CONDITIONS);
+    check_choice(found, at, move, "kind", schema.KINDS);
+
+    for (stance in parts(move.stances)) {
+        if (schema.STANCES.index_of(stance) < 0) { found.push(problem([...at, "stances"], `{stance} isn't a stance`, false)); }
+    }
+
+    for (either in parts(move.input)) {
+        for (button in either.split("+")) {
+            if (schema.BUTTONS.index_of(button.trim()) < 0) { found.push(problem([...at, "input"], `{button.trim()} isn't a button`, false)); }
+        }
+    }
+
+    if (move.input != null && move.priority == null) {
+        found.push(problem([...at, "input"], "it has an input and no priority, it's matched after everything that says one", true));
+    }
+
+    for (share in ["walk", "drift"]) {
+        if (move[share] != null && (move[share] < 0 || move[share] > 1)) {
+            found.push(problem([...at, share], `{share} is a share of the fighter's speed, 0 to 1`, true));
+        }
+    }
+
+    if (move.hitstun_gravity != null && (move.hitstun_gravity < 0.05 || move.hitstun_gravity > 2)) {
+        found.push(problem([...at, "hitstun_gravity"], "hitstun_gravity is a share of their gravity, the game keeps it between 0.05 and 2", true));
+    }
+
+    if (move.launch != null && move.launch.y <= 0 && (move.launch.x != 0 || move.launch.y != 0)) {
+        found.push(problem([...at, "launch"], "a launch that doesn't go up doesn't launch anybody, a shove along the ground is push", true));
+    }
+    if (move.launch != null && move.launch.y > 0 && (move.push ?? 0) > 0) {
+        found.push(problem([...at, "push"], "it launches, so the push never happens, push is for a hit that stays on the ground", true));
+    }
+
+    if (move.landing_lag != null && !schema.airborne(move)) {
+        found.push(problem([...at, "landing_lag"], "it can't be started in the air, so it never lands out of it. Say jumping or falling in its stances", true));
+    }
+}
+
+// What a hit cancel names, every one of them a move the fighter has, a kind of move or any. A name that's neither
+// cancels into nothing, the game reads it and never matches it. A kind the fighter has no move of is only a warning,
+// the moves of a shared file can be for a fighter that has one
+func check_hit_cancel(found, at, move, merged) {
+    for (id in schema.hit_cancels(move.hit_cancel)) {
+        if (id == "any" || has(merged.moves, id)) { continue; }
+        if (schema.KINDS.index_of(id) < 0) {
+            found.push(problem([...at, "hit_cancel"], `the fighter has no {id} to cancel into, and it isn't a kind of move ({schema.KINDS.join(", ")}) or any`, false));
+        } else if (!has_kind(merged, id)) {
+            found.push(problem([...at, "hit_cancel"], `the fighter has no {id} moves, so cancelling into {id} never happens`, true));
+        }
+    }
+}
+
+func has_kind(merged, kind) {
+    for (id in merged.moves) {
+        if (rules.kind_of(merged.moves[id].move) == kind) { return true; }
+    }
+    return false;
+}
+
+// "a | b", or a list of them, as its parts
+func parts(value) {
+    if (value == null) { return []; }
+    if (typeof(value) == "list") { return value; }
+    let made = [];
+    for (part in text(value).split("|")) { made.push(part.trim()); }
+    return made;
+}
+
+func check_reroutes(found, at, move, merged) {
+    for (kind in ["stance_reroutes", "finish_reroutes"]) {
+        for (stance in move[kind] ?? {}) {
+            let target = move[kind][stance];
+            if (schema.STANCES.index_of(stance) < 0) {
+                found.push(problem([...at, kind, stance], `{stance} isn't a stance`, false));
+            } else if (!has(merged.moves, target)) {
+                found.push(problem([...at, kind, stance], `the fighter has no {target} to go to`, false));
+            }
+        }
+    }
+}
+
+/* What loads but is wrong */
+
+func check_phase(found, at, phase, art, who, rate) {
+    check_choice(found, at, phase, "status", schema.STATUSES);
+    check_choice(found, at, phase, "loop_while", schema.CONDITIONS);
+    check_choice(found, at, phase, "until", schema.CONDITIONS);
+    check_choice(found, at, phase, "effect", schema.EFFECTS);
+    check_choice(found, at, phase, "jump", schema.JUMPS);
+
+    if (art != null && phase.animation != null && !art.has(phase.animation)) {
+        found.push(problem([...at, "animation"], `{who}'s art has no animation called {phase.animation}`, true));
+    }
+
+    let length = timing.phase_length(art, phase, rate);
+    for (marker in ["hit", "cancel", "commit"]) {
+        if (phase[marker] != null && phase[marker] >= length) {
+            found.push(problem([...at, marker], `frame {phase[marker]} is past the end of the phase, it's {length} game frames long with {who}'s art`, true));
+        }
+    }
+
+    if (phase.active != null && phase.hit == null) {
+        found.push(problem([...at, "active"], "active is how long the hit of this phase stays out, and it hasn't got a hit", true));
+    }
+    if (phase.art_speed != null && (phase.art_speed < 0.01 || phase.art_speed > 16)) {
+        found.push(problem([...at, "art_speed"], "art_speed is a share of the fighter's frame rate, the game keeps it between 0.01 and 16", true));
+    }
+    if (phase.stretch == true && (phase.frames ?? 0) <= 0) {
+        found.push(problem([...at, "stretch"], "stretch spreads the art over frames, and it doesn't say how many", true));
+    }
+
+    if (phase.cancel != null && phase.commit != null && phase.commit < phase.cancel) {
+        found.push(problem([...at, "commit"], "committed before it can be cancelled, it never can be", true));
+    }
+}
+
+func check_hit(found, at, id, move, art, boxes, who, rate) {
+    let drawn = boxes[id];
+    let laid = timing.lay_out(art, move, rate, drawn == null ? 0 : len(drawn));
+    let damage = move.damage ?? 0;
+    if (laid.hit >= 0 && damage == 0 && schema.GAME_MOVES.index_of(id) < 0) {
+        found.push(problem([...at, "phases"], "it has a hit frame and does no damage", true));
+    }
+    if (laid.hit < 0 && damage > 0) {
+        found.push(problem([...at, "damage"], `it does damage and its hit frame never comes with {who}'s art, it never lands`, true));
+    }
+
+    // The hit can stay out into the phases after its own, never past the end of the move
+    if (laid.hit >= 0 && laid.hit + laid.active > len(laid.frames)) {
+        let name = laid.frames[laid.hit].phase_name;
+        found.push(problem([...at, "phases", name, "active"], `it's out for {laid.active} frames and the move ends {len(laid.frames) - laid.hit} after its hit with {who}'s art`, true));
+    }
+
+    if (drawn != null && laid.hit < 0) {
+        found.push(problem(at, "it has red hitboxes and doesn't hit", true));
+    } else if (drawn != null && len(drawn) > laid.active) {
+        found.push(problem(at, `it has {len(drawn)} red boxes and is only out for {laid.active} frames, some of them never hit`, true));
+    }
+}

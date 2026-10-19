@@ -1,0 +1,123 @@
+// editor, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+// Hex's own window, VS Code's shape. The menus in the title bar along the top, the activity bar down the left and the
+// side bar next to it, the tabs with what the file can do at their right end and the editor (the code, the canvas of a
+// layout or the table of a file) in the middle with the problems, the output and the console under it, the properties
+// or the values on the right, and the status bar along the bottom. The parts are files of their own in shell/, included
+// here, their names Hex's as if they were written here. The parts that take turns are on layers, the canvas, the code,
+// the table and an extension's view in the middle, the components and the files on the left, the properties and the
+// values on the right. All but the designer's start hidden, so the designer shows one of each at a time and the layers
+// list shows the rest to work on, all of them at once ran off the screen. Running, Hex says which are up itself. The
+// sizes are what the code starts from.
+#define layout
+
+let root = compositor.stack({
+    fill: "both",
+    spacing: 0
+});
+
+// The window's own title bar, Hex draws it (the window has no frame of the system's), with the menus in it like VS Code
+let top = compositor.title_bar({
+    parent: root,
+    icon: "layout",
+    title: "@window.title",
+    height: 34,
+    spacing: 0
+});
+
+let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });
+
+let body = compositor.stack({
+    parent: root,
+    anchor: "left",
+    pivot: "left",
+    spacing: 0,
+    direction: "horizontal"
+});
+
+// The activity bar, which of the side bar's views is showing
+let activity_bar = compositor.include({
+    parent: body,
+    anchor: "top",
+    pivot: "top",
+    file: "shell/activity_bar.hor"
+});
+
+// The side bar, the toolbox, tree and layers of a layout or the explorer, outline and search of code
+let side_bar = compositor.include({
+    parent: body,
+    anchor: "top",
+    pivot: "top",
+    file: "shell/side_bar.hor"
+});
+
+let center = compositor.stack({
+    parent: body,
+    anchor: "top",
+    pivot: "top",
+    padding: vec(0, 6, 0, 0),
+    spacing: 0
+});
+
+// The tabs of the open files with what the file can do at their right end, and the breadcrumbs under them
+let editor_tabs = compositor.include({
+    parent: center,
+    anchor: "left",
+    pivot: "left",
+    file: "shell/editor_tabs.hor"
+});
+
+let canvas = compositor.panel({ layer: "canvas", parent: center, size: vec(840, 497) });
+
+// Where the code of whatever is open is edited, the editor of the document that is showing goes in here
+let code_scroll = compositor.panel({
+    layer: "code",
+    parent: center,
+    size: vec(840, 250),
+    color: vec(0.055, 0.06, 0.08, 1)
+});
+
+// A file of code as a table, an object of objects (moves, characters) or a file of texts with its languages side by side
+let data_table = compositor.table({
+    layer: "table",
+    parent: center,
+    size: vec(840, 250),
+    text_scale: 0.14
+});
+
+// Where the views extensions make for a file go, in place of its code, see HexScene.ExtensionUI
+let ext_view = compositor.panel({
+    layer: "extension",
+    parent: center,
+    size: vec(840, 250),
+    clip: true
+});
+
+// The panel under the editor, the problems, the output and the console
+let panel = compositor.include({
+    parent: center,
+    anchor: "left",
+    pivot: "left",
+    file: "shell/panel.hor"
+});
+
+// The properties of what is selected, or the values of a file of code
+let properties = compositor.include({
+    parent: body,
+    anchor: "top",
+    pivot: "top",
+    file: "shell/properties.hor"
+});
+
+let status_bar = compositor.status_bar({ parent: root, fill: "horizontal" });
+
+// What wants more than the status bar, cards in the bottom right corner over everything else, see Notify
+let toasts = compositor.notifications({
+    anchor: "bottom_right",
+    pivot: "bottom_right",
+    pos: vec(-14, 36),
+    width: 400,
+    text_scale: 0.14
+});
+
+compositor.hidden_layers(["files", "code", "table", "extension", "values"]);

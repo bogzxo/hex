@@ -1,0 +1,124 @@
+// The fighter's moves down the left, all of them merged from its files, a kind of them or the ones with something in their
+// name. A move written in another file than the one on screen says which, one with red boxes says (drawn). Over the list
+// a new move out of a template, a copy, a new name and taking one out, all through edits.hor.
+
+let game = include("game.hor");
+let edits = include("edits.hor");
+let templates = include("templates.hor");
+let timing = include("timing.hor");
+
+// @doc The list made again, the move that was picked picked again if it's still listed
+func list_moves(state) {
+    let ui = state.ui;
+    let kind = ui.get("group").value;
+    let wanted = ui.get("filter").text.lower();
+    let ids = [];
+    for (id in state.ids_all) {
+        let at = state.moves[id];
+        let fits = kind == "all" || game.kind_of(id, at.move) == kind;
+        if (fits && (wanted == "" || id.lower().contains(wanted))) { ids.push(id); }
+    }
+
+    state.ids = ids;
+    let rows = [];
+    for (id in ids) { rows.push(row_of(state, id)); }
+    ui.get("moves").items = rows;
+
+    let at = ids.index_of(state.move);
+    if (at >= 0) {
+        ui.get("moves").index = at;
+    } else if (len(ids) > 0) {
+        pick(state, 0);
+    }
+}
+
+// @doc The rows of the list written again, after something that shows in them changed (a red box drawn)
+func update_rows(state) {
+    let rows = [];
+    for (id in state.ids) { rows.push(row_of(state, id)); }
+    state.ui.get("moves").items = rows;
+}
+
+func row_of(state, id) {
+    let at = state.moves[id];
+    let elsewhere = game.same_path(at.file, state.file) ? "" : `  · {game.file_name(at.file).replace(".hor", "")}`;
+    let drawn = has(state.boxes, id) ? "  (drawn)" : "";
+    return `{id}{drawn}{elsewhere}`;
+}
+
+// @doc A move of the list picked, onto its hit frame (that's what's edited most) and its first phase
+func pick(state, index) {
+    if (index < 0 || index >= len(state.ids)) { return; }
+    let list = state.ui.get("moves");
+    if (list.index != index) { list.index = index; }
+
+    state.move = state.ids[index];
+    state.confirm_delete = null;
+    state.relayout();
+    state.frame = state.laid.hit >= 0 ? state.laid.hit : 0;
+    state.phase = timing.phase_at(state.laid, state.frame);
+    state.refresh();
+    state.fit_soon();
+}
+
+/* What's done to moves */
+
+// The name typed for a new move, or why there isn't a good one
+func typed_name(state) {
+    let name = state.ui.get("move_name").text.trim().replace(" ", "_");
+    if (name == "") {
+        state.warn("type a name for it first");
+        return null;
+    }
+    if (has(state.moves, name)) {
+        state.warn(`there's a {name} already`);
+        return null;
+    }
+    return name;
+}
+
+func new_move(state) {
+    let name = typed_name(state);
+    if (name == null) { return; }
+
+    let animation = state.art == null ? "idle" : keys(state.art.animations)[0];
+    let made = templates.make(state.ui.get("template").value, animation);
+    edits.new_move(state, name, made, state.move, state.file);
+    state.ui.get("move_name").text = "";
+}
+
+func duplicate_move(state) {
+    let name = typed_name(state);
+    if (name == null || state.move == null) { return; }
+    edits.duplicate_move(state, state.move, name);
+    state.ui.get("move_name").text = "";
+}
+
+func rename_move(state) {
+    let name = typed_name(state);
+    if (name == null || state.move == null) { return; }
+    edits.rename_move(state, state.move, name, state.fighter.files);
+    state.ui.get("move_name").text = "";
+}
+
+// Taking a move out takes a second press, and says what reroutes to it first
+func delete_move(state) {
+    if (state.move == null) { return; }
+    if (state.confirm_delete != state.move) {
+        state.confirm_delete = state.move;
+        let pointing = [];
+        for (id in state.moves) {
+            for (kind in ["stance_reroutes", "finish_reroutes"]) {
+                for (stance in state.moves[id].move[kind] ?? {}) {
+                    if (state.moves[id].move[kind][stance] == state.move) { pointing.push(id); }
+                }
+            }
+        }
+        let more = len(pointing) > 0 ? `, {pointing.join(", ")} go to it` : "";
+        state.warn(`press delete again to take {state.move} out{more}`);
+        return;
+    }
+
+    state.confirm_delete = null;
+    edits.delete_move(state, state.move);
+}

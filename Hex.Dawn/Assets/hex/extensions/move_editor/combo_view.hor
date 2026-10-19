@@ -1,0 +1,194 @@
+// The combo window, the one thing that makes how a launcher feels editable. Where the move sends whoever it hits (exact,
+// the physics is closed form), the frame the attacker can act again (a cancel, hit_cancel or the end of the move), how
+// high the victim is by then, when their hitstun runs out and when they land. Drawn as an arc on the Data tab and over
+// the frame on the hit frame (frame_view.hor), written out under the arc. Change launch, hitstun or hitstun_gravity and
+// it moves straight away, it's worked out again on every refresh. Round a launch is DI's cone, the flights the victim
+// gets holding square on to it one way and the other as the hitlag ends, 9.74 degrees each side.
+//
+// Every frame here is counted from the hit, both of them frozen for the hitstop first, which moves none of it.
+
+let rules = include("rules.hor");
+let timing = include("timing.hor");
+let schema = include("schema.hor");
+
+let ARC = vec(0.6, 0.9, 1.0, 0.9);
+let FALLING = vec(0.6, 0.9, 1.0, 0.35);
+let FREE = vec(0.5, 1.0, 0.55, 1.0);
+let RECOVERS = vec(1.0, 0.75, 0.3, 1.0);
+let GROUND = vec(1, 1, 1, 0.15);
+let CONE = vec(0.6, 0.9, 1.0, 0.25);
+
+// @doc
+// The combo window of the move on screen, null for one that doesn't hit. { move, data, victim, flown, di, act, how, at,
+// free, jump } where act is how many frames after the hit the attacker can act, at where the victim is then, free how
+// many frames that is before their hitstun ends (minus for after), jump where a full jump straight away gets to and di
+// the two flights at the edges of DI's cone, [up, down], null for a hit that doesn't launch
+func window(state) {
+    if (state.move == null || state.laid.hit < 0 || state.rules == null) { return null; }
+    let n = state.rules;
+    let move = state.moves[state.move].move;
+    let data = rules.frame_data(n, state.laid, move);
+    if (data == null) { return null; }
+
+    let victim = state.victim ?? state.fighter;
+    let movement = victim == null || victim.movement == null ? n.movement : victim.movement;
+    let flown = rules.flight(n, move, movement, data.hitstun, 0);
+    let di = null;
+    if (flown.launched) {
+        di = [rules.flight_turned(n, move, movement, data.hitstun, 0, n.di_max_angle), rules.flight_turned(n, move, movement, data.hitstun, 0, -n.di_max_angle)];
+    }
+    let acts = timing.actionable(state.laid, move);
+    let act = acts.frame - state.laid.hit;
+    return {
+        move: move, data: data, victim: victim, movement: movement, flown: flown, di: di, rules: n,
+        act: act, how: acts.how, at: rules.flight_at(flown, act), free: data.hitstun - act,
+        jump: jump_of(state, move, act, flown)
+    };
+}
+
+// A full jump straight out of the hit cancel, when the move can be jump cancelled. { frame, height, victim } the frame
+// after the hit it tops out on, how high, and where the victim is then. The squat is the fighter's jump move up to its
+// phase with the jump in it
+func jump_of(state, move, act, flown) {
+    let into = schema.hit_cancels(move.hit_cancel);
+    if (into.index_of("jump") < 0 && into.index_of("any") < 0) { return null; }
+
+    let own = state.fighter == null || state.fighter.movement == null ? state.rules.movement : state.fighter.movement;
+    let jump = state.moves["jump"];
+    let rate = state.fighter == null ? 12 : state.fighter.frame_rate;
+    let squat = jump == null ? 0 : math.max(0, timing.jump_frame(state.art, jump.move, rate));
+    let frame = act + squat + rules.rise_frames(own, own.jump_height);
+    return { frame: frame, squat: squat, height: own.jump_height, victim: rules.flight_at(flown, frame) };
+}
+
+// @doc The combo window written out, markdown, "" for nothing to say
+func describe(combo) {
+    if (combo == null) { return ""; }
+    let move = combo.move;
+    let flown = combo.flown;
+    let who = combo.victim == null ? "they" : combo.victim.name;
+    let lines = ["**Combo window**"];
+
+    if (!flown.launched) {
+        let slide = len(flown.points) - 1;
+        let push = rules.push_of(combo.rules, move);
+        let said = move.push == null ? `, the {combo.rules.push} every hit gives` : "";
+        lines.push(`It pushes {who} {rules.units(push)} along the ground{said}, a slide of {count(slide)}, and the attacker {rules.units(push * combo.rules.attacker_recoil)} back. In the air it pops them {combo.rules.air_hit_pop} up.`);
+        lines.push(free_line(combo));
+    } else {
+        let v = flown.velocity;
+        let top = rules.flight_top(flown);
+        lines.push(`It launches {who} at {rules.units(v.x)} along and {rules.units(v.y)} up a second, falling on {math.round(flown.share, 2)} of their gravity. The top is {rules.units(top.y)} up and {rules.units(top.x)} along, on frame {flown.peak}.`);
+        lines.push(free_line(combo));
+
+        let end = rules.flight_at(flown, combo.data.hitstun);
+        let landing = flown.landed >= 0 ? `they land on frame {flown.landed}` : "they're still up there after ten seconds";
+        lines.push(`Their hitstun runs out on frame {combo.data.hitstun}, {rules.units(end.y)} up, and {landing}. A counter hit holds them {combo.rules.counter_hitstun_bonus} longer.`);
+        lines.push(di_line(combo));
+
+        if (combo.jump != null) {
+            let them = combo.jump.victim;
+            lines.push(`Jump cancelled straight away (a squat of {count(combo.jump.squat)}), the jump tops out {rules.units(combo.jump.height)} up on frame {combo.jump.frame}, when they're {rules.units(them.y)} up and {rules.units(them.x)} along.`);
+        }
+    }
+
+    if (combo.victim != null && combo.victim.has_movement == false) {
+        lines.push(`{combo.victim.name} has no movement block in characters.hor yet, this is the defaults.`);
+    }
+    return lines.join("\n\n");
+}
+
+// What DI does to it, the top of the flight at either edge of the cone and where they are when the attacker's free
+func di_line(combo) {
+    // Turned the other way round for a launch that comes back towards the attacker, so the higher one is worked out
+    let first = rules.flight_top(combo.di[0]).y >= rules.flight_top(combo.di[1]).y;
+    let up = first ? combo.di[0] : combo.di[1];
+    let down = first ? combo.di[1] : combo.di[0];
+    let high = rules.flight_top(up);
+    let low = rules.flight_top(down);
+    let degrees = math.round(combo.rules.di_max_angle * 180 / math.pi, 2);
+    let free_up = rules.flight_at(up, combo.act);
+    let free_down = rules.flight_at(down, combo.act);
+    return `DI turns it up to {degrees} degrees either way, the top anywhere from {rules.units(low.y)} up and {rules.units(low.x)} along to {rules.units(high.y)} up and {rules.units(high.x)} along, and when you're free they're between {rules.units(math.min(free_down.y, free_up.y))} and {rules.units(math.max(free_down.y, free_up.y))} up. SDI shoves them {combo.rules.sdi_distance} a press during the hitlag on top.`;
+}
+
+func free_line(combo) {
+    let how = combo.how == "hit_cancel" ? "by hit_cancel" : combo.how == "cancel" ? "by its cancel frame" : "at the end of the move";
+    let height = combo.flown.launched ? `, they're {rules.units(combo.at.y)} up` : "";
+    if (combo.free > 0) { return `Free {count(combo.act)} after the hit {how}, **{count(combo.free)} before they recover**{height}.`; }
+    if (combo.free == 0) { return `Free {count(combo.act)} after the hit {how}, the same frame they recover{height}.`; }
+    return `Free {count(combo.act)} after the hit {how}, **{count(-combo.free)} after they've recovered**{height}.`;
+}
+
+func count(frames) { return frames == 1 ? "1 frame" : `{frames} frames`; }
+
+/* The arc */
+
+// @doc The arc on the Data tab's drawing, scaled to fit, the ground under it and the frames that matter marked
+func draw(state, combo) {
+    let drawing = state.ui.get("combo_arc");
+    drawing.clear();
+    if (combo == null) { return; }
+
+    let points = combo.flown.points;
+    let far = 30;
+    let high = 20;
+    for (flown in combo.di == null ? [combo.flown] : [combo.flown, ...combo.di]) {
+        for (point in flown.points) {
+            far = math.max(far, math.abs(point.x));
+            high = math.max(high, point.y);
+        }
+    }
+
+    let size = drawing.view_size;
+    let scale = math.min((size.x - 40) / far, (size.y - 34) / high);
+    let origin = vec(-size.x / 2 + 16, -size.y / 2 + 14);
+    drawing.line(vec(-size.x / 2, origin.y), vec(size.x / 2, origin.y), 1, GROUND);
+    if (combo.di != null) { cone(drawing, combo, origin, scale); }
+    path(drawing, points, origin, scale, combo.data.hitstun);
+
+    mark(drawing, points, origin, scale, combo.act, combo.free >= 0 ? FREE : RECOVERS, `free {combo.act}`);
+    if (combo.flown.launched) {
+        mark(drawing, points, origin, scale, combo.data.hitstun, RECOVERS, `recovers {combo.data.hitstun}`);
+        let top = rules.flight_top(combo.flown);
+        drawing.text(`{rules.units(top.y)} up`, vec(origin.x + top.x * scale - 10, origin.y + top.y * scale + 4), 0.085, ARC);
+    }
+}
+
+// @doc
+// DI's cone, the two edges of the launch's direction out of where they were hit as far as the arc goes and the flights
+// either edge sends them on, faint under the real one
+func cone(drawing, combo, origin, scale) {
+    let along = combo.flown.velocity;
+    let reach = rules.flight_top(combo.flown).y * scale * 0.8;
+    for (turn in [combo.rules.di_max_angle, -combo.rules.di_max_angle]) {
+        let edge = rules.turned(along, turn);
+        let length = math.sqrt(edge.x * edge.x + edge.y * edge.y);
+        drawing.line(origin, vec(origin.x + edge.x / length * reach, origin.y + edge.y / length * reach), 1, CONE);
+    }
+    for (side in combo.di) {
+        let points = side.points;
+        for (f in range(1, len(points))) {
+            let a = points[f - 1];
+            let b = points[f];
+            drawing.line(vec(origin.x + a.x * scale, origin.y + a.y * scale), vec(origin.x + b.x * scale, origin.y + b.y * scale), 1, CONE);
+        }
+    }
+}
+
+// @doc A flight drawn as a line from where they were hit, solid while they're in hitstun and faint after
+func path(drawing, points, origin, scale, hitstun) {
+    for (f in range(1, len(points))) {
+        let a = points[f - 1];
+        let b = points[f];
+        drawing.line(vec(origin.x + a.x * scale, origin.y + a.y * scale), vec(origin.x + b.x * scale, origin.y + b.y * scale), 2, f <= hitstun ? ARC : FALLING);
+    }
+}
+
+func mark(drawing, points, origin, scale, frame, colour, said) {
+    let at = points[math.clamp(frame, 0, len(points) - 1)];
+    let x = origin.x + at.x * scale;
+    let y = origin.y + at.y * scale;
+    drawing.rect(vec(x - 3, y - 3), vec(x + 3, y + 3), colour);
+    drawing.text(said, vec(x + 5, y - 12), 0.08, colour);
+}

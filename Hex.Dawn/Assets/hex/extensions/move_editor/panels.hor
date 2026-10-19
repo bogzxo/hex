@@ -1,0 +1,288 @@
+// The tabs on the right filled in from the move on screen. Move and Phase are forms of their keys (made out of schema.hor),
+// Hitbox the numbers of the red box of the frame, Data what the game works out of the move (with the combo window,
+// combo_view.hor) and every move of the fighter side by side, Inputs what starts what (inputs.hor). Every frame is a
+// game frame, 60 a second. Setting a form's values tells nobody, what is typed into one is
+// what the extension hands to edits.hor.
+
+let schema = include("schema.hor");
+let timing = include("timing.hor");
+let rules = include("rules.hor");
+let boxes_of = include("boxes.hor");
+let inputs = include("inputs.hor");
+let game = include("game.hor");
+let edits = include("edits.hor");
+let combo_view = include("combo_view.hor");
+
+// @doc The fields of the red box's numbers, in pixels of the frame from its middle
+let BOX_FIELDS = [
+    { key: "back", title: "back edge", kind: "whole", help: "the edge of the box nearest the fighter" },
+    { key: "front", title: "front edge", kind: "whole", help: "the edge furthest out" },
+    { key: "bottom", title: "bottom edge", kind: "whole" },
+    { key: "top", title: "top edge", kind: "whole" },
+    { key: "active", title: "boxes", kind: "whole", help: "how many boxes, spread evenly over the active frames. How long the hit is out for too, when the phase with it doesn't say active" }
+];
+
+func show_all(state) {
+    show_move(state);
+    show_phase(state);
+    show_box(state);
+    show_data(state);
+    show_inputs(state);
+    show_frame_info(state);
+}
+
+/* Move */
+
+func show_move(state) {
+    let ui = state.ui;
+    if (state.move == null) {
+        ui.get("move_head").text = "no move";
+        ui.get("move_form").values = {};
+        ui.get("reroute_form").values = {};
+        ui.get("upgrade_row").visible = false;
+        return;
+    }
+
+    let at = state.moves[state.move];
+    let values = {};
+    for (field in schema.MOVE_FIELDS) {
+        if (has(at.move, field.key)) { values[field.key] = at.move[field.key]; }
+    }
+    ui.get("move_form").values = values;
+    ui.get("reroute_form").values = reroute_values(at.move);
+
+    let replaces = at.replaces == null ? "" : `, in place of the one in {game.file_name(at.replaces)}`;
+    ui.get("move_head").text = `**{state.move}**, written in {game.file_name(at.file)}{replaces}`;
+    ui.get("upgrade_row").visible = edits.outdated(at.move);
+}
+
+// The reroutes of a move as the keys of the reroute form, "stance_reroutes.crouching"
+func reroute_values(move) {
+    let values = {};
+    for (kind in ["stance_reroutes", "finish_reroutes"]) {
+        for (stance in move[kind] ?? {}) { values[`{kind}.{stance}`] = move[kind][stance]; }
+    }
+    return values;
+}
+
+/* Phase */
+
+func show_phase(state) {
+    let ui = state.ui;
+    let written = state.move == null || state.phase == null ? null : state.moves[state.move].move.phases[state.phase];
+    if (written == null) {
+        ui.get("phase_head").text = "no phase, pick one on the timeline";
+        ui.get("phase_form").values = {};
+        return;
+    }
+
+    let values = {};
+    for (field in schema.PHASE_FIELDS) {
+        if (has(written, field.key)) { values[field.key] = written[field.key]; }
+    }
+    ui.get("phase_form").values = values;
+    ui.get("phase_name").text = state.phase;
+
+    let rate = frame_rate(state);
+    let length = timing.phase_length(state.art, written, rate);
+    let natural = timing.natural_length(state.art, written, rate);
+    let art_says = written.frames != null && written.frames != natural ? `, its art would make it {natural}` : "";
+    let order = keys(state.moves[state.move].move.phases);
+    ui.get("phase_head").text = `**{state.phase}**, phase {order.index_of(state.phase) + 1} of {len(order)}, {length} game frames{art_says}`;
+}
+
+/* Hitbox */
+
+func show_box(state) {
+    let ui = state.ui;
+    let box = state.move == null ? null : state.boxes[state.move];
+    let index = timing.active_index(state.laid, state.frame);
+    if (box == null) {
+        ui.get("box_form").values = {};
+        ui.get("box_info").text = "No red box, the move hits with the yellow one the game traces off its art. Draw one on the hit frame, or take the trace's to start from.";
+        return;
+    }
+
+    let pixels = boxes_of.to_pixels(state.art, box[timing.shown_index(state.laid, state.frame, len(box))]);
+    ui.get("box_form").values = {
+        back: math.round(pixels.min.x), front: math.round(pixels.max.x),
+        bottom: math.round(pixels.min.y), top: math.round(pixels.max.y), active: len(box)
+    };
+    let which = timing.box_index(state.laid, state.frame, len(box));
+    ui.get("box_info").text = index >= 0
+        ? `Active frame {index + 1} of {state.laid.active}, hitting with box {which + 1} of {len(box)}.`
+        : "Not an active frame, a ghost of the nearest one's box. Go to an active frame to change it.";
+}
+
+// @doc A number of the red box typed in, the boxes of the move as they come out of it, null for nothing to change
+func box_from_form(state, key, value) {
+    let box = state.boxes[state.move];
+    if (box == null) { return null; }
+    if (key == "active") { return boxes_of.resized(box, math.max(1, value)); }
+
+    let index = timing.box_index(state.laid, state.frame, len(box));
+    if (index < 0) {
+        state.warn("that's a ghost of an active frame's box, go to an active frame to change it");
+        return null;
+    }
+
+    let form = state.ui.get("box_form");
+    let numbers = merge(form.values, {});
+    numbers[key] = value;
+    return boxes_of.with_box(box, index, boxes_of.from_pixels(state.art, vec(numbers.back, numbers.bottom), vec(numbers.front, numbers.top)));
+}
+
+/* Data */
+
+func frame_rate(state) { return state.fighter == null ? 12 : state.fighter.frame_rate; }
+
+// The frame data of any move of the fighter, laid out at the fighter's frame rate
+func data_of(state, id) {
+    let move = state.moves[id].move;
+    return state.rules == null ? null : rules.frame_data(state.rules, timing.lay_out(state.art, move, frame_rate(state), drawn_of(state, id)), move);
+}
+
+// @doc How many red boxes a move has in the hitbox file, 0 for none
+func drawn_of(state, id) {
+    let box = state.boxes[id];
+    return box == null ? 0 : len(box);
+}
+
+func show_data(state) {
+    let ui = state.ui;
+    if (state.move == null) {
+        ui.get("data_text").text = "";
+        ui.get("combo_text").text = "";
+        combo_view.draw(state, null);
+        return;
+    }
+
+    let move = state.moves[state.move].move;
+    if (state.rules == null) { return; }
+    let data = rules.frame_data(state.rules, state.laid, move);
+    let victim = state.victim ?? state.fighter;
+    ui.get("data_text").text = data == null ? `**{state.move}** doesn't hit anybody, there's no frame data to it.` : describe(state.rules, move, data, victim == null || victim.movement == null ? state.rules.movement : victim.movement);
+
+    let combo = combo_view.window(state);
+    ui.get("combo_text").text = combo_view.describe(combo);
+    ui.get("combo_arc").visible = combo != null;
+    combo_view.draw(state, combo);
+    ui.get("table_text").text = table(state);
+}
+
+// The frame data of a move and what it comes out of, markdown
+func describe(n, move, data, victim) {
+    let worth = rules.worth(n, move, data, victim);
+    let lines = [
+        `**startup** {data.startup}, **active** {data.active}, **recovery** {data.recovery}, {data.total} in all`,
+        `**on hit** {rules.signed(data.on_hit)}, **on block** {rules.signed(data.on_block)}`,
+        `**hitstun** {data.hitstun}, **blockstun** {data.blockstun}` + (data.hitstun_said ? ", as it says" : ", out of the startup and the damage"),
+        `**counter hit** {worth.counter_hitstun}, the hitstun and {n.counter_hitstun_bonus} more`,
+        "",
+        `A counter hit takes {worth.counter_damage}. In a combo it takes {worth.combo.join(", ")} as the first, second, third and fifth hit. Gone stale it's {worth.stale.join(", ")} with one, two and three of it among the last nine that landed.`,
+        hitlag_line(n, move, worth),
+        `It builds {worth.meter_on_hit} meter on hit and gives whoever takes it {worth.meter_taken}, {worth.meter_on_block} on a block and {worth.meter_on_whiff} on a whiff.`,
+        kind_line(move, worth)
+    ];
+    if (worth.whiff_lag > 0) { lines.push(`Whiffed, it holds its last frame {worth.whiff_lag} longer and its cancel frames don't count.`); }
+    let growth = growth_line(n, move, victim);
+    if (growth != "") { lines.push(growth); }
+    if (worth.launches) {
+        lines.push(`Juggled, they fall on {math.round(worth.juggle[0], 2)} of their gravity, then {math.round(worth.juggle[1], 2)}, {math.round(worth.juggle[2], 2)} and {math.round(worth.juggle[3], 2)} by the fifth air hit, which is what drops a long juggle.`);
+    }
+    if (worth.knockdown > 0) { lines.push(`It knocks them down, {worth.knockdown} on the floor before they get up.`); }
+    lines.push("");
+    lines.push("Game frames, 60 a second.");
+    return lines.join("\n");
+}
+
+// How long they freeze, the way the game works it out when the move doesn't say
+func hitlag_line(n, move, worth) {
+    let why = worth.hitstop_said ? "as it says" : `{move.damage ?? 0} damage * {n.hitlag_per_damage} + {n.hitlag_base}, {n.max_hitlag} at most`;
+    return `Both freeze **{worth.hitstop}** on the hit ({why}), {worth.counter_hitstop} on a counter and {worth.block_hitstop} on a block, {n.ko_hitstop} if it's the K.O. Blocked it chips {worth.chip}.`;
+}
+
+func kind_line(move, worth) {
+    let said = move.kind != null ? "it says so" : (move.meter_cost ?? 0) > 0 ? `out of its meter cost of {move.meter_cost}` : "it costs no meter";
+    return `It's a **{worth.kind}** ({said}), which is what a hit_cancel by kind goes by.`;
+}
+
+// Where launch_growth has the launch go as the health goes, "" for a move without any
+func growth_line(n, move, victim) {
+    if (move.launch_growth == null || (move.launch_growth.x == 0 && move.launch_growth.y == 0) || !rules.launches(move)) { return ""; }
+    let at = [];
+    for (lost in [30, 60, 90]) {
+        let launch = rules.launch_at(n, move, victim, lost);
+        at.push(`{rules.units(launch.x)} along and {rules.units(launch.y)} up with {lost} lost`);
+    }
+    let weight = victim.weight ?? n.movement.weight;
+    return `It grows with the damage they've taken, {rules.units(move.launch.x)} along and {rules.units(move.launch.y)} up at full health, then {at.join(", ")} (weight {weight}).`;
+}
+
+// @doc Every move of the fighter that hits, its frame data a row, in the order the dropdown says, markdown
+func table(state) {
+    let rows = [];
+    for (id in state.ids_all) {
+        let data = data_of(state, id);
+        if (data != null) { rows.push({ id: id, data: data, damage: state.moves[id].move.damage ?? 0 }); }
+    }
+
+    let by = state.ui.get("sort_by").value;
+    if (by == "by startup") { rows.sort(func(row) { return row.data.startup; }); }
+    if (by == "by on hit") { rows.sort(func(row) { return -row.data.on_hit; }); }
+    if (by == "by on block") { rows.sort(func(row) { return -row.data.on_block; }); }
+    if (by == "by damage") { rows.sort(func(row) { return -row.damage; }); }
+
+    let lines = ["```", "move               start act  rec  hit  block dmg"];
+    for (row in rows) {
+        lines.push(`{row.id.pad_right(18)} {text(row.data.startup).pad_left(5)} {text(row.data.active).pad_left(3)} {text(row.data.recovery).pad_left(4)} {rules.signed(row.data.on_hit).pad_left(4)} {rules.signed(row.data.on_block).pad_left(5)} {text(row.damage).pad_left(3)}`);
+    }
+    lines.push("```");
+    return lines.join("\n");
+}
+
+// @doc The table as a markdown table, for copying out
+func table_markdown(state) {
+    let lines = ["| move | startup | active | recovery | on hit | on block | damage |", "| --- | --- | --- | --- | --- | --- | --- |"];
+    for (id in state.ids_all) {
+        let data = data_of(state, id);
+        if (data != null) {
+            lines.push(`| {id} | {data.startup} | {data.active} | {data.recovery} | {rules.signed(data.on_hit)} | {rules.signed(data.on_block)} | {state.moves[id].move.damage ?? 0} |`);
+        }
+    }
+    return lines.join("\n");
+}
+
+/* Inputs, what's over the frame and what's under the timeline */
+
+func show_inputs(state) {
+    state.ui.get("inputs_text").text = inputs.describe({ moves: state.moves });
+}
+
+// The header over the frame, the move and the phase next to the fighter and the file it's written in
+func show_header(state) {
+    let header = state.ui.get("written_in");
+    if (state.move == null) {
+        header.text = "";
+        return;
+    }
+
+    let at = state.moves[state.move];
+    let phase = state.phase == null ? "" : ` $(chevron-right) {state.phase}`;
+    let replaces = at.replaces == null ? "" : `, over the one in {game.file_name(at.replaces)}`;
+    header.text = `$(chevron-right) **{state.move}**{phase}    in {game.file_name(at.file)}{replaces}`;
+}
+
+func show_frame_info(state) {
+    show_header(state);
+    let info = state.ui.get("frame_info");
+    if (state.move == null || len(state.laid.frames) == 0) {
+        info.text = "";
+        return;
+    }
+
+    let at = state.laid.frames[state.frame];
+    let hit = at.hit ? ", the hit" : "";
+    let unsaved = state.boxes_changed ? ", red boxes unsaved" : "";
+    info.text = `{state.frame + 1} of {len(state.laid.frames)}, {at.phase_name}, {at.animation} {at.shown + 1}, {at.kind}{hit}{unsaved}`;
+}

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dawn, the editor of Hex, a library the Hex program starts (Hex/Program.cs). It was Horizon.Hex. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+
+    <!-- Hex's own version, what About says and the changelog (Help, What changed) goes up to -->
+    <Version>0.3.0</Version>
+
+    <!-- The dialogs for opening and saving a layout are asked for from Windows directly, see HexDialogs.cs -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Where the engine is, its submodule unless a workspace said otherwise -->
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Milestone Builds\**" />
+    <EmbeddedResource Remove="Milestone Builds\**" />
+    <None Remove="Milestone Builds\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hex" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\hex\**\*.hor">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\hex\images\**\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
+    <!-- The engine is a submodule at horizon/, the language a submodule inside of that. A workspace above this repo
+         (Directory.Build.props) can say to use another checkout of the engine instead, see HorizonRoot -->
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
+  </ItemGroup>
+
+</Project>

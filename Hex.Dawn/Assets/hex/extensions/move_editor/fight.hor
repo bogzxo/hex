@@ -1,0 +1,120 @@
+// Fight!, the game started straight into a fight on what's saved, and the move editor's tab of Hex's settings, where
+// Fighter2D's exe is (a path absolute or from the game's folder, or the folder it's in) and who and where it fights.
+
+let game = include("game.hor");
+
+func is_absolute(path) {
+    return path.starts_with("/") || path.starts_with("\\") || (len(path) > 1 && path.substring(1, 2) == ":");
+}
+
+// @doc Where the exe is, out of the setting, or the newest build under the game's bin folder
+func game_exe(hex, root) {
+    let told = hex.setting("game") ?? "";
+    if (told != "") {
+        let path = is_absolute(told) ? told : `{root}/{told}`;
+        for (name in ["Fighter2D.exe", "Fighter2D"]) {
+            if (hex.exists(`{path}/{name}`)) { return `{path}/{name}`; }
+        }
+        return path;
+    }
+
+    for (build in ["bin/x64/Release/net10.0", "bin/x64/Debug/net10.0", "bin/Release/net10.0", "bin/Debug/net10.0"]) {
+        for (name in ["Fighter2D.exe", "Fighter2D"]) {
+            if (hex.exists(`{root}/{build}/{name}`)) { return `{root}/{build}/{name}`; }
+        }
+    }
+    return null;
+}
+
+// @doc
+// The fight started, after what it needs is saved. The game is told the folder of the game for its content, so it reads
+// the files as Hex wrote them and reloads them as they change
+func fight(state, save) {
+    let hex = state.hex;
+    if (state.root == null || state.fighter == null) {
+        state.warn("no game or no fighter, nothing to fight with");
+        return;
+    }
+
+    let exe = game_exe(hex, state.root);
+    if (exe == null || !hex.exists(exe)) {
+        let where = exe == null ? "anywhere in the game's bin folder" : exe;
+        state.warn(`no Fighter2D at {where}, say where it is on the move editor's tab of the settings (Ctrl+,)`);
+        return;
+    }
+
+    save();
+    let started = hex.start(exe, [
+        "--content", state.root,
+        "--map", hex.setting("map"),
+        "--character", state.fighter.id,
+        "--opponent", hex.setting("opponent"),
+        "--dummy", hex.setting("dummy"),
+        "--windowed"
+    ]);
+    if (started) {
+        state.say(`fighting as {state.fighter.name} on {hex.setting("map")} against {hex.setting("opponent")}, who'll {hex.setting("dummy")}. Saved changes reload in the fight`);
+    } else {
+        state.warn("the game wouldn't start, the output says why");
+    }
+}
+
+/* The tab of the settings, move_settings.hor */
+
+func open_settings(hex, ui) {
+    let game_path = ui.get("game_path");
+    game_path.text = hex.setting("game");
+    game_path.on_changed = func(typed) {
+        hex.set_setting("game", typed);
+        show_found(hex, ui);
+    };
+    game_path.on_button = func() { browse_game(hex, ui); };
+
+    // The lists out of the game a move file was last opened in, the one that's set kept even if it isn't there
+    let root = hex.setting("last_game");
+    pick_from(hex, ui.get("map"), "map", game.map_names(hex, root));
+    pick_from(hex, ui.get("opponent"), "opponent", game.character_ids(hex, root));
+
+    let dummy = ui.get("dummy");
+    dummy.value = hex.setting("dummy");
+    dummy.on_changed = func(value) { hex.set_setting("dummy", dummy.value); };
+    show_found(hex, ui);
+}
+
+// Look, Windows' dialog for the exe from the game's folder. One inside the game is kept from its folder
+func browse_game(hex, ui) {
+    let root = hex.setting("last_game");
+    hex.pick_file({ title: "Where is Fighter2D?", folder: root ?? "", filter: ["Fighter2D (*.exe)", "*.exe"] }, func(picked) {
+        let path = picked.replace("\\", "/");
+        if (root != null) {
+            let base = root.replace("\\", "/") + "/";
+            if (path.lower().starts_with(base.lower())) { path = path.substring(len(base)); }
+        }
+
+        ui.get("game_path").text = path;
+        hex.set_setting("game", path);
+        show_found(hex, ui);
+    });
+}
+
+func pick_from(hex, dropdown, setting, choices) {
+    let now = hex.setting(setting);
+    if (choices.index_of(now) < 0) { choices.insert(0, now); }
+    dropdown.options = choices;
+    dropdown.value = now;
+    dropdown.on_changed = func(value) { hex.set_setting(setting, value); };
+}
+
+func show_found(hex, ui) {
+    let root = hex.setting("last_game");
+    let found = ui.get("found");
+    if (root == null) {
+        found.text = "Open a move file of the game once, a relative path is from its folder.";
+        return;
+    }
+
+    let exe = game_exe(hex, root);
+    found.text = exe != null && hex.exists(exe)
+        ? `Fight! starts {exe}`
+        : `There is no {exe ?? "Fighter2D in the bin folder"}, from {root}`;
+}

@@ -1,0 +1,136 @@
+// The red boxes, the hitboxes drawn by hand, and the file the game reads them out of (Assets/data/hitboxes/<fighter>.hor,
+// Fighter2D's CustomHitboxes). A move's boxes are a list spread evenly over its active frames from the hit frame on
+// (PlayerBoxes.Hitbox), however many of either there are. How many there are is how long the hit is out for when the
+// phase with the hit doesn't say active. In here a box is a share of the frame from its middle like the game keeps it,
+// on screen it's pixels of the art.
+
+// @doc How big a frame of the art is, in pixels
+func frame_size(art) {
+    return art == null ? vec(128, 128) : vec(art.width, art.height);
+}
+
+func to_pixels(art, box) {
+    let size = frame_size(art);
+    return { min: vec(box.min.x * size.x, box.min.y * size.y), max: vec(box.max.x * size.x, box.max.y * size.y) };
+}
+
+// @doc A box in pixels back into a share of the frame, onto the pixels of the art and never inside out
+func from_pixels(art, a, b) {
+    let size = frame_size(art);
+    let x0 = math.round(math.min(a.x, b.x));
+    let x1 = math.round(math.max(a.x, b.x));
+    let y0 = math.round(math.min(a.y, b.y));
+    let y1 = math.round(math.max(a.y, b.y));
+    if (x1 <= x0) { x1 = x0 + 1; }
+    if (y1 <= y0) { y1 = y0 + 1; }
+    return { min: vec(x0 / size.x, y0 / size.y), max: vec(x1 / size.x, y1 / size.y) };
+}
+
+func box_list(count, box) {
+    let boxes = [];
+    for (i in range(math.max(1, count))) { boxes.push(box); }
+    return boxes;
+}
+
+// @doc All the boxes of all the moves copied, for keeping what they were before a change
+func copy_all(boxes) {
+    let copied = {};
+    for (id in boxes) { copied[id] = boxes[id].copy(); }
+    return copied;
+}
+
+func without(object, key) {
+    let left = {};
+    for (other in object) {
+        if (other != key) { left[other] = object[other]; }
+    }
+    return left;
+}
+
+// @doc A box on every active frame, the one of the frame on screen, as many as there were
+func same_throughout(boxes, index) {
+    return box_list(len(boxes), boxes[math.clamp(index, 0, len(boxes) - 1)]);
+}
+
+// @doc The boxes with one of them set, CustomHitbox.WithBox, the first one made when there were none
+func with_box(boxes, index, box) {
+    if (boxes == null) { return [box]; }
+    let made = boxes.copy();
+    made[math.clamp(index, 0, len(made) - 1)] = box;
+    return made;
+}
+
+// @doc So many boxes, CustomHitbox.WithActive, new ones the box of the last one there was
+func resized(boxes, count) {
+    let made = boxes.copy();
+    while (len(made) < count) { made.push(made[len(made) - 1]); }
+    while (len(made) > math.max(1, count)) { made.pop(); }
+    return made;
+}
+
+/* The file */
+
+// @doc The boxes of a fighter out of its file, by move, { id: [box, ...] }, nothing for a file that isn't there
+func read_file(hex, file) {
+    let boxes = {};
+    if (file == null || !hex.exists(file)) { return boxes; }
+    let read = hex.try_load(file);
+    if (read.values == null) { return boxes; }
+
+    let all = read.values.hitboxes ?? {};
+    for (id in all) {
+        let box = all[id];
+        if (box.frames != null) {
+            let frames = [];
+            for (one in box.frames) { frames.push({ min: one.min, max: one.max }); }
+            boxes[id] = frames;
+        } else {
+            boxes[id] = box_list(box.active ?? 1, { min: box.min, max: box.max });
+        }
+    }
+    return boxes;
+}
+
+func number(value) { return text(math.round(value * 10000) / 10000); }
+
+func write_box(box) {
+    return `min: vec({number(box.min.x)}, {number(box.min.y)}), max: vec({number(box.max.x)}, {number(box.max.y)})`;
+}
+
+func all_the_same(boxes) {
+    for (box in boxes) {
+        if (box.min != boxes[0].min || box.max != boxes[0].max) { return false; }
+    }
+    return true;
+}
+
+// @doc The file the way the game's editor wrote it, the short way for a box that is the same on every active frame
+func file_text(fighter_id, boxes) {
+    let lines = [
+        `// The hand drawn hitboxes of {fighter_id}, written by the move editor (Hex). A move that isn't here hits with whatever`,
+        "// limb its art has sticking out. min and max are a share of the frame from its middle, x the way the character",
+        "// faces and y up, active is how many frames of the fight (60 a second) the box stays out for from the hit frame. A move whose box",
+        "// changes from one active frame to the next has frames, a box for every one of them from the hit frame on.",
+        "",
+        "let hitboxes = {"
+    ];
+
+    let ids = keys(boxes).sort();
+    for (i in range(len(ids))) {
+        let of = boxes[ids[i]];
+        let comma = i < len(ids) - 1 ? "," : "";
+        if (all_the_same(of)) {
+            lines.push(`    {ids[i]}: \{ {write_box(of[0])}, active: {len(of)} \}{comma}`);
+        } else {
+            lines.push(`    {ids[i]}: \{ frames: [`);
+            for (f in range(len(of))) {
+                let more = f < len(of) - 1 ? "," : "";
+                lines.push(`        \{ {write_box(of[f])} \}{more}`);
+            }
+            lines.push(`    ] \}{comma}`);
+        }
+    }
+
+    lines.push("};");
+    return lines.join("\n") + "\n";
+}

@@ -1,0 +1,14 @@
+// The button of a view an extension made for a file, at the end of the tabs next to Code and Table.
+#define layout
+
+let view_button = compositor.button({
+    icon: "extensions",
+    label: "View",
+    style: "button_flat",
+    size: vec(0, 28),
+    lbl_scale: 0.14,
+    animated: false,
+    hover: "lift",
+    hover_amount: 1.5,
+    hover_time: 0.08
+});

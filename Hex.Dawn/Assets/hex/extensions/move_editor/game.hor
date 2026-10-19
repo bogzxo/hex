@@ -1,0 +1,125 @@
+// The game a file of moves belongs to, its fighters, and a fighter's moves as the game puts them together. A fighter
+// takes its moves from a list of files (moves in characters.hor) and a later file's move replaces the earlier one of the
+// same id, so which move a fighter really has, and which file it is written in, is worked out here.
+
+let schema = include("schema.hor");
+let rules = include("rules.hor");
+
+func key_of(path) {
+    if (path == null) { return ""; }
+    return path.replace("\\", "/").lower();
+}
+
+func same_path(a, b) { return key_of(a) == key_of(b); }
+
+// @doc The folder of the game over a file, the one with Assets/data/characters.hor in it, null for none
+func find_root(hex, file) {
+    return hex.find_up(file, "Assets/data/characters.hor");
+}
+
+// @doc Every fighter of the game whose moves are in a file, or every one when none names it
+func fighters_of(hex, root, file) {
+    let read = hex.try_load(`{root}/Assets/data/characters.hor`);
+    if (read.values == null) { return []; }
+    let n = rules.load(hex, root);
+
+    let using = [];
+    let everybody = [];
+    let characters = read.values.characters ?? {};
+    for (id in characters) {
+        let fighter = fighter_of(n, root, id, characters[id]);
+        everybody.push(fighter);
+        for (file_of in fighter.files) {
+            if (same_path(file_of, file)) { using.push(fighter); }
+        }
+    }
+
+    return len(using) > 0 ? using : everybody;
+}
+
+func fighter_of(n, root, id, character) {
+    let files = [];
+    for (which in character.moves ?? {}) { files.push(`{root}/{character.moves[which]}`); }
+    return {
+        id: id,
+        name: character.pretty_name ?? id,
+        sprites: `{root}/{character.sprites}`,
+        frame_rate: character.frame_rate ?? 12,
+        files: files,
+
+        // How it moves, its movement block over the defaults (rules.movement_of), and whether it has one written yet
+        movement: n == null ? null : rules.movement_of(n, character),
+        has_movement: character.movement != null
+    };
+}
+
+// @doc A fighter of the game by its id, null for one characters.hor hasn't got
+func fighter_by_id(hex, root, id) {
+    let read = root == null || id == null ? null : hex.try_load(`{root}/Assets/data/characters.hor`);
+    if (read == null || read.values == null) { return null; }
+    let characters = read.values.characters ?? {};
+    return has(characters, id) ? fighter_of(rules.load(hex, root), root, id, characters[id]) : null;
+}
+
+// @doc
+// A fighter's moves out of its files, the way the game merges them, and what was wrong with a file that didn't run.
+// { moves: { id: { move, file, replaces } }, ids, by_file: { file: its moves }, errors: { file: why } }, replaces the file
+// a later one took it over from
+func load_moves(hex, files) {
+    let moves = {};
+    let ids = [];
+    let errors = {};
+    let by_file = {};
+
+    for (file in files) {
+        let read = hex.try_load(file);
+        if (read.values == null) {
+            errors[file] = read.error;
+        } else {
+            by_file[file] = read.values.moves ?? {};
+            for (id in read.values.moves ?? {}) {
+                let earlier = moves[id];
+                if (earlier == null) { ids.push(id); }
+                moves[id] = { move: read.values.moves[id], file: file, replaces: earlier == null ? null : earlier.file };
+            }
+        }
+    }
+
+    return { moves: moves, ids: ids, by_file: by_file, errors: errors };
+}
+
+// @doc What kind of move it is, which of the groups of the list it goes in
+func kind_of(id, move) {
+    if (schema.GAME_MOVES.index_of(id) >= 0) { return "the game's"; }
+    if ((move.meter_cost ?? 0) > 0) { return "specials"; }
+    if ((move.damage ?? 0) > 0 || hits(move)) { return "attacks"; }
+    return "movement";
+}
+
+func hits(move) {
+    for (name in move.phases ?? {}) {
+        if (move.phases[name].hit != null) { return true; }
+    }
+    return false;
+}
+
+func hitbox_file(root, fighter) {
+    return root == null || fighter == null ? null : `{root}/Assets/data/hitboxes/{fighter.id}.hor`;
+}
+
+// @doc The maps of the game by their names in maps.hor, and the ids of its fighters, for Fight!
+func map_names(hex, root) {
+    let read = root == null ? null : hex.try_load(`{root}/Assets/data/maps.hor`);
+    return read == null || read.values == null ? [] : keys(read.values.maps ?? {});
+}
+
+func character_ids(hex, root) {
+    let read = root == null ? null : hex.try_load(`{root}/Assets/data/characters.hor`);
+    return read == null || read.values == null ? [] : keys(read.values.characters ?? {});
+}
+
+// @doc A file's name without its folders, for saying where a move is written
+func file_name(path) {
+    let parts = path.replace("\\", "/").split("/");
+    return parts[len(parts) - 1];
+}

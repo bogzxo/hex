@@ -1,0 +1,18 @@
+// Dusk's settings as a form, see extension.hor. The rows are made out of the settings Dusk and Hex describe (api.hor).
+#define layout
+
+let root = compositor.scroll({
+    anchor: "top_left",
+    pivot: "top_left",
+    fill: "both",
+    padding: vec(16, 12, 16, 12)
+});
+
+let form = compositor.form({
+    parent: root,
+    anchor: "top_left",
+    pivot: "top_left",
+    caption_width: 200,
+    row_width: 640,
+    text_scale: 0.14
+});

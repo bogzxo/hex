@@ -1,0 +1,151 @@
+// How a fighter's moves fit together. Which move every button starts in every stance, in the order the game tries them
+// (priority, then the trigger, then whether there's the meter for it), the ones that can never come out because another
+// always gets there first, and where every move goes from (stance_reroutes, finish_reroutes, repeat, a hit cancel and the
+// landing an aerial's landing lag puts them in). landing comes out of the game by itself, an aerial touching down.
+
+let schema = include("schema.hor");
+
+// @doc The alternatives of a move's input, each the buttons pressed together, sorted, "A + B" and "B + A" the same
+func inputs_of(move) {
+    if (move.input == null) { return []; }
+    let alternatives = typeof(move.input) == "list" ? move.input : text(move.input).split("|");
+    let made = [];
+    for (either in alternatives) {
+        let buttons = [];
+        for (button in text(either).split("+")) { buttons.push(button.trim()); }
+        made.push(buttons.sort().join(" + "));
+    }
+    return made;
+}
+
+func stances_of(move) {
+    if (move.stances == null) { return ["standing"]; }
+    if (typeof(move.stances) == "list") { return move.stances; }
+    let made = [];
+    for (stance in text(move.stances).split("|")) { made.push(stance.trim()); }
+    return made;
+}
+
+// @doc
+// What every input starts in every stance, { "A + B": { standing: [ { id, priority, trigger, meter } ] } }, each list in the
+// order the game tries them
+func grid(merged) {
+    let cells = {};
+    for (id in merged.moves) {
+        let move = merged.moves[id].move;
+        for (input in inputs_of(move)) {
+            if (!has(cells, input)) { cells[input] = {}; }
+            for (stance in stances_of(move)) {
+                if (!has(cells[input], stance)) { cells[input][stance] = []; }
+                cells[input][stance].push({ id: id, priority: move.priority ?? -1, trigger: move.trigger ?? "held", meter: move.meter_cost ?? 0 });
+            }
+        }
+    }
+
+    for (input in cells) {
+        for (stance in cells[input]) { cells[input][stance].sort(func(entry) { return entry.priority; }); }
+    }
+    return cells;
+}
+
+// @doc Moves that never come out, the same input, stance and trigger as one that's tried first and needs no meter
+func shadowed(cells) {
+    let found = [];
+    for (input in cells) {
+        for (stance in cells[input]) {
+            let tried = cells[input][stance];
+            for (i in range(len(tried))) {
+                for (j in range(i)) {
+                    let first = tried[j];
+                    let later = tried[i];
+                    if (first.trigger == later.trigger && first.meter == 0 && first.id != later.id) {
+                        found.push({ id: later.id, by: first.id, input: input, stance: stance });
+                    }
+                }
+            }
+        }
+    }
+    return found;
+}
+
+// @doc Where every move goes, { from, to, how } a line, how being the stance of a reroute, "repeat", a hit cancel or the landing
+func routes(merged) {
+    let found = [];
+    for (id in merged.moves) {
+        let move = merged.moves[id].move;
+        for (kind in ["stance_reroutes", "finish_reroutes"]) {
+            for (stance in move[kind] ?? {}) {
+                let how = kind == "stance_reroutes" ? `instead, {stance}` : `after, {stance}`;
+                found.push({ from: id, to: move[kind][stance], how: how });
+            }
+        }
+        if (move.repeat != null) { found.push({ from: id, to: id, how: `again while {move.repeat}` }); }
+        for (to in schema.hit_cancels(move.hit_cancel)) {
+            if (to != "any") { found.push({ from: id, to: to, how: "cancelled into on hit" }); }
+        }
+        if (move.landing_lag != null) { found.push({ from: id, to: "landing", how: `touching down, {move.landing_lag} frames of it` }); }
+    }
+    return found;
+}
+
+// @doc The moves nothing starts, no input and nothing rerouting to them, the game's own aside
+func unreached(merged, found_routes) {
+    let reached = {};
+    for (route in found_routes) { reached[route.to] = true; }
+
+    let lonely = [];
+    for (id in merged.moves) {
+        let move = merged.moves[id].move;
+        if (move.input == null && !has(reached, id) && schema.GAME_MOVES.index_of(id) < 0) { lonely.push(id); }
+    }
+    return lonely;
+}
+
+// @doc All of it written out for the Inputs tab, markdown
+func describe(merged) {
+    let cells = grid(merged);
+    let lines = ["**What every input starts**, tried in this order", ""];
+    for (input in keys(cells).sort()) {
+        lines.push(`**{input}**`);
+        for (stance in schema.STANCES) {
+            if (has(cells[input], stance)) {
+                let tried = [];
+                for (entry in cells[input][stance]) {
+                    let costs = entry.meter > 0 ? ` ({entry.meter} meter)` : "";
+                    tried.push(`{entry.id}{costs}`);
+                }
+                lines.push(`- {stance}, {tried.join(", then ")}`);
+            }
+        }
+    }
+
+    let never = shadowed(cells);
+    if (len(never) > 0) {
+        lines.push("");
+        lines.push("**Never comes out**");
+        for (one in never) { lines.push(`- {one.id}, {one.by} gets {one.input} {one.stance} first`); }
+    }
+
+    let found_routes = routes(merged);
+    lines.push("");
+    lines.push("**Where moves go**");
+    for (route in found_routes) {
+        let missing = has(merged.moves, route.to) ? "" : " (there's no such move)";
+        lines.push(`- {route.from} to {route.to}, {route.how}{missing}`);
+    }
+
+    if (has(merged.moves, "landing")) {
+        lines.push("");
+        lines.push("**landing** is what an aerial with landing_lag lands in, for as long as it says.");
+    } else if (len(found_routes.filter(func(route) { return route.to == "landing"; })) > 0) {
+        lines.push("");
+        lines.push("No **landing**, and an aerial says landing_lag, it has nothing to land in.");
+    }
+
+    let lonely = unreached(merged, found_routes);
+    if (len(lonely) > 0) {
+        lines.push("");
+        lines.push(`**Nothing starts** {lonely.join(", ")}`);
+    }
+    return lines.join("\n");
+}

@@ -1,0 +1,20 @@
+// A Markdown file as it reads, see extension.hor. The engine's rich text, headings, lists, quotes, code and links.
+#define layout
+
+let root = compositor.scroll({
+    anchor: "top_left",
+    pivot: "top_left",
+    fill: "both",
+    padding: vec(28, 20, 28, 20)
+});
+
+let text = compositor.label({
+    parent: root,
+    anchor: "top_left",
+    pivot: "top_left",
+    fill: "horizontal",
+    align: "top_left",
+    markdown: true,
+    wrap: true,
+    text_scale: 0.16
+});

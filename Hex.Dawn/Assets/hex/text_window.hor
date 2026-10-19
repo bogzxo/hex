@@ -1,0 +1,33 @@
+// text_window, laid out with Horizon.Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
+#define layout
+
+
+let window = compositor.window({
+    size: vec(760, 560),
+    z: 10,
+    padding: vec(8, 8, 8, 8),
+    min_size: vec(360, 220),
+    title: "Hex",
+    icon: "book",
+    intro: "pop",
+    intro_time: 0.18
+});
+
+let text_scroll = compositor.scroll({
+    parent: window,
+    fill: "both",
+    padding: vec(8, 8, 8, 8)
+});
+
+let text = compositor.label({
+    parent: text_scroll,
+    anchor: "top_left",
+    pivot: "top_left",
+    fill: "horizontal",
+    text: "# Hex",
+    text_scale: 0.14,
+    wrap: true,
+    markdown: true,
+    align: "top_left"
+});

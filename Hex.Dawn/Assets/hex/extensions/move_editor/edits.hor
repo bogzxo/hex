@@ -1,0 +1,381 @@
+// Every change the editor makes to a move, written into the file the move is written in by Hex (hex.edit and the rest),
+// where it is written and nowhere else, and one history of them for Ctrl+Z in the view. An entry of the history is a
+// change to files (undone by the files' own undo) or to the red boxes (undone by putting back what they were).
+//
+// Everything here takes the state of a view, which has hex, moves (the fighter's merged moves, see game.hor), boxes,
+// history and redo, and what the extension hands it, reload() to read the files again, say(text) for what happened and
+// warn(text) for what didn't.
+
+let schema = include("schema.hor");
+let boxes_of = include("boxes.hor");
+
+/* The history */
+
+func record(state, entry) {
+    state.history.push(entry);
+    state.redo = [];
+}
+
+// @doc A change made to files, kept for undoing when it went and said why when it didn't. why is what hex.edit handed back
+func done(state, files, why) {
+    if (why != null) {
+        state.warn(why);
+        return false;
+    }
+
+    record(state, { kind: "files", files: files });
+    state.reload();
+    return true;
+}
+
+func undo(state) {
+    if (len(state.history) == 0) {
+        state.say("nothing to undo");
+        return;
+    }
+
+    let entry = state.history.pop();
+    state.redo.push(reverse_of(state, entry, true));
+    state.reload();
+    state.say("undone");
+}
+
+func redo(state) {
+    if (len(state.redo) == 0) {
+        state.say("nothing to redo");
+        return;
+    }
+
+    let entry = state.redo.pop();
+    state.history.push(reverse_of(state, entry, false));
+    state.reload();
+    state.say("redone");
+}
+
+// Undoes (or redoes) an entry and hands back the one that takes it back again
+func reverse_of(state, entry, undoing) {
+    if (entry.kind == "boxes") {
+        let now = boxes_of.copy_all(state.boxes);
+        state.boxes = entry.boxes;
+        return { kind: "boxes", boxes: now };
+    }
+
+    for (file in entry.files) {
+        if (undoing) { state.hex.undo_file(file); } else { state.hex.redo_file(file); }
+    }
+    return entry;
+}
+
+/* The keys of a move, its phases and its reroutes */
+
+func path_of(id) { return ["moves", id]; }
+
+// An object of one key, for a key that's in a variable
+func one_key(key, value) {
+    let made = {};
+    made[key] = value;
+    return made;
+}
+
+func written(state, id) { return state.moves[id]; }
+
+// @doc A key of a move set, written where it is or put in where the order of the keys says
+func set_key(state, id, key, value) {
+    let at = written(state, id);
+    let path = path_of(id);
+    let why = has(at.move, key)
+        ? state.hex.edit(at.file, [...path, key], value)
+        : state.hex.insert(at.file, path, key, value, schema.key_after(at.move, key));
+    return done(state, [at.file], why);
+}
+
+func clear_key(state, id, key) {
+    let at = written(state, id);
+    if (!has(at.move, key)) { return true; }
+    return done(state, [at.file], state.hex.remove(at.file, [...path_of(id), key]));
+}
+
+func set_phase_key(state, id, phase, key, value) {
+    let at = written(state, id);
+    let path = [...path_of(id), "phases", phase];
+    let why = has(at.move.phases[phase], key)
+        ? state.hex.edit(at.file, [...path, key], value)
+        : state.hex.insert(at.file, path, key, value, phase_key_after(at.move.phases[phase], key));
+    return done(state, [at.file], why);
+}
+
+// @doc A key of a phase written, edited where it is when the file says it already and put in when it doesn't
+func write_phase_key(state, id, phase, key, value, there) {
+    let at = written(state, id);
+    let path = [...path_of(id), "phases", phase];
+    let why = there
+        ? state.hex.edit(at.file, [...path, key], value)
+        : state.hex.insert(at.file, path, key, value, phase_key_after(at.move.phases[phase], key));
+    return done(state, [at.file], why);
+}
+
+func clear_phase_key(state, id, phase, key) {
+    let at = written(state, id);
+    if (!has(at.move.phases[phase], key)) { return true; }
+    return done(state, [at.file], state.hex.remove(at.file, [...path_of(id), "phases", phase, key]));
+}
+
+// The key of a phase a new one goes after, so a phase keeps the order of the schema
+func phase_key_after(phase, key) {
+    let order = schema.phase_keys();
+    let at = order.index_of(key);
+    let after = null;
+    let nearest = -1;
+    for (other in phase) {
+        let place = order.index_of(other);
+        if (place >= 0 && place < at && place > nearest) {
+            after = other;
+            nearest = place;
+        }
+    }
+    return after;
+}
+
+// @doc A reroute of a move (kind stance_reroutes or finish_reroutes) for a stance set, the object of them made if there's none
+func set_reroute(state, id, kind, stance, target) {
+    let at = written(state, id);
+    let path = [...path_of(id), kind];
+    let routes = at.move[kind];
+    let why = routes == null
+        ? state.hex.insert(at.file, path_of(id), kind, one_key(stance, target), schema.key_after(at.move, kind))
+        : has(routes, stance)
+            ? state.hex.edit(at.file, [...path, stance], target)
+            : state.hex.insert(at.file, path, stance, target, null);
+    return done(state, [at.file], why);
+}
+
+func clear_reroute(state, id, kind, stance) {
+    let at = written(state, id);
+    let routes = at.move[kind];
+    if (routes == null || !has(routes, stance)) { return true; }
+
+    // The last of them takes the object with it
+    let path = len(keys(routes)) == 1 ? [...path_of(id), kind] : [...path_of(id), kind, stance];
+    return done(state, [at.file], state.hex.remove(at.file, path));
+}
+
+// @doc
+// The keys of the first format a move still has said the second format's way, as one step. knockback goes to launch (or
+// push for a shove along the ground) through the old curve, steering and walk_scale to walk, cancellable to a cancel frame
+// on the first phase, and hold to art_speed (hold: 2 is 0.5). The rest of its numbers are taken as game frames already,
+// which is what the migration left them as
+func upgrade(state, id, rate) {
+    let at = written(state, id);
+    let move = at.move;
+    let path = path_of(id);
+    let changes = [];
+
+    if (move.knockback != null) {
+        let made = old_knockback(move.knockback);
+        let key = made.launch != null ? "launch" : "push";
+        let value = made.launch != null ? made.launch : made.push;
+        if (has(move, key)) {
+            // it says the new one already, the old one goes
+            changes.push({ remove: [...path, "knockback"] });
+        } else {
+            changes.push({ rename: [...path, "knockback"], key: key });
+            changes.push({ edit: [...path, key], value: value });
+        }
+    }
+
+    if (move.walk_scale != null) {
+        let walk = move.steering == false ? 0 : math.clamp(move.walk_scale, 0, 1);
+        changes.push({ rename: [...path, "walk_scale"], key: "walk" });
+        changes.push({ edit: [...path, "walk"], value: walk });
+        if (move.steering != null) { changes.push({ remove: [...path, "steering"] }); }
+    } else if (move.steering != null) {
+        changes.push({ rename: [...path, "steering"], key: "walk" });
+        changes.push({ edit: [...path, "walk"], value: move.steering == false ? 0 : 1 });
+    }
+
+    for (old in ["cancellable", "interruptible"]) {
+        if (move[old] != null) {
+            changes.push({ remove: [...path, old] });
+            let first = keys(move.phases ?? {});
+            if (move[old] == true && len(first) > 0 && move.phases[first[0]].cancel == null) {
+                changes.push({ insert: [...path, "phases", first[0]], key: "cancel", value: 0, after: phase_key_after(move.phases[first[0]], "cancel") });
+            }
+        }
+    }
+
+    for (name in move.phases ?? {}) {
+        let phase = move.phases[name];
+        if (phase.hold != null) {
+            let at_phase = [...path, "phases", name];
+            if (phase.hold <= 1 || phase.art_speed != null) {
+                changes.push({ remove: [...at_phase, "hold"] });
+            } else {
+                changes.push({ rename: [...at_phase, "hold"], key: "art_speed" });
+                changes.push({ edit: [...at_phase, "art_speed"], value: math.round(1 / phase.hold, 3) });
+            }
+        }
+    }
+
+    if (len(changes) == 0) { return true; }
+    return done(state, [at.file], state.hex.edits(at.file, changes));
+}
+
+// @doc
+// What an old knockback comes to, the curve its comment in fighting_moves.hor gave (100 away about 6 units and none 19,
+// up 1100 about 30, 1500 about 50, 2000 about 75). { launch } for one that leaves the ground, { push } for a shove
+func old_knockback(knockback) {
+    let away = math.round(19 + math.max(0, knockback.x) * 0.06);
+    let up = knockback.y <= 500 ? 0 : math.round((knockback.y - 500) * 0.05);
+    return up > 0 ? { launch: vec(away, up) } : { push: away };
+}
+
+// @doc Whether a move still says something the way the first format did
+func outdated(move) {
+    for (key in move) {
+        if (has(schema.GONE, key)) { return true; }
+    }
+    for (name in move.phases ?? {}) {
+        if (move.phases[name].hold != null) { return true; }
+    }
+    return false;
+}
+
+/* Phases */
+
+func free_name(taken, base) {
+    if (!has(taken, base)) { return base; }
+    let number = 2;
+    while (has(taken, `{base}_{number}`)) { number = number + 1; }
+    return `{base}_{number}`;
+}
+
+// @doc A new phase next to another, before it or after it, one step to undo
+func add_phase(state, id, next_to, before, made) {
+    let at = written(state, id);
+    let phases = at.move.phases ?? {};
+    let name = free_name(phases, before ? "windup" : "follow");
+    if (at.move.phases == null) {
+        return done(state, [at.file], state.hex.insert(at.file, path_of(id), "phases", one_key(name, made), null));
+    }
+
+    let order = keys(phases);
+    let place = next_to == null ? len(order) : order.index_of(next_to) + (before ? 0 : 1);
+    order.insert(place, name);
+    let path = [...path_of(id), "phases"];
+    let why = state.hex.edits(at.file, [{ insert: path, key: name, value: made }, { reorder: path, keys: order }]);
+    if (done(state, [at.file], why)) { state.phase = name; }
+    return why == null;
+}
+
+func copy_phase(state, id, phase) {
+    let at = written(state, id);
+    return add_phase(state, id, phase, false, at.move.phases[phase]);
+}
+
+func delete_phase(state, id, phase) {
+    let at = written(state, id);
+    if (len(keys(at.move.phases ?? {})) <= 1) {
+        state.warn("a move needs a phase, it'd be nothing otherwise");
+        return false;
+    }
+    return done(state, [at.file], state.hex.remove(at.file, [...path_of(id), "phases", phase]));
+}
+
+// @doc A phase played sooner (by -1) or later (by 1)
+func move_phase(state, id, phase, by) {
+    let at = written(state, id);
+    let order = keys(at.move.phases);
+    let from = order.index_of(phase);
+    let to = from + by;
+    if (to < 0 || to >= len(order)) { return false; }
+
+    order.remove_at(from);
+    order.insert(to, phase);
+    return reorder_phases(state, id, order);
+}
+
+// @doc The phases of a move in another order, every one of them named once
+func reorder_phases(state, id, order) {
+    let at = written(state, id);
+    return done(state, [at.file], state.hex.reorder(at.file, [...path_of(id), "phases"], order));
+}
+
+func rename_phase(state, id, phase, name) {
+    let at = written(state, id);
+    let why = state.hex.rename(at.file, [...path_of(id), "phases", phase], name);
+    if (done(state, [at.file], why)) { state.phase = name; }
+    return why == null;
+}
+
+/* Moves */
+
+// @doc A new move out of a template, after another (or at the end), in the file the one it goes after is in
+func new_move(state, id, made, after, file) {
+    let into = after != null ? written(state, after).file : file;
+    let why = state.hex.insert(into, ["moves"], id, made, after);
+    let went = done(state, [into], why);
+    if (went) { state.move = id; }
+    return went;
+}
+
+func duplicate_move(state, id, copy_id) {
+    let at = written(state, id);
+    return new_move(state, copy_id, at.move, id, at.file);
+}
+
+// @doc A move renamed, and every reroute to it in every file of the fighter, and its red boxes, as one step
+func rename_move(state, id, name, files) {
+    let at = written(state, id);
+    let touched = [at.file];
+    let why = state.hex.rename(at.file, path_of(id), name);
+    if (why != null) {
+        state.warn(why);
+        return false;
+    }
+
+    for (file in files) {
+        let changes = reroutes_to(state, file, id, name);
+        if (len(changes) > 0) {
+            let more = state.hex.edits(file, changes);
+            if (more == null && touched.index_of(file) < 0) { touched.push(file); }
+        }
+    }
+
+    if (has(state.boxes, id)) {
+        record(state, { kind: "boxes", boxes: boxes_of.copy_all(state.boxes) });
+        state.boxes[name] = state.boxes[id];
+        state.boxes = boxes_of.without(state.boxes, id);
+    }
+
+    state.move = name;
+    return done(state, touched, null);
+}
+
+// The edits that point every reroute in a file at a move to its new name
+func reroutes_to(state, file, id, name) {
+    let changes = [];
+    for (other in state.moves) {
+        let at = state.moves[other];
+        if (at.file == file) {
+            for (kind in ["stance_reroutes", "finish_reroutes"]) {
+                for (stance in at.move[kind] ?? {}) {
+                    if (at.move[kind][stance] == id) { changes.push({ edit: ["moves", other, kind, stance], value: name }); }
+                }
+            }
+        }
+    }
+    return changes;
+}
+
+func delete_move(state, id) {
+    let at = written(state, id);
+    return done(state, [at.file], state.hex.remove(at.file, path_of(id)));
+}
+
+/* The red boxes, kept in the view until they're saved */
+
+// @doc The boxes of a move changed (null for none), what they were before kept for Ctrl+Z
+func change_boxes(state, id, boxes) {
+    record(state, { kind: "boxes", boxes: boxes_of.copy_all(state.boxes) });
+    state.boxes = boxes == null ? boxes_of.without(state.boxes, id) : merge(state.boxes, one_key(id, boxes));
+}

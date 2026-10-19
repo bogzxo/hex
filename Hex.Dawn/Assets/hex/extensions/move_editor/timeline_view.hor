@@ -1,0 +1,425 @@
+// The timeline under the frame, where the phases are edited, with the frame meter over it. A cell a game frame (60 a
+// second) coloured startup, active or recovery, a tick on the cells where the art moves on to its next frame (with its
+// number when there's room), the phases as blocks over them with their names, the hit, cancel and commit frames as
+// markers over those, how long the hit stays out for as a bar over them with a handle at its end, and the status of a
+// phase as a band under the cells. Dragging the end of a block changes how long it is, dragging a marker or the end of
+// the active bar moves it, dragging a block onto another plays it there, and a click goes to a frame and picks its
+// phase. A drag is shown on the move as it goes and written to the file once it's let go of, one step to undo.
+//
+// The frame meter is Street Fighter 6's, more or less (and Fighter2D's own FrameBarDisplay). A row for you, the runs of
+// startup, active and recovery with how many of each written on them, and a row for them, the hitstun or the blockstun
+// (a click on its name swaps the two) from the frame the hit lands on. It lands on the last active frame, which is how
+// the game counts on hit and on block, so a meaty hit is as plus as it gets. Where you both are free is marked and the
+// advantage is written after it, green plus or red minus, so whether a move is safe and why is a look rather than a
+// paragraph. A number that an edit changed says what it was for a couple of seconds (-4 » -2), lit.
+
+let edits = include("edits.hor");
+let rules = include("rules.hor");
+
+let STARTUP = vec(0.35, 0.75, 0.45, 1.0);
+let HIT_CELL = vec(1.0, 0.35, 0.35, 1.0);
+let RECOVERY = vec(0.35, 0.55, 0.95, 1.0);
+let NEUTRAL = vec(0.45, 0.47, 0.52, 1.0);
+let STUN = vec(1.0, 0.82, 0.25, 1.0);
+let PICKED = vec(0.95, 0.75, 0.3, 1.0);
+let DIM = vec(1.0, 1.0, 1.0, 0.35);
+let MARKERS = { hit: vec(1, 1, 1, 0.95), cancel: vec(0.5, 0.9, 1.0, 0.95), commit: vec(1.0, 0.6, 0.3, 0.95), active: vec(1.0, 0.35, 0.35, 0.9) };
+let TICK = vec(1, 1, 1, 0.45);
+let PLUS = vec(0.45, 1.0, 0.5, 1.0);
+let MINUS = vec(1.0, 0.42, 0.4, 1.0);
+let EVEN = vec(0.8, 0.82, 0.88, 1.0);
+let GUTTER_TEXT = vec(0.62, 0.64, 0.7, 1.0);
+let LIT = vec(1.0, 0.95, 0.55, 1.0);
+let ON_CELL = vec(0, 0, 0, 0.75);
+
+// Where the rows are, the drawing's middle being 0 and up being up, the meter over the top
+let METER_YOU = { bottom: 39, top: 50 };
+let METER_THEM = { bottom: 26, top: 37 };
+let ACTIVE = { bottom: 17, top: 22 };
+let MARKS = { bottom: 8, top: 15 };
+let BLOCKS = { bottom: -6, top: 6 };
+let CELLS = { bottom: -26, top: -8 };
+let STATUS = { bottom: -34, top: -29 };
+
+// The names of the meter's rows on the left, the advantage on the right
+let GUTTER = 48;
+let AFTER = 64;
+
+// How near the end of a block the pointer has to be to take hold of it, in units of the drawing
+let GRAB = 4;
+
+// How long a number that changed stays lit, in seconds
+let LIT_FOR = 2.0;
+
+// How wide a text is at a scale, the font is Cascadia Mono, a letter is about six tenths of its em of 96
+func text_width(text, scale) { return len(text) * scale * 58; }
+
+// @doc
+// The frame meter of the move on screen, null for none. { total, hit, last, stun, them_free, span, data } with total the
+// frames of the move (you're free on the frame after), last the active frame the hit lands on, stun how long they're
+// stuck from it (hitstun or blockstun, as the meter's set), them_free the frame they're free on and span how many frames
+// the meter covers, the longer of the two. data is null for a move that doesn't hit, which has only your row
+func meter(state) {
+    let total = len(state.laid.frames);
+    if (state.move == null || total == 0 || state.rules == null) { return null; }
+    let data = rules.frame_data(state.rules, state.laid, state.moves[state.move].move);
+    if (data == null) { return { total: total, hit: -1, last: -1, stun: 0, them_free: total, span: total, data: null }; }
+
+    let last = state.laid.hit + data.active - 1;
+    let stun = state.meter_on == "hit" ? data.hitstun : data.blockstun;
+    let them_free = last + stun;
+    return { total: total, hit: state.laid.hit, last: last, stun: stun, them_free: them_free, span: math.max(total, them_free), data: data };
+}
+
+// @doc Where the cells go, { left, cell, count, span }, null for a move with no frames. count is the move's frames, span the meter's
+func geometry(state, meter) {
+    let count = len(state.laid.frames);
+    if (count == 0) { return null; }
+    let span = meter == null ? count : meter.span;
+    let width = state.ui.get("timeline").view_size.x;
+    let cell = math.min(22, math.max(2, (width - GUTTER - AFTER) / span));
+    return { left: -width / 2 + GUTTER, cell: cell, count: count, span: span };
+}
+
+func cell_x(at, index) { return at.left + index * at.cell; }
+
+func draw(state) {
+    let timeline = state.ui.get("timeline");
+    timeline.clear();
+    let measured = meter(state);
+    let at = geometry(state, measured);
+
+    // The test and a drag ask where the cells were, they aren't centred any more and the meter decides how wide they are
+    state.timeline_at = at;
+    if (at == null) { return; }
+
+    let numbers = numbers_of(state, measured);
+    note_changes(state, numbers);
+    draw_meter(state, timeline, at, measured, numbers);
+    draw_cells(state, timeline, at);
+    for (phase in state.laid.phases) { draw_phase(state, timeline, at, phase); }
+}
+
+/* The frame meter */
+
+// The numbers the meter writes, by what they are, the advantage only for a move that hits. They're the cells of each run,
+// so recovery is the frames after the last active one, where the Data tab's (the game's) counts that one in
+func numbers_of(state, measured) {
+    let numbers = { startup: 0, active: 0, recovery: 0, stun: null, advantage: null };
+    if (measured.data == null) {
+        numbers.startup = measured.total;
+        return numbers;
+    }
+    for (frame in state.laid.frames) { numbers[frame.kind] = numbers[frame.kind] + 1; }
+    numbers.stun = measured.stun;
+    numbers.advantage = measured.them_free - measured.total;
+    return numbers;
+}
+
+// What the numbers were the last time the same move was drawn the same way, every one that's different lit with what it
+// was. A different move, or on block after on hit, lights nothing, only an edit does
+func note_changes(state, numbers) {
+    let key = `{state.fighter == null ? "" : state.fighter.id}:{state.move}:{state.meter_on}`;
+    let was = state.meter_was;
+    state.meter_was = { key: key, numbers: numbers };
+    if (was == null || was.key != key) {
+        state.lit = {};
+        return;
+    }
+
+    for (name in numbers) {
+        let before = was.numbers[name];
+        if (before != numbers[name] && before != null && numbers[name] != null) {
+            // a number that changes twice in a row says what it was before either
+            let from = has(state.lit, name) ? state.lit[name].from : before;
+            state.lit[name] = { from: from, left: LIT_FOR };
+            state.wake();
+        }
+    }
+}
+
+// @doc The lit numbers a tick older, true when one went out and the meter wants drawing again
+func fade(state, dt) {
+    let kept = {};
+    let out = false;
+    for (name in keys(state.lit)) {
+        let left = state.lit[name].left - dt;
+        if (left > 0) {
+            kept[name] = { from: state.lit[name].from, left: left };
+        } else {
+            out = true;
+        }
+    }
+    state.lit = kept;
+    return out;
+}
+
+// A number of the meter as it's written, with what it was while it's lit
+func said(state, name, value, signed) {
+    let now = signed ? rules.signed(value) : `{value}`;
+    if (!has(state.lit, name)) { return now; }
+    let from = state.lit[name].from;
+    return `{signed ? rules.signed(from) : from} » {now}`;
+}
+
+func draw_meter(state, timeline, at, measured, numbers) {
+    let left = -timeline.view_size.x / 2;
+    timeline.text("you", vec(left + 6, METER_YOU.top - 1), 0.09, GUTTER_TEXT);
+    draw_runs(state, timeline, at, measured);
+    if (measured.data == null) { return; }
+
+    timeline.text(state.meter_on == "hit" ? "on hit" : "on block", vec(left + 6, METER_THEM.top - 1), 0.09, GUTTER_TEXT);
+    let gap = at.cell > 3 ? 1 : 0;
+
+    // Where the hit could land before the last active frame, faintly, then stuck
+    for (i in range(measured.hit, measured.last)) {
+        timeline.rect(vec(cell_x(at, i), METER_THEM.bottom), vec(cell_x(at, i + 1) - gap, METER_THEM.top), vec(STUN.x, STUN.y, STUN.z, 0.2));
+    }
+    timeline.rect(vec(cell_x(at, measured.last), METER_THEM.bottom), vec(cell_x(at, measured.them_free) - gap, METER_THEM.top), STUN);
+    if (gap > 0) { ticks(timeline, at, measured.last, measured.them_free, METER_THEM); }
+    number_on(timeline, at, measured.last, measured.them_free, METER_THEM, said(state, "stun", measured.stun, false), has(state.lit, "stun"));
+
+    // The frames one of you is free and the other isn't, yours green and theirs red, then the frame you both are
+    let advantage = numbers.advantage;
+    if (advantage > 0) {
+        timeline.rect(vec(cell_x(at, measured.total), METER_YOU.bottom), vec(cell_x(at, measured.them_free), METER_YOU.top), vec(PLUS.x, PLUS.y, PLUS.z, 0.18));
+    } else if (advantage < 0) {
+        timeline.rect(vec(cell_x(at, measured.them_free), METER_THEM.bottom), vec(cell_x(at, measured.total), METER_THEM.top), vec(MINUS.x, MINUS.y, MINUS.z, 0.18));
+    }
+    let both = cell_x(at, measured.span);
+    timeline.line(vec(both, METER_THEM.bottom - 2), vec(both, METER_YOU.top + 2), 1, vec(1, 1, 1, 0.8));
+
+    let colour = has(state.lit, "advantage") ? LIT : advantage > 0 ? PLUS : advantage < 0 ? MINUS : EVEN;
+    timeline.text(said(state, "advantage", advantage, true), vec(both + 5, METER_YOU.top - 4), 0.13, colour);
+}
+
+// Your row, the move's frames in runs of startup, active and recovery, each with how many it is
+func draw_runs(state, timeline, at, measured) {
+    let gap = at.cell > 3 ? 1 : 0;
+    let from = 0;
+    for (i in range(1, measured.total + 1)) {
+        let kind = state.laid.frames[from].kind;
+        if (i == measured.total || state.laid.frames[i].kind != kind) {
+            let colour = kind == "startup" ? STARTUP : kind == "active" ? HIT_CELL : kind == "recovery" ? RECOVERY : NEUTRAL;
+            timeline.rect(vec(cell_x(at, from), METER_YOU.bottom), vec(cell_x(at, i) - gap, METER_YOU.top), colour);
+            if (gap > 0) { ticks(timeline, at, from, i, METER_YOU); }
+            let name = kind == "neutral" ? "startup" : kind;
+            number_on(timeline, at, from, i, METER_YOU, said(state, name, i - from, false), has(state.lit, name));
+            from = i;
+        }
+    }
+}
+
+// The cells of a run told apart, a dark line between every two, the way the game's meter has them
+func ticks(timeline, at, from, to, row) {
+    if (at.cell < 6) { return; }
+    for (i in range(from + 1, to)) {
+        let x = cell_x(at, i) - 1;
+        timeline.line(vec(x, row.bottom), vec(x, row.top), 1, vec(0, 0, 0, 0.25));
+    }
+}
+
+// A number written in the middle of a run when it fits, after it when it doesn't and it's lit (a change is worth saying)
+func number_on(timeline, at, from, to, row, text, lit) {
+    let scale = 0.085;
+    let wide = text_width(text, scale);
+    let x0 = cell_x(at, from);
+    let x1 = cell_x(at, to);
+    if (lit) {
+        let x = x1 - x0 >= wide + 6 ? (x0 + x1 - wide) / 2 : x1 + 3;
+        timeline.rect(vec(x - 2, row.bottom), vec(x + wide + 2, row.top), vec(0, 0, 0, 0.55));
+        timeline.text(text, vec(x, row.top - 1), scale, LIT);
+    } else if (x1 - x0 >= wide + 4) {
+        timeline.text(text, vec((x0 + x1 - wide) / 2, row.top - 1), scale, ON_CELL);
+    }
+}
+
+// @doc A press on the meter's name for them, on hit and on block swapped, true when it was one
+func swap_meter(state, at, point) {
+    if (point.x >= at.left || point.y < METER_THEM.bottom || point.y > METER_THEM.top) { return false; }
+    state.meter_on = state.meter_on == "hit" ? "block" : "hit";
+    draw(state);
+    return true;
+}
+
+// The cells, and a tick where the art moves on, numbered (from 1) when the last number is far enough back to fit one
+func draw_cells(state, timeline, at) {
+    let gap = at.cell > 3 ? 1 : 0;
+    let numbered = -100;
+    for (i in range(at.count)) {
+        let frame = state.laid.frames[i];
+        let x0 = cell_x(at, i);
+        let x1 = x0 + at.cell - gap;
+        let colour = frame.kind == "startup" ? STARTUP : frame.kind == "active" ? HIT_CELL : frame.kind == "recovery" ? RECOVERY : NEUTRAL;
+        timeline.rect(vec(x0, CELLS.bottom), vec(x1, CELLS.top), colour);
+
+        let before = i == 0 ? null : state.laid.frames[i - 1];
+        if (before == null || before.shown != frame.shown || before.animation != frame.animation) {
+            timeline.line(vec(x0, CELLS.bottom), vec(x0, CELLS.top), 1, TICK);
+            if (x0 - numbered >= 14) {
+                timeline.text(`{frame.shown + 1}`, vec(x0 + 1, CELLS.top - 1), 0.07, vec(0, 0, 0, 0.6));
+                numbered = x0;
+            }
+        }
+        if (i == state.frame) { timeline.frame(vec(x0 - 1, CELLS.bottom - 1), vec(x1 + 1, CELLS.top + 1), 2, vec(1, 1, 1, 1)); }
+    }
+}
+
+// A phase's block, its name, where its art would end it, its markers and its status
+func draw_phase(state, timeline, at, phase) {
+    let x0 = cell_x(at, phase.first);
+    let x1 = cell_x(at, phase.first + phase.length) - 1;
+    let picked = phase.name == state.phase;
+    timeline.rect(vec(x0, BLOCKS.bottom), vec(x1, BLOCKS.top), picked ? vec(PICKED.x, PICKED.y, PICKED.z, 0.35) : vec(1, 1, 1, 0.08));
+    timeline.frame(vec(x0, BLOCKS.bottom), vec(x1, BLOCKS.top), 1, picked ? PICKED : DIM);
+    timeline.rect(vec(x1 - 1, BLOCKS.bottom), vec(x1 + 1, BLOCKS.top), picked ? PICKED : DIM);
+
+    let note = phase.loops ? " (loops)" : phase.waits ? " (until)" : "";
+    timeline.text(`{phase.name}{note}`, vec(x0 + 3, BLOCKS.top - 1), 0.095, vec(1, 1, 1, 0.85));
+
+    let written = state.moves[state.move].move.phases[phase.name];
+    for (marker in ["hit", "cancel", "commit"]) {
+        let frame = written[marker];
+        if (frame != null) {
+            let x = cell_x(at, phase.first + frame);
+            timeline.rect(vec(x, MARKS.bottom), vec(x + at.cell - 1, MARKS.top), MARKERS[marker]);
+        }
+    }
+
+    // How long the hit is out for, from the hit on, its handle at the end
+    if (written.hit != null) {
+        let from = cell_x(at, phase.first + written.hit);
+        let end = active_end(state, phase, written);
+        let to = cell_x(at, end) + at.cell - 1;
+        timeline.rect(vec(from, ACTIVE.bottom + 1), vec(to, ACTIVE.top - 1), vec(MARKERS.active.x, MARKERS.active.y, MARKERS.active.z, 0.45));
+        timeline.rect(vec(to - math.max(1, at.cell / 2), ACTIVE.bottom), vec(to, ACTIVE.top), MARKERS.active);
+    }
+
+    if (written.status != null) {
+        let from = cell_x(at, phase.first + (written.status_frame ?? 0));
+        timeline.rect(vec(from, STATUS.bottom), vec(cell_x(at, at.count) - 1, STATUS.top), vec(0.8, 0.5, 1.0, 0.6));
+        timeline.text(written.status, vec(from + 2, STATUS.bottom - 2), 0.085, vec(0.8, 0.5, 1.0, 0.9));
+    }
+}
+
+// The last active frame of a phase with the hit, clamped to the move. How long it's out is the move's (the phase's
+// active, or the red boxes' count)
+func active_end(state, phase, written) {
+    let end = phase.first + written.hit + math.max(1, state.laid.active) - 1;
+    return math.min(end, len(state.laid.frames) - 1);
+}
+
+/* The pointer */
+
+func pointer(state, e) {
+    let at = state.timeline_at;
+    if (at == null || state.move == null) { return; }
+
+    // A drag keeps where the cells were as it started, a phase growing under the pointer makes them narrower and moved
+    // them out from under it, and the drag ran away to twice the length
+    if (e.kind == "down") {
+        if (swap_meter(state, at, e.at)) { return; }
+        state.timeline_drag = merge(what_is_at(state, at, e.at), { at: at });
+        if (state.timeline_drag.kind == "frame") { go_to(state, at, e.at.x); }
+    } else if (e.kind == "drag" && state.timeline_drag != null) {
+        drag_to(state, state.timeline_drag.at, e.at);
+    } else if (e.kind == "up" && state.timeline_drag != null) {
+        let drag = state.timeline_drag;
+        state.timeline_drag = null;
+        let_go(state, drag.at, drag, e.at);
+    }
+}
+
+// What the pointer took hold of, the end of a block, a marker, a block, or a frame
+func what_is_at(state, at, point) {
+    for (phase in state.laid.phases) {
+        let x0 = cell_x(at, phase.first);
+        let x1 = cell_x(at, phase.first + phase.length);
+        if (point.y >= BLOCKS.bottom && point.y <= MARKS.top && math.abs(point.x - x1) <= GRAB) {
+            return { kind: "end", phase: phase.name, first: phase.first, frames: phase.length };
+        }
+
+        let written = state.moves[state.move].move.phases[phase.name];
+        if (written.hit != null && point.y >= ACTIVE.bottom - 1 && point.y <= ACTIVE.top + 4) {
+            let x = cell_x(at, active_end(state, phase, written));
+            if (point.x >= x - 2 && point.x <= x + at.cell + 3) {
+                return { kind: "active", phase: phase.name, first: phase.first, hit: written.hit, frames: phase.length, written: written.active != null };
+            }
+        }
+
+        for (marker in ["hit", "cancel", "commit"]) {
+            let frame = written[marker];
+            if (frame != null && point.y >= MARKS.bottom && point.y <= MARKS.top + 1) {
+                let x = cell_x(at, phase.first + frame);
+                if (point.x >= x - 2 && point.x <= x + at.cell + 2) { return { kind: "marker", marker: marker, phase: phase.name, first: phase.first, frames: phase.length }; }
+            }
+        }
+
+        if (point.y >= BLOCKS.bottom && point.y <= BLOCKS.top && point.x >= x0 && point.x < x1) {
+            state.phase = phase.name;
+            return { kind: "block", phase: phase.name };
+        }
+    }
+    return { kind: "frame" };
+}
+
+func frame_under(at, x) { return math.clamp(math.floor((x - at.left) / at.cell), 0, at.count - 1); }
+
+func go_to(state, at, x) {
+    state.frame = frame_under(at, x);
+    state.phase = state.laid.frames[state.frame].phase_name;
+    state.refresh();
+}
+
+// A drag shown on the move as it goes, the loaded move changed and laid out again
+func drag_to(state, at, point) {
+    let drag = state.timeline_drag;
+    let phase = drag.phase == null ? null : state.moves[state.move].move.phases[drag.phase];
+    if (drag.kind == "frame") {
+        go_to(state, at, point.x);
+    } else if (drag.kind == "end") {
+        phase.frames = math.max(1, math.round((point.x - cell_x(at, drag.first)) / at.cell));
+        state.relayout();
+    } else if (drag.kind == "marker") {
+        phase[drag.marker] = math.clamp(frame_under(at, point.x) - drag.first, 0, drag.frames - 1);
+        state.relayout();
+    } else if (drag.kind == "active") {
+        // the hit can stay out past the end of its phase, into the ones after, never past the move
+        phase.active = math.clamp(frame_under(at, point.x) - drag.first - drag.hit + 1, 1, at.count - drag.first - drag.hit);
+        state.relayout();
+    }
+}
+
+// Let go of, what the drag came to written to the file
+func let_go(state, at, drag, point) {
+    if (drag.kind == "end") {
+        let phase = state.moves[state.move].move.phases[drag.phase];
+        edits.set_phase_key(state, state.move, drag.phase, "frames", phase.frames);
+    } else if (drag.kind == "marker") {
+        let phase = state.moves[state.move].move.phases[drag.phase];
+        edits.set_phase_key(state, state.move, drag.phase, drag.marker, phase[drag.marker]);
+    } else if (drag.kind == "active") {
+        // the drag put active on the move it shows, whether the file says it already is what the drag remembered
+        let phase = state.moves[state.move].move.phases[drag.phase];
+        edits.write_phase_key(state, state.move, drag.phase, "active", phase.active, drag.written);
+    } else if (drag.kind == "block") {
+        drop_block(state, at, drag.phase, point);
+    } else {
+        state.refresh();
+    }
+}
+
+// A block dropped on another plays where that one did
+func drop_block(state, at, name, point) {
+    let onto = state.laid.frames[frame_under(at, point.x)].phase_name;
+    if (onto == name) {
+        state.refresh();
+        return;
+    }
+
+    let order = keys(state.moves[state.move].move.phases);
+    let to = order.index_of(onto);
+    order.remove_at(order.index_of(name));
+    order.insert(to, name);
+    edits.reorder_phases(state, state.move, order);
+}

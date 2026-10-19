@@ -1,0 +1,100 @@
+// The move editor of Fighter2D, as an extension of Hex. A file that says #define fight_move gets a Moves view and opens
+// on it, everything a move can say edited there and written into the file where it's written (Hex's hex.edit), the
+// file staying the truth, typed into or edited here. The fighter's art with its boxes, the phases along a timeline, the
+// red hitboxes, the frame data the game works out, what every input starts, and what's wrong with any of it in Hex's
+// problems. It was a C# app of its own (Fighter2D's HitboxEditor) that only did the red boxes.
+//
+// It's in parts, each a file of functions taking the state of a view. view.hor is a view and what keeps it up to date,
+// wiring.hor connects its layout (move_view.hor), game.hor finds the game and merges a fighter's moves, schema.hor is
+// every key of a move, timing.hor plays a move a game frame at a time, rules.hor is the game's combat rules and how a
+// fighter moves, edits.hor changes moves, boxes.hor and tracer.hor are the red boxes and the traced ones, checks.hor and
+// inputs.hor look the moves over, panels.hor, combo_view.hor, frame_view.hor, timeline_view.hor, strip_view.hor and
+// moves_list.hor are what's on screen, columns.hor sizes it, templates.hor is what a new move starts as and fight.hor
+// starts the game. See hex/docs/move-editor.md.
+//
+// It reads Fighter2D's second move format, every time in game frames (60 a second) and every distance in world units.
+
+let extension = {
+    name: "Move editor",
+    description: "Fighter2D's moves, all of them. A move file with #define fight_move opens on a view of its moves, their phases, art, hitboxes and frame data.",
+    version: "3.0.0",
+    author: "bogz",
+
+    // Its tab of Hex's settings, move_settings.hor, filled in by on_settings. Hex keeps what these are told in
+    // hex_settings.hor and hex.setting reads them back
+    settings_layout: "move_settings.hor",
+    settings: {
+        game: { title: "Fighter2D's exe", kind: "path", default: "", about: "The game Fight! starts, absolute or from the game's folder. Empty looks in the game's bin folder" },
+        map: { title: "Map", kind: "text", default: "japan", about: "the map Fight! fights on" },
+        opponent: { title: "Opponent", kind: "text", default: "the_man", about: "who stands there and takes it" },
+        dummy: { title: "The dummy", kind: "text", default: "stand", about: "what the opponent does, the game's --dummy" }
+    }
+};
+
+let view = include("view.hor");
+let wiring = include("wiring.hor");
+let game = include("game.hor");
+let fight = include("fight.hor");
+
+// @doc Every view that is open, by the file it's of
+let views = {};
+
+func on_start(hex) {
+    hex.view({
+        id: "moves",
+        title: "Moves",
+        icon: "symbol-event",
+        layout: "move_view.hor",
+        when: "fight_move",
+        open: func(ui, file) { open_view(hex, ui, file); },
+
+        // The values of the file are no use next to the move, the side goes while the view is up (Ctrl+Alt+B for it anyway)
+        right: false
+    });
+}
+
+func open_view(hex, ui, file) {
+    let state = view.make(hex, ui, file);
+    views[game.key_of(file)] = state;
+    wiring.wire(state, view);
+    view.load_game(state);
+}
+
+// A file ran again (it was typed into, or edited), every view whose fighter has it reads its moves again
+func on_run(hex, file) {
+    for (each in views) {
+        let state = views[each];
+        if (uses(state, file)) { view.reload(state); }
+    }
+}
+
+// A file of a fighter saved, its red boxes with it
+func on_save(hex, file) {
+    for (each in views) {
+        let state = views[each];
+        if (uses(state, file) && state.boxes_changed) { view.save_boxes(state); }
+    }
+}
+
+// The art changed on the disk (it's watched), drawn again from the new one
+func on_file_changed(hex, path) {
+    for (each in views) {
+        let state = views[each];
+        if (state.fighter != null && game.same_path(state.fighter.sprites, path)) {
+            state.art = hex.sprite(path);
+            state.traces = {};
+            state.floor = null;
+            view.refresh(state);
+        }
+    }
+}
+
+func on_settings(hex, ui) { fight.open_settings(hex, ui); }
+
+func uses(state, file) {
+    if (state.fighter == null) { return game.same_path(state.file, file); }
+    for (own in state.fighter.files) {
+        if (game.same_path(own, file)) { return true; }
+    }
+    return false;
+}

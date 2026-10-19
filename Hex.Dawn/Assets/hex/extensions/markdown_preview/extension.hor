@@ -1,0 +1,38 @@
+// Markdown as it reads, a view of any Markdown file beside its code (F7 between the two, or the view's button over
+// the editor). The engine's own rich text draws it, headings, bold and italic, lists, quotes, rules, fenced code and
+// links, and it follows the code as it is typed, a moment after the typing stops. Not a browser, no HTML and no
+// pictures yet, what a README or a notes file has.
+let extension = {
+    name: "Markdown preview",
+    description: "Any Markdown file as it reads, next to its code, following it as it's typed.",
+    version: "0.1.0",
+    author: "bogz"
+};
+
+// @doc The label of every file whose preview is open, by the file
+let previews = {};
+
+func on_start(hex) {
+    hex.view({
+        id: "preview",
+        title: "Preview",
+        icon: "open-preview",
+        layout: "preview.hor",
+        when: ".md, .markdown",
+        open: func(ui, file) { show(hex, ui, file); },
+        right: false
+    });
+}
+
+func show(hex, ui, file) {
+    let label = ui.get("text");
+    label.text = hex.read(file);
+    previews[file] = label;
+}
+
+// The file typed into, its preview says what it says now
+func on_change(hex, file) {
+    if (previews[file] != null) {
+        previews[file].text = hex.read(file);
+    }
+}

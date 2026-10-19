@@ -1,0 +1,321 @@
+// A view of a file of moves, its state and what keeps it up to date. The state is one object every part takes (see the
+// fields in make), with a few functions on it the parts call back through, reload() reads the fighter's files again,
+// refresh() draws everything and fills the tabs in, relayout() lays the move out again after a change shown before it's
+// written, say(text) puts a line under the frame for what just happened and warn(text) puts it on a card in Hex's corner
+// as well, for what didn't (a refusal said in a grey line nobody looks at is a refusal nobody sees). fit_soon() fits the
+// frame to the fighter again. wiring.hor connects the layout to all of it.
+
+let game = include("game.hor");
+let timing = include("timing.hor");
+let schema = include("schema.hor");
+let boxes_of = include("boxes.hor");
+let checks = include("checks.hor");
+let columns = include("columns.hor");
+let panels = include("panels.hor");
+let rules = include("rules.hor");
+let frame_view = include("frame_view.hor");
+let timeline_view = include("timeline_view.hor");
+let strip_view = include("strip_view.hor");
+let moves_list = include("moves_list.hor");
+let edits = include("edits.hor");
+let fight_of = include("fight.hor");
+
+// @doc A new view's state, for the file it's of
+func make(hex, ui, file) {
+    let state = {
+        hex: hex, ui: ui, file: file,
+        root: null, fighters: [], fighter: null, art: null,
+
+        // Who the combo window throws about, the opponent of the settings or the fighter itself
+        victim: null,
+
+        // The fighter's moves merged (game.load_moves), every id and the ones listed
+        moves: {}, ids_all: [], ids: [],
+
+        // The move, the phase and the frame on screen, the move laid out (timing.lay_out)
+        move: null, phase: null, frame: 0, laid: { frames: [], hit: -1, phases: [] },
+
+        // The red boxes, what they were as they were last saved, and whether they've changed since
+        boxes: {}, boxes_saved: "", boxes_changed: false,
+
+        // Ctrl+Z and Ctrl+Y, see edits.hor
+        history: [], redo: [],
+
+        // Playing it, and what Hex calls every tick while it plays (see wake)
+        playing: false, clock: 0, ticker: null,
+
+        // Which overlays of the frame are on, by the name of their button on the toolbar
+        overlays: { show_hurtbox: true, show_traced: true, show_onion: false, show_path: true },
+
+        // The frame meter (timeline_view.hor), on hit or on block, the numbers it showed last and the ones lit for having
+        // changed, each with how long it has left
+        meter_on: "hit", meter_was: null, lit: {},
+
+        // Where the feet are in the art, in pixels of the frame from its middle, the line the fighter stands on
+        floor: null,
+
+        traces: {}, drag: null, timeline_drag: null, confirm_delete: null,
+        sized: vec(0, 0), fit: 2, right: hex.setting("right_width") ?? 300, reroutes_for: ""
+    };
+
+    state.say = func(said) { ui.get("status").text = said; };
+    state.warn = func(said) {
+        ui.get("status").text = said;
+        hex.notify(said);
+    };
+    state.fit_soon = func() { fit_soon(state); };
+    state.wake = func() { wake(state); };
+    state.reload = func() { reload(state); };
+    state.refresh = func() { refresh(state); };
+    state.relayout = func() { relayout(state); };
+    state.pick_fighter = func(name) { pick_fighter(state, name); };
+    state.save_boxes = func() { save_boxes(state); };
+    return state;
+}
+
+/* The game and the fighter */
+
+// @doc The game over the file found, its fighters in the dropdown and the first of them picked
+func load_game(state) {
+    let hex = state.hex;
+    state.root = game.find_root(hex, state.file);
+    if (state.root == null) {
+        state.warn("no Assets/data/characters.hor over this file, there's no game to find the fighters of");
+        return;
+    }
+
+    if (hex.setting("last_game") != state.root) { hex.set_setting("last_game", state.root); }
+
+    // The game's combat rules, which everything worked out of a move goes by
+    state.rules = rules.load(hex, state.root);
+    if (state.rules == null) {
+        state.warn("no Assets/data/combat_rules.hor in the game, there are no rules to work the frame data out by");
+        return;
+    }
+    state.fighters = game.fighters_of(hex, state.root, state.file);
+
+    let names = [];
+    for (fighter in state.fighters) { names.push(fighter.name); }
+    let picker = state.ui.get("fighter");
+    picker.options = len(names) > 0 ? names : ["none"];
+    if (len(names) > 0) {
+        picker.value = names[0];
+        pick_fighter(state, names[0]);
+    }
+}
+
+func pick_fighter(state, name) {
+    let chosen = null;
+    for (fighter in state.fighters) {
+        if (fighter.name == name) { chosen = fighter; }
+    }
+    if (chosen == null) { return; }
+
+    let hex = state.hex;
+    state.fighter = chosen;
+    state.victim = game.fighter_by_id(hex, state.root, hex.setting("opponent")) ?? chosen;
+    state.traces = {};
+    state.floor = null;
+    state.art = hex.exists(chosen.sprites) ? hex.sprite(chosen.sprites) : null;
+    if (state.art != null) { hex.watch(chosen.sprites); }
+    fit_soon(state);
+    read_boxes(state);
+
+    let animations = state.art == null ? [] : keys(state.art.animations).sort();
+    state.ui.get("phase_form").fields = schema.phase_fields(animations);
+    reload(state);
+
+    let art = state.art == null ? "no art" : `{state.art.width} by {state.art.height} frames`;
+    state.say(`{chosen.name}, {art} at {chosen.frame_rate} a second, its moves out of {len(chosen.files)} files and counted in game frames`);
+}
+
+/* Reading the files again, after an edit, an undo or the file being typed into */
+
+// @doc The fighter's moves read again out of its files, as they are in Hex, and everything after them
+func reload(state) {
+    if (state.fighter == null) { return; }
+    let merged = game.load_moves(state.hex, state.fighter.files);
+    for (file in merged.errors) { state.say(`{game.file_name(file)} doesn't run as it is, {merged.errors[file]}`); }
+
+    state.moves = merged.moves;
+    state.ids_all = merged.ids;
+    if (state.move != null && !has(state.moves, state.move)) { state.move = null; }
+
+    // The reroutes offer every move of the fighter, made again when there are other moves
+    let ids_key = merged.ids.join(",");
+    if (ids_key != state.reroutes_for) {
+        state.reroutes_for = ids_key;
+        state.ui.get("reroute_form").fields = schema.reroute_fields(merged.ids);
+        state.ui.get("move_form").fields = schema.move_fields(merged.ids);
+    }
+
+    moves_list.list_moves(state);
+    relayout(state);
+    report(state, merged);
+    refresh(state);
+}
+
+// What's wrong with every file of the fighter, into Hex's problems
+func report(state, merged) {
+    let files = state.fighter.files;
+    for (i in range(len(files))) {
+        let file = files[i];
+        if (has(merged.by_file, file)) {
+            let found = checks.check_file(file, merged.by_file[file], merged, state.art, state.boxes, state.fighter.name, frame_rate(state));
+            if (i == len(files) - 1) {
+                for (more in checks.check_fighter(merged)) { found.push(more); }
+            }
+            state.hex.problems(file, found);
+        }
+    }
+}
+
+// @doc The move on screen laid out again (after it changed, or its boxes did), the frame and the phase kept where they can be
+func relayout(state) {
+    if (state.move == null) {
+        state.laid = { frames: [], hit: -1, phases: [] };
+        return;
+    }
+
+    let box = state.boxes[state.move];
+    state.laid = timing.lay_out(state.art, state.moves[state.move].move, frame_rate(state), box == null ? 0 : len(box));
+    state.frame = math.clamp(state.frame, 0, math.max(0, len(state.laid.frames) - 1));
+    if (state.phase == null || timing.first_of(state.laid, state.phase) < 0) { state.phase = timing.phase_at(state.laid, state.frame); }
+    state.boxes_changed = boxes_of.file_text(state.fighter.id, state.boxes) != state.boxes_saved;
+    frame_view.draw(state);
+    timeline_view.draw(state);
+}
+
+// @doc Everything drawn and every tab filled in again
+func refresh(state) {
+    relayout(state);
+    moves_list.update_rows(state);
+    strip_view.draw(state);
+    panels.show_all(state);
+}
+
+// @doc The frame rate the fighter's art plays at, what a game frame's art is worked out from
+func frame_rate(state) { return state.fighter == null ? 12 : state.fighter.frame_rate; }
+
+/* The red boxes and their file */
+
+func read_boxes(state) {
+    let file = game.hitbox_file(state.root, state.fighter);
+    state.boxes = boxes_of.read_file(state.hex, file);
+    state.boxes_saved = boxes_of.file_text(state.fighter.id, state.boxes);
+    state.boxes_changed = false;
+}
+
+func save_boxes(state) {
+    let file = game.hitbox_file(state.root, state.fighter);
+    if (file == null) {
+        state.warn("no fighter, nowhere to save the red boxes");
+        return;
+    }
+
+    let written = boxes_of.file_text(state.fighter.id, state.boxes);
+    if (written == state.boxes_saved && state.hex.exists(file)) { return; }
+    state.hex.write(file, written);
+    state.boxes_saved = written;
+    state.boxes_changed = false;
+    state.say(`saved {len(keys(state.boxes))} red boxes to Assets/data/hitboxes/{state.fighter.id}.hor`);
+    refresh(state);
+}
+
+/* The room the view has, and ticking while the move plays */
+
+// How fast the speed selector says it plays, against the game's 60 frames a second
+func speed_of(said) { return said == "half" ? 0.5 : said == "a quarter" ? 0.25 : 1; }
+
+// @doc The view given another size by Hex (on_resize), everything laid out to it and the frame fitted once that's settled
+func resized(state, size) {
+    state.sized = size;
+    columns.lay_out(state, size);
+    refresh(state);
+    fit_soon(state);
+}
+
+// The frame fitted to the drawing in a couple of ticks, once the drawing is the size it's going to be
+func fit_soon(state) {
+    state.fit = 2;
+    wake(state);
+}
+
+// A tick is a call into this every frame, so the view only asks for them while something's going on (the frame waiting
+// to be fitted, the move playing, a number of the meter lit for having changed) and lets go of them after, sat still it
+// costs Hex nothing
+func wake(state) { state.ui.on_tick = state.ticker; }
+
+func tick(state, dt) {
+    if (state.fit > 0) {
+        state.fit = state.fit - 1;
+        if (state.fit == 0) { frame_view.fit(state); }
+    }
+
+    if (state.playing && len(state.laid.frames) > 0) { play(state, dt); }
+    if (len(keys(state.lit)) > 0 && timeline_view.fade(state, dt)) { timeline_view.draw(state); }
+    if (state.fit == 0 && !state.playing && len(keys(state.lit)) == 0) { state.ui.on_tick = null; }
+}
+
+func play(state, dt) {
+    let speed = speed_of(state.ui.get("speed").value);
+    let frame_time = 1 / (timing.TICK_RATE * speed);
+    state.clock = state.clock + dt;
+    let moved = false;
+    while (state.clock >= frame_time) {
+        state.clock = state.clock - frame_time;
+        state.frame = (state.frame + 1) % len(state.laid.frames);
+        moved = true;
+    }
+    if (moved) {
+        state.phase = timing.phase_at(state.laid, state.frame);
+        refresh(state);
+    }
+}
+
+// @doc The right column dragged wider or narrower, never so wide the frame hasn't the room it needs
+func resize_right(state, width) {
+    state.right = math.floor(math.clamp(width, columns.LEAST_RIGHT, columns.most_right(state.sized.x - 20)));
+    columns.lay_out(state, state.sized);
+    refresh(state);
+}
+
+/* The frame on screen */
+
+func show_frame(state, index) {
+    if (len(state.laid.frames) == 0) { return; }
+    state.frame = math.clamp(index, 0, len(state.laid.frames) - 1);
+    state.phase = timing.phase_at(state.laid, state.frame);
+    refresh(state);
+}
+
+func toggle_playing(state) {
+    state.playing = !state.playing;
+    state.clock = 0;
+    wake(state);
+    let button = state.ui.get("play");
+    button.label = state.playing ? "Pause" : "Play";
+    button.icon = state.playing ? "debug-pause" : "play";
+}
+
+// @doc A key while the view is on screen, true when it was the view's
+func key_pressed(state, key) {
+    if (key == "right") { show_frame(state, state.frame + 1); return true; }
+    if (key == "left") { show_frame(state, state.frame - 1); return true; }
+    if (key == "home") { show_frame(state, 0); return true; }
+    if (key == "end") { show_frame(state, len(state.laid.frames) - 1); return true; }
+    if (key == "space") { toggle_playing(state); return true; }
+    if (key == "down") { moves_list.pick(state, math.min(state.ids.index_of(state.move) + 1, len(state.ids) - 1)); return true; }
+    if (key == "up") { moves_list.pick(state, math.max(state.ids.index_of(state.move) - 1, 0)); return true; }
+    if (key == "undo") { edits.undo(state); return true; }
+    if (key == "redo") { edits.redo(state); return true; }
+    if (key == "delete" && state.move != null && has(state.boxes, state.move)) {
+        edits.change_boxes(state, state.move, null);
+        refresh(state);
+        return true;
+    }
+    return false;
+}
+
+// @doc Fight!, the red boxes saved first
+func fight(state) { fight_of.fight(state, func() { save_boxes(state); }); }
