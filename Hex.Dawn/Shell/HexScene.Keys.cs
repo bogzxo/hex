@@ -379,4 +379,18 @@ internal sealed partial class HexScene
         FillKeysTree();
         Say(Said(changed ? "keys.back" : "keys.back_already"));
     }
+
+    /// <summary>Every tick, whatever keys were pressed set off (see <see cref="UICommands"/>).</summary>
+    private void UpdateKeys()
+    {
+        // A text box of the editor, or one of the layout that is being tried out in the canvas
+        // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
+        bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
+
+        // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
+        // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
+        // from a terminal are terminal commands (HexScene.Terminal) and go through it
+        if (!UpdateKeyCapture() && compositor.Focus is not TerminalView)
+            commands.Keys.Update(Engine.Input.Keyboard, typing);
+    }
 }

@@ -228,48 +228,6 @@ internal sealed partial class HexScene
         MarkSelection();
     }
 
-    /* Undoing */
-
-    private void Undo()
-    {
-        // The view of an extension undoes its own changes, if it takes the key
-        if (ExtensionKey("undo"))
-            return;
-
-        // The editor of code undoes its own typing (it is handed the key as well), a file of code has no layout to undo
-        if (compositor.Focus is CodeEditor)
-            return;
-        if (!LayoutTools)
-        {
-            code.Document.Undo();
-            return;
-        }
-
-        if (document.Undo())
-            Restored("undone");
-        else
-            Say("nothing to undo");
-    }
-
-    private void Redo()
-    {
-        if (ExtensionKey("redo"))
-            return;
-
-        if (compositor.Focus is CodeEditor)
-            return;
-        if (!LayoutTools)
-        {
-            code.Document.Redo();
-            return;
-        }
-
-        if (document.Redo())
-            Restored("redone");
-        else
-            Say("nothing to redo");
-    }
-
     private void Restored(string what)
     {
         // The layout was built again from what it was, everything on screen that is about it is out of date
@@ -277,29 +235,6 @@ internal sealed partial class HexScene
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
 
         Say($"{what}, {document.UndoCount} more to undo");
-    }
-
-    /// <summary>
-    /// Notes the layout as a step to come back to once a change has been left alone for a moment with the
-    /// pointer up, and sets off whatever keys were pressed (see <see cref="BuildShortcuts"/>).
-    /// </summary>
-    private void UpdateHistory(float dt)
-    {
-        if (recordPending && !compositor.Pointer.Down && (settleTimer -= dt) <= 0.0f)
-        {
-            recordPending = false;
-            document.Record();
-        }
-
-        // A text box of the editor, or one of the layout that is being tried out in the canvas
-        // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
-        bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
-
-        // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
-        // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
-        // from a terminal are terminal commands (HexScene.Terminal) and go through it
-        if (!UpdateKeyCapture() && compositor.Focus is not TerminalView)
-            commands.Keys.Update(Engine.Input.Keyboard, typing);
     }
 
     /// <summary>
@@ -317,5 +252,15 @@ internal sealed partial class HexScene
         foreach (var selected in moving)
             selected.Position += new Vector2(x, y) * (far ? BIG_NUDGE : 1.0f);
         codeDirty = inspectorDirty = true;
+    }
+
+    /// <summary>Notes the layout as a step to come back to once a change has been left alone for a moment with the pointer up.</summary>
+    private void UpdateRecord(float dt)
+    {
+        if (recordPending && !compositor.Pointer.Down && (settleTimer -= dt) <= 0.0f)
+        {
+            recordPending = false;
+            document.Record();
+        }
     }
 }

@@ -394,7 +394,8 @@ internal sealed partial class HexScene : Scene
     private void UpdateDesigner(float dt)
     {
         UpdateCanvasPointer();
-        UpdateHistory(dt);
+        UpdateRecord(dt);
+        UpdateKeys();
 
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)

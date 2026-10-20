@@ -322,4 +322,29 @@ internal sealed partial class HexScene
 
         sideTree.Items = items;
     }
+
+    /// <summary>The list in the side bar, whatever its view is.</summary>
+    private void RebuildTree()
+    {
+        treeRows.Clear();
+        fileRows.Clear();
+        ApplySide();
+
+        switch (Side)
+        {
+            case HexSide.Explorer:
+                RebuildFiles();
+                break;
+            case HexSide.Search:
+                RebuildResults();
+                break;
+            case HexSide.Design:
+                RebuildComponentTree();
+                break;
+            default:
+                if (!RebuildSideView())
+                    RebuildOutline();
+                break;
+        }
+    }
 }

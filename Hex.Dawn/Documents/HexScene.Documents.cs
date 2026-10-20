@@ -486,4 +486,46 @@ internal sealed partial class HexScene
         commands.Bind(Key.Tab, () => CycleDocuments(1), control: true, whileTyping: true, shift: false);
         commands.Bind(Key.Tab, () => CycleDocuments(-1), control: true, whileTyping: true, shift: true);
     }
+
+    /* Undoing, the view of an extension's own, the code's, or the layout's */
+
+    private void Undo()
+    {
+        // The view of an extension undoes its own changes, if it takes the key
+        if (ExtensionKey("undo"))
+            return;
+
+        // The editor of code undoes its own typing (it is handed the key as well), a file of code has no layout to undo
+        if (compositor.Focus is CodeEditor)
+            return;
+        if (!LayoutTools)
+        {
+            code.Document.Undo();
+            return;
+        }
+
+        if (document.Undo())
+            Restored("undone");
+        else
+            Say("nothing to undo");
+    }
+
+    private void Redo()
+    {
+        if (ExtensionKey("redo"))
+            return;
+
+        if (compositor.Focus is CodeEditor)
+            return;
+        if (!LayoutTools)
+        {
+            code.Document.Redo();
+            return;
+        }
+
+        if (document.Redo())
+            Restored("redone");
+        else
+            Say("nothing to redo");
+    }
 }
