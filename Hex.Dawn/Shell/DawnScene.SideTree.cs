@@ -13,7 +13,7 @@ internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int De
 // The side bar's lists for code, the explorer, the outline, what was found and the files of a folder, all one tree the
 // side bar paints itself (a TreeView). They were a row a component made out of a template, every one of them made again
 // for any change, a selection that moved included. The designer's components and layers are still rows of their own.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private TreeView sideTree = null!;
 

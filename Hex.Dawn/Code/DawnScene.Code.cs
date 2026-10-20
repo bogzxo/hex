@@ -19,7 +19,7 @@ namespace Hex.Dawn;
 // language, a skin, a move set) opens as code, the code of a layout can be edited by hand and put back into it, and
 // there is finding, going to a line, opening any file of the workspace by a few letters of its name, finding across
 // all of them, checking all of them for what doesn't parse, and running a file to see what it comes to.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The editor of the document on screen, where its code is edited and the code of a layout is shown
     private CodeEditor code => document.Editor;

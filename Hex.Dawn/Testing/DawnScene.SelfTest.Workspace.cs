@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, the workspace and the explorer, closing tabs and the window, the help windows and the conveniences.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestWorkspace(HexPointerScript test)
     {

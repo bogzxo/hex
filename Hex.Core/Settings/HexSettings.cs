@@ -46,7 +46,7 @@ internal sealed class HexSettings
     public bool ReopenLast;
 
     /// <summary>
-    /// The picture behind the code (see HexScene.Backdrop), whether it's there, which (empty for the girl that comes with
+    /// The picture behind the code (see DawnScene.Backdrop), whether it's there, which (empty for the girl that comes with
     /// Hex), how big against its pixels, how far from the bottom right corner it is, along and up, and how much of it shows.
     /// </summary>
     public bool BackdropOn = true;
@@ -66,7 +66,7 @@ internal sealed class HexSettings
     /// <summary>How quickly a word the wrap moves glides to its new line (CodeEditor.FlowRate), 0 to snap.</summary>
     public float WrapFlow = Horizon.UI.Components.CodeEditor.FLOW_RATE;
 
-    /// <summary>The effects, none, subtle (the caret glides, a save throws sparks) or all (sparks as it types too), see HexScene.Effects.</summary>
+    /// <summary>The effects, none, subtle (the caret glides, a save throws sparks) or all (sparks as it types too), see DawnScene.Effects.</summary>
     public string Effects = "none";
 
     /// <summary>
@@ -94,7 +94,7 @@ internal sealed class HexSettings
     /// <summary>Whether F5 says what a file printed and declared in the console of the terminal page rather than the output.</summary>
     public bool RunToTerminal;
 
-    /// <summary>Where netcoredbg is, empty to look for it (HexScene.Debugging).</summary>
+    /// <summary>Where netcoredbg is, empty to look for it (DawnScene.Debugging).</summary>
     public string DebuggerPath = string.Empty;
 
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
@@ -109,7 +109,7 @@ internal sealed class HexSettings
     /// <summary>The newest version of each server it found, and the versions that were said not to be offered again.</summary>
     public readonly Dictionary<string, string> ServerLatest = new(StringComparer.OrdinalIgnoreCase), ServerSkipped = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The font the code is written in, a folder of Assets/fonts (hack), empty for the skin's (see HexScene.CodeFont).</summary>
+    /// <summary>The font the code is written in, a folder of Assets/fonts (hack), empty for the skin's (see DawnScene.CodeFont).</summary>
     public string CodeFont = "hack";
     public string BackdropImage = string.Empty;
     public float BackdropScale = 0.5f, BackdropAcross, BackdropUp, BackdropOpacity = 0.22f;

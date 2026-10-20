@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 // The self test, Hex's own dialog for files and folders (UIFileBrowser), which is what Open, Save, Open Folder and an
 // extension's pick_file are on every system. A folder of the test's own with a layout, a text, a hidden layout and a
 // folder in it, a dialog for each kind shown the way the editor shows them, driven the way the UI drives them.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestDialogs(HexPointerScript test)
     {

@@ -9,7 +9,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // How big the editor draws itself and how it shares the window out between its parts.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // Where the editor keeps how big it was last asked to draw itself, next to its executable.
     private const string SCALE_FILE = "hex_ui_scale.txt";

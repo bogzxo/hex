@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 // What the terminal put in the Problems panel, a compiler's errors read off its output by a problem matcher (the
 // engine's TerminalProblems) or put there by a plugin with terminal.problem. Kept apart from the file's own and from F8's,
 // shown after them, cleared when the terminal asks or when a new run of the same program starts saying things.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private readonly List<HexProblem> terminalProblems = [];
 

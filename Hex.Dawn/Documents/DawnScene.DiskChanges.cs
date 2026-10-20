@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 // what Hex had read, and saving it put the old text back over the new without anybody seeing it go. Now a file with
 // nothing changed in Hex is read again quietly, one step of its undo, and one with changes asks with a card. Saving
 // over a file that changed on the disk since Hex last read it asks first, whether or not the watcher heard.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private readonly HexDiskWatch disk = new();
 

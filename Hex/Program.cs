@@ -114,7 +114,7 @@ internal static partial class Program
         DateTime giveUp = DateTime.UtcNow.AddSeconds(20);
         foreach (string file in files)
         {
-            while (!HexInstance.Tell(HexScene.RemotePipe, $"open|{file}|0"))
+            while (!HexInstance.Tell(DawnScene.RemotePipe, $"open|{file}|0"))
             {
                 if (DateTime.UtcNow > giveUp)
                     return;

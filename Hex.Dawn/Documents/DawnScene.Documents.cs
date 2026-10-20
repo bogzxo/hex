@@ -11,7 +11,7 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // Making, opening, saving and closing layouts. Windows asks where, the editor testing itself (which can't click in a dialog of Windows) uses the list on the left to open and its workspace to save.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // Whether the stage is showing its layouts in the font of the editor, which it does for the editor's own
     private bool stagePlain;
@@ -348,7 +348,7 @@ internal sealed partial class HexScene
             if (document.CodeEdited)
                 ApplyCode();
 
-            // A file of code tidied first, one step to undo, the auto save leaves it be (see HexScene.Conveniences)
+            // A file of code tidied first, one step to undo, the auto save leaves it be (see DawnScene.Conveniences)
             if (document.IsText && !savingQuietly && Tidied(document.Editor.Text) is { } tidy)
                 document.Editor.Document.Replace(tidy);
 

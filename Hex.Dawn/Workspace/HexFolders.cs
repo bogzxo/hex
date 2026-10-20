@@ -17,7 +17,7 @@ internal sealed class HexFolders : IDisposable
     // The folders something changed in, from the watchers' threads, let go of on the editor's
     private readonly ConcurrentQueue<string> changed = new();
 
-    // What happened to files, for the language servers (HexScene.Linting), the most kept between two looks at them
+    // What happened to files, for the language servers (DawnScene.Linting), the most kept between two looks at them
     private readonly ConcurrentQueue<(string Path, LanguageServerFileChange Change)> files = new();
     private const int MOST_FILE_CHANGES = 2000;
 

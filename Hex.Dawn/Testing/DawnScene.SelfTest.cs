@@ -12,7 +12,7 @@ namespace Hex.Dawn;
 /// with a mouse would, and every step of the way what the editor ended up with is checked and printed.
 /// Started with <c>--selftest</c>, see <see cref="Program"/>.
 /// </summary>
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private HexPointerScript? selfTest;
     private bool selfTestReported;

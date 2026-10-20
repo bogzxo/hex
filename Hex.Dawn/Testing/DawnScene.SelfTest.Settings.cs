@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, the one window of settings and the skins.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestSettings(HexPointerScript test)
     {

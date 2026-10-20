@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, saving, opening and tabs, the editor's own layout, scrolling, its size and the layout debugger.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestSavingAndOpening(HexPointerScript test)
     {

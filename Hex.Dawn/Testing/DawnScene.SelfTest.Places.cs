@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 
 // The self test, going back and forward. A jump of more than a screen and a jump into another file are places to come
 // back to, stepping a line isn't. The quiet mode, and F2 renaming a name in the other files of the workspace as well.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestPlaces(HexPointerScript test)
     {

@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 // the palette and the files opened last over the rest of quick open (thinner and a colour of their own, ListBox.Lead),
 // the files closed last brought back with Ctrl+Shift+T, a scratchpad on Ctrl+N, the path of the file on screen copied, the trailing spaces and
 // the last newline seen to on a save, and a file of code saved by itself a moment after typing stops.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // How many closed files are remembered for Ctrl+Shift+T, and the files the recent lists are kept in (the settings folder)
     private const int MAX_CLOSED = 20;

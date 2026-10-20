@@ -2,7 +2,7 @@ namespace Hex.Dawn;
 
 // The self test of the tasks, a tasks.hor written out of the template and read back, a task run in a terminal tab named
 // after it with what it said about a compiler's error in the Problems panel, and the same tab again on the second run.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestTasks(HexPointerScript test)
     {

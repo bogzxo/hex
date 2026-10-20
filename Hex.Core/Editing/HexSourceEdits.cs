@@ -11,7 +11,7 @@ internal readonly record struct HexEntry(string Key, SourceSpan Name, SourceSpan
 /// <summary>
 /// Changes to the text of a file of HIDL by where things are written in it, the rest of the file left exactly as it was,
 /// its comments, its spacing and its blank lines. Nothing here runs anything or knows about Hex, it's text in and text
-/// out, which is what the edits an extension asks for (hex.edit and the rest, see HexScene.ExtensionEdits) come down
+/// out, which is what the edits an extension asks for (hex.edit and the rest, see DawnScene.ExtensionEdits) come down
 /// to and what Horizon.Tests can check without a window.
 /// </summary>
 internal static class HexSourceEdits

@@ -5,7 +5,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The self test, keyboard shortcuts changed (Help, Keyboard Shortcuts, and keys.hor), and put back after.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestKeys(HexPointerScript test)
     {

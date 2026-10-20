@@ -2,10 +2,10 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// The self test of the little things (HexScene.Conveniences). The command picked last over the rest of the palette and
+// The self test of the little things (DawnScene.Conveniences). The command picked last over the rest of the palette and
 // the file opened last over the rest of quick open, a closed file brought back where its caret was, a save tidying the
 // ends of the lines, a file saving itself once typing stops, and the glass as thick as its sliders say.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestRecentAndTidy(HexPointerScript test)
     {

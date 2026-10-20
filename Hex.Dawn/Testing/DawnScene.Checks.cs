@@ -9,7 +9,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // Testing layouts rather than editing them, for whoever runs the editor with --check.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /* Testing layouts rather than editing them */
 

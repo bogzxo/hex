@@ -15,7 +15,7 @@ namespace Hex.Dawn;
 // own commands and keys (UICommands), the window's own are here. Only what means something for what is open is on the
 // bar, the Layout menu is the designer's. Every item of every menu in a list is CommandPalette, their keys put where
 // somebody wants them is Keys.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void WireToolbar()
     {

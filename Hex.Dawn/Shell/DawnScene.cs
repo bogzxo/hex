@@ -16,7 +16,7 @@ namespace Hex.Dawn;
 /// There are two UIs on screen for that reason: the editor's own, in a plain font that reads well small, and
 /// the one the layouts are in (the stage), which looks the way a game would show them.
 /// </summary>
-internal sealed partial class HexScene : Scene
+internal sealed partial class DawnScene : Scene
 {
     public const string EDITOR_LAYOUT = "Assets/hex/editor.hor";
 
@@ -107,7 +107,7 @@ internal sealed partial class HexScene : Scene
     // Layouts that are only opened to be tested, and how that went
     private bool checksDone;
 
-    public HexScene(HexOptions options)
+    public DawnScene(HexOptions options)
     {
         this.options = options;
         browseDirectory = Path.GetFullPath(options.Workspace);

@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 // The self test, the languages the code editor colours. Every one VS Code has a grammar for, and HIDL through its own
 // with everything it showed before the grammars came.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // A language server of forty lines, for the linting check. It answers initialize and publishes a warning for
     // every TODO in a file as it is opened and changed, an error for every FIXME. The same one the engine's tests use

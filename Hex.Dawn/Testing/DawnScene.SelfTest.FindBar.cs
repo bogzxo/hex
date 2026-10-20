@@ -2,7 +2,7 @@ namespace Hex.Dawn;
 
 // The self test, the find bar over the code. Lit as it's typed and counted, the case, whole words and a regex, the
 // next and the one before, replacing one at a time and all of them, and escape putting it away.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestFindBar(HexPointerScript test)
     {

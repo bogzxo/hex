@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 // The self test of Dawn as an editor of any file, not only HIDL. A C# file, a Markdown one and a JSON one opened, each
 // with an outline of its own language, an icon and a colour by what it is, and the values side folded away while
 // there are no values to show, back for a file of HIDL.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestAnyFile(HexPointerScript test)
     {

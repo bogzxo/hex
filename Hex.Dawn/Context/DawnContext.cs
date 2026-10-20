@@ -11,7 +11,7 @@ using Horizon.UI.Scripting;
 namespace Hex.Dawn;
 
 /// <summary>
-/// What a part of the editor that has a class of its own (the languages, and the rest as they come out of HexScene)
+/// What a part of the editor that has a class of its own (the languages, and the rest as they come out of DawnScene)
 /// is handed to work with, instead of the scene: the open documents, the workspace, saying things, work off the
 /// editor's thread, the little windows, the settings and the commands. It reaches nothing else of the editor, and the
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).

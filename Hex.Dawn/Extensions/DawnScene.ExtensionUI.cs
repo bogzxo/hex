@@ -17,7 +17,7 @@ namespace Hex.Dawn;
 // panel is a tab next to the problems, the output and the console. A window is a little window over everything. Every
 // one of them a layout out of the extension's folder, its handlers called by the extension (a second at the most, the
 // extension switched off when one throws).
-internal sealed partial class HexScene : IExtensionScreens
+internal sealed partial class DawnScene : IExtensionScreens
 {
     // What an extension put in the title bar after Hex, in brackets, and which one it was
     private string titleNote = string.Empty;

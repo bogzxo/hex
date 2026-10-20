@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 // The self test, the editing round of on-par.md. More than one caret, folding by brackets (a caret going inside opens
 // it), and long lines wrapped at the edge.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestEditingRound(HexPointerScript test)
     {

@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 // Read with the engine's reader of languages but kept apart from the game's language, which Hex loads for the layouts
 // it shows (Localisation is one language at a time, the game's). Read again every time one of the windows opens, so
 // whoever edits the file sees it the next time without building anything.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string STRINGS_FILE = "Assets/hex/localisation/en-gb.hor";
 

@@ -24,7 +24,7 @@ internal sealed partial class HexCodeEditing
     internal HashSet<string>? vocabulary;
     private bool gathering;
 
-    // What the files of the workspace document, by name, gathered with the names (see HexScene.Docs)
+    // What the files of the workspace document, by name, gathered with the names (see DawnScene.Docs)
     internal Dictionary<string, WorkspaceDoc>? docIndex;
 
     // Which gathering is the one that counts, a change of the workspace while one is going makes it out of date

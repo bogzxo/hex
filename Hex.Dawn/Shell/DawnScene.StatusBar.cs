@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 // said. On the right where the caret is, the indentation, the line endings and what the
 // file is in code, and in the designer where the pointer is, how many components there are, the zoom, the skin and
 // the screen the layout is made for. Most of it does something when clicked.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private StatusBar statusBar = null!;
     private StatusItem problemsItem = null!, messageItem = null!;
@@ -46,7 +46,7 @@ internal sealed partial class HexScene
         runningItem = statusBar.Add(string.Empty, right: true, tooltip: "A game started from Hex is running, and reads every file it uses again when it's saved here, Ctrl+S and look");
         runningItem.IsVisible = () => Volatile.Read(ref extensions.programsRunning) > 0;
 
-        // The work going in the background, on the right before the rest (HexScene.Background)
+        // The work going in the background, on the right before the rest (DawnScene.Background)
         BuildWorkItem();
 
         caretItem = statusBar.Add("Ln 1, Col 1", right: true, pressed: GoToLine, tooltip: "Go to a line (Ctrl+G)");

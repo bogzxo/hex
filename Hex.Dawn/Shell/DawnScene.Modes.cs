@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 // while a terminal has the keyboard) swaps to Dusk and back, see Hex.Shell.HexModes. The editor is kept whole while the
 // terminal is up, its files, its undo and where it was scrolled to, and Dusk the same the other way round. Started on its
 // own by something that isn't Hex.exe there's nothing to swap with in the window, and Dusk is started as a program.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /// <summary>Kept when it's left for Dusk rather than thrown away, while both modes are in the window.</summary>
     public override bool Persistent => HexModes.Together;

@@ -64,7 +64,7 @@ internal sealed class HexDiskWatch : IDisposable
             }
             catch (Exception)
             {
-                // a folder that can't be watched is checked when the file is saved, see HexScene.SaveTo
+                // a folder that can't be watched is checked when the file is saved, see DawnScene.SaveTo
             }
         }
     }

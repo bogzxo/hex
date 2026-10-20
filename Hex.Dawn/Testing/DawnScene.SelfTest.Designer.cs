@@ -10,7 +10,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, the designer, adding, selecting, editing, undoing, the canvas and the inspector.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestEditorItself(HexPointerScript test)
     {

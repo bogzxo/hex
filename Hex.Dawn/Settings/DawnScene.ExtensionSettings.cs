@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 
 // What an extension can be told, kept in the settings file, and its section of the settings window (SettingsPage makes
 // it, a row a setting out of the template here or the extension's own layout).
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string EXTENSION_SETTING = "extension_setting.hor";
 

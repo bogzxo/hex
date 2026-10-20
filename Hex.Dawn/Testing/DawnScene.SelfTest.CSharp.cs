@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 // this machine. A file with a mistake in it is opened before there is a project for it, so the server is going when the
 // project is made (a clone, dotnet new, while Hex is open) and has to hear of it from the workspace's watcher: then the
 // mistake is underlined, and Console. offers Console's members as they're typed, the way the editor asks.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string CSHARP_PROJECT = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup></Project>\n";
 

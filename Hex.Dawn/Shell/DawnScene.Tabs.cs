@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 
 // The tabs over the editor (a native TabStrip) and the breadcrumbs under them, where the file is and, in code, where
 // the caret is in it, or in the designer what the selected component is inside of.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private readonly List<Button> tabButtons = [];
 

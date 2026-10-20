@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 
 // The self test, Dusk's files in Hex. The terminal's settings.hor, keys.hor and a plugin, in the test's own home,
 // opened, known for what they are, completed, explained and checked, and the settings edited through their form.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestDuskFiles(HexPointerScript test)
     {

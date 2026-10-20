@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 // The self test of the work going on in the background and its cards: a piece of work with a card that follows how far
 // it got and what it's doing, the same key started again being the one there is, Cancel stopping it, a failure saying
 // why with its output, the status bar's count, and an install of a language server by its command line, pressed twice.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /// <summary>A picture of the window as it is, into the folder DAWN_SELFTEST_SHOTS names, for whoever wants to look. Nothing without it.</summary>
     private void Shot(string name)

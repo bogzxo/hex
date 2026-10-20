@@ -16,7 +16,7 @@ namespace Hex.Dawn;
 // old key of the command comes off, and whatever else was on the new one, so a key does one thing, and the menus and
 // the palette say what it is now since they read it off the items. The editing keys the code editor handles itself
 // (Ctrl+D and its friends) go on working there as well, it doesn't ask the menus.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // dawn_keys.hor in the settings folder, it was keys.hor next to the exe, which Dusk took for its own keys file there
     private const string KEYS_FILE = "dawn_keys.hor", KEYS_LAYOUT = "keys.hor";
@@ -389,7 +389,7 @@ internal sealed partial class HexScene
 
         // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
         // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
-        // from a terminal are terminal commands (HexScene.Terminal) and go through it
+        // from a terminal are terminal commands (DawnScene.Terminal) and go through it
         if (!UpdateKeyCapture() && compositor.Focus is not TerminalView)
             commands.Keys.Update(Engine.Input.Keyboard, typing);
     }

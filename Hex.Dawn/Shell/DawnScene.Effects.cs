@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 // drawing in goes to have it (UIGlass in the engine). The sparks are a module of their own over everything that
 // the pointer goes through, a pool of quads that makes no garbage, and with nothing flying nothing is drawn, so an idle
 // window stays as idle as it was.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // About two thirds of the way to where it went in this long
     private const float CARET_GLIDE = 0.045f;

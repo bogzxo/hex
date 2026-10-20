@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // turn, has to come up on the move editor with moves in its list, and leave nothing in the problems that isn't a warning.
 // A move file the game reads and the editor chokes on is found here, not by whoever opens it. Without the game next to
 // Hex there's nothing to open, and the run says it left this out rather than passing a check it never made.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private static string? FindFighter2D()
     {

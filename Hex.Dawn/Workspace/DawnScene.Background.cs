@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 // pressed twice is one update), says how far it got, and can be stopped. One that's asked to be seen has a card in the
 // corner while it goes, a bar of how far it got and what it's doing, Cancel, and how it ended (Output when it wrote any),
 // and the status bar says how many are going, a click for the list of them and stopping one.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private readonly WorkScheduler work = new();
 

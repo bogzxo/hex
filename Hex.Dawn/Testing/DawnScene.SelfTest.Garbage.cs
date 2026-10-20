@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, how much garbage sweeping the pointer over the editor makes.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /// <param name="warmUp">
     /// Whether every sweep goes over its points once before it's measured. Always, now. What the pointer resting on a

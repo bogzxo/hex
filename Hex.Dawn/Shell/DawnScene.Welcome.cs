@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 // What Hex opens on when nothing is open. Hex always has a document, it starts with an empty layout, so the welcome is a
 // page over that layout's canvas, there while the empty layout is all there is and gone the moment a component goes into
 // it or a file is opened. New, open, a folder, the commands, the help, and the files worked on last.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string WELCOME_LAYOUT = "welcome.hor";
 

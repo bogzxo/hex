@@ -9,7 +9,7 @@ namespace Hex.Dawn;
 // The picture behind the code, in the bottom right corner of the editor, faint, the code written over it.
 // With the code wrapped (Alt+Z) the lines run round it rather
 // than over it, the shape of what is drawn in the picture worked out once from its file (UIWrapShape).
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     public const string USUAL_BACKDROP = "Assets/hex/images/background_icon.png";
 

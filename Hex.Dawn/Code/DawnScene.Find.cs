@@ -17,7 +17,7 @@ namespace Hex.Dawn;
 
 // Finding things. In the file (Ctrl+F, F3, Ctrl+H, Ctrl+G), and in every file of the workspace, opening one by a few
 // letters of its name (Ctrl+P), every line something is on (Ctrl+Shift+F) and every file checked for what is wrong (F8).
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /* Finding and going places */
 

@@ -6,7 +6,7 @@ namespace Hex.Dusk;
 
 /// <summary>
 /// Dawn, from Dusk's side. A file opened in the Dawn that is running when there is one (it listens on a pipe of its own,
-/// HexScene.Remote, a line "open|path|line"), started for the file when there isn't. Dusk is a mode of Hex.exe, so Dawn
+/// DawnScene.Remote, a line "open|path|line"), started for the file when there isn't. Dusk is a mode of Hex.exe, so Dawn
 /// is the same exe started without --dusk, unless <c>DUSK_HEX</c> says another (none for no Dawn at all).
 /// </summary>
 internal static class HexLauncher

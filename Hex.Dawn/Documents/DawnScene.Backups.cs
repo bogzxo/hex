@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 // What isn't saved, kept every couple of seconds in a folder of Hex's own (HexBackups) and brought back the next time Hex
 // starts if it never got to say what to do with it, a crash or a power cut. Closing a file or Hex and answering the
 // question about its changes either way takes the backup away, so only what was lost comes back.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // How often what isn't saved is looked over
     private const float BACKUP_EVERY = 2.0f;

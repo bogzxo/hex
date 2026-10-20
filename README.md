@@ -102,8 +102,8 @@ was told (or its default), `hex.set_setting(name, value)` changes it, and Hex ke
 
 ## Finding your way round the code
 
-Hex is one scene, `HexScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
-`Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
+Hex is one scene, `DawnScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
+`Shell/DawnScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
 `editor.hor` is the skeleton that includes the parts in `Assets/hex/shell/`, the activity bar, the side bar, the tabs,
 the panel and the properties, each a layout of its own that opens on its own in Hex) and its
 `UpdateState` is a tick of the whole editor in a handful of steps, read that first. Every part of the class says what it is in

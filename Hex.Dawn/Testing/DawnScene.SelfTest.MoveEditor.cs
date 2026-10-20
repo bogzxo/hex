@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 // are in a shared file and one of its own, in Fighter2D's second format (game frames and world units). Every kind of edit
 // made through the view and checked in the files' text, one step to undo, the timeline dragged, the frame meter, the combo
 // window, an old key said the new way, the red boxes, the problems, and the view laid out to whatever room it has.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string MOVE_VIEW = "move_editor.moves";
 

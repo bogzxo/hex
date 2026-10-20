@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 /// <summary>
 /// What of the extensions is on screen and is the editor's to put there: the views of a file next to its code, the pages
 /// of the panel, the little windows, a note in the title bar, and the file on screen as an extension sees it. The scene
-/// does these (HexScene.UIScriptedLayout), HexExtensions asks for them.
+/// does these (DawnScene.UIScriptedLayout), HexExtensions asks for them.
 /// </summary>
 internal interface IExtensionScreens
 {

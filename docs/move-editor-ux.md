@@ -342,7 +342,7 @@ Once the v2 work has landed in the extension, since it's in the same files (`tim
 7. The engine's `Table` and `TreeView` for HIDL, then the move list as a tree and the Data and Inputs tables wide.
 8. The opponent at range, the empty states, the drawers for a narrow window, the key list behind `?`.
 
-Each step gets its checks in `Testing/HexScene.SelfTest.MoveEditor.cs` as it goes, a list that shows more than four
+Each step gets its checks in `Testing/DawnScene.SelfTest.MoveEditor.cs` as it goes, a list that shows more than four
 rows at 1600 by 900 being the first of them, and a screenshot of Blocky's uppercut before and after each, which is how
 "clunky" gets checked rather than argued about.
 

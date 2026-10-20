@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // The self test, the terminal page. A shell brought up with F6, typed into and split, the keys of Hex's that work from a
 // terminal and the ones that don't, the console as a profile of it, a problem put in the Problems panel by the terminal,
 // and the terminal's files being the shared ones in the test's own home.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestTerminal(HexPointerScript test)
     {

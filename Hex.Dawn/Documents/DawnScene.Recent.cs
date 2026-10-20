@@ -9,7 +9,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The layouts that were worked on last, kept in a file in the settings folder next to the editor between runs.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // Where it keeps the layouts that were worked on last (one path a line, the latest first), and how many of them
     private const string RECENT_FILE = "hex_recent.txt";

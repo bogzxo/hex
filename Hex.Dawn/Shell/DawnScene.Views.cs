@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 // its layers and its properties) or its code, flipped with F7 or the two buttons over the middle, and a file of code
 // is only ever its code, with the explorer or its outline on the left and what is wrong with it on the right. Also the
 // little x of every tab and asking before anything unsaved goes, a tab or the whole window.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /// <summary>Whether the tools of a layout are out, which is the designer of a layout.</summary>
     private bool LayoutTools => document.InDesigner;
@@ -34,7 +34,7 @@ internal sealed partial class HexScene
         bool tools = LayoutTools;
         bool table = document.IsText && document.View == HexView.Table;
 
-        // A view an extension made for the file goes where the code is, see HexScene.UIScriptedLayout
+        // A view an extension made for the file goes where the code is, see DawnScene.UIScriptedLayout
         ApplyExtensionViews();
         bool extension = document.View == HexView.Extension;
 

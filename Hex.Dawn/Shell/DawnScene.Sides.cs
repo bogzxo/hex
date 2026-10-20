@@ -9,7 +9,7 @@ namespace Hex.Dawn;
 
 // The sides of the editor and the panels in them, how wide they were left, the grips they are dragged by and a side
 // put away by a drag past its least.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The least and the most the panels can be dragged to, in the editor's units
     private const float MIN_SIDE = 180.0f, MAX_SIDE = 640.0f;

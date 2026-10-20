@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 
 // The self test, what an extension can ask (a menu, a question, a name), keys on its commands, on_change, and an
 // extension read again when its file changes, without Hex being started again.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private const string ASKING_EXTENSION = """
         let extension = { name: "Asking" };

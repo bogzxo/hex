@@ -26,7 +26,7 @@ internal enum HexSide
 // its outline, the designer of a layout has its toolbox, components and layers instead of the outline, and the explorer
 // and search as well. Each remembers which it was left on, so going from the code to the designer and back puts the
 // side bar back the way it was.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private HexSide codeSide = HexSide.Outline, designSide = HexSide.Design;
 

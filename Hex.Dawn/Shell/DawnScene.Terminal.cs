@@ -14,10 +14,10 @@ namespace Hex.Dawn;
 // The terminal page of the panel under the editor, Dusk's terminal in Hex. It is the engine's TerminalPanel on the
 // engine's TerminalHost, the same host Dusk is a window round, so the plugins, the keys, the settings and the history are
 // Dusk's (the user's folder, %AppData%\Dusk) and a command written for one is in the other's palette too. The console
-// is a profile of it (HexScene.Console). The first tab opens the first time the page is looked at, in the workspace's
+// is a profile of it (DawnScene.Console). The first tab opens the first time the page is looked at, in the workspace's
 // folder or the file's (start_in in settings.hor). While a terminal has the keyboard Hex's own keys stay out of the
 // shell's way, the few that have to work from a terminal (the panel away, F6, Ctrl+`) are terminal commands of Hex's.
-internal sealed partial class HexScene : ITerminalHostUi
+internal sealed partial class DawnScene : ITerminalHostUi
 {
     private TerminalPanel terminalPanel = null!;
     private TerminalHost terminals = null!;

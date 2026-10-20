@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 // side has the keyboard, a click into the other side makes that one it. A tab opened goes into the side that's on screen,
 // "Open to the side" on a tab puts it in the other. Only code goes side by side, the designer, the table and an
 // extension's view take the whole middle as they always did.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The two sides while the middle is split, null for both when it isn't
     private HexDocument? splitLeft, splitRight;

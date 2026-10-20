@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 // The self test of debugging C#. A little program of its own in the test's folder, a breakpoint on it, F5, and the
 // program stopped there with the line lit, the stack and its variables on the Debug side, a step, and on to its end with
 // what it wrote in the output. Only where netcoredbg is.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestDebug(HexPointerScript test)
     {

@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 // The quiet mode, F11 (Sublime's distraction free, VS Code's zen). The side bar, the panel, the right side, the tabs
 // and the breadcrumbs go together, the code or the canvas has the middle, and F11 again puts back what was there and
 // nothing else. None of it is written into the settings, it's a moment's way of working and not how Hex is set up.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // What was showing when it went quiet, put back as it was
     private (bool Left, bool Right, bool Panel)? quietFrom;

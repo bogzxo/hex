@@ -9,7 +9,7 @@ namespace Hex.Dawn;
 
 // What the editor itself is drawn in, any skin there is in any of its themes, and the colours of its own layout taken
 // from that skin.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The skin of the editor that its colours were last taken from, see ColourChrome
     private UISkin? colouredFor;

@@ -9,7 +9,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, files of code, their values, the console, docs, the table and completion.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestCode(HexPointerScript test)
     {

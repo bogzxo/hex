@@ -9,7 +9,7 @@ namespace Hex.Dawn;
 
 // What the editor is set to (HexSettings), read as it starts and saved as it changes. The window it's set in is
 // SettingsPage, its skin is in EditorSkin, the edges of its panels in Sides.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private HexSettings settings = null!;
     /// <summary>

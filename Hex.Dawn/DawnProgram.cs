@@ -79,11 +79,11 @@ public static class DawnProgram
         // one was asked to be a window of its own
         bool window = args.Contains(ARGUMENT_WINDOW);
         if (!selfTest && !window && ValueOf(args, ARGUMENT_OPEN) is { } toOpen && Path.IsPathRooted(toOpen) && File.Exists(toOpen)
-            && Hex.Shell.HexInstance.Tell(HexScene.RemotePipe, $"open|{Path.GetFullPath(toOpen)}|{(int.TryParse(ValueOf(args, ARGUMENT_LINE), out int lineAsked) ? lineAsked : 0)}"))
+            && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"open|{Path.GetFullPath(toOpen)}|{(int.TryParse(ValueOf(args, ARGUMENT_LINE), out int lineAsked) ? lineAsked : 0)}"))
             return;
 
         string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(asked) ? Path.GetFullPath(asked) : null;
-        if (!selfTest && !window && folder is not null && Hex.Shell.HexInstance.Tell(HexScene.RemotePipe, $"folder|{folder}"))
+        if (!selfTest && !window && folder is not null && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"folder|{folder}"))
             return;
 
         Directory.CreateDirectory(workspace);
@@ -129,7 +129,7 @@ public static class DawnProgram
             }
         });
 
-        var scene = new HexScene(options);
+        var scene = new DawnScene(options);
 
         // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
         // is the one mode and nothing else
@@ -149,7 +149,7 @@ public static class DawnProgram
         Hex.Shell.HexModes.Shutdown();
 
         // Where the time went, with HEX_PROFILE set
-        HexScene.Profile.Report();
+        DawnScene.Profile.Report();
     }
 
     /// <summary>How Hex.exe makes the terminal for the same window, in a folder, see Hex.Shell.HexModes.</summary>
@@ -159,7 +159,7 @@ public static class DawnProgram
     public static Scene Scene(string? folder)
     {
         Directory.CreateDirectory(DEFAULT_WORKSPACE);
-        return new HexScene(new HexOptions(
+        return new DawnScene(new HexOptions(
             Open: null,
             Workspace: DEFAULT_WORKSPACE,
             SelfTest: false,

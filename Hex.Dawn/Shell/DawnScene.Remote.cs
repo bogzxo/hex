@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // terminal's dawn command. A pipe of Hex's own (horizon-hex-<user>) that takes a line at a time, "open|path|line" or
 // "folder|path", on a thread of its own, the file or the folder opened on the editor's next tick. The first Hex to start has the pipe, one started after it opens what it was told
 // to on its own command line and leaves the pipe to the first.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     public static string RemotePipe => "horizon-hex-" + System.Environment.UserName.ToLowerInvariant();
 

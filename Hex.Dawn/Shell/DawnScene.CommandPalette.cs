@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 
 // The command palette (Ctrl+Shift+P), every item of every menu that means something right now in a list that narrows as
 // it is typed into, and the list it's shown in, which whatever else wants a few letters to pick from uses too.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     /* The command palette */
 

@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, extensions, Hello Dolly and the tabs of the settings extensions have.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The greeting extension's command as the palette has it, under whatever bogz has called it this week
     private string DollyCommand() => $"{extensions.All.First(extension => extension.Id == "hello_dolly").Name}: Another greeting";

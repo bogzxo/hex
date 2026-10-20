@@ -5,7 +5,7 @@ namespace Hex.Dawn;
 // The self test, files that are open changed on the disk by something else. Read again when Hex has nothing of its own in
 // them, asked about on a card when it has, and a save that would write over the disk's asking first. Then what isn't
 // saved kept in a backup and brought back after Hex stopped without asking.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestDiskChanges(HexPointerScript test)
     {

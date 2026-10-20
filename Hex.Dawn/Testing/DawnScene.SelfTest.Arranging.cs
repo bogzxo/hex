@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // The self test, more than one thing at once, groups, copies, what a layout is made for, tabs, closing and dragging edges.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestMultipleSelection(HexPointerScript test)
     {

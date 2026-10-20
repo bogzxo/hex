@@ -2,7 +2,7 @@ namespace Hex.Dawn;
 
 // The C# sides of the built-in extensions, by the native their extension.hor names. A file goes to the first of them
 // that's switched on, started and says it's one of its own, and to the code editor when none does.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private Dictionary<string, IHexFileKind>? fileKinds;
 

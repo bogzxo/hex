@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 
 // What the menus do that isn't anywhere else. Saving every file, putting the properties away, going to something in the
 // file or the next problem, a component's code, and the dialogs of the Help menu.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // Which problem the last step through them went to
     private int problemStep = -1;

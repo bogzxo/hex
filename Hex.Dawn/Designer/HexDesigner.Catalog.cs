@@ -37,7 +37,7 @@ internal sealed partial class HexDesigner
     };
 
     // How wide what a property is set with is, which is whatever the properties have left next to what it is
-    // called. They can be dragged wider (see HexScene.Settings). What is taken off is the padding either side (8
+    // called. They can be dragged wider (see DawnScene.Settings). What is taken off is the padding either side (8
     // and 8), the name and the gap after it (CaptionWidth and 6), and the scroll bar with the gap it keeps (6 and 6).
     // It was 14 short of that once and every editor ran on under the bar
     private const float EDITOR_MARGIN = 34;

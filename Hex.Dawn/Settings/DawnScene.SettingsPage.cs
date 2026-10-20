@@ -14,7 +14,7 @@ namespace Hex.Dawn;
 // a section for each one's own settings (its layout of them, or a row a setting it described). The editor's are put in
 // force the moment one changes (EditorSource), the terminal's through the terminal page's host. There used to be a page
 // of some of them and a window of the rest, and what was where was anybody's guess.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The section the extensions that are on are in, and the one in front of each extension's own
     private const string EXTENSIONS = HexExtensions.SETTINGS, EXTENSION_SECTION = "Extensions · ";
@@ -124,7 +124,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The editor's section, read from and put in force on the editor itself.</summary>
-    private sealed class EditorSource(HexScene hex) : ISettingsSource
+    private sealed class EditorSource(DawnScene hex) : ISettingsSource
     {
         public string Section => SettingsSections.EDITOR;
 

@@ -3,7 +3,7 @@ namespace Hex.Dawn;
 // The self test of the effects, off as Dawn comes, the caret gliding and a save bursting with them subtle, sparks off the
 // caret as it types with them all, the glass under the sides and the palette while they're on, and nothing left flying
 // (or frosted) once they're off again.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     private void TestEffects(HexPointerScript test)
     {

@@ -13,7 +13,7 @@ internal readonly record struct HexProblem(string Path, int Line, int Column, st
 // open and, after F8, with every file of the workspace, a row a problem, a click goes there. Output is everything Hex has
 // said (the status bar only has the last of it) and what running a file printed. With nothing wrong and the problems the
 // page on it, it folds down to its tabs, "nothing wrong with this file" took a seventh of the window every time.
-internal sealed partial class HexScene
+internal sealed partial class DawnScene
 {
     // The page of the panel the terminals and the console are on
     private const int CONSOLE_PAGE = 2;
