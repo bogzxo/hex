@@ -215,6 +215,32 @@ Step 6 is done in its first form: Hex.Core is a project of what has no window in
 its trash, backups and names, the search, edits by path and the source trees, the language servers' catalog and
 GitHub's releases, the evaluation of a file, the tasks. Hex.Tests is Hex.Dusk.Tests renamed, testing all of Hex.
 
+Step 7 is done. Values is `HexRunning` (the values side, the table, the console and the runner, its problems a source
+and its runs an event), the designer `HexDesigner`, the editor's smarts `HexCodeEditing` (completion, hovers,
+signatures, hints, the find bar, the font, with the sources the other parts add to) and the workspace and its explorer
+`HexExplorer`. Problems, places and the explorer's entries are records of their own. `IEditorWindow` is what they
+need of the window (its layout, chrome and stage, which parts to put together again, the side, the menus), and
+`HexScene` is `DawnScene` now, named for the window it is. What it has left is the chrome, the documents and their
+backups, changes on the disk and the recent list, the settings and the terminal page, which is what a composition root
+should have.
+
+Step 8 went smaller than planned. Dusk is a dozen partials of a hundred lines or so each and every one of them is
+already a feature, so turning them into classes would be ceremony. What was the same as Dawn's is shared, Dusk reads
+its effects and its backdrop through `HexSettings` as Dawn does instead of parsing the editor's section by hand.
+
+Step 10 is done. The engine is `Horizon` (the runtime), `Horizon.UI`, `Horizon.Terminal` and `Horizon.Tooling`, as
+the table above has it, except that TextMate's grammars stayed in the UI, the code editor colours with them and HIDL's
+own highlighting is built on one. Nothing in `Horizon` names the UI. Scene2D and the Skyline debugger went into the UI
+with it, the engine still adds the debugger in a Debug build through `IGameDebugger` and `GameEngine.DebuggerMaker`,
+which the UI sets as it loads. The UI is a friend assembly of the engine's, it was built on the input the engine
+holds back from a game and on the renderer's insides, and making those public would hand them to every game. The
+terminal's layout kinds and the help over its settings are said by the terminal (`TerminalKinds`), which Hex does
+before its first window. Fighter2D only needs a reference to `Horizon.UI`.
+
+Step 11 is done, `.github/workflows/ci.yml` in both repositories builds and runs the unit tests on Windows, Linux and
+macOS. The self tests aren't run there yet. Hex's needs its submodule moved to an engine with the new projects in it
+before it can pass.
+
 ## What goes into the engine instead
 
 The plan said Hex.Shell would be the window furniture both modes share. It's the engine's instead, Horizon.UI, so a
@@ -226,4 +252,9 @@ its dialogs, the chooser and what it remembers (`UIFileBrowser`, `UIFileDialogs`
 `Lens`, `Pane`) and a label's escaping of what somebody wrote (`UIRichText.Plain`, `Literal`). Hex.Shell is left with
 what is Hex's own, the modes, the single instance, its identity and files, its titles and filters for the dialogs, and
 the catalog of the editor's settings.
+
+What extensions put on screen went the same way. `UIScriptedLayout` is a layout a script drives (its handlers, on_tick,
+on_key, on_resize) and `UIScriptedScreens` keeps everything a program's scripts made, the views of a file, the pages of
+a panel and the little windows, ticks them and closes them when their owner is read again or their file goes. Hex
+keeps which view goes with which file, the buttons for them and the title note.
 
