@@ -32,6 +32,9 @@ internal static partial class Program
         // Started from the Dock or a desktop's launcher, the PATH a terminal would have, off this thread
         Horizon.Core.Processes.ProcessEnvironment.ImportLoginShell();
 
+        // The terminal's components known to layouts before the first module is made, both modes have them
+        Horizon.UI.Components.TerminalKinds.Register();
+
         HexMode mode = HexIdentity.ModeOf(args, Environment.ProcessPath);
         HexIdentity.Claim(mode);
 
