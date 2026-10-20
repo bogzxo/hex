@@ -37,11 +37,6 @@ internal sealed partial class HexScene
     // What running a file of code last came to, put in the output
     private readonly List<string> runOutput = [];
 
-    // The folders never looked in for files of a workspace, what gets built, git's own and old builds kept on purpose
-    private static readonly HashSet<string> SkippedFolders = new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "Build History" };
-
-    private readonly record struct HexResult(string Path, int Line, int Column, string Text);
-
     // The parts of the editor's own layout that only mean something for a layout, hidden while a file of code is open
     private const string LINK_TEMPLATE = "link.hor";
 
@@ -152,7 +147,7 @@ internal sealed partial class HexScene
     /// <summary>After the code of a document was parsed, what it says about the texts of the game it names by key.</summary>
     private void CodeChecked(HexDocument checkedDocument)
     {
-        localisationFound[checkedDocument] = LocalisationDiagnostics(checkedDocument.Editor.Text);
+        localisationFound[checkedDocument] = HexSearch.LocalisationDiagnostics(checkedDocument.Editor.Text);
         ShowDiagnostics(checkedDocument);
 
         if (checkedDocument == document)
@@ -203,28 +198,6 @@ internal sealed partial class HexScene
         of.Editor.Diagnostics = found;
         if (of == document)
             problemsDirty = true;
-    }
-
-    /// <summary>
-    /// Helper method to find the texts a piece of code names by key ("@main_menu.quit") that the language of its game
-    /// hasn't got, with no languages loaded there is nothing to say.
-    /// </summary>
-    private static IReadOnlyList<UICodeDiagnostic> LocalisationDiagnostics(string text)
-    {
-        if (Localisation.Count == 0 || !text.Contains("\"@", StringComparison.Ordinal))
-            return [];
-
-        var found = new List<UICodeDiagnostic>();
-        foreach (Token token in Lexer.Tokenize(text, lenient: true))
-        {
-            if (token.Type != TokenType.TextLiteral || !Localisation.IsKey(token.Value))
-                continue;
-
-            if (!Localisation.Has(token.Value[1..]))
-                found.Add(new UICodeDiagnostic(token.Line - 1, token.Col - 1, token.Length, $"{Localisation.Language} has no text for {token.Value[1..]}", Warning: true));
-        }
-
-        return found;
     }
 
     /* Text documents */

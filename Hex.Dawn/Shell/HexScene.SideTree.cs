@@ -118,7 +118,7 @@ internal sealed partial class HexScene
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
-            if (SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= MAX_EXPLORER_ROWS)
+            if (HexSearch.SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= MAX_EXPLORER_ROWS)
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));

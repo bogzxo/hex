@@ -48,14 +48,6 @@ internal sealed partial class HexScene
         textDialog = shown;
     }
 
-    private static int CountIn(string text, string query)
-    {
-        int count = 0;
-        for (int at = text.IndexOf(query, StringComparison.OrdinalIgnoreCase); at >= 0; at = text.IndexOf(query, at + query.Length, StringComparison.OrdinalIgnoreCase))
-            count++;
-        return count;
-    }
-
     private void GoToLine()
     {
         AskText("Go to line", $"Which line, 1 to {code.Document.LineCount}", string.Empty, "Go", answer =>
@@ -94,74 +86,10 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every .hor of every folder looked through, once each.</summary>
-    private List<string> AllWorkspaceFiles() => FilesUnder(WorkspaceRoots());
-
-    /// <summary>Every .hor under some folders, once each. Reads nothing of the editor, for the background.</summary>
-    private static List<string> FilesUnder(IReadOnlyList<string> roots)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var files = new List<string>();
-        foreach (string root in roots)
-        {
-            foreach (string file in WorkspaceFiles(root))
-            {
-                if (seen.Add(file))
-                    files.Add(file);
-            }
-        }
-
-        return files;
-    }
-
-    /// <summary>
-    /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
-    /// (which are the files of another repository, and there are copies of the engine in more than one).
-    /// </summary>
-    private static List<string> WorkspaceFiles(string root)
-    {
-        var files = new List<string>();
-        var pending = new Stack<string>();
-        pending.Push(root);
-
-        while (pending.Count > 0)
-        {
-            string folder = pending.Pop();
-            try
-            {
-                files.AddRange(Directory.GetFiles(folder, "*.hor").Where(file => !Path.GetFileName(file).StartsWith("~syncthing~")));
-
-                foreach (string inside in Directory.GetDirectories(folder))
-                {
-                    string name = Path.GetFileName(inside);
-                    if (SkippedFolders.Contains(name) || name.StartsWith('.') || File.Exists(Path.Combine(inside, ".git")))
-                        continue;
-                    pending.Push(inside);
-                }
-            }
-            catch (Exception)
-            {
-                // A folder that can't be read has no files as far as this goes
-            }
-        }
-
-        files.Sort(StringComparer.OrdinalIgnoreCase);
-        return files;
-    }
+    private List<string> AllWorkspaceFiles() => HexSearch.FilesUnder(WorkspaceRoots());
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
-    private string Relative(string path) => RelativeTo(WorkspaceRoots(), path);
-
-    /// <summary>A path as it is inside of the folders looked through, for the background.</summary>
-    private static string RelativeTo(IReadOnlyList<string> roots, string path)
-    {
-        string full = Path.GetFullPath(path);
-        string? root = roots.Where(folder => full.StartsWith(folder, PlatformPaths.Comparison)).OrderByDescending(folder => folder.Length).FirstOrDefault();
-        if (root is null)
-            return full.Replace('\\', '/');
-
-        string inside = Path.GetRelativePath(root, full).Replace('\\', '/');
-        return roots.Count > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : inside;
-    }
+    private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);
 
     /// <summary>Ctrl+P, opens a file of the workspace by a few letters of its name.</summary>
     private void QuickOpen()
@@ -211,25 +139,10 @@ internal sealed partial class HexScene
         }
     }
 
-    // Whether a name has the letters typed in it in order, the way every editor's quick open goes
-    private static bool Matches(string name, string typed)
-    {
-        int at = 0;
-        foreach (char wanted in typed)
-        {
-            if (char.IsWhiteSpace(wanted)) continue;
-            at = name.IndexOf(wanted.ToString(), at, StringComparison.OrdinalIgnoreCase);
-            if (at < 0) return false;
-            at++;
-        }
-
-        return true;
-    }
-
     /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left, as the find bar's toggles say.</summary>
     private void FindInFiles()
     {
-        string how = DescribeFindOptions(findOptions);
+        string how = HexSearch.DescribeOptions(findOptions);
         AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}{how}", lastFind, "Find", query =>
         {
             if (query.Length == 0)
@@ -241,7 +154,7 @@ internal sealed partial class HexScene
             UIFindOptions options = findOptions;
 
             // Every file read off the editor's thread, the results come in when they are all there
-            InBackground($"looking for '{query}' in {where}...", () => FindIn(roots, query, options), found =>
+            InBackground($"looking for '{query}' in {where}...", () => HexSearch.FindIn(roots, query, options), found =>
             {
                 ShowResults($"FOUND '{query}' ({found.Count})", found);
                 Say(found.Count > 0 ? $"'{query}' is in {found.Select(result => result.Path).Distinct().Count()} files, {found.Count} lines" : $"no '{query}' in {where}", error: found.Count == 0);
@@ -250,75 +163,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
-    private List<HexResult> FindEverywhere(string query, bool wholeWord) => FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
-
-    /// <summary>
-    /// Every line something is on in the files under some folders, the first place on each, the case, whole words and a
-    /// regex as the options say. Reads nothing of the editor, for the background. A regex that doesn't build finds nothing.
-    /// </summary>
-    private static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, UIFindOptions options)
-    {
-        var found = new List<HexResult>();
-        Regex? pattern = null;
-        if (options.Regex)
-        {
-            try { pattern = new Regex(query, (options.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); }
-            catch (ArgumentException) { return found; }
-        }
-
-        foreach (string file in FilesUnder(roots))
-        {
-            string[] lines = ReadLines(file);
-            for (int line = 0; line < lines.Length && found.Count < 2000; line++)
-            {
-                if (FirstMatch(lines[line], query, options, pattern) is { } at)
-                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}"));
-            }
-        }
-
-        return found;
-    }
-
-    // Where something is first on a line as the options say, null for nowhere
-    private static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
-    {
-        if (pattern is not null)
-        {
-            try
-            {
-                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
-                {
-                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
-                        return match.Index;
-                }
-            }
-            catch (RegexMatchTimeoutException)
-            {
-            }
-            return null;
-        }
-
-        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
-        {
-            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
-                return at;
-        }
-        return null;
-    }
-
-    // The toggles of the find bar that are on, said after what's asked, empty for none
-    private static string DescribeFindOptions(UIFindOptions options)
-    {
-        var on = new List<string>();
-        if (options.MatchCase) on.Add("the case matching");
-        if (options.WholeWord) on.Add("whole words");
-        if (options.Regex) on.Add("as a regex");
-        return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
-    }
-
-    private static bool IsWholeWord(string line, int at, int length) =>
-        (at == 0 || !UITextDocument.IsWordChar(line[at - 1])) && (at + length >= line.Length || !UITextDocument.IsWordChar(line[at + length]));
+    private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
     /// <summary>Every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game hasn't got.</summary>
     private void CheckAllFiles()
@@ -326,7 +171,7 @@ internal sealed partial class HexScene
         List<string> roots = WorkspaceRoots();
         string where = DescribeRoots();
 
-        InBackground($"checking every file in {where}...", () => CheckFiles(roots), checkedFiles =>
+        InBackground($"checking every file in {where}...", () => HexSearch.CheckFiles(roots), checkedFiles =>
         {
             var (files, problems) = checkedFiles;
 
@@ -340,58 +185,6 @@ internal sealed partial class HexScene
 
             Say(problems.Count == 0 ? $"all {files} files in {where} parse" : $"{problems.Count} problems in {files} files, listed under the editor", error: problems.Count > 0);
         });
-    }
-
-    /// <summary>Every .hor under some folders parsed, and what names a text the game hasn't got. For the background.</summary>
-    private static (int Files, List<HexResult> Problems) CheckFiles(IReadOnlyList<string> roots)
-    {
-        List<string> files = FilesUnder(roots);
-        var problems = new List<HexResult>();
-        string Relative(string path) => RelativeTo(roots, path);
-
-        foreach (string file in files)
-        {
-            string source;
-            try
-            {
-                source = File.ReadAllText(file);
-            }
-            catch (Exception e)
-            {
-                problems.Add(new HexResult(file, 0, 0, $"{Relative(file)}  couldn't be read, {e.Message}"));
-                continue;
-            }
-
-            try
-            {
-                new Parser().ProduceSyntaxTree(Lexer.Tokenize(source));
-            }
-            catch (ParseException e)
-            {
-                problems.Add(new HexResult(file, Math.Max(0, e.Line - 1), Math.Max(0, e.Col - 1), $"{Relative(file)}:{e.Line}  {e.Message}"));
-            }
-            catch (Exception e)
-            {
-                problems.Add(new HexResult(file, 0, 0, $"{Relative(file)}  {e.Message}"));
-            }
-
-            foreach (UICodeDiagnostic missing in LocalisationDiagnostics(source))
-                problems.Add(new HexResult(file, missing.Line, missing.Column, $"{Relative(file)}:{missing.Line + 1}  {missing.Message}"));
-        }
-
-        return (files.Count, problems);
-    }
-
-    private static string[] ReadLines(string file)
-    {
-        try
-        {
-            return File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
-        }
-        catch (Exception)
-        {
-            return [];
-        }
     }
 
     private const string SEARCH_EMPTY_TEMPLATE = "search_empty.hor", ASK_TEMPLATE = "ask.hor";

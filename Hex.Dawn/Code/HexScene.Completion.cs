@@ -77,7 +77,7 @@ internal sealed partial class HexScene
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         var docs = new Dictionary<string, WorkspaceDoc>(StringComparer.Ordinal);
-        foreach (string file in FilesUnder(roots).Take(2000))
+        foreach (string file in HexSearch.FilesUnder(roots).Take(2000))
         {
             string source;
             try
@@ -346,7 +346,7 @@ internal sealed partial class HexScene
             return;
         }
 
-        string[] lines = ReadLines(file);
+        string[] lines = HexSearch.ReadLines(file);
         string[] parts = key.Split('.');
         int line = 0, part = 0;
 

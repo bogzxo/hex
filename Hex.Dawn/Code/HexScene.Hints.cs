@@ -194,7 +194,7 @@ internal sealed partial class HexScene
             // The other files with it, looked for off the editor's thread, a question only if there are any
             List<string> roots = WorkspaceRoots();
             string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
-            InBackground($"looking for {name} in the other files...", () => FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
+            InBackground($"looking for {name} in the other files...", () => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
                 .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
             {
                 if (!documents.Contains(here))
