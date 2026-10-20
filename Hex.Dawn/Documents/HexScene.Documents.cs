@@ -80,7 +80,7 @@ internal sealed partial class HexScene
         nameBox.Text = shown.Name;
         designer.MarkSelection();
         // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
-        browsing = browsing && !workspace.IsEmpty;
+        browsing = browsing && !explorer.workspace.IsEmpty;
         running.Forget();
 
         // Its editor is the one in the code panel (or one of the two side by side), the find bar stays over whichever it is
@@ -88,7 +88,7 @@ internal sealed partial class HexScene
 
         ApplyView();
         FoldValuesFor(shown);
-        KeepWorkspace();
+        explorer.KeepWorkspace();
         WatchOpenFiles();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
     }
@@ -109,8 +109,8 @@ internal sealed partial class HexScene
         // A workspace file is the workspace it describes, the way VS Code opens one
         if (path.EndsWith(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
         {
-            OpenWorkspaceFile(path);
-            return !workspace.IsEmpty;
+            explorer.OpenWorkspaceFile(path);
+            return !explorer.workspace.IsEmpty;
         }
 
         // Somebody who opens the same file twice wants to see it, not have it twice
@@ -460,7 +460,7 @@ internal sealed partial class HexScene
         // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu
         commands.Add("File/new", "New Scratchpad", NewScratchpad, "Ctrl+N", "new-file", UIKeyUse.BoundWhileTyping);
         commands.Add("File/new", "New Layout", () => Show(NewDocument()), icon: "layout");
-        commands.Add("File/new", "New File...", () => NewFileIn(workspace.IsEmpty ? browseDirectory : workspace.Folders[0]), icon: "file-add");
+        commands.Add("File/new", "New File...", () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
         commands.Add("File/new", "Open...", OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
         recentMenu = commands.AddMenu("File/new", "Open Recent", "history");
         FillRecentMenu();

@@ -269,7 +269,7 @@ internal sealed partial class HexScene
     /// <summary>The dark behind the layouts exactly what the middle shows, then the layout put in the canvas.</summary>
     private void PlaceCanvas()
     {
-        // A hidden canvas isn't laid out any more, so with the code up it kept the size it had, and designer.dragging the panel up
+        // A hidden canvas isn't laid out any more, so with the code up it kept the size it had, and dragging the panel up
         // had the dark show through the panel where the canvas used to be
         UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : running.Table.Visible ? running.Table : codeScroll;
         if (!middle.Bounds.IsEmpty)

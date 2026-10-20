@@ -24,7 +24,7 @@ internal sealed partial class HexScene
             && entries.Any(entry => entry is { Name: "Grow", Icon: "symbol-method" }) && entries.Any(entry => entry is { Name: "Kind", Icon: "symbol-enum" })
             && !entries.Any(entry => entry.Name == "if"));
         test.Check("any file: and the values side is folded away, there are no values", () => !right.Shown);
-        test.Check("any file: its icon and its colour say what it is", () => FileIcon(cs) == "symbol-class" && FileIconColor(cs) is not null && FileIcon(md) == "markdown");
+        test.Check("any file: its icon and its colour say what it is", () => HexExplorer.FileIcon(cs) == "symbol-class" && explorer.FileIconColor(cs) is not null && HexExplorer.FileIcon(md) == "markdown");
 
         test.Run(() => Open(md));
         test.Settle(0.3f);

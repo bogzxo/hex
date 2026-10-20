@@ -118,10 +118,10 @@ internal sealed partial class HexScene
         if (tab.Path is not { } path)
             return;
 
-        if (workspace.IsEmpty)
+        if (explorer.workspace.IsEmpty)
             browseDirectory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
         else
-            OpenUpTo(path);
+            explorer.OpenUpTo(path);
 
         left.Show(true);
         Side = HexSide.Explorer;

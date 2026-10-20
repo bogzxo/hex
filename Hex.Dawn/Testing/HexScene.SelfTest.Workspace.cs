@@ -28,20 +28,20 @@ internal sealed partial class HexScene
             System.IO.File.WriteAllText(Path.Combine(folderA, "inner", "deep.hor"), "let deep = 0;\n");
             System.IO.File.WriteAllText(Path.Combine(folderB, "b.hor"), "let beta = alpha + 1;\nlet names = { gamma: 2 };\n");
 
-            AddFolder(folderA);
-            AddFolder(folderB);
+            explorer.AddFolder(folderA);
+            explorer.AddFolder(folderB);
         });
         test.Wait();
         test.Check("workspace: two folders added, the explorer has both", () =>
-            workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("EXPLORER")
-            && explorerRows.Any(row => row.IsFolder && row.Path == folderA) && explorerRows.Any(row => row.IsFolder && row.Path == folderB)
-            && explorerRows.Any(row => row.Path == Path.Combine(folderA, "a.hor")) && explorerRows.Any(row => row.Path == Path.Combine(folderB, "b.hor")));
+            explorer.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("EXPLORER")
+            && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderA) && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderB)
+            && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderA, "a.hor")) && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderB, "b.hor")));
         test.Check("workspace: a folder in one of them is shut until it is opened up", () =>
-            explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner")) && !explorerRows.Any(row => row.Path.EndsWith("deep.hor")));
+            explorer.explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner")) && !explorer.explorerRows.Any(row => row.Path.EndsWith("deep.hor")));
 
         test.Click(Explorer(() => Path.Combine(folderA, "inner")));
         test.Wait();
-        test.Check("workspace: a click opens a folder up", () => explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner", "deep.hor")));
+        test.Check("workspace: a click opens a folder up", () => explorer.explorerRows.Any(row => row.Path == Path.Combine(folderA, "inner", "deep.hor")));
         test.Click(Explorer(() => Path.Combine(folderB, "b.hor")));
         test.Wait();
         test.Check("workspace: a click on a file opens it", () => document.Path == Path.Combine(folderB, "b.hor") && document.IsText);
@@ -75,30 +75,30 @@ internal sealed partial class HexScene
             code.Document.Undo();
         });
 
-        test.Run(() => MakeFile(Path.Combine(folderB, "made.hor")));
+        test.Run(() => explorer.MakeFile(Path.Combine(folderB, "made.hor")));
         test.Wait();
         test.Check("workspace: a file made in a folder is there and open", () =>
-            System.IO.File.Exists(Path.Combine(folderB, "made.hor")) && document.Path == Path.Combine(folderB, "made.hor") && explorerRows.Any(row => row.Path.EndsWith("made.hor")));
+            System.IO.File.Exists(Path.Combine(folderB, "made.hor")) && document.Path == Path.Combine(folderB, "made.hor") && explorer.explorerRows.Any(row => row.Path.EndsWith("made.hor")));
 
-        test.Run(() => SaveWorkspaceAs(workspaceFile));
+        test.Run(() => explorer.SaveWorkspaceAs(workspaceFile));
         test.Check("workspace: saved to a file, it reads back the same, its folders relative to it", () =>
             System.IO.File.Exists(workspaceFile) && System.IO.File.ReadAllText(workspaceFile).Contains("\"ws_a\"")
-            && HexWorkspace.Load(workspaceFile) is { } read && read.Folders.SequenceEqual(workspace.Folders) && read.OpenFiles.Contains(Path.Combine(folderB, "made.hor")));
+            && HexWorkspace.Load(workspaceFile) is { } read && read.Folders.SequenceEqual(explorer.workspace.Folders) && read.OpenFiles.Contains(Path.Combine(folderB, "made.hor")));
 
         test.Run(() =>
         {
-            CloseWorkspace();
-            OpenWorkspaceFile(workspaceFile);
+            explorer.CloseWorkspace();
+            explorer.OpenWorkspaceFile(workspaceFile);
         });
         test.Wait();
         test.Check("workspace: closed and opened again from its file, its folders are back", () =>
-            workspace.Folders.Count == 2 && workspace.FilePath == workspaceFile && explorerRows.Count > 2);
+            explorer.workspace.Folders.Count == 2 && explorer.workspace.FilePath == workspaceFile && explorer.explorerRows.Count > 2);
 
-        test.Run(() => RemoveFolder(folderB));
+        test.Run(() => explorer.RemoveFolder(folderB));
         test.Wait();
         test.Check("workspace: a folder taken out is out of the explorer, its files where they were", () =>
-            workspace.Folders.Count == 1 && !explorerRows.Any(row => row.Path.StartsWith(folderB)) && System.IO.File.Exists(Path.Combine(folderB, "b.hor")));
-        test.Run(CloseWorkspace);
+            explorer.workspace.Folders.Count == 1 && !explorer.explorerRows.Any(row => row.Path.StartsWith(folderB)) && System.IO.File.Exists(Path.Combine(folderB, "b.hor")));
+        test.Run(explorer.CloseWorkspace);
     }
 
     private void TestClosingTabs(HexPointerScript test)

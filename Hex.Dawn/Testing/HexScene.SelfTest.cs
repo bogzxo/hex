@@ -326,7 +326,7 @@ internal sealed partial class HexScene
         return last;
     };
 
-    private Func<Vector2> Explorer(Func<string> path) => TreeRow(() => explorerRows.Find(row => row.Path == path()).Row);
+    private Func<Vector2> Explorer(Func<string> path) => TreeRow(() => explorer.explorerRows.Find(row => row.Path == path()).Row);
     private Func<Vector2> FileRow(string name) => TreeRow(() => fileRows.Find(row => Path.GetFileName(row.Path) == name).Row);
 
     // A row of the list a dropdown of the inspector has open, and a point of one of the areas of a colour picker

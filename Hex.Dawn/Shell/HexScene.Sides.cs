@@ -28,7 +28,7 @@ internal sealed partial class HexScene
     {
         Grip(panel, edge, new Vector2(MIN_SIDE * 0.5f, 0.0f), new Vector2(MAX_SIDE, 0.0f), size =>
         {
-            // Both halves of a side go with the drag (the tree and the components' list, the properties and the running.LastRun)
+            // Both halves of a side go with the drag (the tree and the components' list, the properties and the LastRun)
             if (left)
             {
                 treeScroll.Size = treeScroll.Size with { X = size.X };
@@ -64,7 +64,7 @@ internal sealed partial class HexScene
             ToggleSideBar();
     }
 
-    /// <summary>The same for the right side, the properties or the running.LastRun.</summary>
+    /// <summary>The same for the right side, the properties or the LastRun.</summary>
     private void CollapseRight()
     {
         float width = Math.Clamp(settings.RightWidth > 0.0f ? settings.RightWidth : usualRight, MIN_SIDE, MAX_SIDE);

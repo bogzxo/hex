@@ -24,7 +24,7 @@ internal sealed partial class HexScene
     // The editor of the document on screen, where its code is edited and the code of a layout is shown
     private CodeEditor code => document.Editor;
 
-    // designer.Set while the program puts code into an editor, so that isn't taken for somebody typing
+    // Set while the program puts code into an editor, so that isn't taken for somebody typing
     private bool settingCode;
 
     // What the list on the left shows instead of the layout or the files, the places something was found (null for nothing)
@@ -297,9 +297,9 @@ internal sealed partial class HexScene
         commands.Add("Edit/comment", "Toggle Line Comment", () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
 
         commands.ShowMenuWhen("Selection", inCode);
-        commands.Add("Selection/select", "designer.Select All", () => code.Document.SelectAll(), "Ctrl+A");
-        commands.Add("Selection/select", "designer.Select Line", SelectCaretLine);
-        commands.Add("Selection/select", "designer.Select Word", () => code.Document.SelectWordAt(code.Document.Caret));
+        commands.Add("Selection/select", "Select All", () => code.Document.SelectAll(), "Ctrl+A");
+        commands.Add("Selection/select", "Select Line", SelectCaretLine);
+        commands.Add("Selection/select", "Select Word", () => code.Document.SelectWordAt(code.Document.Caret));
         commands.Add("Selection/lines", "Move Line Up", () => code.Document.MoveLines(-1), "Alt+Up", "arrow-up");
         commands.Add("Selection/lines", "Move Line Down", () => code.Document.MoveLines(1), "Alt+Down", "arrow-down");
         commands.Add("Selection/lines", "Duplicate Line", () => code.Document.Duplicate(), "Ctrl+Shift+D", "copy");

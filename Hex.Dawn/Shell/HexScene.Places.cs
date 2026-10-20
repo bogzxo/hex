@@ -98,4 +98,11 @@ internal sealed partial class HexScene
 
         OpenAt(going.Path, going.Line, going.Column);
     }
+
+    /// <summary>Go's back and forward through the places the caret was.</summary>
+    private void AddPlaceCommands()
+    {
+        commands.Add("Go/places", "Back", () => GoPlace(back: true), "Alt+Left", "arrow-left", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", "Forward", () => GoPlace(back: false), "Alt+Right", "arrow-right", UIKeyUse.BoundWhileTyping);
+    }
 }

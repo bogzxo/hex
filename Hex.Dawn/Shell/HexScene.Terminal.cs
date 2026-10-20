@@ -140,7 +140,7 @@ internal sealed partial class HexScene : ITerminalHostUi
     private string TerminalFolder()
     {
         string? file = document.Path is { } path ? Path.GetDirectoryName(path) : null;
-        string? root = workspace.Folders.FirstOrDefault();
+        string? root = explorer.workspace.Folders.FirstOrDefault();
         return terminals.Settings.StartIn == "file" ? file ?? root ?? browseDirectory : root ?? file ?? browseDirectory;
     }
 
@@ -177,7 +177,7 @@ internal sealed partial class HexScene : ITerminalHostUi
     /// <summary>The tabs the workspace kept when the settings say so and there are any, a shell in the workspace's folder otherwise.</summary>
     private void OpenTerminals()
     {
-        if (terminals.Settings.RestoreSessions && workspace.Terminal is { } kept && TerminalSessions.Restore(terminalPanel, kept, terminals.ProfileCalled))
+        if (terminals.Settings.RestoreSessions && explorer.workspace.Terminal is { } kept && TerminalSessions.Restore(terminalPanel, kept, terminals.ProfileCalled))
         {
             return;
         }
@@ -204,7 +204,7 @@ internal sealed partial class HexScene : ITerminalHostUi
         }
 
         if (terminalKeepIn > 0.0f && (terminalKeepIn -= dt) <= 0.0f)
-            KeepWorkspace();
+            explorer.KeepWorkspace();
     }
 
     /* What Hex adds to the terminal object */
@@ -221,7 +221,7 @@ internal sealed partial class HexScene : ITerminalHostUi
     private IEnumerable<(string, IRuntimeValue)> HexTerminalApi(TerminalPlugin plugin) =>
     [
         ("file", Natives.Function("file", _ => new StringValue(document.Path ?? string.Empty))),
-        ("workspace", Natives.Function("workspace", _ => Natives.List(workspace.Folders))),
+        ("workspace", Natives.Function("workspace", _ => Natives.List(explorer.workspace.Folders))),
         ("problem", Natives.Action("problem", args => AddTerminalProblem(args.Text(0), (int)args.Number(1), (int)args.Number(2, 1), args.Text(3), args.Bool(4, false)))),
         ("clear_problems", Natives.Action("clear_problems", _ => ClearTerminalProblems()))
     ];
@@ -270,7 +270,7 @@ internal sealed partial class HexScene : ITerminalHostUi
 
         if (Directory.Exists(path))
         {
-            OpenFolder(path);
+            explorer.OpenFolder(path);
             return true;
         }
 

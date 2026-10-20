@@ -167,6 +167,8 @@ internal sealed partial class HexScene : Scene
         LoadSettings();
         DeclareMenus();
         codeEditing = new HexCodeEditing(Context);
+        explorer = new HexExplorer(Context);
+        explorer.FoldersChanged += codeEditing.ForgetVocabulary;
         running = new HexRunning(Context);
         designer = new HexDesigner(Context);
         running.Ran += path => extensions.Raise("on_run", new StringValue(path));
@@ -188,7 +190,8 @@ internal sealed partial class HexScene : Scene
         recent.AddRange(ReadRecent());
         AddWindowCommands();
         AddDocumentCommands();
-        AddWorkspaceCommands();
+        explorer.AddWorkspaceCommands();
+        AddPlaceCommands();
         AddSettingsCommands();
         AddFindCommands();
         AddCodeCommands();
@@ -225,17 +228,17 @@ internal sealed partial class HexScene : Scene
         startedWith = document;
 
         // The folders of last time and the files that were open in them, unless the editor was told what to open
-        RestoreWorkspace();
+        explorer.RestoreWorkspace();
 
         // A folder it was started on (dawn -window folder in a terminal) is the workspace instead
         if (options.Folder is not null)
-            OpenFolder(options.Folder);
+            explorer.OpenFolder(options.Folder);
 
         if (options.Open is not null && options.Line > 0)
             OpenAt(options.Open, options.Line - 1, 0);
         else if (options.Open is not null)
             Open(options.Open);
-        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && workspace.OpenFiles.Count == 0)
+        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && explorer.workspace.OpenFiles.Count == 0)
             Open(recent[0]);
 
         // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own

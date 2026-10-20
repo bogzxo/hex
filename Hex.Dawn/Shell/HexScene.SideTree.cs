@@ -52,14 +52,14 @@ internal sealed partial class HexScene
     /// <summary>The folders of the workspace as a tree, a folder's files read when it is opened and kept until they change.</summary>
     private void RebuildExplorer()
     {
-        treeTitle.Text = Said("side.explorer_of", ("workspace", workspace.Name.ToUpperInvariant()));
-        explorerRows.Clear();
+        treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name.ToUpperInvariant()));
+        explorer.explorerRows.Clear();
         explorerMade = 0;
         UseSideTree(true);
         WatchFolders();
 
         var items = new List<UITreeItem>();
-        foreach (string folder in workspace.Folders)
+        foreach (string folder in explorer.workspace.Folders)
             items.Add(FolderItem(new ExplorerEntry(folder, true, 0, true)));
 
         if (items.Count == 0)
@@ -74,7 +74,7 @@ internal sealed partial class HexScene
 
     private UITreeItem FolderItem(ExplorerEntry entry)
     {
-        bool open = workspace.Expanded.Contains(entry.Path);
+        bool open = explorer.workspace.Expanded.Contains(entry.Path);
         var item = new UITreeItem(Path.GetFileName(entry.Path.TrimEnd('\\', '/')), open ? "folder-opened" : "folder")
         {
             IconColor = FolderColor,
@@ -85,17 +85,17 @@ internal sealed partial class HexScene
         };
 
         item.Tag = new SideTag(
-            Menu: _ => ShowExplorerMenu(entry),
+            Menu: _ => explorer.ShowExplorerMenu(entry),
             Toggled: toggled =>
             {
                 toggled.Icon = toggled.Expanded ? "folder-opened" : "folder";
-                if (toggled.Expanded) workspace.Expanded.Add(entry.Path);
-                else workspace.Expanded.Remove(entry.Path);
-                KeepWorkspace();
+                if (toggled.Expanded) explorer.workspace.Expanded.Add(entry.Path);
+                else explorer.workspace.Expanded.Remove(entry.Path);
+                explorer.KeepWorkspace();
             },
             Expanding: FillFolder);
 
-        explorerRows.Add((entry.Path, true, item));
+        explorer.explorerRows.Add((entry.Path, true, item));
         explorerMade++;
 
         if (open)
@@ -118,7 +118,7 @@ internal sealed partial class HexScene
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
-            if (HexSearch.SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= MAX_EXPLORER_ROWS)
+            if (HexSearch.SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
@@ -127,19 +127,19 @@ internal sealed partial class HexScene
         foreach (string file in files)
         {
             string name = Path.GetFileName(file);
-            if (name.StartsWith("~syncthing~") || name.StartsWith('.') || name.Contains(".sync-conflict") || explorerMade >= MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || name.StartsWith('.') || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
                 continue;
 
             var entry = new ExplorerEntry(file, false, depth, false);
-            var row = item.Add(new UITreeItem(name, FileIcon(file))
+            var row = item.Add(new UITreeItem(name, HexExplorer.FileIcon(file))
             {
-                IconColor = FileIconColor(file),
-                Color = IsEditable(file) ? null : DimColor,
+                IconColor = explorer.FileIconColor(file),
+                Color = HexExplorer.IsEditable(file) ? null : DimColor,
                 Tooltip = file,
-                Tag = new SideTag(Pressed: () => ExplorerPressed(entry), Menu: _ => ShowExplorerMenu(entry))
+                Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
             });
 
-            explorerRows.Add((file, false, row));
+            explorer.explorerRows.Add((file, false, row));
             explorerMade++;
         }
     }
@@ -151,7 +151,7 @@ internal sealed partial class HexScene
             return;
 
         string full = Path.GetFullPath(path);
-        foreach (var (rowPath, isFolder, row) in explorerRows)
+        foreach (var (rowPath, isFolder, row) in explorer.explorerRows)
         {
             if (!isFolder && string.Equals(Path.GetFullPath(rowPath), full, PlatformPaths.Comparison))
             {
@@ -166,7 +166,7 @@ internal sealed partial class HexScene
     private void RebuildFiles()
     {
         // A workspace is a tree of its folders, without one it is the folder files are opened from
-        if (!workspace.IsEmpty)
+        if (!explorer.workspace.IsEmpty)
         {
             RebuildExplorer();
             return;
@@ -187,7 +187,7 @@ internal sealed partial class HexScene
         // Every file that is text, a layout or not, the editor opens any of them
         foreach (string file in files)
         {
-            if (IsEditable(file))
+            if (HexExplorer.IsEditable(file))
                 items.Add(FileItem(file, false, Path.GetFileName(file)));
         }
 
@@ -196,12 +196,12 @@ internal sealed partial class HexScene
 
     private UITreeItem FileItem(string path, bool isDirectory, string text)
     {
-        var item = new UITreeItem(text, isDirectory ? "folder" : FileIcon(path))
+        var item = new UITreeItem(text, isDirectory ? "folder" : HexExplorer.FileIcon(path))
         {
-            IconColor = isDirectory ? FolderColor : FileIconColor(path),
+            IconColor = isDirectory ? FolderColor : explorer.FileIconColor(path),
             Color = isDirectory ? FolderColor : null,
             Tooltip = path,
-            Tag = new SideTag(Pressed: () => PickFile(path, isDirectory))
+            Tag = new SideTag(Pressed: () => explorer.PickFile(path, isDirectory))
         };
 
         fileRows.Add((path, isDirectory, item));
@@ -295,7 +295,7 @@ internal sealed partial class HexScene
         {
             if (!byFile.TryGetValue(result.Path, out UITreeItem? file))
             {
-                file = new UITreeItem(Path.GetFileName(result.Path), FileIcon(result.Path))
+                file = new UITreeItem(Path.GetFileName(result.Path), HexExplorer.FileIcon(result.Path))
                 {
                     Tooltip = result.Path,
                     Expanded = true,

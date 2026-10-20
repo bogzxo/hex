@@ -26,6 +26,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private HexRunning running = null!;
     private HexDesigner designer = null!;
     private HexCodeEditing codeEditing = null!;
+    private HexExplorer explorer = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, commands, options,
@@ -104,19 +105,18 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     private readonly List<Func<IEnumerable<string>>> watchedToo = [];
     private Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>>? filesChanged;
-    private Action<string>? folderDeleting;
 
-    IReadOnlyList<string> IWorkspace.Folders => workspace.Folders;
+    IReadOnlyList<string> IWorkspace.Folders => explorer.workspace.Folders;
     IReadOnlyList<string> IWorkspace.Roots => WorkspaceRoots();
     string IWorkspace.Relative(string path) => Relative(path);
     void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
     void IWorkspace.Rewatch() => WatchFolders();
     event Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>> IWorkspace.FilesChanged { add => filesChanged += value; remove => filesChanged -= value; }
-    event Action<string> IWorkspace.Deleting { add => folderDeleting += value; remove => folderDeleting -= value; }
+    event Action<string> IWorkspace.Deleting { add => explorer.Deleting += value; remove => explorer.Deleting -= value; }
 
     /// <summary>Watches the folders of the workspace (for the explorer) and the ones the parts of the editor want watched too, and nothing else.</summary>
     private void WatchFolders() =>
-        folders.Watch(workspace.Folders.Concat(watchedToo.SelectMany(more => more())).Where(Directory.Exists).Distinct(PlatformPaths.Comparer));
+        folders.Watch(explorer.workspace.Folders.Concat(watchedToo.SelectMany(more => more())).Where(Directory.Exists).Distinct(PlatformPaths.Comparer));
 
     /// <summary>Every tick, what changed on the disk in the folders that are watched said to whoever wants to know.</summary>
     private void UpdateFileChanges()
@@ -161,7 +161,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
         });
     }
 
-    void IWindows.ChooseFolder(Action<string> picked) => AskFolder(picked);
+    void IWindows.ChooseFolder(Action<string> picked) => explorer.AskFolder(picked);
 
     void IWindows.Ask(string title, string text, string[] buttons, Action<string> answered)
     {
@@ -175,7 +175,14 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     void IWindows.Menu(Menu menu) => contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
     void IWindows.MenuAt(Menu menu, Vector2 at) => contextMenu = ContextMenu.ShowAt(chrome, at, menu);
-    string IWindows.BrowseFolder => browseDirectory;
+    string IWindows.BrowseFolder
+    {
+        get => browseDirectory;
+        set => browseDirectory = value;
+    }
+
+    UIDialogHost IWindows.DialogHost => DialogHost;
+    void IWindows.Pick(Task<string?> asked, Action<string> picked) => Ask(asked, picked);
     void IWindows.Choose(string title, string message, List<(string Text, Action Picked)> choices) => ChooseFrom(title, message, choices);
 
     /// <summary>A page in the browser the system has.</summary>
@@ -346,4 +353,13 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     }
 
     void IWork.InBackground<T>(string doing, Func<T> what, Action<T> done, bool quiet) => InBackground(doing, what, done, quiet);
+
+    HexSide IEditorWindow.HomeSide => HomeSide;
+    void IEditorWindow.ClearResults() => results = null;
+
+    void IEditorWindow.ShowName()
+    {
+        nameBox.Text = document.Name;
+        tabsDirty = true;
+    }
 }

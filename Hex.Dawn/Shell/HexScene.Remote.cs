@@ -79,7 +79,7 @@ internal sealed partial class HexScene
     private void UpdateRemote()
     {
         while (remoteFolders.TryDequeue(out string? folder))
-            OpenFolder(folder);
+            explorer.OpenFolder(folder);
 
         while (remoteOpens.TryDequeue(out var asked))
         {

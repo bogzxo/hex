@@ -103,7 +103,7 @@ internal sealed partial class HexScene
         test.Run(() => grab = At(() => ((StackPanel)designer.editors["size"]).Children[0], 0.3f)());
         test.Drag(() => grab, () => grab + new Vector2(160, 0) * compositor.UIScale);
         test.Wait();
-        test.Check("inspector: designer.dragging across a number box changes the number", () => Near(button!.Size.X, 40, 1.5f) && Code().Contains("size: vec("));
+        test.Check("inspector: dragging across a number box changes the number", () => Near(button!.Size.X, 40, 1.5f) && Code().Contains("size: vec("));
 
         test.Click(At(() => designer.editors["anchor"]));
         test.Wait();
@@ -243,7 +243,7 @@ internal sealed partial class HexScene
         });
         test.Drag(() => grab, () => grab + pull * compositor.UIScale);
         test.Wait();
-        test.Check("canvas: designer.dragging moves a component by as much of the layout as the pointer covered", () =>
+        test.Check("canvas: dragging moves a component by as much of the layout as the pointer covered", () =>
             Vector2.Distance(panel!.Position - before, pull / document.Module.Scale.X) < 2.5f && Code().Contains("pos: vec("));
         test.Check("canvas: and the inspector shows where it ended up", () =>
             designer.editors["pos"] is StackPanel row && row.Children[0] is NumberBox x && Near(x.Value, panel!.Position.X, 0.01f));
@@ -270,7 +270,7 @@ internal sealed partial class HexScene
         test.Click(In(() => Picker().AlphaBounds, 0.5f, 0.97f));
         test.Drag(In(() => Picker().ShadeBounds, 0.3f, 0.4f), In(() => Picker().ShadeBounds, 0.95f, 0.95f));
         test.Wait();
-        test.Check("colour: designer.dragging through the square picks a shade, the strip how solid it is", () =>
+        test.Check("colour: dragging through the square picks a shade, the strip how solid it is", () =>
             ((Label)label!).Color is { X: > 0.8f, Y: < 0.2f, Z: < 0.2f, W: > 0.9f } && Code().Contains("color: vec("));
         test.Click(In(() => Picker().HueBounds, 0.5f, 0.34f));
         test.Wait();

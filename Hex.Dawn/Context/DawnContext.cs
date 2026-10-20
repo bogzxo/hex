@@ -208,8 +208,14 @@ internal interface IWindows
     /// <summary>A folder picked with Hex's own dialog, something done with it.</summary>
     void ChooseFolder(Action<string> picked);
 
-    /// <summary>The folder the dialogs start in when nothing says another.</summary>
-    string BrowseFolder { get; }
+    /// <summary>The folder the dialogs start in when nothing says another, the one files were last opened from.</summary>
+    string BrowseFolder { get; set; }
+
+    /// <summary>Where Hex's own dialogs go, over the editor, with the workspace's folders among their places.</summary>
+    UIDialogHost DialogHost { get; }
+
+    /// <summary>What a dialog hands back done with once it does, one dialog at a time (the self test types instead).</summary>
+    void Pick(Task<string?> asked, Action<string> picked);
 }
 
 /// <summary>The settings, and the window they're changed in.</summary>
@@ -359,6 +365,15 @@ internal interface IEditorWindow
 
     /// <summary>The places something was found, listed in the side bar's search view.</summary>
     void ShowResults(string title, List<HexResult> found);
+
+    /// <summary>The view of the side bar that's what's on screen's own, the components or the outline.</summary>
+    HexSide HomeSide { get; }
+
+    /// <summary>The name of the document on screen shown again, it was renamed.</summary>
+    void ShowName();
+
+    /// <summary>What was last found in the files, put away.</summary>
+    void ClearResults();
 
     /// <summary>The status bar's piece that says where the pointer is.</summary>
     StatusItem Coordinates { get; }

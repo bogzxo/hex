@@ -54,16 +54,16 @@ internal sealed partial class HexScene
     /// </summary>
     private void AddWindowCommands()
     {
-        commands.Add("View/palette", "Command HexDesigner.Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", "Command Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
         commands.Bind(Key.F1, CommandPalette, whileTyping: true);
         commands.Add("View/palette", "Dusk, the Terminal", SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
 
         // VS Code's keys for the side bar, the panel and the command palette
-        commands.Add("View/sides", "Explorer", ShowExplorer, "Ctrl+Shift+E", "files", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/sides", "Explorer", explorer.ShowExplorer, "Ctrl+Shift+E", "files", UIKeyUse.BoundWhileTyping);
         commands.Add("View/sides", "Search", () => ShowSide(HexSide.Search), icon: "search");
         commands.Add("View/sides", "Debug", () => ShowSide(HexSide.Debug), icon: "debug-alt");
-        commands.Add("View/sides", "Outline", ShowOutline, "Ctrl+Shift+O", "list-tree", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
-        commands.Add("View/sides", "Toolbox", ShowOutline, "Ctrl+Shift+O", "layout").IsVisible = () => LayoutTools;
+        commands.Add("View/sides", "Outline", explorer.ShowOutline, "Ctrl+Shift+O", "list-tree", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+        commands.Add("View/sides", "Toolbox", explorer.ShowOutline, "Ctrl+Shift+O", "layout").IsVisible = () => LayoutTools;
         commands.Add("View/sides", "Problems", () => ShowPanel(PROBLEMS_PAGE), icon: "error");
         commands.Add("View/sides", "Output", () => ShowPanel(OUTPUT_PAGE), icon: "output");
 

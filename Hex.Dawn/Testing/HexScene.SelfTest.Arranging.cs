@@ -7,7 +7,7 @@ using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
-// The self test, more than one thing at once, groups, copies, what a layout is made for, tabs, closing and designer.dragging edges.
+// The self test, more than one thing at once, groups, copies, what a layout is made for, tabs, closing and dragging edges.
 internal sealed partial class HexScene
 {
     private void TestMultipleSelection(HexPointerScript test)
@@ -277,7 +277,7 @@ internal sealed partial class HexScene
             InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)),
             InLayout(() => new Vector2(box!.Bounds.Center.X + boxSize.X * 0.5f - 2 + 60, box.Bounds.Center.Y)));
         test.Wait();
-        test.Check("handles: designer.dragging the right edge makes it that much wider and no taller, code and all", () =>
+        test.Check("handles: dragging the right edge makes it that much wider and no taller, code and all", () =>
             Near(box!.Size.X, 260, 1.5f) && Near(box.Size.Y, 120) && Code().Contains("size: vec(") && !designer.dragging);
 
         test.Run(() => boxSize = box!.Bounds.Size);
@@ -319,7 +319,7 @@ internal sealed partial class HexScene
             InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)),
             InChrome(() => new Vector2(treeScroll.Bounds.Min.X + listWide + 4 + 70, treeScroll.Bounds.Center.Y)));
         test.Wait();
-        test.Check("panels: designer.dragging it makes the lists wider and the canvas make do", () =>
+        test.Check("panels: dragging it makes the lists wider and the canvas make do", () =>
             Near(treeScroll.Size.X, listWide + 70, 2) && Near(settings.LeftWidth, treeScroll.Size.X) && Fits() && !treeScroll.IsResizing);
         test.Check("panels: and nothing in the canvas was touched by it", () => document.Selected == box && !designer.dragging);
         test.Check("panels: the rows of the list and the buttons over it are as wide as the list is now", () =>
@@ -339,7 +339,7 @@ internal sealed partial class HexScene
         });
         test.Drag(InChrome(() => propertiesEdge), InChrome(() => propertiesEdge - new Vector2(90, 0)));
         test.Wait();
-        test.Check("panels: designer.dragging the properties wider makes what is in them wider with them", () =>
+        test.Check("panels: dragging the properties wider makes what is in them wider with them", () =>
             Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(designer.editors["name"].Bounds.Width, editorWide + 90, 2)
             && designer.editors["name"].Bounds.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits());
         test.Check("panels: every kind of editor in them, the ones that are two and four numbers across as well", () =>

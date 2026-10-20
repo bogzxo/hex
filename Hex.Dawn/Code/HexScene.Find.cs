@@ -76,7 +76,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The folders whose files are looked through, the workspace's, or the repository of the open file without one.</summary>
-    private List<string> WorkspaceRoots() => workspace.IsEmpty ? [RepositoryRoot()] : [.. workspace.Folders];
+    private List<string> WorkspaceRoots() => explorer.workspace.IsEmpty ? [RepositoryRoot()] : [.. explorer.workspace.Folders];
 
     /// <summary>What is looked through, said the way a person would.</summary>
     private string DescribeRoots()

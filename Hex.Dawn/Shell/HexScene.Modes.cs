@@ -37,7 +37,7 @@ internal sealed partial class HexScene
     /// <summary>To Dusk, in the folder that's open, the window's own when Hex.exe started it.</summary>
     private void SwapMode()
     {
-        string? folder = workspace.Folders.Count > 0 ? workspace.Folders[0] : browseDirectory;
+        string? folder = explorer.workspace.Folders.Count > 0 ? explorer.workspace.Folders[0] : browseDirectory;
         if (!HexModes.Swap(folder))
             Say("there's no Dusk to swap to", error: true);
     }

@@ -111,10 +111,10 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             terminals.Run("split_right");
-            KeepWorkspace();
+            explorer.KeepWorkspace();
         });
         test.Wait();
-        test.Check("terminal: the workspace keeps the terminal's tabs", () => workspace.Terminal is { } kept && Horizon.HIDL.HIDLWriter.Write(kept).Contains("split: \"right\""));
+        test.Check("terminal: the workspace keeps the terminal's tabs", () => explorer.workspace.Terminal is { } kept && Horizon.HIDL.HIDLWriter.Write(kept).Contains("split: \"right\""));
         test.Run(() =>
         {
             foreach (TerminalTab tab in terminalPanel.Tabs.ToArray())

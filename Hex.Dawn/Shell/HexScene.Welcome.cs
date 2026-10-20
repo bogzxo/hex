@@ -44,7 +44,7 @@ internal sealed partial class HexScene
 
             made.Get<Button>("new_layout").OnPressed = () => Show(NewDocument());
             made.Get<Button>("open_file").OnPressed = OpenPressed;
-            made.Get<Button>("open_folder").OnPressed = () => AskFolder(OpenFolder);
+            made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
             made.Get<Button>("commands").OnPressed = CommandPalette;
             made.Get<Button>("keys").OnPressed = OpenKeysWindow;
             made.Get<Button>("language").OnPressed = ShowLanguageHelp;
@@ -58,7 +58,7 @@ internal sealed partial class HexScene
                 string path = recent[i];
                 var link = rows[i].Get<Button>("link");
                 link.Label = $"{Path.GetFileName(path)}    {Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty)}";
-                link.Icon = FileIcon(path);
+                link.Icon = HexExplorer.FileIcon(path);
                 link.Tooltip = path;
                 link.OnPressed = () => Open(path);
             }

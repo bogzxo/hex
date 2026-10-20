@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 
 // The explorer, the folders of the workspace as a tree on the left, and what can be done to their files from it. Made,
 // renamed and deleted (into the trash, see HexTrash).
-internal sealed partial class HexScene
+internal sealed partial class HexExplorer
 {
     /* The explorer */
     // The files the editor opens, .hor first of all, anything else that is text by the look of its name, and whatever a
@@ -19,10 +19,10 @@ internal sealed partial class HexScene
         ".csproj", ".sln", ".props", ".targets", ".yml", ".yaml", ".ini", ".cfg", ".gitignore", ".editorconfig", ".fnt", ".csv"
     };
 
-    private static bool IsEditable(string path) => TextExtensions.Contains(Path.GetExtension(path)) || Path.GetExtension(path).Length == 0
+    internal static bool IsEditable(string path) => TextExtensions.Contains(Path.GetExtension(path)) || Path.GetExtension(path).Length == 0
         || Horizon.UI.Scripting.CodeLanguages.ForFile(path) is not null;
 
-    private void ExplorerPressed(ExplorerEntry entry)
+    internal void ExplorerPressed(ExplorerEntry entry)
     {
         if (entry.IsFolder)
         {
@@ -36,20 +36,20 @@ internal sealed partial class HexScene
 
         if (!IsEditable(entry.Path))
         {
-            Say($"{Path.GetFileName(entry.Path)} isn't text, there is nothing to edit in it here", error: true);
+            context.Notices.Say($"{Path.GetFileName(entry.Path)} isn't text, there is nothing to edit in it here", error: true);
             return;
         }
 
-        Open(entry.Path);
+        context.Documents.Open(entry.Path);
     }
 
-    private void ShowExplorerMenu(ExplorerEntry entry)
+    internal void ShowExplorerMenu(ExplorerEntry entry)
     {
         var shown = new Menu("file");
         string folder = entry.IsFolder ? entry.Path : Path.GetDirectoryName(entry.Path)!;
 
         if (!entry.IsFolder)
-            shown.Add("Open", () => Open(entry.Path));
+            shown.Add("Open", () => context.Documents.Open(entry.Path));
 
         shown.Add("New file...", () => NewFileIn(folder));
         shown.Add("New folder...", () => NewFolderIn(folder));
@@ -61,7 +61,7 @@ internal sealed partial class HexScene
         shown.Add("Copy the path", () =>
         {
             UIClipboard.Copy(entry.Path);
-            Say($"{entry.Path} is on the clipboard");
+            context.Notices.Say($"{entry.Path} is on the clipboard");
         });
 
         if (entry.IsRoot)
@@ -70,7 +70,7 @@ internal sealed partial class HexScene
             shown.Add("Take out of the workspace", () => RemoveFolder(entry.Path));
         }
 
-        contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
+        context.Windows.Menu(shown);
     }
 
     /* Files made, renamed and thrown away */
@@ -85,7 +85,7 @@ internal sealed partial class HexScene
         try
         {
             if (OperatingSystem.IsWindows())
-                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+                System.Diagnostics.Process.Start("exe", $"/select,\"{path}\"");
             else if (OperatingSystem.IsMacOS())
                 System.Diagnostics.Process.Start("open", ["-R", path]);
             else if (!ShowInFileManager(path))
@@ -93,7 +93,7 @@ internal sealed partial class HexScene
         }
         catch (Exception e)
         {
-            Say($"{Path.GetFileName(path)} couldn't be shown, {e.Message}", error: true);
+            context.Notices.Say($"{Path.GetFileName(path)} couldn't be shown, {e.Message}", error: true);
         }
     }
 
@@ -125,14 +125,14 @@ internal sealed partial class HexScene
         }
     }
 
-    private void NewFileIn(string folder)
+    internal void NewFileIn(string folder)
     {
-        AskText("New file", $"A file in {folder}, .hor unless it says otherwise", "new.hor", "Make", name =>
+        context.Windows.Prompt("New file", $"A file in {folder}, .hor unless it says otherwise", "new.hor", "Make", string.Empty, name =>
         {
             name = name.Trim();
             if (!IsPlainName(name))
             {
-                Say($"'{name}' can't be the name of a file", error: true);
+                context.Notices.Say($"'{name}' can't be the name of a file", error: true);
                 return;
             }
 
@@ -144,11 +144,11 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Makes a file that isn't there yet, opens up the folder it is in, and opens it.</summary>
-    private void MakeFile(string path)
+    internal void MakeFile(string path)
     {
         if (File.Exists(path) || Directory.Exists(path))
         {
-            Say($"there is a {Path.GetFileName(path)} there already", error: true);
+            context.Notices.Say($"there is a {Path.GetFileName(path)} there already", error: true);
             return;
         }
 
@@ -158,26 +158,26 @@ internal sealed partial class HexScene
         }
         catch (Exception e)
         {
-            Say($"couldn't make {path}, {e.Message}", error: true);
+            context.Notices.Say($"couldn't make {path}, {e.Message}", error: true);
             return;
         }
 
         workspace.Expanded.Add(Path.GetDirectoryName(Path.GetFullPath(path))!);
         treeDirty = true;
-        Open(path);
-        Say($"made {path}");
+        context.Documents.Open(path);
+        context.Notices.Say($"made {path}");
     }
 
     private void NewFolderIn(string folder)
     {
-        AskText("New folder", $"A folder in {folder}", "new folder", "Make", name =>
+        context.Windows.Prompt("New folder", $"A folder in {folder}", "new folder", "Make", string.Empty, name =>
         {
             name = name.Trim();
             string path = Path.Combine(folder, name);
 
             if (!IsPlainName(name) || Directory.Exists(path) || File.Exists(path))
             {
-                Say($"'{name}' can't be made there", error: true);
+                context.Notices.Say($"'{name}' can't be made there", error: true);
                 return;
             }
 
@@ -186,14 +186,14 @@ internal sealed partial class HexScene
             workspace.Expanded.Add(Path.GetFullPath(path));
             treeDirty = true;
             KeepWorkspace();
-            Say($"made {path}");
+            context.Notices.Say($"made {path}");
         });
     }
 
     private void RenamePath(string path)
     {
         string old = Path.GetFileName(path.TrimEnd('\\', '/'));
-        AskText("Rename", $"What {old} is called from now on", old, "Rename", name =>
+        context.Windows.Prompt("Rename", $"What {old} is called from now on", old, "Rename", string.Empty, name =>
         {
             name = name.Trim();
             if (!IsPlainName(name) || name == old)
@@ -202,7 +202,7 @@ internal sealed partial class HexScene
             string to = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, name);
             if (File.Exists(to) || Directory.Exists(to))
             {
-                Say($"there is a {name} there already", error: true);
+                context.Notices.Say($"there is a {name} there already", error: true);
                 return;
             }
 
@@ -213,7 +213,7 @@ internal sealed partial class HexScene
             }
             catch (Exception e)
             {
-                Say($"couldn't rename {old}, {e.Message}", error: true);
+                context.Notices.Say($"couldn't rename {old}, {e.Message}", error: true);
                 return;
             }
 
@@ -239,10 +239,10 @@ internal sealed partial class HexScene
             if (workspace.Expanded.Remove(from))
                 workspace.Expanded.Add(to);
 
-            nameBox.Text = document.Name;
-            tabsDirty = treeDirty = true;
+            window.ShowName();
+            treeDirty = true;
             KeepWorkspace();
-            Say($"{old} is {name} now");
+            context.Notices.Say($"{old} is {name} now");
         });
     }
 
@@ -264,7 +264,7 @@ internal sealed partial class HexScene
 
         // Whatever runs in it (a language server, its folder its process's) would keep Windows from moving it
         if (Directory.Exists(full))
-            folderDeleting?.Invoke(full);
+            Deleting?.Invoke(full);
 
         try
         {
@@ -272,7 +272,7 @@ internal sealed partial class HexScene
         }
         catch (Exception e)
         {
-            Say($"couldn't delete {Path.GetFileName(full)}, {e.Message}", error: true);
+            context.Notices.Say($"couldn't delete {Path.GetFileName(full)}, {e.Message}", error: true);
             return;
         }
 
@@ -291,13 +291,13 @@ internal sealed partial class HexScene
         }
 
         tabsDirty = treeDirty = true;
-        codeEditing.ForgetVocabulary();
+        FoldersChanged?.Invoke();
         KeepWorkspace();
-        Say($"{Path.GetFileName(full)} is in the trash");
+        context.Notices.Say($"{Path.GetFileName(full)} is in the trash");
     }
 
     /// <summary>The icon of a file in the explorer and the lists, by what it is.</summary>
-    private static string FileIcon(string path)
+    internal static string FileIcon(string path)
     {
         string name = Path.GetFileName(path);
         string extension = Path.GetExtension(path).ToLowerInvariant();
@@ -332,7 +332,7 @@ internal sealed partial class HexScene
     /// The colour of a file's icon by what it is, the colours the skin writes code in, so a theme colours them too. Null
     /// for the text's own colour, a file of nothing in particular.
     /// </summary>
-    private System.Numerics.Vector4? FileIconColor(string path)
+    internal System.Numerics.Vector4? FileIconColor(string path)
     {
         if (compositor.Skin?.Syntax is not { } syntax)
             return null;
@@ -351,17 +351,17 @@ internal sealed partial class HexScene
         };
     }
 
-    private void PickFile(string path, bool isDirectory)
+    internal void PickFile(string path, bool isDirectory)
     {
         if (isDirectory)
         {
             // New layouts are saved to wherever was looked at last
             browseDirectory = path;
             treeDirty = true;
-            Say($"files of {browseDirectory}");
+            context.Notices.Say($"files of {browseDirectory}");
             return;
         }
 
-        Open(path);
+        context.Documents.Open(path);
     }
 }
