@@ -16,7 +16,7 @@ internal sealed partial class HexScene
 
     private string ownMoves = string.Empty, sharedMoves = string.Empty, hitboxFile = string.Empty;
 
-    private ExtensionUI? MoveView() => viewsMade.Values.FirstOrDefault(made => made.Owner.Name == "Move editor" && !made.Closed);
+    private UIScriptedLayout? MoveView() => viewsMade.Values.FirstOrDefault(made => made.Owner.Name == "Move editor" && !made.Closed);
 
     private T Part<T>(string name) where T : UIComponent => MoveView()!.Made.Get<T>(name);
 
@@ -24,7 +24,7 @@ internal sealed partial class HexScene
 
     // The state of the view in the extension, what it has on screen, for asking about it
     private ObjectValue? EditorState() =>
-        MoveView()?.Owner.Runtime?.UserScope.Lookup("views") is ObjectValue views && views.Properties.Values.FirstOrDefault() is ObjectValue state ? state : null;
+        (MoveView()?.Owner as HexExtension)?.Runtime?.UserScope.Lookup("views") is ObjectValue views && views.Properties.Values.FirstOrDefault() is ObjectValue state ? state : null;
 
     private string? EditorText(string key) => EditorState()?.Properties.GetValueOrDefault(key) is StringValue text ? text.Value : null;
 

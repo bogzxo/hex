@@ -14,7 +14,7 @@ internal sealed record ExtensionSetting(string Key, string Title, string About, 
 /// description, version, author }</c>) and has functions Hex calls when things happen, <c>on_start(hex)</c> for now, in a
 /// runtime of its own with <c>hex</c> the only thing it is handed. See the README.
 /// </summary>
-internal sealed class HexExtension
+internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
 {
     public const string FILE = "extension.hor";
 

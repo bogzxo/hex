@@ -7,7 +7,7 @@ namespace Hex.Dawn;
 /// <summary>
 /// What of the extensions is on screen and is the editor's to put there: the views of a file next to its code, the pages
 /// of the panel, the little windows, a note in the title bar, and the file on screen as an extension sees it. The scene
-/// does these (HexScene.ExtensionUI), HexExtensions asks for them.
+/// does these (HexScene.UIScriptedLayout), HexExtensions asks for them.
 /// </summary>
 internal interface IExtensionScreens
 {
@@ -15,10 +15,10 @@ internal interface IExtensionScreens
     void AddView(ExtensionViewKind kind);
 
     /// <summary>A page of the panel out of an extension's layout, null (said) when it doesn't build.</summary>
-    ExtensionUI? MakePanelPage(HexExtension owner, string title, string icon, string layout);
+    UIScriptedLayout? MakePanelPage(HexExtension owner, string title, string icon, string layout);
 
     /// <summary>A little window over everything out of an extension's layout, null (said) when it doesn't build.</summary>
-    ExtensionUI? MakeWindow(HexExtension owner, string title, string layout, Vector2 size);
+    UIScriptedLayout? MakeWindow(HexExtension owner, string title, string layout, Vector2 size);
 
     /// <summary>What an extension has in the title bar after Hex, empty for nothing.</summary>
     void TitleNote(HexExtension by, string text);

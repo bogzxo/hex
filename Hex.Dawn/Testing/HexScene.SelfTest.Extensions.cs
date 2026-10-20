@@ -111,7 +111,7 @@ internal sealed partial class HexScene
         /* The sections extensions have in the settings window. The move editor has a layout of its own there, which keeps
            what it's told through hex.set_setting */
 
-        ExtensionUI? MoveSettings() => settingsMade.FirstOrDefault(made => made.Owner.Name == "Move editor");
+        UIScriptedLayout? MoveSettings() => settingsMade.FirstOrDefault(made => made.Owner.Name == "Move editor");
         HexExtension MoveEditor() => extensions.All.First(extension => extension.Name == "Move editor");
         test.Run(() => OpenSettings(EXTENSION_SECTION + "Move editor"));
         test.Wait();

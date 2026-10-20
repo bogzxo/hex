@@ -13,3 +13,4 @@ global using Hex.Core;
 // The engine's UI, commands, keys and the components the editor is made of
 global using Horizon.UI;
 global using Horizon.UI.Components;
+global using Horizon.UI.Scripting;

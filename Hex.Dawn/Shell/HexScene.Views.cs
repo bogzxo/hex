@@ -34,7 +34,7 @@ internal sealed partial class HexScene
         bool tools = LayoutTools;
         bool table = document.IsText && document.View == HexView.Table;
 
-        // A view an extension made for the file goes where the code is, see HexScene.ExtensionUI
+        // A view an extension made for the file goes where the code is, see HexScene.UIScriptedLayout
         ApplyExtensionViews();
         bool extension = document.View == HexView.Extension;
 

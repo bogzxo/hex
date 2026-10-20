@@ -30,8 +30,8 @@ internal sealed partial class HexScene : IExtensionScreens
         tabsDirty = true;
     }
 
-    ExtensionUI? IExtensionScreens.MakePanelPage(HexExtension owner, string title, string icon, string layoutFile) => MakePanelPage(owner, title, icon, layoutFile);
-    ExtensionUI? IExtensionScreens.MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size) => MakeWindow(owner, title, layoutFile, size);
+    UIScriptedLayout? IExtensionScreens.MakePanelPage(HexExtension owner, string title, string icon, string layoutFile) => MakePanelPage(owner, title, icon, layoutFile);
+    UIScriptedLayout? IExtensionScreens.MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size) => MakeWindow(owner, title, layoutFile, size);
 
     void IExtensionScreens.TitleNote(HexExtension by, string text)
     {
@@ -135,8 +135,8 @@ internal sealed partial class HexScene : IExtensionScreens
     private const string VIEW_BUTTON = "view_button.hor";
 
     private readonly List<ExtensionViewKind> viewKinds = [];
-    private readonly Dictionary<(HexDocument, string), ExtensionUI> viewsMade = [];
-    private readonly List<ExtensionUI> panelsMade = [], windowsMade = [];
+    private readonly Dictionary<(HexDocument, string), UIScriptedLayout> viewsMade = [];
+    private readonly List<UIScriptedLayout> panelsMade = [], windowsMade = [];
 
     // The panel the views of extensions go into, in the middle where the code is
     private Panel extensionViews = null!;
@@ -191,7 +191,7 @@ internal sealed partial class HexScene : IExtensionScreens
     }
 
     /// <summary>The view of an extension that is on screen, null when it's the code, the table or the designer.</summary>
-    private ExtensionUI? ShownView => document.View == HexView.Extension && document.ExtensionView is { } id && viewsMade.TryGetValue((document, id), out ExtensionUI? made) ? made : null;
+    private UIScriptedLayout? ShownView => document.View == HexView.Extension && document.ExtensionView is { } id && viewsMade.TryGetValue((document, id), out UIScriptedLayout? made) ? made : null;
 
     /// <summary>
     /// Helper method for ApplyView, the views of extensions put up or away for the document on screen, their buttons with
@@ -229,7 +229,7 @@ internal sealed partial class HexScene : IExtensionScreens
             document.ExtensionView = null;
         }
 
-        foreach (ExtensionUI made in viewsMade.Values)
+        foreach (UIScriptedLayout made in viewsMade.Values)
             made.Root.Visible = false;
 
         extensionViews.Visible = showing;
@@ -238,7 +238,7 @@ internal sealed partial class HexScene : IExtensionScreens
         if (shown is null)
             return;
 
-        if (!viewsMade.TryGetValue((document, shown.Id), out ExtensionUI? view))
+        if (!viewsMade.TryGetValue((document, shown.Id), out UIScriptedLayout? view))
             view = MakeView(shown, document);
 
         if (view is not null)
@@ -263,11 +263,11 @@ internal sealed partial class HexScene : IExtensionScreens
     }
 
     /// <summary>Makes a view of a file out of its layout, and hands it to the extension's open(ui, file).</summary>
-    private ExtensionUI? MakeView(ExtensionViewKind kind, HexDocument of)
+    private UIScriptedLayout? MakeView(ExtensionViewKind kind, HexDocument of)
     {
         var holder = extensionViews.Add(new Panel { Fill = UIFill.Both });
         // What it has room for is the panel the views go in, the holder is only as big as what's in it
-        ExtensionUI? made = MakeUI(kind.Owner, "view", kind.Layout, holder, of.Path is { } path ? Path.GetFullPath(path) : null, null, () => extensionViews.Bounds.Size);
+        UIScriptedLayout? made = MakeUI(kind.Owner, "view", kind.Layout, holder, of.Path is { } path ? Path.GetFullPath(path) : null, null, () => extensionViews.Bounds.Size);
         if (made is null)
         {
             extensionViews.Remove(holder);
@@ -285,28 +285,12 @@ internal sealed partial class HexScene : IExtensionScreens
     /// Helper method to make a layout of an extension's folder inside of something, its handlers the extension's to call.
     /// Null, said, if the layout doesn't build.
     /// </summary>
-    private ExtensionUI? MakeUI(HexExtension owner, string kind, string layoutFile, UIComponent into, string? file, Action? close, Func<Vector2>? room = null)
-    {
-        string path = Path.GetFullPath(Path.Combine(owner.Folder, layoutFile));
-        UILayout made;
-        try
-        {
-            made = UILayout.Load(chrome, path, into);
-        }
-        catch (Exception e)
-        {
-            Notify($"{owner.Name}: {Path.GetFileName(path)} didn't build, {e.Message}", error: true);
-            return null;
-        }
+    private UIScriptedLayout? MakeUI(HexExtension owner, string kind, string layoutFile, UIComponent into, string? file, Action? close, Func<Vector2>? room = null) =>
+        UIScriptedLayout.Make(chrome, owner, kind, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), into, file, close,
+            said => Notify(said, error: true), ScriptFailed, room);
 
-        into.ScriptCaller = (handler, arguments) =>
-        {
-            if (owner.Failed is null && !owner.Invoke(handler, arguments))
-                extensions.Failed(owner);
-        };
-
-        return new ExtensionUI(owner, kind, made, into, file, close, room);
-    }
+    // What a layout of an extension says when a call of its went wrong, the extension switched off and said so
+    private void ScriptFailed(IUIScriptOwner owner) => extensions.Failed((HexExtension)owner);
 
     /// <summary>Shows a view of an extension for the document on screen.</summary>
     private void SwitchToExtensionView(string id)
@@ -320,10 +304,10 @@ internal sealed partial class HexScene : IExtensionScreens
     }
 
     /// <summary>A page of the panel under the editor, made out of an extension's layout.</summary>
-    private ExtensionUI? MakePanelPage(HexExtension owner, string title, string icon, string layoutFile)
+    private UIScriptedLayout? MakePanelPage(HexExtension owner, string title, string icon, string layoutFile)
     {
         var page = bottom.Add(new Panel { Fill = UIFill.Both });
-        ExtensionUI? made = null;
+        UIScriptedLayout? made = null;
         made = MakeUI(owner, "panel page", layoutFile, page, null, () =>
         {
             bottom.Remove(page);
@@ -344,34 +328,19 @@ internal sealed partial class HexScene : IExtensionScreens
     }
 
     // What the pages of the panel extensions made say on their tabs
-    private readonly Dictionary<ExtensionUI, string> panelTitles = [];
+    private readonly Dictionary<UIScriptedLayout, string> panelTitles = [];
 
     /// <summary>The titles of the pages of the panel, Hex's three and then the extensions'.</summary>
     private string[] PanelTabs(string problemsTitle) =>
         [problemsTitle, Said("panel.output"), Said("panel.console"), .. panelsMade.Select(page => panelTitles[page])];
 
     /// <summary>A little window over everything, made out of an extension's layout.</summary>
-    private ExtensionUI? MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size)
+    private UIScriptedLayout? MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size)
     {
-        var window = chrome.Root.Add(new WindowPanel { Title = title, Size = size, Closable = true, ResizeGrip = true, Padding = new UIEdges(8) });
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
-
-        ExtensionUI? made = null;
-        void Close()
-        {
-            window.Parent?.Remove(window);
-            if (made is not null) { made.Closed = true; windowsMade.Remove(made); }
-        }
-
-        made = MakeUI(owner, "window", layoutFile, window, null, Close);
-        if (made is null)
-        {
-            window.Parent?.Remove(window);
-            return null;
-        }
-
-        window.OnClosed = Close;
-        windowsMade.Add(made);
+        UIScriptedLayout? made = UIScriptedLayout.MakeWindow(chrome, owner, title, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), size,
+            said => Notify(said, error: true), ScriptFailed, closed => windowsMade.Remove(closed));
+        if (made is not null)
+            windowsMade.Add(made);
         return made;
     }
 
@@ -388,18 +357,18 @@ internal sealed partial class HexScene : IExtensionScreens
         // Made only when something ticks, a view with nothing going on costs nothing a frame
         NumberValue? number = null;
         if (ShownView is { } view)
-            TickUI(view, dt, ref number);
+            view.Update(dt, ref number, ScriptFailed);
 
         for (int i = panelsMade.Count - 1; i >= 0; i--)
         {
             if (panelsMade[i] is { } page && page.Root.Visible && bottom.Visible && bottom.SelectedPage == page.Root)
-                TickUI(page, dt, ref number);
+                page.Update(dt, ref number, ScriptFailed);
         }
 
         for (int i = windowsMade.Count - 1; i >= 0; i--)
         {
             if (windowsMade[i] is { } window && window.Root.Visible)
-                TickUI(window, dt, ref number);
+                window.Update(dt, ref number, ScriptFailed);
         }
 
         // The keys go to the view on screen when nothing has the keyboard, or one of its own drawings does
@@ -408,72 +377,27 @@ internal sealed partial class HexScene : IExtensionScreens
             var keyboard = Engine.Input.Keyboard;
             if (!keyboard.Control)
             {
-                foreach (var (key, name) in ExtensionKeys)
+                foreach (var (key, name) in UIScriptedLayout.Keys)
                 {
                     if (keyboard.WasPressed(key))
-                        ExtensionKeyHeld(name, keyboard.Shift, keyboard.Alt);
-                }
-
-                foreach (var (key, name) in MoreViewKeys)
-                {
-                    if (keyboard.WasPressed(key))
-                        ExtensionKeyHeld(name, keyboard.Shift, keyboard.Alt);
+                        keyed.Press(name, keyboard.Shift, keyboard.Alt, ScriptFailed);
                 }
             }
         }
     }
-
-    /// <summary>A UI on screen told the room it has when that changed (on_resize), then how long the tick was (on_tick).</summary>
-    private void TickUI(ExtensionUI ui, float dt, ref NumberValue? number)
-    {
-        // One that went wrong is said about the once and left alone after, not every tick
-        if (ui.Owner.Failed is not null)
-            return;
-
-        if (ui.Resize is { } resize && ui.Room is var room && room != ui.Sized && room.X > 0 && room.Y > 0)
-        {
-            ui.Sized = room;
-            if (!ui.Owner.Invoke(resize, ui, new Vector2Value(room)))
-            {
-                extensions.Failed(ui.Owner);
-                return;
-            }
-        }
-
-        if (ui.Tick is { } tick && !ui.Owner.Invoke(tick, ui, number ??= new NumberValue(dt)))
-            extensions.Failed(ui.Owner);
-    }
-
-    private static readonly (Key Key, string Name)[] ExtensionKeys =
-    [
-        (Key.Left, "left"), (Key.Right, "right"), (Key.Up, "up"), (Key.Down, "down"), (Key.Home, "home"), (Key.End, "end"),
-        (Key.Space, "space"), (Key.Delete, "delete"), (Key.Enter, "enter"), (Key.PageUp, "page_up"), (Key.PageDown, "page_down")
-    ];
 
     /// <summary>
     /// Hands a key to the view of an extension on screen, true if it took it (its on_key handed back true), which is how
     /// Ctrl+Z undoes the view's own changes rather than the code's.
     /// </summary>
-    private bool ExtensionKey(string name)
-    {
-        if (ShownView is not { Key: { } handler } view || view.Owner.Failed is not null)
-            return false;
-
-        if (!view.Owner.Invoke(handler, [view, new StringValue(name)], out IRuntimeValue taken))
-        {
-            extensions.Failed(view.Owner);
-            return false;
-        }
-
-        return taken is BooleanValue { Value: true };
-    }
+    private bool ExtensionKey(string name) => ShownView is { } view && view.Press(name, ScriptFailed);
 
     /// <summary>Takes away what a document had made for it by extensions, as it closes.</summary>
     private void ForgetExtensionViews(HexDocument closing)
     {
         foreach (var key in viewsMade.Keys.Where(key => key.Item1 == closing).ToList())
         {
-            ExtensionUI made = viewsMade[key];
+            UIScriptedLayout made = viewsMade[key];
             made.Closed = true;
             extensionViews.Remove(made.Root);
             viewsMade.Remove(key);
@@ -488,44 +412,5 @@ internal sealed partial class HexScene : IExtensionScreens
         ExtensionViewKind? wanted = viewKinds.FirstOrDefault(kind => kind.When is { } when && !when.StartsWith('.') && defines.ContainsKey(when) && kind.Owner.Enabled && kind.Owner.Failed is null);
         if (wanted is not null && opened == document)
             SwitchToExtensionView(wanted.Id);
-    }
-
-    /* Keys for a view, letters and digits and with shift as well as the arrows */
-
-    private static readonly (Key Key, string Name)[] MoreViewKeys = BuildMoreViewKeys();
-
-    private static (Key, string)[] BuildMoreViewKeys()
-    {
-        var keys = new List<(Key, string)>();
-        for (char letter = 'a'; letter <= 'z'; letter++)
-            keys.Add((Key.A + (letter - 'a'), letter.ToString()));
-        for (char digit = '0'; digit <= '9'; digit++)
-            keys.Add((Key.Number0 + (digit - '0'), digit.ToString()));
-        keys.Add((Key.Comma, ","));
-        keys.Add((Key.Period, "."));
-        keys.Add((Key.LeftBracket, "["));
-        keys.Add((Key.RightBracket, "]"));
-        keys.Add((Key.Escape, "escape"));
-        keys.Add((Key.Backspace, "backspace"));
-        keys.Add((Key.Tab, "tab"));
-        keys.Add((Key.Slash, "/"));
-        return [.. keys];
-    }
-
-    // The names of a key with shift or alt held, made once a key so a press makes nothing
-    private readonly Dictionary<(string, bool, bool), string> heldNames = [];
-
-    /// <summary>A key handed to the view, "shift+left" first when shift is held, then "left" if it didn't want that.</summary>
-    private void ExtensionKeyHeld(string name, bool shift, bool alt)
-    {
-        if (shift || alt)
-        {
-            if (!heldNames.TryGetValue((name, shift, alt), out string? held))
-                heldNames[(name, shift, alt)] = held = (alt ? "alt+" : string.Empty) + (shift ? "shift+" : string.Empty) + name;
-            if (ExtensionKey(held))
-                return;
-        }
-
-        ExtensionKey(name);
     }
 }

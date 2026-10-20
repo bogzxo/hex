@@ -9,6 +9,6 @@ internal enum HexView
     // A file of code as a table, an object of objects or a file of texts, see HexScene.Table
     Table,
 
-    // A view an extension made for the file, which one in HexDocument.ExtensionView, see HexScene.ExtensionUI
+    // A view an extension made for the file, which one in HexDocument.ExtensionView, see HexScene.UIScriptedLayout
     Extension
 }

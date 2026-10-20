@@ -68,7 +68,7 @@ internal sealed partial class HexExtensions
         ("panel", Natives.Function("panel", args =>
         {
             ObjectValue made = args.Object(0);
-            ExtensionUI? page = screens.MakePanelPage(extension, Text(made, "title") ?? extension.Name, Text(made, "icon") ?? string.Empty,
+            UIScriptedLayout? page = screens.MakePanelPage(extension, Text(made, "title") ?? extension.Name, Text(made, "icon") ?? string.Empty,
                 Text(made, "layout") ?? throw args.Wrong("a page of the panel needs a layout."));
             return Opened(extension, page, FunctionOf(made, "open"));
         })),
@@ -76,14 +76,14 @@ internal sealed partial class HexExtensions
         {
             ObjectValue made = args.Object(0);
             Vector2 size = new(Number(made, "width") ?? 480, Number(made, "height") ?? 360);
-            ExtensionUI? window = screens.MakeWindow(extension, Text(made, "title") ?? extension.Name,
+            UIScriptedLayout? window = screens.MakeWindow(extension, Text(made, "title") ?? extension.Name,
                 Text(made, "layout") ?? throw args.Wrong("a window needs a layout."), size);
             return Opened(extension, window, FunctionOf(made, "open"));
         }))
     ];
 
     /// <summary>Helper method to hand something an extension made to its open function, what the extension gets back for it.</summary>
-    private IRuntimeValue Opened(HexExtension extension, ExtensionUI? made, IRuntimeValue? open)
+    private IRuntimeValue Opened(HexExtension extension, UIScriptedLayout? made, IRuntimeValue? open)
     {
         if (made is null)
             return Values.Null;

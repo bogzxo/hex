@@ -12,7 +12,7 @@ namespace Hex.Dawn;
 // all folder next to Hex, a folder each with an extension.hor in it. They are loaded as Hex starts, every one that
 // isn't switched off in the settings, and on_start is called on each once the window is up. What they are handed is
 // the hex object (HexExtensions.Api), which is all an extension can touch. What they put on screen is the editor's
-// (IExtensionScreens, HexScene.ExtensionUI), their settings' rows the settings window's (HexScene.ExtensionSettings).
+// (IExtensionScreens, HexScene.UIScriptedLayout), their settings' rows the settings window's (HexScene.ExtensionSettings).
 internal sealed partial class HexExtensions
 {
     private const string BUILT_IN_EXTENSIONS = "Assets/hex/extensions", OWN_EXTENSIONS = "extensions";

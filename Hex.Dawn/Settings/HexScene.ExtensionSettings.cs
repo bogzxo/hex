@@ -12,12 +12,12 @@ internal sealed partial class HexScene
     private const string EXTENSION_SETTING = "extension_setting.hor";
 
     // What the extensions made of their own layouts of settings, let go of as the window goes
-    private readonly List<ExtensionUI> settingsMade = [];
+    private readonly List<UIScriptedLayout> settingsMade = [];
 
     /// <summary>Lets go of what the extensions put on their sections, as the settings go.</summary>
     private void ForgetExtensionTabs()
     {
-        foreach (ExtensionUI page in settingsMade)
+        foreach (UIScriptedLayout page in settingsMade)
             page.Closed = true;
         settingsMade.Clear();
     }
