@@ -41,6 +41,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
     <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
     <!-- The engine is a submodule at horizon/, the language a submodule inside of that. A workspace above this repo
          (Directory.Build.props) can say to use another checkout of the engine instead, see HorizonRoot -->

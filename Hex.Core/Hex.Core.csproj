@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What Hex knows and does that has no window in it: the settings, the workspace, the files and what's in them, the
+       language servers' catalog, the tasks. Dawn and Dusk are drawn on top of it, and it is unit tested on its own -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hex" />
+    <InternalsVisibleTo Include="Hex.Shell" />
+    <InternalsVisibleTo Include="Hex.Dawn" />
+    <InternalsVisibleTo Include="Hex.Dusk" />
+    <InternalsVisibleTo Include="Hex.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
+  </ItemGroup>
+
+</Project>

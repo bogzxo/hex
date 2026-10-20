@@ -77,8 +77,8 @@ internal sealed class HexSettings
     /// <summary>The effects of light, a glow under the caret, a spotlight under the pointer, rings off clicks, embers behind the pointer.</summary>
     public bool EffectCaretGlow = true, EffectSpotlight, EffectRipples = true, EffectTrail;
 
-    /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (Hex.Shell's HexGlass).</summary>
-    public float GlassBlur = HexGlass.BLUR, GlassClarity = HexGlass.CLARITY, GlassRim = HexGlass.RIM, GlassBend = HexGlass.BEND;
+    /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (HexGlassDefaults, Hex.Shell's HexGlass draws it).</summary>
+    public float GlassBlur = HexGlassDefaults.BLUR, GlassClarity = HexGlassDefaults.CLARITY, GlassRim = HexGlassDefaults.RIM, GlassBend = HexGlassDefaults.BEND;
 
     /// <summary>Whether a file of code loses the spaces at the ends of its lines and gets a newline at its end when saved.</summary>
     public bool TrimWhitespace = true, FinalNewline;
