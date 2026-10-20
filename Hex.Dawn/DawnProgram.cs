@@ -139,9 +139,12 @@ public static class DawnProgram
 #if DEBUG
         // The engine's own debugger is on F8, F9 and F10 in a Debug build, which are the C# debugger's here, so it's on
         // Pause and the rest of it on its buttons
-        engine.Debugger.ToggleKey = Silk.NET.Input.Key.Pause;
-        engine.Debugger.PauseKey = null;
-        engine.Debugger.StepKey = null;
+        if (engine.Debugger is { } debugger)
+        {
+            debugger.ToggleKey = Silk.NET.Input.Key.Pause;
+            debugger.PauseKey = null;
+            debugger.StepKey = null;
+        }
 #endif
 
         engine.SetScene(scene);
