@@ -80,7 +80,7 @@ internal sealed partial class HexScene
             File.WriteAllText(naming, "let other = quirky_reach + quirky_reachable;\n");
             Open(named);
             code.GoTo(0, 6);
-            RenameSymbol();
+            codeEditing.RenameSymbol();
         });
         test.Wait();
         test.Run(() => Descendants(textDialog!.Body).OfType<TextBox>().First().OnSubmitted!("odd_reach"));

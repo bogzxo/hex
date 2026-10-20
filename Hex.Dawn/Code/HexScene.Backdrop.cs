@@ -56,7 +56,7 @@ internal sealed partial class HexScene
 
         backdropRead = true;
         ApplyBackdrop();
-        ApplyCodeFont();
+        codeEditing.ApplyCodeFont();
     }
 
     /// <summary>Every editor of code shown the picture as the settings have it now, its place, size and how faint.</summary>

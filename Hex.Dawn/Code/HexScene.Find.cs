@@ -132,7 +132,7 @@ internal sealed partial class HexScene
                 return lines;
 
             case '#':
-                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {HexEvaluation.Shorten(Localisation.Get(key), 60)}", (Action)(() => GoToKey(key))))];
+                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {HexEvaluation.Shorten(Localisation.Get(key), 60)}", (Action)(() => codeEditing.GoToKey(key))))];
 
             default:
                 return null;
@@ -142,16 +142,16 @@ internal sealed partial class HexScene
     /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left, as the find bar's toggles say.</summary>
     private void FindInFiles()
     {
-        string how = HexSearch.DescribeOptions(findOptions);
-        AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}{how}", lastFind, "Find", query =>
+        string how = HexSearch.DescribeOptions(codeEditing.findOptions);
+        AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}{how}", codeEditing.lastFind, "Find", query =>
         {
             if (query.Length == 0)
                 return;
 
-            lastFind = query;
+            codeEditing.lastFind = query;
             List<string> roots = WorkspaceRoots();
             string where = DescribeRoots();
-            UIFindOptions options = findOptions;
+            UIFindOptions options = codeEditing.findOptions;
 
             // Every file read off the editor's thread, the results come in when they are all there
             InBackground($"looking for '{query}' in {where}...", () => HexSearch.FindIn(roots, query, options), found =>

@@ -10,7 +10,7 @@ internal readonly record struct WorkspaceDoc(string Doc, string File, int Line, 
 // Documentation, // @doc over a declaration, a key or a field (see the language's HIDLDocs), shown wherever the name is.
 // The run of the file on screen knows its own and its includes', the file's text knows what it says this moment, and
 // the workspace's index knows every other file's, so a name documented in one file reads its documentation in another.
-internal sealed partial class HexScene
+internal sealed partial class HexCodeEditing
 {
     // What the keys of the last run's values document, by the key's name, worked out once a run
     private HexValues? keyDocsOf;
@@ -23,7 +23,7 @@ internal sealed partial class HexScene
     /// </summary>
     private (string Doc, string? Where)? DocOf(string name)
     {
-        if (running.LastRun is { } ran && running.LastRunOf == document)
+        if (window.LastRun is { } ran)
         {
             if (ran.Sources.TryGetDeclaration(name, out var declared) && declared.Doc is { } doc)
                 return (doc, Elsewhere(declared.File, declared.Span.Line));

@@ -222,7 +222,7 @@ internal sealed partial class HexScene
                     return;
                 case ("code_font", StringValue font):
                     settings.CodeFont = font.Value;
-                    hex.ApplyCodeFont();
+                    hex.codeEditing.ApplyCodeFont();
                     break;
                 case ("wrap_code", BooleanValue wrap):
                     settings.WrapCode = wrap.Value;

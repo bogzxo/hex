@@ -54,7 +54,7 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             code.GoTo(0, 12);
-            GoToDefinition();
+            codeEditing.GoToDefinition();
         });
         test.Wait();
         test.Check("workspace: F12 on a name goes to its let in the other folder", () =>
@@ -66,7 +66,7 @@ internal sealed partial class HexScene
             code.Document.Insert("\nlet x = be");
             code.Complete(typed: true);
         });
-        test.WaitFor(() => vocabulary is not null && code.Completions.Any(item => item.Text == "beta"), 3.0f);
+        test.WaitFor(() => codeEditing.vocabulary is not null && code.Completions.Any(item => item.Text == "beta"), 3.0f);
         test.Check("workspace: names of the other files are offered as they are typed, gathered off the editor's thread", () =>
             code.CompletionOpen && code.Completions.Any(item => item.Text == "beta"));
         test.Run(() =>

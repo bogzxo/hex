@@ -103,7 +103,7 @@ internal sealed partial class HexScene
     {
         SwitchView(HexView.Code);
 
-        if (FindDeclaration(code.Text, name) is { } at)
+        if (HexCodeEditing.FindDeclaration(code.Text, name) is { } at)
             code.GoTo(at.Line, at.Column);
     }
 

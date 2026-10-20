@@ -44,7 +44,7 @@ internal sealed partial class HexScene
         {
             int row = Enumerable.Range(0, code.Document.LineCount).First(line => code.Document.LineAt(line).TrimStart().StartsWith("scrollback:"));
             int column = code.Document.LineAt(row).IndexOf("scrollback", StringComparison.Ordinal) + 2;
-            return HoverHint(code, new UITextPosition(row, column))?.Contains("How many rows") == true;
+            return codeEditing.HoverHint(code, new UITextPosition(row, column))?.Contains("How many rows") == true;
         });
 
         test.Run(() =>

@@ -14,24 +14,24 @@ namespace Hex.Dawn;
 
 // Completing what is typed by what it is being typed into, and going from a name to where it is declared (F12) and to
 // everywhere it is used (Shift+F12).
-internal sealed partial class HexScene
+internal sealed partial class HexCodeEditing
 {
     /* Completing what is typed, by what it is being typed into */
 
     // Every name and key of every file of the workspace, gathered off the editor's thread the first time anything is
     // completed and again once something changes the files (null until then). It read up to two thousand files on the
     // editor's thread, the first completion of a big workspace froze Hex
-    private HashSet<string>? vocabulary;
+    internal HashSet<string>? vocabulary;
     private bool gathering;
 
     // What the files of the workspace document, by name, gathered with the names (see HexScene.Docs)
-    private Dictionary<string, WorkspaceDoc>? docIndex;
+    internal Dictionary<string, WorkspaceDoc>? docIndex;
 
     // Which gathering is the one that counts, a change of the workspace while one is going makes it out of date
     private int vocabularyGeneration;
 
     /// <summary>Lets go of the names, the files they came from changed.</summary>
-    private void ForgetVocabulary()
+    internal void ForgetVocabulary()
     {
         vocabulary = null;
         docIndex = null;
@@ -50,9 +50,9 @@ internal sealed partial class HexScene
         if (!gathering)
         {
             gathering = true;
-            List<string> roots = WorkspaceRoots();
+            List<string> roots = [.. context.Workspace.Roots];
             int generation = vocabularyGeneration;
-            InBackground("gathering the names of the workspace...", () => Gather(roots), gathered =>
+            context.Work.InBackground("gathering the names of the workspace...", () => Gather(roots), gathered =>
             {
                 if (generation != vocabularyGeneration)
                     return;
@@ -109,9 +109,9 @@ internal sealed partial class HexScene
     /// the properties of the component being made inside its braces, and otherwise the language's words with every name
     /// of the workspace.
     /// </summary>
-    private UICompletionRequest? Completions(CodeEditor editor)
+    internal UICompletionRequest? Completions(CodeEditor editor)
     {
-        HexDocument? of = documents.Find(open => open.Editor == editor);
+        HexDocument? of = documents.FirstOrDefault(open => open.Editor == editor);
 
         // What the parts complete in some files, the terminal's own files (HexTerminalFiles) and a file of another
         // language by its language server (HexLanguages)
@@ -252,7 +252,7 @@ internal sealed partial class HexScene
     /// workspace, a text naming a key of the game's language to the key in the language's file, a text naming a file
     /// (an include, a template) to the file.
     /// </summary>
-    private void GoToDefinition()
+    internal void GoToDefinition()
     {
         UITextDocument doc = code.Document;
         UITextPosition caret = doc.Caret;
@@ -270,11 +270,11 @@ internal sealed partial class HexScene
                 return;
             }
 
-            string folder = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path))! : browseDirectory;
+            string folder = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path))! : context.Windows.BrowseFolder;
             string named = Path.Combine(folder, token.Value);
             if (token.Value.Length > 0 && File.Exists(named))
             {
-                OpenAt(named, 0, 0);
+                context.Documents.OpenAt(named, 0, 0);
                 return;
             }
         }
@@ -282,7 +282,7 @@ internal sealed partial class HexScene
         var (start, end) = doc.WordAt(caret);
         if (end <= start)
         {
-            Say("there is nothing at the caret to go to");
+            context.Notices.Say("there is nothing at the caret to go to");
             return;
         }
 
@@ -292,12 +292,12 @@ internal sealed partial class HexScene
         if (FindDeclaration(code.Text, word) is { } here)
         {
             code.GoTo(here.Line, here.Column);
-            Say($"{word} is declared on line {here.Line + 1}");
+            context.Notices.Say($"{word} is declared on line {here.Line + 1}");
             return;
         }
 
         // In the workspace
-        foreach (string file in AllWorkspaceFiles())
+        foreach (string file in HexSearch.FilesUnder(context.Workspace.Roots))
         {
             string source;
             try
@@ -312,16 +312,16 @@ internal sealed partial class HexScene
             if (!source.Contains(word, StringComparison.Ordinal) || FindDeclaration(source, word) is not { } there)
                 continue;
 
-            OpenAt(file, there.Line, there.Column);
-            Say($"{word} is declared in {Relative(file)}, line {there.Line + 1}");
+            context.Documents.OpenAt(file, there.Line, there.Column);
+            context.Notices.Say($"{word} is declared in {context.Workspace.Relative(file)}, line {there.Line + 1}");
             return;
         }
 
-        Say($"{word} isn't declared with a let anywhere in {DescribeRoots()}", error: true);
+        context.Notices.Say($"{word} isn't declared with a let anywhere in {DescribeRoots()}", error: true);
     }
 
     /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
-    private static UITextPosition? FindDeclaration(string source, string name)
+    internal static UITextPosition? FindDeclaration(string source, string name)
     {
         Token[] tokens = Lexer.Tokenize(source, lenient: true);
         for (int i = 0; i + 1 < tokens.Length; i++)
@@ -334,12 +334,12 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Opens the language file of the game at a key, the line of its last part under the ones before it.</summary>
-    private void GoToKey(string key)
+    internal void GoToKey(string key)
     {
         string file = Path.Combine(Localisation.Folder, Localisation.Language + ".hor");
         if (Localisation.Folder.Length == 0 || !File.Exists(file))
         {
-            Say("no language is loaded to look the key up in", error: true);
+            context.Notices.Say("no language is loaded to look the key up in", error: true);
             return;
         }
 
@@ -357,23 +357,30 @@ internal sealed partial class HexScene
             }
         }
 
-        OpenAt(file, Math.Min(line, lines.Length - 1), Math.Max(0, lines[Math.Min(line, lines.Length - 1)].Length - lines[Math.Min(line, lines.Length - 1)].TrimStart().Length));
-        Say(part == parts.Length ? $"{key} in {Localisation.Language}" : $"{Localisation.Language} has no {key}, this is as far as it goes", error: part != parts.Length);
+        context.Documents.OpenAt(file, Math.Min(line, lines.Length - 1), Math.Max(0, lines[Math.Min(line, lines.Length - 1)].Length - lines[Math.Min(line, lines.Length - 1)].TrimStart().Length));
+        context.Notices.Say(part == parts.Length ? $"{key} in {Localisation.Language}" : $"{Localisation.Language} has no {key}, this is as far as it goes", error: part != parts.Length);
     }
 
     /// <summary>Shift+F12, every line of the workspace the word at the caret is on as a word of its own, listed on the left.</summary>
-    private void FindReferences()
+    internal void FindReferences()
     {
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
-            Say("there is no word at the caret to look for");
+            context.Notices.Say("there is no word at the caret to look for");
             return;
         }
 
         string word = code.Document.LineAt(code.Document.Caret.Line)[start..end];
-        List<HexResult> found = FindEverywhere(word, wholeWord: true);
-        ShowResults($"WHERE {word} IS ({found.Count})", found);
-        Say($"{word} is on {found.Count} lines of {found.Select(result => result.Path).Distinct().Count()} files");
+        List<HexResult> found = HexSearch.FindIn(context.Workspace.Roots, word, new UIFindOptions(WholeWord: true));
+        window.ShowResults($"WHERE {word} IS ({found.Count})", found);
+        context.Notices.Say($"{word} is on {found.Count} lines of {found.Select(result => result.Path).Distinct().Count()} files");
+    }
+
+    /// <summary>What is looked through, said the way a person would.</summary>
+    private string DescribeRoots()
+    {
+        IReadOnlyList<string> roots = context.Workspace.Roots;
+        return roots.Count == 1 ? roots[0] : $"the {roots.Count} folders of the workspace";
     }
 }

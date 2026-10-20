@@ -159,6 +159,12 @@ internal interface IWork
     /// <inheritdoc cref="Start(string, string, Func{WorkContext, Task}, Action{WorkItem}?, bool, bool)"/>
     WorkItem Start(string key, string title, Action<WorkContext> what, Action<WorkItem>? done = null, bool seen = true, bool cancellable = true);
 
+    /// <summary>
+    /// Something done off the editor's thread, quickly and without a key, what it came to handed over on the editor's.
+    /// What the work reads of the editor it is given before it goes, never reaches for while it runs.
+    /// </summary>
+    void InBackground<T>(string doing, Func<T> work, Action<T> done, bool quiet = false);
+
     /// <summary>A piece of work that's going brought to notice again, its card back up.</summary>
     void Renew(WorkItem item);
 
@@ -344,6 +350,15 @@ internal interface IEditorWindow
 
     /// <summary>The mouse, for the canvas's wheel and its middle button.</summary>
     Horizon.Input.Mouse Mouse { get; }
+
+    /// <summary>What the file on screen came to the last time it ran, null when it hasn't (HexRunning's).</summary>
+    HexValues? LastRun { get; }
+
+    /// <summary>What the window has to do with the code on screen, added to its right click menu (run it, the palette).</summary>
+    void AddCodeMenu(Menu menu);
+
+    /// <summary>The places something was found, listed in the side bar's search view.</summary>
+    void ShowResults(string title, List<HexResult> found);
 
     /// <summary>The status bar's piece that says where the pointer is.</summary>
     StatusItem Coordinates { get; }

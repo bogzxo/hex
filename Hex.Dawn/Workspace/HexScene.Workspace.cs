@@ -144,7 +144,7 @@ internal sealed partial class HexScene
         browsing = true;
         results = null;
         treeDirty = true;
-        ForgetVocabulary();
+        codeEditing.ForgetVocabulary();
         KeepWorkspace();
         Say($"added {folder}, the workspace has {workspace.Folders.Count} folders");
     }
@@ -162,7 +162,7 @@ internal sealed partial class HexScene
             return;
 
         treeDirty = true;
-        ForgetVocabulary();
+        codeEditing.ForgetVocabulary();
         KeepWorkspace();
         Say($"{Path.GetFileName(folder)} is out of the workspace, nothing in it was touched");
     }
@@ -182,7 +182,7 @@ internal sealed partial class HexScene
         browsing = true;
         results = null;
         treeDirty = true;
-        ForgetVocabulary();
+        codeEditing.ForgetVocabulary();
 
         foreach (string file in workspace.OpenFiles.ToArray())
         {
@@ -217,7 +217,7 @@ internal sealed partial class HexScene
         workspace = new HexWorkspace();
         browsing = false;
         treeDirty = true;
-        ForgetVocabulary();
+        codeEditing.ForgetVocabulary();
         KeepWorkspace();
         Say("the workspace is closed, no folders");
     }

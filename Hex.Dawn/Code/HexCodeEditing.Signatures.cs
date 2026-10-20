@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // Signature help, how the function being called at the caret is called, said over the call as it's typed with the
 // argument the caret is on in bold (CodeEditor.SignatureSource). The language's own functions from a table here, the
 // file's own from their func.
-internal sealed partial class HexScene
+internal sealed partial class HexCodeEditing
 {
     private static readonly Dictionary<string, string[]> LibraryCalls = new(StringComparer.Ordinal)
     {
@@ -42,7 +42,7 @@ internal sealed partial class HexScene
     };
 
     /// <summary>A call's signature, the language's or one of the file's own funcs, the argument the caret is on picked out.</summary>
-    private static UISignature? SignatureOf(CodeEditor editor, string name, int argument)
+    internal static UISignature? SignatureOf(CodeEditor editor, string name, int argument)
     {
         string[]? parameters = LibraryCalls.GetValueOrDefault(name) ?? FileFunction(editor.Text, name);
         if (parameters is null)

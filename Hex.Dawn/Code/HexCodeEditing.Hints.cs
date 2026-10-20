@@ -13,16 +13,16 @@ namespace Hex.Dawn;
 
 // What the editor of code says about the word the pointer rests on (a property, a kind, a key of the game's language, a
 // let, the library), its context menu, renaming a name all through a file, and picking a colour from a swatch.
-internal sealed partial class HexScene
+internal sealed partial class HexCodeEditing
 {
     /// <summary>
     /// The hint for the word at a place, markdown, null for nothing worth saying. What it is is worked out from what is
     /// round it the way the highlighter does it.
     /// </summary>
-    private string? HoverHint(CodeEditor editor, UITextPosition at)
+    internal string? HoverHint(CodeEditor editor, UITextPosition at)
     {
         // What a part says about some files first, the terminal's its settings, commands and functions (HexTerminalFiles)
-        if (hoverSources.Count > 0 && documents.Find(open => open.Editor == editor) is { } of)
+        if (hoverSources.Count > 0 && documents.FirstOrDefault(open => open.Editor == editor) is { } of)
         {
             foreach (var source in hoverSources)
             {
@@ -142,7 +142,7 @@ internal sealed partial class HexScene
 
     /* The editor's context menu */
 
-    private void ShowCodeMenu(HexDocument at, Vector2 point)
+    internal void ShowCodeMenu(HexDocument at, Vector2 point)
     {
         CodeEditor editor = at.Editor;
 
@@ -165,9 +165,7 @@ internal sealed partial class HexScene
         shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
         shown.Add("The next one as well", () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
         shown.AddSeparator();
-        shown.Add("Run the file", running.RunCode, "F5", "play").IsVisible = () => document.IsText;
-        shown.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
-        shown.Add("Command palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc");
+        window.AddCodeMenu(shown);
 
         editor.Focus();
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
@@ -178,29 +176,29 @@ internal sealed partial class HexScene
     /// workspace have it too (a key of an included file, the shared moves and a fighter's own), it asks whether to rename
     /// it in them as well, each opened behind with the rename as one step of its undo and nothing saved.
     /// </summary>
-    private void RenameSymbol()
+    internal void RenameSymbol()
     {
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
-            Say("the caret isn't on a name", error: true);
+            context.Notices.Say("the caret isn't on a name", error: true);
             return;
         }
 
         string name = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         HexDocument here = document;
-        AskText("Rename", $"Every {name} in {document.Name} as a word of its own becomes", name, "Rename", renamed =>
+        context.Windows.Prompt("Rename", $"Every {name} in {document.Name} as a word of its own becomes", name, "Rename", string.Empty, renamed =>
         {
             if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
             {
-                Say($"{renamed} can't be a name", error: true);
+                context.Notices.Say($"{renamed} can't be a name", error: true);
                 return;
             }
 
             // The other files with it, looked for off the editor's thread, a question only if there are any
-            List<string> roots = WorkspaceRoots();
+            List<string> roots = [.. context.Workspace.Roots];
             string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
-            InBackground($"looking for {name} in the other files...", () => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
+            context.Work.InBackground($"looking for {name} in the other files...", () => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
                 .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
             {
                 if (!documents.Contains(here))
@@ -231,9 +229,9 @@ internal sealed partial class HexScene
         string text = target.Editor.Text;
         int count = Regex.Matches(text, pattern).Count;
         if (count > 0)
-            Rewrite(target, Regex.Replace(text, pattern, renamed));
+            context.Documents.Rewrite(target, Regex.Replace(text, pattern, renamed));
         if (say)
-            Say($"renamed {name} to {renamed}, {count} places");
+            context.Notices.Say($"renamed {name} to {renamed}, {count} places");
         return count;
     }
 
@@ -246,7 +244,7 @@ internal sealed partial class HexScene
         foreach (string file in others)
         {
             // A layout open in its designer is written out of the layout, its code isn't the place to rename in
-            HexDocument? open = OpenDocument(file);
+            HexDocument? open = context.Documents.Find(file);
             if (open is { IsText: false })
             {
                 skipped.Add(Path.GetFileName(file));
@@ -257,8 +255,8 @@ internal sealed partial class HexScene
             {
                 if (!File.Exists(file))
                     continue;
-                OpenText(file, File.ReadAllText(file), show: false);
-                open = OpenDocument(file);
+                context.Documents.OpenBehind(file);
+                open = context.Documents.Find(file);
             }
 
             if (open is not null && RenameIn(open, name, renamed, say: false) is > 0 and var count)
@@ -270,13 +268,13 @@ internal sealed partial class HexScene
 
         tabsDirty = true;
         string left = skipped.Count > 0 ? $", not in {string.Join(", ", skipped)} (open in the designer, rename it there)" : string.Empty;
-        Say($"renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}");
+        context.Notices.Say($"renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}");
     }
 
     /* Swatches */
 
     /// <summary>A swatch of a colour written in the code was clicked, a colour picker for another, written back as a vec.</summary>
-    private void PickSwatch(HidlSwatch swatch)
+    internal void PickSwatch(HidlSwatch swatch)
     {
         ColorPicker picker = null!;
         UIDialog shown = UIDialog.Show(chrome, "Colour", "The colour written at this place in the code", new DialogChoice("Use it", () => WriteSwatch(swatch, picker.Color)), new DialogChoice("Cancel"));
@@ -295,6 +293,6 @@ internal sealed partial class HexScene
 
         code.Document.Select(new UITextPosition(swatch.Line, swatch.Column), new UITextPosition(swatch.Line, swatch.Column + swatch.Length));
         code.Document.Insert(written);
-        Say($"the colour is {written}");
+        context.Notices.Say($"the colour is {written}");
     }
 }

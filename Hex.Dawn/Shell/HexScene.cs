@@ -166,6 +166,7 @@ internal sealed partial class HexScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         DeclareMenus();
+        codeEditing = new HexCodeEditing(Context);
         running = new HexRunning(Context);
         designer = new HexDesigner(Context);
         running.Ran += path => extensions.Raise("on_run", new StringValue(path));
@@ -175,7 +176,7 @@ internal sealed partial class HexScene : Scene
         languages = new HexLanguages(Context);
         BuildStatusBar();
         BuildPanel();
-        BuildFindBar();
+        codeEditing.BuildFindBar();
         BuildQuiet();
         BuildTerminal();
         StartRemote();
@@ -428,7 +429,7 @@ internal sealed partial class HexScene : Scene
         UpdateWelcome();
         UpdateDiskChanges();
         UpdateBackups(dt);
-        UpdateFindBar();
+        codeEditing.UpdateFindBar();
         UpdatePlaces();
         UpdateBackdrop();
         UpdateSplit();

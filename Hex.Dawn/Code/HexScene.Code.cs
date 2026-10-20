@@ -31,8 +31,6 @@ internal sealed partial class HexScene
     private List<HexResult>? results;
     private string resultsTitle = string.Empty;
 
-    // What was last looked for, to look for again
-    private string lastFind = string.Empty;
 
 
     // The parts of the editor's own layout that only mean something for a layout, hidden while a file of code is open
@@ -53,18 +51,18 @@ internal sealed partial class HexScene
         editor.FocusLine = true;
         editor.WordWrap = settings.WrapCode;
         editor.CaretGlide = Motion ? CARET_GLIDE : 0.0f;
-        editor.Font = codeFont;
-        editor.SignatureSource = (name, argument) => SourcedSignature(prepared, name, argument) ?? SignatureOf(editor, name, argument);
+        editor.Font = codeEditing.codeFont;
+        editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         ShowBackdrop(editor);
         editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
-        editor.CompletionSource = Completions;
+        editor.CompletionSource = codeEditing.Completions;
         editor.OnChecked = _ => CodeChecked(prepared);
-        editor.HoverSource = HoverHint;
-        editor.OnSwatchPressed = PickSwatch;
+        editor.HoverSource = codeEditing.HoverHint;
+        editor.OnSwatchPressed = codeEditing.PickSwatch;
         editor.ArtPath = name => ArtFileOf(prepared, name);
         editor.ArtSkin = () => stage.Skin;
-        editor.OnContextMenu = point => ShowCodeMenu(prepared, point);
+        editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point);
     }
 
     /// <summary>
@@ -324,13 +322,13 @@ internal sealed partial class HexScene
         commands.Add("View/zoom", "Zoom Out", () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
         commands.Add("View/zoom", "Reset Zoom", () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
 
-        commands.Add("Go/symbols", "Go to Definition", GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/symbols", "Find All References", FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", "Go to Definition", codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", "Find All References", codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/problems", "Next Problem", () => StepProblem(1), icon: "arrow-down");
         commands.Add("Go/problems", "Previous Problem", () => StepProblem(-1), icon: "arrow-up");
 
         // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
-        commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
+        commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
         commands.Add("Run/run", "Run File", running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
@@ -343,18 +341,6 @@ internal sealed partial class HexScene
         commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Discard Code Changes", RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Convert to Layout...", MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
-    }
-
-    /// <summary>What a part says a call in a document takes, the first that says anything, null for none.</summary>
-    private UISignature? SourcedSignature(HexDocument of, string name, int argument)
-    {
-        foreach (var source in signatureSources)
-        {
-            if (source(of, name, argument) is { } said)
-                return said;
-        }
-
-        return null;
     }
 
     /// <summary>The outline of what is in the code editor, by the language of its file.</summary>

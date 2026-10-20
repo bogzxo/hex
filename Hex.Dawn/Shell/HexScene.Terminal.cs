@@ -156,7 +156,7 @@ internal sealed partial class HexScene : ITerminalHostUi
         if (!terminalFontSet && Horizon.Graphics.GraphicsDevice.IsAvailable)
         {
             terminalFontSet = true;
-            terminalPanel.Font = UIFont.Shared(Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", HACK), HACK + ".ttf", CODE_FONT_EM, terminal: true);
+            terminalPanel.Font = UIFont.Shared(Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM, terminal: true);
         }
 
         if (compositor.Skin is { } skin && !ReferenceEquals(skin, terminalColouredFor))

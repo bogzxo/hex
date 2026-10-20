@@ -72,7 +72,7 @@ internal sealed partial class HexScene
         commands.Add("View/toggles", "Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
         commands.Add("View/toggles", "Zen Mode", ToggleQuiet, "F11", "screen-full").IsChecked = () => Quiet;
         commands.Add("View/toggles", "Word Wrap", ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
-        commands.Add("View/toggles", "Code in Hack", ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
+        commands.Add("View/toggles", "Code in Hack", codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
         commands.Add("View/toggles", "Split Editor", ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
 
         // F7 flips a layout between its designer and its code, the way Visual Studio's designers go

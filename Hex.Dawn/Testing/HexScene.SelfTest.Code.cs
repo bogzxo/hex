@@ -58,9 +58,9 @@ internal sealed partial class HexScene
 
         test.Run(() =>
         {
-            lastFind = "names";
+            codeEditing.lastFind = "names";
             code.Document.MoveToStart(false);
-            FindAgain(forward: true);
+            codeEditing.FindAgain(forward: true);
         });
         test.Wait();
         test.Check("code: finding selects what is found", () => code.Document.SelectedText == "names" && code.FoundCount == 1);
@@ -163,24 +163,24 @@ internal sealed partial class HexScene
         });
         test.WaitFor(() => running.LastRun is { } ran && running.LastRunOf == document && ran.Declared.Any(pair => pair.Name == "greetings"), 3.0f);
         test.Check("docs: a // @doc over a let is its documentation, under the pointer where it is made", () =>
-            HoverHint(code, new UITextPosition(2, 6)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal));
+            codeEditing.HoverHint(code, new UITextPosition(2, 6)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal));
         test.Check("docs: and in the tooltip of its value", () =>
             running.ValuesTree.Items.FirstOrDefault(item => item.Text == "greetings") is { } row && row.Tooltip.Contains("The list of greetings", StringComparison.Ordinal));
 
         test.Run(() => Open(usesFile));
         test.WaitFor(() => running.LastRun is { } ran && running.LastRunOf == document && ran.Declared.Any(pair => pair.Name == "first"), 3.0f);
         test.Check("docs: in a file that includes it, on the name used there, saying where it was made", () =>
-            HoverHint(code, new UITextPosition(1, 20)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal) && said.Contains("selftest_docs.hor", StringComparison.Ordinal));
+            codeEditing.HoverHint(code, new UITextPosition(1, 20)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal) && said.Contains("selftest_docs.hor", StringComparison.Ordinal));
 
         test.Run(() =>
         {
-            ForgetVocabulary();
+            codeEditing.ForgetVocabulary();
             Open(elsewhereFile);
-            HoverHint(code, new UITextPosition(0, 15));
+            codeEditing.HoverHint(code, new UITextPosition(0, 15));
         });
-        test.WaitFor(() => docIndex is not null, 3.0f);
+        test.WaitFor(() => codeEditing.docIndex is not null, 3.0f);
         test.Check("docs: and in any file of the workspace by its name, out of the index of what every file documents", () =>
-            HoverHint(code, new UITextPosition(0, 15)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal));
+            codeEditing.HoverHint(code, new UITextPosition(0, 15)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal));
 
         test.Run(() =>
         {
@@ -252,22 +252,22 @@ internal sealed partial class HexScene
         string before = settings.CodeFont;
         test.Run(() =>
         {
-            settings.CodeFont = HACK;
-            ApplyCodeFont();
+            settings.CodeFont = HexCodeEditing.HACK;
+            codeEditing.ApplyCodeFont();
         });
         test.Wait();
         test.Check("font: the code is written in Hack and the rest of the editor isn't", () =>
-            code.Font is { } hack && ReferenceEquals(hack, codeFont) && compositor.Skin is { } skin && !ReferenceEquals(hack, skin.Font)
+            code.Font is { } hack && ReferenceEquals(hack, codeEditing.codeFont) && compositor.Skin is { } skin && !ReferenceEquals(hack, skin.Font)
             && hack.Field.LineHeight > 0.0f);
 
-        test.Run(ToggleCodeFont);
+        test.Run(codeEditing.ToggleCodeFont);
         test.Wait();
         test.Check("font: the View menu's Code in Hack puts it back in the skin's font", () => code.Font is null && settings.CodeFont.Length == 0);
 
         test.Run(() =>
         {
             settings.CodeFont = before;
-            ApplyCodeFont();
+            codeEditing.ApplyCodeFont();
             SaveSettings();
         });
         test.Wait();

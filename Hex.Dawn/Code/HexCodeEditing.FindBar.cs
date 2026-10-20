@@ -10,27 +10,27 @@ namespace Hex.Dawn;
 // dialogs ending in replace all. Now every match is lit as the query is typed, the match grows from where the bar was
 // opened rather than hopping on with every letter, "3 of 17", enter and shift enter, three toggles, a row to replace
 // one at a time or all of them, and escape puts it away with the caret left on the match.
-internal sealed partial class HexScene
+internal sealed partial class HexCodeEditing
 {
     private const string FIND_BAR = "find_bar.hor";
 
-    private Panel findBar = null!;
-    private TextBox findBox = null!, replaceBox = null!;
-    private Button findCase = null!, findWord = null!, findRegex = null!, findExpand = null!;
-    private Label findCount = null!;
-    private StackPanel replaceRow = null!;
+    internal Panel findBar = null!;
+    internal TextBox findBox = null!, replaceBox = null!;
+    internal Button findCase = null!, findWord = null!, findRegex = null!, findExpand = null!;
+    internal Label findCount = null!;
+    internal StackPanel replaceRow = null!;
 
     // How it's looked for, and where the caret was when the bar was opened, which the match grows from
-    private UIFindOptions findOptions;
+    internal UIFindOptions findOptions;
     private UITextPosition findStart;
 
     // What the count says, written again only when it changes, and the editor the bar was last looking in
     private (int Index, int Count, bool Error) findCountShown = (-2, -2, false);
     private CodeEditor? findEditor;
 
-    private bool FindBarOpen => findBar.Visible;
+    internal bool FindBarOpen => findBar.Visible;
 
-    private void BuildFindBar()
+    internal void BuildFindBar()
     {
         UILayout made = layout.Instantiate(FIND_BAR, codeScroll);
         findBar = made.Get<Panel>("find_bar");
@@ -45,7 +45,7 @@ internal sealed partial class HexScene
         findBar.Visible = false;
 
         findBox.OnChanged = FindTyped;
-        findBox.OnSubmitted = _ => FindStep(forward: !Engine.Input.Keyboard.Shift);
+        findBox.OnSubmitted = _ => FindStep(forward: !context.Keyboard.Shift);
         replaceBox.OnSubmitted = _ => ReplaceOne();
         findCase.OnPressed = () => ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase });
         findWord.OnPressed = () => ToggleFindOption(findOptions with { WholeWord = !findOptions.WholeWord });
@@ -71,15 +71,15 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Ctrl+F, the bar opened over the code with what's selected (a word, a line of it) to look for, its text picked out.</summary>
-    private void FindInFile() => OpenFindBar(replacing: replaceRow.Visible && FindBarOpen);
+    internal void FindInFile() => OpenFindBar(replacing: replaceRow.Visible && FindBarOpen);
 
     /// <summary>Ctrl+H, the bar with its replace row.</summary>
-    private void ReplaceInFile() => OpenFindBar(replacing: true);
+    internal void ReplaceInFile() => OpenFindBar(replacing: true);
 
     private void OpenFindBar(bool replacing)
     {
         if (document.View != HexView.Code && !document.IsText)
-            SwitchView(HexView.Code);
+            window.SwitchView(HexView.Code);
 
         // What's selected is looked for, unless it's a match of what's looked for already (Ctrl+H with the bar up), and
         // as itself when the bar is on regexes
@@ -106,7 +106,7 @@ internal sealed partial class HexScene
             replaceBox.Focus();
     }
 
-    private void CloseFindBar()
+    internal void CloseFindBar()
     {
         findBar.Visible = false;
         code.FindQuery = string.Empty;
@@ -116,7 +116,7 @@ internal sealed partial class HexScene
 
     // Escape puts the bar away from its boxes, or from the code when nothing else there wants it (the list of what can be
     // completed has escape first)
-    private void EscapeFindBar()
+    internal void EscapeFindBar()
     {
         if (!FindBarOpen)
             return;
@@ -152,7 +152,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>F3, enter in the bar, the next match or the one before. The bar opened if it wasn't.</summary>
-    private void FindAgain(bool forward)
+    internal void FindAgain(bool forward)
     {
         if (lastFind.Length == 0)
         {
@@ -165,18 +165,18 @@ internal sealed partial class HexScene
         FindStep(forward);
     }
 
-    private void FindStep(bool forward)
+    internal void FindStep(bool forward)
     {
         if (lastFind.Length == 0)
             return;
 
         if (!code.FindNext(forward))
-            Say(code.FindError is { } bad ? $"'{lastFind}' isn't a regex that works, {bad}" : $"no '{lastFind}' in {document.Name}", error: true);
+            context.Notices.Say(code.FindError is { } bad ? $"'{lastFind}' isn't a regex that works, {bad}" : $"no '{lastFind}' in {document.Name}", error: true);
         findStart = code.Document.SelectionStart;
         UpdateFindCount();
     }
 
-    private void ReplaceOne()
+    internal void ReplaceOne()
     {
         if (lastFind.Length == 0 || code.ReadOnly)
             return;
@@ -186,18 +186,18 @@ internal sealed partial class HexScene
         UpdateFindCount();
     }
 
-    private void ReplaceEvery()
+    internal void ReplaceEvery()
     {
         if (lastFind.Length == 0)
             return;
 
         int count = code.ReplaceAll(replaceBox.Text);
-        Say(count > 0 ? $"replaced {count} of '{lastFind}', Ctrl+Z puts them back" : $"no '{lastFind}' in {document.Name}", error: count == 0);
+        context.Notices.Say(count > 0 ? $"replaced {count} of '{lastFind}', Ctrl+Z puts them back" : $"no '{lastFind}' in {document.Name}", error: count == 0);
         UpdateFindCount();
     }
 
     /// <summary>Every tick the bar is open, "3 of 17" kept up with the code, written again only when it changed.</summary>
-    private void UpdateFindBar()
+    internal void UpdateFindBar()
     {
         if (!FindBarOpen)
             return;
@@ -230,11 +230,11 @@ internal sealed partial class HexScene
             return;
 
         findCountShown = (index, count, error);
-        findCount.Text = error ? Said("find.bad_regex")
+        findCount.Text = error ? context.Strings.Said("find.bad_regex")
             : count < 0 ? string.Empty
-            : count == 0 ? Said("find.none")
-            : index < 0 ? Said("find.count", ("count", count.ToString()))
-            : Said("find.of", ("index", (index + 1).ToString()), ("count", count.ToString()));
-        findCount.Color = error || count == 0 ? ErrorColor : DimColor;
+            : count == 0 ? context.Strings.Said("find.none")
+            : index < 0 ? context.Strings.Said("find.count", ("count", count.ToString()))
+            : context.Strings.Said("find.of", ("index", (index + 1).ToString()), ("count", count.ToString()));
+        findCount.Color = error || count == 0 ? context.Panels.Error : context.Panels.Dim;
     }
 }

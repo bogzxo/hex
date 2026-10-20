@@ -363,7 +363,7 @@ internal sealed partial class HexScene
             document.DiskText = onDisk;
             document.SavedCode = written;
             document.SavedCrLf = document.CrLf;
-            ForgetVocabulary();
+            codeEditing.ForgetVocabulary();
             document.Modified = false;
 
             // Its templates are looked for next to it, which may be somewhere else now

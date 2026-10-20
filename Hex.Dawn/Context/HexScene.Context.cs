@@ -25,6 +25,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private HexExtensions extensions = null!;
     private HexRunning running = null!;
     private HexDesigner designer = null!;
+    private HexCodeEditing codeEditing = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, commands, options,
@@ -34,9 +35,6 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     private Action<HexDocument>? documentOpened, documentEdited, documentClosed;
     private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
-    private readonly List<HexCompletionSource> completionSources = [];
-    private readonly List<Func<HexDocument, CodeEditor, UITextPosition, string?>> hoverSources = [];
-    private readonly List<Func<HexDocument, string, int, UISignature?>> signatureSources = [];
 
     IReadOnlyList<HexDocument> IDocuments.All => documents;
     bool IDocuments.Open(string path) => Open(path);
@@ -98,9 +96,9 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     void IDocuments.AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source) => diagnosticSources.Add(source);
     void IDocuments.DiagnosticsChanged(HexDocument of) => ShowDiagnostics(of);
-    void IDocuments.AddCompletions(HexCompletionSource source) => completionSources.Add(source);
-    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source) => hoverSources.Add(source);
-    void IDocuments.AddSignatures(Func<HexDocument, string, int, UISignature?> source) => signatureSources.Add(source);
+    void IDocuments.AddCompletions(HexCompletionSource source) => codeEditing.completionSources.Add(source);
+    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source) => codeEditing.hoverSources.Add(source);
+    void IDocuments.AddSignatures(Func<HexDocument, string, int, UISignature?> source) => codeEditing.signatureSources.Add(source);
 
     /* The workspace */
 
@@ -336,4 +334,16 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void IEditorWindow.ShowDeclaration(string name) => ShowDeclaration(name);
     bool IEditorWindow.CloseTopWindow() => CloseTopWindow();
     Horizon.Input.Mouse IEditorWindow.Mouse => Engine.Input.Mouse;
+
+    HexValues? IEditorWindow.LastRun => running.LastRunOf == document ? running.LastRun : null;
+    void IEditorWindow.ShowResults(string title, List<HexResult> found) => ShowResults(title, found);
+
+    void IEditorWindow.AddCodeMenu(Menu menu)
+    {
+        menu.Add("Run the file", running.RunCode, "F5", "play").IsVisible = () => document.IsText;
+        menu.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
+        menu.Add("Command palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc");
+    }
+
+    void IWork.InBackground<T>(string doing, Func<T> what, Action<T> done, bool quiet) => InBackground(doing, what, done, quiet);
 }

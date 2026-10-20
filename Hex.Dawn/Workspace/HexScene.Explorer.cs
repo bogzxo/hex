@@ -291,7 +291,7 @@ internal sealed partial class HexScene
         }
 
         tabsDirty = treeDirty = true;
-        ForgetVocabulary();
+        codeEditing.ForgetVocabulary();
         KeepWorkspace();
         Say($"{Path.GetFileName(full)} is in the trash");
     }

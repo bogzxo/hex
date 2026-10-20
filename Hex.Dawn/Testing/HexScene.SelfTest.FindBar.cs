@@ -12,51 +12,51 @@ internal sealed partial class HexScene
             File.WriteAllText(file, "let moves = {\n    jab: { damage: 5 },\n    Jab_two: { damage: 12 },\n    kick: { damage: 7 }\n};\n");
             Open(file);
             code.Document.MoveToStart(false);
-            FindInFile();
-            TypeInto(findBox, "jab");
+            codeEditing.FindInFile();
+            TypeInto(codeEditing.findBox, "jab");
         });
         test.Wait();
         test.Check("find bar: Ctrl+F opens it over the code, what's typed is lit and counted, the first selected", () =>
-            FindBarOpen && findBar.Bounds.Max.Y <= code.Bounds.Max.Y + 1 && code.FoundCount == 2 && code.FoundIndex == 0
-            && code.Document.SelectedText == "jab" && findCount.Text == "1 of 2");
+            codeEditing.FindBarOpen && codeEditing.findBar.Bounds.Max.Y <= code.Bounds.Max.Y + 1 && code.FoundCount == 2 && code.FoundIndex == 0
+            && code.Document.SelectedText == "jab" && codeEditing.findCount.Text == "1 of 2");
 
-        test.Run(() => FindStep(forward: true));
+        test.Run(() => codeEditing.FindStep(forward: true));
         test.Wait();
-        test.Check("find bar: enter goes to the next", () => code.FoundIndex == 1 && code.Document.SelectedText == "Jab" && findCount.Text == "2 of 2");
+        test.Check("find bar: enter goes to the next", () => code.FoundIndex == 1 && code.Document.SelectedText == "Jab" && codeEditing.findCount.Text == "2 of 2");
 
-        test.Run(() => findCase.OnPressed!());
+        test.Run(() => codeEditing.findCase.OnPressed!());
         test.Wait();
-        test.Check("find bar: the case has to match, one of them goes", () => findCase.Selected && code.FoundCount == 1);
+        test.Check("find bar: the case has to match, one of them goes", () => codeEditing.findCase.Selected && code.FoundCount == 1);
 
         test.Run(() =>
         {
-            findCase.OnPressed!();
-            findWord.OnPressed!();
+            codeEditing.findCase.OnPressed!();
+            codeEditing.findWord.OnPressed!();
         });
         test.Wait();
-        test.Check("find bar: whole words only, Jab_two isn't one", () => !findCase.Selected && findWord.Selected && code.FoundCount == 1);
+        test.Check("find bar: whole words only, Jab_two isn't one", () => !codeEditing.findCase.Selected && codeEditing.findWord.Selected && code.FoundCount == 1);
 
         test.Run(() =>
         {
-            findWord.OnPressed!();
-            findRegex.OnPressed!();
-            TypeInto(findBox, @"damage: (\d+)");
+            codeEditing.findWord.OnPressed!();
+            codeEditing.findRegex.OnPressed!();
+            TypeInto(codeEditing.findBox, @"damage: (\d+)");
         });
         test.Wait();
         // Typed into, it looks on from the match it was on, the Jab of Jab_two
-        test.Check("find bar: a regex, every damage found", () => findRegex.Selected && code.FoundCount == 3 && code.Document.SelectedText == "damage: 12");
+        test.Check("find bar: a regex, every damage found", () => codeEditing.findRegex.Selected && code.FoundCount == 3 && code.Document.SelectedText == "damage: 12");
 
         test.Run(() =>
         {
-            ReplaceInFile();
-            TypeInto(replaceBox, "damage: $1$1");
-            ReplaceOne();
+            codeEditing.ReplaceInFile();
+            TypeInto(codeEditing.replaceBox, "damage: $1$1");
+            codeEditing.ReplaceOne();
         });
         test.Wait();
         test.Check("find bar: Ctrl+H opens the replace row, and one replaced, the groups in, on to the next", () =>
-            replaceRow.Visible && code.Text.Contains("Jab_two: { damage: 1212 }", StringComparison.Ordinal) && code.Document.SelectedText == "damage: 7");
+            codeEditing.replaceRow.Visible && code.Text.Contains("Jab_two: { damage: 1212 }", StringComparison.Ordinal) && code.Document.SelectedText == "damage: 7");
 
-        test.Run(ReplaceEvery);
+        test.Run(codeEditing.ReplaceEvery);
         test.Wait();
         test.Check("find bar: replace all, the rest of them as one step", () =>
             code.Text.Contains("damage: 55", StringComparison.Ordinal) && code.Text.Contains("damage: 77", StringComparison.Ordinal));
@@ -65,23 +65,23 @@ internal sealed partial class HexScene
         test.Check("find bar: and one undo puts them back", () =>
             code.Text.Contains("damage: 5 }", StringComparison.Ordinal) && code.Text.Contains("damage: 1212", StringComparison.Ordinal));
 
-        test.Run(() => TypeInto(findBox, "("));
+        test.Run(() => TypeInto(codeEditing.findBox, "("));
         test.Wait();
-        test.Check("find bar: a regex that doesn't work says so", () => code.FoundCount == 0 && findCount.Text == Said("find.bad_regex"));
+        test.Check("find bar: a regex that doesn't work says so", () => code.FoundCount == 0 && codeEditing.findCount.Text == Said("find.bad_regex"));
 
         test.Run(() =>
         {
-            findBox.Focus();
-            EscapeFindBar();
+            codeEditing.findBox.Focus();
+            codeEditing.EscapeFindBar();
         });
         test.Wait();
         test.Check("find bar: escape puts it away, nothing lit, the code with the keys", () =>
-            !FindBarOpen && code.FindQuery.Length == 0 && compositor.Focus == code);
+            !codeEditing.FindBarOpen && code.FindQuery.Length == 0 && compositor.Focus == code);
 
         test.Run(() =>
         {
-            findOptions = default;
-            lastFind = string.Empty;
+            codeEditing.findOptions = default;
+            codeEditing.lastFind = string.Empty;
             if (document.Path == file)
                 CloseNow();
         });
