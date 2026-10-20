@@ -307,8 +307,7 @@ The engine. `DrawingPanel` sends which button (`e.button`, left or right, and th
 extension doesn't take it), a double click, and the wheel to a drawing that isn't navigable, for the timeline. `Table`
 gets its columns, rows (text, colour, fill, tooltip) and `on_pressed`, `on_activated` exposed to HIDL, and `TreeView`
 its items (text, icon, colour, detail, children, expanded) and `on_pressed`, `on_expanding`. Optionally a cursor a
-drawing can ask for under the pointer. Tests in `Horizon.Tests/UI` for the exposed properties, a line each in the engine
-CLAUDE.md.
+drawing can ask for under the pointer. Tests in `Horizon.Tests/UI` for the exposed properties.
 
 Hex. `hex.menu(items, at)` for a context menu at the pointer, its items `{ label, icon, key, on_pressed }` with
 separators and submenus (the engine's `ContextMenu` and `Menu` underneath, the same as Hex's own). `hex.ask({ title,
