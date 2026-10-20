@@ -175,7 +175,7 @@ internal sealed partial class HexScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         DeclareMenus();
-        AttachLanguages();
+        languages = new HexLanguages(Context);
         BuildStatusBar();
         BuildPanel();
         BuildFindBar();
@@ -200,7 +200,7 @@ internal sealed partial class HexScene : Scene
         AddDebuggingCommands();
         AddHelpCommands();
         BuildTasks();
-        StartServerChecks();
+        languages.StartChecks();
         BuildEffects();
         BuildModes();
         AddDesignerCommands();
@@ -449,7 +449,7 @@ internal sealed partial class HexScene : Scene
 
         UpdateValues(dt);
         UpdateFileChanges();
-        UpdateLinting(dt);
+        languages.Update(dt);
         UpdateValueBox();
     }
 

@@ -3,3 +3,6 @@ global using Hex.Shell;
 
 // Where things go and how paths compare on Windows, macOS and Linux (the engine's PlatformPaths)
 global using Horizon.Core.Platform;
+
+// Labels of what somebody wrote, Plain and Literal
+global using static Hex.Dawn.HexMarkup;

@@ -87,10 +87,10 @@ internal sealed partial class HexScene
         int installs = 0;
         test.Run(() =>
         {
-            InstallServer(server);
-            installing = Installing(server);
-            InstallServer(server);
-            installs = work.Items.Count(going => going.Key == INSTALL_WORK + "selftest");
+            languages.InstallServer(server);
+            installing = languages.Installing(server);
+            languages.InstallServer(server);
+            installs = work.Items.Count(going => going.Key == HexLanguages.INSTALL_WORK + "selftest");
         });
         test.WaitFor(() => installing!.Progress is >= 0.25f, 5.0f);
         test.Check("work: an install pressed twice is the one install, its bar set by the percentages it printed", () =>

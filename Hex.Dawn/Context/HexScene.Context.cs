@@ -15,6 +15,9 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 {
     private DawnContext? context;
 
+    // The parts with a class of their own, made with the context
+    private HexLanguages languages = null!;
+
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, commands, options, () => Engine.WindowManager.Wake());
 

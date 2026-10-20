@@ -29,8 +29,8 @@ internal sealed partial class HexScene
         if (!there)
             return;
 
-        test.WaitFor(() => LinterOf(document) is not null, 10.0f);
-        test.Check("csharp: a .cs file is opened in csharp-ls", () => LinterOf(document) == "csharp");
+        test.WaitFor(() => languages.LinterOf(document) is not null, 10.0f);
+        test.Check("csharp: a .cs file is opened in csharp-ls", () => languages.LinterOf(document) == "csharp");
 
         // The project after the server is going
         test.Settle(1.0f);

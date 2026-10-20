@@ -127,10 +127,6 @@ internal sealed partial class HexScene
             card.Detail = item.Message;
             card.Progress = item.State == WorkState.Waiting ? float.NaN : item.Progress ?? float.NaN;
             workCards[item] = (card, item.Version);
-
-            // The settings' lines of the servers say how an install of one is going, while they're up
-            if (item.Key.StartsWith(INSTALL_WORK, StringComparison.Ordinal) && serverStatus.Count > 0)
-                RefreshServerStatus();
         }
     }
 

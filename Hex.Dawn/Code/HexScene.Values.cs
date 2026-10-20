@@ -426,9 +426,6 @@ internal sealed partial class HexScene
         _ => Shorten(HexEvaluation.Describe(value), 60)
     };
 
-    /// <summary>What somebody wrote as it is, unless a label would take some of it for its markup.</summary>
-    private static string Literal(string text) => UIRichText.HasTags(text) ? Plain(text) : text;
-
     /// <summary>
     /// Where something of the file is in its code, by its path, through the outline of the file. Each step of the path is
     /// the first key of that name deeper in than the one before it, an index into a list stays on the list.

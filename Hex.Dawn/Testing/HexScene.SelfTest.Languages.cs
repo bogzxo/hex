@@ -145,7 +145,7 @@ internal sealed partial class HexScene
         {
             test.WaitFor(() => code.Diagnostics.Count == 1, 10.0f);
             test.Check("linting: a file of another language is opened in its language server and what it says is under the code and in the status bar", () =>
-                code.Diagnostics is [{ Line: 1, Column: 2, Length: 4, Warning: true }] && LinterOf(document) == "fake" && languageItem.Text.Contains("fake")
+                code.Diagnostics is [{ Line: 1, Column: 2, Length: 4, Warning: true }] && languages.LinterOf(document) == "fake" && languageItem.Text.Contains("fake")
                 && problemList.Any(problem => problem.Text.Contains("TODO left in")));
             test.Run(() =>
             {
@@ -165,8 +165,8 @@ internal sealed partial class HexScene
         /* The language servers' settings, what language_servers.hor says of each and where it is */
 
         test.Check("language servers: the file says how each is installed, where its releases are and how it says its version", () =>
-            ServerEntry("csharp") is { Command: "csharp-ls", Repo: "razzmatazz/csharp-language-server", Install.Length: > 0, Update: "dotnet tool update -g csharp-ls", VersionArguments: ["--version"] }
-            && ServerEntry("markdown") is { Install: "", Update: "", Repo.Length: > 0 } && ServerEntries.Count >= 8);
+            languages.ServerEntry("csharp") is { Command: "csharp-ls", Repo: "razzmatazz/csharp-language-server", Install.Length: > 0, Update: "dotnet tool update -g csharp-ls", VersionArguments: ["--version"] }
+            && languages.ServerEntry("markdown") is { Install: "", Update: "", Repo.Length: > 0 } && languages.ServerEntries.Count >= 8);
         test.Check("language servers: versions are found in what a program prints and put in order by their numbers", () =>
             HexServerCatalog.FindVersion("clangd version 19.1.2 (https://github.com/llvm/llvm-project 7ba7d8e)") == "19.1.2"
             && HexServerCatalog.FindVersion("2024-12-18\n") == "2024-12-18" && HexServerCatalog.FindVersion("no version") is null
@@ -185,14 +185,14 @@ internal sealed partial class HexScene
         });
 
         string nowhere = Path.Combine(folder, "csharp-ls.exe");
-        test.Run(() => OpenSettings(SERVER_SECTION));
+        test.Run(() => OpenSettings(HexLanguages.SERVER_SECTION));
         test.Check("language servers: a row a server in the settings, with what was found of each under them", () =>
-            SettingsPage?.Enter(SERVER_KEY + "csharp", new StringValue(nowhere)) == true && serverStatus.ContainsKey("csharp")
-            && SettingsPage.Settings.Any(setting => setting.Key == SERVER_KEY + "markdown" && setting.Buttons is [CHOOSE, DOWNLOAD, CHANGES]));
+            SettingsPage?.Enter(HexLanguages.SERVER_KEY + "csharp", new StringValue(nowhere)) == true && languages.serverStatus.ContainsKey("csharp")
+            && SettingsPage.Settings.Any(setting => setting.Key == HexLanguages.SERVER_KEY + "markdown" && setting.Buttons is [HexLanguages.CHOOSE, HexLanguages.DOWNLOAD, HexLanguages.CHANGES]));
         test.Check("language servers: where a server is set in the settings is what it is started with, and empty is back to the PATH", () =>
         {
             bool set = settings.ServerPaths["csharp"] == nowhere && LanguageServers.Registered.Any(entry => entry.Name == "csharp" && entry.Command == nowhere);
-            SettingsPage!.Reset(SERVER_KEY + "csharp");
+            SettingsPage!.Reset(HexLanguages.SERVER_KEY + "csharp");
             return set && !settings.ServerPaths.ContainsKey("csharp") && LanguageServers.Registered.Any(entry => entry.Name == "csharp" && entry.Command == "csharp-ls");
         });
         test.Run(CloseSettings);

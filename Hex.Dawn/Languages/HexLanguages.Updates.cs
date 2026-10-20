@@ -12,13 +12,14 @@ namespace Hex.Dawn;
 // Check now is pressed, the newest release of each one with a repository is asked of GitHub and kept in the settings,
 // so the days in between still know. A server that is behind gets a card with Update, What changed and Not this one.
 // Installing and updating run the entry's command line in the background, the server stopped first (a program that
-// is running can't be written over) and started again after. All of it is work of the scheduler's (HexScene.Background),
+// is running can't be written over) and started again after. All of it is work of the scheduler's (IWork),
 // each known by a key so it runs once at a time: an update pressed twice, or pressed again from the settings while it
 // goes, is the one update, with a card saying how far it got, what the command is printing, and Cancel.
-internal sealed partial class HexScene
+internal sealed partial class HexLanguages
 {
     // The keys of the servers' work
-    private const string FIND_WORK = "servers:find:", CHECK_WORK = "servers:check", INSTALL_WORK = "servers:install:", CHANGES_WORK = "servers:changes:";
+    private const string FIND_WORK = "servers:find:", CHECK_WORK = "servers:check", CHANGES_WORK = "servers:changes:";
+    internal const string INSTALL_WORK = "servers:install:";
 
     // A percentage a command prints as it goes (npm's, dotnet's, winget's), which the bar is set to
     private static readonly Regex Percent = new(@"(\d{1,3}(?:\.\d+)?)\s?%", RegexOptions.Compiled);
@@ -41,18 +42,26 @@ internal sealed partial class HexScene
     private readonly HashSet<string> serversOffered = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The install or update of a server that's going, null when none is.</summary>
-    private WorkItem? Installing(HexServerEntry entry) => work.Find(INSTALL_WORK + entry.Name);
+    internal WorkItem? Installing(HexServerEntry entry)
+    {
+        // Asked every tick while the settings are up, the key made once a server
+        if (!installKeys.TryGetValue(entry.Name, out string? key))
+            installKeys[entry.Name] = key = INSTALL_WORK + entry.Name;
+        return context.Work.Find(key);
+    }
+
+    private readonly Dictionary<string, string> installKeys = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The entry of a server by its name, null for none.</summary>
-    private HexServerEntry? ServerEntry(string name) => ServerEntries.FirstOrDefault(entry => entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    internal HexServerEntry? ServerEntry(string name) => ServerEntries.FirstOrDefault(entry => entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// As Hex starts, every server looked for, then GitHub asked about the newest versions if it's been a day (and the
     /// settings let it), and anything that is behind offered.
     /// </summary>
-    private void StartServerChecks()
+    internal void StartChecks()
     {
-        if (options.SelfTest || options.Check.Length > 0)
+        if (context.Options.SelfTest || context.Options.Check.Length > 0)
             return;
 
         ProbeServers(ServerEntries, () =>
@@ -78,7 +87,7 @@ internal sealed partial class HexScene
 
         RefreshServerStatus();
         var found = new List<(string Name, ServerFound Found)>();
-        StartWork(FIND_WORK + string.Join(',', looking.Select(pair => pair.Entry.Name)), "Looking for the language servers", context =>
+        context.Work.Start(FIND_WORK + string.Join(',', looking.Select(pair => pair.Entry.Name)), "Looking for the language servers", context =>
         {
             Horizon.Core.Processes.ProcessEnvironment.WaitForLoginShell();
             for (int i = 0; i < looking.Count; i++)
@@ -113,7 +122,7 @@ internal sealed partial class HexScene
         int asking = 0;
 
         // Asked again while it goes, it's the one look, and says what it found when it's done the same
-        StartWork(CHECK_WORK, "Looking for new versions of the language servers", async context =>
+        context.Work.Start(CHECK_WORK, "Looking for new versions of the language servers", async context =>
         {
             context.Report(0.0f, "asking GitHub");
             await Parallel.ForEachAsync(repos, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = context.Token }, async (pair, cancel) =>
@@ -146,15 +155,15 @@ internal sealed partial class HexScene
             // Only a look that got somewhere counts as having looked, no network tries again next time
             if (latest.Count > 0)
                 settings.ServersChecked = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
-            SaveSettings();
+            context.Settings.Save();
             RefreshServerStatus();
 
             int behind = OfferServerUpdates(again: asked);
             if (problems.Count > 0)
-                Note($"GitHub couldn't be asked about some of the language servers, {string.Join("; ", problems)}", error: latest.Count == 0);
+                context.Notices.Note($"GitHub couldn't be asked about some of the language servers, {string.Join("; ", problems)}", error: latest.Count == 0);
             if (asked)
             {
-                Say(latest.Count == 0 && problems.Count > 0 ? "GitHub couldn't be asked, see the output"
+                context.Notices.Say(latest.Count == 0 && problems.Count > 0 ? "GitHub couldn't be asked, see the output"
                     : behind == 0 ? "every language server on this machine is up to date" : $"{behind} language server{(behind == 1 ? " has" : "s have")} a new version");
             }
         }, seen: asked);
@@ -193,10 +202,10 @@ internal sealed partial class HexScene
             actions.Add(("Not this one", () =>
             {
                 settings.ServerSkipped[entry.Name] = latest;
-                SaveSettings();
+                context.Settings.Save();
             }));
 
-            Notify($"{entry.Command} {Plain(latest)} is out, you have {have}.", actions: [.. actions]);
+            context.Notices.Notify($"{entry.Command} {Plain(latest)} is out, you have {have}.", actions: [.. actions]);
         }
 
         return behind;
@@ -213,8 +222,8 @@ internal sealed partial class HexScene
 
         string? have = serversFound.TryGetValue(entry.Name, out ServerFound? found) ? found.Version : null;
         List<HexRelease> releases = [];
-        Say($"asking GitHub what changed in {entry.Command}...");
-        StartWork(CHANGES_WORK + entry.Name, $"What changed in {entry.Command}", async context =>
+        context.Notices.Say($"asking GitHub what changed in {entry.Command}...");
+        context.Work.Start(CHANGES_WORK + entry.Name, $"What changed in {entry.Command}", async context =>
         {
             context.Say($"asking {entry.Repo}");
             releases = await HexReleases.Recent(entry.Repo, have is null ? 5 : 30, context.Token).ConfigureAwait(false);
@@ -222,7 +231,7 @@ internal sealed partial class HexScene
         {
             if (item.State == WorkState.Failed)
             {
-                Say($"GitHub couldn't be asked about {entry.Command}, {item.Error}", error: true);
+                context.Notices.Say($"GitHub couldn't be asked about {entry.Command}, {item.Error}", error: true);
                 return;
             }
 
@@ -232,7 +241,7 @@ internal sealed partial class HexScene
             string header = have is null
                 ? $"The newest releases of **{entry.Command}**, from [{entry.Repo}]({entry.ReleasesPage}).\n\n"
                 : $"What changed in **{entry.Command}** since {have}, the one on this machine, from [{entry.Repo}]({entry.ReleasesPage}).\n\n";
-            ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, Literal), 560.0f);
+            context.Windows.ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, Literal), 560.0f);
         }, seen: false);
     }
 
@@ -240,31 +249,31 @@ internal sealed partial class HexScene
     /// Installs or updates a server by its entry's command line, in the background, the server stopped first and
     /// started again after with every open file of its. One without a command line has its releases opened instead.
     /// </summary>
-    private void InstallServer(HexServerEntry entry)
+    internal void InstallServer(HexServerEntry entry)
     {
         bool there = serversFound.TryGetValue(entry.Name, out ServerFound? found) && found.Path is not null;
         string line = there ? entry.Update : entry.Install;
         if (line.Length == 0)
         {
             if (entry.ReleasesPage.Length > 0)
-                OpenInBrowser(entry.ReleasesPage);
+                context.Windows.OpenInBrowser(entry.ReleasesPage);
             else
-                Say($"{entry.Command} has no way of being installed from here, see language_servers.hor", error: true);
+                context.Notices.Say($"{entry.Command} has no way of being installed from here, see language_servers.hor", error: true);
             return;
         }
 
         // Going already (pressed again, or from the settings and from a card both), it's that one, its card brought back
         if (Installing(entry) is { } going)
         {
-            RenewWork(going);
+            context.Work.Renew(going);
             return;
         }
 
         // A program that's running can't be written over, the server goes first (its process gone before the command starts)
         Task stopped = StopServer(entry);
         string? before = found?.Version;
-        Note($"> {line}");
-        StartWork(INSTALL_WORK + entry.Name, $"{(there ? "Updating" : "Installing")} {entry.Command}", async context =>
+        context.Notices.Note($"> {line}");
+        context.Work.Start(INSTALL_WORK + entry.Name, $"{(there ? "Updating" : "Installing")} {entry.Command}", async context =>
         {
             context.Say($"stopping {entry.Command}");
             await stopped.WaitAsync(context.Token).ConfigureAwait(false);
@@ -275,7 +284,7 @@ internal sealed partial class HexScene
         }, item =>
         {
             foreach (string said in item.Output)
-                Note(said, error: item.State == WorkState.Failed);
+                context.Notices.Note(said, error: item.State == WorkState.Failed);
 
             // Whatever happened, what's there now is looked for, and the server started again with it
             ProbeServers([entry], () =>
@@ -287,13 +296,13 @@ internal sealed partial class HexScene
                 ServerFound now = serversFound.GetValueOrDefault(entry.Name) ?? new ServerFound(null, null);
                 if (now.Path is null)
                 {
-                    Notify($"{entry.Command} was {(there ? "updated" : "installed")} but isn't on the PATH Hex has, set where it is in the settings or restart Hex",
-                        error: true, ("Settings", () => OpenSettings(SERVER_SECTION)));
+                    context.Notices.Notify($"{entry.Command} was {(there ? "updated" : "installed")} but isn't on the PATH Hex has, set where it is in the settings or restart Hex",
+                        error: true, ("Settings", () => context.Windows.OpenSettings(SERVER_SECTION)));
                     return;
                 }
 
                 string version = now.Version is { } said ? $" {said}" : string.Empty;
-                Say(there && before is not null && now.Version is not null && HexServerCatalog.Same(before, now.Version)
+                context.Notices.Say(there && before is not null && now.Version is not null && HexServerCatalog.Same(before, now.Version)
                     ? $"{entry.Command} was already the newest it could be, {before}"
                     : $"{entry.Command}{version} is {(there ? "updated" : "installed")}");
             });

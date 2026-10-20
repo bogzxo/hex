@@ -264,9 +264,6 @@ internal sealed partial class HexScene
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
-    // What somebody wrote, without the brackets a label would take for its markup
-    private static string Plain(string text) => text.Replace('[', '(').Replace(']', ')');
-
     private static void FitRowsTo(StackPanel list, ScrollPanel scroll)
     {
         float width = MathF.Max(MIN_FLEXIBLE, scroll.Size.X - ROW_MARGIN);

@@ -9,8 +9,10 @@ namespace Hex.Dawn;
 // server says about it goes under the code and into the Problems panel the way HIDL's own diagnostics do. A server
 // that isn't on the machine is no trouble, the file is coloured and nothing is said. HIDL will go the same way once it
 // has a server of its own, for now its diagnostics come out of the editor's parser and the run of the file.
-internal sealed partial class HexScene
+internal sealed partial class HexLanguages
 {
+    private readonly DawnContext context;
+
     private const string LANGUAGE_SERVERS = "Assets/hex/language_servers.hor";
 
     // How long after the last keystroke the text goes to the server
@@ -30,13 +32,13 @@ internal sealed partial class HexScene
     private readonly HashSet<string> failed = [];
 
     /// <summary>
-    /// What the languages take from the rest of the editor and give it, through the context: the documents opened, typed
+    /// The languages, taking from the rest of the editor and giving it through the context: the documents opened, typed
     /// into and closed, what's wrong with them and what completes in them, the folders the servers run in watched, and
     /// a page of settings.
     /// </summary>
-    private void AttachLanguages()
+    public HexLanguages(DawnContext with)
     {
-        DawnContext with = Context;
+        context = with;
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
         with.Documents.Closed += StopLinting;
@@ -68,7 +70,7 @@ internal sealed partial class HexScene
     private string ServerRootFor(string path)
     {
         string full = Path.GetFullPath(path);
-        if (workspace.Folders.Where(folder => PlatformPaths.IsUnder(full, folder)).OrderByDescending(folder => folder.Length).FirstOrDefault() is { } inWorkspace)
+        if (context.Workspace.Folders.Where(folder => PlatformPaths.IsUnder(full, folder)).OrderByDescending(folder => folder.Length).FirstOrDefault() is { } inWorkspace)
             return inWorkspace;
 
         string folder = Path.GetDirectoryName(full) ?? System.Environment.CurrentDirectory;
@@ -92,13 +94,16 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The name of the server linting a document, null for none.</summary>
-    private string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
+    internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
 
     // What language_servers.hor says, read the first time a server is wanted, nothing when it can't be read
     private List<HexServerEntry> serverEntries = [];
 
+    // The settings, where the servers are among them
+    private HexSettings settings => context.Settings.Values;
+
     /// <summary>The servers language_servers.hor names, in its order.</summary>
-    private IReadOnlyList<HexServerEntry> ServerEntries
+    internal IReadOnlyList<HexServerEntry> ServerEntries
     {
         get
         {
@@ -158,7 +163,7 @@ internal sealed partial class HexScene
     private void RestartServer(HexServerEntry entry)
     {
         StopServer(entry);
-        foreach (HexDocument of in documents.ToList())
+        foreach (HexDocument of in context.Documents.Open.ToList())
         {
             if (of.Path is { } path && !linters.ContainsKey(of)
                 && entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase)))
@@ -182,14 +187,14 @@ internal sealed partial class HexScene
         server.Woken ??= WakeForLinting;
 
         // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
-        Context.Workspace.Rewatch();
+        context.Workspace.Rewatch();
         linters[of] = server;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
     }
 
     // The server's reading thread has something, the window's thread wakes for it
-    private void WakeForLinting() => Engine.WindowManager.Wake();
+    private void WakeForLinting() => context.Wake();
 
     /// <summary>A file of another language was typed into, its server hears a moment after the typing stops.</summary>
     private void LintChanged(HexDocument changed)
@@ -210,7 +215,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every tick, the changes that are due go to their servers and what the servers said is taken in.</summary>
-    private void UpdateLinting(float dt)
+    internal void Update(float dt)
     {
         if (lintIn.Count > 0)
         {
@@ -233,7 +238,7 @@ internal sealed partial class HexScene
                     continue;
 
                 reloadIn.Remove(due);
-                Note($"[Hex] {due.Command} started again, a project of its changed");
+                context.Notices.Note($"[Hex] {due.Command} started again, a project of its changed");
                 RestartServer(due);
             }
         }
@@ -248,17 +253,18 @@ internal sealed partial class HexScene
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
                 string full = Path.GetFullPath(path);
-                HexDocument? of = documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, PlatformPaths.Comparison));
+                HexDocument? of = context.Documents.OpenAt(full);
                 if (of is null)
                     continue;
 
                 lintFound[of] = found;
-                ShowDiagnostics(of);
+                context.Documents.DiagnosticsChanged(of);
                 Console.WriteLine($"[Hex] {server.Name} has {found.Count} things to say about {Path.GetFileName(path)}.");
             }
         }
 
         UpdateServerCompletions();
+        UpdateInstallStatus();
     }
 
     /// <summary>What changed on the disk where the servers run, said to every server, which goes by it for what isn't open in it.</summary>

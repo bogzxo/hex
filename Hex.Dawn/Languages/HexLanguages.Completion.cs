@@ -6,11 +6,11 @@ using Horizon.UI.Scripting;
 namespace Hex.Dawn;
 
 // Completing what is typed in the languages that aren't HIDL, by asking the language server a file is linted by
-// (HexScene.Linting). The server answers on its own thread some time later, so the list can't be there the moment it is
+// (HexLanguages). The server answers on its own thread some time later, so the list can't be there the moment it is
 // asked for: the word being typed is asked about once, from where it starts, nothing is offered until the answer comes
 // back, and then the list opens by itself. The editor narrows it down as the word goes on, so typing more of the same
 // word asks nothing more, unless the server said it only sent some of it.
-internal sealed partial class HexScene
+internal sealed partial class HexLanguages
 {
     // Where the word being completed starts, and the line before it, which is what the server's answer is good for
     private readonly record struct ServerWord(int Line, int Start, string Ahead);
@@ -83,7 +83,7 @@ internal sealed partial class HexScene
         server.Complete(path, caret.Line, caret.Column, start, trigger, again).ContinueWith(answered =>
         {
             serverAnswers.Enqueue((of, generation, answered.IsCompletedSuccessfully ? answered.Result : null));
-            Engine.WindowManager.Wake();
+            context.Wake();
         }, TaskScheduler.Default);
 
         return asking.Offered;
@@ -103,7 +103,7 @@ internal sealed partial class HexScene
 
             // Only for the word it was asked about, the caret having gone somewhere else is the end of it
             CodeEditor editor = answer.Of.Editor;
-            if (!editor.IsFocused || !documents.Contains(answer.Of))
+            if (!editor.IsFocused || !context.Documents.Open.Contains(answer.Of))
                 continue;
 
             UITextPosition caret = editor.Document.Caret;

@@ -164,7 +164,7 @@ internal sealed partial class HexScene
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return ("folder-library", "Hex workspace");
         if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
-            return shown.Editor.Highlighter is { } language ? ("file-code", LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", "Plain text");
+            return shown.Editor.Highlighter is { } language ? ("file-code", languages.LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", "Plain text");
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return ("paintcan", "HIDL skin");
         if (shown.Path is { } file && Path.GetFileName(Path.GetDirectoryName(file))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)
