@@ -21,9 +21,15 @@ internal sealed partial class HexScene
     /// </summary>
     private string? HoverHint(CodeEditor editor, UITextPosition at)
     {
-        // One of the terminal's files, its settings, commands and functions said first (HexScene.TerminalFiles)
-        if (documents.Find(open => open.Editor == editor) is { } of && TerminalHover(of, editor, at) is { } terminal)
-            return terminal;
+        // What a part says about some files first, the terminal's its settings, commands and functions (HexTerminalFiles)
+        if (hoverSources.Count > 0 && documents.Find(open => open.Editor == editor) is { } of)
+        {
+            foreach (var source in hoverSources)
+            {
+                if (source(of, editor, at) is { } said)
+                    return said;
+            }
+        }
 
         string line = editor.Document.LineAt(at.Line);
         var (start, end) = editor.Document.WordAt(at);

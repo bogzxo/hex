@@ -175,6 +175,7 @@ internal sealed partial class HexScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         DeclareMenus();
+        terminalFiles = new HexTerminalFiles(Context);
         languages = new HexLanguages(Context);
         BuildStatusBar();
         BuildPanel();

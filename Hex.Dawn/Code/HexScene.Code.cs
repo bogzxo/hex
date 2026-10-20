@@ -56,7 +56,7 @@ internal sealed partial class HexScene
         editor.WordWrap = settings.WrapCode;
         editor.CaretGlide = Motion ? CARET_GLIDE : 0.0f;
         editor.Font = codeFont;
-        editor.SignatureSource = (name, argument) => TerminalSignature(prepared, name, argument) ?? SignatureOf(editor, name, argument);
+        editor.SignatureSource = (name, argument) => SourcedSignature(prepared, name, argument) ?? SignatureOf(editor, name, argument);
         ShowBackdrop(editor);
         editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
@@ -191,7 +191,6 @@ internal sealed partial class HexScene
         }
 
         found.AddRange(ExtensionProblemsOf(of.Path));
-        found.AddRange(TerminalProblemsOf(of));
         foreach (var source in diagnosticSources)
             found.AddRange(source(of) ?? []);
         of.Editor.Diagnostics = found;
@@ -427,5 +426,17 @@ internal sealed partial class HexScene
         commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: HexKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Discard Code Changes", RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Convert to Layout...", MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
+    }
+
+    /// <summary>What a part says a call in a document takes, the first that says anything, null for none.</summary>
+    private UISignature? SourcedSignature(HexDocument of, string name, int argument)
+    {
+        foreach (var source in signatureSources)
+        {
+            if (source(of, name, argument) is { } said)
+                return said;
+        }
+
+        return null;
     }
 }

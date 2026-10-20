@@ -81,6 +81,12 @@ internal interface IDocuments
 
     /// <summary>Something that completes what is typed in some files, asked before the editor's own completions.</summary>
     void AddCompletions(HexCompletionSource source);
+
+    /// <summary>Something that says what a word of some files is as the pointer rests on it (markdown), null to leave it to the next.</summary>
+    void AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source);
+
+    /// <summary>Something that says what a call in some files takes, the argument being typed picked out, null to leave it to the next.</summary>
+    void AddSignatures(Func<HexDocument, string, int, UISignature?> source);
 }
 
 /// <summary>The folders of the workspace, and what changes in them on the disk.</summary>
@@ -190,6 +196,9 @@ internal interface ISettingsHost
 /// <summary>The terminal page under the editor, its tabs.</summary>
 internal interface ITerminals
 {
+    /// <summary>The terminal host Dawn's terminal page runs on, its plugins, its profiles and what its object has.</summary>
+    TerminalHost Host { get; }
+
     /// <summary>
     /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
     /// still there, a new one in a folder otherwise, named so. The page is brought up with it.

@@ -12,8 +12,20 @@ namespace Hex.Dawn;
 // any HIDL file has, out of the description the hosts write (api.hor, the engine's TerminalApiDescription), which says
 // what Dusk has as well as what Hex has. The knowing is the engine's (TerminalFileKnowledge), this only puts it through
 // the editor's seams.
-internal sealed partial class HexScene
+internal sealed class HexTerminalFiles
 {
+    private readonly DawnContext context;
+
+    /// <summary>The terminal's files known through the documents' seams, ahead of what any HIDL file has.</summary>
+    public HexTerminalFiles(DawnContext with)
+    {
+        context = with;
+        context.Documents.AddCompletions(Completions);
+        context.Documents.AddHovers(TerminalHover);
+        context.Documents.AddSignatures(TerminalSignature);
+        context.Documents.AddDiagnostics(of => TerminalKindOf(of) == TerminalFileKind.None ? null : [.. TerminalProblemsOf(of)]);
+    }
+
     private TerminalFileKnowledge? terminalKnowledge;
     private DateTime terminalKnowledgeFrom;
 
@@ -27,7 +39,7 @@ internal sealed partial class HexScene
             if (terminalKnowledge is null || written != terminalKnowledgeFrom)
             {
                 terminalKnowledgeFrom = written;
-                terminalKnowledge = new TerminalFileKnowledge(terminals.Describe());
+                terminalKnowledge = new TerminalFileKnowledge(context.Terminals.Host.Describe());
             }
 
             return terminalKnowledge;
@@ -35,11 +47,19 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Which of the terminal's files a document is, none for every other.</summary>
-    private TerminalFileKind TerminalKindOf(HexDocument of) =>
+    internal TerminalFileKind TerminalKindOf(HexDocument of) =>
         of.IsText && of.Path is { } path ? TerminalFileKnowledge.KindOf(path, of.Editor.Text) : TerminalFileKind.None;
 
     /// <summary>What there is to write at the caret of a terminal file, null to leave it to the editor's own.</summary>
-    private UICompletionRequest? TerminalCompletions(HexDocument of, CodeEditor editor)
+    // A completion source's, handled for a terminal file whatever there is
+    private UICompletionRequest? Completions(HexDocument of, CodeEditor editor, out bool handled)
+    {
+        UICompletionRequest? offered = TerminalCompletions(of, editor);
+        handled = offered is not null;
+        return offered;
+    }
+
+    internal UICompletionRequest? TerminalCompletions(HexDocument of, CodeEditor editor)
     {
         TerminalFileKind kind = TerminalKindOf(of);
         if (kind == TerminalFileKind.None)
@@ -65,7 +85,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>What a call on the terminal object takes, with the argument being typed picked out, null for any other call.</summary>
-    private UISignature? TerminalSignature(HexDocument of, string name, int argument)
+    internal UISignature? TerminalSignature(HexDocument of, string name, int argument)
     {
         if (TerminalKindOf(of) != TerminalFileKind.Plugin || TerminalKnowledge.Parameters(name) is not { } parameters)
             return null;
@@ -99,9 +119,10 @@ internal sealed partial class HexScene
 
     /* What an extension is handed about the terminal's files, the settings form (Assets/hex/extensions/dusk_settings) */
 
-    private (string, IRuntimeValue)[] TerminalFilesApi() =>
+    /// <summary>What an extension is handed about the terminal's files.</summary>
+    internal (string, IRuntimeValue)[] Api() =>
     [
-        ("terminal_settings", Natives.Function("terminal_settings", args => SettingsFormOf(args.Has(0) ? args.Text(0) : document.Path))),
+        ("terminal_settings", Natives.Function("terminal_settings", args => SettingsFormOf(args.Has(0) ? args.Text(0) : context.Documents.Current.Path))),
         // a field's value as the file writes it, the flags of a list back into a list
         ("terminal_setting_value", Natives.Function("terminal_setting_value", args => TerminalSettingsForm.ValueOf(args.Text(0), args[1])))
     ];
@@ -112,7 +133,7 @@ internal sealed partial class HexScene
     /// </summary>
     private IRuntimeValue SettingsFormOf(string? file)
     {
-        string text = file is not null && documents.Find(open => open.Path is { } path && string.Equals(Path.GetFullPath(path), Path.GetFullPath(file), PlatformPaths.Comparison)) is { } open
+        string text = file is not null && context.Documents.Find(file) is { } open
             ? open.Editor.Text
             : file is not null && File.Exists(file) ? File.ReadAllText(file) : string.Empty;
 
@@ -126,6 +147,6 @@ internal sealed partial class HexScene
             said = [];
         }
 
-        return TerminalSettingsForm.Script(terminals.Plugins.Where(plugin => !plugin.BuiltIn).Select(plugin => plugin.Id), terminals.Panel.Profiles.Select(profile => profile.Id), said);
+        return TerminalSettingsForm.Script(context.Terminals.Host.Plugins.Where(plugin => !plugin.BuiltIn).Select(plugin => plugin.Id), context.Terminals.Host.Panel.Profiles.Select(profile => profile.Id), said);
     }
 }

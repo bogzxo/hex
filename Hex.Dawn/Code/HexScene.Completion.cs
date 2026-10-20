@@ -111,13 +111,10 @@ internal sealed partial class HexScene
     /// </summary>
     private UICompletionRequest? Completions(CodeEditor editor)
     {
-        // One of the terminal's files, its settings, keys and functions first (HexScene.TerminalFiles)
         HexDocument? of = documents.Find(open => open.Editor == editor);
-        if (of is not null && TerminalCompletions(of, editor) is { } terminal)
-            return terminal;
 
-        // A file of another language, what its language server offers (HexScene.ServerCompletion), and whatever else
-        // completes some files
+        // What the parts complete in some files, the terminal's own files (HexTerminalFiles) and a file of another
+        // language by its language server (HexLanguages)
         if (of is not null)
         {
             foreach (HexCompletionSource source in completionSources)

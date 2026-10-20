@@ -27,7 +27,7 @@ internal sealed partial class HexScene
             Open(settingsFile);
         });
         test.Wait();
-        test.Check("dusk files: settings.hor is known as the terminal's settings", () => TerminalKindOf(document) == TerminalFileKind.Settings);
+        test.Check("dusk files: settings.hor is known as the terminal's settings", () => terminalFiles.TerminalKindOf(document) == TerminalFileKind.Settings);
         test.Run(() =>
         {
             code.Document.MoveToEnd(false);
@@ -35,7 +35,7 @@ internal sealed partial class HexScene
             code.Document.Insert("let more = { anim");
         });
         test.Check("dusk files: a key of the settings is completed", () =>
-            TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "animations"));
+            terminalFiles.TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "animations"));
         test.Run(() => code.Document.Undo());
         test.Run(() => code.Document.Undo());
         test.Wait();
@@ -84,7 +84,7 @@ internal sealed partial class HexScene
         test.Wait();
         test.Run(() => ShowDiagnostics(document));
         test.Check("dusk files: keys.hor warns of a key that isn't one and a command nobody has", () =>
-            TerminalKindOf(document) == TerminalFileKind.Keys
+            terminalFiles.TerminalKindOf(document) == TerminalFileKind.Keys
             && code.Diagnostics.Any(problem => problem.Message.Contains("isn't a key")) && code.Diagnostics.Any(problem => problem.Message.Contains("nothing_at_all")));
         test.Run(() =>
         {
@@ -92,7 +92,7 @@ internal sealed partial class HexScene
             code.Document.Insert("    spl");
         });
         test.Check("dusk files: a command's name is completed in keys.hor", () =>
-            TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "split_right"));
+            terminalFiles.TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "split_right"));
         test.Run(() => code.Document.Undo());
 
         // A plugin
@@ -105,8 +105,8 @@ internal sealed partial class HexScene
         test.Wait();
         test.Run(() => code.Document.MoveTo(new UITextPosition(2, 9), false));
         test.Check("dusk files: after terminal. in a plugin, what the object has", () =>
-            TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "split") && offered.Items.Any(item => item.Text == "file"));
-        test.Check("dusk files: and what a call takes", () => TerminalSignature(document, "terminal.split", 0) is { } signature && signature.Text.Contains("\"right\" or \"down\""));
+            terminalFiles.TerminalCompletions(document, code) is { } offered && offered.Items.Any(item => item.Text == "split") && offered.Items.Any(item => item.Text == "file"));
+        test.Check("dusk files: and what a call takes", () => terminalFiles.TerminalSignature(document, "terminal.split", 0) is { } signature && signature.Text.Contains("\"right\" or \"down\""));
         test.Run(() =>
         {
             CloseNow();

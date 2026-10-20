@@ -20,6 +20,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private HexLanguages languages = null!;
     private HexTasks tasks = null!;
     private HexDebugging debugger = null!;
+    private HexTerminalFiles terminalFiles = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, commands, options,
@@ -30,6 +31,8 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private Action<HexDocument>? documentOpened, documentEdited, documentClosed;
     private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
     private readonly List<HexCompletionSource> completionSources = [];
+    private readonly List<Func<HexDocument, CodeEditor, UITextPosition, string?>> hoverSources = [];
+    private readonly List<Func<HexDocument, string, int, UISignature?>> signatureSources = [];
 
     IReadOnlyList<HexDocument> IDocuments.All => documents;
     bool IDocuments.Open(string path) => Open(path);
@@ -66,6 +69,8 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void IDocuments.AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source) => diagnosticSources.Add(source);
     void IDocuments.DiagnosticsChanged(HexDocument of) => ShowDiagnostics(of);
     void IDocuments.AddCompletions(HexCompletionSource source) => completionSources.Add(source);
+    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source) => hoverSources.Add(source);
+    void IDocuments.AddSignatures(Func<HexDocument, string, int, UISignature?> source) => signatureSources.Add(source);
 
     /* The workspace */
 
@@ -140,6 +145,8 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void ISettingsHost.Refresh(string key) => SettingsPage?.Refresh(key);
 
     /* The terminal page */
+
+    TerminalHost ITerminals.Host => terminals;
 
     void ITerminals.RunInTab(string key, string title, string folder, string commandLine)
     {

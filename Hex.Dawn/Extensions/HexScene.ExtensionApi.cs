@@ -22,7 +22,7 @@ internal sealed partial class HexScene
             [
                 .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension), .. Prompting(extension),
                 .. Sides(), .. Programs(extension), .. About(extension), .. Edits(extension), .. Problems(extension),
-                .. Watching(extension), .. TerminalFilesApi()
+                .. Watching(extension), .. terminalFiles.Api()
             ]);
         }
 
