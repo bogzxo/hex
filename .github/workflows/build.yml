@@ -1,0 +1,84 @@
+# Every push to master, Hex published for Windows, Linux and macOS, a zip for each kept with the run (Actions, the
+# run, Artifacts). A native compiler only builds for the system it runs on, so each platform is built on its own.
+# Pushing a tag that starts with v (v0.4.0) builds the same and puts the zips on a GitHub release of that name.
+
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The engine (bogzxo/horizon at horizon) and the language inside of it
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
+      - name: Native compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Publish
+        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex
+
+      - name: Zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path publish/Hex -DestinationPath Hex-${{ matrix.rid }}.zip
+
+      - name: Zip
+        if: runner.os != 'Windows'
+        working-directory: publish
+        run: zip -r ../Hex-${{ matrix.rid }}.zip Hex
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hex-${{ matrix.rid }}
+          path: Hex-${{ matrix.rid }}.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "Hex $GITHUB_REF_NAME" --generate-notes
