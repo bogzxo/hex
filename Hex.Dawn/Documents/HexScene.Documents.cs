@@ -204,12 +204,20 @@ internal sealed partial class HexScene
     }
 
     private static bool SameDirectory(string a, string b) =>
-        string.Equals(Path.GetDirectoryName(Path.GetFullPath(a)), Path.GetDirectoryName(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Path.GetDirectoryName(Path.GetFullPath(a)), Path.GetDirectoryName(Path.GetFullPath(b)), PlatformPaths.Comparison);
 
-    /* Opening and saving. Windows asks where, the editor testing itself (which can't click in a dialog of
-       Windows) uses the list on the left to open and its workspace to save. */
+    /* Opening and saving. Hex's own dialog asks where (HexFileBrowser), the editor testing itself uses the list on
+       the left to open and its workspace to save. */
 
-    private nint WindowHandle => Engine.WindowManager.Window.Native?.Win32?.Hwnd ?? 0;
+    /// <summary>
+    /// Where a dialog of Hex's own goes, over the rest of the editor and coloured as its other windows are, with the
+    /// workspace's folders among its places.
+    /// </summary>
+    private HexDialogHost DialogHost => new(window =>
+    {
+        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        chrome.Root.Add(window);
+    }, WorkspaceRoots());
 
     private void OpenPressed()
     {
@@ -227,7 +235,7 @@ internal sealed partial class HexScene
             return;
         }
 
-        Ask(HexDialogs.Open(browseDirectory, WindowHandle), path =>
+        Ask(HexDialogs.Open(browseDirectory, DialogHost), path =>
         {
             // New layouts are saved to wherever was looked at last
             browseDirectory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
@@ -278,7 +286,7 @@ internal sealed partial class HexScene
         HexDocument saved = document;
         string directory = saved.Path is { } known ? Path.GetDirectoryName(Path.GetFullPath(known))! : browseDirectory;
 
-        Ask(HexDialogs.Save(directory, saved.Name + ".hor", WindowHandle), path =>
+        Ask(HexDialogs.Save(directory, saved.Name + ".hor", DialogHost), path =>
         {
             // The dialog was open for a while, the layout it was about may not be the one on screen any more
             if (!documents.Contains(saved))

@@ -16,7 +16,7 @@ public static class HexFiles
     {
         string path = Path.Combine(TerminalFiles.UserFolder, name);
         string old = Path.Combine(AppContext.BaseDirectory, was ?? name);
-        if (!File.Exists(path) && File.Exists(old) && !string.Equals(Path.GetFullPath(old), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+        if (!File.Exists(path) && File.Exists(old) && !string.Equals(Path.GetFullPath(old), Path.GetFullPath(path), Horizon.Core.Platform.PlatformPaths.Comparison))
         {
             try
             {

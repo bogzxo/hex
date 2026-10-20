@@ -159,7 +159,7 @@ internal sealed partial class HexScene
         {
             foreach (string other in Directory.GetFiles(folder, "*.hor").Order(StringComparer.OrdinalIgnoreCase))
             {
-                if (string.Equals(Path.GetFullPath(other), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(Path.GetFullPath(other), Path.GetFullPath(path), PlatformPaths.Comparison))
                     continue;
 
                 try
@@ -254,7 +254,7 @@ internal sealed partial class HexScene
         if (!tableCells.TryGetValue((row, column), out SourceLocation at))
             return;
 
-        bool here = at.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(open), StringComparison.OrdinalIgnoreCase));
+        bool here = at.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(open), PlatformPaths.Comparison));
         if (column == 0 || !here || !at.Literal || !at.Value.IsKnown)
         {
             SwitchView(HexView.Code);

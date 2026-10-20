@@ -70,7 +70,7 @@ internal sealed partial class HexScene
     private void ChooseBackdrop()
     {
         string from = settings.BackdropImage.Length > 0 ? Path.GetDirectoryName(settings.BackdropImage) ?? browseDirectory : browseDirectory;
-        Ask(HexDialogs.OpenFile(Said("settings.backdrop.choose_title"), from, [("Pictures (*.png, *.jpg)", "*.png;*.jpg;*.jpeg")], WindowHandle), path =>
+        Ask(HexDialogs.OpenFile(Said("settings.backdrop.choose_title"), from, [("Pictures (*.png, *.jpg)", "*.png;*.jpg;*.jpeg")], DialogHost), path =>
         {
             settings.BackdropImage = Path.GetFullPath(path);
             SaveSettings();

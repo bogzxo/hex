@@ -25,7 +25,7 @@ internal sealed class HexWorkspace
     public List<string> Folders { get; } = [];
 
     /// <summary>The folders that are opened up in the explorer, full paths.</summary>
-    public HashSet<string> Expanded { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> Expanded { get; } = new(PlatformPaths.Comparer);
 
     /// <summary>The files that were open, full paths, the one on screen last.</summary>
     public List<string> OpenFiles { get; } = [];
@@ -44,7 +44,7 @@ internal sealed class HexWorkspace
     public bool Add(string folder)
     {
         string full = Path.GetFullPath(folder).TrimEnd('\\', '/');
-        if (Folders.Any(known => string.Equals(known, full, StringComparison.OrdinalIgnoreCase)))
+        if (Folders.Any(known => string.Equals(known, full, PlatformPaths.Comparison)))
             return false;
 
         Folders.Add(full);
@@ -53,13 +53,13 @@ internal sealed class HexWorkspace
     }
 
     public bool Remove(string folder) =>
-        Folders.RemoveAll(known => string.Equals(known, Path.GetFullPath(folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) > 0;
+        Folders.RemoveAll(known => string.Equals(known, Path.GetFullPath(folder).TrimEnd('\\', '/'), PlatformPaths.Comparison)) > 0;
 
     /// <summary>The folder of the workspace a file is in, null if it is in none of them.</summary>
     public string? FolderOf(string path)
     {
         string full = Path.GetFullPath(path);
-        return Folders.Where(folder => full.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || string.Equals(full, folder, StringComparison.OrdinalIgnoreCase))
+        return Folders.Where(folder => full.StartsWith(folder + Path.DirectorySeparatorChar, PlatformPaths.Comparison) || string.Equals(full, folder, PlatformPaths.Comparison))
             .OrderByDescending(folder => folder.Length)
             .FirstOrDefault();
     }
@@ -93,7 +93,7 @@ internal sealed class HexWorkspace
         foreach (string folder in Paths(values, "folders", relativeTo))
         {
             string trimmed = folder.TrimEnd('\\', '/');
-            if (!Folders.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            if (!Folders.Contains(trimmed, PlatformPaths.Comparer))
                 Folders.Add(trimmed);
         }
 
@@ -155,5 +155,5 @@ internal sealed class HexWorkspace
 
     // Whether a path can be written relative to a folder without climbing out of the drive it is on
     private static bool IsUnder(string path, string folder) =>
-        string.Equals(Path.GetPathRoot(Path.GetFullPath(path)), Path.GetPathRoot(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Path.GetPathRoot(Path.GetFullPath(path)), Path.GetPathRoot(Path.GetFullPath(folder)), PlatformPaths.Comparison);
 }

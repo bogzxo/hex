@@ -22,7 +22,51 @@ internal sealed partial class HexScene
     private readonly Dictionary<HexDocument, float> lintIn = [];
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> lintFound = [];
     private bool serversRead;
+
+    // The servers to be started again, a project of theirs having changed, and how long until (a build or a checkout
+    // writes many at once, the server goes once they've settled)
+    private const float RELOAD_DELAY = 1.5f;
+    private readonly Dictionary<HexServerEntry, float> reloadIn = [];
     private readonly HashSet<string> failed = [];
+
+    /// <summary>
+    /// Watches the folders of the workspace (for the explorer) and the folders the language servers were started in
+    /// (for what changes in them on the disk), and nothing else.
+    /// </summary>
+    private void WatchFolders() =>
+        folders.Watch(workspace.Folders.Concat(LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory))
+            .Where(Directory.Exists).Distinct(PlatformPaths.Comparer));
+
+    /// <summary>
+    /// The folder a file's server runs in, which is where it looks for projects: the workspace's folder the file is in,
+    /// otherwise the nearest folder over it with a project of its server's (a .csproj, a .sln, what its reload names),
+    /// otherwise the file's own folder. A file outside the workspace got the workspace's server, which knew nothing of it.
+    /// </summary>
+    private string ServerRootFor(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (workspace.Folders.Where(folder => PlatformPaths.IsUnder(full, folder)).OrderByDescending(folder => folder.Length).FirstOrDefault() is { } inWorkspace)
+            return inWorkspace;
+
+        string folder = Path.GetDirectoryName(full) ?? System.Environment.CurrentDirectory;
+        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(full), StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
+        {
+            for (string? above = folder; above is not null; above = Path.GetDirectoryName(above))
+            {
+                try
+                {
+                    if (Directory.EnumerateFiles(above).Any(server.ReloadsFor))
+                        return above;
+                }
+                catch (Exception)
+                {
+                    // A folder that can't be read has no project as far as this goes
+                }
+            }
+        }
+
+        return folder;
+    }
 
     /// <summary>The name of the server linting a document, null for none.</summary>
     private string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
@@ -66,21 +110,22 @@ internal sealed partial class HexScene
     private string CommandOf(HexServerEntry entry) =>
         settings.ServerPaths.TryGetValue(entry.Name, out string? at) && at.Length > 0 ? at : entry.Command;
 
-    // Helper method to say which files a server is for and how it is started, which stops the one that was running
-    private void RegisterServer(HexServerEntry entry) =>
+    // Helper method to say which files a server is for and how it is started, which stops the one that was running (done
+    // when the task is, off the editor's thread)
+    private Task RegisterServer(HexServerEntry entry) =>
         LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions);
 
     /// <summary>
     /// Stops a server, its files let go of. It starts again with the next file of its that is opened, or with
     /// <see cref="RestartServer"/>. Before it is updated, a program that is running can't be written over.
     /// </summary>
-    private void StopServer(HexServerEntry entry)
+    private Task StopServer(HexServerEntry entry)
     {
         foreach (HexDocument of in linters.Where(pair => pair.Value.Name == entry.Name).Select(pair => pair.Key).ToList())
             StopLinting(of);
 
-        RegisterServer(entry);
         failed.Remove(entry.Name);
+        return RegisterServer(entry);
     }
 
     /// <summary>
@@ -107,12 +152,14 @@ internal sealed partial class HexScene
         if (!serversRead)
             ReadLanguageServers();
 
-        // The server runs in the workspace, or the file's own folder when there isn't one, which is what it looks for a project in
-        string root = WorkspaceRoots().FirstOrDefault() ?? Path.GetDirectoryName(Path.GetFullPath(path)) ?? System.Environment.CurrentDirectory;
+        string root = ServerRootFor(path);
         if (LanguageServers.For(path, root) is not { } server)
             return;
 
         server.Woken ??= WakeForLinting;
+
+        // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
+        WatchFolders();
         linters[of] = server;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
@@ -155,7 +202,37 @@ internal sealed partial class HexScene
             }
         }
 
+        // What changed on the disk in the workspace, said to every server, which goes by it for what isn't open in it
         IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
+        if (folders.TakeFileChanges() is { Count: > 0 } changes)
+        {
+            foreach (LanguageServer server in servers)
+            {
+                if (server.Failure is null)
+                    server.FilesChanged(changes);
+            }
+
+            // A project of a server's that reads them only as it starts, the server started again a moment after
+            foreach (HexServerEntry entry in serverEntries)
+            {
+                if (changes.Any(change => entry.ReloadsFor(change.Path)) && servers.Any(server => server.Name == entry.Name))
+                    reloadIn[entry] = RELOAD_DELAY;
+            }
+        }
+
+        if (reloadIn.Count > 0)
+        {
+            foreach (HexServerEntry due in reloadIn.Keys.ToArray())
+            {
+                if ((reloadIn[due] -= dt) > 0.0f)
+                    continue;
+
+                reloadIn.Remove(due);
+                Note($"[Hex] {due.Command} started again, a project of its changed");
+                RestartServer(due);
+            }
+        }
+
         for (int i = 0; i < servers.Count; i++)
         {
             LanguageServer server = servers[i];
@@ -165,7 +242,7 @@ internal sealed partial class HexScene
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
                 string full = Path.GetFullPath(path);
-                HexDocument? of = documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, StringComparison.OrdinalIgnoreCase));
+                HexDocument? of = documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, PlatformPaths.Comparison));
                 if (of is null)
                     continue;
 

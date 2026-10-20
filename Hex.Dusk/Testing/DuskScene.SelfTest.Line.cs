@@ -3,7 +3,8 @@ using Horizon.UI.Components;
 namespace Hex.Dusk;
 
 // The self test of the line typed at a prompt being coloured, in a real PowerShell (which says what it has once it is
-// first idle) and a real cmd (which says its marks through its prompt). Nothing is run but what cmd is asked to.
+// first idle) and a real cmd (which says its marks through its prompt), or the machine's shell (bash, zsh) on Linux and
+// macOS, where the PowerShell and cmd parts are left out. Nothing is run but what cmd is asked to.
 internal sealed partial class DuskScene
 {
     private void TestLine(DuskScript test)
@@ -25,6 +26,9 @@ internal sealed partial class DuskScene
         test.Check("one off the PATH is green and its flag a flag", () => View().LineKindsText() == "cccccc.fffffffff");
 
         Clear(test);
+        if (!OperatingSystem.IsWindows())
+            return;
+
         test.Run(() => View().Send($"Get-ChildItem '{Path.GetTempPath().TrimEnd('\\')}' -Force"));
         test.WaitFor(() => View().LineText.EndsWith(" -Force"), 5.0f);
         test.Check("a cmdlet is green and a string a string", () => View().LineKindsText() is { } kinds && kinds.StartsWith("ccccccccccccc.s") && kinds.EndsWith(".ffffff"));
@@ -77,9 +81,11 @@ internal sealed partial class DuskScene
     }
 
     // What is typed at the prompt cleared, escape on its own and a moment for the shell to take it as that
+    // The line at the prompt emptied: Escape in PowerShell (and cmd), Ctrl+E then Ctrl+U in bash and zsh, where Escape
+    // is the start of a key with meta and would take the next letter typed with it
     private void Clear(DuskScript test)
     {
-        test.Run(() => panel.FocusedView!.Send("\u001b"));
+        test.Run(() => panel.FocusedView!.Send(OperatingSystem.IsWindows() ? "\u001b" : "\u0005\u0015"));
         test.Wait();
         test.Wait();
     }

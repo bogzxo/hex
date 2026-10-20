@@ -83,7 +83,10 @@ internal sealed partial class HexScene
 
         // A compiler's error in a shell's output, into the Problems panel, and out again when the next line is run
         test.Run(() => terminalPanel.Select(0));
-        test.Run(() => terminalPanel.FocusedView?.Send("Write-Output ('C:\\hex\\Program.cs(12,5): error CS1002: ; expect' + 'ed')\r"));
+        // Said in two halves, so the line typed isn't itself the error: PowerShell's on Windows, sh's anywhere else
+        test.Run(() => terminalPanel.FocusedView?.Send(OperatingSystem.IsWindows()
+            ? "Write-Output ('C:\\hex\\Program.cs(12,5): error CS1002: ; expect' + 'ed')\r"
+            : "printf '%s\\n' '/tmp/hex/Program.cs(12,5): error CS1002: ; expect''ed'\r"));
         test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("CS1002")), 8.0f);
         test.Check("terminal: a compiler's error in a shell's output is in the Problems panel", () =>
             problemList.Any(problem => problem.Text == "CS1002: ; expected" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));

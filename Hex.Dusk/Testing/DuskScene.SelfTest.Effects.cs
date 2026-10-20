@@ -61,7 +61,7 @@ internal sealed partial class DuskScene
         test.Run(() => View().Send("\r"));
         test.WaitFor(() => View().Screen.AtPrompt && sparks.Count == 0, 5.0f);
 
-        test.Run(() => View().Send("Start-Sleep -Milliseconds 2200; 'slept'\r"));
+        test.Run(() => View().Send(OperatingSystem.IsWindows() ? "Start-Sleep -Milliseconds 2200; 'slept'\r" : "sleep 2.2; echo slept\r"));
         test.WaitFor(() => sparks.Count > 20, 8.0f);
         test.Check("effects: and a command that took a while and went well throws a burst", () => sparks.Count > 20);
 

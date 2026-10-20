@@ -18,10 +18,13 @@ internal sealed partial class HexScene
 
     private HexBackups Backups => backups ??= new HexBackups(BackupFolder);
 
-    // The self test keeps its backups apart, or a run of it would leave things to bring back for the next real start
+    // The self test keeps its backups apart, or a run of it would leave things to bring back for the next real start.
+    // Windows' where they always were, ~/Library/Application Support/Hex/backups and ~/.local/state/hex/backups elsewhere
     private string BackupFolder => options.SelfTest
         ? Path.Combine(Path.GetTempPath(), "Hex", "self test backups")
-        : Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Horizon", "Horizon.Hex", "backups");
+        : OperatingSystem.IsWindows()
+            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Horizon", "Horizon.Hex", "backups")
+            : Path.Combine(Horizon.Core.Platform.PlatformPaths.State("Hex"), "backups");
 
     /// <summary>Every couple of seconds, what has changes kept and what has none any more let go of.</summary>
     private void UpdateBackups(float dt)
@@ -34,7 +37,7 @@ internal sealed partial class HexScene
         foreach (var open in documents)
         {
             // what the disk had for a file, opened to compare, isn't anybody's work
-            if (open.Path is { } path && path.StartsWith(CompareFolder, StringComparison.OrdinalIgnoreCase))
+            if (open.Path is { } path && path.StartsWith(CompareFolder, PlatformPaths.Comparison))
                 continue;
 
             // A layout's code is written out of it again whenever it's shown, which changes the code and not the layout, so
@@ -108,7 +111,7 @@ internal sealed partial class HexScene
         if (ReadNow(path) is { } onDisk && onDisk.Replace("\r\n", "\n") == backup.Text)
             return false;
 
-        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(path), PlatformPaths.Comparison));
         if (open is null)
         {
             if (!Open(path))

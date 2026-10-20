@@ -107,12 +107,12 @@ internal sealed partial class HexScene
 
     /* Folders in and out */
 
-    /// <summary>Asks for a folder, Explorer's picker of folders where there is one, opened where the explorer is, and a line to type it into otherwise.</summary>
+    /// <summary>Asks for a folder, with Hex's own dialog opened where the explorer is, and a line to type it into for the self test.</summary>
     private void AskFolder(Action<string> picked)
     {
-        if (OperatingSystem.IsWindows() && !options.SelfTest)
+        if (!options.SelfTest)
         {
-            Ask(HexDialogs.PickFolder(browseDirectory, WindowHandle), picked);
+            Ask(HexDialogs.PickFolder(browseDirectory, DialogHost), picked);
             return;
         }
 
@@ -227,7 +227,7 @@ internal sealed partial class HexScene
         if (options.SelfTest)
             return;
 
-        Ask(HexDialogs.OpenWorkspace(browseDirectory, WindowHandle), OpenWorkspaceFile);
+        Ask(HexDialogs.OpenWorkspace(browseDirectory, DialogHost), OpenWorkspaceFile);
     }
 
     private void SaveWorkspacePressed(bool asNew)
@@ -242,7 +242,7 @@ internal sealed partial class HexScene
             return;
 
         string start = workspace.Folders.Count > 0 ? workspace.Folders[0] : browseDirectory;
-        Ask(HexDialogs.SaveWorkspace(start, workspace.Name + HexWorkspace.EXTENSION, WindowHandle), SaveWorkspaceAs);
+        Ask(HexDialogs.SaveWorkspace(start, workspace.Name + HexWorkspace.EXTENSION, DialogHost), SaveWorkspaceAs);
     }
 
     /// <summary>The left back to what is in the document on screen, its components or its outline.</summary>
@@ -267,7 +267,7 @@ internal sealed partial class HexScene
         foreach (string root in workspace.Folders)
         {
             string top = Path.GetFullPath(root);
-            if (!full.StartsWith(top, StringComparison.OrdinalIgnoreCase))
+            if (!full.StartsWith(top, PlatformPaths.Comparison))
                 continue;
 
             for (string? at = Path.GetDirectoryName(full); at is not null && at.Length >= top.Length; at = Path.GetDirectoryName(at))

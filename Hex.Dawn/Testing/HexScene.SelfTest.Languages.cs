@@ -199,12 +199,14 @@ internal sealed partial class HexScene
 
         test.Run(() =>
         {
-            foreach (HexDocument open in documents.Where(open => open.Path is { } path && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).ToList())
+            foreach (HexDocument open in documents.Where(open => open.Path is { } path && path.StartsWith(folder, PlatformPaths.Comparison)).ToList())
             {
                 Show(open);
                 CloseNow();
             }
 
+            // A server started in the folder has it as its process's, which Windows won't delete from under it
+            LanguageServers.StopUnder(folder).Wait(TimeSpan.FromSeconds(6));
             Directory.Delete(folder, recursive: true);
             if (before is not null && documents.Contains(before))
                 Show(before);

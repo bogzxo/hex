@@ -142,7 +142,7 @@ internal sealed partial class HexScene
         if (document.Path is { } path)
         {
             string full = Path.GetFullPath(path);
-            string root = WorkspaceRoots().FirstOrDefault(folder => full.StartsWith(Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)) ?? Path.GetDirectoryName(full)!;
+            string root = WorkspaceRoots().FirstOrDefault(folder => full.StartsWith(Path.GetFullPath(folder), PlatformPaths.Comparison)) ?? Path.GetDirectoryName(full)!;
             string relative = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(root)) ?? root, Path.GetDirectoryName(full)!);
 
             HexDocument here = document;

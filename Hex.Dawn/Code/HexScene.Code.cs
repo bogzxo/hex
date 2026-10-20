@@ -189,7 +189,7 @@ internal sealed partial class HexScene
         }
 
         if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran && valuesOf == of
-            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))))
+            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), PlatformPaths.Comparison))))
         {
             found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
         }

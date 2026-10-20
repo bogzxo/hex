@@ -128,7 +128,7 @@ internal sealed partial class HexScene
                 string[] here = Directory.GetFiles(folder, "*.csproj");
                 if (here.Length > 0)
                     return [here[0]];
-                if (WorkspaceRoots().Any(root => string.Equals(Path.GetFullPath(root).TrimEnd('\\', '/'), folder.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
+                if (WorkspaceRoots().Any(root => string.Equals(Path.GetFullPath(root).TrimEnd('\\', '/'), folder.TrimEnd('\\', '/'), PlatformPaths.Comparison)))
                     break;
             }
         }
@@ -175,6 +175,8 @@ internal sealed partial class HexScene
                 return there;
         }
 
+        // Started from the Dock or a launcher, the PATH a terminal has (ProcessEnvironment.ImportLoginShell)
+        Horizon.Core.Processes.ProcessEnvironment.WaitForLoginShell();
         foreach (string folder in Horizon.Core.Processes.ProcessEnvironment.Path().Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             string there = Path.Combine(folder.Trim('"'), exe);
@@ -185,12 +187,19 @@ internal sealed partial class HexScene
         return null;
     }
 
+    // What to say when there's no netcoredbg, where to get one for this machine. Its releases (github.com/Samsung/netcoredbg)
+    // have Windows, Linux (x64 and arm64) and Intel Macs, an Apple silicon Mac builds it from its source
+    private static string NoDebugger =>
+        OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+            ? "netcoredbg isn't anywhere Hex looks, and its releases have nothing for Apple silicon: build it from github.com/Samsung/netcoredbg and say where in the settings (debugger_path)"
+            : $"netcoredbg isn't anywhere Hex looks, get it from github.com/Samsung/netcoredbg/releases and put it in a netcoredbg folder next to {(OperatingSystem.IsWindows() ? "Hex.exe" : "Hex")} or on the PATH, or say where in the settings (debugger_path)";
+
     /// <summary>Builds a project, then runs what it made under the debugger with the breakpoints there are, off the editor's thread.</summary>
     private void StartDebugging(string project)
     {
         if (Netcoredbg() is not { } debugger)
         {
-            Say("netcoredbg isn't anywhere Hex looks, put it in a netcoredbg folder next to Hex.exe or say where in the settings (debugger_path)", error: true);
+            Say(NoDebugger, error: true);
             return;
         }
 
@@ -397,7 +406,7 @@ internal sealed partial class HexScene
             return;
 
         OpenAt(file, frame.Line, frame.Column);
-        if (document.Path is { } open && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase))
+        if (document.Path is { } open && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
             document.Editor.ExecutionLine = frame.Line;
         variablesShown = null;
         treeDirty = true;

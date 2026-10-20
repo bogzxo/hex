@@ -116,6 +116,7 @@ public static class DawnProgram
                 WindowTitle = "Hex",
                 WindowIcon = HexIdentity.ICON,
                 CustomFrame = true,
+                AppId = "hex-dawn",
 
 
                 Mode = selfTest ? RunMode.Game : RunMode.Application,

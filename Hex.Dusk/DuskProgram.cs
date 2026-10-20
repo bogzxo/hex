@@ -19,6 +19,7 @@ public static class DuskProgram
     private const string ARGUMENT_SCALE = "--scale";
     private const string ARGUMENT_APP = "--app";
     private const string ARGUMENT_REAL_KEYS = "--realkeys";
+    private const string ARGUMENT_TOGGLE = "--toggle";
 
     /// <summary>
     /// Starts the terminal. Without arguments it comes up maximised with the machine's usual shell in a tab.
@@ -33,6 +34,9 @@ public static class DuskProgram
     /// The parts that press real keys (keys, history, repl) send them only while Dusk is the window in front, and run only
     /// when named or with <c>--realkeys</c>, so a plain run never types into anything of anybody's.</item>
     /// <item><c>--exit</c> closes once the self test is done, with an exit code of 1 if anything failed.</item>
+    /// <item><c>--toggle</c> drops the Dusk that's running down from the top of the screen, or takes it back up, and leaves,
+    /// for a key of the desktop's own where there's no key for everywhere of Hex's (Linux and macOS): bind
+    /// <c>hex --dusk --toggle</c> in the keyboard settings. With no Dusk running it starts one.</item>
     /// </list>
     /// </summary>
     public static void Run(string[] args)
@@ -54,6 +58,10 @@ public static class DuskProgram
             Environment.SetEnvironmentVariable("DUSK_HOME", home);
             Environment.SetEnvironmentVariable("DUSK_HEX", "none");
         }
+
+        // The drop down, for a key of the desktop's, said to the Dusk that's running
+        if (!selfTest && args.Contains(ARGUMENT_TOGGLE) && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, "toggle"))
+            return;
 
         // A Dusk running already takes it as a tab of its own, and this one leaves
         if (!selfTest && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}"))
@@ -79,6 +87,7 @@ public static class DuskProgram
                 WindowTitle = "Dusk",
                 WindowIcon = HexIdentity.ICON,
                 CustomFrame = true,
+                AppId = "hex-dusk",
                 Mode = selfTest && !options.App ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,

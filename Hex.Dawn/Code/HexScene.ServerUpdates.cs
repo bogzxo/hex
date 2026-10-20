@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
+using System.Text.RegularExpressions;
+
+using Horizon.Core.Threading;
 
 namespace Hex.Dawn;
 
@@ -10,9 +12,17 @@ namespace Hex.Dawn;
 // Check now is pressed, the newest release of each one with a repository is asked of GitHub and kept in the settings,
 // so the days in between still know. A server that is behind gets a card with Update, What changed and Not this one.
 // Installing and updating run the entry's command line in the background, the server stopped first (a program that
-// is running can't be written over) and started again after, and what the command printed goes in the output.
+// is running can't be written over) and started again after. All of it is work of the scheduler's (HexScene.Background),
+// each known by a key so it runs once at a time: an update pressed twice, or pressed again from the settings while it
+// goes, is the one update, with a card saying how far it got, what the command is printing, and Cancel.
 internal sealed partial class HexScene
 {
+    // The keys of the servers' work
+    private const string FIND_WORK = "servers:find:", CHECK_WORK = "servers:check", INSTALL_WORK = "servers:install:", CHANGES_WORK = "servers:changes:";
+
+    // A percentage a command prints as it goes (npm's, dotnet's, winget's), which the bar is set to
+    private static readonly Regex Percent = new(@"(\d{1,3}(?:\.\d+)?)\s?%", RegexOptions.Compiled);
+
     // How long after a look at GitHub the next one is, as Hex starts
     private static readonly TimeSpan SERVER_CHECK_EVERY = TimeSpan.FromHours(20);
 
@@ -26,10 +36,12 @@ internal sealed partial class HexScene
 
     private readonly Dictionary<string, ServerFound> serversFound = new(StringComparer.OrdinalIgnoreCase);
 
-    // The servers being looked for, installed or updated, and the ones a card was put up for this run
-    private readonly HashSet<string> serversProbing = new(StringComparer.OrdinalIgnoreCase), serversInstalling = new(StringComparer.OrdinalIgnoreCase);
+    // The servers being looked for, and the ones a card was put up for this run
+    private readonly HashSet<string> serversProbing = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> serversOffered = new(StringComparer.OrdinalIgnoreCase);
-    private bool serversChecking;
+
+    /// <summary>The install or update of a server that's going, null when none is.</summary>
+    private WorkItem? Installing(HexServerEntry entry) => work.Find(INSTALL_WORK + entry.Name);
 
     /// <summary>The entry of a server by its name, null for none.</summary>
     private HexServerEntry? ServerEntry(string name) => ServerEntries.FirstOrDefault(entry => entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -65,28 +77,28 @@ internal sealed partial class HexScene
         }
 
         RefreshServerStatus();
-        InBackground("looking for the language servers...", () =>
+        var found = new List<(string Name, ServerFound Found)>();
+        StartWork(FIND_WORK + string.Join(',', looking.Select(pair => pair.Entry.Name)), "Looking for the language servers", context =>
         {
-            var found = new List<(string Name, ServerFound Found)>();
-            foreach (var (entry, command) in looking)
+            Horizon.Core.Processes.ProcessEnvironment.WaitForLoginShell();
+            for (int i = 0; i < looking.Count; i++)
             {
+                var (entry, command) = looking[i];
+                context.Report((float)i / looking.Count, entry.Command);
                 string? path = HexServerCatalog.Locate(command);
                 string? version = path is not null && entry.VersionArguments is { } arguments ? HexServerCatalog.VersionOf(path, arguments) : null;
                 found.Add((entry.Name, new ServerFound(path, version)));
             }
-
-            return found;
-        }, found =>
+        }, _ =>
         {
+            foreach (var (entry, _) in looking)
+                serversProbing.Remove(entry.Name);
             foreach (var (name, what) in found)
-            {
-                serversProbing.Remove(name);
                 serversFound[name] = what;
-            }
 
             RefreshServerStatus();
             then?.Invoke();
-        }, quiet: true);
+        }, seen: false, cancellable: false);
     }
 
     /// <summary>
@@ -95,55 +107,58 @@ internal sealed partial class HexScene
     /// </summary>
     private void CheckServerUpdates(bool asked)
     {
-        if (serversChecking)
-            return;
-
-        serversChecking = true;
         var repos = ServerEntries.Where(entry => entry.Repo.Length > 0).Select(entry => (entry.Name, entry.Repo)).ToList();
-        RefreshServerStatus();
-        InBackground("looking for new versions of the language servers...", () =>
+        var latest = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var problems = new List<string>();
+        int asking = 0;
+
+        // Asked again while it goes, it's the one look, and says what it found when it's done the same
+        StartWork(CHECK_WORK, "Looking for new versions of the language servers", async context =>
         {
-            var latest = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var problems = new List<string>();
-            Parallel.ForEach(repos, new ParallelOptions { MaxDegreeOfParallelism = 4 }, pair =>
+            context.Report(0.0f, "asking GitHub");
+            await Parallel.ForEachAsync(repos, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = context.Token }, async (pair, cancel) =>
             {
                 try
                 {
-                    if (HexReleases.Latest(pair.Repo).GetAwaiter().GetResult() is { } release)
+                    if (await HexReleases.Latest(pair.Repo, cancel).ConfigureAwait(false) is { } release)
                     {
                         lock (latest)
                             latest[pair.Name] = release.Tag;
                     }
                 }
-                catch (Exception e)
+                catch (Exception e) when (e is not OperationCanceledException)
                 {
                     lock (problems)
                         problems.Add($"{pair.Name}: {e.Message}");
                 }
-            });
 
-            return (latest, problems);
-        }, result =>
+                int done = Interlocked.Increment(ref asking);
+                context.Report((float)done / repos.Count, $"{pair.Repo}");
+            }).ConfigureAwait(false);
+        }, item =>
         {
-            serversChecking = false;
-            foreach (var (name, tag) in result.latest)
+            if (item.State != WorkState.Succeeded)
+                return;
+
+            foreach (var (name, tag) in latest)
                 settings.ServerLatest[name] = tag;
 
             // Only a look that got somewhere counts as having looked, no network tries again next time
-            if (result.latest.Count > 0)
+            if (latest.Count > 0)
                 settings.ServersChecked = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             SaveSettings();
             RefreshServerStatus();
 
             int behind = OfferServerUpdates(again: asked);
-            if (result.problems.Count > 0)
-                Note($"GitHub couldn't be asked about some of the language servers, {string.Join("; ", result.problems)}", error: result.latest.Count == 0);
+            if (problems.Count > 0)
+                Note($"GitHub couldn't be asked about some of the language servers, {string.Join("; ", problems)}", error: latest.Count == 0);
             if (asked)
             {
-                Say(result.latest.Count == 0 && result.problems.Count > 0 ? "GitHub couldn't be asked, see the output"
+                Say(latest.Count == 0 && problems.Count > 0 ? "GitHub couldn't be asked, see the output"
                     : behind == 0 ? "every language server on this machine is up to date" : $"{behind} language server{(behind == 1 ? " has" : "s have")} a new version");
             }
-        }, quiet: !asked);
+        }, seen: asked);
+        RefreshServerStatus();
     }
 
     /// <summary>Whether a server on this machine is older than the newest release, which version that is if so.</summary>
@@ -160,7 +175,7 @@ internal sealed partial class HexScene
         int behind = 0;
         foreach (HexServerEntry entry in ServerEntries)
         {
-            if (NewerServerVersion(entry) is not { } latest || serversInstalling.Contains(entry.Name))
+            if (NewerServerVersion(entry) is not { } latest || Installing(entry) is not null)
                 continue;
 
             behind++;
@@ -197,29 +212,28 @@ internal sealed partial class HexScene
             return;
 
         string? have = serversFound.TryGetValue(entry.Name, out ServerFound? found) ? found.Version : null;
-        InBackground($"asking GitHub what changed in {entry.Command}...", () =>
+        List<HexRelease> releases = [];
+        Say($"asking GitHub what changed in {entry.Command}...");
+        StartWork(CHANGES_WORK + entry.Name, $"What changed in {entry.Command}", async context =>
         {
-            try
-            {
-                return (Releases: HexReleases.Recent(entry.Repo, have is null ? 5 : 30).GetAwaiter().GetResult(), Problem: (string?)null);
-            }
-            catch (Exception e)
-            {
-                return (Releases: new List<HexRelease>(), Problem: e.Message);
-            }
-        }, result =>
+            context.Say($"asking {entry.Repo}");
+            releases = await HexReleases.Recent(entry.Repo, have is null ? 5 : 30, context.Token).ConfigureAwait(false);
+        }, item =>
         {
-            if (result.Problem is { } problem)
+            if (item.State == WorkState.Failed)
             {
-                Say($"GitHub couldn't be asked about {entry.Command}, {problem}", error: true);
+                Say($"GitHub couldn't be asked about {entry.Command}, {item.Error}", error: true);
                 return;
             }
+
+            if (item.State != WorkState.Succeeded)
+                return;
 
             string header = have is null
                 ? $"The newest releases of **{entry.Command}**, from [{entry.Repo}]({entry.ReleasesPage}).\n\n"
                 : $"What changed in **{entry.Command}** since {have}, the one on this machine, from [{entry.Repo}]({entry.ReleasesPage}).\n\n";
-            ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(result.Releases, have, Literal), 560.0f);
-        });
+            ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, Literal), 560.0f);
+        }, seen: false);
     }
 
     /// <summary>
@@ -239,28 +253,41 @@ internal sealed partial class HexScene
             return;
         }
 
-        if (!serversInstalling.Add(entry.Name))
-            return;
-
-        StopServer(entry);
-        RefreshServerStatus();
-        string doing = there ? "updating" : "installing";
-        Note($"> {line}");
-        InBackground($"{doing} {entry.Command}...", () => RunCommandLine(line), result =>
+        // Going already (pressed again, or from the settings and from a card both), it's that one, its card brought back
+        if (Installing(entry) is { } going)
         {
-            serversInstalling.Remove(entry.Name);
-            if (result.Output.Length > 0)
-                Note(result.Output.TrimEnd(), error: result.Code != 0);
+            RenewWork(going);
+            return;
+        }
 
-            string? before = found?.Version;
+        // A program that's running can't be written over, the server goes first (its process gone before the command starts)
+        Task stopped = StopServer(entry);
+        string? before = found?.Version;
+        Note($"> {line}");
+        StartWork(INSTALL_WORK + entry.Name, $"{(there ? "Updating" : "Installing")} {entry.Command}", async context =>
+        {
+            context.Say($"stopping {entry.Command}");
+            await stopped.WaitAsync(context.Token).ConfigureAwait(false);
+            context.Say(line);
+            int code = await RunCommandLine(line, context).ConfigureAwait(false);
+            if (code != 0)
+                throw new InvalidOperationException($"{line} ended with {code}, what it said is under Output");
+        }, item =>
+        {
+            foreach (string said in item.Output)
+                Note(said, error: item.State == WorkState.Failed);
+
+            // Whatever happened, what's there now is looked for, and the server started again with it
             ProbeServers([entry], () =>
             {
                 RestartServer(entry);
+                if (item.State != WorkState.Succeeded)
+                    return;
+
                 ServerFound now = serversFound.GetValueOrDefault(entry.Name) ?? new ServerFound(null, null);
-                if (result.Code != 0 || now.Path is null)
+                if (now.Path is null)
                 {
-                    Notify(result.Code != 0 ? $"{doing} {entry.Command} didn't work, it ended with {result.Code}, what it said is in the output"
-                        : $"{entry.Command} was {(there ? "updated" : "installed")} but isn't on the PATH Hex has, set where it is in the settings or restart Hex",
+                    Notify($"{entry.Command} was {(there ? "updated" : "installed")} but isn't on the PATH Hex has, set where it is in the settings or restart Hex",
                         error: true, ("Settings", () => OpenSettings(SERVER_SECTION)));
                     return;
                 }
@@ -271,13 +298,16 @@ internal sealed partial class HexScene
                     : $"{entry.Command}{version} is {(there ? "updated" : "installed")}");
             });
         });
+        RefreshServerStatus();
     }
 
     /// <summary>
-    /// Runs a command line by the usual shell (cmd on Windows, sh elsewhere) and waits for it, what it printed and
-    /// its exit code. Nothing is typed into it, a command that asks something is told no. Blocks, for the background.
+    /// Runs a command line by the usual shell (cmd on Windows, sh elsewhere) as a piece of work, every line it prints
+    /// written to it (the last shown on its card, a percentage in one setting its bar), and its exit code once it ends.
+    /// Nothing is typed into it, a command that asks something is told no. Cancelled, the command and everything it
+    /// started are ended; taking more than ten minutes, likewise, and it's taken to have hung.
     /// </summary>
-    private static (int Code, string Output) RunCommandLine(string line)
+    private static async Task<int> RunCommandLine(string line, WorkContext context)
     {
         var info = OperatingSystem.IsWindows()
             ? new ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/s", "/c", line } }
@@ -288,31 +318,37 @@ internal sealed partial class HexScene
         info.RedirectStandardInput = true;
         info.CreateNoWindow = true;
 
-        var output = new StringBuilder();
+        void Heard(string? said)
+        {
+            if (said is null)
+                return;
+
+            context.Write(said);
+            if (Percent.Match(said) is { Success: true } percent && float.TryParse(percent.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float done) && done <= 100.0f)
+                context.Report(done / 100.0f);
+        }
+
+        using Process process = Process.Start(info) ?? throw new InvalidOperationException($"{line} couldn't be started");
+        process.StandardInput.Close();
+        process.OutputDataReceived += (_, said) => Heard(said.Data);
+        process.ErrorDataReceived += (_, said) => Heard(said.Data);
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(context.Token);
+        limit.CancelAfter(SERVER_COMMAND_TIMEOUT);
         try
         {
-            using Process process = Process.Start(info) ?? throw new InvalidOperationException("it didn't start");
-            process.StandardInput.Close();
-            process.OutputDataReceived += (_, said) => { if (said.Data is { } text) lock (output) output.AppendLine(text); };
-            process.ErrorDataReceived += (_, said) => { if (said.Data is { } text) lock (output) output.AppendLine(text); };
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            if (!process.WaitForExit(SERVER_COMMAND_TIMEOUT))
-            {
-                try { process.Kill(entireProcessTree: true); } catch (Exception) { }
-                lock (output)
-                    return (-1, output + "\n(it took more than ten minutes and was stopped)");
-            }
-
-            process.WaitForExit();
-            lock (output)
-                return (process.ExitCode, output.ToString());
+            await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
         }
-        catch (Exception e)
+        catch (OperationCanceledException)
         {
-            return (-1, $"{line} couldn't be run, {e.Message}");
+            try { process.Kill(entireProcessTree: true); } catch (Exception) { }
+            context.ThrowIfCancelled();
+            throw new TimeoutException($"{line} took more than ten minutes, and was stopped");
         }
+
+        return process.ExitCode;
     }
 
     /// <summary>A page in the browser the system has.</summary>

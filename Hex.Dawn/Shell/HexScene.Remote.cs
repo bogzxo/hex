@@ -30,6 +30,7 @@ internal sealed partial class HexScene
 
     private void Listen(CancellationToken stop)
     {
+        HexInstance.ClearStale(RemotePipe);
         while (!stop.IsCancellationRequested)
         {
             try

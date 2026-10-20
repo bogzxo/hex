@@ -1,2 +1,5 @@
 // Hex.Shell is what Dawn is drawn with as much as the engine is, the file dialogs among it
 global using Hex.Shell;
+
+// Where things go and how paths compare on Windows, macOS and Linux (the engine's PlatformPaths)
+global using Horizon.Core.Platform;

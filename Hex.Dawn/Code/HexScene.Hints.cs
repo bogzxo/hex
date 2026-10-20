@@ -195,7 +195,7 @@ internal sealed partial class HexScene
             List<string> roots = WorkspaceRoots();
             string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
             InBackground($"looking for {name} in the other files...", () => FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
-                .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), others =>
+                .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
             {
                 if (!documents.Contains(here))
                     return;

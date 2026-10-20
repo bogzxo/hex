@@ -17,7 +17,7 @@ internal sealed class HexBackups
     private readonly string folder;
 
     // What was last written for a document, by the name of its backup, so the same text isn't written twice
-    private readonly Dictionary<string, string> written = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> written = new(PlatformPaths.Comparer);
 
     // The writes and deletes one after the other, a delete never overtaking the write before it
     private Task chain = Task.CompletedTask;

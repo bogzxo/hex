@@ -13,14 +13,14 @@ internal sealed class HexDiskWatch : IDisposable
     // How long a file has to be left alone after it changed before it's read
     private const long SETTLE_MS = 250;
 
-    private readonly Dictionary<string, FileSystemWatcher> watchers = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> watched = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, FileSystemWatcher> watchers = new(PlatformPaths.Comparer);
+    private readonly HashSet<string> watched = new(PlatformPaths.Comparer);
 
     // From the watchers' threads
     private readonly ConcurrentQueue<string> changed = new();
 
     // On the editor's thread, a file and when it last changed
-    private readonly Dictionary<string, long> waiting = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> waiting = new(PlatformPaths.Comparer);
     private readonly List<string> settled = [];
 
     /// <summary>The files to watch, the open ones with a file. The folders that have none of them any more stop being watched.</summary>
@@ -30,7 +30,7 @@ internal sealed class HexDiskWatch : IDisposable
         foreach (string file in files)
             watched.Add(Path.GetFullPath(file));
 
-        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folders = new HashSet<string>(PlatformPaths.Comparer);
         foreach (string file in watched)
         {
             if (Path.GetDirectoryName(file) is { } folder && Directory.Exists(folder))

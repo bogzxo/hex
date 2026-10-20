@@ -195,6 +195,9 @@ internal sealed partial class HexScene
         {
             TestLanguages(test);
         }),
+        ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
+        ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
+        ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
         ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away", TestAnyFile),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),

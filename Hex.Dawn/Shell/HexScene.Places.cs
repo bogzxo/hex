@@ -42,7 +42,7 @@ internal sealed partial class HexScene
             return;
 
         if (!goingPlaces && placeWas is { } was && now is { } here
-            && (!string.Equals(was.Path, here.Path, StringComparison.OrdinalIgnoreCase) || Math.Abs(was.Line - here.Line) >= JUMP_LINES))
+            && (!string.Equals(was.Path, here.Path, PlatformPaths.Comparison) || Math.Abs(was.Line - here.Line) >= JUMP_LINES))
         {
             Remember(placesBack, was);
             placesForward.Clear();

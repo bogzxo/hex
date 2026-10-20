@@ -112,7 +112,7 @@ internal sealed partial class HexScene
     /// </summary>
     private IRuntimeValue SettingsFormOf(string? file)
     {
-        string text = file is not null && documents.Find(open => open.Path is { } path && string.Equals(Path.GetFullPath(path), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase)) is { } open
+        string text = file is not null && documents.Find(open => open.Path is { } path && string.Equals(Path.GetFullPath(path), Path.GetFullPath(file), PlatformPaths.Comparison)) is { } open
             ? open.Editor.Text
             : file is not null && File.Exists(file) ? File.ReadAllText(file) : string.Empty;
 

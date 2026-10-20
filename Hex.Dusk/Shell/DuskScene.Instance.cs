@@ -12,15 +12,25 @@ internal sealed partial class DuskScene
     private void UpdateInstance()
     {
         while (instance is not null && instance.TryTake(out string line))
-        {
-            string[] parts = line.Split('|');
-            if (parts is not ["tab", ..])
-                continue;
+            TakeInstanceLine(line);
+    }
 
-            string? folder = parts.Length > 1 && Directory.Exists(parts[1]) ? parts[1] : null;
-            TerminalProfile? profile = parts.Length > 2 && parts[2].Length > 0 ? host.ProfileCalled(parts[2]) : null;
-            panel.NewTab(profile ?? host.UsualProfile, folder);
-            Engine.WindowManager.BringToFront();
+    /// <summary>What another start of Dusk said, "tab|folder|profile" or "toggle" (the drop down, hex --dusk --toggle).</summary>
+    private void TakeInstanceLine(string line)
+    {
+        string[] parts = line.Split('|');
+        if (parts is ["toggle"])
+        {
+            ToggleQuake();
+            return;
         }
+
+        if (parts is not ["tab", ..])
+            return;
+
+        string? folder = parts.Length > 1 && Directory.Exists(parts[1]) ? parts[1] : null;
+        TerminalProfile? profile = parts.Length > 2 && parts[2].Length > 0 ? host.ProfileCalled(parts[2]) : null;
+        panel.NewTab(profile ?? host.UsualProfile, folder);
+        Engine.WindowManager.BringToFront();
     }
 }

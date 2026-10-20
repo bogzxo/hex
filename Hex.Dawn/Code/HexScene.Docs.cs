@@ -68,7 +68,7 @@ internal sealed partial class HexScene
     /// <summary>Where something is if that isn't the file on screen, "greetings.hor line 9", null if it is.</summary>
     private string? Elsewhere(string? file, int line)
     {
-        if (file is null || (document.Path is { } open && string.Equals(Path.GetFullPath(file), Path.GetFullPath(open), StringComparison.OrdinalIgnoreCase)))
+        if (file is null || (document.Path is { } open && string.Equals(Path.GetFullPath(file), Path.GetFullPath(open), PlatformPaths.Comparison)))
             return null;
 
         return $"{Path.GetFileName(file)} line {line}";

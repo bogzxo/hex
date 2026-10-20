@@ -60,19 +60,42 @@ internal static unsafe partial class HexTrash
             return;
         }
 
+        // The freedesktop trash is files/ and info/ under $XDG_DATA_HOME/Trash, a .trashinfo a file saying where it came
+        // from and when, which is what the file manager's Restore goes by
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string trash = OperatingSystem.IsMacOS() ? Path.Combine(home, ".Trash") : Path.Combine(home, ".local", "share", "Trash", "files");
+        string trash = OperatingSystem.IsMacOS() ? Path.Combine(home, ".Trash") : Path.Combine(Horizon.Core.Platform.PlatformPaths.DataRoot, "Trash", "files");
+        string? info = OperatingSystem.IsMacOS() ? null : Path.Combine(Path.GetDirectoryName(trash)!, "info");
         Directory.CreateDirectory(trash);
+        if (info is not null)
+            Directory.CreateDirectory(info);
 
-        // A name the trash hasn't got yet
+        // A name the trash hasn't got yet, in either of its folders
         string name = Path.GetFileName(full.TrimEnd('/', '\\'));
         string to = Path.Combine(trash, name);
-        for (int number = 2; File.Exists(to) || Directory.Exists(to); number++)
+        for (int number = 2; File.Exists(to) || Directory.Exists(to) || (info is not null && File.Exists(Path.Combine(info, Path.GetFileName(to) + ".trashinfo"))); number++)
             to = Path.Combine(trash, $"{Path.GetFileNameWithoutExtension(name)} {number}{Path.GetExtension(name)}");
 
-        if (Directory.Exists(full))
-            Directory.Move(full, to);
-        else
-            File.Move(full, to);
+        // The info first, the spec says, so a file in the trash always has one
+        string? infoFile = info is null ? null : Path.Combine(info, Path.GetFileName(to) + ".trashinfo");
+        if (infoFile is not null)
+        {
+            string encoded = string.Join('/', full.Split('/').Select(Uri.EscapeDataString));
+            File.WriteAllText(infoFile, $"[Trash Info]\nPath={encoded}\nDeletionDate={DateTime.Now:yyyy-MM-ddTHH:mm:ss}\n");
+        }
+
+        try
+        {
+            if (Directory.Exists(full))
+                Directory.Move(full, to);
+            else
+                File.Move(full, to);
+        }
+        catch (Exception)
+        {
+            // Not moved (another drive, which has a trash of its own this doesn't use), so not in the trash either
+            if (infoFile is not null)
+                File.Delete(infoFile);
+            throw;
+        }
     }
 }

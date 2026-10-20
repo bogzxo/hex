@@ -79,7 +79,7 @@ It can have a UI too, a view of a file (`hex.view`, offered on the files that sa
 itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
 doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
 and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
-for a file or a folder with Windows' dialogs (`hex.pick_file({ title, folder, filter: ["Programs (*.exe)", "*.exe"] },
+for a file or a folder with Hex's own dialog (`hex.pick_file({ title, folder, filter: ["Pictures", "*.png;*.jpg"] },
 func(path) { ... })`, `hex.pick_folder(func(path) { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
 error }`, for a file that may be half typed.
 
@@ -122,7 +122,7 @@ a comment at its top.
 - `Extensions/` loading extensions and everything `hex` is to them, their views, panels and windows.
 - `Workspace/` the folders open, the explorer, the trash, and the work done on other threads over all of the files.
 - `Settings/` `hex_settings.hor`, the settings window and the skin Hex is drawn in.
-- `Platform/` the dialogs of Windows, opening, saving and picking a folder.
+- `Platform/` and `Dialogs/` (in `Hex.Shell`) opening, saving and picking a folder, Hex's own dialog on every system.
 - `Testing/` the self test, a file per part of Hex, and `--check`.
 
 `HEX_PROFILE=20` (or any number of milliseconds) has Hex write out every tick that took longer than that with the steps
@@ -132,9 +132,24 @@ that took it, and when it's closed what every step cost altogether. See `docs/pe
 
 ```
 git clone --recursive https://github.com/bogzxo/hex
-dotnet build Hex.sln
-Horizon.Hex/bin/Debug/net10.0/Horizon.Hex --selftest --exit --size 1600x900
+dotnet build Hex/Hex.csproj
+Hex/bin/Debug/net10.0/Hex --selftest --exit --size 1600x900
 ```
+
+Hex runs on Windows, Linux and macOS, with the .NET 10 SDK on each.
+
+- **Windows** 10 1809 or later (the terminal is ConPTY). Nothing else.
+- **Linux**, Wayland or X11. It draws with Vulkan, so it wants the Vulkan loader and a driver (`libvulkan1` and
+  `mesa-vulkan-drivers` on Debian and Ubuntu, `vulkan-icd-loader` and your GPU's driver on Arch). Its window is SDL's,
+  which comes with it. A desktop that shows apps by their `.desktop` file (GNOME, KDE) wants
+  `scripts/install-desktop.sh` run once, for Hex's name and icon in its dock.
+- **macOS** 11 or later, Apple silicon or Intel. Vulkan is MoltenVK, which comes with it. Shortcuts are on command
+  where they're on control elsewhere, the files say Ctrl either way.
+
+Settings are in `%AppData%\Hex` (or a `settings` folder next to Hex.exe), `~/Library/Application Support/Hex` and
+`~/.config/hex`. A Dusk drop down key is Windows' own there, on Linux and macOS it's the desktop's: bind
+`hex --dusk --toggle` to it in the keyboard settings. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
+-r linux-x64`, `osx-arm64`, `win-x64`) it wants clang on Linux and the Xcode command line tools on a Mac.
 
 The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`
 (the designer, the minute and more of it), `code`, `workspace`, `extensions` and `garbage`, as many as you like. A part

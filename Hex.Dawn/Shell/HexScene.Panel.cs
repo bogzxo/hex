@@ -180,7 +180,7 @@ internal sealed partial class HexScene
             foreach (HexResult result in workspaceProblems)
             {
                 // The open file is said about above, as it is now
-                if (document.Path is { } open && string.Equals(Path.GetFullPath(result.Path), Path.GetFullPath(open), StringComparison.OrdinalIgnoreCase))
+                if (document.Path is { } open && string.Equals(Path.GetFullPath(result.Path), Path.GetFullPath(open), PlatformPaths.Comparison))
                     continue;
 
                 problemList.Add(new HexProblem(result.Path, result.Line, result.Column, result.Text, result.Text.Contains("hasn't got", StringComparison.Ordinal)));

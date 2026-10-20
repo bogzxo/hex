@@ -26,7 +26,7 @@ internal sealed partial class HexScene
         string? file = of.Path is { } at ? Path.GetFullPath(at) : null;
         var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
-        bool Here(SourceLocation at) => at.File is null || (file is not null && string.Equals(Path.GetFullPath(at.File), file, StringComparison.OrdinalIgnoreCase));
+        bool Here(SourceLocation at) => at.File is null || (file is not null && string.Equals(Path.GetFullPath(at.File), file, PlatformPaths.Comparison));
 
         void Warn(SourceLocation at, string message)
         {

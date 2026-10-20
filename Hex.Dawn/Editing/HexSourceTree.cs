@@ -113,5 +113,5 @@ internal sealed class HexSourceTree
 
     /// <summary>Whether a place is in this file and not an include of it.</summary>
     private bool IsHere(SourceLocation at) =>
-        at.File is null || file is null || string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase);
+        at.File is null || file is null || string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(file), PlatformPaths.Comparison);
 }

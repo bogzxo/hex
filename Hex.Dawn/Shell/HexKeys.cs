@@ -4,7 +4,8 @@ namespace Hex.Dawn;
 
 /// <summary>
 /// Keys as the menus write them, "Ctrl+Shift+F", read into the key and what's held with it and written back the same
-/// way, for keys.hor and the keys extensions put their commands on.
+/// way, for keys.hor and the keys extensions put their commands on. Ctrl is command on a Mac (Keyboard.Primary), the
+/// file says Ctrl either way and the menus show Cmd there (UIShortcutText).
 /// </summary>
 internal static class HexKeys
 {
@@ -25,7 +26,7 @@ internal static class HexKeys
         {
             switch (part.ToLowerInvariant())
             {
-                case "ctrl" or "control": control = true; break;
+                case "ctrl" or "control" or "cmd" or "command": control = true; break;
                 case "shift": shift = true; break;
                 case "alt": alt = true; break;
                 default:

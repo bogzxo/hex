@@ -54,8 +54,8 @@ internal sealed partial class HexScene
     private string ServerStatusOf(HexServerEntry entry)
     {
         string name = $"**{Literal(entry.Command)}**  [color:#7f8a9e]{Literal(string.Join(" ", entry.Extensions))}[/color]  ";
-        if (serversInstalling.Contains(entry.Name))
-            return name + "being installed...";
+        if (Installing(entry) is { } going)
+            return name + $"[color:#e5c07b]{Literal(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {Literal(going.Message)}";
         if (serversProbing.Contains(entry.Name) || !serversFound.TryGetValue(entry.Name, out ServerFound? found))
             return name + "looking for it...";
 
@@ -172,8 +172,8 @@ internal sealed partial class HexScene
     {
         string now = settings.ServerPaths.GetValueOrDefault(entry.Name) ?? serversFound.GetValueOrDefault(entry.Name)?.Path ?? string.Empty;
         string from = now.Length > 0 ? Path.GetDirectoryName(now) ?? browseDirectory : browseDirectory;
-        (string, string)[] filter = OperatingSystem.IsWindows() ? [("Programs (*.exe, *.cmd, *.bat)", "*.exe;*.cmd;*.bat"), ("Everything", "*.*")] : [("Everything", "*")];
-        Ask(HexDialogs.OpenFile($"Where {entry.Command} is", from, filter, WindowHandle), path =>
+        (string, string)[] filter = OperatingSystem.IsWindows() ? [("Programs (*.exe, *.cmd, *.bat)", "*.exe;*.cmd;*.bat")] : [];
+        Ask(HexDialogs.OpenFile($"Where {entry.Command} is", from, filter, DialogHost), path =>
         {
             new ServerSource(this).Set(SERVER_KEY + entry.Name, new StringValue(Path.GetFullPath(path)));
             SettingsPage?.Refresh(SERVER_KEY + entry.Name);

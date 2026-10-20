@@ -16,12 +16,12 @@ internal sealed partial class HexScene
     // Ctrl or shift held, as far as clicks go. The self-test can't hold keys, so it says so here instead
     private bool fakeModifier;
 
-    /// <summary>Whether a click adds to what is selected (ctrl or shift held) rather than replacing it.</summary>
+    /// <summary>Whether a click adds to what is selected (ctrl, command on a Mac, or shift held) rather than replacing it.</summary>
     private bool Modifier()
     {
         var keyboard = Engine.Input.Keyboard;
         return fakeModifier
-            || keyboard.IsDown(Key.ControlLeft) || keyboard.IsDown(Key.ControlRight)
+            || keyboard.Primary
             || keyboard.IsDown(Key.ShiftLeft) || keyboard.IsDown(Key.ShiftRight);
     }
 

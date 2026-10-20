@@ -59,7 +59,7 @@ internal sealed partial class DuskScene
     private static float Number(Dictionary<string, IRuntimeValue> values, string key, float otherwise) =>
         values.TryGetValue(key, out IRuntimeValue? value) && value is NumberValue number ? number.Value : otherwise;
 
-    /// <summary>A button of the settings pressed, the picture chosen with Windows' own dialog or the usual one back.</summary>
+    /// <summary>A button of the settings pressed, the picture chosen with Hex's own dialog or the usual one back.</summary>
     private void SettingPressed(FileSectionSource editor, string key, int which)
     {
         if (key != "backdrop_image")
@@ -72,9 +72,13 @@ internal sealed partial class DuskScene
             return;
         }
 
-        nint window = Engine.WindowManager.Window.Native?.Win32?.Hwnd ?? 0;
+        var dialogs = new HexDialogHost(window =>
+        {
+            window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+            chrome.Root.Add(window);
+        }, []);
         HexDialogs.OpenFile("A picture to put behind the terminals", System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyPictures),
-            [("Pictures (*.png, *.jpg)", "*.png;*.jpg;*.jpeg")], window).ContinueWith(picked =>
+            [("Pictures (*.png, *.jpg)", "*.png;*.jpg;*.jpeg")], dialogs).ContinueWith(picked =>
             {
                 if (picked.Result is not { Length: > 0 } path)
                     return;

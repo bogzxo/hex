@@ -86,12 +86,42 @@ internal sealed partial class HexScene
         {
             if (OperatingSystem.IsWindows())
                 System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
-            else
+            else if (OperatingSystem.IsMacOS())
+                System.Diagnostics.Process.Start("open", ["-R", path]);
+            else if (!ShowInFileManager(path))
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Directory.Exists(path) ? path : Path.GetDirectoryName(path)!) { UseShellExecute = true });
         }
         catch (Exception e)
         {
             Say($"{Path.GetFileName(path)} couldn't be shown, {e.Message}", error: true);
+        }
+    }
+
+    /// <summary>
+    /// On Linux, a file picked in the desktop's file manager (Files, Dolphin, Thunar and the rest answer
+    /// org.freedesktop.FileManager1 on the session's bus), false when nothing answered and the folder should be opened instead.
+    /// </summary>
+    private static bool ShowInFileManager(string path)
+    {
+        try
+        {
+            using var asked = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dbus-send")
+            {
+                ArgumentList =
+                {
+                    "--session", "--print-reply", "--dest=org.freedesktop.FileManager1", "--type=method_call",
+                    "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems",
+                    $"array:string:{new Uri(Path.GetFullPath(path)).AbsoluteUri}", "string:"
+                },
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+            return asked is not null && asked.WaitForExit(3000) && asked.ExitCode == 0;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -195,12 +225,12 @@ internal sealed partial class HexScene
                     continue;
 
                 string full = Path.GetFullPath(openPath);
-                if (string.Equals(full, from, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(full, from, PlatformPaths.Comparison))
                 {
                     open.Path = to;
                     open.Name = Path.GetFileNameWithoutExtension(to);
                 }
-                else if (full.StartsWith(from + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                else if (full.StartsWith(from + Path.DirectorySeparatorChar, PlatformPaths.Comparison))
                 {
                     open.Path = to + full[from.Length..];
                 }
@@ -232,6 +262,14 @@ internal sealed partial class HexScene
     {
         string full = Path.GetFullPath(path);
 
+        // A language server running in it (its folder its process's) would keep Windows from moving it
+        if (Directory.Exists(full))
+        {
+            foreach (HexDocument of in linters.Where(pair => PlatformPaths.IsUnder(pair.Value.RootDirectory, full)).Select(pair => pair.Key).ToList())
+                StopLinting(of);
+            Horizon.UI.Scripting.LanguageServers.StopUnder(full).Wait(TimeSpan.FromSeconds(6));
+        }
+
         try
         {
             HexTrash.Discard(full);
@@ -248,7 +286,7 @@ internal sealed partial class HexScene
                 continue;
 
             string openFull = Path.GetFullPath(openPath);
-            if (string.Equals(openFull, full, StringComparison.OrdinalIgnoreCase) || openFull.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(openFull, full, PlatformPaths.Comparison) || openFull.StartsWith(full + Path.DirectorySeparatorChar, PlatformPaths.Comparison))
             {
                 // Gone from the disk, what is in the editor is still there to be saved somewhere else, as a document without a file
                 open.Path = null;

@@ -31,7 +31,7 @@ internal sealed partial class DuskScene
         test.Check("a plugin adds a rule of its own", () => host.OutputRules.Rules.Exists(rule => rule.Name == "ticket"));
 
         test.WaitFor(() => View().Screen.AtPrompt, 10.0f);
-        test.Run(() => View().Send("Write-Output 'the build failed in 3 files, see DUSK-42'\r"));
+        test.Run(() => View().Send(OperatingSystem.IsWindows() ? "Write-Output 'the build failed in 3 files, see DUSK-42'\r" : "echo 'the build failed in 3 files, see DUSK-42'\r"));
         test.WaitFor(() => RowOf(View(), "the build failed in 3") >= 0 && View().Screen.AtPrompt, 8.0f);
         test.Settle(0.3f);
         test.Run(() => Shot("output"));

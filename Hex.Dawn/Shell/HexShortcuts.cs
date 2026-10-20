@@ -68,7 +68,8 @@ internal sealed class HexShortcuts
     /// <param name="typing">Whether the keyboard is busy with a text box right now.</param>
     public void Update(Keyboard keyboard, bool typing)
     {
-        bool control = keyboard.IsDown(Key.ControlLeft) || keyboard.IsDown(Key.ControlRight);
+        // Ctrl in a shortcut is command on a Mac, see Keyboard.Primary
+        bool control = keyboard.Primary;
         bool shift = keyboard.IsDown(Key.ShiftLeft) || keyboard.IsDown(Key.ShiftRight);
         bool alt = keyboard.IsDown(Key.AltLeft) || keyboard.IsDown(Key.AltRight);
 

@@ -56,7 +56,7 @@ internal sealed partial class HexScene
         explorerRows.Clear();
         explorerMade = 0;
         UseSideTree(true);
-        folders.Watch(workspace.Folders);
+        WatchFolders();
 
         var items = new List<UITreeItem>();
         foreach (string folder in workspace.Folders)
@@ -153,7 +153,7 @@ internal sealed partial class HexScene
         string full = Path.GetFullPath(path);
         foreach (var (rowPath, isFolder, row) in explorerRows)
         {
-            if (!isFolder && string.Equals(Path.GetFullPath(rowPath), full, StringComparison.OrdinalIgnoreCase))
+            if (!isFolder && string.Equals(Path.GetFullPath(rowPath), full, PlatformPaths.Comparison))
             {
                 sideTree.Selected = row;
                 return;
@@ -290,7 +290,7 @@ internal sealed partial class HexScene
         UseSideTree(true);
 
         var items = new List<UITreeItem>();
-        var byFile = new Dictionary<string, UITreeItem>(StringComparer.OrdinalIgnoreCase);
+        var byFile = new Dictionary<string, UITreeItem>(PlatformPaths.Comparer);
         foreach (HexResult result in results)
         {
             if (!byFile.TryGetValue(result.Path, out UITreeItem? file))

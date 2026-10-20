@@ -17,6 +17,10 @@ namespace Hex.Dawn;
 /// <param name="Update">The command line that updates it, the install one when the file doesn't say.</param>
 /// <param name="Repo">Its repository on GitHub, owner/name, empty for none.</param>
 /// <param name="VersionArguments">What makes it say its version, null for a server with no way to.</param>
+/// <param name="Reload">
+/// The files that, made, changed or taken away in the workspace, have the server started again ("*.csproj", "*.sln"),
+/// for a server that reads its projects once as it starts and never again. Empty for none.
+/// </param>
 internal sealed record HexServerEntry(
     string Name,
     string Command,
@@ -27,8 +31,25 @@ internal sealed record HexServerEntry(
     string Install,
     string Update,
     string Repo,
-    string[]? VersionArguments)
+    string[]? VersionArguments,
+    string[]? Reload = null)
 {
+    /// <summary>Whether a file is one whose change has the server started again, by its name ("*.csproj" or a whole name).</summary>
+    public bool ReloadsFor(string path)
+    {
+        if (Reload is not { Length: > 0 } patterns)
+            return false;
+
+        string name = System.IO.Path.GetFileName(path);
+        foreach (string pattern in patterns)
+        {
+            if (pattern.StartsWith("*.", StringComparison.Ordinal) ? name.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase) : name.Equals(pattern, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Where it says the releases are, on GitHub, empty without a repository.</summary>
     public string ReleasesPage => Repo.Length > 0 ? $"https://github.com/{Repo}/releases" : string.Empty;
 }
@@ -62,13 +83,23 @@ internal static partial class HexServerCatalog
                 install,
                 update.Length > 0 ? update : install,
                 Text(server, "repo"),
-                Texts(server, "version")));
+                Texts(server, "version"),
+                Texts(server, "reload")));
         }
 
         return entries;
     }
 
-    private static string Text(ObjectValue of, string key) => of.Properties.GetValueOrDefault(key) is StringValue text ? text.Value : string.Empty;
+    // A text, or one a system ({ windows: ..., macos: ..., linux: ... }), this one's, empty for none
+    private static string Text(ObjectValue of, string key) => of.Properties.GetValueOrDefault(key) switch
+    {
+        StringValue text => text.Value,
+        ObjectValue bySystem => bySystem.Properties.GetValueOrDefault(SystemName) is StringValue mine ? mine.Value : string.Empty,
+        _ => string.Empty
+    };
+
+    /// <summary>What language_servers.hor calls the system Hex is running on, windows, macos or linux.</summary>
+    public static string SystemName => OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
 
     private static string[]? Texts(ObjectValue of, string key) =>
         of.Properties.GetValueOrDefault(key) is ListValue list ? [.. list.Items.OfType<StringValue>().Select(item => item.Value)] : null;

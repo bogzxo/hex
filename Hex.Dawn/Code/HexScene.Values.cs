@@ -113,7 +113,7 @@ internal sealed partial class HexScene
         {
             if (!done.Sources.TryGetDeclaration(name, out var at) || at.Literal || !at.Span.IsKnown)
                 continue;
-            if (at.File is { } file && own is not null && !Path.GetFullPath(file).Equals(own, StringComparison.OrdinalIgnoreCase))
+            if (at.File is { } file && own is not null && !Path.GetFullPath(file).Equals(own, PlatformPaths.Comparison))
                 continue;
             if (value is ObjectValue or ListValue or FunctionValue or AnonymousFunctionValue)
                 continue;
@@ -343,7 +343,7 @@ internal sealed partial class HexScene
     {
         if (at is { Span.IsKnown: true } known)
         {
-            if (known.File is { } file && (document.Path is null || !string.Equals(Path.GetFullPath(file), Path.GetFullPath(document.Path), StringComparison.OrdinalIgnoreCase)))
+            if (known.File is { } file && (document.Path is null || !string.Equals(Path.GetFullPath(file), Path.GetFullPath(document.Path), PlatformPaths.Comparison)))
                 OpenAt(file, known.Span.Line - 1, known.Span.Column - 1);
             else
                 code.GoTo(known.Span.Line - 1, known.Span.Column - 1);
@@ -364,7 +364,7 @@ internal sealed partial class HexScene
         if (at is not { Span.IsKnown: true } known)
             return said;
 
-        bool here = known.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(known.File), Path.GetFullPath(open), StringComparison.OrdinalIgnoreCase));
+        bool here = known.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(known.File), Path.GetFullPath(open), PlatformPaths.Comparison));
         if (!here)
             return $"{said}, from {Path.GetFileName(known.File)} line {known.Span.Line}{(known.Doc is { } elsewhere ? $"\n{elsewhere}" : string.Empty)}";
 

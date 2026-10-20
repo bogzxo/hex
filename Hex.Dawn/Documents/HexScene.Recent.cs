@@ -49,7 +49,7 @@ internal sealed partial class HexScene
             return;
 
         string full = Path.GetFullPath(path);
-        recent.RemoveAll(known => string.Equals(known, full, StringComparison.OrdinalIgnoreCase));
+        recent.RemoveAll(known => string.Equals(known, full, PlatformPaths.Comparison));
         recent.Insert(0, full);
 
         if (recent.Count > MAX_RECENT)

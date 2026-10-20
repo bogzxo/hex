@@ -153,7 +153,7 @@ internal sealed partial class HexScene
     private static string RelativeTo(IReadOnlyList<string> roots, string path)
     {
         string full = Path.GetFullPath(path);
-        string? root = roots.Where(folder => full.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).OrderByDescending(folder => folder.Length).FirstOrDefault();
+        string? root = roots.Where(folder => full.StartsWith(folder, PlatformPaths.Comparison)).OrderByDescending(folder => folder.Length).FirstOrDefault();
         if (root is null)
             return full.Replace('\\', '/');
 

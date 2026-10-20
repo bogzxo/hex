@@ -47,6 +47,9 @@ internal sealed partial class HexScene
         runningItem = statusBar.Add(string.Empty, right: true, tooltip: "A game started from Hex is running, and reads every file it uses again when it's saved here, Ctrl+S and look");
         runningItem.IsVisible = () => Volatile.Read(ref programsRunning) > 0;
 
+        // The work going in the background, on the right before the rest (HexScene.Background)
+        BuildWorkItem();
+
         caretItem = statusBar.Add("Ln 1, Col 1", right: true, pressed: GoToLine, tooltip: "Go to a line (Ctrl+G)");
         caretItem.IsVisible = Code;
         selectionItem = statusBar.Add(string.Empty, right: true);

@@ -39,7 +39,7 @@ internal sealed partial class HexScene
             return;
 
         string full = Path.GetFullPath(path);
-        closed.RemoveAll(known => string.Equals(known.Path, full, StringComparison.OrdinalIgnoreCase));
+        closed.RemoveAll(known => string.Equals(known.Path, full, PlatformPaths.Comparison));
         var caret = closing.IsText ? closing.Editor.Document.Caret : default;
         closed.Add((full, caret.Line, caret.Column));
         if (closed.Count > MAX_CLOSED)

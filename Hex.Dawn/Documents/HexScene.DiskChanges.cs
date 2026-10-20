@@ -27,7 +27,7 @@ internal sealed partial class HexScene
 
     private void DiskChanged(string path)
     {
-        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(path, StringComparison.OrdinalIgnoreCase));
+        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(path, PlatformPaths.Comparison));
         if (open is null)
             return;
 
@@ -153,7 +153,7 @@ internal sealed partial class HexScene
         File.WriteAllText(copy, text);
 
         // A copy opened before is read again rather than opened twice, and goes next to the file, mine on the left
-        HexDocument? copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), StringComparison.OrdinalIgnoreCase));
+        HexDocument? copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), PlatformPaths.Comparison));
         if (copied is not null)
         {
             TakeFromDisk(copied, text);
@@ -161,7 +161,7 @@ internal sealed partial class HexScene
         else
         {
             OpenText(copy, text, show: false);
-            copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), StringComparison.OrdinalIgnoreCase));
+            copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), PlatformPaths.Comparison));
         }
 
         if (documents.Contains(open))
@@ -178,7 +178,7 @@ internal sealed partial class HexScene
     private bool SafeToSave(string path)
     {
         if (document.DiskText is not { } known || document.Path is not { } own
-            || !Path.GetFullPath(own).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)
+            || !Path.GetFullPath(own).Equals(Path.GetFullPath(path), PlatformPaths.Comparison)
             || !File.Exists(path) || ReadNow(path) is not { } now || now == known)
             return true;
 

@@ -301,12 +301,12 @@ internal sealed partial class HexScene
             ("values", declared));
     }
 
-    /// <summary>A file to open picked, Windows' dialog, or its path typed where there is none of that.</summary>
+    /// <summary>A file to open picked, with Hex's own dialog, or its path typed for the self test.</summary>
     private void AskFile(string title, string folder, List<(string Name, string Pattern)> filter, Action<string> picked)
     {
-        if (OperatingSystem.IsWindows() && !options.SelfTest)
+        if (!options.SelfTest)
         {
-            Ask(HexDialogs.OpenFile(title, folder, filter, WindowHandle), picked);
+            Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
             return;
         }
 

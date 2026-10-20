@@ -113,14 +113,27 @@ internal sealed partial class DuskScene
         test.Settle(settle);
         test.Check("and its x puts it away", () => SettingsPage is null);
 
-        // The drop down, and a key for everywhere
-        test.Check("a key for everywhere can be had", () =>
+        // The drop down, and a key for everywhere: Windows' own, the desktop's elsewhere, bound to hex --dusk --toggle
+        if (OperatingSystem.IsWindows())
         {
-            int id = Engine.WindowManager.RegisterHotKey("Ctrl+Alt+Shift+F11");
-            bool had = id > 0 && !Engine.WindowManager.TakeHotKey(id);
-            Engine.WindowManager.UnregisterHotKey(id);
-            return had;
-        });
+            test.Check("a key for everywhere can be had", () =>
+            {
+                int id = Engine.WindowManager.RegisterHotKey("Ctrl+Alt+Shift+F11");
+                bool had = id > 0 && !Engine.WindowManager.TakeHotKey(id);
+                Engine.WindowManager.UnregisterHotKey(id);
+                return had;
+            });
+        }
+        else
+        {
+            test.Check("there's no key for everywhere of Hex's own here, the desktop's is", () => Engine.WindowManager.RegisterHotKey("Ctrl+Alt+Shift+F11") < 0);
+            test.Run(() => TakeInstanceLine("toggle"));
+            test.WaitFor(() => Engine.WindowManager.IsDropped, 2.0f);
+            test.Check("hex --dusk --toggle drops it down", () => Engine.WindowManager.IsDropped);
+            test.Run(() => TakeInstanceLine("toggle"));
+            test.WaitFor(() => !Engine.WindowManager.IsDropped, 2.0f);
+            test.Check("and takes it back up", () => !Engine.WindowManager.IsDropped);
+        }
         test.Run(() => Run("quake"));
         test.WaitFor(() => Engine.WindowManager.IsDropped, 2.0f);
         test.Settle(0.4f);
