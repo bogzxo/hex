@@ -14,9 +14,9 @@ internal sealed partial class HexScene
     private const string RECENT_COMMANDS_FILE = "hex_recent_commands.txt", RECENT_OPENED_FILE = "hex_recent_opened.txt", SCRATCH_FOLDER = "scratch";
 
     // Testing itself it keeps them in memory, it'd be the palette of whoever ran it otherwise
-    private HexRecentList? recentCommands, recentOpened;
-    private HexRecentList RecentCommands => recentCommands ??= new(KeepsRecent ? HexFiles.Kept(RECENT_COMMANDS_FILE) : null);
-    private HexRecentList RecentOpened => recentOpened ??= new(KeepsRecent ? HexFiles.Kept(RECENT_OPENED_FILE) : null);
+    private UIRecentList? recentCommands, recentOpened;
+    private UIRecentList RecentCommands => recentCommands ??= new(KeepsRecent ? HexFiles.Kept(RECENT_COMMANDS_FILE) : null);
+    private UIRecentList RecentOpened => recentOpened ??= new(KeepsRecent ? HexFiles.Kept(RECENT_OPENED_FILE) : null);
 
     // The files closed last, the newest at the end, and where the caret was in each
     private readonly List<(string Path, int Line, int Column)> closed = [];

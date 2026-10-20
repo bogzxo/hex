@@ -72,7 +72,7 @@ internal sealed partial class DuskScene
             return;
         }
 
-        var dialogs = new HexDialogHost(window =>
+        var dialogs = new UIDialogHost(window =>
         {
             window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
             chrome.Root.Add(window);

@@ -208,14 +208,14 @@ internal sealed partial class HexScene
     private static bool SameDirectory(string a, string b) =>
         string.Equals(Path.GetDirectoryName(Path.GetFullPath(a)), Path.GetDirectoryName(Path.GetFullPath(b)), PlatformPaths.Comparison);
 
-    /* Opening and saving. Hex's own dialog asks where (HexFileBrowser), the editor testing itself uses the list on
+    /* Opening and saving. Hex's own dialog asks where (UIFileBrowser), the editor testing itself uses the list on
        the left to open and its workspace to save. */
 
     /// <summary>
     /// Where a dialog of Hex's own goes, over the rest of the editor and coloured as its other windows are, with the
     /// workspace's folders among its places.
     /// </summary>
-    private HexDialogHost DialogHost => new(window =>
+    private UIDialogHost DialogHost => new(window =>
     {
         window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         chrome.Root.Add(window);

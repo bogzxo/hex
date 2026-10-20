@@ -1,18 +1,11 @@
-﻿using Horizon.UI.Components;
+using Horizon.UI.Components;
 
 namespace Hex.Shell;
 
 /// <summary>
-/// Where a mode shows a dialog and what it has for its places: <see cref="Present"/> puts the window over the mode
-/// (coloured as its other windows are), <see cref="Roots"/> are its workspace's folders.
-/// </summary>
-public sealed record HexDialogHost(Action<WindowPanel> Present, IReadOnlyList<string> Roots);
-
-/// <summary>
-/// Picking a layout to open, a place to save one, a workspace, a folder or any file, with Hex's own window for it
-/// (<see cref="HexFileBrowser"/>), the same on Windows, macOS and Linux. It used to be Windows' own dialogs (comdlg32
-/// and the shell's folder picker), which nothing else has. Each hands back what was picked as a task, finished on the
-/// UI's thread when the window is done with, null if it was closed without picking anything.
+/// Picking a layout to open, a place to save one, a workspace, a folder or any file, with the engine's own window for it
+/// (<see cref="UIFileDialogs"/>), Hex's titles and filters on it. It used to be Windows' own dialogs (comdlg32 and the
+/// shell's folder picker), which nothing else has.
 /// </summary>
 public static class HexDialogs
 {
@@ -27,36 +20,22 @@ public static class HexDialogs
     public const string SAVE_TITLE = "Save the layout as";
 
     /// <param name="directory">The folder it starts in.</param>
-    public static Task<string?> Open(string directory, HexDialogHost host) =>
-        Show(host, HexBrowse.Open, OPEN_TITLE, directory, string.Empty, Layouts);
+    public static Task<string?> Open(string directory, UIDialogHost host) => UIFileDialogs.Open(OPEN_TITLE, directory, Layouts, host);
 
     /// <summary>A workspace file to open (.hex-workspace).</summary>
-    public static Task<string?> OpenWorkspace(string directory, HexDialogHost host) =>
-        Show(host, HexBrowse.Open, OPEN_WORKSPACE_TITLE, directory, string.Empty, Workspaces);
+    public static Task<string?> OpenWorkspace(string directory, UIDialogHost host) => UIFileDialogs.Open(OPEN_WORKSPACE_TITLE, directory, Workspaces, host);
 
     /// <summary>Where to save a workspace file.</summary>
-    public static Task<string?> SaveWorkspace(string directory, string name, HexDialogHost host) =>
-        Show(host, HexBrowse.Save, SAVE_WORKSPACE_TITLE, directory, name, Workspaces);
+    public static Task<string?> SaveWorkspace(string directory, string name, UIDialogHost host) =>
+        UIFileDialogs.Save(SAVE_WORKSPACE_TITLE, directory, name, Workspaces, host);
 
-    /// <summary>
-    /// Any file to open, for an extension (hex.pick_file). The filter is pairs of what it says and what it matches,
-    /// "Pictures" and "*.png;*.jpg", all files after them.
-    /// </summary>
-    public static Task<string?> OpenFile(string title, string directory, IReadOnlyList<(string Name, string Pattern)> filter, HexDialogHost host) =>
-        Show(host, HexBrowse.Open, title, directory, string.Empty, filter);
+    /// <summary>Any file to open, for an extension (hex.pick_file) or a language server's program.</summary>
+    public static Task<string?> OpenFile(string title, string directory, IReadOnlyList<(string Name, string Pattern)> filter, UIDialogHost host) =>
+        UIFileDialogs.Open(title, directory, filter, host);
 
     /// <summary>A folder, starting in the folder given.</summary>
-    public static Task<string?> PickFolder(string directory, HexDialogHost host) =>
-        Show(host, HexBrowse.Folder, FOLDER_TITLE, directory, string.Empty, []);
+    public static Task<string?> PickFolder(string directory, UIDialogHost host) => UIFileDialogs.Folder(FOLDER_TITLE, directory, host);
 
     /// <param name="name">The name the file is given unless another one is typed.</param>
-    public static Task<string?> Save(string directory, string name, HexDialogHost host) =>
-        Show(host, HexBrowse.Save, SAVE_TITLE, directory, name, Layouts);
-
-    private static Task<string?> Show(HexDialogHost host, HexBrowse kind, string title, string directory, string name, IReadOnlyList<(string, string)> filter)
-    {
-        var browser = new HexFileBrowser(kind, title, directory, name, filter, host.Roots);
-        host.Present(browser.Window);
-        return browser.Picked;
-    }
+    public static Task<string?> Save(string directory, string name, UIDialogHost host) => UIFileDialogs.Save(SAVE_TITLE, directory, name, Layouts, host);
 }

@@ -67,11 +67,11 @@ internal sealed partial class HexScene
     /// </param>
     /// <param name="recent">The ones picked last, over the rest and remembered in it, the palette's commands, quick open's files.</param>
     private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false,
-        Func<char, List<(string Text, Action Picked)>?>? prefixed = null, HexRecentList? recent = null)
+        Func<char, List<(string Text, Action Picked)>?>? prefixed = null, UIRecentList? recent = null)
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
-        textDialog = Hex.Shell.HexChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent);
+        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent);
     }
 }

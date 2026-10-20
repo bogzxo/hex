@@ -1,6 +1,6 @@
 namespace Hex.Dawn;
 
-// The self test, Hex's own dialog for files and folders (HexFileBrowser), which is what Open, Save, Open Folder and an
+// The self test, Hex's own dialog for files and folders (UIFileBrowser), which is what Open, Save, Open Folder and an
 // extension's pick_file are on every system. A folder of the test's own with a layout, a text, a hidden layout and a
 // folder in it, a dialog for each kind shown the way the editor shows them, driven the way the UI drives them.
 internal sealed partial class HexScene
@@ -9,7 +9,7 @@ internal sealed partial class HexScene
     {
         string folder = Path.Combine(Path.GetTempPath(), "hex dialog test");
         string inside = Path.Combine(folder, "inside"), layout = Path.Combine(folder, "a.hor");
-        HexFileBrowser? browser = null;
+        UIFileBrowser? browser = null;
 
         test.Run(() =>
         {
@@ -20,7 +20,7 @@ internal sealed partial class HexScene
             File.WriteAllText(Path.Combine(folder, "notes.txt"), "not a layout");
             File.WriteAllText(Path.Combine(folder, ".hidden.hor"), "#define layout\n");
 
-            browser = new HexFileBrowser(HexBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, [("Horizon files", "*.hor")], WorkspaceRoots());
+            browser = new UIFileBrowser(UIBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, [("Horizon files", "*.hor")], WorkspaceRoots());
             DialogHost.Present(browser.Window);
         });
         test.Wait();
@@ -56,12 +56,12 @@ internal sealed partial class HexScene
 
         test.Check("dialogs: saving gives a name its extension, and over a file that's there only when Save is pressed again", () =>
         {
-            var save = new HexFileBrowser(HexBrowse.Save, HexDialogs.SAVE_TITLE, folder, "fresh", [("Horizon files", "*.hor")]);
+            var save = new UIFileBrowser(UIBrowse.Save, HexDialogs.SAVE_TITLE, folder, "fresh", [("Horizon files", "*.hor")]);
             DialogHost.Present(save.Window);
             save.Press();
             bool fresh = save.Picked is { IsCompletedSuccessfully: true, Result: { } made } && PlatformPaths.Same(made, Path.Combine(folder, "fresh.hor"));
 
-            var over = new HexFileBrowser(HexBrowse.Save, HexDialogs.SAVE_TITLE, folder, "a", [("Horizon files", "*.hor")]);
+            var over = new UIFileBrowser(UIBrowse.Save, HexDialogs.SAVE_TITLE, folder, "a", [("Horizon files", "*.hor")]);
             DialogHost.Present(over.Window);
             over.Press();
             bool asked = !over.Picked.IsCompleted && over.Message.Contains("already");
@@ -71,7 +71,7 @@ internal sealed partial class HexScene
 
         test.Check("dialogs: a folder is picked by being in it, a new one made is gone into, and Cancel hands back nothing", () =>
         {
-            var pick = new HexFileBrowser(HexBrowse.Folder, HexDialogs.FOLDER_TITLE, folder, string.Empty, []);
+            var pick = new UIFileBrowser(UIBrowse.Folder, HexDialogs.FOLDER_TITLE, folder, string.Empty, []);
             DialogHost.Present(pick.Window);
             bool foldersOnly = pick.Entries is ["..", "inside/"];
             pick.MakeNewFolder("made here");
@@ -79,7 +79,7 @@ internal sealed partial class HexScene
             pick.Press();
             bool picked = pick.Picked is { IsCompletedSuccessfully: true, Result: { } chosen } && PlatformPaths.Same(chosen, Path.Combine(folder, "made here"));
 
-            var cancelled = new HexFileBrowser(HexBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, []);
+            var cancelled = new UIFileBrowser(UIBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, []);
             DialogHost.Present(cancelled.Window);
             cancelled.Cancel();
             return foldersOnly && made && picked && cancelled.Picked is { IsCompletedSuccessfully: true, Result: null } && cancelled.Window.Parent is null;
