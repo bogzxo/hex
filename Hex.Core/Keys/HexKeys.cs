@@ -1,6 +1,6 @@
 using Silk.NET.Input;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// Keys as the menus write them, "Ctrl+Shift+F", read into the key and what's held with it and written back the same

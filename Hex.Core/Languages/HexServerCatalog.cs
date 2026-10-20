@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// One server of language_servers.hor, what it is started with and what the settings say about it, how it is installed

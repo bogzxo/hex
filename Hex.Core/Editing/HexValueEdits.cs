@@ -1,7 +1,7 @@
 using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>One edit of a batch, a function of the text as it is and what the file came to, the new text or why not.</summary>
 internal delegate string? HexEdit(string text, HexSourceTree tree, out string why);

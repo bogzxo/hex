@@ -2,7 +2,7 @@ using Horizon.HIDL;
 using Horizon.HIDL.Parsing;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// A value of a file found by its path (<c>["moves", "kick_left", "damage"]</c>), where it is written and, for an object,

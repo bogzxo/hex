@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>One release of something on GitHub, its tag, its name, what it says changed (markdown) and its page.</summary>
 internal sealed record HexRelease(string Tag, string Name, string Notes, string Page, DateTimeOffset Published);

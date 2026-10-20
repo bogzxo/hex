@@ -12,7 +12,7 @@ namespace Hex.Shell;
 public static class HexGlass
 {
     /// <summary>What the sliders come as, clear glass with a bright rim and a strong lens.</summary>
-    public const float BLUR = Dawn.HexGlassDefaults.BLUR, CLARITY = Dawn.HexGlassDefaults.CLARITY, RIM = Dawn.HexGlassDefaults.RIM, BEND = Dawn.HexGlassDefaults.BEND;
+    public const float BLUR = Hex.Core.HexGlassDefaults.BLUR, CLARITY = Hex.Core.HexGlassDefaults.CLARITY, RIM = Hex.Core.HexGlassDefaults.RIM, BEND = Hex.Core.HexGlassDefaults.BEND;
 
     /// <summary>The glass of the dialogs, menus and the palette.</summary>
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) =>

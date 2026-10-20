@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// Where a file or a folder deleted in the explorer goes, which is never straight out of existence. The recycle bin on

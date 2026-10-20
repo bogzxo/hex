@@ -1,7 +1,7 @@
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// A value written as code for putting into a file, the way the files of a game are written by hand. A small object of

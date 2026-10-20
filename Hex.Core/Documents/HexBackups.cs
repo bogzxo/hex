@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// What isn't saved, kept in a folder of Hex's own so a crash or a power cut doesn't take it (VS Code's hot exit, cut down).

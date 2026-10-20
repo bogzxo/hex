@@ -6,3 +6,6 @@ global using Horizon.Core.Platform;
 
 // Labels of what somebody wrote, Plain and Literal
 global using static Hex.Dawn.HexMarkup;
+
+// What has no window in it, the settings, the workspace, the files and what is in them (Hex.Core)
+global using Hex.Core;

@@ -4,7 +4,7 @@ using Horizon.HIDL;
 using Horizon.HIDL.Parsing;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>What a file came to when it was run, or why it didn't.</summary>
 /// <param name="Runtime">The runtime it ran in, what it declared is still in there for the console to use.</param>

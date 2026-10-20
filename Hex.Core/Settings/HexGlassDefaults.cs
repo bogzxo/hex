@@ -1,4 +1,4 @@
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>How thick the glass of Hex's popups and sides is to begin with, the settings' and Hex.Shell's HexGlass's.</summary>
 internal static class HexGlassDefaults

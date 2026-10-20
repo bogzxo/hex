@@ -5,7 +5,7 @@ using Horizon.HIDL.Lexing;
 using Horizon.HIDL.Parsing;
 using Horizon.UI.Components;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>A place in a file something was found or is wrong, its line and column from 0, and what is said about it.</summary>
 internal readonly record struct HexResult(string Path, int Line, int Column, string Text);

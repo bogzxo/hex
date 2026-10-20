@@ -2,7 +2,7 @@
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// The folders the editor has open, VS Code style. Any number of them, from anywhere, their files in the explorer and

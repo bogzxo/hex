@@ -1,6 +1,6 @@
 using Horizon.HIDL.Parsing;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>One key of an object as it is written, where its name is and where its value is.</summary>
 internal readonly record struct HexEntry(string Key, SourceSpan Name, SourceSpan Value)

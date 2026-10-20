@@ -1,6 +1,6 @@
 using Horizon.HIDL;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// One task of a workspace's tasks.hor, a command line run in a terminal tab of its own, VS Code's tasks.json without the

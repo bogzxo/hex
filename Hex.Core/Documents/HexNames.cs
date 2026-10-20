@@ -1,6 +1,6 @@
 using Horizon.UI.Components;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// The names the components of a layout go by in its code, both ways round. A name was looked up by going through every

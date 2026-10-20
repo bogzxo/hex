@@ -4,7 +4,7 @@ using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
 using Horizon.Logging;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 /// <summary>
 /// What the editor is set to and keeps from one run to the next, the look of itself, how its panels were dragged
