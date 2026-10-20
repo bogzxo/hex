@@ -116,9 +116,16 @@ internal sealed partial class HexScene
         if (of is not null && TerminalCompletions(of, editor) is { } terminal)
             return terminal;
 
-        // A file of another language, what its language server offers (HexScene.ServerCompletion)
-        if (of is not null && ServerCompletions(of, editor, out bool served) is var offered && served)
-            return offered;
+        // A file of another language, what its language server offers (HexScene.ServerCompletion), and whatever else
+        // completes some files
+        if (of is not null)
+        {
+            foreach (HexCompletionSource source in completionSources)
+            {
+                if (source(of, editor, out bool served) is var offered && served)
+                    return offered;
+            }
+        }
 
         UITextDocument doc = editor.Document;
         UITextPosition caret = doc.Caret;

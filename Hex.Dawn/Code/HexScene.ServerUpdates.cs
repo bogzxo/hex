@@ -350,17 +350,4 @@ internal sealed partial class HexScene
 
         return process.ExitCode;
     }
-
-    /// <summary>A page in the browser the system has.</summary>
-    private void OpenInBrowser(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception e)
-        {
-            Say($"{url} couldn't be opened, {e.Message}", error: true);
-        }
-    }
 }

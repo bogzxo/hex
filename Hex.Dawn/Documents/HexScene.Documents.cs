@@ -415,7 +415,7 @@ internal sealed partial class HexScene
 
         stage.RemoveModule(document.Module);
         documents.Remove(document);
-        StopLinting(document);
+        documentClosed?.Invoke(document);
         ForgetExtensionViews(document);
         DropBackup(document);
         recordPending = false;

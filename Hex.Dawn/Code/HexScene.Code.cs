@@ -116,7 +116,7 @@ internal sealed partial class HexScene
         if (changed.IsText)
         {
             codeDirty = true;
-            LintChanged(changed);
+            documentEdited?.Invoke(changed);
             return;
         }
 
@@ -198,7 +198,8 @@ internal sealed partial class HexScene
 
         found.AddRange(ExtensionProblemsOf(of.Path));
         found.AddRange(TerminalProblemsOf(of));
-        found.AddRange(lintFound.GetValueOrDefault(of) ?? []);
+        foreach (var source in diagnosticSources)
+            found.AddRange(source(of) ?? []);
         of.Editor.Diagnostics = found;
         if (of == document)
             problemsDirty = true;
@@ -258,7 +259,7 @@ internal sealed partial class HexScene
         opened.Editor.CheckSyntax = ReferenceEquals(opened.Editor.Highlighter, CodeLanguages.Hidl);
         SetCode(opened, source, fresh: true);
         opened.SavedCode = opened.Editor.Text;
-        StartLinting(opened);
+        documentOpened?.Invoke(opened);
 
         documents.Add(opened);
         if (!show)

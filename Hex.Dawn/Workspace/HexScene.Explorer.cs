@@ -262,13 +262,9 @@ internal sealed partial class HexScene
     {
         string full = Path.GetFullPath(path);
 
-        // A language server running in it (its folder its process's) would keep Windows from moving it
+        // Whatever runs in it (a language server, its folder its process's) would keep Windows from moving it
         if (Directory.Exists(full))
-        {
-            foreach (HexDocument of in linters.Where(pair => PlatformPaths.IsUnder(pair.Value.RootDirectory, full)).Select(pair => pair.Key).ToList())
-                StopLinting(of);
-            Horizon.UI.Scripting.LanguageServers.StopUnder(full).Wait(TimeSpan.FromSeconds(6));
-        }
+            folderDeleting?.Invoke(full);
 
         try
         {

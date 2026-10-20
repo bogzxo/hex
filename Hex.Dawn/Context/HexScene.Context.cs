@@ -1,0 +1,111 @@
+using System.Diagnostics;
+
+using Hex.Shell;
+
+using Horizon.Core.Threading;
+using Horizon.UI.Components;
+using Horizon.UI.Scripting;
+
+namespace Hex.Dawn;
+
+// The scene as what the parts of the editor with a class of their own are handed (DawnContext). Each of these is the
+// scene's own doing passed on, what's new is the events and the sources the parts add, which the rest of the scene
+// raises and asks at the moments it used to call into them by name.
+internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost
+{
+    private DawnContext? context;
+
+    /// <summary>What a part of the editor is made with.</summary>
+    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, commands, options, () => Engine.WindowManager.Wake());
+
+    /* The documents */
+
+    private Action<HexDocument>? documentOpened, documentEdited, documentClosed;
+    private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
+    private readonly List<HexCompletionSource> completionSources = [];
+
+    IReadOnlyList<HexDocument> IDocuments.Open => documents;
+
+    HexDocument? IDocuments.OpenAt(string path)
+    {
+        string full = Path.GetFullPath(path);
+        return documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, PlatformPaths.Comparison));
+    }
+
+    event Action<HexDocument> IDocuments.Opened { add => documentOpened += value; remove => documentOpened -= value; }
+    event Action<HexDocument> IDocuments.Edited { add => documentEdited += value; remove => documentEdited -= value; }
+    event Action<HexDocument> IDocuments.Closed { add => documentClosed += value; remove => documentClosed -= value; }
+
+    void IDocuments.AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source) => diagnosticSources.Add(source);
+    void IDocuments.DiagnosticsChanged(HexDocument of) => ShowDiagnostics(of);
+    void IDocuments.AddCompletions(HexCompletionSource source) => completionSources.Add(source);
+
+    /* The workspace */
+
+    private readonly List<Func<IEnumerable<string>>> watchedToo = [];
+    private Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>>? filesChanged;
+    private Action<string>? folderDeleting;
+
+    IReadOnlyList<string> IWorkspace.Folders => workspace.Folders;
+    void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
+    void IWorkspace.Rewatch() => WatchFolders();
+    event Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>> IWorkspace.FilesChanged { add => filesChanged += value; remove => filesChanged -= value; }
+    event Action<string> IWorkspace.Deleting { add => folderDeleting += value; remove => folderDeleting -= value; }
+
+    /// <summary>Watches the folders of the workspace (for the explorer) and the ones the parts of the editor want watched too, and nothing else.</summary>
+    private void WatchFolders() =>
+        folders.Watch(workspace.Folders.Concat(watchedToo.SelectMany(more => more())).Where(Directory.Exists).Distinct(PlatformPaths.Comparer));
+
+    /// <summary>Every tick, what changed on the disk in the folders that are watched said to whoever wants to know.</summary>
+    private void UpdateFileChanges()
+    {
+        if (filesChanged is not null && folders.TakeFileChanges() is { Count: > 0 } changes)
+            filesChanged(changes);
+    }
+
+    /* Saying things, and work */
+
+    void INotices.Say(string message, bool error) => Say(message, error);
+    void INotices.Note(string text, bool error) => Note(text, error);
+    UINotification INotices.Notify(string message, bool error, params (string Label, Action Pressed)[] actions) => Notify(message, error, actions);
+
+    WorkItem IWork.Start(string key, string title, Func<WorkContext, Task> what, Action<WorkItem>? done, bool seen, bool cancellable) =>
+        StartWork(key, title, what, done, seen, cancellable);
+    WorkItem IWork.Start(string key, string title, Action<WorkContext> what, Action<WorkItem>? done, bool seen, bool cancellable) =>
+        StartWork(key, title, what, done, seen, cancellable);
+    void IWork.Renew(WorkItem item) => RenewWork(item);
+    WorkItem? IWork.Find(string key) => work.Find(key);
+
+    /* The little windows */
+
+    WindowPanel IWindows.ShowText(string title, string markdown, float height) => ShowText(title, markdown, height);
+    void IWindows.OpenSettings(string? section) => OpenSettings(section);
+    void IWindows.OpenInBrowser(string url) => OpenInBrowser(url);
+    void IWindows.ChooseFile(string title, string folder, (string Name, string Pattern)[] filter, Action<string> picked) =>
+        Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
+    string IWindows.BrowseFolder => browseDirectory;
+
+    /// <summary>A page in the browser the system has.</summary>
+    private void OpenInBrowser(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception e)
+        {
+            Say($"{url} couldn't be opened, {e.Message}", error: true);
+        }
+    }
+
+    /* The settings */
+
+    // What the parts add to the settings window, made each time it opens
+    private readonly List<(Func<ISettingsSource> Source, string? Section, Func<UIComponent>? Panel, Action? Opened, Action? Closed)> settingSources = [];
+
+    HexSettings ISettingsHost.Values => settings;
+    void ISettingsHost.Save() => SaveSettings();
+    void ISettingsHost.AddSource(Func<ISettingsSource> source, string? section, Func<UIComponent>? panel, Action? opened, Action? closed) =>
+        settingSources.Add((source, section, panel, opened, closed));
+    void ISettingsHost.Refresh(string key) => SettingsPage?.Refresh(key);
+}

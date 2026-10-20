@@ -47,15 +47,21 @@ internal sealed partial class HexScene
             return;
         }
 
-        var sources = new List<ISettingsSource> { new EditorSource(this), new ServerSource(this), new TerminalSettingsSource(terminals) };
+        var sources = new List<ISettingsSource> { new EditorSource(this) };
+        sources.AddRange(settingSources.Select(added => added.Source()));
+        sources.Add(new TerminalSettingsSource(terminals));
         settingsView = new HexSettingsView(sources, CloseSettings);
         settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         chrome.Root.Add(settingsView.Window);
-        settingsView.SetPanel(SERVER_SECTION, MakeServerStatus());
-        AddExtensionSections(settingsView);
+        foreach (var added in settingSources)
+        {
+            if (added.Section is { } under && added.Panel is { } panel)
+                settingsView.SetPanel(under, panel());
+        }
 
-        // What was found of the servers, looked for again in case something was installed since
-        ProbeServers(ServerEntries);
+        AddExtensionSections(settingsView);
+        foreach (var added in settingSources)
+            added.Opened?.Invoke();
 
         if (section is not null)
             settingsView.Page.GoTo(section);
@@ -69,7 +75,8 @@ internal sealed partial class HexScene
             parent.Remove(window);
         settingsView = null;
         settingControls.Clear();
-        serverStatus.Clear();
+        foreach (var added in settingSources)
+            added.Closed?.Invoke();
         ForgetExtensionTabs();
     }
 

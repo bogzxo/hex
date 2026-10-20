@@ -30,12 +30,35 @@ internal sealed partial class HexScene
     private readonly HashSet<string> failed = [];
 
     /// <summary>
-    /// Watches the folders of the workspace (for the explorer) and the folders the language servers were started in
-    /// (for what changes in them on the disk), and nothing else.
+    /// What the languages take from the rest of the editor and give it, through the context: the documents opened, typed
+    /// into and closed, what's wrong with them and what completes in them, the folders the servers run in watched, and
+    /// a page of settings.
     /// </summary>
-    private void WatchFolders() =>
-        folders.Watch(workspace.Folders.Concat(LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory))
-            .Where(Directory.Exists).Distinct(PlatformPaths.Comparer));
+    private void AttachLanguages()
+    {
+        DawnContext with = Context;
+        with.Documents.Opened += StartLinting;
+        with.Documents.Edited += LintChanged;
+        with.Documents.Closed += StopLinting;
+        with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
+        with.Documents.AddCompletions(ServerCompletions);
+
+        // What changes on the disk in the folders the servers were started in, for what isn't open in them
+        with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory));
+        with.Workspace.FilesChanged += ServerFilesChanged;
+        with.Workspace.Deleting += StopServersUnder;
+
+        // What was found of the servers looked for again as the settings open, in case something was installed since
+        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerStatus, () => ProbeServers(ServerEntries), serverStatus.Clear);
+    }
+
+    /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
+    private void StopServersUnder(string folder)
+    {
+        foreach (HexDocument of in linters.Where(pair => PlatformPaths.IsUnder(pair.Value.RootDirectory, folder)).Select(pair => pair.Key).ToList())
+            StopLinting(of);
+        LanguageServers.StopUnder(folder).Wait(TimeSpan.FromSeconds(6));
+    }
 
     /// <summary>
     /// The folder a file's server runs in, which is where it looks for projects: the workspace's folder the file is in,
@@ -159,7 +182,7 @@ internal sealed partial class HexScene
         server.Woken ??= WakeForLinting;
 
         // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
-        WatchFolders();
+        Context.Workspace.Rewatch();
         linters[of] = server;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
@@ -202,24 +225,6 @@ internal sealed partial class HexScene
             }
         }
 
-        // What changed on the disk in the workspace, said to every server, which goes by it for what isn't open in it
-        IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
-        if (folders.TakeFileChanges() is { Count: > 0 } changes)
-        {
-            foreach (LanguageServer server in servers)
-            {
-                if (server.Failure is null)
-                    server.FilesChanged(changes);
-            }
-
-            // A project of a server's that reads them only as it starts, the server started again a moment after
-            foreach (HexServerEntry entry in serverEntries)
-            {
-                if (changes.Any(change => entry.ReloadsFor(change.Path)) && servers.Any(server => server.Name == entry.Name))
-                    reloadIn[entry] = RELOAD_DELAY;
-            }
-        }
-
         if (reloadIn.Count > 0)
         {
             foreach (HexServerEntry due in reloadIn.Keys.ToArray())
@@ -233,6 +238,7 @@ internal sealed partial class HexScene
             }
         }
 
+        IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
         for (int i = 0; i < servers.Count; i++)
         {
             LanguageServer server = servers[i];
@@ -253,5 +259,23 @@ internal sealed partial class HexScene
         }
 
         UpdateServerCompletions();
+    }
+
+    /// <summary>What changed on the disk where the servers run, said to every server, which goes by it for what isn't open in it.</summary>
+    private void ServerFilesChanged(IReadOnlyList<(string Path, LanguageServerFileChange Change)> changes)
+    {
+        IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
+        foreach (LanguageServer server in servers)
+        {
+            if (server.Failure is null)
+                server.FilesChanged(changes);
+        }
+
+        // A project of a server's that reads them only as it starts, the server started again a moment after
+        foreach (HexServerEntry entry in serverEntries)
+        {
+            if (changes.Any(change => entry.ReloadsFor(change.Path)) && servers.Any(server => server.Name == entry.Name))
+                reloadIn[entry] = RELOAD_DELAY;
+        }
     }
 }
