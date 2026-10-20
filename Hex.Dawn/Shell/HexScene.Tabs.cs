@@ -188,7 +188,7 @@ internal sealed partial class HexScene
     private static List<OutlineEntry> OutlineAt(string text, int line, string? path = null)
     {
         var chain = new List<OutlineEntry>();
-        foreach (OutlineEntry entry in Outline(text, path))
+        foreach (OutlineEntry entry in HexOutline.Outline(text, path))
         {
             if (entry.Line > line)
                 break;

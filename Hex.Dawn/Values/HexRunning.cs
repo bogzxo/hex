@@ -51,7 +51,7 @@ internal sealed partial class HexScene
         {
             // What went wrong says the name it most likely meant, when it named one a letter or two off
             if (done.Error is { } failed && valuesAsked.Document is { } asked)
-                done = done with { Error = failed + LikelyFix(failed, asked.Editor.Text) };
+                done = done with { Error = failed + HexFixes.LikelyFix(failed, asked.Editor.Text) };
 
             // A file seen for the first time comes open a level, when it declares few enough things for that to be the
             // way into it (a move list is one let of forty moves)
@@ -420,10 +420,10 @@ internal sealed partial class HexScene
     {
         ObjectValue obj => $"{{ {obj.Properties.Count} }}",
         ListValue list => $"[ {list.Count} ]",
-        StringValue text => $"\"{Shorten(text.Value ?? string.Empty, 48)}\"",
+        StringValue text => $"\"{HexEvaluation.Shorten(text.Value ?? string.Empty, 48)}\"",
         FunctionValue function => $"func({string.Join(", ", function.Parameters)})",
         AnonymousFunctionValue function => $"func({string.Join(", ", function.Parameters)})",
-        _ => Shorten(HexEvaluation.Describe(value), 60)
+        _ => HexEvaluation.Shorten(HexEvaluation.Describe(value), 60)
     };
 
     /// <summary>

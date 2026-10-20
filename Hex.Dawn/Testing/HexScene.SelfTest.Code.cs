@@ -80,7 +80,7 @@ internal sealed partial class HexScene
             && valuesTree.Visible && valuesTree.Items.Any(item => item.Text == "names" && item.Detail == "{ 1 }"));
         test.Check("values: a key of an object is found in the code by its path", () => LineOf("names.first") is (2, _));
         test.Check("outline: says what each thing is, a number, an object and a text", () =>
-            Outline(code.Text) is var entries && entries.Any(entry => entry is { Name: "speed", Icon: "symbol-number" })
+            HexOutline.Outline(code.Text) is var entries && entries.Any(entry => entry is { Name: "speed", Icon: "symbol-number" })
             && entries.Any(entry => entry is { Name: "names", Icon: "symbol-object" }) && entries.Any(entry => entry is { Name: "first", Icon: "symbol-string" }));
 
         test.Run(() => AskConsole("speed * 2"));

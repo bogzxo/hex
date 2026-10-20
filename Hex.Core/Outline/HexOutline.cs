@@ -10,20 +10,19 @@ using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
-// The outline of a file of code, what it declares and the keys of its objects, by its tokens.
-internal sealed partial class HexScene
+/// <summary>One line of an outline, a name, where it is (from 0), how deep in, and its icon.</summary>
+internal readonly record struct OutlineEntry(string Name, int Line, int Column, int Depth, string Icon = "symbol-variable");
+
+/// <summary>The outline of a file of code, what it declares and the keys of its objects, by its tokens.</summary>
+internal static partial class HexOutline
 {
-    /* The outline of a file of code, what it declares and the keys of its objects, on the left */
-
-    private readonly record struct OutlineEntry(string Name, int Line, int Column, int Depth, string Icon = "symbol-variable");
-
     /// <summary>
     /// What a file declares (its lets and consts) and the keys of the objects in those, a few levels down, by its tokens
     /// so a file that doesn't parse right now still has one.
     /// </summary>
-    private static List<OutlineEntry> Outline(string text, string? path = null)
+    public static List<OutlineEntry> Outline(string text, string? path = null)
     {
         // The breadcrumbs ask on every move of the caret, the values on every click, the outline on every change. An
         // editor hands out the same string until its text changes, so the last one is kept, nobody changes the list
@@ -35,9 +34,6 @@ internal sealed partial class HexScene
         outlinedAs = extension;
         return outlined = extension == ".hor" ? OutlineOf(text) : OutlineOfOther(text, extension);
     }
-
-    /// <summary>The outline of what is in the code editor, by the language of its file.</summary>
-    private List<OutlineEntry> OutlineHere() => Outline(code.Text, document?.Path);
 
     private static string? outlinedText, outlinedAs;
     private static List<OutlineEntry>? outlined;

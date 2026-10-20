@@ -95,7 +95,7 @@ internal sealed partial class HexScene
                     continue;
 
                 // Close to a key most of the others have and this one hasn't
-                string? meant = common.FirstOrDefault(other => !obj.Properties.ContainsKey(other) && Distance(key, other) <= (other.Length >= 6 ? 2 : 1));
+                string? meant = common.FirstOrDefault(other => !obj.Properties.ContainsKey(other) && HexFixes.Distance(key, other) <= (other.Length >= 6 ? 2 : 1));
                 if (meant is not null && ran.Sources.TryGetKey(obj, key, out var at))
                     warn(at, Said("lint.typo", ("key", key), ("meant", meant), ("count", counts[meant].ToString()), ("of", objects.ToString()), ("name", childName)));
             }
@@ -122,30 +122,5 @@ internal sealed partial class HexScene
         }
 
         return false;
-    }
-
-    /// <summary>How many letters have to change to turn one word into another (Levenshtein), stopping early past three.</summary>
-    private static int Distance(string a, string b)
-    {
-        if (Math.Abs(a.Length - b.Length) > 3)
-            return 4;
-
-        Span<int> previous = stackalloc int[b.Length + 1];
-        Span<int> current = stackalloc int[b.Length + 1];
-        for (int j = 0; j <= b.Length; j++) previous[j] = j;
-
-        for (int i = 1; i <= a.Length; i++)
-        {
-            current[0] = i;
-            for (int j = 1; j <= b.Length; j++)
-            {
-                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
-            }
-
-            current.CopyTo(previous);
-        }
-
-        return previous[b.Length];
     }
 }

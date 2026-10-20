@@ -335,7 +335,7 @@ internal sealed partial class HexScene
         else
         {
             foreach (var (name, value) in runtime.UserScope.Variables)
-                runOutput.Add($"{name} = {Shorten(Describe(value), 240)}");
+                runOutput.Add($"{name} = {HexEvaluation.Shorten(Describe(value), 240)}");
 
             Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, see the output");
         }
@@ -361,13 +361,6 @@ internal sealed partial class HexScene
     }
 
     private static string Describe(IRuntimeValue value) => HexEvaluation.Describe(value);
-
-    private static string Shorten(string text, int most)
-    {
-        string flat = text.Replace("\r", string.Empty).Replace('\n', ' ');
-        while (flat.Contains("  ", StringComparison.Ordinal)) flat = flat.Replace("  ", " ");
-        return flat.Length <= most ? flat : flat[..most] + "...";
-    }
 
     /// <summary>
     /// The commands of code in any file, the Selection menu (the code editor answers its keys itself), its zoom, going
@@ -438,4 +431,7 @@ internal sealed partial class HexScene
 
         return null;
     }
+
+    /// <summary>The outline of what is in the code editor, by the language of its file.</summary>
+    private List<OutlineEntry> OutlineHere() => HexOutline.Outline(code.Text, document?.Path);
 }

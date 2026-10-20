@@ -129,7 +129,7 @@ internal sealed partial class HexScene
 
                     cells[k + 1] = new UITableCell(inner is StringValue said ? said.Value : Summarise(inner), CellColor(inner))
                     {
-                        Tooltip = $"{name}.{rowName}.{keys[k]} = {Shorten(HexEvaluation.Describe(inner), 200)}"
+                        Tooltip = $"{name}.{rowName}.{keys[k]} = {HexEvaluation.Shorten(HexEvaluation.Describe(inner), 200)}"
                     };
 
                     if (shown.Sources.TryGetKey(obj, keys[k], out var at))

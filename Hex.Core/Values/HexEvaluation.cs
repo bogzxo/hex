@@ -208,4 +208,12 @@ internal sealed class HexEvaluation
             return Values.Text(value);
         }
     }
+
+    /// <summary>A text on one line and no longer than so much, "..." where it was cut.</summary>
+    public static string Shorten(string text, int most)
+    {
+        string flat = text.Replace("\r", string.Empty).Replace('\n', ' ');
+        while (flat.Contains("  ", StringComparison.Ordinal)) flat = flat.Replace("  ", " ");
+        return flat.Length <= most ? flat : flat[..most] + "...";
+    }
 }

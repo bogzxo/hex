@@ -1,12 +1,12 @@
 using System.Text.RegularExpressions;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 // The outline of a file that isn't HIDL, what it declares by the shapes its language writes declarations in, a
 // line at a time, how deep each is by how far in it is. Not a parser and not meant to be one, a language server's
 // symbols are what a file with a server gets, this is for the rest and for before the server has answered. C#, the
 // shaders, Python, JavaScript and TypeScript, Markdown's headings, the keys of JSON and YAML.
-internal sealed partial class HexScene
+internal static partial class HexOutline
 {
     private static readonly Regex CsType = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record|interface|enum)\s+(\w+)", RegexOptions.Compiled);
     private static readonly Regex CsMember = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|override|virtual|async|readonly|unsafe|extern|new|required|partial)\s+)+[\w<>\[\],.?() ]+?\s+(\w+)\s*(\(|\{|=>|=|;)", RegexOptions.Compiled);

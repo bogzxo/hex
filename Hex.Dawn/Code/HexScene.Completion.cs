@@ -138,7 +138,7 @@ internal sealed partial class HexScene
             if (inside.StartsWith('@'))
             {
                 var keys = Localisation.Keys.Order(StringComparer.Ordinal)
-                    .Select(key => new UICompletion(key, Shorten(Localisation.Get(key), 40)))
+                    .Select(key => new UICompletion(key, HexEvaluation.Shorten(Localisation.Get(key), 40)))
                     .ToList();
                 return new UICompletionRequest(quote + 2, keys);
             }
@@ -161,7 +161,7 @@ internal sealed partial class HexScene
 
         // A kind of component, after compositor.
         if (ahead.EndsWith("compositor.", StringComparison.Ordinal))
-            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, Shorten(Describe(kind), 40), kind + "({ "))]);
+            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(Describe(kind), 40), kind + "({ "))]);
 
         // A property of the component being made, where a key goes inside its braces
         if (ComponentBeingMade(editor.Text, doc, start) is { } kind && UIModule.CreateDetached(kind) is { } made)
@@ -172,7 +172,7 @@ internal sealed partial class HexScene
                 var properties = made.Object.Properties.Keys
                     .Where(name => name != "parent")
                     .Prepend("parent")
-                    .Select(name => new UICompletion(name, Shorten(Horizon.UI.Scripting.UIPropertyHelp.Describe(kind, name), 48), name + ": "))
+                    .Select(name => new UICompletion(name, HexEvaluation.Shorten(Horizon.UI.Scripting.UIPropertyHelp.Describe(kind, name), 48), name + ": "))
                     .ToList();
                 return new UICompletionRequest(start, properties);
             }

@@ -132,7 +132,7 @@ internal sealed partial class HexScene
                 return lines;
 
             case '#':
-                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {Shorten(Localisation.Get(key), 60)}", (Action)(() => GoToKey(key))))];
+                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {HexEvaluation.Shorten(Localisation.Get(key), 60)}", (Action)(() => GoToKey(key))))];
 
             default:
                 return null;

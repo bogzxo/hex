@@ -81,7 +81,7 @@ internal sealed partial class HexScene
         if (FindDeclaration(editor.Text, word) is { } declared)
         {
             string declaration = editor.Document.LineAt(declared.Line).Trim();
-            return $"$(symbol-variable) **{word}**, made on line {declared.Line + 1}\n\n```\n{Shorten(declaration, 120)}\n```{DocHint(word)}";
+            return $"$(symbol-variable) **{word}**, made on line {declared.Line + 1}\n\n```\n{HexEvaluation.Shorten(declaration, 120)}\n```{DocHint(word)}";
         }
 
         // Made somewhere else, an included file or anywhere in the workspace, or a key of an object, and documented there

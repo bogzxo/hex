@@ -2,16 +2,16 @@ using System.Text.RegularExpressions;
 
 using Horizon.HIDL.Lexing;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 // Errors that say what to do, Thonny's assistant cut down to a line. A name HIDL doesn't know is null rather than a
 // mistake, so what goes wrong is a misspelt function called ("moev isn't a function, it is null"), a member of
 // nothing ("there is nothing to get 'damage' from") or a member a list or a text hasn't got ("a list has no 'pus'"),
 // and nine times in ten the name was a letter or two off one the file or the language has. That one is said after.
-internal sealed partial class HexScene
+internal static class HexFixes
 {
     /// <summary>"Did you mean ...?" after an error that names something a letter or two off a name there is, empty otherwise.</summary>
-    private static string LikelyFix(string error, string code)
+    public static string LikelyFix(string error, string code)
     {
         var named = new List<string>();
         foreach (Match quoted in Regex.Matches(error, "'([A-Za-z_][A-Za-z0-9_]*)'"))
@@ -58,5 +58,30 @@ internal sealed partial class HexScene
         }
 
         return string.Empty;
+    }
+
+    /// <summary>How many letters have to change to turn one word into another (Levenshtein), stopping early past three.</summary>
+    public static int Distance(string a, string b)
+    {
+        if (Math.Abs(a.Length - b.Length) > 3)
+            return 4;
+
+        Span<int> previous = stackalloc int[b.Length + 1];
+        Span<int> current = stackalloc int[b.Length + 1];
+        for (int j = 0; j <= b.Length; j++) previous[j] = j;
+
+        for (int i = 1; i <= a.Length; i++)
+        {
+            current[0] = i;
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+            }
+
+            current.CopyTo(previous);
+        }
+
+        return previous[b.Length];
     }
 }
