@@ -82,6 +82,8 @@ public static class DuskProgram
 
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
+            // A terminal, nobody plays it with a controller
+            Gamepads = false,
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
                 WindowTitle = "Dusk",

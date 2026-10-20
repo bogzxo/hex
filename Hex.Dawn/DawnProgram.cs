@@ -111,6 +111,8 @@ public static class DawnProgram
 
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
+            // A text editor, nobody plays it with a controller
+            Gamepads = false,
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
                 WindowTitle = "Hex",
