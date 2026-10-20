@@ -1,8 +1,8 @@
 // The language servers Hex lints and completes other languages with, the protocol VS Code gets its squiggles through.
 // One entry a server, the command it is started with (on the PATH, or a full path), its arguments, the language id the
 // protocol knows the files by and the files it is for. A server that isn't on the machine is left alone, the file is
-// coloured and nothing is said about it. HIDL isn't in here, its diagnostics come out of the editor itself until it has
-// a server of its own.
+// coloured and nothing is said about it. HIDL isn't in here, Hex is its server: the editor knows a file of it inside,
+// and `Hex --lsp` is the same knowledge for any other editor.
 //
 // What the settings (Editor, Language servers) make of the rest of an entry, all of it optional:
 //   about    a sentence on what it is, said under its name with how it is installed

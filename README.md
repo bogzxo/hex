@@ -100,6 +100,15 @@ pages name in `settings.hor`, `extension_tab.hor`), a row for each of them there
 was told (or its default), `hex.set_setting(name, value)` changes it, and Hex keeps the lot in `hex_settings.hor` under
 `extension_settings`. A change made on its tab is told to the extension, `on_setting(hex, name, value)`.
 
+## HIDL's language server
+
+`Hex --lsp` is a language server for HIDL on stdin and stdout, for any editor that speaks the protocol. It knows a file the
+way Dawn does, because it's the same code (`Hex.Core/Hidl`): what the parser didn't like, where running the file went
+wrong and the lints of what it came to, completion (the language's words, the file's and the workspace's names, a kind
+of component after `compositor.` and its properties inside its braces, the words a property like `anchor` takes),
+hovers, where a name is declared (the file, the other open files, then the workspace) and the outline. Dawn doesn't
+start it for its own files, it has all of that inside already.
+
 ## Finding your way round the code
 
 Hex is one scene, `DawnScene`, a partial class in parts by what they're about, and a few classes of its own next to them.

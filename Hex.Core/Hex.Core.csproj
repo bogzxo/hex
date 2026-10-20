@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Tooling\Horizon.Tooling.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.Terminal\Horizon.Terminal.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
