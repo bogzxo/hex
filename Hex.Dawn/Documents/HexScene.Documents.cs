@@ -32,8 +32,8 @@ internal sealed partial class HexScene
         PrepareEditor(created);
 
         // Laid out as if the canvas were the screen it is made for, and kept inside of it
-        created.Module.Viewport = DesignScreen;
-        created.Module.Clip = DesignScreen;
+        created.Module.Viewport = HexDesigner.DesignScreen;
+        created.Module.Clip = HexDesigner.DesignScreen;
 
         // An empty layout that nobody has touched has nothing to save
         created.SavedCode = created.GenerateCode();
@@ -46,9 +46,9 @@ internal sealed partial class HexScene
     private void Show(HexDocument shown)
     {
         // Whatever was being done to the layout that is put away is a step back in it, not in the next one
-        if (recordPending && document is not null)
+        if (designer.recordPending && document is not null)
             document.Record();
-        recordPending = false;
+        designer.recordPending = false;
 
         HexDocument? was = document;
         document = shown;
@@ -78,7 +78,7 @@ internal sealed partial class HexScene
             other.Module.Enabled = other == shown;
 
         nameBox.Text = shown.Name;
-        MarkSelection();
+        designer.MarkSelection();
         // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
         browsing = browsing && !workspace.IsEmpty;
         running.Forget();
@@ -417,7 +417,7 @@ internal sealed partial class HexScene
         documentClosed?.Invoke(document);
         ForgetExtensionViews(document);
         DropBackup(document);
-        recordPending = false;
+        designer.recordPending = false;
 
         Show(documents.Count > 0 ? documents[^1] : NewDocument());
     }
@@ -479,7 +479,7 @@ internal sealed partial class HexScene
         commands.Add("File/path", "Copy Path", () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
         commands.Add("File/path", "Copy Relative Path", () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
 
-        commands.Add("Edit/history", "Undo", Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || recordPending;
+        commands.Add("Edit/history", "Undo", Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending;
         commands.Add("Edit/history", "Redo", Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo;
 
         // Ctrl+Tab goes through the files that are open, the way every editor does, with shift the other way
@@ -505,7 +505,7 @@ internal sealed partial class HexScene
         }
 
         if (document.Undo())
-            Restored("undone");
+            designer.Restored("undone");
         else
             Say("nothing to undo");
     }
@@ -524,7 +524,7 @@ internal sealed partial class HexScene
         }
 
         if (document.Redo())
-            Restored("redone");
+            designer.Restored("redone");
         else
             Say("nothing to redo");
     }

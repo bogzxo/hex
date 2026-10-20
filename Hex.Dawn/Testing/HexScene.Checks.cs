@@ -75,8 +75,8 @@ internal sealed partial class HexScene
         // Edited. Moved, and with a label of its own in the first thing that takes one
         UIComponent first = document.Find(firstName)!;
         Vector2 was = first.Position;
-        Select(first);
-        Set(first, "pos", new Vector2Value(was + new Vector2(12, -7)));
+        designer.Select(first);
+        designer.Set(first, "pos", new Vector2Value(was + new Vector2(12, -7)));
 
         UIComponent? added = document.Add("label", document.Walk().Select(entry => entry.Component).OfType<Panel>().FirstOrDefault());
         Expect(added is not null && document.Rename(added, "hex_exercise"), "a label couldn't be added and named");
@@ -95,7 +95,7 @@ internal sealed partial class HexScene
         if (document.Find("hex_exercise") is { } label)
             document.Remove(label);
         if (document.Find(firstName) is { } moved)
-            Set(moved, "pos", new Vector2Value(was));
+            designer.Set(moved, "pos", new Vector2Value(was));
 
         SaveTo(file);
         Close();
@@ -105,7 +105,7 @@ internal sealed partial class HexScene
         Expect(AllNamed(), "a name went missing putting everything back");
 
         // And once more with undo and redo, which build the layout again from what it was
-        Set(document.Find(firstName)!, "pos", new Vector2Value(was + new Vector2(30, 30)));
+        designer.Set(document.Find(firstName)!, "pos", new Vector2Value(was + new Vector2(30, 30)));
         document.Record();
         string changed = document.GenerateCode();
 
@@ -114,7 +114,7 @@ internal sealed partial class HexScene
         Expect(document.Undo() && document.GenerateCode() == untouched, "undo didn't work a second time");
         Expect(System.IO.File.ReadAllText(file) == untouched, "the file isn't the layout it started as");
 
-        Restored("exercised");
+        designer.Restored("exercised");
 
         foreach (string problem in problems)
             Console.WriteLine($"[Hex check] {Path.GetFileName(file)}: {problem}");

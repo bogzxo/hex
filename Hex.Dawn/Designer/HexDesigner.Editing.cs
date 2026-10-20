@@ -9,7 +9,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // Adding, deleting, moving and selecting components, and taking any of it back.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // How far the arrows move something while shift is held
     private const float BIG_NUDGE = 10.0f;
@@ -52,7 +52,7 @@ internal sealed partial class HexScene
 
         if (!document.Move(moving, by))
         {
-            Say(by < 0 ? "it's the first one in there already" : "it's the last one in there already");
+            context.Notices.Say(by < 0 ? "it's the first one in there already" : "it's the last one in there already");
             return;
         }
 
@@ -82,13 +82,13 @@ internal sealed partial class HexScene
 
         if (moved == 0)
         {
-            Say(problem, error: true);
+            context.Notices.Say(problem, error: true);
             return;
         }
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        Say(inwards ? "moved into the container before it" : "moved out of its container");
+        context.Notices.Say(inwards ? "moved into the container before it" : "moved out of its container");
     }
 
     /* The clipboard. What was copied is kept as the code that makes it, so it can be put down in another layout */
@@ -102,7 +102,7 @@ internal sealed partial class HexScene
             return;
 
         clipboard = document.Copy(copied);
-        Say(copied.Count == 1 ? $"copied {document.NameOf(copied[0])}" : $"copied {copied.Count} things");
+        context.Notices.Say(copied.Count == 1 ? $"copied {document.NameOf(copied[0])}" : $"copied {copied.Count} things");
     }
 
     private void CutSelected()
@@ -112,21 +112,21 @@ internal sealed partial class HexScene
 
         CopySelected();
         DeleteAll();
-        Say("cut, paste puts it back down");
+        context.Notices.Say("cut, paste puts it back down");
     }
 
     private void Paste()
     {
         if (clipboard.Length == 0)
         {
-            Say("nothing has been copied yet");
+            context.Notices.Say("nothing has been copied yet");
             return;
         }
 
         var made = document.Paste(clipboard, ContainerForNew(), out string problem);
         if (made.Count == 0)
         {
-            Say($"couldn't paste: {problem}", error: true);
+            context.Notices.Say($"couldn't paste: {problem}", error: true);
             return;
         }
 
@@ -136,7 +136,7 @@ internal sealed partial class HexScene
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        Say(made.Count == 1 ? $"pasted as {document.NameOf(made[0])}" : $"pasted {made.Count} things");
+        context.Notices.Say(made.Count == 1 ? $"pasted as {document.NameOf(made[0])}" : $"pasted {made.Count} things");
     }
 
     /* Lining things up */
@@ -184,7 +184,7 @@ internal sealed partial class HexScene
         }
 
         codeDirty = inspectorDirty = true;
-        Say(moving.Count == 1 ? "lined up with its container" : $"lined {moving.Count} things up");
+        context.Notices.Say(moving.Count == 1 ? "lined up with its container" : $"lined {moving.Count} things up");
     }
 
     /// <summary>
@@ -196,7 +196,7 @@ internal sealed partial class HexScene
         var moving = document.TopSelection();
         if (moving.Count < 3)
         {
-            Say("select three or more things to space them out");
+            context.Notices.Say("select three or more things to space them out");
             return;
         }
 
@@ -217,10 +217,10 @@ internal sealed partial class HexScene
         }
 
         codeDirty = inspectorDirty = true;
-        Say($"spaced {moving.Count} things out {(horizontally ? "across" : "up and down")}");
+        context.Notices.Say($"spaced {moving.Count} things out {(horizontally ? "across" : "up and down")}");
     }
 
-    private void Select(UIComponent? component)
+    internal void Select(UIComponent? component)
     {
         document.Selected = component;
 
@@ -228,13 +228,13 @@ internal sealed partial class HexScene
         MarkSelection();
     }
 
-    private void Restored(string what)
+    internal void Restored(string what)
     {
         // The layout was built again from what it was, everything on screen that is about it is out of date
         MarkSelection();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
 
-        Say($"{what}, {document.UndoCount} more to undo");
+        context.Notices.Say($"{what}, {document.UndoCount} more to undo");
     }
 
     /// <summary>
@@ -246,7 +246,7 @@ internal sealed partial class HexScene
         if (moving.Count == 0)
             return;
 
-        var keyboard = Engine.Input.Keyboard;
+        var keyboard = context.Keyboard;
         bool far = keyboard.IsDown(Silk.NET.Input.Key.ShiftLeft) || keyboard.IsDown(Silk.NET.Input.Key.ShiftRight);
 
         foreach (var selected in moving)
@@ -255,7 +255,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Notes the layout as a step to come back to once a change has been left alone for a moment with the pointer up.</summary>
-    private void UpdateRecord(float dt)
+    internal void UpdateRecord(float dt)
     {
         if (recordPending && !compositor.Pointer.Down && (settleTimer -= dt) <= 0.0f)
         {

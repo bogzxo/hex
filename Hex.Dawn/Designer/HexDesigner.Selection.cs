@@ -8,18 +8,17 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // Selecting more than one thing, groups, copies, what goes on top of what, and the right click menu for all of it.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // The menu a right click opened last, for the self-test to find its items
-    private ContextMenu? contextMenu;
 
     // Ctrl or shift held, as far as clicks go. The self-test can't hold keys, so it says so here instead
-    private bool fakeModifier;
+    internal bool fakeModifier;
 
     /// <summary>Whether a click adds to what is selected (ctrl, command on a Mac, or shift held) rather than replacing it.</summary>
     private bool Modifier()
     {
-        var keyboard = Engine.Input.Keyboard;
+        var keyboard = context.Keyboard;
         return fakeModifier
             || keyboard.Primary
             || keyboard.IsDown(Key.ShiftLeft) || keyboard.IsDown(Key.ShiftRight);
@@ -29,7 +28,7 @@ internal sealed partial class HexScene
     /// Helper method to have the UI mark out everything that's selected, and open the pages of any tabs the selection
     /// is hidden away on so it can be seen.
     /// </summary>
-    private void MarkSelection()
+    internal void MarkSelection()
     {
         stage.Highlighted = document.Selected;
         stage.Highlights = [.. document.Selection];
@@ -42,14 +41,14 @@ internal sealed partial class HexScene
     }
 
     // The tree is to scroll to what was selected, once its rows have been laid out
-    private bool treeReveal;
+    internal bool treeReveal;
 
     /// <summary>
     /// Helper method to scroll the tree so the row of what is selected is in sight, whichever way it was selected (the
     /// canvas, the arrange menu, an undo). The rows are made again when the selection changes and have nowhere to be
     /// until the UI has laid them out at the end of the tick, so it waits for that and does it on the tick after.
     /// </summary>
-    private void RevealInTree()
+    internal void RevealInTree()
     {
         if (!treeReveal || treeDirty)
             return;
@@ -92,7 +91,7 @@ internal sealed partial class HexScene
     /// </summary>
     private UIComponent? ResolveClick(UIComponent? hit)
     {
-        var keyboard = Engine.Input.Keyboard;
+        var keyboard = context.Keyboard;
         if (hit is null || keyboard.IsDown(Key.AltLeft) || keyboard.IsDown(Key.AltRight))
             return hit;
 
@@ -117,7 +116,7 @@ internal sealed partial class HexScene
         return groups[0];
     }
 
-    private static bool IsInside(UIComponent component, UIComponent container)
+    internal static bool IsInside(UIComponent component, UIComponent container)
     {
         for (UIComponent? at = component; at is not null; at = at.Parent)
         {
@@ -156,20 +155,20 @@ internal sealed partial class HexScene
 
         Select(null);
         treeDirty = codeDirty = true;
-        Say(gone.Count == 1 ? "deleted it" : $"deleted {gone.Count} things");
+        context.Notices.Say(gone.Count == 1 ? "deleted it" : $"deleted {gone.Count} things");
     }
 
     private void GroupSelected()
     {
         if (document.Group(document.TopSelection(), out string problem) is not { } group)
         {
-            Say(problem, error: true);
+            context.Notices.Say(problem, error: true);
             return;
         }
 
         Select(group);
         treeDirty = codeDirty = true;
-        Say($"grouped {group.Children.Count} things as {document.NameOf(group)}, click again to get at what's in it");
+        context.Notices.Say($"grouped {group.Children.Count} things as {document.NameOf(group)}, click again to get at what's in it");
     }
 
     private void UngroupSelected()
@@ -177,7 +176,7 @@ internal sealed partial class HexScene
         var groups = document.TopSelection().OfType<Group>().ToList();
         if (groups.Count == 0)
         {
-            Say("there's no group selected to take apart", error: true);
+            context.Notices.Say("there's no group selected to take apart", error: true);
             return;
         }
 
@@ -191,7 +190,7 @@ internal sealed partial class HexScene
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        Say($"took {groups.Count} group{(groups.Count == 1 ? string.Empty : "s")} apart");
+        context.Notices.Say($"took {groups.Count} group{(groups.Count == 1 ? string.Empty : "s")} apart");
     }
 
     // What a container can be changed into, the kind, whether a stack runs across, and what the menu calls it
@@ -223,7 +222,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Changes the container selected into another kind of container, everything in it with it.</summary>
-    private void ConvertSelected(string kind, bool across)
+    internal void ConvertSelected(string kind, bool across)
     {
         if (document.Selected is not { } selected)
             return;
@@ -231,13 +230,13 @@ internal sealed partial class HexScene
         string was = UIModule.KindOf(selected) ?? "container";
         if (document.Convert(selected, kind, across, out string problem) is not { } made)
         {
-            Say(problem, error: true);
+            context.Notices.Say(problem, error: true);
             return;
         }
 
         Select(made);
         treeDirty = codeDirty = inspectorDirty = true;
-        Say($"{document.NameOf(made)} is a {kind}{(kind == "stack" ? (across ? " across" : " down") : string.Empty)} now, it was a {was}, Ctrl+Z puts it back");
+        context.Notices.Say($"{document.NameOf(made)} is a {kind}{(kind == "stack" ? (across ? " across" : " down") : string.Empty)} now, it was a {was}, Ctrl+Z puts it back");
     }
 
     private void DuplicateSelected()
@@ -252,7 +251,7 @@ internal sealed partial class HexScene
             if (document.Duplicate(original, out string problem) is { } copy)
                 copies.Add(copy);
             else
-                Say($"couldn't copy {document.NameOf(original)}: {problem}", error: true);
+                context.Notices.Say($"couldn't copy {document.NameOf(original)}: {problem}", error: true);
         }
 
         if (copies.Count == 0)
@@ -264,7 +263,7 @@ internal sealed partial class HexScene
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        Say(copies.Count == 1 ? $"copied it as {document.NameOf(copies[0])}" : $"copied {copies.Count} things");
+        context.Notices.Say(copies.Count == 1 ? $"copied it as {document.NameOf(copies[0])}" : $"copied {copies.Count} things");
     }
 
     private void ReorderSelected(HexDocument.Order order)
@@ -294,7 +293,7 @@ internal sealed partial class HexScene
         }
 
         MarkSelection();
-        Say($"selected {document.Selection.Count} things");
+        context.Notices.Say($"selected {document.Selection.Count} things");
     }
 
     private void SelectParent()
@@ -328,9 +327,9 @@ internal sealed partial class HexScene
         string directory = document.Path is { } path ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)) ?? string.Empty : document.FallbackDirectory;
         string file = System.IO.Path.Combine(directory, include.File);
         if (File.Exists(file))
-            Open(file);
+            context.Documents.Open(file);
         else
-            Say($"there's no {include.File} next to the layout", error: true);
+            context.Notices.Say($"there's no {include.File} next to the layout", error: true);
     }
 
     private Menu ComponentMenu()
@@ -373,13 +372,13 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Helper method to show the menu of what's selected where the pointer is, in the editor's own UI.</summary>
-    private void ShowComponentMenu(Vector2 world) => contextMenu = ContextMenu.ShowAt(chrome, world, ComponentMenu());
+    private void ShowComponentMenu(Vector2 world) => context.Windows.MenuAt(ComponentMenu(), world);
 
     /// <summary>
     /// Helper method for a right click in the editor that nothing in its UI wanted: on the canvas it picks what's under the
     /// pointer (unless that's selected already, so a menu can be had for all of the selection) and shows the menu.
     /// </summary>
-    private void OnContextRequested(UIComponent? over, Vector2 world)
+    internal void OnContextRequested(UIComponent? over, Vector2 world)
     {
         if (!PointerOnCanvas(world))
             return;
@@ -395,7 +394,7 @@ internal sealed partial class HexScene
     /// The designer's commands, the clipboard of components, its zoom, the Layout menu and the keys that move what is
     /// selected about, which keep out of the way while something is being typed.
     /// </summary>
-    private void AddDesignerCommands()
+    internal void AddDesignerCommands()
     {
         Func<bool> design = () => LayoutTools;
         Func<bool> some = () => LayoutTools && document.Selected is not null;
@@ -431,16 +430,11 @@ internal sealed partial class HexScene
         FillScreenMenu(commands.AddMenu("Layout/screen", "Screen", "device-desktop"));
 
         // Escape puts away the little window on top first (the settings, a page of help), then what is selected
-        commands.Bind(Key.Escape, () => { if (!CloseTopWindow()) Select(null); });
+        commands.Bind(Key.Escape, () => { if (!window.CloseTopWindow()) Select(null); });
         commands.Bind(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Front), control: true);
         commands.Bind(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Back), control: true);
         commands.Bind(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Forward));
         commands.Bind(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Backward));
-
-        // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
-        commands.Bind(Key.Number0, () => { if (LayoutTools) ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
-        commands.Bind(Key.Equal, () => { if (LayoutTools) ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center); else ZoomCode(CODE_ZOOM_STEP); }, control: true, whileTyping: true);
-        commands.Bind(Key.Minus, () => { if (LayoutTools) ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center); else ZoomCode(1.0f / CODE_ZOOM_STEP); }, control: true, whileTyping: true);
 
         // With control the arrows move it about the tree instead of about the canvas
         commands.Bind(Key.Up, () => MoveSelected(-1), control: true);
@@ -485,5 +479,12 @@ internal sealed partial class HexScene
         into.AddSeparator();
         into.Add("Distribute Horizontally", () => Distribute(horizontally: true)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
         into.Add("Distribute Vertically", () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
+    }
+
+    /// <summary>The code of the layout, with the caret on the let of what is selected.</summary>
+    private void ShowSelectedCode()
+    {
+        if (document.Selected is { } selected)
+            window.ShowDeclaration(document.NameOf(selected));
     }
 }

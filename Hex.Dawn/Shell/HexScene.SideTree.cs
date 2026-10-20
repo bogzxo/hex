@@ -257,7 +257,7 @@ internal sealed partial class HexScene
 
         // Opening a row only shows what is in it, it doesn't go there, the way an outline does
         sideTree.Items = items;
-        RebuildLayers();
+        designer.RebuildLayers();
     }
 
     /// <summary>The colour of an icon of the outline, the same as the values give the same kind of thing.</summary>
@@ -326,7 +326,7 @@ internal sealed partial class HexScene
     /// <summary>The list in the side bar, whatever its view is.</summary>
     private void RebuildTree()
     {
-        treeRows.Clear();
+        designer.treeRows.Clear();
         fileRows.Clear();
         ApplySide();
 
@@ -339,7 +339,7 @@ internal sealed partial class HexScene
                 RebuildResults();
                 break;
             case HexSide.Design:
-                RebuildComponentTree();
+                designer.RebuildComponentTree();
                 break;
             default:
                 if (!RebuildSideView())

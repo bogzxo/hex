@@ -8,7 +8,7 @@ using Horizon.UI.Skinning;
 namespace Hex.Dawn;
 
 // What is selected in the canvas dragged bigger by its edges, and moves landing on the grid.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // How near an edge of what is selected in the canvas the pointer has hold of it, inside and out, in the layout's units
     private const float HANDLE_INSIDE = 7.0f, HANDLE_OUTSIDE = 5.0f;

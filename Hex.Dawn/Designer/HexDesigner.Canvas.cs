@@ -9,10 +9,10 @@ using MouseButton = Silk.NET.Input.MouseButton;
 namespace Hex.Dawn;
 
 // The canvas: zooming and panning about the layout, the screen it's previewed on, and what the layout says it's made for.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // How much a notch of the wheel zooms by, and how far in and out it goes
-    private const float ZOOM_STEP = 1.15f;
+    internal const float ZOOM_STEP = 1.15f;
     private const float MIN_ZOOM = 0.1f, MAX_ZOOM = 16.0f;
 
     // The edges of the layout, and of the screen it's previewed on when that's another shape
@@ -29,7 +29,7 @@ internal sealed partial class HexScene
     ];
 
     // How far past fitting the screen into the canvas it's zoomed in, and how far it's been dragged about (in the editor's units)
-    private float canvasZoom = 1.0f;
+    internal float canvasZoom = 1.0f;
     private Vector2 canvasPan;
     private float previewAspect;
 
@@ -59,19 +59,8 @@ internal sealed partial class HexScene
     /// Helper method to put the layout in the canvas: the preview screen fitted into it, then zoomed and panned however
     /// it's been, and cut off at the edges of the canvas.
     /// </summary>
-    private void PlaceCanvas()
+    internal void PlaceCanvas()
     {
-        // The dark behind the layouts, exactly what the middle shows. A hidden canvas isn't laid out any more, so with the
-        // code up it kept the size it had, and dragging the panel up had the dark show through the panel where the
-        // canvas used to be
-        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : running.Table.Visible ? running.Table : codeScroll;
-        if (!middle.Bounds.IsEmpty)
-        {
-            backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, middle.Bounds.Size);
-            backdrop.Position = middle.Bounds.Center;
-            backdrop.Scale = Vector2.One;
-        }
-
         UIRect area = canvas.Bounds;
         if (!canvas.Visible || area.IsEmpty)
             return;
@@ -93,7 +82,7 @@ internal sealed partial class HexScene
     /// <summary>
     /// Helper method to zoom the canvas by a factor, keeping whatever is under a point (in the editor's units) where it is.
     /// </summary>
-    private void ZoomCanvas(float factor, Vector2 around)
+    internal void ZoomCanvas(float factor, Vector2 around)
     {
         var module = document.Module;
         float before = module.Scale.X;
@@ -108,23 +97,23 @@ internal sealed partial class HexScene
         canvasPan = around - local * after - canvas.Bounds.Center;
         canvasZoom = zoom;
 
-        Say($"zoomed to {after * 100.0f / compositor.Scale:0}%");
+        context.Notices.Say($"zoomed to {after * 100.0f / compositor.Scale:0}%");
     }
 
-    private void ZoomToFit()
+    internal void ZoomToFit()
     {
         canvasZoom = 1.0f;
         canvasPan = Vector2.Zero;
-        Say("zoomed to fit");
+        context.Notices.Say("zoomed to fit");
     }
 
-    private void ZoomToActualSize()
+    internal void ZoomToActualSize()
     {
         // A unit of the layout a unit of the editor, which is a pixel at the editor's own scale of 1
         float fit = CanvasFit(canvas.Bounds, PreviewScreen());
         canvasZoom = fit > 0.0f ? 1.0f / fit : 1.0f;
         canvasPan = Vector2.Zero;
-        Say("actual size");
+        context.Notices.Say("actual size");
     }
 
     /// <summary>
@@ -133,8 +122,8 @@ internal sealed partial class HexScene
     /// </summary>
     private bool UpdateCanvasView(Vector2 inChrome, bool overCanvas, bool pressed)
     {
-        var mouse = Engine.Input.Mouse;
-        var keyboard = Engine.Input.Keyboard;
+        var mouse = window.Mouse;
+        var keyboard = context.Keyboard;
 
         if (overCanvas && mouse.Scroll != 0.0f && chrome.Popup is null)
             ZoomCanvas(MathF.Pow(ZOOM_STEP, mouse.Scroll), inChrome);
@@ -172,12 +161,12 @@ internal sealed partial class HexScene
         document.SetDesign(size, fit);
         codeDirty = inspectorDirty = true;
 
-        Say(size is { } made
+        context.Notices.Say(size is { } made
             ? $"made for {made.X:0} x {made.Y:0}, {(fit == UIFit.Contain ? "keeping its shape in the middle of other screens" : "stretching out over other screens")}"
             : "made for any screen: laid out against whatever it's shown on");
     }
 
-    private static string DescribeDesign(Vector2 size) => $"Design for {size.X:0} x {size.Y:0}";
+    internal static string DescribeDesign(Vector2 size) => $"Design for {size.X:0} x {size.Y:0}";
 
     /// <summary>What screen the layout is made for, how it goes on another one, and what it is previewed on, the Layout menu's Screen.</summary>
     private void FillScreenMenu(Menu made)
@@ -198,7 +187,7 @@ internal sealed partial class HexScene
             made.Add($"Preview on {name}", () =>
             {
                 previewAspect = aspect;
-                Say($"previewing on {name}");
+                context.Notices.Say($"previewing on {name}");
             }).IsChecked = () => previewAspect == aspect;
         }
     }
@@ -223,4 +212,8 @@ internal sealed partial class HexScene
             heldHovers.Add(at);
         }
     }
+
+    /// <summary>The canvas a step closer, or further, round its middle.</summary>
+    internal void ZoomCanvasIn() => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center);
+    internal void ZoomCanvasOut() => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center);
 }

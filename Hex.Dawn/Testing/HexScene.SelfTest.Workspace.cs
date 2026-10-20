@@ -248,14 +248,14 @@ internal sealed partial class HexScene
         {
             Open(savedFile);
             SwitchView(HexView.Design);
-            Select(document.Walk().Select(pair => pair.Component).FirstOrDefault());
+            designer.Select(document.Walk().Select(pair => pair.Component).FirstOrDefault());
         });
         test.Settle(0.3f);
         test.Run(RenameSelected);
         test.Wait();
         test.Check("conveniences: F2 in the designer puts the name of what is selected in front of you to type over", () =>
         {
-            bool found = editors.TryGetValue("name", out UIComponent? name);
+            bool found = designer.editors.TryGetValue("name", out UIComponent? name);
             Console.WriteLine($"[Hex self-test]   F2: selected {document.Selected?.GetType().Name}, editor {found} {name?.GetType().Name}, focus {compositor.Focus?.GetType().Name}, selection '{(name as TextBox)?.Selection}' of '{(name as TextBox)?.Text}', tools {LayoutTools}");
             return found && name is TextBox box && box.IsFocused && box.Selection == box.Text && box.Text.Length > 0;
         });

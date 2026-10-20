@@ -98,13 +98,9 @@ internal sealed partial class HexScene
         Say($"{problemStep + 1} of {problemList.Count}, {problem.Text}", error: !problem.Warning);
     }
 
-    /// <summary>The code of the layout, with the caret on the let of what is selected.</summary>
-    private void ShowSelectedCode()
+    /// <summary>The code of the layout, with the caret on the let of a name of it.</summary>
+    private void ShowDeclaration(string name)
     {
-        if (document.Selected is not { } selected)
-            return;
-
-        string name = document.NameOf(selected);
         SwitchView(HexView.Code);
 
         if (FindDeclaration(code.Text, name) is { } at)
@@ -130,7 +126,7 @@ internal sealed partial class HexScene
     /// <summary>F2 in the designer, the name of what is selected to type over, in its row of the properties.</summary>
     private void RenameSelected()
     {
-        if (document.Selected is null || !editors.TryGetValue("name", out UIComponent? editor) || editor is not TextBox box)
+        if (document.Selected is null || !designer.editors.TryGetValue("name", out UIComponent? editor) || editor is not TextBox box)
             return;
 
         inspectorScroll.ScrollIntoView(box);

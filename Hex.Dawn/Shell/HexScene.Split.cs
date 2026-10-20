@@ -8,7 +8,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // Two files side by side, Ctrl+\ (VS Code's editor groups, two at the most). The moves and the characters, a layout's code
-// and the texts it names, the shared file and the fighter's own. Both editors are in the code panel, one on its left and
+// and the texts it names, the shared file and the fighter's own. Both designer.editors are in the code panel, one on its left and
 // one on its right, and the document on screen (what the values, the outline and every command are about) is whichever
 // side has the keyboard, a click into the other side makes that one it. A tab opened goes into the side that's on screen,
 // "Open to the side" on a tab puts it in the other. Only code goes side by side, the designer, the table and an
@@ -97,7 +97,7 @@ internal sealed partial class HexScene
             splitRight = shown;
     }
 
-    /// <summary>The editors in the code panel, the one on screen alone filling it, or the two of a split side by side.</summary>
+    /// <summary>The designer.editors in the code panel, the one on screen alone filling it, or the two of a split side by side.</summary>
     private void PlaceEditors()
     {
         foreach (var child in codeScroll.Children.ToArray())

@@ -31,11 +31,11 @@ internal sealed partial class HexScene
         Pick("File", () => "New Layout");
         test.Wait();
         test.Check("tabs: a new layout has a tab of its own and is the one on screen", () =>
-            documents.Count == 2 && docTabs.Tabs.Count == 2 && docTabs.Selected == 1 && !documents[0].Module.Enabled && documents[1].Module.Enabled && treeRows.Count == 0);
+            documents.Count == 2 && docTabs.Tabs.Count == 2 && docTabs.Selected == 1 && !documents[0].Module.Enabled && documents[1].Module.Enabled && designer.treeRows.Count == 0);
 
         test.Click(In(() => docTabs.TabBounds(0), 0.3f, 0.5f));
         test.Wait();
-        test.Check("tabs: clicking a tab shows its layout", () => document == documents[0] && nameBox.Text == "selftest_menu" && treeRows.Count == 3);
+        test.Check("tabs: clicking a tab shows its layout", () => document == documents[0] && nameBox.Text == "selftest_menu" && designer.treeRows.Count == 3);
 
         Pick("File", () => "Close");
         test.Wait();
@@ -71,7 +71,7 @@ internal sealed partial class HexScene
         test.Check("open: and the first row goes back up", () => browseDirectory == testFolder);
         Pick("File", () => "Open...");
         test.Wait();
-        test.Check("open: pressing open again goes back to the layout", () => !browsing && treeRows.Count == 3);
+        test.Check("open: pressing open again goes back to the layout", () => !browsing && designer.treeRows.Count == 3);
     }
 
     // A layout somebody wrote notes into, over the header, the design, a component, and one inside a component
@@ -134,16 +134,16 @@ internal sealed partial class HexScene
             && startHidden.All(document.Module.IsLayerHidden) && chrome.HiddenLayers.Count == 0);
 
         // The list of layers is short, the row scrolled to first the way somebody would
-        test.Run(() => layersScroll.ScrollIntoView(layerRows["code"]));
+        test.Run(() => layersScroll.ScrollIntoView(designer.layerRows["code"]));
         test.Wait();
-        test.Click(At(() => layerRows.GetValueOrDefault("code")));
+        test.Click(At(() => designer.layerRows.GetValueOrDefault("code")));
         test.Wait();
         test.Check("layers: a click on one shows it to work on, and the code says the layout starts with the rest hidden", () =>
             !document.Module.IsLayerHidden("code") && Code().Contains("compositor.hidden_layers([\"files\", \"table\", \"extension\", \"values\"]);"));
 
-        test.Run(() => layersScroll.ScrollIntoView(layerRows["code"]));
+        test.Run(() => layersScroll.ScrollIntoView(designer.layerRows["code"]));
         test.Wait();
-        test.Click(At(() => layerRows.GetValueOrDefault("code")));
+        test.Click(At(() => designer.layerRows.GetValueOrDefault("code")));
         test.Wait();
         test.Check("layers: and another hides it again", () => document.Module.IsLayerHidden("code") && Code().Contains("\"code\""));
 
@@ -210,12 +210,12 @@ internal sealed partial class HexScene
 
         // Zoomed far in the layout is bigger than the canvas, and neither it nor the boxes the debugger draws
         // about it may run on out of the canvas over the lists either side
-        test.Run(() => ZoomCanvas(8.0f, canvas.Bounds.Center));
+        test.Run(() => designer.ZoomCanvas(8.0f, canvas.Bounds.Center));
         test.Settle(0.4f);
         test.Check("debugger: zoomed in, the layout and what is drawn about it are cut off at the canvas", () =>
             document.Module.Clip is { } cut && Near(cut.Width * document.Module.Scale.X, canvas.Bounds.Width, 1.0f)
             && Near(cut.Height * document.Module.Scale.Y, canvas.Bounds.Height, 1.0f) && document.Module.Frame.Width * document.Module.Scale.X > canvas.Bounds.Width);
-        test.Run(ZoomToFit);
+        test.Run(designer.ZoomToFit);
         test.Wait();
         Pick("View", () => "Layout Debugger");
         test.Wait();

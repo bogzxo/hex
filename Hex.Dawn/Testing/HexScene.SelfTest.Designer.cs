@@ -36,7 +36,7 @@ internal sealed partial class HexScene
         test.Check("welcome: and gone once it isn't wanted", () => welcome is not { Visible: true });
 
         test.Check("bootstrap: the palette was filled from its template", () =>
-            paletteButtons.Count == Palette.Length && paletteButtons[0].Label == "stack" && paletteButtons[0].Parent == layout.Get<GridPanel>("palette"));
+            designer.paletteButtons.Count == HexDesigner.Palette.Length && designer.paletteButtons[0].Label == "stack" && designer.paletteButtons[0].Parent == layout.Get<GridPanel>("palette"));
     }
 
     private void TestAdding(HexPointerScript test)
@@ -57,7 +57,7 @@ internal sealed partial class HexScene
         test.Check("add: and next to the selection when that isn't a container", () =>
             (label = document.Selected) is Label && label.Parent == stack && document.Walk().Count() == 3);
         test.Check("tree: a row for each of them, the selected one lit", () =>
-            treeRows.Count == 3 && treeRows[label!].Selected && !treeRows[button!].Selected);
+            designer.treeRows.Count == 3 && designer.treeRows[label!].Selected && !designer.treeRows[button!].Selected);
         test.Check("code: written in the order they are in the layout", () =>
         {
             string written = Code();
@@ -76,12 +76,12 @@ internal sealed partial class HexScene
         test.Check("canvas: clicking a component selects it", () => document.Selected == button);
         test.Check("canvas: and has the UI mark it out", () => stage.Highlighted == button);
         test.Check("inspector: a row for every property of a button", () =>
-            editors.ContainsKey("label") && editors.ContainsKey("size") && editors.ContainsKey("anchor") && editors.ContainsKey("visible")
-            && editors["label"] is TextBox { Text: "Button" } && !editors.ContainsKey("on_pressed"));
+            designer.editors.ContainsKey("label") && designer.editors.ContainsKey("size") && designer.editors.ContainsKey("anchor") && designer.editors.ContainsKey("visible")
+            && designer.editors["label"] is TextBox { Text: "Button" } && !designer.editors.ContainsKey("on_pressed"));
 
         test.Click(Row(() => label));
         test.Wait();
-        test.Check("tree: clicking a row selects its component", () => document.Selected == label && editors["text"] is TextBox { Text: "Label" });
+        test.Check("tree: clicking a row selects its component", () => document.Selected == label && designer.editors["text"] is TextBox { Text: "Label" });
 
         test.Click(Row(() => button));
         test.Wait();
@@ -91,34 +91,34 @@ internal sealed partial class HexScene
     {
         /* Editing properties */
 
-        test.Click(At(() => editors["label"]));
+        test.Click(At(() => designer.editors["label"]));
         test.Wait();
-        test.Check("inspector: clicking a text box gives it the focus", () => editors["label"].IsFocused);
+        test.Check("inspector: clicking a text box gives it the focus", () => designer.editors["label"].IsFocused);
 
-        test.Run(() => TypeInto((TextBox)editors["label"], "Fight"));
+        test.Run(() => TypeInto((TextBox)designer.editors["label"], "Fight"));
         test.Wait();
         test.Check("inspector: typing changes the component", () => ((Button)button!).Label == "Fight");
         test.Check("inspector: and the code, on screen as well", () => Code().Contains("label: \"Fight\"") && code.Text.Contains("label: \"Fight\""));
 
-        test.Run(() => grab = At(() => ((StackPanel)editors["size"]).Children[0], 0.3f)());
+        test.Run(() => grab = At(() => ((StackPanel)designer.editors["size"]).Children[0], 0.3f)());
         test.Drag(() => grab, () => grab + new Vector2(160, 0) * compositor.UIScale);
         test.Wait();
-        test.Check("inspector: dragging across a number box changes the number", () => Near(button!.Size.X, 40, 1.5f) && Code().Contains("size: vec("));
+        test.Check("inspector: designer.dragging across a number box changes the number", () => Near(button!.Size.X, 40, 1.5f) && Code().Contains("size: vec("));
 
-        test.Click(At(() => editors["anchor"]));
+        test.Click(At(() => designer.editors["anchor"]));
         test.Wait();
         test.Check("dropdown: clicking it opens its list on top of the inspector", () =>
-            editors["anchor"] is Dropdown { IsOpen: true } open && chrome.Popup == open);
+            designer.editors["anchor"] is Dropdown { IsOpen: true } open && chrome.Popup == open);
         test.Click(Option("anchor", 1));
         test.Wait();
         test.Check("dropdown: clicking an option chooses it and closes the list", () =>
-            button!.Anchor == Horizon.Rendering.Origin.TopLeft && Code().Contains("anchor: \"top_left\"") && editors["anchor"] is Dropdown { IsOpen: false });
-        test.Click(At(() => editors["anchor"]));
+            button!.Anchor == Horizon.Rendering.Origin.TopLeft && Code().Contains("anchor: \"top_left\"") && designer.editors["anchor"] is Dropdown { IsOpen: false });
+        test.Click(At(() => designer.editors["anchor"]));
         test.Click(Option("anchor", 0));
         test.Wait();
         test.Check("dropdown: and back, which takes it out of the code again", () => button!.Anchor == Horizon.Rendering.Origin.Center && !Code().Contains("anchor:"));
-        test.Click(At(() => editors["anchor"]));
-        test.Click(At(() => editors["kind"]));
+        test.Click(At(() => designer.editors["anchor"]));
+        test.Click(At(() => designer.editors["kind"]));
         test.Wait();
         test.Check("dropdown: clicking anywhere else closes the list and changes nothing", () =>
             chrome.Popup is null && button!.Anchor == Horizon.Rendering.Origin.Center);
@@ -129,7 +129,7 @@ internal sealed partial class HexScene
         /* Entrances */
 
         Reveal("intro_time");
-        test.Click(At(() => editors["intro"]));
+        test.Click(At(() => designer.editors["intro"]));
         test.Click(Option("intro", 1));
         test.Wait();
         test.Check("intro: a component can be told to pop in", () => button!.Intro == UIIntro.Pop && Code().Contains("intro: \"pop\""));
@@ -140,14 +140,14 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("intro: the play button next to the name of the layout plays them again", () => button!.Tweens.Count > 0);
 
-        test.Click(At(() => ((StackPanel)editors["intro_time"]).Children[0]));
+        test.Click(At(() => ((StackPanel)designer.editors["intro_time"]).Children[0]));
         test.Wait();
         test.Check("slider: clicking halfway along sets the number halfway", () =>
             Near(button!.IntroTime, 1.0f, 0.12f) && Code().Contains("intro_time: ")
-            && ((StackPanel)editors["intro_time"]).Children[1] is NumberBox shown && Near(shown.Value, button.IntroTime, 0.001f));
+            && ((StackPanel)designer.editors["intro_time"]).Children[1] is NumberBox shown && Near(shown.Value, button.IntroTime, 0.001f));
 
-        test.Run(() => TypeInto((NumberBox)((StackPanel)editors["intro_time"]).Children[1], "0.35"));
-        test.Click(At(() => editors["intro"]));
+        test.Run(() => TypeInto((NumberBox)((StackPanel)designer.editors["intro_time"]).Children[1], "0.35"));
+        test.Click(At(() => designer.editors["intro"]));
         test.Click(Option("intro", 0));
         test.Wait();
         test.Check("intro: put back, there is nothing about it in the code", () =>
@@ -163,17 +163,17 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             settled = Code();
-            TypeInto((TextBox)editors["label"], "Brawl");
+            TypeInto((TextBox)designer.editors["label"], "Brawl");
         });
         test.Settle(0.6f);
-        test.Check("undo: the button is lit once there is something to take back", () => (document.CanUndo || recordPending) && ((Button)button!).Label == "Brawl");
+        test.Check("undo: the button is lit once there is something to take back", () => (document.CanUndo || designer.recordPending) && ((Button)button!).Label == "Brawl");
 
         Pick("Edit", () => "Undo");
         test.Settle(0.3f);
         test.Check("undo: takes the last change back, and only that one", () =>
             Code() == settled && document.Find("button1") is Button { Label: "Fight" });
         test.Check("undo: what was selected still is", () =>
-            document.Selected == document.Find("button1") && stage.Highlighted == document.Selected && editors["label"] is TextBox { Text: "Fight" });
+            document.Selected == document.Find("button1") && stage.Highlighted == document.Selected && designer.editors["label"] is TextBox { Text: "Fight" });
 
         Pick("Edit", () => "Redo");
         test.Settle(0.3f);
@@ -190,31 +190,31 @@ internal sealed partial class HexScene
         });
         test.Check("undo: and takes it back again", () => Code() == settled && button is Button { Label: "Fight" } && document.CanRedo);
 
-        test.Click(At(() => editors["visible"], 0.9f));
+        test.Click(At(() => designer.editors["visible"], 0.9f));
         test.Wait();
         test.Check("inspector: hiding a component greys its row out", () => !button!.Visible && Code().Contains("visible: false"));
-        test.Click(At(() => editors["visible"], 0.9f));
+        test.Click(At(() => designer.editors["visible"], 0.9f));
         test.Wait();
 
-        test.Run(() => TypeInto((TextBox)editors["name"], "start_button"));
+        test.Run(() => TypeInto((TextBox)designer.editors["name"], "start_button"));
         test.Wait();
         test.Check("rename: the code and the tree go by the new name", () =>
             document.NameOf(button!) == "start_button" && Code().Contains("let start_button = compositor.button(")
-            && treeRows[button!].Children[0] is Label { Text: var row } && row.Contains("start_button") && row.Contains("button[/color]"));
+            && designer.treeRows[button!].Children[0] is Label { Text: var row } && row.Contains("start_button") && row.Contains("button[/color]"));
 
-        test.Run(() => TypeInto((TextBox)editors["name"], "label1"));
+        test.Run(() => TypeInto((TextBox)designer.editors["name"], "label1"));
         test.Wait();
         test.Check("rename: a name another component has is refused", () => document.NameOf(button!) != "label1" && document.NameOf(label!) == "label1");
-        test.Run(() => TypeInto((TextBox)editors["name"], "start_button"));
+        test.Run(() => TypeInto((TextBox)designer.editors["name"], "start_button"));
         test.Wait();
 
         // Resting on what a property is called says what it does, and so does resting on its editor
-        UIComponent CaptionOf(string property) => editors[property].Parent!.Parent!.Children[0];
+        UIComponent CaptionOf(string property) => designer.editors[property].Parent!.Parent!.Children[0];
         test.Hover(At(() => CaptionOf("pos")));
         test.Settle(0.8f);
         test.Check("help: resting on a property's name brings up what it does", () =>
             compositor.TooltipOf == CaptionOf("pos") && compositor.TooltipOf!.Tooltip.Contains("anchor"));
-        test.Hover(At(() => editors["anchor"]));
+        test.Hover(At(() => designer.editors["anchor"]));
         test.Settle(0.8f);
         test.Check("help: and so does resting on its editor", () =>
             compositor.TooltipOf is { } helping && helping.Tooltip.Contains("parent") && helping != CaptionOf("pos"));
@@ -228,7 +228,7 @@ internal sealed partial class HexScene
 
         test.Click(Part("canvas", 0.04f, 0.06f));
         test.Wait();
-        test.Check("canvas: clicking where there is nothing selects nothing", () => document.Selected is null && editors.Count == 0);
+        test.Check("canvas: clicking where there is nothing selects nothing", () => document.Selected is null && designer.editors.Count == 0);
 
         test.Click(Kind("panel"));
         test.Wait();
@@ -243,10 +243,10 @@ internal sealed partial class HexScene
         });
         test.Drag(() => grab, () => grab + pull * compositor.UIScale);
         test.Wait();
-        test.Check("canvas: dragging moves a component by as much of the layout as the pointer covered", () =>
+        test.Check("canvas: designer.dragging moves a component by as much of the layout as the pointer covered", () =>
             Vector2.Distance(panel!.Position - before, pull / document.Module.Scale.X) < 2.5f && Code().Contains("pos: vec("));
         test.Check("canvas: and the inspector shows where it ended up", () =>
-            editors["pos"] is StackPanel row && row.Children[0] is NumberBox x && Near(x.Value, panel!.Position.X, 0.01f));
+            designer.editors["pos"] is StackPanel row && row.Children[0] is NumberBox x && Near(x.Value, panel!.Position.X, 0.01f));
     }
 
     private void TestReordering(HexPointerScript test)
@@ -261,22 +261,22 @@ internal sealed partial class HexScene
     {
         /* Colours */
 
-        ColorPicker Picker() => (ColorPicker)((StackPanel)editors["color"]).Children[0];
+        ColorPicker Picker() => (ColorPicker)((StackPanel)designer.editors["color"]).Children[0];
 
         // The colour is the last but one of what a label has, in a small window that is past the end of what is in sight
         Reveal("color");
         test.Check("colour: a colour has a picker and its four numbers", () =>
-            editors["color"] is StackPanel { Children: [ColorPicker, StackPanel { Children.Count: 4 }] });
+            designer.editors["color"] is StackPanel { Children: [ColorPicker, StackPanel { Children.Count: 4 }] });
         test.Click(In(() => Picker().AlphaBounds, 0.5f, 0.97f));
         test.Drag(In(() => Picker().ShadeBounds, 0.3f, 0.4f), In(() => Picker().ShadeBounds, 0.95f, 0.95f));
         test.Wait();
-        test.Check("colour: dragging through the square picks a shade, the strip how solid it is", () =>
+        test.Check("colour: designer.dragging through the square picks a shade, the strip how solid it is", () =>
             ((Label)label!).Color is { X: > 0.8f, Y: < 0.2f, Z: < 0.2f, W: > 0.9f } && Code().Contains("color: vec("));
         test.Click(In(() => Picker().HueBounds, 0.5f, 0.34f));
         test.Wait();
         test.Check("colour: the other strip picks the hue", () => ((Label)label!).Color is { X: < 0.2f, Y: > 0.8f, W: > 0.9f });
         test.Check("colour: and the numbers follow", () =>
-            ((StackPanel)editors["color"]).Children[1].Children[1] is NumberBox green && Near(green.Value, ((Label)label!).Color!.Value.Y, 0.002f));
+            ((StackPanel)designer.editors["color"]).Children[1].Children[1] is NumberBox green && Near(green.Value, ((Label)label!).Color!.Value.Y, 0.002f));
     }
 
     private void TestSectionsAndKeys(HexPointerScript test)
@@ -285,7 +285,7 @@ internal sealed partial class HexScene
 
         Collapsible Section(string editor)
         {
-            UIComponent? at = editors[editor];
+            UIComponent? at = designer.editors[editor];
             while (at is not null and not Collapsible)
                 at = at.Parent;
             return (Collapsible)at!;
@@ -298,9 +298,9 @@ internal sealed partial class HexScene
         test.WaitFor(() => Section("intro").Openness == 0.0f, 1.0f);
         test.Check("sections: a click on the bar folds it away, and only it", () =>
             Section("intro") is { Expanded: false, Openness: 0.0f } && Section("pos").Expanded);
-        test.Run(() => Select(stack));
+        test.Run(() => designer.Select(stack));
         test.Wait();
-        test.Run(() => Select(label));
+        test.Run(() => designer.Select(label));
         test.Wait();
         test.Check("sections: and it stays folded for the next thing selected", () => !Section("intro").Expanded);
         Reveal("intro");
@@ -309,25 +309,25 @@ internal sealed partial class HexScene
         test.Check("sections: and out again", () => Section("intro") is { Expanded: true, Openness: 1.0f });
 
         Reveal("text");
-        test.Click(At(() => editors["text"]));
+        test.Click(At(() => designer.editors["text"]));
         test.Wait();
         test.Run(() => compositor.FocusNext());
         test.Wait();
         test.Check("tab: the next box has all of what is in it picked out, to type over", () =>
-            compositor.Focus is TextBox { Text.Length: > 0 } next && next != editors["text"] && next.Selection == next.Text);
+            compositor.Focus is TextBox { Text.Length: > 0 } next && next != designer.editors["text"] && next.Selection == next.Text);
         test.Run(() => compositor.FocusNext(-1));
         test.Wait();
         test.Check("tab: and shift goes back, all of it picked out again", () =>
-            compositor.Focus == editors["text"] && ((TextBox)editors["text"]).Selection == ((TextBox)editors["text"]).Text);
+            compositor.Focus == designer.editors["text"] && ((TextBox)designer.editors["text"]).Selection == ((TextBox)designer.editors["text"]).Text);
         test.Run(() => compositor.Focus = null);
 
         test.Run(() => treeScroll.Offset = treeScroll.MaxOffset);
-        test.Run(() => Select(stack));
-        test.WaitFor(() => !treeReveal, 1.0f);
+        test.Run(() => designer.Select(stack));
+        test.WaitFor(() => !designer.treeReveal, 1.0f);
         test.Wait();
         test.Check("tree: selecting something scrolls its row into sight", () =>
-            treeRows[stack!].Bounds is var row && treeScroll.Bounds.Contains(row.Center) && treeScroll.Bounds.Shrink(treeScroll.Padding).Max.Y >= row.Max.Y - 0.5f);
-        test.Run(() => Select(label));
+            designer.treeRows[stack!].Bounds is var row && treeScroll.Bounds.Contains(row.Center) && treeScroll.Bounds.Shrink(treeScroll.Padding).Max.Y >= row.Max.Y - 0.5f);
+        test.Run(() => designer.Select(label));
         test.Wait();
 
         Pick("Layout", () => "Move Up");
@@ -340,7 +340,7 @@ internal sealed partial class HexScene
 
         test.Click(Part("move_up"));
         test.Wait();
-        test.Check("reorder: the buttons over the tree do the same", () => stack!.Children[0] == label && treeRows[label!].Selected);
+        test.Check("reorder: the buttons over the tree do the same", () => stack!.Children[0] == label && designer.treeRows[label!].Selected);
         test.Click(Part("move_down"));
         test.Wait();
         test.Check("reorder: there and back", () => stack!.Children[1] == label);
@@ -369,23 +369,23 @@ internal sealed partial class HexScene
 
         UIComponent? pasted = null;
         int rowsBefore = 0;
-        test.Run(() => rowsBefore = treeRows.Count);
+        test.Run(() => rowsBefore = designer.treeRows.Count);
         Pick("Edit", () => "Copy");
         Pick("Edit", () => "Paste");
         test.Wait();
         test.Check("clipboard: a copy is pasted next to what's selected, with a name of its own, and selected", () =>
             (pasted = document.Selected) is Label && pasted != label && pasted.Parent == stack
-            && document.NameOf(pasted) != document.NameOf(label!) && treeRows.Count == rowsBefore + 1);
+            && document.NameOf(pasted) != document.NameOf(label!) && designer.treeRows.Count == rowsBefore + 1);
         Pick("Edit", () => "Cut");
         test.Wait();
-        test.Check("clipboard: cut takes it out again", () => pasted!.Parent is null && treeRows.Count == rowsBefore && document.Selected is null);
+        test.Check("clipboard: cut takes it out again", () => pasted!.Parent is null && designer.treeRows.Count == rowsBefore && document.Selected is null);
         test.Click(Row(() => label));
         test.Wait();
 
         Pick("Edit", () => "Delete");
         test.Wait();
         test.Check("delete: gone from the layout, the tree and the code", () =>
-            label!.Parent is null && !treeRows.ContainsKey(label) && !Code().Contains("label1") && document.Selected is null && treeRows.Count == 3);
+            label!.Parent is null && !designer.treeRows.ContainsKey(label) && !Code().Contains("label1") && document.Selected is null && designer.treeRows.Count == 3);
     }
 
     private void TestTemplates(HexPointerScript test)
@@ -400,13 +400,13 @@ internal sealed partial class HexScene
         test.Wait();
         test.Run(() =>
         {
-            ((TextBox)editors["template"]).Insert("item.hor");
-            TypeInto((NumberBox)editors["preview_count"], "3");
+            ((TextBox)designer.editors["template"]).Insert("item.hor");
+            TypeInto((NumberBox)designer.editors["preview_count"], "3");
         });
         test.Settle(0.3f);
         test.Check("templates: a container shows items made from its template", () => document.PreviewCount == 3 && stack!.Children.Count == 4);
         test.Check("templates: which are in neither the tree nor the code", () =>
-            document.Walk().Count() == 3 && treeRows.Count == 3 && Code().Contains("template: \"item.hor\"") && !Code().Contains("an item"));
+            document.Walk().Count() == 3 && designer.treeRows.Count == 3 && Code().Contains("template: \"item.hor\"") && !Code().Contains("an item"));
 
         test.Click(At(() => stack!.Children[^1]));
         test.Wait();

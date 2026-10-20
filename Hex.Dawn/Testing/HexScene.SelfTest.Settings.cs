@@ -62,7 +62,7 @@ internal sealed partial class HexScene
         Label? overCanvas = null;
         test.Run(() =>
         {
-            Select(document.Walk().Select(pair => pair.Component).FirstOrDefault());
+            designer.Select(document.Walk().Select(pair => pair.Component).FirstOrDefault());
             keptSelected = document.Selected;
             overCanvas = Descendants(SettingsWindow!).OfType<Label>()
                 .FirstOrDefault(label => label.Visible && canvas.Bounds.Contains(label.Bounds.Center) && label.Bounds.Width > 20);

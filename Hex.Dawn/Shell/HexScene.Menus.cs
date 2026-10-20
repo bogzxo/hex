@@ -27,7 +27,7 @@ internal sealed partial class HexScene
     {
         // C# is debugged, and while something is being debugged F5 goes on from where it stopped
         if (debugger.DebugStopped || (!LayoutTools && HexDebugging.IsCSharp(document.Path))) debugger.DebugOrContinue();
-        else if (LayoutTools) PlayIntros();
+        else if (LayoutTools) designer.PlayIntros();
         else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && tasks.DefaultTask("run") is { } task) tasks.Run(task);
         else running.RunCode();
     }
@@ -54,7 +54,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void AddWindowCommands()
     {
-        commands.Add("View/palette", "Command Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", "Command HexDesigner.Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
         commands.Bind(Key.F1, CommandPalette, whileTyping: true);
         commands.Add("View/palette", "Dusk, the Terminal", SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
 
@@ -87,6 +87,11 @@ internal sealed partial class HexScene
         // game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set to
         // the same, and the editor itself stays in its flat one
         AddSkins(commands.AddMenu("View/look", "Layout Skin", "paintcan"));
+
+        // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
+        commands.Bind(Key.Number0, () => { if (LayoutTools) designer.ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
+        commands.Bind(Key.Equal, () => { if (LayoutTools) designer.ZoomCanvasIn(); else ZoomCode(CODE_ZOOM_STEP); }, control: true, whileTyping: true);
+        commands.Bind(Key.Minus, () => { if (LayoutTools) designer.ZoomCanvasOut(); else ZoomCode(1.0f / CODE_ZOOM_STEP); }, control: true, whileTyping: true);
 
         // Nothing types an F5, so it plays the entrances from a text box as well, see RunOrPlay
         commands.Bind(Key.F5, RunOrPlay, whileTyping: true, shift: false);

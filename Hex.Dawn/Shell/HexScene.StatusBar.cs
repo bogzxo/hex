@@ -25,7 +25,6 @@ internal sealed partial class HexScene
     private HexDocument? languageFor;
 
     // How many components the layout has, counted when its tree is put together, not walked again every tick
-    private int componentCount;
 
     // What the items were last written from, so a number is only made into text when it changes
     private (int Line, int Column, int Selected, int Version)? caretShown;
@@ -67,11 +66,11 @@ internal sealed partial class HexScene
         coordsItem.IsVisible = Design;
         componentsItem = statusBar.Add(string.Empty, right: true, pressed: () => ShowSide(HexSide.Design), tooltip: "How many components the layout has, and how many are selected");
         componentsItem.IsVisible = Design;
-        zoomItem = statusBar.Add("$(zoom-in) 100%", right: true, pressed: ZoomToFit, tooltip: "How big the layout is drawn, click to fit it to the canvas (Ctrl+0)");
+        zoomItem = statusBar.Add("$(zoom-in) 100%", right: true, pressed: designer.ZoomToFit, tooltip: "How big the layout is drawn, click to fit it to the canvas (Ctrl+0)");
         zoomItem.IsVisible = Design;
         skinItem = statusBar.Add(string.Empty, right: true, pressed: ShowSkinMenu, tooltip: "The skin the layout is shown in, a game's setting, click for the others");
         skinItem.IsVisible = Design;
-        screenItem = statusBar.Add($"$(device-desktop) {DesignSize.X:0} x {DesignSize.Y:0}", right: true, tooltip: "The screen the layout is laid out for");
+        screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: "The screen the layout is laid out for");
         screenItem.IsVisible = Design;
 
         caretItem.MinWidth = 120.0f;
@@ -130,7 +129,7 @@ internal sealed partial class HexScene
             return;
         }
 
-        int count = componentCount;
+        int count = designer.componentCount;
         if (componentsShown != (count, document.Selection.Count))
         {
             componentsShown = (count, document.Selection.Count);
@@ -139,10 +138,10 @@ internal sealed partial class HexScene
                 : $"$(symbol-class) {count} components";
         }
 
-        if (canvasZoom != zoomShown)
+        if (designer.canvasZoom != zoomShown)
         {
-            zoomShown = canvasZoom;
-            zoomItem.Text = $"$(zoom-in) {canvasZoom * 100.0f:0}%";
+            zoomShown = designer.canvasZoom;
+            zoomItem.Text = $"$(zoom-in) {designer.canvasZoom * 100.0f:0}%";
         }
 
         if (skinShown != (UISkins.Current, UISkins.Theme))

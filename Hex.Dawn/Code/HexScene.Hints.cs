@@ -52,8 +52,8 @@ internal sealed partial class HexScene
         // The kind of a component, compositor.button
         if (before.EndsWith("compositor.", StringComparison.Ordinal))
         {
-            string described = Describe(word);
-            return described.Length > 0 ? $"$({KindIcon(word)}) **{word}**, a kind of component\n\n{described}" : $"**{word}**, no kind of component Hex knows";
+            string described = HexDesigner.Describe(word);
+            return described.Length > 0 ? $"$({HexDesigner.KindIcon(word)}) **{word}**, a kind of component\n\n{described}" : $"**{word}**, no kind of component Hex knows";
         }
 
         // A property of the component being made, padding: in compositor.label({ ... })
@@ -159,7 +159,7 @@ internal sealed partial class HexScene
         shown.AddSeparator();
         shown.Add("Cut", () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X").IsEnabled = () => hasSelection && !editor.ReadOnly;
         shown.Add("Copy", () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
-        shown.Add("Select all", () => editor.Document.SelectAll(), "Ctrl+A");
+        shown.Add("designer.Select all", () => editor.Document.SelectAll(), "Ctrl+A");
         shown.AddSeparator();
         shown.Add("Comment lines in and out", () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
         shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");

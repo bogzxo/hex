@@ -10,20 +10,12 @@ using Horizon.UI.Scripting;
 namespace Hex.Dawn;
 
 // The inspector, one row per property of whatever is selected.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     /* The inspector: one row per property of whatever is selected, each with an editor for the kind of value it is */
 
-    private void RebuildInspector()
+    internal void RebuildInspector()
     {
-        // The code of a file (or of a layout) has no components, it has what is wrong with it and what running it came to
-        if (!LayoutTools)
-        {
-            running.RebuildCodeInspector();
-            return;
-        }
-
-        running.ValuesTree.Visible = false;
         inspectorScroll.Visible = true;
 
         editors.Clear();
@@ -34,7 +26,7 @@ internal sealed partial class HexScene
 
         if (document.Selected is not { } selected)
         {
-            Hint(inspector, "select something in the canvas\nor in the layout on the left");
+            window.Hint(inspector, "select something in the canvas\nor in the layout on the left");
             return;
         }
 
@@ -92,14 +84,6 @@ internal sealed partial class HexScene
     /// <summary>Helper method to build one of the inspector's templates inside of something.</summary>
     private UILayout Editor(EditorTemplate template, UIComponent into) => layout.Instantiate(TemplateOf(template), into);
 
-    /// <summary>Helper method to say something where a list has nothing in it, out of hint.hor.</summary>
-    private Label Hint(UIComponent into, string text)
-    {
-        var hint = layout.Instantiate(HINT_TEMPLATE, into).Get<Label>("hint");
-        hint.Text = text;
-        return hint;
-    }
-
     private UIComponent NameEditor(UIComponent selected, UIComponent into)
     {
         var box = Editor(EditorTemplate.Text, into).Get<TextBox>("box");
@@ -111,11 +95,11 @@ internal sealed partial class HexScene
             if (document.Rename(selected, text))
             {
                 treeDirty = codeDirty = true;
-                Say($"renamed to {text}");
+                context.Notices.Say($"renamed to {text}");
             }
             else
             {
-                Say($"'{text}' can't be its name: taken, or not a name a variable can have", error: true);
+                context.Notices.Say($"'{text}' can't be its name: taken, or not a name a variable can have", error: true);
             }
         };
 
@@ -179,10 +163,10 @@ internal sealed partial class HexScene
     /// Helper method to play the entrance of everything in the layout from the start, the way loading it in a
     /// program does. The whole of it and not only what is selected, a delay means nothing without the rest.
     /// </summary>
-    private void PlayIntros()
+    internal void PlayIntros()
     {
         document.PlayIntros();
-        Say("playing the entrances, F5 does it again");
+        context.Notices.Say("playing the entrances, F5 does it again");
     }
 
     // The properties that name a piece of art of the skin, the look of anything that has one, a panel's backdrop,
@@ -190,7 +174,7 @@ internal sealed partial class HexScene
     private static readonly HashSet<string> ArtProperties = ["style", "background", "region", "handle"];
 
     // The menu of art that was opened last, for the self-test to find its tiles
-    private ArtPicker? artPicker;
+    internal ArtPicker? artPicker;
 
     /// <summary>
     /// Helper method to add a row for a property, the row out of the inspector's template and its editor made inside of
@@ -302,7 +286,7 @@ internal sealed partial class HexScene
                     {
                         box.Text = chosen;
                         Set(target, name, new StringValue(chosen));
-                        Say($"{name} is {chosen}");
+                        context.Notices.Say($"{name} is {chosen}");
                     });
                 }
 
@@ -388,11 +372,11 @@ internal sealed partial class HexScene
     /// What the rest of the selection gets, worked out of what each of them has now, for a change that is only to a
     /// part of the value (one number of a position). Null from it leaves that one alone, left out they all get the value.
     /// </param>
-    private void Set(UIComponent target, string name, IRuntimeValue value, Func<IRuntimeValue, IRuntimeValue?>? forOthers = null)
+    internal void Set(UIComponent target, string name, IRuntimeValue value, Func<IRuntimeValue, IRuntimeValue?>? forOthers = null)
     {
         if (HexDocument.Write(target, name, value) is { } problem)
         {
-            Say(problem, error: true);
+            context.Notices.Say(problem, error: true);
             return;
         }
 
@@ -414,7 +398,7 @@ internal sealed partial class HexScene
         }
 
         if (others > 0)
-            Say($"{name.Replace('_', ' ')} changed for {others + 1} things");
+            context.Notices.Say($"{name.Replace('_', ' ')} changed for {others + 1} things");
 
         codeDirty = true;
 
@@ -432,6 +416,6 @@ internal sealed partial class HexScene
 
         // What a container is shown filled with is up to these two
         if (name is "template" or "preview_count" or "file" && document.RefreshPreviews() is { } missing)
-            Say(missing, error: true);
+            context.Notices.Say(missing, error: true);
     }
 }

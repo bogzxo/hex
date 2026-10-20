@@ -24,6 +24,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private HexTerminalFiles terminalFiles = null!;
     private HexExtensions extensions = null!;
     private HexRunning running = null!;
+    private HexDesigner designer = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, commands, options,
@@ -175,6 +176,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
         AskText(title, text, value, button, typed, box => box.Placeholder = placeholder);
 
     void IWindows.Menu(Menu menu) => contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
+    void IWindows.MenuAt(Menu menu, Vector2 at) => contextMenu = ContextMenu.ShowAt(chrome, at, menu);
     string IWindows.BrowseFolder => browseDirectory;
     void IWindows.Choose(string title, string message, List<(string Text, Action Picked)> choices) => ChooseFrom(title, message, choices);
 
@@ -305,4 +307,33 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void IEditorWindow.Grip(UIComponent panel, UIResize edge, bool left) => SideGrip(panel, edge, left);
     Label IEditorWindow.Hint(UIComponent into, string text) => Hint(into, text);
     List<OutlineEntry> IEditorWindow.Outline() => OutlineHere();
+
+    UICompositor IEditorWindow.Stage => stage;
+    void IEditorWindow.UseSideTree(bool on) => UseSideTree(on);
+    StatusItem IEditorWindow.Coordinates => coordsItem;
+
+    bool IEditorWindow.Browsing
+    {
+        get => browsing;
+        set => browsing = value;
+    }
+
+    bool IEditorWindow.this[DawnParts part]
+    {
+        get => part switch { DawnParts.Tabs => tabsDirty, DawnParts.Tree => treeDirty, DawnParts.Right => inspectorDirty, _ => codeDirty };
+        set
+        {
+            switch (part)
+            {
+                case DawnParts.Tabs: tabsDirty = value; break;
+                case DawnParts.Tree: treeDirty = value; break;
+                case DawnParts.Right: inspectorDirty = value; break;
+                default: codeDirty = value; break;
+            }
+        }
+    }
+
+    void IEditorWindow.ShowDeclaration(string name) => ShowDeclaration(name);
+    bool IEditorWindow.CloseTopWindow() => CloseTopWindow();
+    Horizon.Input.Mouse IEditorWindow.Mouse => Engine.Input.Mouse;
 }

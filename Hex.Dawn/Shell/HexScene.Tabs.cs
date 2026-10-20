@@ -168,7 +168,7 @@ internal sealed partial class HexScene
             foreach (UIComponent component in chain)
             {
                 crumbParts.Add($"$(symbol-class) {document.NameOf(component)}");
-                crumbActions.Add(() => Select(component));
+                crumbActions.Add(() => designer.Select(component));
             }
         }
         else

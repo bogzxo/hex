@@ -9,12 +9,12 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The designer's lists, the tree of the layout and its layers.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
-    private void RebuildComponentTree()
+    internal void RebuildComponentTree()
     {
-        UseSideTree(false);
-        treeTitle.Text = Said("side.designer");
+        window.UseSideTree(false);
+        treeTitle.Text = context.Strings.Said("side.designer");
 
         var components = document.Walk().ToList();
         componentCount = components.Count;
@@ -30,7 +30,7 @@ internal sealed partial class HexScene
             string kind = UIModule.KindOf(component) ?? "component";
             caption.Text = $"$({KindIcon(kind)}) {document.NameOf(component)}  [color:#7f8a9e]{kind}[/color]";
             caption.Position = new Vector2(10 + depth * 14, 0);
-            caption.Color = component.Visible && !component.IsHiddenByLayer ? null : DimColor;
+            caption.Color = component.Visible && !component.IsHiddenByLayer ? null : context.Panels.Dim;
 
             // Ctrl or shift adds a row to what's selected, a right click is the menu for it (and the rest of what's selected)
             row.Selected = document.IsSelected(component);
@@ -45,7 +45,7 @@ internal sealed partial class HexScene
         }
 
         if (components.Count == 0)
-            Hint(tree, "nothing yet, add something\nout of the toolbox above");
+            window.Hint(tree, "nothing yet, add something\nout of the toolbox above");
 
         RebuildLayers();
     }
@@ -55,7 +55,7 @@ internal sealed partial class HexScene
        the file, and so do the ones that are hidden, as the layers the layout starts with hidden (compositor.hidden_layers),
        the screens of a menu that aren't the first, the views of Hex that take turns. */
 
-    private void RebuildLayers()
+    internal void RebuildLayers()
     {
         layerRows.Clear();
 
@@ -71,7 +71,7 @@ internal sealed partial class HexScene
             var caption = items[i].Get<Label>("caption");
 
             caption.Text = hidden ? $"$(eye-closed) {UIRichText.Plain(name)}  (hidden)" : $"$(eye) {UIRichText.Plain(name)}";
-            caption.Color = hidden ? DimColor : null;
+            caption.Color = hidden ? context.Panels.Dim : null;
 
             row.OnPressed = () => ToggleLayer(name);
             layerRows[name] = row;
@@ -79,7 +79,7 @@ internal sealed partial class HexScene
 
         if (names.Count == 0)
         {
-            Hint(layers, "none yet, a component gets one\nin its properties, under layer");
+            window.Hint(layers, "none yet, a component gets one\nin its properties, under layer");
         }
     }
 
@@ -90,7 +90,7 @@ internal sealed partial class HexScene
 
         // The tree greys out what is out of sight, and the code says which layers the layout starts with hidden
         treeDirty = codeDirty = true;
-        Say(show ? $"showing the layer {name}" : $"hid the layer {name}, the layout starts with it hidden, everything on it is still in the file");
+        context.Notices.Say(show ? $"showing the layer {name}" : $"hid the layer {name}, the layout starts with it hidden, everything on it is still in the file");
     }
 
     private void ShowAllLayers()

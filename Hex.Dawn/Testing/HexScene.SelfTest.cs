@@ -283,7 +283,7 @@ internal sealed partial class HexScene
     // sections now and the ones further down are out of sight at the start
     private void Reveal(string editor)
     {
-        selfTest!.Run(() => inspectorScroll.ScrollIntoView(editors[editor]));
+        selfTest!.Run(() => inspectorScroll.ScrollIntoView(designer.editors[editor]));
         selfTest.Wait();
     }
 
@@ -310,8 +310,8 @@ internal sealed partial class HexScene
     }
 
     private Func<Vector2> Part(string name, float x = 0.5f, float y = 0.5f) => At(() => layout.Get<UIComponent>(name), x, y);
-    private Func<Vector2> Kind(string kind) => At(() => paletteButtons[Array.IndexOf(Palette, kind)]);
-    private Func<Vector2> Row(Func<UIComponent?> of) => At(() => of() is { } component ? treeRows.GetValueOrDefault(component) : null);
+    private Func<Vector2> Kind(string kind) => At(() => designer.paletteButtons[Array.IndexOf(HexDesigner.Palette, kind)]);
+    private Func<Vector2> Row(Func<UIComponent?> of) => At(() => of() is { } component ? designer.treeRows.GetValueOrDefault(component) : null);
 
     // The middle of a row of the side bar's tree, scrolled to first the way somebody would
     private Func<Vector2> TreeRow(Func<UITreeItem?> find) => () =>
@@ -330,7 +330,7 @@ internal sealed partial class HexScene
     private Func<Vector2> FileRow(string name) => TreeRow(() => fileRows.Find(row => Path.GetFileName(row.Path) == name).Row);
 
     // A row of the list a dropdown of the inspector has open, and a point of one of the areas of a colour picker
-    private Func<Vector2> Option(string editor, int row) => () => chrome.ToWorld(((Dropdown)editors[editor]).RowBounds(row).Center);
+    private Func<Vector2> Option(string editor, int row) => () => chrome.ToWorld(((Dropdown)designer.editors[editor]).RowBounds(row).Center);
     private Func<Vector2> In(Func<UIRect> area, float x, float y) => () => chrome.ToWorld(area().Min + area().Size * new Vector2(x, y));
 
     // Whether the columns of the editor are as tall as each other and reach the edges of the window, the activity

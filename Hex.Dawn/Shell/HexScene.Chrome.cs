@@ -36,7 +36,7 @@ internal sealed partial class HexScene
 
         settings.CodeZoom = zoom;
         foreach (HexDocument open in documents)
-            open.Editor.TextScale = EDITOR_TEXT * zoom;
+            open.Editor.TextScale = HexDesigner.EDITOR_TEXT * zoom;
 
         SaveSettings();
         Say($"the code is at {zoom * 100.0f:0}%, Ctrl+0 puts it back");
@@ -128,8 +128,8 @@ internal sealed partial class HexScene
 
         // Two to a line, with the gap of their grid between them
         float button = MathF.Floor((leftWidth - 4.0f) * 0.5f);
-        for (int i = 0; i < paletteButtons.Count; i++)
-            paletteButtons[i].Size = paletteButtons[i].Size with { X = button };
+        for (int i = 0; i < designer.paletteButtons.Count; i++)
+            designer.paletteButtons[i].Size = designer.paletteButtons[i].Size with { X = button };
     }
 
     private static void Widen(IReadOnlyList<UIComponent> rows, float width)
@@ -250,5 +250,43 @@ internal sealed partial class HexScene
         }
         else
             canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas)));
+    }
+
+    /// <summary>The right side, what the code of a file comes to, or the properties of what's selected in a layout.</summary>
+    private void RebuildInspector()
+    {
+        // The code of a file (or of a layout) has no components, it has what is wrong with it and what running it came to
+        if (!LayoutTools)
+        {
+            running.RebuildCodeInspector();
+            return;
+        }
+
+        running.ValuesTree.Visible = false;
+        designer.RebuildInspector();
+    }
+
+    /// <summary>The dark behind the layouts exactly what the middle shows, then the layout put in the canvas.</summary>
+    private void PlaceCanvas()
+    {
+        // A hidden canvas isn't laid out any more, so with the code up it kept the size it had, and designer.dragging the panel up
+        // had the dark show through the panel where the canvas used to be
+        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : running.Table.Visible ? running.Table : codeScroll;
+        if (!middle.Bounds.IsEmpty)
+        {
+            backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, middle.Bounds.Size);
+            backdrop.Position = middle.Bounds.Center;
+            backdrop.Scale = Vector2.One;
+        }
+
+        designer.PlaceCanvas();
+    }
+
+    /// <summary>Helper method to say something where a list has nothing in it, out of hint.hor.</summary>
+    private Label Hint(UIComponent into, string text)
+    {
+        var hint = layout.Instantiate("hint.hor", into).Get<Label>("hint");
+        hint.Text = text;
+        return hint;
     }
 }

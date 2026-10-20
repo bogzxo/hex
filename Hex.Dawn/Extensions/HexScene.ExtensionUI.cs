@@ -372,7 +372,7 @@ internal sealed partial class HexScene : IExtensionScreens
         }
 
         // The keys go to the view on screen when nothing has the keyboard, or one of its own drawings does
-        if (ShownView is { Key: not null } keyed && (compositor.Focus is null || (compositor.Focus is DrawingPanel && IsInside(compositor.Focus, keyed.Root))))
+        if (ShownView is { Key: not null } keyed && (compositor.Focus is null || (compositor.Focus is DrawingPanel && HexDesigner.IsInside(compositor.Focus, keyed.Root))))
         {
             var keyboard = Engine.Input.Keyboard;
             if (!keyboard.Control)

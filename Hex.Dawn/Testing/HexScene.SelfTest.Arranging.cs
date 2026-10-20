@@ -7,7 +7,7 @@ using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
-// The self test, more than one thing at once, groups, copies, what a layout is made for, tabs, closing and dragging edges.
+// The self test, more than one thing at once, groups, copies, what a layout is made for, tabs, closing and designer.dragging edges.
 internal sealed partial class HexScene
 {
     private void TestMultipleSelection(HexPointerScript test)
@@ -41,48 +41,48 @@ internal sealed partial class HexScene
         test.Check("multiselect: two things to play with, next to each other", () => first is Label && second is Button && first.Parent == second.Parent);
 
         test.Click(At(() => first));
-        test.Run(() => fakeModifier = true);
+        test.Run(() => designer.fakeModifier = true);
         test.Click(At(() => second));
-        test.Run(() => fakeModifier = false);
+        test.Run(() => designer.fakeModifier = false);
         test.Wait();
         test.Check("multiselect: ctrl and a click adds to what's selected", () =>
-            document.Selection.Count == 2 && stage.Highlights.Count == 2 && treeRows[first!].Selected && treeRows[second!].Selected);
+            document.Selection.Count == 2 && stage.Highlights.Count == 2 && designer.treeRows[first!].Selected && designer.treeRows[second!].Selected);
 
         // The style of the button, picked out of the art of the skin. The button was picked last, the rows are its.
         // Its row is a good way down the properties by now, so it is brought into view first
-        test.Run(() => inspectorScroll.ScrollIntoView(editors["style"]));
+        test.Run(() => inspectorScroll.ScrollIntoView(designer.editors["style"]));
         test.Wait();
-        test.Click(() => chrome.ToWorld(((TextBox)editors["style"]).ButtonBounds.Center));
+        test.Click(() => chrome.ToWorld(((TextBox)designer.editors["style"]).ButtonBounds.Center));
         test.Settle(0.3f);
         test.Check("art: the button in the style box opens the art of the skin the layouts wear", () =>
-            artPicker is { IsOpen: true, Tiles.Count: > 10 } && editors["style"] is TextBox { HasButton: true });
-        test.Run(() => artPicker!.Filter = "button_flat");
+            designer.artPicker is { IsOpen: true, Tiles.Count: > 10 } && designer.editors["style"] is TextBox { HasButton: true });
+        test.Run(() => designer.artPicker!.Filter = "button_flat");
         test.Settle(0.3f);
-        test.Check("art: typing narrows it down", () => artPicker!.Tiles.Count is > 0 and < 40);
-        test.Click(() => chrome.ToWorld(artPicker!.Tiles[0].Bounds.Center));
+        test.Check("art: typing narrows it down", () => designer.artPicker!.Tiles.Count is > 0 and < 40);
+        test.Click(() => chrome.ToWorld(designer.artPicker!.Tiles[0].Bounds.Center));
         test.Wait();
         test.Check("art: a click on a piece picks it, for the box, the component and the code", () =>
-            !artPicker!.IsOpen && second is Button { Style: var style } && style.StartsWith("button_flat")
-            && ((TextBox)editors["style"]).Text == style && Code().Contains($"style: \"{style}\""));
-        test.Run(() => Set(second!, "style", new StringValue("button")));
+            !designer.artPicker!.IsOpen && second is Button { Style: var style } && style.StartsWith("button_flat")
+            && ((TextBox)designer.editors["style"]).Text == style && Code().Contains($"style: \"{style}\""));
+        test.Run(() => designer.Set(second!, "style", new StringValue("button")));
         test.Wait();
 
         Vector2 firstAt = default;
         test.Run(() =>
         {
             firstAt = first!.Position;
-            Set(second!, "intro", new StringValue("fade"));
-            Set(second!, "intro_delay", new NumberValue(0.5f));
+            designer.Set(second!, "intro", new StringValue("fade"));
+            designer.Set(second!, "intro_delay", new NumberValue(0.5f));
         });
         test.Check("multiselect: a property changed in the inspector is changed for everything selected", () =>
             first!.Intro == UIIntro.Fade && second!.Intro == UIIntro.Fade && Near(first.IntroDelay, 0.5f, 0.001f) && Near(second.IntroDelay, 0.5f, 0.001f));
-        test.Run(() => ((NumberBox)((StackPanel)editors["pos"]).Children[0]).OnValueChanged!(33));
+        test.Run(() => ((NumberBox)((StackPanel)designer.editors["pos"]).Children[0]).OnValueChanged!(33));
         test.Check("multiselect: one number of a position only changes that number for the rest", () =>
             Near(second!.Position.X, 33) && Near(first!.Position.X, 33) && Near(first.Position.Y, firstAt.Y) && !Near(first.Position.Y, second.Position.Y, 20));
         test.Run(() =>
         {
-            Set(second!, "intro", new StringValue("none"));
-            Set(second!, "intro_delay", new NumberValue(0.0f));
+            designer.Set(second!, "intro", new StringValue("none"));
+            designer.Set(second!, "intro_delay", new NumberValue(0.0f));
             document.SettleIntros();
         });
         test.Wait();
@@ -121,7 +121,7 @@ internal sealed partial class HexScene
         test.Click(Nothing());
         test.Run(() =>
         {
-            Select(grouped);
+            designer.Select(grouped);
             groupName = document.NameOf(grouped!);
         });
         test.RightClick(At(() => grouped));
@@ -132,11 +132,11 @@ internal sealed partial class HexScene
             document.Selected is StackPanel { Direction: UIDirection.Horizontal } stack && stack is not Collapsible
             && document.NameOf(stack) == groupName && first!.Parent == stack && second!.Parent == stack
             && grouped!.Parent is null && Code().Contains($"let {groupName} = compositor.stack(") && CheckRoundTrip(document));
-        test.Run(() => ConvertSelected("tabs", false));
+        test.Run(() => designer.ConvertSelected("tabs", false));
         test.Wait();
         test.Check("change into: into tabs everything in it is a page", () =>
             document.Selected is TabPanel { Tabs.Length: 2 } pages && first!.Parent == pages && CheckRoundTrip(document));
-        test.Run(() => ConvertSelected("group", false));
+        test.Run(() => designer.ConvertSelected("group", false));
         test.Wait();
         test.Check("change into: and back into a group", () =>
             (grouped = document.Selected) is Group && first!.Parent == grouped && second!.Parent == grouped && document.NameOf(grouped) == groupName);
@@ -177,7 +177,7 @@ internal sealed partial class HexScene
     {
         /* What a layout is made for, and the canvas */
 
-        Pick("Layout", () => DescribeDesign(new Vector2(1600, 900)));
+        Pick("Layout", () => HexDesigner.DescribeDesign(new Vector2(1600, 900)));
         test.Wait();
         test.Check("design: the layout menu says what it's made for, in the code before anything else", () =>
             document.Design == new Vector2(1600, 900) && Code().Contains("compositor.design({ size: vec(1600, 900), fit: \"contain\" });")
@@ -200,12 +200,12 @@ internal sealed partial class HexScene
         test.Run(() => fitted = document.Module.Scale.X);
         Pick("View", () => "Zoom In");
         test.Wait();
-        test.Check("zoom: the view menu zooms the canvas in", () => canvasZoom > 1.0f && document.Module.Scale.X > fitted * 1.2f);
+        test.Check("zoom: the view menu zooms the canvas in", () => designer.canvasZoom > 1.0f && document.Module.Scale.X > fitted * 1.2f);
         Pick("View", () => "Zoom to Fit");
 
         // Waited on rather than given a few updates, a busy machine took longer than that now and then
-        test.WaitFor(() => canvasZoom == 1.0f && Near(document.Module.Scale.X, fitted, 0.001f), 2.0f);
-        test.Check("zoom: and back to fit", () => canvasZoom == 1.0f && Near(document.Module.Scale.X, fitted, 0.001f));
+        test.WaitFor(() => designer.canvasZoom == 1.0f && Near(document.Module.Scale.X, fitted, 0.001f), 2.0f);
+        test.Check("zoom: and back to fit", () => designer.canvasZoom == 1.0f && Near(document.Module.Scale.X, fitted, 0.001f));
     }
 
     private void TestTabs(HexPointerScript test)
@@ -264,7 +264,7 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             box = document.Selected;
-            Set(box!, "size", new Vector2Value(new Vector2(200, 120)));
+            designer.Set(box!, "size", new Vector2Value(new Vector2(200, 120)));
         });
         test.Wait();
         test.Run(() => boxSize = box!.Bounds.Size);
@@ -277,8 +277,8 @@ internal sealed partial class HexScene
             InLayout(() => new Vector2(box!.Bounds.Max.X - 2, box.Bounds.Center.Y)),
             InLayout(() => new Vector2(box!.Bounds.Center.X + boxSize.X * 0.5f - 2 + 60, box.Bounds.Center.Y)));
         test.Wait();
-        test.Check("handles: dragging the right edge makes it that much wider and no taller, code and all", () =>
-            Near(box!.Size.X, 260, 1.5f) && Near(box.Size.Y, 120) && Code().Contains("size: vec(") && !dragging);
+        test.Check("handles: designer.dragging the right edge makes it that much wider and no taller, code and all", () =>
+            Near(box!.Size.X, 260, 1.5f) && Near(box.Size.Y, 120) && Code().Contains("size: vec(") && !designer.dragging);
 
         test.Run(() => boxSize = box!.Bounds.Size);
         test.Drag(
@@ -305,7 +305,7 @@ internal sealed partial class HexScene
         test.Check("handles: switched off there are none", () => stage.HighlightGrips == UIResize.None && stage.HighlightLitGrips == UIResize.None);
         test.Run(() => settings.CanvasHandles = true);
 
-        test.Run(() => Set(box!, "resize", new StringValue("right, bottom")));
+        test.Run(() => designer.Set(box!, "resize", new StringValue("right, bottom")));
         test.Wait();
         test.Check("resize: a component that can be dragged in a game says so in its code", () =>
             box!.Resizable == (UIResize.Right | UIResize.Bottom) && Code().Contains("resize: \"right, bottom\""));
@@ -319,12 +319,12 @@ internal sealed partial class HexScene
             InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)),
             InChrome(() => new Vector2(treeScroll.Bounds.Min.X + listWide + 4 + 70, treeScroll.Bounds.Center.Y)));
         test.Wait();
-        test.Check("panels: dragging it makes the lists wider and the canvas make do", () =>
+        test.Check("panels: designer.dragging it makes the lists wider and the canvas make do", () =>
             Near(treeScroll.Size.X, listWide + 70, 2) && Near(settings.LeftWidth, treeScroll.Size.X) && Fits() && !treeScroll.IsResizing);
-        test.Check("panels: and nothing in the canvas was touched by it", () => document.Selected == box && !dragging);
+        test.Check("panels: and nothing in the canvas was touched by it", () => document.Selected == box && !designer.dragging);
         test.Check("panels: the rows of the list and the buttons over it are as wide as the list is now", () =>
             tree.Children.Count > 0 && tree.Children.All(row => Near(row.Size.X, treeScroll.Size.X - 24, 1))
-            && Near(paletteButtons[0].Size.X * 2 + 4, treeScroll.Size.X, 2) && tree.Children[0].Bounds.Max.X <= treeScroll.Bounds.Max.X);
+            && Near(designer.paletteButtons[0].Size.X * 2 + 4, treeScroll.Size.X, 2) && tree.Children[0].Bounds.Max.X <= treeScroll.Bounds.Max.X);
 
         // The properties on the other side, dragged by their left edge. What a property is set with gets the room
         // Where to take hold of it is read once, before it moves. Asked for again on the way the edge has gone
@@ -334,17 +334,17 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             propertiesWide = inspectorScroll.Size.X;
-            editorWide = editors["name"].Bounds.Width;
+            editorWide = designer.editors["name"].Bounds.Width;
             propertiesEdge = new Vector2(inspectorScroll.Bounds.Min.X - 4, inspectorScroll.Bounds.Center.Y);
         });
         test.Drag(InChrome(() => propertiesEdge), InChrome(() => propertiesEdge - new Vector2(90, 0)));
         test.Wait();
-        test.Check("panels: dragging the properties wider makes what is in them wider with them", () =>
-            Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(editors["name"].Bounds.Width, editorWide + 90, 2)
-            && editors["name"].Bounds.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits());
+        test.Check("panels: designer.dragging the properties wider makes what is in them wider with them", () =>
+            Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(designer.editors["name"].Bounds.Width, editorWide + 90, 2)
+            && designer.editors["name"].Bounds.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits());
         test.Check("panels: every kind of editor in them, the ones that are two and four numbers across as well", () =>
-            editors["pos"] is StackPanel pair && Near(pair.Bounds.Width, editors["name"].Bounds.Width, 2)
-            && editors["padding"] is StackPanel four && Near(four.Bounds.Width, editors["name"].Bounds.Width, 2));
+            designer.editors["pos"] is StackPanel pair && Near(pair.Bounds.Width, designer.editors["name"].Bounds.Width, 2)
+            && designer.editors["padding"] is StackPanel four && Near(four.Bounds.Width, designer.editors["name"].Bounds.Width, 2));
 
         test.Run(ResetPanels);
         test.Wait();

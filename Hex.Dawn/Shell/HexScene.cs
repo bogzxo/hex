@@ -28,9 +28,6 @@ internal sealed partial class HexScene : Scene
     // Which skin the layouts were shown in the last time, see the Skin menu
     private const string SKIN_FILE = "hex_skin.txt";
 
-    // The screen the layouts being edited are made for, scaled to whatever room the canvas has.
-    private static readonly Vector2 DesignSize = new(1600, 900);
-    private static readonly UIRect DesignScreen = new(DesignSize / -2.0f, DesignSize / 2.0f);
 
     // How big the editor can draw itself. Text is at its sharpest at the whole ones.
     private static readonly float[] Scales = [0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f];
@@ -47,8 +44,6 @@ internal sealed partial class HexScene : Scene
     private const float MIN_FLEXIBLE = 80;
     private const float MIN_CENTER = 240;
 
-    // How long a layout has to be left alone before how it is now is a step to come back to
-    private const float SETTLE_TIME = 0.3f;
 
     // What is said quietly and what has gone wrong, the editor's skin's own, so they read on whichever theme it is in
     // (it comes in a light one as well). The numbers are for the moment before there is a skin
@@ -84,10 +79,10 @@ internal sealed partial class HexScene : Scene
     // The layouts that were opened or saved last, the latest first
     private readonly List<string> recent = [];
 
-    // A change that hasn't been noted as a step to come back to yet, and how long it has to rest still
-    private bool recordPending;
-    private float settleTimer;
     private readonly UICommands commands = new();
+
+    // The menu a right click put up, while it's up
+    private ContextMenu? contextMenu;
 
     private readonly List<HexDocument> documents = [];
     private HexDocument document = null!;
@@ -107,11 +102,7 @@ internal sealed partial class HexScene : Scene
     private readonly HashSet<string> layoutWarned = new(StringComparer.OrdinalIgnoreCase);
 
     // What the lists on screen are showing right now, by what they stand for
-    private readonly List<Button> paletteButtons = [];
     private readonly List<(string Path, bool IsDirectory, UITreeItem Row)> fileRows = [];
-    private readonly Dictionary<UIComponent, Button> treeRows = [];
-    private readonly Dictionary<string, Button> layerRows = [];
-    private readonly Dictionary<string, UIComponent> editors = [];
 
     // Layouts that are only opened to be tested, and how that went
     private bool checksDone;
@@ -176,6 +167,7 @@ internal sealed partial class HexScene : Scene
         LoadSettings();
         DeclareMenus();
         running = new HexRunning(Context);
+        designer = new HexDesigner(Context);
         running.Ran += path => extensions.Raise("on_run", new StringValue(path));
         extensions = new HexExtensions(Context, this);
         terminalFiles = new HexTerminalFiles(Context);
@@ -205,7 +197,7 @@ internal sealed partial class HexScene : Scene
         languages.StartChecks();
         BuildEffects();
         BuildModes();
-        AddDesignerCommands();
+        designer.AddDesignerCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -213,7 +205,7 @@ internal sealed partial class HexScene : Scene
         WireActivityBar();
 
         // A right click on the canvas that nothing of the editor took is a menu for what's there
-        compositor.ContextRequested = OnContextRequested;
+        compositor.ContextRequested = designer.OnContextRequested;
 
         // The window has no frame of the system's, the title bar is the editor's and so are the edges
         compositor.ResizesWindow = true;
@@ -226,7 +218,7 @@ internal sealed partial class HexScene : Scene
             tabsDirty = codeDirty = true;
         };
 
-        BuildPalette();
+        designer.BuildPalette();
         extensions.Find();
         Show(NewDocument());
         startedWith = document;
@@ -393,15 +385,15 @@ internal sealed partial class HexScene : Scene
     /// <summary>The pointer on the canvas, the steps to come back to, and the code of a layout written again after a change.</summary>
     private void UpdateDesigner(float dt)
     {
-        UpdateCanvasPointer();
-        UpdateRecord(dt);
+        designer.UpdateCanvasPointer();
+        designer.UpdateRecord(dt);
         UpdateKeys();
 
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
         {
-            recordPending = true;
-            settleTimer = SETTLE_TIME;
+            designer.recordPending = true;
+            designer.settleTimer = HexDesigner.SETTLE_TIME;
         }
 
         // The code of a layout is written again for every change, every tick of a drag. Out of sight in the designer it is
@@ -418,7 +410,7 @@ internal sealed partial class HexScene : Scene
     /// <summary>The tabs, the tree and the inspector made again if something marked them, once a tick however many times it did.</summary>
     private void RebuildMarked()
     {
-        RevealInTree();
+        designer.RevealInTree();
 
         if (tabsDirty) RebuildTabs();
         if (treeDirty) RebuildTree();

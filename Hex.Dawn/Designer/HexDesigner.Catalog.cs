@@ -2,10 +2,10 @@ namespace Hex.Dawn;
 
 // What the designer offers, the components that can be added, the words a property can be, the numbers that have a
 // slider, and how wide the inspector gives a property's name and what sets it.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // What can be added, in the order the buttons for it come.
-    private static readonly string[] Palette =
+    internal static readonly string[] Palette =
     [
         "stack", "collapsible", "grid", "panel", "scroll", "label", "button", "toggle", "textbox", "number_box", "selector",
         "dropdown", "list", "slider", "color_picker", "progress_bar", "image", "tabs", "divider", "spacer",
@@ -14,7 +14,7 @@ internal sealed partial class HexScene
 
     // The properties that are one of a few words, and the words.
     private static readonly string[] Origins = ["center", "top_left", "top", "top_right", "left", "right", "bottom_left", "bottom", "bottom_right"];
-    private static readonly Dictionary<string, string[]> Choices = new()
+    internal static readonly Dictionary<string, string[]> Choices = new()
     {
         ["anchor"] = Origins,
         ["pivot"] = Origins,
@@ -49,6 +49,6 @@ internal sealed partial class HexScene
     private float CaptionWidth => MathF.Round(Math.Clamp(inspectorScroll.Size.X * CAPTION_SHARE, MIN_CAPTION, MAX_CAPTION));
     private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN - CaptionWidth);
     private const float EDITOR_HEIGHT = 28;
-    private const float EDITOR_TEXT = 0.14f;
+    internal const float EDITOR_TEXT = 0.14f;
     private const float PICKER_HEIGHT = 112;
 }

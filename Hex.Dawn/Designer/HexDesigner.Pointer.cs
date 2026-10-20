@@ -7,11 +7,11 @@ namespace Hex.Dawn;
 
 // The pointer on the canvas. A click selects what's under it, a drag moves what's selected, and where it is in the layout
 // is in the status bar. The edges of what's selected are Handles, zooming and panning Canvas.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
     // Dragging a component around the canvas
     private bool pointerWasDown;
-    private bool dragging, dragMoved;
+    internal bool dragging, dragMoved;
     private Vector2 dragLast;
 
     // Something that was selected already and pressed on, it's all that's selected if it isn't dragged
@@ -21,7 +21,7 @@ internal sealed partial class HexScene
     /// Clicking in the canvas selects what is there (on top of what already is with ctrl or shift), dragging moves all
     /// of it. The wheel zooms, the middle button (or space) pans, and a click on a tab opens its page.
     /// </summary>
-    private void UpdateCanvasPointer()
+    internal void UpdateCanvasPointer()
     {
         UIPointer pointer = compositor.Pointer;
 

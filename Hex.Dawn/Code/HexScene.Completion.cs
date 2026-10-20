@@ -148,7 +148,7 @@ internal sealed partial class HexScene
             if (head.EndsWith(':'))
             {
                 string property = TrailingWord(head[..^1].TrimEnd());
-                if (Choices.TryGetValue(property, out string[]? words))
+                if (HexDesigner.Choices.TryGetValue(property, out string[]? words))
                     return new UICompletionRequest(quote + 1, [.. words.Select(word => new UICompletion(word, property))]);
             }
 
@@ -161,7 +161,7 @@ internal sealed partial class HexScene
 
         // A kind of component, after compositor.
         if (ahead.EndsWith("compositor.", StringComparison.Ordinal))
-            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(Describe(kind), 40), kind + "({ "))]);
+            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(HexDesigner.Describe(kind), 40), kind + "({ "))]);
 
         // A property of the component being made, where a key goes inside its braces
         if (ComponentBeingMade(editor.Text, doc, start) is { } kind && UIModule.CreateDetached(kind) is { } made)

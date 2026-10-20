@@ -196,6 +196,9 @@ internal interface IWindows
     /// <summary>A menu where the pointer is.</summary>
     void Menu(Menu menu);
 
+    /// <summary>A menu at a place of the chrome, where something was right clicked.</summary>
+    void MenuAt(Menu menu, Vector2 at);
+
     /// <summary>A folder picked with Hex's own dialog, something done with it.</summary>
     void ChooseFolder(Action<string> picked);
 
@@ -320,4 +323,37 @@ internal interface IEditorWindow
 
     /// <summary>The outline of the code on screen, what it declares and the keys of its objects.</summary>
     List<OutlineEntry> Outline();
+
+    /// <summary>What the layouts being edited are drawn by, under the editor and seen through its canvas.</summary>
+    UICompositor Stage { get; }
+
+    /// <summary>Whether a part of the window has to be put together again before the next frame, and saying it has.</summary>
+    bool this[DawnParts part] { get; set; }
+
+    /// <summary>The side tree (the explorer, the outline) rather than the designer's list of components, on the side.</summary>
+    void UseSideTree(bool on);
+
+    /// <summary>Whether the side bar is on the files, and putting it on them or off.</summary>
+    bool Browsing { get; set; }
+
+    /// <summary>The code of the layout on screen, the caret on what a name of it declares.</summary>
+    void ShowDeclaration(string name);
+
+    /// <summary>The little window on top (the settings, a page of help) taken down, false when there is none.</summary>
+    bool CloseTopWindow();
+
+    /// <summary>The mouse, for the canvas's wheel and its middle button.</summary>
+    Horizon.Input.Mouse Mouse { get; }
+
+    /// <summary>The status bar's piece that says where the pointer is.</summary>
+    StatusItem Coordinates { get; }
+}
+
+/// <summary>The parts of the editor's window that are put together again when what they show changed.</summary>
+internal enum DawnParts
+{
+    Tabs,
+    Tree,
+    Right,
+    Code
 }

@@ -12,9 +12,9 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // The palette of components on the left of the designer, a button a kind with its icon and what it is, pressed to add one.
-internal sealed partial class HexScene
+internal sealed partial class HexDesigner
 {
-    private void BuildPalette()
+    internal void BuildPalette()
     {
         // One button per kind of component, each made from the template the palette names
         var items = layout.Populate("palette", Palette.Length);
@@ -52,7 +52,7 @@ internal sealed partial class HexScene
     /// <summary>
     /// Helper method for what a kind of component is for, the line the palette shows when the pointer rests on its button.
     /// </summary>
-    private static string Describe(string kind) => kind switch
+    internal static string Describe(string kind) => kind switch
     {
         "stack" => "A row or a column of things, with a gap between them",
         "grid" => "Cells in rows and columns, so many across",
@@ -87,7 +87,7 @@ internal sealed partial class HexScene
     };
 
     /// <summary>The icon of a kind of component, in the toolbox, the tree and the breadcrumbs.</summary>
-    private static string KindIcon(string kind) => kind switch
+    internal static string KindIcon(string kind) => kind switch
     {
         "stack" => "list-flat",
         "collapsible" => "fold",
