@@ -2,7 +2,7 @@ using Horizon.HIDL.Parsing;
 using Horizon.HIDL.Runtime;
 using Horizon.UI.Components;
 
-namespace Hex.Dawn;
+namespace Hex.Core;
 
 // What Hex can say is wrong with a file from what it comes to, without anybody writing down what it should look like.
 // There is no schema for a move list, the shape is in a comment at the top and in the moves themselves, so the moves are
@@ -10,7 +10,10 @@ namespace Hex.Dawn;
 // letter or two off a key most of them have is a typo nine times in ten. And a text that looks like the path of a file
 // (a slash and an extension) that isn't there from the file's folder or any folder over it is a warning, the game reads
 // them from its own folder and Fighter2D's characters name their sprites and moves that way.
-internal sealed partial class HexScene
+/// <summary>A text of Hex's by its key, its gaps filled in (Assets/hex/localisation).</summary>
+internal delegate string HexSaid(string key, params (string Name, string Value)[] filled);
+
+internal static class HexLints
 {
     // How many objects an object needs before its keys say what its objects look like
     private const int SIBLINGS = 3;
@@ -19,11 +22,13 @@ internal sealed partial class HexScene
     private const int PATH_LEVELS = 8;
 
     /// <summary>What the last run of a file says is wrong with it, as warnings under its code.</summary>
-    private List<UICodeDiagnostic> Lint(HexValues ran, HexDocument of)
+    /// <param name="of">The file it ran as, null for one that isn't anywhere.</param>
+    /// <param name="said">Hex's texts, what the warnings say.</param>
+    public static List<UICodeDiagnostic> Lint(HexValues ran, string? of, HexSaid said)
     {
         var found = new List<UICodeDiagnostic>();
-        string? folder = of.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : null;
-        string? file = of.Path is { } at ? Path.GetFullPath(at) : null;
+        string? folder = of is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : null;
+        string? file = of is { } at ? Path.GetFullPath(at) : null;
         var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
         bool Here(SourceLocation at) => at.File is null || (file is not null && string.Equals(Path.GetFullPath(at.File), file, PlatformPaths.Comparison));
@@ -39,7 +44,7 @@ internal sealed partial class HexScene
             switch (value)
             {
                 case ObjectValue obj when seen.Add(obj.Properties):
-                    Siblings(ran, obj, Warn);
+                    Siblings(ran, obj, Warn, said);
                     foreach (var (key, inner) in obj.Properties)
                         Walk(inner, ran.Sources.TryGetKey(obj, key, out var keyAt) ? keyAt : null);
                     break;
@@ -51,7 +56,7 @@ internal sealed partial class HexScene
 
                 case StringValue text when at is { Literal: true } written && folder is not null && LooksLikePath(text.Value) && !PathExists(folder, text.Value):
                     // The text itself is underlined, not its key
-                    Warn(written with { Span = written.Value }, Said("lint.no_file", ("path", text.Value)));
+                    Warn(written with { Span = written.Value }, said("lint.no_file", ("path", text.Value)));
                     break;
             }
         }
@@ -66,7 +71,7 @@ internal sealed partial class HexScene
     /// Helper method to warn about a key only one of the objects in an object has, when it is a letter or two off one most
     /// of them have.
     /// </summary>
-    private void Siblings(HexValues ran, ObjectValue parent, Action<SourceLocation, string> warn)
+    private static void Siblings(HexValues ran, ObjectValue parent, Action<SourceLocation, string> warn, HexSaid said)
     {
         int objects = 0;
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -97,7 +102,7 @@ internal sealed partial class HexScene
                 // Close to a key most of the others have and this one hasn't
                 string? meant = common.FirstOrDefault(other => !obj.Properties.ContainsKey(other) && HexFixes.Distance(key, other) <= (other.Length >= 6 ? 2 : 1));
                 if (meant is not null && ran.Sources.TryGetKey(obj, key, out var at))
-                    warn(at, Said("lint.typo", ("key", key), ("meant", meant), ("count", counts[meant].ToString()), ("of", objects.ToString()), ("name", childName)));
+                    warn(at, said("lint.typo", ("key", key), ("meant", meant), ("count", counts[meant].ToString()), ("of", objects.ToString()), ("name", childName)));
             }
         }
     }

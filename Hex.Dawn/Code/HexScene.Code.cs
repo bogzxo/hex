@@ -178,7 +178,7 @@ internal sealed partial class HexScene
             if (!ReferenceEquals(linted, clean))
             {
                 linted = clean;
-                lints = Lint(clean, of);
+                lints = HexLints.Lint(clean, of.Path, Said);
             }
 
             found.AddRange(lints);
