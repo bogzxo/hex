@@ -15,7 +15,7 @@ namespace Hex.Dawn;
 //   hex.reorder(file, ["moves", "jab", "phases"], [...])   an object's keys in another order
 //   hex.edits(file, [{ edit: path, value }, { insert: path, key, value, after }, { remove: path }, ...])  several, one step
 //   hex.undo_file(file) and hex.redo_file(file)            the file's own undo
-internal sealed partial class HexScene
+internal sealed partial class HexExtensions
 {
     private (string, IRuntimeValue)[] Edits(HexExtension extension) =>
     [
@@ -42,19 +42,8 @@ internal sealed partial class HexScene
             return new StringValue(why);
 
         if (text != target.Editor.Text)
-            Rewrite(target, text);
+            context.Documents.Rewrite(target, text);
         return Values.Null;
-    }
-
-    /// <summary>A file's text replaced as one step to undo, the tab saying it has changes when it isn't the one on screen.</summary>
-    private void Rewrite(HexDocument target, string text)
-    {
-        target.Editor.Document.Replace(text);
-        if (target != document)
-        {
-            target.Modified = target.Editor.Text != target.SavedCode;
-            tabsDirty = true;
-        }
     }
 
     /// <summary>An include of a file being edited, the open files as they are in Hex.</summary>
@@ -70,15 +59,15 @@ internal sealed partial class HexScene
         why = string.Empty;
         if (file is not StringValue { Value: { Length: > 0 } named })
         {
-            if (document.IsText)
-                return document;
+            if (context.Documents.Current.IsText)
+                return context.Documents.Current;
 
             why = "the file on screen is a layout, not code";
             return null;
         }
 
         string full = PathFor(extension, named);
-        if (OpenDocument(full) is { } open)
+        if (context.Documents.Find(full) is { } open)
             return open.IsText ? open : null;
 
         if (!File.Exists(full))
@@ -87,8 +76,6 @@ internal sealed partial class HexScene
             return null;
         }
 
-        // As it is on the disk, line endings and all, the editor keeps them and its save writes them back the same
-        OpenText(full, File.ReadAllText(full), show: false);
-        return OpenDocument(full);
+        return context.Documents.OpenBehind(full);
     }
 }

@@ -11,29 +11,6 @@ internal sealed partial class HexScene
 {
     private const string EXTENSION_SETTING = "extension_setting.hor";
 
-    /// <summary>A setting of an extension, what it was told or else what it says it is to begin with, null for one it hasn't got.</summary>
-    private IRuntimeValue SettingOf(HexExtension extension, string key)
-    {
-        if (settings.ExtensionSettings.TryGetValue(extension.Id, out var told) && told.TryGetValue(key, out IRuntimeValue? value))
-            return value;
-
-        return extension.Settings.Find(setting => setting.Key == key)?.Default ?? Values.Null;
-    }
-
-    /// <summary>Changes a setting of an extension and keeps it, telling the extension (on_setting) unless it changed it itself.</summary>
-    private void SetSetting(HexExtension extension, string key, IRuntimeValue value, bool tell = false)
-    {
-        if (!settings.ExtensionSettings.TryGetValue(extension.Id, out var told))
-            settings.ExtensionSettings[extension.Id] = told = new Dictionary<string, IRuntimeValue>(StringComparer.OrdinalIgnoreCase);
-
-        told[key] = value;
-        if (settings.Save() is { } why)
-            Notify(why, error: true);
-
-        if (tell && extension.Enabled && extension.Failed is null && !extension.Raise("on_setting", HexOf(extension), new StringValue(key), value))
-            ExtensionFailed(extension);
-    }
-
     // What the extensions made of their own layouts of settings, let go of as the window goes
     private readonly List<ExtensionUI> settingsMade = [];
 
@@ -60,25 +37,25 @@ internal sealed partial class HexScene
         number.Visible = setting.Kind == "number";
         flag.Visible = setting.Kind == "flag";
 
-        IRuntimeValue now = SettingOf(extension, setting.Key);
+        IRuntimeValue now = extensions.SettingOf(extension, setting.Key);
         if (text.Visible)
         {
             text.Text = now is StringValue said ? said.Value : string.Empty;
             text.Placeholder = setting.Kind == "path" ? Said("extensions.a_path") : string.Empty;
             text.Tooltip = setting.About;
-            text.OnChanged = value => SetSetting(extension, setting.Key, new StringValue(value), tell: true);
+            text.OnChanged = value => extensions.SetSetting(extension, setting.Key, new StringValue(value), tell: true);
         }
         else if (number.Visible)
         {
             number.Value = now is NumberValue amount ? amount.Value : 0;
             number.Tooltip = setting.About;
-            number.OnValueChanged = value => SetSetting(extension, setting.Key, new NumberValue(value), tell: true);
+            number.OnValueChanged = value => extensions.SetSetting(extension, setting.Key, new NumberValue(value), tell: true);
         }
         else
         {
             flag.State = now is BooleanValue { Value: true };
             flag.Tooltip = setting.About;
-            flag.OnPressed = () => SetSetting(extension, setting.Key, Values.Bool(flag.State), tell: true);
+            flag.OnPressed = () => extensions.SetSetting(extension, setting.Key, Values.Bool(flag.State), tell: true);
         }
 
         settingControls[$"extension_{extension.Id}_{setting.Key}"] = text.Visible ? text : number.Visible ? number : flag;

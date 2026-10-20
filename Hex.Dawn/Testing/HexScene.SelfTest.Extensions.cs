@@ -11,7 +11,7 @@ namespace Hex.Dawn;
 internal sealed partial class HexScene
 {
     // The greeting extension's command as the palette has it, under whatever bogz has called it this week
-    private string DollyCommand() => $"{extensions.First(extension => extension.Id == "hello_dolly").Name}: Another greeting";
+    private string DollyCommand() => $"{extensions.All.First(extension => extension.Id == "hello_dolly").Name}: Another greeting";
 
     private void TestExtensions(HexPointerScript test)
     {
@@ -19,9 +19,9 @@ internal sealed partial class HexScene
 
         string TitleNow() => ((TitleBar)top).Title;
         test.Check("extensions: Hello Dolly is loaded and started, a greeting of its own after Hex in the title bar", () =>
-            extensions.FirstOrDefault(extension => extension.Id == "hello_dolly") is { Enabled: true, Failed: null, Runtime: { } runtime }
+            extensions.All.FirstOrDefault(extension => extension.Id == "hello_dolly") is { Enabled: true, Failed: null, Runtime: { } runtime }
             && runtime.UserScope.Lookup("welcome_greetings") is ListValue greetings && greetings.Items.Any(said => said is StringValue { Value: var text } && text == titleNote)
-            && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexVersion} ({titleNote})", StringComparison.Ordinal));
+            && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexAbout.Version} ({titleNote})", StringComparison.Ordinal));
 
         test.Run(() => OpenSettings(EXTENSIONS));
         test.Settle(0.3f);
@@ -29,10 +29,10 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("extensions: switched off on its page of the settings, its greeting goes and it stays off", () =>
             titleNote.Length == 0 && !TitleNow().Contains('(') && settings.DisabledExtensions.Contains("hello_dolly")
-            && extensions.First(extension => extension.Id == "hello_dolly") is { Enabled: false });
+            && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: false });
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([])));
         test.Wait();
-        test.Check("extensions: and on again", () => !settings.DisabledExtensions.Contains("hello_dolly") && extensions.First(extension => extension.Id == "hello_dolly") is { Enabled: true });
+        test.Check("extensions: and on again", () => !settings.DisabledExtensions.Contains("hello_dolly") && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: true });
         test.Run(() => CloseSettings());
 
         HexExtension? broken = null;
@@ -42,7 +42,7 @@ internal sealed partial class HexScene
             Directory.CreateDirectory(folder);
             System.IO.File.WriteAllText(Path.Combine(folder, HexExtension.FILE), "let extension = { name: \"Broken\" };\nfunc on_start(hex) { hex.nothing_of_the_sort(); }\n");
             broken = new HexExtension(folder, builtIn: false) { Enabled = true };
-            StartExtension(broken);
+            extensions.Start(broken);
         });
         test.Wait();
         test.Check("extensions: one that throws in on_start says why in the output and Hex carries on", () =>
@@ -58,11 +58,11 @@ internal sealed partial class HexScene
         test.Check("extensions: its x takes the card away", () => toasts.Cards.Count == 0);
 
         test.Check("extensions: Hello Dolly's command for another greeting is in the command palette", () =>
-            ExtensionCommands().Any(command => command.Text == DollyCommand()));
+            extensions.Commands().Any(command => command.Text == DollyCommand()));
         test.Run(() =>
         {
             titleNote = string.Empty;
-            ExtensionCommands().First(command => command.Text == DollyCommand()).Picked();
+            extensions.Commands().First(command => command.Text == DollyCommand()).Picked();
         });
         test.Wait();
         test.Check("extensions: and picked, there is a greeting again", () => titleNote.Length > 0 && TitleNow().Contains($"({titleNote})", StringComparison.Ordinal));
@@ -91,7 +91,7 @@ internal sealed partial class HexScene
             System.IO.File.WriteAllText(Path.Combine(folder, HexExtension.FILE), "let extension = { name: \"Listening\" };\nlet opened = [];\nfunc on_open(hex, file) { opened.push(file); hex.say(`opened {len(opened)}`); }\n");
             listening = new HexExtension(folder, builtIn: false) { Enabled = true };
             extensions.Add(listening);
-            StartExtension(listening);
+            extensions.Start(listening);
             System.IO.File.WriteAllText(Path.Combine(testFolder, "selftest_heard.hor"), "let heard = 1;");
             Open(Path.Combine(testFolder, "selftest_heard.hor"));
         });
@@ -112,13 +112,13 @@ internal sealed partial class HexScene
            what it's told through hex.set_setting */
 
         ExtensionUI? MoveSettings() => settingsMade.FirstOrDefault(made => made.Owner.Name == "Move editor");
-        HexExtension MoveEditor() => extensions.First(extension => extension.Name == "Move editor");
+        HexExtension MoveEditor() => extensions.All.First(extension => extension.Name == "Move editor");
         test.Run(() => OpenSettings(EXTENSION_SECTION + "Move editor"));
         test.Wait();
         test.Check("settings: a section of the window for every extension with something to set, the move editor's its own layout", () =>
             SettingsPage is not null && MoveSettings() is { } page && page.Made.TryGet<TextBox>("game_path", out _));
         test.Check("settings: its own layout, filled in from the game a move file was last opened in", () =>
-            SettingOf(MoveEditor(), "last_game") is StringValue { Value: var root } && Path.GetFullPath(root) == Path.GetFullPath(game)
+            extensions.SettingOf(MoveEditor(), "last_game") is StringValue { Value: var root } && Path.GetFullPath(root) == Path.GetFullPath(game)
             && MoveSettings()!.Made.Get<Dropdown>("opponent").Options.Contains("tester")
             && MoveSettings()!.Made.Get<Label>("found").Text.StartsWith("There is no", StringComparison.Ordinal));
 
@@ -129,7 +129,7 @@ internal sealed partial class HexScene
         });
         test.Wait();
         test.Check("settings: what is typed into it is kept by Hex, a relative path from the game's folder", () =>
-            SettingOf(MoveEditor(), "game") is StringValue { Value: "bin/fighter.exe" } && settings.ExtensionSettings["move_editor"].ContainsKey("game")
+            extensions.SettingOf(MoveEditor(), "game") is StringValue { Value: "bin/fighter.exe" } && settings.ExtensionSettings["move_editor"].ContainsKey("game")
             && MoveSettings()!.Made.Get<Label>("found").Text.Contains("bin/fighter.exe", StringComparison.Ordinal));
 
         test.Run(() =>
@@ -137,7 +137,7 @@ internal sealed partial class HexScene
             Directory.CreateDirectory(Path.Combine(game, "bin"));
             System.IO.File.WriteAllText(Path.Combine(game, "bin", "fighter.exe"), string.Empty);
             HexExtension extension = MoveEditor();
-            SetSetting(extension, "game", new StringValue("bin/fighter.exe"), tell: true);
+            extensions.SetSetting(extension, "game", new StringValue("bin/fighter.exe"), tell: true);
             TypeInto(MoveSettings()!.Made.Get<TextBox>("game_path"), "");
             TypeInto(MoveSettings()!.Made.Get<TextBox>("game_path"), "bin/fighter.exe");
         });
@@ -157,7 +157,7 @@ internal sealed partial class HexScene
         });
         test.Wait();
         test.Check("settings: and what was picked inside the game is kept from the game's folder", () =>
-            SettingOf(MoveEditor(), "game") is StringValue { Value: "build/Fighter2D.exe" }
+            extensions.SettingOf(MoveEditor(), "game") is StringValue { Value: "build/Fighter2D.exe" }
             && MoveSettings()!.Made.Get<TextBox>("game_path").Text == "build/Fighter2D.exe"
             && MoveSettings()!.Made.Get<Label>("found").Text.StartsWith("Fight! starts", StringComparison.Ordinal));
 
@@ -167,7 +167,7 @@ internal sealed partial class HexScene
             CloseSettings();
         });
         test.Wait();
-        test.Check("settings: and the sections go with the window", () => settingsMade.Count == 0 && SettingOf(MoveEditor(), "game") is StringValue { Value: "" });
+        test.Check("settings: and the sections go with the window", () => settingsMade.Count == 0 && extensions.SettingOf(MoveEditor(), "game") is StringValue { Value: "" });
 
         // A setting written and read back the way the settings file keeps it, a path with its backslashes among them
         test.Check("settings: the settings of extensions are kept in the extensions section of the settings file and read back as they were", () =>

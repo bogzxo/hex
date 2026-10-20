@@ -49,7 +49,7 @@ internal sealed partial class HexScene
             made.Get<Button>("keys").OnPressed = OpenKeysWindow;
             made.Get<Button>("language").OnPressed = ShowLanguageHelp;
             made.Get<Button>("changes").OnPressed = ShowChangelog;
-            made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexVersion));
+            made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Version));
 
             var list = made.Get<StackPanel>("recent");
             var rows = layout.Populate(list, Math.Min(recent.Count, 10));

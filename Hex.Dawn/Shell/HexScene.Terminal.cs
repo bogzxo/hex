@@ -31,7 +31,7 @@ internal sealed partial class HexScene : ITerminalHostUi
         terminals = new TerminalHost(terminalPanel, new TerminalHostOptions
         {
             Name = "hex",
-            Version = HexVersion,
+            Version = HexAbout.Version,
             ObjectNames = ["terminal"],
             PluginFolders = [(TerminalHost.EnginePlugins, true), (Path.Combine(TerminalFiles.UserFolder, TerminalFiles.PLUGINS), false)],
             KeysFiles = [TerminalHost.EngineKeys, TerminalFiles.Keys()],

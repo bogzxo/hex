@@ -38,7 +38,7 @@ internal sealed partial class HexScene
         string folder = Path.Combine(testFolder, "asking_extension");
         HexExtension? asking = null;
         IRuntimeValue? Their(string name) => asking?.Runtime?.UserScope.Lookup(name);
-        void Command(string name) => ExtensionCommands().First(command => command.Text.StartsWith($"Asking: {name}", StringComparison.Ordinal)).Picked();
+        void Command(string name) => extensions.Commands().First(command => command.Text.StartsWith($"Asking: {name}", StringComparison.Ordinal)).Picked();
 
         test.Run(() =>
         {
@@ -46,16 +46,16 @@ internal sealed partial class HexScene
             File.WriteAllText(Path.Combine(folder, HexExtension.FILE), ASKING_EXTENSION);
             asking = new HexExtension(folder, builtIn: false) { Enabled = true };
             extensions.Add(asking);
-            StartExtension(asking);
+            extensions.Start(asking);
         });
 
         // Watched once the file it was made with is written and done with, or that's a change to it
         test.Settle(0.5f);
-        test.Run(WatchExtensions);
+        test.Run(extensions.WatchFolders);
         test.Wait();
         test.Check("extensions: a command on a key says the key in the palette, and the key reads as control, alt and J", () =>
-            asking is { Failed: null } && ExtensionCommands().Any(command => command.Text == "Asking: Ask me   (Ctrl+Alt+J)")
-            && ReadKey("Ctrl+Alt+J") == (Key.J, true, false, true) && ReadKey("Shift+F6") == (Key.F6, false, true, false) && ReadKey("Ctrl+Nope") is null);
+            asking is { Failed: null } && extensions.Commands().Any(command => command.Text == "Asking: Ask me   (Ctrl+Alt+J)")
+            && HexKeys.Read("Ctrl+Alt+J") == (Key.J, true, false, true) && HexKeys.Read("Shift+F6") == (Key.F6, false, true, false) && HexKeys.Read("Ctrl+Nope") is null);
 
         // hex.ask, the dialog with its buttons, the one pressed handed to the function
         test.Run(() => Command("Ask me"));
@@ -122,15 +122,15 @@ internal sealed partial class HexScene
         // Read again without a restart when its file changes, its commands those of the new one
         test.Run(() => File.WriteAllText(Path.Combine(folder, HexExtension.FILE),
             ASKING_EXTENSION.Replace("\"Ask me\"", "\"Ask me again\"", StringComparison.Ordinal)));
-        test.WaitFor(() => ExtensionCommands().Any(command => command.Text.StartsWith("Asking: Ask me again", StringComparison.Ordinal)), 4.0f);
+        test.WaitFor(() => extensions.Commands().Any(command => command.Text.StartsWith("Asking: Ask me again", StringComparison.Ordinal)), 4.0f);
         test.Check("extensions: changing an extension's file reads it again, its commands the new ones and the old one gone", () =>
-            asking is { Failed: null } && ExtensionCommands().Any(command => command.Text == "Asking: Ask me again   (Ctrl+Alt+J)")
-            && !ExtensionCommands().Any(command => command.Text.StartsWith("Asking: Ask me   ", StringComparison.Ordinal))
+            asking is { Failed: null } && extensions.Commands().Any(command => command.Text == "Asking: Ask me again   (Ctrl+Alt+J)")
+            && !extensions.Commands().Any(command => command.Text.StartsWith("Asking: Ask me   ", StringComparison.Ordinal))
             && Their("answers") is ListValue { Count: 0 });
 
         test.Run(() =>
         {
-            if (extensionWatchers.Remove(asking!, out FileSystemWatcher? watcher))
+            if (extensions.extensionWatchers.Remove(asking!, out FileSystemWatcher? watcher))
                 watcher.Dispose();
             extensions.Remove(asking!);
             CloseNow();

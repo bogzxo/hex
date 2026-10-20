@@ -11,7 +11,7 @@ internal sealed partial class HexScene
     /// <summary>The built-in extension that opens a file, null for none (it's text).</summary>
     private IHexFileKind? FileKindFor(string path, string source)
     {
-        foreach (HexExtension extension in extensions)
+        foreach (HexExtension extension in extensions.All)
         {
             if (extension is { Enabled: true, Failed: null, Native: { } native } && FileKinds.TryGetValue(native, out IHexFileKind? kind) && kind.Opens(path, source))
                 return kind;
@@ -21,5 +21,5 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Whether the designer is switched on, which is whether a layout opens on its canvas.</summary>
-    private bool DesignerOn => extensions.Any(extension => extension is { Enabled: true, Failed: null, Native: HexDesignerKind.ID });
+    private bool DesignerOn => extensions.NativeOn(HexDesignerKind.ID);
 }

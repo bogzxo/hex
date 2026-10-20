@@ -175,7 +175,9 @@ internal sealed partial class HexScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         DeclareMenus();
+        extensions = new HexExtensions(Context, this);
         terminalFiles = new HexTerminalFiles(Context);
+        extensions.TerminalApi = terminalFiles.Api();
         languages = new HexLanguages(Context);
         BuildStatusBar();
         BuildPanel();
@@ -226,7 +228,7 @@ internal sealed partial class HexScene : Scene
         };
 
         BuildPalette();
-        FindExtensions();
+        extensions.Find();
         Show(NewDocument());
         startedWith = document;
 
@@ -251,8 +253,8 @@ internal sealed partial class HexScene : Scene
             RestoreBackups();
 
         // Last, an extension's on_start finds the editor up and a file open
-        LoadExtensions();
-        WatchExtensions();
+        extensions.StartAll();
+        extensions.WatchFolders();
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
@@ -348,8 +350,7 @@ internal sealed partial class HexScene : Scene
         Profile.Mark("work");
 
         UpdateExtensionUI(dt);
-        UpdateWatchedFiles();
-        UpdateEffects();
+                UpdateEffects();
         UpdateAutoSave(dt);
         debugger.Update();
         ApplyAskedView();

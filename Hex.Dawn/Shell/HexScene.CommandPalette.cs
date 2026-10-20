@@ -40,7 +40,7 @@ internal sealed partial class HexScene
             }
         }
 
-        commands.AddRange(ExtensionCommands());
+        commands.AddRange(extensions.Commands());
 
         // The terminal's commands, the same ones Dusk has, under a heading of their own
         foreach (TerminalCommand command in terminals.Commands.All)

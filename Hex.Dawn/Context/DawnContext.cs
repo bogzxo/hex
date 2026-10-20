@@ -3,6 +3,7 @@ using System.Numerics;
 using Hex.Shell;
 
 using Horizon.Core.Threading;
+using Horizon.Input;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 
@@ -15,7 +16,8 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, ITerminals terminals, IPanels panels, HexCommands commands, HexOptions options, Action wake, Action redraw)
+    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, HexCommands commands, HexOptions options,
+    Action wake, Action redraw, Func<Keyboard> keyboard, Func<bool> typing)
 {
     public IDocuments Documents { get; } = documents;
     public IWorkspace Workspace { get; } = workspace;
@@ -25,6 +27,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public ISettingsHost Settings { get; } = settings;
     public ITerminals Terminals { get; } = terminals;
     public IPanels Panels { get; } = panels;
+    public IStrings Strings { get; } = strings;
     public HexCommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
@@ -35,6 +38,12 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
 
     /// <summary>Has the window drawn again for a while, for something that changed without anybody touching it.</summary>
     public void Redraw() => redraw();
+
+    /// <summary>The keyboard, for a part that has keys of its own that aren't commands.</summary>
+    public Keyboard Keyboard => keyboard();
+
+    /// <summary>Whether something has the keyboard, a text box or the code, which a key without control is typing into.</summary>
+    public bool Typing => typing();
 }
 
 /// <summary>
@@ -57,6 +66,12 @@ internal interface IDocuments
 
     /// <summary>The open document of a file, by its path, null when it isn't open.</summary>
     HexDocument? Find(string path);
+
+    /// <summary>A file opened as text in a tab behind the one on screen, or the one it has open already. Null when it can't be read.</summary>
+    HexDocument? OpenBehind(string path);
+
+    /// <summary>A document's text replaced as one step to undo, its tab saying it has changes when it isn't the one on screen.</summary>
+    void Rewrite(HexDocument of, string text);
 
     /// <summary>Opens a file, or shows it open, with the caret at a line and column of it (from 0).</summary>
     void OpenAt(string path, int line, int column);
@@ -170,6 +185,18 @@ internal interface IWindows
     /// </summary>
     void Choose(string title, string message, List<(string Text, Action Picked)> choices);
 
+    /// <summary>A question with buttons, the label of the one pressed handed on.</summary>
+    void Ask(string title, string text, string[] buttons, Action<string> answered);
+
+    /// <summary>A line of text asked for, what was typed handed on, enter or the button.</summary>
+    void Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed);
+
+    /// <summary>A menu where the pointer is.</summary>
+    void Menu(Menu menu);
+
+    /// <summary>A folder picked with Hex's own dialog, something done with it.</summary>
+    void ChooseFolder(Action<string> picked);
+
     /// <summary>The folder the dialogs start in when nothing says another.</summary>
     string BrowseFolder { get; }
 }
@@ -227,9 +254,25 @@ internal interface IPanels
     /// <summary>The panel's output brought up.</summary>
     void ShowOutput();
 
+    /// <summary>The Problems panel put together again, for problems of files that aren't on screen.</summary>
+    void RefreshProblems();
+
+    /// <summary>Whether the side bar is out, and putting it out or away as Ctrl+B does, kept as that is.</summary>
+    bool SideBarShown { get; set; }
+
+    /// <summary>Whether the properties are out, and putting them out or away as Ctrl+Alt+B does, kept as that is.</summary>
+    bool PropertiesShown { get; set; }
+
     /// <summary>The colour of what is said quietly in a row, the skin's.</summary>
     Vector4 Dim { get; }
 
     /// <summary>The colour of what went wrong, the skin's.</summary>
     Vector4 Error { get; }
+}
+
+/// <summary>Hex's texts, Assets/hex/localisation, with what goes in their gaps.</summary>
+internal interface IStrings
+{
+    /// <summary>The text of a key, {name} in it filled in.</summary>
+    string Said(string key, params (string Name, string Value)[] filled);
 }

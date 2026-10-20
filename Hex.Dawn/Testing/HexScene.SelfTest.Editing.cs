@@ -158,14 +158,14 @@ internal sealed partial class HexScene
     private void TestRunningProgram(HexPointerScript test)
     {
         string shell = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.System), "cmd.exe");
-        if (!File.Exists(shell) || extensions.Count == 0)
+        if (!File.Exists(shell) || extensions.All.Count == 0)
             return;
 
-        test.Run(() => StartProgram(extensions[0], shell, ["/c", "ping", "-n", "3", "127.0.0.1"], null));
+        test.Run(() => extensions.StartProgram(extensions.All[0], shell, ["/c", "ping", "-n", "3", "127.0.0.1"], null));
         test.Wait();
         test.Check("running: a game started from Hex is said in the status bar, what's saved reloading in it", () =>
             runningItem.IsVisible?.Invoke() == true && runningItem.Text.Contains("cmd running", StringComparison.Ordinal));
-        test.WaitFor(() => Volatile.Read(ref programsRunning) == 0, 8.0f);
+        test.WaitFor(() => Volatile.Read(ref extensions.programsRunning) == 0, 8.0f);
         test.Check("running: and isn't once it's gone", () => runningItem.IsVisible?.Invoke() == false);
     }
 

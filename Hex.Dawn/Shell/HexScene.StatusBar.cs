@@ -45,7 +45,7 @@ internal sealed partial class HexScene
 
         // A game started from here (Fight!) reads what's saved as it changes, Defold's hot reload, said while it runs
         runningItem = statusBar.Add(string.Empty, right: true, tooltip: "A game started from Hex is running, and reads every file it uses again when it's saved here, Ctrl+S and look");
-        runningItem.IsVisible = () => Volatile.Read(ref programsRunning) > 0;
+        runningItem.IsVisible = () => Volatile.Read(ref extensions.programsRunning) > 0;
 
         // The work going in the background, on the right before the rest (HexScene.Background)
         BuildWorkItem();
@@ -80,11 +80,11 @@ internal sealed partial class HexScene
     /// <summary>The name of the running game said once, when it changes.</summary>
     private void UpdateRunningItem()
     {
-        if (ReferenceEquals(runningShown, runningName))
+        if (ReferenceEquals(runningShown, extensions.runningName))
             return;
 
-        runningShown = runningName;
-        runningItem.Text = $"$(run) {runningName} running, saves reload in it";
+        runningShown = extensions.runningName;
+        runningItem.Text = $"$(run) {extensions.runningName} running, saves reload in it";
     }
 
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>

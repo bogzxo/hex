@@ -17,8 +17,121 @@ namespace Hex.Dawn;
 // panel is a tab next to the problems, the output and the console. A window is a little window over everything. Every
 // one of them a layout out of the extension's folder, its handlers called by the extension (a second at the most, the
 // extension switched off when one throws).
-internal sealed partial class HexScene
+internal sealed partial class HexScene : IExtensionScreens
 {
+    // What an extension put in the title bar after Hex, in brackets, and which one it was
+    private string titleNote = string.Empty;
+    private HexExtension? titleNoteBy;
+
+    void IExtensionScreens.AddView(ExtensionViewKind kind)
+    {
+        viewKinds.RemoveAll(other => other.Id == kind.Id);
+        viewKinds.Add(kind);
+        tabsDirty = true;
+    }
+
+    ExtensionUI? IExtensionScreens.MakePanelPage(HexExtension owner, string title, string icon, string layoutFile) => MakePanelPage(owner, title, icon, layoutFile);
+    ExtensionUI? IExtensionScreens.MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size) => MakeWindow(owner, title, layoutFile, size);
+
+    void IExtensionScreens.TitleNote(HexExtension by, string text)
+    {
+        titleNote = text;
+        titleNoteBy = by;
+        tabsDirty = true;
+    }
+
+    void IExtensionScreens.ForgetTitleNote(HexExtension by)
+    {
+        if (titleNoteBy != by)
+            return;
+
+        titleNote = string.Empty;
+        titleNoteBy = null;
+        tabsDirty = true;
+    }
+
+    /// <summary>The file on screen for an extension, its path, name, text, #defines and what it came to the last time it ran.</summary>
+    IRuntimeValue IExtensionScreens.DocumentObject()
+    {
+        var defines = new Dictionary<string, IRuntimeValue>();
+        foreach (var (name, value) in DefinesOf(document))
+            defines[name] = new StringValue(value);
+
+        IRuntimeValue declared = Values.Null;
+        if (values is { } ran && valuesOf == document)
+        {
+            var all = new Dictionary<string, IRuntimeValue>();
+            foreach (var (name, value) in ran.Declared)
+                all[name] = value;
+            declared = new ObjectValue(all);
+        }
+
+        return Natives.Object(
+            ("path", document.Path is { } path ? new StringValue(Path.GetFullPath(path)) : Values.Null),
+            ("name", new StringValue(document.Name)),
+            ("text", new StringValue(code.Text)),
+            ("defines", new ObjectValue(defines)),
+            ("values", declared));
+    }
+
+    /// <summary>A file to open picked, with Hex's own dialog, or its path typed for the self test.</summary>
+    private void AskFile(string title, string folder, List<(string Name, string Pattern)> filter, Action<string> picked)
+    {
+        if (!options.SelfTest)
+        {
+            Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
+            return;
+        }
+
+        AskText(title, "The path of the file", folder, "Pick", typed =>
+        {
+            if (File.Exists(typed.Trim()))
+                picked(typed.Trim());
+            else
+                context.Notices.Say($"there is no file {typed}", error: true);
+        });
+    }
+
+
+    void IExtensionScreens.Reload(HexExtension extension, Action start)
+    {
+        var showing = new List<(HexDocument Document, string Id)>();
+        foreach (var ((open, id), made) in viewsMade.ToList())
+        {
+            if (made.Owner != extension)
+                continue;
+
+            if (open.View == HexView.Extension && open.ExtensionView == id)
+                showing.Add((open, id));
+            made.Closed = true;
+            extensionViews.Remove(made.Root);
+            viewsMade.Remove((open, id));
+        }
+
+        for (int i = windowsMade.Count - 1; i >= 0; i--)
+        {
+            if (windowsMade[i].Owner == extension)
+            {
+                windowsMade[i].Closed = true;
+                windowsMade[i].Root.Parent?.Remove(windowsMade[i].Root);
+                windowsMade.RemoveAt(i);
+            }
+        }
+
+        viewKinds.RemoveAll(kind => kind.Owner == extension);
+        start();
+
+        foreach (var (open, id) in showing)
+        {
+            if (!documents.Contains(open))
+                continue;
+            open.View = HexView.Extension;
+            open.ExtensionView = id;
+        }
+
+        ApplyView();
+    }
+
     private const string VIEW_BUTTON = "view_button.hor";
 
     private readonly List<ExtensionViewKind> viewKinds = [];
@@ -163,7 +276,7 @@ internal sealed partial class HexScene
 
         viewsMade[(of, kind.Id)] = made;
         if (kind.Open is { } open && !kind.Owner.Invoke(open, made, made.File is { } file ? new StringValue(file) : Values.Null))
-            ExtensionFailed(kind.Owner);
+            extensions.Failed(kind.Owner);
 
         return made;
     }
@@ -189,7 +302,7 @@ internal sealed partial class HexScene
         into.ScriptCaller = (handler, arguments) =>
         {
             if (owner.Failed is null && !owner.Invoke(handler, arguments))
-                ExtensionFailed(owner);
+                extensions.Failed(owner);
         };
 
         return new ExtensionUI(owner, kind, made, into, file, close, room);
@@ -268,9 +381,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void UpdateExtensionUI(float dt)
     {
-        UpdateCommandKeys();
-        UpdateExtensionChange(dt);
-        UpdateExtensionReloads();
+        extensions.Update(dt);
         if (viewsMade.Count == 0 && panelsMade.Count == 0 && windowsMade.Count == 0)
             return;
 
@@ -324,13 +435,13 @@ internal sealed partial class HexScene
             ui.Sized = room;
             if (!ui.Owner.Invoke(resize, ui, new Vector2Value(room)))
             {
-                ExtensionFailed(ui.Owner);
+                extensions.Failed(ui.Owner);
                 return;
             }
         }
 
         if (ui.Tick is { } tick && !ui.Owner.Invoke(tick, ui, number ??= new NumberValue(dt)))
-            ExtensionFailed(ui.Owner);
+            extensions.Failed(ui.Owner);
     }
 
     private static readonly (Key Key, string Name)[] ExtensionKeys =
@@ -350,7 +461,7 @@ internal sealed partial class HexScene
 
         if (!view.Owner.Invoke(handler, [view, new StringValue(name)], out IRuntimeValue taken))
         {
-            ExtensionFailed(view.Owner);
+            extensions.Failed(view.Owner);
             return false;
         }
 
@@ -377,5 +488,44 @@ internal sealed partial class HexScene
         ExtensionViewKind? wanted = viewKinds.FirstOrDefault(kind => kind.When is { } when && !when.StartsWith('.') && defines.ContainsKey(when) && kind.Owner.Enabled && kind.Owner.Failed is null);
         if (wanted is not null && opened == document)
             SwitchToExtensionView(wanted.Id);
+    }
+
+    /* Keys for a view, letters and digits and with shift as well as the arrows */
+
+    private static readonly (Key Key, string Name)[] MoreViewKeys = BuildMoreViewKeys();
+
+    private static (Key, string)[] BuildMoreViewKeys()
+    {
+        var keys = new List<(Key, string)>();
+        for (char letter = 'a'; letter <= 'z'; letter++)
+            keys.Add((Key.A + (letter - 'a'), letter.ToString()));
+        for (char digit = '0'; digit <= '9'; digit++)
+            keys.Add((Key.Number0 + (digit - '0'), digit.ToString()));
+        keys.Add((Key.Comma, ","));
+        keys.Add((Key.Period, "."));
+        keys.Add((Key.LeftBracket, "["));
+        keys.Add((Key.RightBracket, "]"));
+        keys.Add((Key.Escape, "escape"));
+        keys.Add((Key.Backspace, "backspace"));
+        keys.Add((Key.Tab, "tab"));
+        keys.Add((Key.Slash, "/"));
+        return [.. keys];
+    }
+
+    // The names of a key with shift or alt held, made once a key so a press makes nothing
+    private readonly Dictionary<(string, bool, bool), string> heldNames = [];
+
+    /// <summary>A key handed to the view, "shift+left" first when shift is held, then "left" if it didn't want that.</summary>
+    private void ExtensionKeyHeld(string name, bool shift, bool alt)
+    {
+        if (shift || alt)
+        {
+            if (!heldNames.TryGetValue((name, shift, alt), out string? held))
+                heldNames[(name, shift, alt)] = held = (alt ? "alt+" : string.Empty) + (shift ? "shift+" : string.Empty) + name;
+            if (ExtensionKey(held))
+                return;
+        }
+
+        ExtensionKey(name);
     }
 }

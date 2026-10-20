@@ -173,7 +173,7 @@ internal sealed partial class HexScene
 
         // The extensions that are on, a toggle each
         test.Check("settings: the extensions are a row with a toggle for every extension there is", () =>
-            SettingsPage!.Settings.First(setting => setting.Key == "disabled_extensions").Choices is { Length: > 0 } listed && listed.Length == extensions.Count);
+            SettingsPage!.Settings.First(setting => setting.Key == "disabled_extensions").Choices is { Length: > 0 } listed && listed.Length == extensions.All.Count);
 
         Vector2 closeAt = Vector2.Zero;
         test.Run(() => closeAt = chrome.ToWorld(SettingsWindow!.CloseBounds.Center));

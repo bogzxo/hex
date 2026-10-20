@@ -190,7 +190,6 @@ internal sealed partial class HexScene
             found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
         }
 
-        found.AddRange(ExtensionProblemsOf(of.Path));
         foreach (var source in diagnosticSources)
             found.AddRange(source(of) ?? []);
         of.Editor.Diagnostics = found;
@@ -244,7 +243,7 @@ internal sealed partial class HexScene
         UseLanguagesNear(path);
         Show(opened);
         Remember(path);
-        RaiseExtensions("on_open", new StringValue(Path.GetFullPath(path)));
+        extensions.Raise("on_open", new StringValue(Path.GetFullPath(path)));
 
         // A file an extension has a view for by its #define comes up on it
         OpenOnExtensionView(opened);

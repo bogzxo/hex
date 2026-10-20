@@ -17,7 +17,7 @@ namespace Hex.Dawn;
 internal sealed partial class HexScene
 {
     // The section the extensions that are on are in, and the one in front of each extension's own
-    private const string EXTENSIONS = "Extensions · Installed", EXTENSION_SECTION = "Extensions · ";
+    private const string EXTENSIONS = HexExtensions.SETTINGS, EXTENSION_SECTION = "Extensions · ";
 
     // What the editor's panels and Dawn's size are in
     private const string PANELS = "Editor · Panels";
@@ -83,7 +83,7 @@ internal sealed partial class HexScene
     /// <summary>A section of the window for every extension that is on and has something to set, its own layout of it or a row a setting.</summary>
     private void AddExtensionSections(HexSettingsView view)
     {
-        foreach (HexExtension extension in extensions)
+        foreach (HexExtension extension in extensions.All)
         {
             if (!extension.Enabled || extension.Failed is not null || (extension.SettingsLayout is null && extension.Settings.Count == 0))
                 continue;
@@ -94,8 +94,8 @@ internal sealed partial class HexScene
             if (extension.SettingsLayout is { } own && MakeUI(extension, "settings page", own, body, null, null) is { } page)
             {
                 settingsMade.Add(page);
-                if (!extension.Raise("on_settings", HexOf(extension), page))
-                    ExtensionFailed(extension);
+                if (!extension.Raise("on_settings", extensions.HexOf(extension), page))
+                    extensions.Failed(extension);
             }
             else
             {
@@ -138,7 +138,7 @@ internal sealed partial class HexScene
             new("layout_skin", "Layouts are shown in", UIFormKind.Choice, "The skin and the theme the designer shows a layout in, the game's own setting and not Dawn's.", EditorSettingsCatalog.DESIGNER,
                 [.. LayoutSkins().Select(choice => choice.Text)]),
             new("disabled_extensions", "Switched off", UIFormKind.Flags, "The extensions that are off, the rest run. Each one that is on and has settings of its own has a section of them under this.", EXTENSIONS,
-                [.. hex.extensions.Select(extension => extension.Id)])
+                [.. hex.extensions.All.Select(extension => extension.Id)])
         ];
 
         public IRuntimeValue? Get(string key) => key switch
@@ -183,7 +183,7 @@ internal sealed partial class HexScene
             "auto_save_delay" => new NumberValue(hex.settings.AutoSaveDelay),
             "canvas_handles" => Values.Bool(hex.settings.CanvasHandles),
             "snap" => new NumberValue(hex.settings.Snap),
-            "disabled_extensions" => Natives.List(hex.extensions.Where(extension => !extension.Enabled).Select(extension => extension.Id)),
+            "disabled_extensions" => Natives.List(hex.extensions.All.Where(extension => !extension.Enabled).Select(extension => extension.Id)),
             _ => null
         };
 
@@ -191,7 +191,7 @@ internal sealed partial class HexScene
         {
             "editor_skin" => hex.settings.EditorSkin != "flat" || hex.settings.EditorTheme != "horizon",
             "size" or "panels" or "layout_skin" => false,
-            "disabled_extensions" => hex.extensions.Any(extension => !extension.Enabled),
+            "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
         };
 
@@ -354,10 +354,10 @@ internal sealed partial class HexScene
                     break;
                 case ("disabled_extensions", ListValue off):
                     var named = off.Items.OfType<StringValue>().Select(item => item.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                    foreach (HexExtension extension in hex.extensions)
+                    foreach (HexExtension extension in hex.extensions.All)
                     {
                         if (extension.Enabled == named.Contains(extension.Id))
-                            hex.SwitchExtension(extension, !named.Contains(extension.Id));
+                            hex.extensions.Switch(extension, !named.Contains(extension.Id));
                     }
                     return;
                 default:

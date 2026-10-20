@@ -187,7 +187,7 @@ internal sealed partial class HexScene
             }
         }
 
-        foreach (var (file, problem) in ExtensionProblemsElsewhere())
+        foreach (var (file, problem) in extensions.ProblemsElsewhere())
             problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning));
 
         problemList.AddRange(terminalProblems);

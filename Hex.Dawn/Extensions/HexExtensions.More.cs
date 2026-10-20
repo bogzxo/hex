@@ -9,12 +9,12 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// What extensions were missing once one had a real UI (the move editor's plan asked for every one of these). A menu at
+// What all were missing once one had a real UI (the move editor's plan asked for every one of these). A menu at
 // the pointer (hex.menu), a question with buttons (hex.ask), a name asked for (hex.prompt), a key on a command
 // (hex.command's third argument, shown in the palette), letters, digits and shift reaching a view as well as the arrows,
 // on_change as a file is typed into, and an extension read again when a file of its folder changes, its views of open
 // files put back on them, so writing one isn't a restart of Hex a change.
-internal sealed partial class HexScene
+internal sealed partial class HexExtensions
 {
     // How long a file is left alone after it was typed into before on_change, and an extension's folder after it changed
     private const float CHANGE_QUIET = 0.3f;
@@ -28,7 +28,7 @@ internal sealed partial class HexScene
                 throw args.Wrong("hex.menu takes a list of items, { label, icon, key, on_pressed, items }.");
             var made = new Menu(extension.Name);
             FillMenu(extension, made, items);
-            contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, made);
+            context.Windows.Menu(made);
         })),
         ("ask", Natives.Action("ask", args =>
         {
@@ -38,18 +38,15 @@ internal sealed partial class HexScene
                 ? [.. list.Items.Select(item => item is StringValue text ? text.Value : "?")]
                 : ["OK", "Cancel"];
 
-            if (textDialog is { IsOpen: true })
-                textDialog.Close();
-            textDialog = UIDialog.Show(chrome, Text(asked, "title") ?? extension.Name, Text(asked, "text") ?? string.Empty,
-                [.. buttons.Select(label => new DialogChoice(label, () => Answered(extension, then, new StringValue(label))))]);
+            context.Windows.Ask(Text(asked, "title") ?? extension.Name, Text(asked, "text") ?? string.Empty, buttons,
+                label => Answered(extension, then, new StringValue(label)));
         })),
         ("prompt", Natives.Action("prompt", args =>
         {
             ObjectValue asked = args.Object(0);
             IRuntimeValue then = args[1];
-            AskText(Text(asked, "title") ?? extension.Name, Text(asked, "text") ?? string.Empty, Text(asked, "value") ?? string.Empty,
-                Text(asked, "button") ?? "OK", typed => Answered(extension, then, new StringValue(typed)),
-                box => box.Placeholder = Text(asked, "placeholder") ?? string.Empty);
+            context.Windows.Prompt(Text(asked, "title") ?? extension.Name, Text(asked, "text") ?? string.Empty, Text(asked, "value") ?? string.Empty,
+                Text(asked, "button") ?? "OK", Text(asked, "placeholder") ?? string.Empty, typed => Answered(extension, then, new StringValue(typed)));
         }))
     ];
 
@@ -57,7 +54,7 @@ internal sealed partial class HexScene
     private void Answered(HexExtension extension, IRuntimeValue then, IRuntimeValue answer)
     {
         if (extension.Enabled && !extension.Invoke(then, HexOf(extension), answer))
-            ExtensionFailed(extension);
+            Failed(extension);
     }
 
     /// <summary>A menu filled out of an extension's list, "-" a separator, an item with items a menu of its own.</summary>
@@ -85,7 +82,7 @@ internal sealed partial class HexScene
             MenuItem added = made.Add(label, () =>
             {
                 if (pressed is not null && pressed is not NullValue && !extension.Invoke(pressed, HexOf(extension)))
-                    ExtensionFailed(extension);
+                    Failed(extension);
             }, Text(entry, "key") ?? string.Empty, Text(entry, "icon") ?? string.Empty);
             if (Flag(entry, "enabled") is false)
                 added.IsEnabled = () => false;
@@ -102,8 +99,8 @@ internal sealed partial class HexScene
 
     private void UpdateCommandKeys()
     {
-        var keyboard = Engine.Input.Keyboard;
-        foreach (HexExtension extension in extensions)
+        var keyboard = context.Keyboard;
+        foreach (HexExtension extension in all)
         {
             if (!extension.Enabled || extension.Failed is not null || extension.CommandKeys.Count == 0)
                 continue;
@@ -111,7 +108,7 @@ internal sealed partial class HexScene
             foreach (var (name, written) in extension.CommandKeys)
             {
                 // A key without control or alt is a letter being typed while anything has the keyboard
-                if (ReadKey(written) is not { } key || (compositor.Focus is not null && !key.Control && !key.Alt))
+                if (ReadKey(written) is not { } key || (context.Typing && !key.Control && !key.Alt))
                     continue;
 
                 bool down = keyboard.IsDown(key.Key) && keyboard.Control == key.Control && keyboard.Shift == key.Shift && keyboard.Alt == key.Alt;
@@ -123,7 +120,7 @@ internal sealed partial class HexScene
                 foreach (var (commandName, function) in extension.Commands)
                 {
                     if (commandName == name && !extension.Invoke(function, HexOf(extension)))
-                        ExtensionFailed(extension);
+                        Failed(extension);
                 }
             }
         }
@@ -136,6 +133,7 @@ internal sealed partial class HexScene
 
     private void UpdateExtensionChange(float dt)
     {
+        HexDocument document = context.Documents.Current;
         if (document.Path is not { } path || !document.IsText)
             return;
 
@@ -155,19 +153,19 @@ internal sealed partial class HexScene
         if (changeQuiet >= CHANGE_QUIET && changeTold != now)
         {
             changeTold = now;
-            RaiseExtensions("on_change", new StringValue(Path.GetFullPath(path)));
+            Raise("on_change", new StringValue(Path.GetFullPath(path)));
         }
     }
 
     /* Reading an extension again when its folder changes */
 
-    private readonly Dictionary<HexExtension, FileSystemWatcher> extensionWatchers = [];
+    internal readonly Dictionary<HexExtension, FileSystemWatcher> extensionWatchers = [];
     private readonly ConcurrentDictionary<HexExtension, long> extensionsChanged = new();
 
     /// <summary>The folder of every extension that is on watched, so a change to it reads it again.</summary>
-    private void WatchExtensions()
+    internal void WatchFolders()
     {
-        foreach (HexExtension extension in extensions)
+        foreach (HexExtension extension in all)
         {
             if (extensionWatchers.ContainsKey(extension) || !Directory.Exists(extension.Folder))
                 continue;
@@ -224,80 +222,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void ReloadExtension(HexExtension extension)
     {
-        var showing = new List<(HexDocument Document, string Id)>();
-        foreach (var ((open, id), made) in viewsMade.ToList())
-        {
-            if (made.Owner != extension)
-                continue;
-
-            if (open.View == HexView.Extension && open.ExtensionView == id)
-                showing.Add((open, id));
-            made.Closed = true;
-            extensionViews.Remove(made.Root);
-            viewsMade.Remove((open, id));
-        }
-
-        for (int i = windowsMade.Count - 1; i >= 0; i--)
-        {
-            if (windowsMade[i].Owner == extension)
-            {
-                windowsMade[i].Closed = true;
-                windowsMade[i].Root.Parent?.Remove(windowsMade[i].Root);
-                windowsMade.RemoveAt(i);
-            }
-        }
-
-        viewKinds.RemoveAll(kind => kind.Owner == extension);
-        StartExtension(extension);
-
-        foreach (var (open, id) in showing)
-        {
-            if (!documents.Contains(open))
-                continue;
-            open.View = HexView.Extension;
-            open.ExtensionView = id;
-        }
-
-        ApplyView();
-        Say($"{extension.Name} read again");
-    }
-
-    /* Keys for a view, letters and digits and with shift as well as the arrows */
-
-    private static readonly (Key Key, string Name)[] MoreViewKeys = BuildMoreViewKeys();
-
-    private static (Key, string)[] BuildMoreViewKeys()
-    {
-        var keys = new List<(Key, string)>();
-        for (char letter = 'a'; letter <= 'z'; letter++)
-            keys.Add((Key.A + (letter - 'a'), letter.ToString()));
-        for (char digit = '0'; digit <= '9'; digit++)
-            keys.Add((Key.Number0 + (digit - '0'), digit.ToString()));
-        keys.Add((Key.Comma, ","));
-        keys.Add((Key.Period, "."));
-        keys.Add((Key.LeftBracket, "["));
-        keys.Add((Key.RightBracket, "]"));
-        keys.Add((Key.Escape, "escape"));
-        keys.Add((Key.Backspace, "backspace"));
-        keys.Add((Key.Tab, "tab"));
-        keys.Add((Key.Slash, "/"));
-        return [.. keys];
-    }
-
-    // The names of a key with shift or alt held, made once a key so a press makes nothing
-    private readonly Dictionary<(string, bool, bool), string> heldNames = [];
-
-    /// <summary>A key handed to the view, "shift+left" first when shift is held, then "left" if it didn't want that.</summary>
-    private void ExtensionKeyHeld(string name, bool shift, bool alt)
-    {
-        if (shift || alt)
-        {
-            if (!heldNames.TryGetValue((name, shift, alt), out string? held))
-                heldNames[(name, shift, alt)] = held = (alt ? "alt+" : string.Empty) + (shift ? "shift+" : string.Empty) + name;
-            if (ExtensionKey(held))
-                return;
-        }
-
-        ExtensionKey(name);
+        screens.Reload(extension, () => Start(extension));
+        context.Notices.Say($"{extension.Name} read again");
     }
 }

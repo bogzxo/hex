@@ -66,8 +66,8 @@ internal sealed partial class HexScene
 
         // The window says what is open, with a dot while it has changes, VS Code's way
         string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
-        ((TitleBar)top).Title = $"{name}{(document.Modified || document.CodeEdited ? " *" : string.Empty)}  -  Hex {HexVersion}{(titleNote.Length > 0 ? $" ({titleNote})" : string.Empty)}";
-        Engine.WindowManager.Title = $"{name} - Hex {HexVersion}";
+        ((TitleBar)top).Title = $"{name}{(document.Modified || document.CodeEdited ? " *" : string.Empty)}  -  Hex {HexAbout.Version}{(titleNote.Length > 0 ? $" ({titleNote})" : string.Empty)}";
+        Engine.WindowManager.Title = $"{name} - Hex {HexAbout.Version}";
     }
 
     private void ShowTabMenu(HexDocument tab)

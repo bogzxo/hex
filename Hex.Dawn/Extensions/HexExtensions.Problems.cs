@@ -8,9 +8,9 @@ namespace Hex.Dawn;
 // wrong with it. hex.problems(file, [{ path: ["moves", "jab", "hit"], message, warning }, { line, column, message }])
 // replaces whatever that extension said about that file before, [] says nothing's wrong. A path is placed where its key
 // is written, a line and a column are counted from 1.
-internal sealed partial class HexScene
+internal sealed partial class HexExtensions
 {
-    // What the extensions said, by the full path of the file and then by who said it
+    // What the all said, by the full path of the file and then by who said it
     private readonly Dictionary<string, Dictionary<HexExtension, List<UICodeDiagnostic>>> extensionFound = new(StringComparer.OrdinalIgnoreCase);
 
     private (string, IRuntimeValue)[] Problems(HexExtension extension) =>
@@ -25,13 +25,13 @@ internal sealed partial class HexScene
     /// <summary>Helper method for hex.problems, null when they were put up, why not otherwise.</summary>
     private string? SetProblems(HexExtension extension, IRuntimeValue file, IRuntimeValue said)
     {
-        string? full = file is StringValue { Value.Length: > 0 } named ? PathFor(extension, named.Value) : document.Path is { } here ? Path.GetFullPath(here) : null;
+        string? full = file is StringValue { Value.Length: > 0 } named ? PathFor(extension, named.Value) : context.Documents.Current.Path is { } here ? Path.GetFullPath(here) : null;
         if (full is null)
             return "the file on screen has never been saved, its problems have nowhere to go";
         if (said is not ListValue list)
             return "hex.problems takes a list of problems";
 
-        string text = OpenDocument(full)?.Editor.Text ?? (File.Exists(full) ? File.ReadAllText(full).ReplaceLineEndings("\n") : string.Empty);
+        string text = context.Documents.Find(full)?.Editor.Text ?? (File.Exists(full) ? File.ReadAllText(full).ReplaceLineEndings("\n") : string.Empty);
         HexSourceTree? tree = null;
 
         var found = new List<UICodeDiagnostic>();
@@ -68,14 +68,14 @@ internal sealed partial class HexScene
             extensionFound[full] = byExtension = [];
         byExtension[extension] = found;
 
-        if (OpenDocument(full) is { } open)
-            ShowDiagnostics(open);
-        problemsDirty = true;
+        if (context.Documents.Find(full) is { } open)
+            context.Documents.DiagnosticsChanged(open);
+        context.Panels.RefreshProblems();
         return null;
     }
 
-    /// <summary>What the extensions found wrong with a file, for its diagnostics and the problems panel.</summary>
-    private IEnumerable<UICodeDiagnostic> ExtensionProblemsOf(string? path)
+    /// <summary>What the all found wrong with a file, for its diagnostics and the problems panel.</summary>
+    private IEnumerable<UICodeDiagnostic> ProblemsOf(string? path)
     {
         if (path is null || !extensionFound.TryGetValue(Path.GetFullPath(path), out var byExtension))
             yield break;
@@ -90,16 +90,16 @@ internal sealed partial class HexScene
         }
     }
 
-    /// <summary>What the extensions found wrong with the files that aren't on screen, for the problems panel.</summary>
-    private IEnumerable<(string Path, UICodeDiagnostic Problem)> ExtensionProblemsElsewhere()
+    /// <summary>What the all found wrong with the files that aren't on screen, for the problems panel.</summary>
+    internal IEnumerable<(string Path, UICodeDiagnostic Problem)> ProblemsElsewhere()
     {
-        string? here = document.Path is { } path ? Path.GetFullPath(path) : null;
+        string? here = context.Documents.Current.Path is { } path ? Path.GetFullPath(path) : null;
         foreach (string file in extensionFound.Keys)
         {
             if (here is not null && string.Equals(file, here, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            foreach (UICodeDiagnostic problem in ExtensionProblemsOf(file))
+            foreach (UICodeDiagnostic problem in ProblemsOf(file))
                 yield return (file, problem);
         }
     }

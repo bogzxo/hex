@@ -4,6 +4,7 @@ using System.Numerics;
 using Hex.Shell;
 
 using Horizon.Core.Threading;
+using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 
@@ -12,7 +13,7 @@ namespace Hex.Dawn;
 // The scene as what the parts of the editor with a class of their own are handed (DawnContext). Each of these is the
 // scene's own doing passed on, what's new is the events and the sources the parts add, which the rest of the scene
 // raises and asks at the moments it used to call into them by name.
-internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals, IPanels
+internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals, IPanels, IStrings
 {
     private DawnContext? context;
 
@@ -21,10 +22,11 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private HexTasks tasks = null!;
     private HexDebugging debugger = null!;
     private HexTerminalFiles terminalFiles = null!;
+    private HexExtensions extensions = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
-    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, commands, options,
-        () => Engine.WindowManager.Wake(), () => Engine.WindowManager.RequestFrames());
+    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, commands, options,
+        () => Engine.WindowManager.Wake(), () => Engine.WindowManager.RequestFrames(), () => Engine.Input.Keyboard, () => compositor.Focus is not null);
 
     /* The documents */
 
@@ -56,11 +58,37 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
             Show(was);
     }
 
-    HexDocument? IDocuments.Find(string path)
+    HexDocument? IDocuments.OpenBehind(string path)
     {
         string full = Path.GetFullPath(path);
-        return documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, PlatformPaths.Comparison));
+        if (OpenDocument(full) is { } open)
+            return open;
+        if (!File.Exists(full))
+            return null;
+
+        // As it is on the disk, line endings and all, the editor keeps them and its save writes them back the same
+        OpenText(full, File.ReadAllText(full), show: false);
+        return OpenDocument(full);
     }
+
+    void IDocuments.Rewrite(HexDocument of, string text) => Rewrite(of, text);
+
+    /// <summary>A document's text replaced as one step to undo, its tab saying it has changes when it isn't the one on screen.</summary>
+    private void Rewrite(HexDocument of, string text)
+    {
+        of.Editor.Document.Replace(text);
+        if (of != document)
+        {
+            of.Modified = of.Editor.Text != of.SavedCode;
+            tabsDirty = true;
+        }
+    }
+
+    HexDocument? IDocuments.Find(string path) => OpenDocument(path);
+
+    /// <summary>The document open in Hex for a file, null if it isn't open.</summary>
+    private HexDocument? OpenDocument(string path) =>
+        documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), Path.GetFullPath(path), PlatformPaths.Comparison));
 
     event Action<HexDocument> IDocuments.Opened { add => documentOpened += value; remove => documentOpened -= value; }
     event Action<HexDocument> IDocuments.Edited { add => documentEdited += value; remove => documentEdited -= value; }
@@ -115,8 +143,37 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     WindowPanel IWindows.ShowText(string title, string markdown, float height) => ShowText(title, markdown, height);
     void IWindows.OpenSettings(string? section) => OpenSettings(section);
     void IWindows.OpenInBrowser(string url) => OpenInBrowser(url);
-    void IWindows.ChooseFile(string title, string folder, (string Name, string Pattern)[] filter, Action<string> picked) =>
-        Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
+    void IWindows.ChooseFile(string title, string folder, (string Name, string Pattern)[] filter, Action<string> picked)
+    {
+        if (!options.SelfTest)
+        {
+            Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
+            return;
+        }
+
+        // Testing itself the path is typed, there's nobody to click through a dialog
+        AskText(title, "The path of the file", folder, "Pick", typed =>
+        {
+            if (File.Exists(typed.Trim()))
+                picked(typed.Trim());
+            else
+                Say($"there is no file {typed}", error: true);
+        });
+    }
+
+    void IWindows.ChooseFolder(Action<string> picked) => AskFolder(picked);
+
+    void IWindows.Ask(string title, string text, string[] buttons, Action<string> answered)
+    {
+        if (textDialog is { IsOpen: true })
+            textDialog.Close();
+        textDialog = UIDialog.Show(chrome, title, text, [.. buttons.Select(label => new DialogChoice(label, () => answered(label)))]);
+    }
+
+    void IWindows.Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed) =>
+        AskText(title, text, value, button, typed, box => box.Placeholder = placeholder);
+
+    void IWindows.Menu(Menu menu) => contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
     string IWindows.BrowseFolder => browseDirectory;
     void IWindows.Choose(string title, string message, List<(string Text, Action Picked)> choices) => ChooseFrom(title, message, choices);
 
@@ -193,6 +250,27 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     void IPanels.RefreshRows() => sideTree.Refresh();
     void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
+    void IPanels.RefreshProblems() => problemsDirty = true;
+
+    bool IPanels.SideBarShown
+    {
+        get => left.Shown;
+        set
+        {
+            if (left.Shown != value)
+                ToggleSideBar();
+        }
+    }
+
+    bool IPanels.PropertiesShown
+    {
+        get => right.Shown;
+        set
+        {
+            if (right.Shown != value)
+                ToggleProperties();
+        }
+    }
     Vector4 IPanels.Dim => DimColor;
     Vector4 IPanels.Error => ErrorColor;
 
@@ -207,4 +285,8 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
         sideTree.Items = view.Rows();
         return true;
     }
+
+    /* Hex's texts */
+
+    string IStrings.Said(string key, params (string Name, string Value)[] filled) => Said(key, filled);
 }

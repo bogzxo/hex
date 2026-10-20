@@ -12,7 +12,7 @@ namespace Hex.Dawn;
 //                            (Aseprite saves a file in a few goes). A picture or an .ase that changes is read again next time
 //   hex.open(file, path)     the file on screen, at the value of a path if one is given
 //   hex.copy(text)           on the clipboard, and hex.copied() what was last copied through Hex
-internal sealed partial class HexScene
+internal sealed partial class HexExtensions
 {
     // How long a watched file has to be left alone before it counts as changed
     private const float WATCH_QUIET = 0.25f;
@@ -56,11 +56,11 @@ internal sealed partial class HexScene
     private void Changed(string path)
     {
         changedAt[path] = System.Environment.TickCount64;
-        Engine.WindowManager.Wake();
+        context.Wake();
     }
 
     /// <summary>Every tick, the watched files that changed and have been left alone since, told to whoever watches them.</summary>
-    private void UpdateWatchedFiles()
+    private void UpdateWatched()
     {
         if (changedAt.IsEmpty)
             return;
@@ -77,7 +77,7 @@ internal sealed partial class HexScene
             foreach (HexExtension extension in known.By)
             {
                 if (extension.Enabled && extension.Failed is null && !extension.Raise("on_file_changed", HexOf(extension), new StringValue(path)))
-                    ExtensionFailed(extension);
+                    Failed(extension);
             }
         }
     }
@@ -85,14 +85,14 @@ internal sealed partial class HexScene
     /// <summary>Opens a file for an extension, at the place a path of its values is written when there's one.</summary>
     private void OpenForExtension(string path, IRuntimeValue at)
     {
-        Open(path);
-        if (at is NullValue || OpenDocument(path) is not { IsText: true } opened)
+        context.Documents.Open(path);
+        if (at is NullValue || context.Documents.Find(path) is not { IsText: true } opened)
             return;
 
         try
         {
             if (HexSourceTree.Read(opened.Editor.Text, path, ReadInclude).Find(HexValueEdits.PathOf(at), out _) is { At.Span.IsKnown: true } node)
-                OpenAt(path, node.At.Span.Line - 1, node.At.Span.Column - 1);
+                context.Documents.OpenAt(path, node.At.Span.Line - 1, node.At.Span.Column - 1);
         }
         catch (Exception)
         {

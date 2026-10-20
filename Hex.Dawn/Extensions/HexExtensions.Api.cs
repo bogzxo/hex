@@ -9,12 +9,12 @@ namespace Hex.Dawn;
 // What an extension is handed, hex. Everything it can do to Hex is on it and nowhere else, in groups below by what
 // it is for, the README of Hex says what every one does. One is made for an extension and kept, it was made anew for
 // every event an extension heard about, sixty closures a time and every run of a file as it's typed is one.
-internal sealed partial class HexScene
+internal sealed partial class HexExtensions
 {
     private readonly Dictionary<HexExtension, ObjectValue> hexObjects = [];
 
     /// <summary>The hex object of an extension, made the first time it is asked for.</summary>
-    private ObjectValue HexOf(HexExtension extension)
+    internal ObjectValue HexOf(HexExtension extension)
     {
         if (!hexObjects.TryGetValue(extension, out ObjectValue hex))
         {
@@ -22,24 +22,22 @@ internal sealed partial class HexScene
             [
                 .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension), .. Prompting(extension),
                 .. Sides(), .. Programs(extension), .. About(extension), .. Edits(extension), .. Problems(extension),
-                .. Watching(extension), .. terminalFiles.Api()
+                .. Watching(extension), .. TerminalApi
             ]);
         }
 
         return hex;
     }
 
+    /// <summary>What the hex object has about the terminal's files, the terminal files' to hand over (HexTerminalFiles.Api).</summary>
+    internal (string, IRuntimeValue)[] TerminalApi { get; set; } = [];
+
     /// <summary>The title bar, the status bar, the cards in the corner and the command palette.</summary>
     private (string, IRuntimeValue)[] Talking(HexExtension extension) =>
     [
-        ("title_note", Natives.Action("title_note", args =>
-        {
-            titleNote = args.Text(0, string.Empty).ReplaceLineEndings(" ");
-            titleNoteBy = extension;
-            tabsDirty = true;
-        })),
-        ("say", Natives.Action("say", args => Say($"{extension.Name}: {args.Text(0, string.Empty)}"))),
-        ("notify", Natives.Action("notify", args => Notify($"{extension.Name}: {args.Text(0, string.Empty)}", error: args.Bool(1, false)))),
+        ("title_note", Natives.Action("title_note", args => screens.TitleNote(extension, args.Text(0, string.Empty).ReplaceLineEndings(" ")))),
+        ("say", Natives.Action("say", args => context.Notices.Say($"{extension.Name}: {args.Text(0, string.Empty)}"))),
+        ("notify", Natives.Action("notify", args => context.Notices.Notify($"{extension.Name}: {args.Text(0, string.Empty)}", error: args.Bool(1, false)))),
         ("command", Natives.Action("command", args =>
         {
             // In the command palette under the extension's name, as long as it is switched on, and on a key if it says one
@@ -56,23 +54,21 @@ internal sealed partial class HexScene
         }))
     ];
 
-    /// <summary>What it puts on screen, layouts of its folder, see HexScene.ExtensionUI.</summary>
+    /// <summary>What it puts on screen, layouts of its folder, see IExtensionScreens.</summary>
     private (string, IRuntimeValue)[] Screens(HexExtension extension) =>
     [
         ("view", Natives.Action("view", args =>
         {
             ObjectValue made = args.Object(0);
             string id = $"{extension.Id}.{Text(made, "id") ?? throw args.Wrong("a view needs an id.")}";
-            viewKinds.RemoveAll(kind => kind.Id == id);
-            viewKinds.Add(new ExtensionViewKind(extension, id, Text(made, "title") ?? id, Text(made, "icon") ?? "extensions",
+            screens.AddView(new ExtensionViewKind(extension, id, Text(made, "title") ?? id, Text(made, "icon") ?? "extensions",
                 Text(made, "layout") ?? throw args.Wrong("a view needs a layout."), Text(made, "when"), FunctionOf(made, "open"),
                 Flag(made, "left") ?? true, Flag(made, "right") ?? true));
-            tabsDirty = true;
         })),
         ("panel", Natives.Function("panel", args =>
         {
             ObjectValue made = args.Object(0);
-            ExtensionUI? page = MakePanelPage(extension, Text(made, "title") ?? extension.Name, Text(made, "icon") ?? string.Empty,
+            ExtensionUI? page = screens.MakePanelPage(extension, Text(made, "title") ?? extension.Name, Text(made, "icon") ?? string.Empty,
                 Text(made, "layout") ?? throw args.Wrong("a page of the panel needs a layout."));
             return Opened(extension, page, FunctionOf(made, "open"));
         })),
@@ -80,7 +76,7 @@ internal sealed partial class HexScene
         {
             ObjectValue made = args.Object(0);
             Vector2 size = new(Number(made, "width") ?? 480, Number(made, "height") ?? 360);
-            ExtensionUI? window = MakeWindow(extension, Text(made, "title") ?? extension.Name,
+            ExtensionUI? window = screens.MakeWindow(extension, Text(made, "title") ?? extension.Name,
                 Text(made, "layout") ?? throw args.Wrong("a window needs a layout."), size);
             return Opened(extension, window, FunctionOf(made, "open"));
         }))
@@ -93,7 +89,7 @@ internal sealed partial class HexScene
             return Values.Null;
 
         if (open is not null && !extension.Invoke(open, made))
-            ExtensionFailed(extension);
+            Failed(extension);
         return made;
     }
 
@@ -106,8 +102,8 @@ internal sealed partial class HexScene
         ("find_up", Natives.Function("find_up", args => FindUp(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null)),
         ("load", Natives.Function("load", args => LoadForExtension(PathFor(extension, args.Text(0))))),
         ("try_load", Natives.Function("try_load", args => TryLoadForExtension(PathFor(extension, args.Text(0))))),
-        ("document", Natives.Function("document", _ => DocumentObject())),
-        ("file", Natives.Function("file", _ => document.Path is { } path ? new StringValue(path) : Values.Null)),
+        ("document", Natives.Function("document", _ => screens.DocumentObject())),
+        ("file", Natives.Function("file", _ => context.Documents.Current.Path is { } path ? new StringValue(path) : Values.Null)),
         ("sprite", Natives.Function("sprite", args => Horizon.UI.Drawing.UISprite.Open(PathFor(extension, args.Text(0)))))
     ];
 
@@ -123,13 +119,13 @@ internal sealed partial class HexScene
         {
             ObjectValue asked = args.Object(0);
             IRuntimeValue then = args[1];
-            string folder = Text(asked, "folder") is { } from ? PathFor(extension, from) : browseDirectory;
-            AskFile(Text(asked, "title") ?? $"{extension.Name}, a file", folder, FilterOf(asked), picked => Picked(extension, then, picked));
+            string folder = Text(asked, "folder") is { } from ? PathFor(extension, from) : context.Windows.BrowseFolder;
+            context.Windows.ChooseFile(Text(asked, "title") ?? $"{extension.Name}, a file", folder, [.. FilterOf(asked)], picked => Picked(extension, then, picked));
         })),
         ("pick_folder", Natives.Action("pick_folder", args =>
         {
             IRuntimeValue then = args[0];
-            AskFolder(picked => Picked(extension, then, picked));
+            context.Windows.ChooseFolder(picked => Picked(extension, then, picked));
         }))
     ];
 
@@ -154,12 +150,12 @@ internal sealed partial class HexScene
             bool shown = args.Bool(1, true);
             switch (args.Text(0))
             {
-                case "left": if (left.Shown != shown) ToggleSideBar(); break;
-                case "right": if (right.Shown != shown) ToggleProperties(); break;
+                case "left": context.Panels.SideBarShown = shown; break;
+                case "right": context.Panels.PropertiesShown = shown; break;
                 default: throw args.Wrong("the sides are \"left\" and \"right\".");
             }
         })),
-        ("side_shown", Natives.Function("side_shown", args => Values.Bool(args.Text(0) == "left" ? left.Shown : right.Shown)))
+        ("side_shown", Natives.Function("side_shown", args => Values.Bool(args.Text(0) == "left" ? context.Panels.SideBarShown : context.Panels.PropertiesShown)))
     ];
 
     /// <summary>A program started, a game to try what was edited in, with its arguments and the folder it starts in.</summary>
@@ -170,19 +166,17 @@ internal sealed partial class HexScene
             args.Has(2) ? PathFor(extension, args.Text(2)) : null))))
     ];
 
-    /// <summary>Hex's version, the extension's name (put right once its file has said it, see StartExtension) and its folder.</summary>
+    /// <summary>Hex's version, the extension's name (put right once its file has said it, see Start) and its folder.</summary>
     private static (string, IRuntimeValue)[] About(HexExtension extension) =>
     [
-        ("version", new StringValue(HexVersion)),
+        ("version", new StringValue(HexAbout.Version)),
         ("name", new StringValue(extension.Name)),
         ("folder", new StringValue(extension.Folder))
     ];
 
-    private static string HexVersion => System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
-
     /* Reading what an extension handed over */
 
-    private static string? Text(ObjectValue of, string key) =>
+    internal static string? Text(ObjectValue of, string key) =>
         of.Properties.TryGetValue(key, out IRuntimeValue? value) && value is StringValue text ? text.Value : null;
 
     private static bool? Flag(ObjectValue of, string key) =>
@@ -191,7 +185,7 @@ internal sealed partial class HexScene
     private static float? Number(ObjectValue of, string key) =>
         of.Properties.TryGetValue(key, out IRuntimeValue? value) && value is NumberValue number ? number.Value : null;
 
-    private static IRuntimeValue? FunctionOf(ObjectValue of, string key) =>
+    internal static IRuntimeValue? FunctionOf(ObjectValue of, string key) =>
         of.Properties.TryGetValue(key, out IRuntimeValue? value) && Values.IsFunction(value) ? value : null;
 
     /// <summary>A path an extension gave, from its folder unless it is rooted.</summary>
@@ -213,13 +207,9 @@ internal sealed partial class HexScene
         }
     }
 
-    /// <summary>The document open in Hex for a file, null if it isn't open.</summary>
-    private HexDocument? OpenDocument(string path) =>
-        documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), path, StringComparison.OrdinalIgnoreCase));
-
     private string ReadForExtension(string path)
     {
-        if (OpenDocument(path) is { IsText: true } open)
+        if (context.Documents.Find(path) is { IsText: true } open)
             return open.Editor.Text;
 
         return File.Exists(path) ? File.ReadAllText(path) : throw new HidlRuntimeException($"There is no '{path}' to read.");
@@ -231,7 +221,7 @@ internal sealed partial class HexScene
     /// </summary>
     private void WriteForExtension(string path, string text)
     {
-        if (OpenDocument(path) is { IsText: true } open)
+        if (context.Documents.Find(path) is { IsText: true } open)
         {
             if (open.Editor.Text != text)
                 open.Editor.Document.Replace(text);
@@ -277,65 +267,23 @@ internal sealed partial class HexScene
         return new ObjectValue(new Dictionary<string, IRuntimeValue>(runtime.UserScope.Variables));
     }
 
-    /// <summary>The file on screen for an extension, its path, name, text, #defines and what it came to the last time it ran.</summary>
-    private IRuntimeValue DocumentObject()
-    {
-        var defines = new Dictionary<string, IRuntimeValue>();
-        foreach (var (name, value) in DefinesOf(document))
-            defines[name] = new StringValue(value);
-
-        IRuntimeValue declared = Values.Null;
-        if (values is { } ran && valuesOf == document)
-        {
-            var all = new Dictionary<string, IRuntimeValue>();
-            foreach (var (name, value) in ran.Declared)
-                all[name] = value;
-            declared = new ObjectValue(all);
-        }
-
-        return Natives.Object(
-            ("path", document.Path is { } path ? new StringValue(Path.GetFullPath(path)) : Values.Null),
-            ("name", new StringValue(document.Name)),
-            ("text", new StringValue(code.Text)),
-            ("defines", new ObjectValue(defines)),
-            ("values", declared));
-    }
-
-    /// <summary>A file to open picked, with Hex's own dialog, or its path typed for the self test.</summary>
-    private void AskFile(string title, string folder, List<(string Name, string Pattern)> filter, Action<string> picked)
-    {
-        if (!options.SelfTest)
-        {
-            Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
-            return;
-        }
-
-        AskText(title, "The path of the file", folder, "Pick", typed =>
-        {
-            if (File.Exists(typed.Trim()))
-                picked(typed.Trim());
-            else
-                Say($"there is no file {typed}", error: true);
-        });
-    }
-
     /// <summary>Hands what was picked to the extension that asked, which is switched off if that goes wrong.</summary>
     private void Picked(HexExtension extension, IRuntimeValue then, string path)
     {
         if (extension.Failed is null && Values.IsFunction(then) && !extension.Invoke(then, new StringValue(Path.GetFullPath(path))))
-            ExtensionFailed(extension);
+            Failed(extension);
     }
 
     /// <summary>Starts a program for an extension, false (and said why in the output) if it wouldn't.</summary>
-    // How many programs extensions started are still running, and the name of the last one
-    private int programsRunning;
-    private string runningName = string.Empty;
+    // How many programs all started are still running, and the name of the last one
+    internal int programsRunning;
+    internal string runningName = string.Empty;
 
-    private bool StartProgram(HexExtension extension, string program, string[] arguments, string? folder)
+    internal bool StartProgram(HexExtension extension, string program, string[] arguments, string? folder)
     {
         if (!File.Exists(program))
         {
-            Note($"{extension.Name}: there is no '{program}' to start.", error: true);
+            context.Notices.Note($"{extension.Name}: there is no '{program}' to start.", error: true);
             return false;
         }
 
@@ -360,14 +308,14 @@ internal sealed partial class HexScene
                 {
                     Interlocked.Decrement(ref programsRunning);
                     process.Dispose();
-                    Engine.WindowManager.Wake();
+                    context.Wake();
                 };
             }
             return true;
         }
         catch (Exception e)
         {
-            Note($"{extension.Name}: '{Path.GetFileName(program)}' wouldn't start, {e.Message}", error: true);
+            context.Notices.Note($"{extension.Name}: '{Path.GetFileName(program)}' wouldn't start, {e.Message}", error: true);
             return false;
         }
     }

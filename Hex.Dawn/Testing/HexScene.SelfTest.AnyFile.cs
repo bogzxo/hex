@@ -58,12 +58,12 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             File.WriteAllText(layoutFile, STAND_IN_LAYOUT);
-            designer = extensions.Find(extension => extension.Native == HexDesignerKind.ID);
+            designer = extensions.All.FirstOrDefault(extension => extension.Native == HexDesignerKind.ID);
         });
         test.Check("any file: the designer is a built-in extension, on", () => designer is { BuiltIn: true, Enabled: true, Failed: null } && DesignerOn);
         test.Run(() =>
         {
-            SwitchExtension(designer!, false);
+            extensions.Switch(designer!, false);
             Open(layoutFile);
         });
         test.Settle(0.3f);
@@ -71,7 +71,7 @@ internal sealed partial class HexScene
         test.Run(() =>
         {
             CloseDocument(document);
-            SwitchExtension(designer!, true);
+            extensions.Switch(designer!, true);
             Open(layoutFile);
         });
         test.Settle(0.3f);

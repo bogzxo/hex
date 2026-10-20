@@ -75,7 +75,7 @@ internal sealed partial class HexScene
                 ShowDiagnostics(ran);
                 ShowInlineValues(ran, done);
                 if (ran.Path is { } runPath && done.Error is null)
-                    RaiseExtensions("on_run", new StringValue(Path.GetFullPath(runPath)));
+                    extensions.Raise("on_run", new StringValue(Path.GetFullPath(runPath)));
             }
             if (!LayoutTools)
                 inspectorDirty = true;

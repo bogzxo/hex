@@ -162,7 +162,7 @@ internal sealed partial class HexScene
         }
 
         Remember(path);
-        RaiseExtensions("on_open", new StringValue(Path.GetFullPath(path)));
+        extensions.Raise("on_open", new StringValue(Path.GetFullPath(path)));
         target.DiskText = source;
         target.SavedCode = target.GenerateCode();
         target.CodeEdited = false;
@@ -372,7 +372,7 @@ internal sealed partial class HexScene
             tabsDirty = treeDirty = true;
             Remember(path);
             WatchOpenFiles();
-            RaiseExtensions("on_save", new StringValue(Path.GetFullPath(path)));
+            extensions.Raise("on_save", new StringValue(Path.GetFullPath(path)));
 
             Console.WriteLine($"[Hex] Saved '{path}'.");
             if (!savingQuietly)
