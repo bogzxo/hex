@@ -8,6 +8,8 @@ namespace Hex.Dawn;
 /// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, and its right click.</summary>
 internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null);
 
+internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
+
 // The side bar's lists for code, the explorer, the outline, what was found and the files of a folder, all one tree the
 // side bar paints itself (a TreeView). They were a row a component made out of a template, every one of them made again
 // for any change, a selection that moved included. The designer's components and layers are still rows of their own.
@@ -46,8 +48,6 @@ internal sealed partial class HexScene
     private static UITreeItem NoteItem(string text, Vector4 color) => new(text) { Color = color };
 
     /* The explorer */
-
-    private readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
 
     /// <summary>The folders of the workspace as a tree, a folder's files read when it is opened and kept until they change.</summary>
     private void RebuildExplorer()

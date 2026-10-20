@@ -6,6 +6,9 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
+/// <summary>One problem, where it is, what it is, and whether it is only a warning.</summary>
+internal readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning);
+
 // The panel under the editor, put away and brought back with Ctrl+J. Problems is everything wrong with the file that is
 // open and, after F8, with every file of the workspace, a row a problem, a click goes there. Output is everything Hex has
 // said (the status bar only has the last of it) and what running a file printed. With nothing wrong and the problems the
@@ -51,8 +54,6 @@ internal sealed partial class HexScene
     private UIResize panelResize;
     private float panelOpenHeight;
 
-    /// <summary>One problem, where it is, what it is, and whether it is only a warning.</summary>
-    private readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning);
     private readonly List<HexProblem> problemList = [];
 
     private void BuildPanel()

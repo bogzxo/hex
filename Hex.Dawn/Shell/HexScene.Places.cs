@@ -2,6 +2,8 @@ using Silk.NET.Input;
 
 namespace Hex.Dawn;
 
+internal readonly record struct HexPlace(string Path, int Line, int Column);
+
 // Going back to where you were, Alt+Left and Alt+Right and the mouse's back and forward buttons. F12, a click in the values,
 // a problem, find in files, all of them jump somewhere (often another file) and there was no way back. A place is noted
 // whenever the caret goes further than a screen in one go or into another file, typing and stepping about don't count.
@@ -11,8 +13,6 @@ internal sealed partial class HexScene
 
     // How far the caret has to go in one tick to count as a jump, in lines
     private const int JUMP_LINES = 12;
-
-    private readonly record struct HexPlace(string Path, int Line, int Column);
 
     private readonly List<HexPlace> placesBack = [], placesForward = [];
 
