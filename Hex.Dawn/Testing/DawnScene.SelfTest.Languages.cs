@@ -66,7 +66,7 @@ internal sealed partial class DawnScene
             ("thing.cs", "using System;\n\n// a comment\npublic class Thing\n{\n    public int Count { get; set; } = 3;\n    private string name = \"hello\";\n}\n", "C#",
                 [(0, 0, SyntaxKind.Keyword), (2, 3, SyntaxKind.Comment), (3, 13, SyntaxKind.Type), (5, 37, SyntaxKind.Number), (6, 27, SyntaxKind.Text)]),
             ("make.py", "import os\n\ndef greet(name):\n    # say hello\n    print(len(name), 42)\n    return f\"hi {name}\"\n", "Python",
-                [(0, 0, SyntaxKind.Keyword), (2, 4, SyntaxKind.Call), (3, 4, SyntaxKind.Comment), (4, 4, SyntaxKind.Builtin), (4, 21, SyntaxKind.Number), (5, 13, SyntaxKind.Text)]),
+                [(0, 0, SyntaxKind.Control), (2, 4, SyntaxKind.Call), (3, 4, SyntaxKind.Comment), (4, 4, SyntaxKind.Builtin), (4, 21, SyntaxKind.Number), (5, 13, SyntaxKind.Text)]),
             ("data.json", "{\n    \"name\": \"hex\",\n    \"count\": 3,\n    \"on\": true\n}\n", "JSON",
                 [(1, 5, SyntaxKind.Property), (1, 13, SyntaxKind.Text), (2, 13, SyntaxKind.Number), (3, 10, SyntaxKind.Constant)]),
             ("sprites.slang", "#include <common/camera.slang>\n\nstruct Vertex { float4 position : SV_Position; };\n\n// the vertex stage\n", "HLSL",

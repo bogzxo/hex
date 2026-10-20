@@ -1,5 +1,6 @@
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
+using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
@@ -39,6 +40,10 @@ internal sealed partial class HexLanguages
     public HexLanguages(DawnContext with)
     {
         context = with;
+
+        // C# in the colours Visual Studio shows it in, whatever the skin, the way it looks where most of it is written
+        CodeLanguages.SetColors("source.cs", UISyntaxColors.VisualStudioDark(), UISyntaxColors.VisualStudioLight());
+
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
         with.Documents.Closed += StopLinting;

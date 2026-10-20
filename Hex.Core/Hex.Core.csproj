@@ -3,7 +3,7 @@
   <!-- What Hex knows and does that has no window in it: the settings, the workspace, the files and what's in them, the
        language servers' catalog, the tasks. Dawn and Dusk are drawn on top of it, and it is unit tested on its own -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
