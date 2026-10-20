@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
 
     private string ownMoves = string.Empty, sharedMoves = string.Empty, hitboxFile = string.Empty;
 
-    private UIScriptedLayout? MoveView() => viewsMade.Values.FirstOrDefault(made => made.Owner.Name == "Move editor" && !made.Closed);
+    private UIScriptedLayout? MoveView() => screens.Views.FirstOrDefault(made => made.Owner.Name == "Move editor" && !made.Closed);
 
     private T Part<T>(string name) where T : UIComponent => MoveView()!.Made.Get<T>(name);
 

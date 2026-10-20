@@ -30,8 +30,12 @@ internal sealed partial class DawnScene : IExtensionScreens
         tabsDirty = true;
     }
 
-    UIScriptedLayout? IExtensionScreens.MakePanelPage(HexExtension owner, string title, string icon, string layoutFile) => MakePanelPage(owner, title, icon, layoutFile);
-    UIScriptedLayout? IExtensionScreens.MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size) => MakeWindow(owner, title, layoutFile, size);
+    UIScriptedLayout? IExtensionScreens.MakePanelPage(HexExtension owner, string title, string icon, string layoutFile) =>
+        screens.MakePage(owner, icon.Length > 0 ? $"$({icon}) {title.ToUpperInvariant()}" : title.ToUpperInvariant(), Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)),
+            bottom, () => problemsDirty = true);
+
+    UIScriptedLayout? IExtensionScreens.MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size) =>
+        screens.MakeWindow(owner, title, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), size);
 
     void IExtensionScreens.TitleNote(HexExtension by, string text)
     {
@@ -95,29 +99,8 @@ internal sealed partial class DawnScene : IExtensionScreens
 
     void IExtensionScreens.Reload(HexExtension extension, Action start)
     {
-        var showing = new List<(HexDocument Document, string Id)>();
-        foreach (var ((open, id), made) in viewsMade.ToList())
-        {
-            if (made.Owner != extension)
-                continue;
-
-            if (open.View == HexView.Extension && open.ExtensionView == id)
-                showing.Add((open, id));
-            made.Closed = true;
-            extensionViews.Remove(made.Root);
-            viewsMade.Remove((open, id));
-        }
-
-        for (int i = windowsMade.Count - 1; i >= 0; i--)
-        {
-            if (windowsMade[i].Owner == extension)
-            {
-                windowsMade[i].Closed = true;
-                windowsMade[i].Root.Parent?.Remove(windowsMade[i].Root);
-                windowsMade.RemoveAt(i);
-            }
-        }
-
+        // The views that were on screen go back on their files once it's started again
+        var showing = screens.Forget(extension).Where(view => view.File.View == HexView.Extension && view.File.ExtensionView == view.Id).ToList();
         viewKinds.RemoveAll(kind => kind.Owner == extension);
         start();
 
@@ -135,8 +118,9 @@ internal sealed partial class DawnScene : IExtensionScreens
     private const string VIEW_BUTTON = "view_button.hor";
 
     private readonly List<ExtensionViewKind> viewKinds = [];
-    private readonly Dictionary<(HexDocument, string), UIScriptedLayout> viewsMade = [];
-    private readonly List<UIScriptedLayout> panelsMade = [], windowsMade = [];
+
+    // The views, pages and windows the extensions made, the engine's to keep and tick
+    private UIScriptedScreens<HexDocument> screens = null!;
 
     // The panel the views of extensions go into, in the middle where the code is
     private Panel extensionViews = null!;
@@ -148,6 +132,7 @@ internal sealed partial class DawnScene : IExtensionScreens
     {
         extensionViews = layout.Get<Panel>("ext_view");
         extensionViews.Visible = false;
+        screens = new UIScriptedScreens<HexDocument>(chrome, said => Notify(said, error: true), ScriptFailed);
     }
 
     /// <summary>What the defines of a file are, its #define lines, read off its text (kept against the text).</summary>
@@ -191,7 +176,7 @@ internal sealed partial class DawnScene : IExtensionScreens
     }
 
     /// <summary>The view of an extension that is on screen, null when it's the code, the table or the designer.</summary>
-    private UIScriptedLayout? ShownView => document.View == HexView.Extension && document.ExtensionView is { } id && viewsMade.TryGetValue((document, id), out UIScriptedLayout? made) ? made : null;
+    private UIScriptedLayout? ShownView => document.View == HexView.Extension && document.ExtensionView is { } id ? screens.View(document, id) : null;
 
     /// <summary>
     /// Helper method for ApplyView, the views of extensions put up or away for the document on screen, their buttons with
@@ -229,7 +214,7 @@ internal sealed partial class DawnScene : IExtensionScreens
             document.ExtensionView = null;
         }
 
-        foreach (UIScriptedLayout made in viewsMade.Values)
+        foreach (UIScriptedLayout made in screens.Views)
             made.Root.Visible = false;
 
         extensionViews.Visible = showing;
@@ -238,8 +223,7 @@ internal sealed partial class DawnScene : IExtensionScreens
         if (shown is null)
             return;
 
-        if (!viewsMade.TryGetValue((document, shown.Id), out UIScriptedLayout? view))
-            view = MakeView(shown, document);
+        UIScriptedLayout? view = screens.View(document, shown.Id) ?? MakeView(shown, document);
 
         if (view is not null)
             view.Root.Visible = true;
@@ -265,16 +249,11 @@ internal sealed partial class DawnScene : IExtensionScreens
     /// <summary>Makes a view of a file out of its layout, and hands it to the extension's open(ui, file).</summary>
     private UIScriptedLayout? MakeView(ExtensionViewKind kind, HexDocument of)
     {
-        var holder = extensionViews.Add(new Panel { Fill = UIFill.Both });
-        // What it has room for is the panel the views go in, the holder is only as big as what's in it
-        UIScriptedLayout? made = MakeUI(kind.Owner, "view", kind.Layout, holder, of.Path is { } path ? Path.GetFullPath(path) : null, null, () => extensionViews.Bounds.Size);
+        UIScriptedLayout? made = screens.MakeView(kind.Owner, kind.Id, of, Path.GetFullPath(Path.Combine(kind.Owner.Folder, kind.Layout)), extensionViews,
+            of.Path is { } path ? Path.GetFullPath(path) : null);
         if (made is null)
-        {
-            extensionViews.Remove(holder);
             return null;
-        }
 
-        viewsMade[(of, kind.Id)] = made;
         if (kind.Open is { } open && !kind.Owner.Invoke(open, made, made.File is { } file ? new StringValue(file) : Values.Null))
             extensions.Failed(kind.Owner);
 
@@ -285,9 +264,8 @@ internal sealed partial class DawnScene : IExtensionScreens
     /// Helper method to make a layout of an extension's folder inside of something, its handlers the extension's to call.
     /// Null, said, if the layout doesn't build.
     /// </summary>
-    private UIScriptedLayout? MakeUI(HexExtension owner, string kind, string layoutFile, UIComponent into, string? file, Action? close, Func<Vector2>? room = null) =>
-        UIScriptedLayout.Make(chrome, owner, kind, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), into, file, close,
-            said => Notify(said, error: true), ScriptFailed, room);
+    private UIScriptedLayout? MakeUI(HexExtension owner, string kind, string layoutFile, UIComponent into, string? file, Action? close) =>
+        screens.Make(owner, kind, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), into, file, close);
 
     // What a layout of an extension says when a call of its went wrong, the extension switched off and said so
     private void ScriptFailed(IUIScriptOwner owner) => extensions.Failed((HexExtension)owner);
@@ -303,46 +281,9 @@ internal sealed partial class DawnScene : IExtensionScreens
         ApplyView();
     }
 
-    /// <summary>A page of the panel under the editor, made out of an extension's layout.</summary>
-    private UIScriptedLayout? MakePanelPage(HexExtension owner, string title, string icon, string layoutFile)
-    {
-        var page = bottom.Add(new Panel { Fill = UIFill.Both });
-        UIScriptedLayout? made = null;
-        made = MakeUI(owner, "panel page", layoutFile, page, null, () =>
-        {
-            bottom.Remove(page);
-            if (made is not null) { made.Closed = true; panelsMade.Remove(made); }
-            problemsDirty = true;
-        });
-
-        if (made is null)
-        {
-            bottom.Remove(page);
-            return null;
-        }
-
-        panelTitles[made] = icon.Length > 0 ? $"$({icon}) {title.ToUpperInvariant()}" : title.ToUpperInvariant();
-        panelsMade.Add(made);
-        problemsDirty = true;
-        return made;
-    }
-
-    // What the pages of the panel extensions made say on their tabs
-    private readonly Dictionary<UIScriptedLayout, string> panelTitles = [];
-
     /// <summary>The titles of the pages of the panel, Hex's three and then the extensions'.</summary>
     private string[] PanelTabs(string problemsTitle) =>
-        [problemsTitle, Said("panel.output"), Said("panel.console"), .. panelsMade.Select(page => panelTitles[page])];
-
-    /// <summary>A little window over everything, made out of an extension's layout.</summary>
-    private UIScriptedLayout? MakeWindow(HexExtension owner, string title, string layoutFile, Vector2 size)
-    {
-        UIScriptedLayout? made = UIScriptedLayout.MakeWindow(chrome, owner, title, Path.GetFullPath(Path.Combine(owner.Folder, layoutFile)), size,
-            said => Notify(said, error: true), ScriptFailed, closed => windowsMade.Remove(closed));
-        if (made is not null)
-            windowsMade.Add(made);
-        return made;
-    }
+        [problemsTitle, Said("panel.output"), Said("panel.console"), .. screens.Pages.Select(screens.TitleOf)];
 
     /// <summary>
     /// Every tick, the views, pages and windows of extensions that are on screen told how long it was (on_tick), and the
@@ -351,25 +292,7 @@ internal sealed partial class DawnScene : IExtensionScreens
     private void UpdateExtensionUI(float dt)
     {
         extensions.Update(dt);
-        if (viewsMade.Count == 0 && panelsMade.Count == 0 && windowsMade.Count == 0)
-            return;
-
-        // Made only when something ticks, a view with nothing going on costs nothing a frame
-        NumberValue? number = null;
-        if (ShownView is { } view)
-            view.Update(dt, ref number, ScriptFailed);
-
-        for (int i = panelsMade.Count - 1; i >= 0; i--)
-        {
-            if (panelsMade[i] is { } page && page.Root.Visible && bottom.Visible && bottom.SelectedPage == page.Root)
-                page.Update(dt, ref number, ScriptFailed);
-        }
-
-        for (int i = windowsMade.Count - 1; i >= 0; i--)
-        {
-            if (windowsMade[i] is { } window && window.Root.Visible)
-                window.Update(dt, ref number, ScriptFailed);
-        }
+        screens.Update(dt, ShownView, bottom);
 
         // The keys go to the view on screen when nothing has the keyboard, or one of its own drawings does
         if (ShownView is { Key: not null } keyed && (compositor.Focus is null || (compositor.Focus is DrawingPanel && HexDesigner.IsInside(compositor.Focus, keyed.Root))))
@@ -380,7 +303,7 @@ internal sealed partial class DawnScene : IExtensionScreens
                 foreach (var (key, name) in UIScriptedLayout.Keys)
                 {
                     if (keyboard.WasPressed(key))
-                        keyed.Press(name, keyboard.Shift, keyboard.Alt, ScriptFailed);
+                        screens.Press(keyed, name, keyboard.Shift, keyboard.Alt);
                 }
             }
         }
@@ -390,18 +313,12 @@ internal sealed partial class DawnScene : IExtensionScreens
     /// Hands a key to the view of an extension on screen, true if it took it (its on_key handed back true), which is how
     /// Ctrl+Z undoes the view's own changes rather than the code's.
     /// </summary>
-    private bool ExtensionKey(string name) => ShownView is { } view && view.Press(name, ScriptFailed);
+    private bool ExtensionKey(string name) => screens.Press(ShownView, name);
 
     /// <summary>Takes away what a document had made for it by extensions, as it closes.</summary>
     private void ForgetExtensionViews(HexDocument closing)
     {
-        foreach (var key in viewsMade.Keys.Where(key => key.Item1 == closing).ToList())
-        {
-            UIScriptedLayout made = viewsMade[key];
-            made.Closed = true;
-            extensionViews.Remove(made.Root);
-            viewsMade.Remove(key);
-        }
+        screens.Forget(closing);
     }
 
     /// <summary>A file that was just opened, put on the view an extension has for its #define, if one has.</summary>
