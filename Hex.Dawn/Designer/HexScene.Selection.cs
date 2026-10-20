@@ -401,16 +401,16 @@ internal sealed partial class HexScene
         Func<bool> some = () => LayoutTools && document.Selected is not null;
 
         // The clipboard, which a text box keeps for itself while it is being typed into
-        commands.Add("Edit/clipboard", "Cut", CutSelected, "Ctrl+X", use: HexKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Copy", CopySelected, "Ctrl+C", "copy", HexKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Paste", Paste, "Ctrl+V", use: HexKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Duplicate", DuplicateSelected, "Ctrl+D", use: HexKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Delete", DeleteAll, "Del", "trash", HexKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Cut", CutSelected, "Ctrl+X", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Copy", CopySelected, "Ctrl+C", "copy", UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Paste", Paste, "Ctrl+V", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Duplicate", DuplicateSelected, "Ctrl+D", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Delete", DeleteAll, "Del", "trash", UIKeyUse.Bound).IsVisible = design;
 
         commands.Add("View/zoom", "Zoom In", () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
         commands.Add("View/zoom", "Zoom Out", () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
         commands.Add("View/zoom", "Zoom to Fit", ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
-        commands.Add("View/zoom", "Actual Size", ZoomToActualSize, "Ctrl+1", use: HexKeyUse.Bound).IsVisible = design;
+        commands.Add("View/zoom", "Actual Size", ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
 
         commands.Add("Run/run", "Play Entrances", PlayIntros, "F5", "play").IsVisible = design;
 
@@ -418,13 +418,13 @@ internal sealed partial class HexScene
         Menu add = commands.AddMenu("Layout/add", "Add", "add");
         foreach (string kind in Palette)
             add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
-        commands.Add("Layout/group", "Group", GroupSelected, "Ctrl+G", "group-by-ref-type", HexKeyUse.Bound).IsEnabled = some;
-        commands.Add("Layout/group", "Ungroup", UngroupSelected, "Ctrl+Shift+G", use: HexKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
+        commands.Add("Layout/group", "Group", GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/group", "Ungroup", UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
         AddConvertMenu(commands.AddMenu("Layout/group", "Convert To", "arrow-swap"));
         AddMoveMenu(commands.AddMenu("Layout/move", "Move", "arrow-swap"), some);
         AddArrangeMenu(commands.AddMenu("Layout/move", "Arrange", "layers"), some);
         AddAlignMenu(commands.AddMenu("Layout/move", "Align", "symbol-ruler"), some);
-        commands.Add("Layout/select", "Select All", SelectAll, "Ctrl+A", use: HexKeyUse.Bound);
+        commands.Add("Layout/select", "Select All", SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
         commands.Add("Layout/select", "Deselect All", () => Select(null), "Esc").IsEnabled = some;
         commands.Add("Layout/select", "Show All Layers", ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
         commands.Add("Layout/select", "Show Code", ShowSelectedCode, icon: "code").IsEnabled = some;

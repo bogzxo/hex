@@ -12,7 +12,7 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // The menu bar and the toolbar. The bar's menus are declared here and filled by the parts of the editor, each adding its
-// own commands and keys (HexCommands), the window's own are here. Only what means something for what is open is on the
+// own commands and keys (UICommands), the window's own are here. Only what means something for what is open is on the
 // bar, the Layout menu is the designer's. Every item of every menu in a list is CommandPalette, their keys put where
 // somebody wants them is Keys.
 internal sealed partial class HexScene
@@ -54,29 +54,29 @@ internal sealed partial class HexScene
     /// </summary>
     private void AddWindowCommands()
     {
-        commands.Add("View/palette", "Command Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", HexKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", "Command Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
         commands.Bind(Key.F1, CommandPalette, whileTyping: true);
-        commands.Add("View/palette", "Dusk, the Terminal", SwapMode, "Ctrl+Alt+D", "terminal", HexKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", "Dusk, the Terminal", SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
 
         // VS Code's keys for the side bar, the panel and the command palette
-        commands.Add("View/sides", "Explorer", ShowExplorer, "Ctrl+Shift+E", "files", HexKeyUse.BoundWhileTyping);
+        commands.Add("View/sides", "Explorer", ShowExplorer, "Ctrl+Shift+E", "files", UIKeyUse.BoundWhileTyping);
         commands.Add("View/sides", "Search", () => ShowSide(HexSide.Search), icon: "search");
         commands.Add("View/sides", "Debug", () => ShowSide(HexSide.Debug), icon: "debug-alt");
-        commands.Add("View/sides", "Outline", ShowOutline, "Ctrl+Shift+O", "list-tree", HexKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+        commands.Add("View/sides", "Outline", ShowOutline, "Ctrl+Shift+O", "list-tree", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
         commands.Add("View/sides", "Toolbox", ShowOutline, "Ctrl+Shift+O", "layout").IsVisible = () => LayoutTools;
         commands.Add("View/sides", "Problems", () => ShowPanel(PROBLEMS_PAGE), icon: "error");
         commands.Add("View/sides", "Output", () => ShowPanel(OUTPUT_PAGE), icon: "output");
 
-        commands.Add("View/toggles", "Side Bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left", HexKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
-        commands.Add("View/toggles", "Panel", TogglePanel, "Ctrl+J", "layout-panel", HexKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
-        commands.Add("View/toggles", "Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", HexKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
+        commands.Add("View/toggles", "Side Bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
+        commands.Add("View/toggles", "Panel", TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
+        commands.Add("View/toggles", "Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
         commands.Add("View/toggles", "Zen Mode", ToggleQuiet, "F11", "screen-full").IsChecked = () => Quiet;
-        commands.Add("View/toggles", "Word Wrap", ToggleWrap, "Alt+Z", "word-wrap", HexKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
+        commands.Add("View/toggles", "Word Wrap", ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
         commands.Add("View/toggles", "Code in Hack", ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
-        commands.Add("View/toggles", "Split Editor", ToggleSplit, "Ctrl+\\", "split-horizontal", HexKeyUse.BoundWhileTyping).IsChecked = () => Split;
+        commands.Add("View/toggles", "Split Editor", ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
 
         // F7 flips a layout between its designer and its code, the way Visual Studio's designers go
-        commands.Add("View/zoom", "Toggle Designer and Code", ToggleView, "F7", "layout", HexKeyUse.BoundWhileTyping).IsEnabled = () => !document.IsText;
+        commands.Add("View/zoom", "Toggle Designer and Code", ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.IsText;
 
         layoutDebugger.AddTo(commands, "View/look", () => Say(layoutDebugger.IsOn ? "layout debugger on, padding is green, gaps are orange" : "layout debugger off"));
         Menu size = commands.AddMenu("View/look", "Editor Scale", "zoom-in");

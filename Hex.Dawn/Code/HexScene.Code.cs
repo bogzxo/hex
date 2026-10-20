@@ -406,8 +406,8 @@ internal sealed partial class HexScene
         commands.Add("View/zoom", "Zoom Out", () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
         commands.Add("View/zoom", "Reset Zoom", () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
 
-        commands.Add("Go/symbols", "Go to Definition", GoToDefinition, "F12", "references", HexKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/symbols", "Find All References", FindReferences, "Shift+F12", "references", HexKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", "Go to Definition", GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", "Find All References", FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/problems", "Next Problem", () => StepProblem(1), icon: "arrow-down");
         commands.Add("Go/problems", "Previous Problem", () => StepProblem(-1), icon: "arrow-up");
 
@@ -419,10 +419,10 @@ internal sealed partial class HexScene
         commands.Add("Run/run", "Run Behaviour...", OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
         commands.Bind(Key.F5, () => { if (!LayoutTools) OpenRunner(); }, control: true, whileTyping: true);
 
-        commands.Add("Run/check", "Check All Files", CheckAllFiles, "F8", "check-all", HexKeyUse.BoundWhileTyping);
+        commands.Add("Run/check", "Check All Files", CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", "Trigger Completion", () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
 
-        commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: HexKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
+        commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Discard Code Changes", RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", "Convert to Layout...", MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
     }

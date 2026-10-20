@@ -55,7 +55,7 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("extensions: a command on a key says the key in the palette, and the key reads as control, alt and J", () =>
             asking is { Failed: null } && extensions.Commands().Any(command => command.Text == "Asking: Ask me   (Ctrl+Alt+J)")
-            && HexKeys.Read("Ctrl+Alt+J") == (Key.J, true, false, true) && HexKeys.Read("Shift+F6") == (Key.F6, false, true, false) && HexKeys.Read("Ctrl+Nope") is null);
+            && UIKeys.Read("Ctrl+Alt+J") == (Key.J, true, false, true) && UIKeys.Read("Shift+F6") == (Key.F6, false, true, false) && UIKeys.Read("Ctrl+Nope") is null);
 
         // hex.ask, the dialog with its buttons, the one pressed handed to the function
         test.Run(() => Command("Ask me"));

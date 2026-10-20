@@ -13,8 +13,8 @@ internal sealed partial class HexScene
 
         test.Check("keys: the menus' keys read and write back as they're written, the odd ones among them", () =>
             new[] { "Ctrl+Shift+F", "Ctrl+\\", "Ctrl+,", "Ctrl+Shift+[", "Del", "Esc", "Shift+F12", "Ctrl+0", "Alt+Up", "Ctrl+=" }
-                .All(written => HexKeys.Tidy(written) == written)
-            && HexKeys.Read("Ctrl+Nope") is null && HexKeys.Read("Ctrl+F+G") is null && HexKeys.Tidy("alt+ctrl+f") == "Ctrl+Alt+F");
+                .All(written => UIKeys.Tidy(written) == written)
+            && UIKeys.Read("Ctrl+Nope") is null && UIKeys.Read("Ctrl+F+G") is null && UIKeys.Tidy("alt+ctrl+f") == "Ctrl+Alt+F");
 
         // The window, every command in a list, narrowed by the filter, the arrows go about it
         test.Run(OpenKeysWindow);

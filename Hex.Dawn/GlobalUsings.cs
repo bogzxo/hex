@@ -9,3 +9,7 @@ global using static Hex.Dawn.HexMarkup;
 
 // What has no window in it, the settings, the workspace, the files and what is in them (Hex.Core)
 global using Hex.Core;
+
+// The engine's UI, commands, keys and the components the editor is made of
+global using Horizon.UI;
+global using Horizon.UI.Components;

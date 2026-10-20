@@ -22,9 +22,9 @@ internal sealed class HexTasks
     public HexTasks(DawnContext with)
     {
         context = with;
-        HexCommands commands = context.Commands;
+        UICommands commands = context.Commands;
         commands.Add("Run/tasks", "Run Task...", ChooseTask, icon: "tasklist");
-        commands.Add("Run/tasks", "Run Build Task", RunBuildTask, "Ctrl+Shift+B", "tools", HexKeyUse.BoundWhileTyping);
+        commands.Add("Run/tasks", "Run Build Task", RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/tasks", "Configure Tasks", ConfigureTasks, icon: "gear");
     }
 

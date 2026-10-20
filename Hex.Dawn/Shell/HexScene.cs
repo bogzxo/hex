@@ -87,7 +87,7 @@ internal sealed partial class HexScene : Scene
     // A change that hasn't been noted as a step to come back to yet, and how long it has to rest still
     private bool recordPending;
     private float settleTimer;
-    private readonly HexCommands commands = new();
+    private readonly UICommands commands = new();
 
     private readonly List<HexDocument> documents = [];
     private HexDocument document = null!;

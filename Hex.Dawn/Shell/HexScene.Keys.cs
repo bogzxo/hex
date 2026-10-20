@@ -129,24 +129,24 @@ internal sealed partial class HexScene
         if (Commands().FirstOrDefault(pair => LabelOf(pair.Item) == wanted).Item is not { } item)
             return false;
 
-        var to = written.Length > 0 ? HexKeys.Read(written) : null;
+        var to = written.Length > 0 ? UIKeys.Read(written) : null;
         if (written.Length > 0 && to is null)
             return false;
 
-        originalKeys.TryAdd(wanted, HexKeys.Tidy(item.Shortcut) ?? string.Empty);
+        originalKeys.TryAdd(wanted, UIKeys.Tidy(item.Shortcut) ?? string.Empty);
 
         // It goes off while typing if its old key did, and never on a key that types something (a letter on its own)
         bool? typing = null;
-        if (HexKeys.Read(item.Shortcut) is { } old)
+        if (UIKeys.Read(item.Shortcut) is { } old)
         {
             typing = commands.Keys.Remove(old.Key, old.Control, old.Shift, old.Alt);
-            keysTaken.Add(HexKeys.Write(old.Key, old.Control, old.Shift, old.Alt));
+            keysTaken.Add(UIKeys.Write(old.Key, old.Control, old.Shift, old.Alt));
         }
 
         string tidy = string.Empty;
         if (to is { } key)
         {
-            tidy = HexKeys.Write(key.Key, key.Control, key.Shift, key.Alt);
+            tidy = UIKeys.Write(key.Key, key.Control, key.Shift, key.Alt);
             commands.Keys.Remove(key.Key, key.Control, key.Shift, key.Alt);
             bool typesNothing = key.Control || key.Alt || key.Key is >= Key.F1 and <= Key.F25;
             keysTaken.Add(tidy);
@@ -154,7 +154,7 @@ internal sealed partial class HexScene
             // Whatever else was on the key is written down as off it, so keys.hor says the whole of what changed
             foreach (var (other, _) in Commands())
             {
-                if (other == item || HexKeys.Tidy(other.Shortcut) != tidy)
+                if (other == item || UIKeys.Tidy(other.Shortcut) != tidy)
                     continue;
 
                 originalKeys.TryAdd(LabelOf(other), tidy);
@@ -191,7 +191,7 @@ internal sealed partial class HexScene
             int at = rebound.FindIndex(pair => pair.Label == label);
             if (at >= 0)
                 item.Shortcut = rebound[at].Key;
-            else if (item.Shortcut.Length > 0 && HexKeys.Tidy(item.Shortcut) is { } shown && keysTaken.Contains(shown))
+            else if (item.Shortcut.Length > 0 && UIKeys.Tidy(item.Shortcut) is { } shown && keysTaken.Contains(shown))
                 item.Shortcut = string.Empty;
         }
     }
@@ -332,13 +332,13 @@ internal sealed partial class HexScene
         return true;
     }
 
-    private static readonly Key[] PressableKeys = [.. Enum.GetValues<Key>().Distinct().Where(key => !HexKeys.IsHeld(key))];
+    private static readonly Key[] PressableKeys = [.. Enum.GetValues<Key>().Distinct().Where(key => !UIKeys.IsHeld(key))];
 
     /// <summary>The key pressed for a command, put on it and written down.</summary>
     private void KeyPressedFor(MenuItem item, Key key, bool control, bool shift, bool alt)
     {
-        string written = HexKeys.Write(key, control, shift, alt);
-        string? had = Commands().FirstOrDefault(pair => pair.Item != item && HexKeys.Tidy(pair.Item.Shortcut) == written).Item?.Label.TrimEnd('.');
+        string written = UIKeys.Write(key, control, shift, alt);
+        string? had = Commands().FirstOrDefault(pair => pair.Item != item && UIKeys.Tidy(pair.Item.Shortcut) == written).Item?.Label.TrimEnd('.');
 
         keyFor = null;
         keyDialog?.Close();

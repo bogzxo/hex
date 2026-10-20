@@ -28,15 +28,15 @@ internal sealed class HexDebugging
         context = with;
         context.Documents.Opened += PrepareBreakpoints;
         context.Panels.AddSide(HexSide.Debug, "DEBUG", DebugSide);
-        HexCommands commands = context.Commands;
+        UICommands commands = context.Commands;
         commands.Add("Run/debug", "Start Debugging", DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && IsCSharp(context.Documents.Current.Path);
         commands.Add("Run/debug", "Continue", DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
-        commands.Add("Run/debug", "Step Over", StepOver, "F10", "debug-step-over", HexKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", "Step Over", StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", "Step Into", StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", "Step Out", StepOut, "Shift+F11", "debug-step-out", HexKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", "Stop Debugging", StopDebugging, "Shift+F5", "debug-stop", HexKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", "Restart Debugging", RestartDebugging, "Ctrl+Shift+F5", "debug-restart", HexKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", "Toggle Breakpoint", ToggleBreakpointHere, "F9", "debug-breakpoint", HexKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && IsCSharp(context.Documents.Current.Path);
+        commands.Add("Run/debug", "Step Out", StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", "Stop Debugging", StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", "Restart Debugging", RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", "Toggle Breakpoint", ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && IsCSharp(context.Documents.Current.Path);
     }
 
     // The breakpoints, by the file's whole path, the lines counted from 0. An editor of the file is handed the set

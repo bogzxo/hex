@@ -48,7 +48,7 @@ internal sealed partial class HexScene
                     if (ShaderFunction.Match(row) is { Success: true } shader)
                     {
                         bool isStruct = shader.Groups[2].Success;
-                        Group name = isStruct ? shader.Groups[3] : shader.Groups[5];
+                        System.Text.RegularExpressions.Group name = isStruct ? shader.Groups[3] : shader.Groups[5];
                         if (!NotNames.Contains(name.Value))
                             entries.Add(new OutlineEntry(name.Value, line, name.Index, Depth(isStruct ? shader.Groups[1].Value : shader.Groups[4].Value, 4), isStruct ? "symbol-struct" : "symbol-method"));
                     }
@@ -63,7 +63,7 @@ internal sealed partial class HexScene
                     if (Script.Match(row) is { Success: true } script)
                     {
                         bool declared = script.Groups[3].Success;
-                        Group name = declared ? script.Groups[3] : script.Groups[5];
+                        System.Text.RegularExpressions.Group name = declared ? script.Groups[3] : script.Groups[5];
                         string kind = declared ? script.Groups[2].Value : "function";
                         entries.Add(new OutlineEntry(name.Value, line, name.Index, Depth(declared ? script.Groups[1].Value : script.Groups[4].Value, 2),
                             kind switch { "class" => "symbol-class", "interface" or "type" => "symbol-interface", "enum" => "symbol-enum", _ => "symbol-method" }));

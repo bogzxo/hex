@@ -30,7 +30,7 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
     /// picked while it is on.
     /// </summary>
     /// <param name="toggled">Called after the debugger was switched on or off from the menu, for whoever has something to say about it.</param>
-    public void AddTo(HexCommands commands, string where, Action? toggled = null)
+    public void AddTo(UICommands commands, string where, Action? toggled = null)
     {
         commands.Add(where, "Layout Debugger", () =>
         {
@@ -46,7 +46,7 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
         Option(commands, where, "    Hidden components too", () => Options.ShowHidden, on => Options.ShowHidden = on);
     }
 
-    private void Option(HexCommands commands, string where, string label, Func<bool> read, Action<bool> write)
+    private void Option(UICommands commands, string where, string label, Func<bool> read, Action<bool> write)
     {
         MenuItem item = commands.Add(where, label, () => write(!read()));
         item.IsChecked = read;

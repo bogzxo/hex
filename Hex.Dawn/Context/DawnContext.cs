@@ -16,7 +16,7 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, HexCommands commands, HexOptions options,
+    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, UICommands commands, HexOptions options,
     Action wake, Action redraw, Func<Keyboard> keyboard, Func<bool> typing)
 {
     public IDocuments Documents { get; } = documents;
@@ -28,7 +28,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public ITerminals Terminals { get; } = terminals;
     public IPanels Panels { get; } = panels;
     public IStrings Strings { get; } = strings;
-    public HexCommands Commands { get; } = commands;
+    public UICommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
     public HexOptions Options { get; } = options;

@@ -92,7 +92,7 @@ internal sealed partial class HexExtensions
     /* A key on a command */
 
     /// <summary>A key as Hex's menus write it, "Ctrl+Shift+K", as the key and what's held with it, null for one it can't read.</summary>
-    private static (Key Key, bool Control, bool Shift, bool Alt)? ReadKey(string written) => HexKeys.Read(written);
+    private static (Key Key, bool Control, bool Shift, bool Alt)? ReadKey(string written) => UIKeys.Read(written);
 
     // The commands with keys, checked every tick, they come and go with their extension so they aren't Hex's own shortcuts
     private readonly Dictionary<(Key, bool, bool, bool), bool> commandKeysDown = [];

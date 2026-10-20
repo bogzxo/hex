@@ -210,9 +210,9 @@ internal sealed partial class HexScene
     /// <summary>Finding across the workspace, and going to a file, a line or something a file declares by a few letters.</summary>
     private void AddFindCommands()
     {
-        commands.Add("Edit/files", "Find in Files...", FindInFiles, "Ctrl+Shift+F", "search", HexKeyUse.BoundWhileTyping);
+        commands.Add("Edit/files", "Find in Files...", FindInFiles, "Ctrl+Shift+F", "search", UIKeyUse.BoundWhileTyping);
 
-        commands.Add("Go/open", "Go to File...", QuickOpen, "Ctrl+P", "go-to-file", HexKeyUse.BoundWhileTyping);
+        commands.Add("Go/open", "Go to File...", QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/open", "Go to Line...", GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;
         commands.Add("Go/open", "Go to Symbol...", GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
 

@@ -45,6 +45,6 @@ internal sealed partial class HexScene
 
     private void AddSettingsCommands()
     {
-        commands.Add("File/settings", "Settings...", OpenSettings, "Ctrl+,", "settings-gear", HexKeyUse.Bound);
+        commands.Add("File/settings", "Settings...", OpenSettings, "Ctrl+,", "settings-gear", UIKeyUse.Bound);
     }
 }

@@ -57,10 +57,10 @@ internal sealed partial class HexScene
         made.Get<Button>("replace_one").OnPressed = ReplaceOne;
         made.Get<Button>("replace_all").OnPressed = ReplaceEvery;
 
-        commands.Add("Edit/find", "Find...", FindInFile, "Ctrl+F", "search", HexKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Find Next", () => FindAgain(forward: true), "F3", use: HexKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Find Previous", () => FindAgain(forward: false), "Shift+F3", use: HexKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Replace...", ReplaceInFile, "Ctrl+H", "replace", HexKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+        commands.Add("Edit/find", "Find...", FindInFile, "Ctrl+F", "search", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Find Next", () => FindAgain(forward: true), "F3", use: UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Find Previous", () => FindAgain(forward: false), "Shift+F3", use: UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Replace...", ReplaceInFile, "Ctrl+H", "replace", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
 
         // While the bar is open, from the boxes and from the code
         commands.Bind(Key.C, () => { if (FindBarOpen) ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase }); }, whileTyping: true, alt: true);

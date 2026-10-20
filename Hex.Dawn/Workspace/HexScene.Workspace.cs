@@ -287,7 +287,7 @@ internal sealed partial class HexScene
         commands.Add("File/workspace", "Save Workspace As...", () => SaveWorkspacePressed(asNew: true)).IsEnabled = () => !workspace.IsEmpty;
         commands.Add("File/workspace", "Close Workspace", CloseWorkspace).IsEnabled = () => !workspace.IsEmpty;
 
-        commands.Add("Go/places", "Back", () => GoPlace(back: true), "Alt+Left", "arrow-left", HexKeyUse.BoundWhileTyping);
-        commands.Add("Go/places", "Forward", () => GoPlace(back: false), "Alt+Right", "arrow-right", HexKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", "Back", () => GoPlace(back: true), "Alt+Left", "arrow-left", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", "Forward", () => GoPlace(back: false), "Alt+Right", "arrow-right", UIKeyUse.BoundWhileTyping);
     }
 }
