@@ -10,7 +10,7 @@ namespace Hex.Dusk;
 // window Dawn shows, one search over all of it.
 internal sealed partial class DuskScene
 {
-    private HexSettingsView? settingsView;
+    private SettingsWindow? settingsView;
 
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
@@ -36,7 +36,7 @@ internal sealed partial class DuskScene
             ReadBackdrop();
         };
 
-        settingsView = new HexSettingsView([new TerminalSettingsSource(host), editor], CloseSettings);
+        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor], CloseSettings, EditorSettingsCatalog.Parts);
         settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         chrome.Root.Add(settingsView.Window);
         settingsView.Page.Search.Focus();

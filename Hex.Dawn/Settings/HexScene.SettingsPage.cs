@@ -22,7 +22,7 @@ internal sealed partial class HexScene
     // What the editor's panels and Dawn's size are in
     private const string PANELS = "Editor · Panels";
 
-    private HexSettingsView? settingsView;
+    private SettingsWindow? settingsView;
 
     // What sets an extension's own settings, by extension_<id>_<key>, for the self test to find
     private readonly Dictionary<string, UIComponent> settingControls = [];
@@ -49,8 +49,8 @@ internal sealed partial class HexScene
 
         var sources = new List<ISettingsSource> { new EditorSource(this) };
         sources.AddRange(settingSources.Select(added => added.Source()));
-        sources.Add(new TerminalSettingsSource(terminals));
-        settingsView = new HexSettingsView(sources, CloseSettings);
+        sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
+        settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts);
         settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         chrome.Root.Add(settingsView.Window);
         foreach (var added in settingSources)
@@ -81,7 +81,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>A section of the window for every extension that is on and has something to set, its own layout of it or a row a setting.</summary>
-    private void AddExtensionSections(HexSettingsView view)
+    private void AddExtensionSections(SettingsWindow view)
     {
         foreach (HexExtension extension in extensions.All)
         {

@@ -20,6 +20,12 @@ public static class EditorSettingsCatalog
     public const string THEME = "Appearance · Theme", EFFECTS = "Appearance · Effects", BACKDROP = "Appearance · Backdrop",
         CODE = "Editor · Code", FILES = "Editor · Files", DESIGNER = "Editor · Designer";
 
+    /// <summary>
+    /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
+    /// terminal's and goes with Dawn's under how Hex looks).
+    /// </summary>
+    public static readonly string[] Parts = ["Appearance", "Editor", "Terminal", "Extensions"];
+
     /// <summary>The buttons of the picture's row, which one is which.</summary>
     public const int CHOOSE_PICTURE = 0, USUAL_PICTURE = 1;
 
