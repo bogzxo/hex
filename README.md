@@ -142,7 +142,7 @@ that took it, and when it's closed what every step cost altogether. See `docs/pe
 ```
 git clone --recursive https://github.com/bogzxo/hex
 dotnet build Hex/Hex.csproj
-Hex/bin/Debug/net10.0/Hex --selftest --exit --size 1600x900
+Hex/bin/Debug/net11.0/Hex --selftest --exit --size 1600x900
 ```
 
 Hex runs on Windows, Linux and macOS, with the .NET 10 SDK on each.

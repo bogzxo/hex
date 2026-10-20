@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // mistake is underlined, and Console. offers Console's members as they're typed, the way the editor asks.
 internal sealed partial class DawnScene
 {
-    private const string CSHARP_PROJECT = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup></Project>\n";
+    private const string CSHARP_PROJECT = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup></Project>\n";
 
     private void TestCSharp(HexPointerScript test)
     {

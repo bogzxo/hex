@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
         {
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "debugme.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
+                "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net11.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
             File.WriteAllText(program, "int answer = 6 * 7;\nstring said = \"forty two\";\nSystem.Console.WriteLine(said);\nSystem.Console.WriteLine(answer + 1);\n");
             Open(program);
         });

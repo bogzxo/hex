@@ -2,7 +2,7 @@
 
   <!-- Dawn, the editor of Hex, a library the Hex program starts (Hex/Program.cs). It was Horizon.Hex. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>

@@ -2,7 +2,7 @@
 
   <!-- What Dawn and Dusk are both drawn with and both are, the window's identity, the settings page, the chrome they share -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
