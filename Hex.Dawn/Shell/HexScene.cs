@@ -197,7 +197,7 @@ internal sealed partial class HexScene : Scene
         AddSettingsCommands();
         AddFindCommands();
         AddCodeCommands();
-        AddDebuggingCommands();
+        debugger = new HexDebugging(Context);
         AddHelpCommands();
         tasks = new HexTasks(Context);
         languages.StartChecks();
@@ -350,7 +350,7 @@ internal sealed partial class HexScene : Scene
         UpdateWatchedFiles();
         UpdateEffects();
         UpdateAutoSave(dt);
-        UpdateDebugging();
+        debugger.Update();
         ApplyAskedView();
         Profile.Mark("extensions");
 

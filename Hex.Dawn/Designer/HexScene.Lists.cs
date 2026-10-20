@@ -29,11 +29,9 @@ internal sealed partial class HexScene
             case HexSide.Design:
                 RebuildComponentTree();
                 break;
-            case HexSide.Debug:
-                RebuildDebugSide();
-                break;
             default:
-                RebuildOutline();
+                if (!RebuildSideView())
+                    RebuildOutline();
                 break;
         }
     }

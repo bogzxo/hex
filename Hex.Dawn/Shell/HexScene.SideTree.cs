@@ -5,6 +5,9 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
+/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, and its right click.</summary>
+internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null);
+
 // The side bar's lists for code, the explorer, the outline, what was found and the files of a folder, all one tree the
 // side bar paints itself (a TreeView). They were a row a component made out of a template, every one of them made again
 // for any change, a selection that moved included. The designer's components and layers are still rows of their own.
@@ -17,9 +20,6 @@ internal sealed partial class HexScene
 
     // The outline's rows that were closed, by their name and line, so they stay closed while the file is typed into
     private readonly HashSet<string> outlineClosed = new(StringComparer.Ordinal);
-
-    /// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, and its right click.</summary>
-    private sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null);
 
     private void BuildSideTree()
     {

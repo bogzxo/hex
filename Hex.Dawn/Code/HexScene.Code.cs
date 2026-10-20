@@ -57,7 +57,6 @@ internal sealed partial class HexScene
         editor.CaretGlide = Motion ? CARET_GLIDE : 0.0f;
         editor.Font = codeFont;
         editor.SignatureSource = (name, argument) => TerminalSignature(prepared, name, argument) ?? SignatureOf(editor, name, argument);
-        PrepareBreakpoints(prepared);
         ShowBackdrop(editor);
         editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
@@ -418,7 +417,7 @@ internal sealed partial class HexScene
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
-        commands.Add("Run/run", "Run File", RunCode, "F5", "play").IsVisible = () => !LayoutTools && !IsCSharp(document.Path);
+        commands.Add("Run/run", "Run File", RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
         commands.Add("Run/run", "Run Behaviour...", OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
         commands.Bind(Key.F5, () => { if (!LayoutTools) OpenRunner(); }, control: true, whileTyping: true);
 

@@ -1,3 +1,5 @@
+using System.Numerics;
+
 using Hex.Shell;
 
 using Horizon.Core.Threading;
@@ -13,7 +15,7 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, ITerminals terminals, HexCommands commands, HexOptions options, Action wake)
+    ISettingsHost settings, ITerminals terminals, IPanels panels, HexCommands commands, HexOptions options, Action wake, Action redraw)
 {
     public IDocuments Documents { get; } = documents;
     public IWorkspace Workspace { get; } = workspace;
@@ -22,6 +24,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public IWindows Windows { get; } = windows;
     public ISettingsHost Settings { get; } = settings;
     public ITerminals Terminals { get; } = terminals;
+    public IPanels Panels { get; } = panels;
     public HexCommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
@@ -29,6 +32,9 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
 
     /// <summary>Wakes the editor's thread from another, which sleeps while nothing is going on, for something that came in.</summary>
     public void Wake() => wake();
+
+    /// <summary>Has the window drawn again for a while, for something that changed without anybody touching it.</summary>
+    public void Redraw() => redraw();
 }
 
 /// <summary>
@@ -46,8 +52,17 @@ internal interface IDocuments
     /// <summary>Opens a file and shows it, the tab it has when it's open already. False when it couldn't be read.</summary>
     bool Open(string path);
 
+    /// <summary>The document on screen.</summary>
+    HexDocument Current { get; }
+
     /// <summary>The open document of a file, by its path, null when it isn't open.</summary>
-    HexDocument? OpenAt(string path);
+    HexDocument? Find(string path);
+
+    /// <summary>Opens a file, or shows it open, with the caret at a line and column of it (from 0).</summary>
+    void OpenAt(string path, int line, int column);
+
+    /// <summary>Saves the documents with changes that a test says, each where it came from, the one on screen staying on screen.</summary>
+    void SaveAll(Func<HexDocument, bool> which);
 
     /// <summary>A file was opened as text in the language its name says, before it is shown.</summary>
     event Action<HexDocument> Opened;
@@ -76,6 +91,9 @@ internal interface IWorkspace
 
     /// <summary>The folders things are looked for in, the workspace's, or the repository Hex runs from without one.</summary>
     IReadOnlyList<string> Roots { get; }
+
+    /// <summary>A file by where it is in the folders things are looked for in, with the name of its folder in front when there is more than one.</summary>
+    string Relative(string path);
 
     /// <summary>More folders to watch than the workspace's, asked whenever what is watched is put together again.</summary>
     void WatchToo(Func<IEnumerable<string>> folders);
@@ -177,4 +195,32 @@ internal interface ITerminals
     /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
     /// </summary>
     void RunInTab(string key, string title, string folder, string commandLine);
+}
+
+/// <summary>The side bar and the panel under the editor.</summary>
+internal interface IPanels
+{
+    /// <summary>A view of the side bar a part fills, its title and rows made again whenever it's shown or refreshed.</summary>
+    void AddSide(HexSide side, string title, Func<List<UITreeItem>> rows);
+
+    /// <summary>A view of the side bar brought up, the bar shown with it.</summary>
+    void ShowSide(HexSide side);
+
+    /// <summary>Whether the side bar is on a view.</summary>
+    bool Showing(HexSide side);
+
+    /// <summary>A view's rows made again, if it's the one the side bar is on.</summary>
+    void RefreshSide(HexSide side);
+
+    /// <summary>The side bar's rows drawn again as they are, after one was filled in as it opened.</summary>
+    void RefreshRows();
+
+    /// <summary>The panel's output brought up.</summary>
+    void ShowOutput();
+
+    /// <summary>The colour of what is said quietly in a row, the skin's.</summary>
+    Vector4 Dim { get; }
+
+    /// <summary>The colour of what went wrong, the skin's.</summary>
+    Vector4 Error { get; }
 }

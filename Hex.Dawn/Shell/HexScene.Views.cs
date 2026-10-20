@@ -10,7 +10,7 @@ namespace Hex.Dawn;
 internal sealed partial class HexScene
 {
     /// <summary>Whether the tools of a layout are out, which is the designer of a layout.</summary>
-    private bool LayoutTools => !document.IsText && document.View == HexView.Design;
+    private bool LayoutTools => document.InDesigner;
 
     // The window was asked to close with something unsaved, and the question is to be asked on the next tick
     private volatile bool closeAsked;
@@ -259,7 +259,7 @@ internal sealed partial class HexScene
     {
         // What wasn't saved was saved or thrown away when asked, there's nothing to bring back next time
         Backups.DropAll();
-        EndDebugging();
+        debugger.EndDebugging();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

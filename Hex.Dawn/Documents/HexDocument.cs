@@ -84,6 +84,9 @@ internal sealed partial class HexDocument
     /// <summary>Whether a layout is shown as its designer or as its code. A file of code is only ever its code.</summary>
     public HexView View { get; set; } = HexView.Design;
 
+    /// <summary>Whether it is a layout on screen in its designer, where the designer's keys and menus mean something.</summary>
+    public bool InDesigner => !IsText && View == HexView.Design;
+
     /// <summary>Which view of an extension the file is shown in, while <see cref="View"/> is Extension.</summary>
     public string? ExtensionView { get; set; }
 

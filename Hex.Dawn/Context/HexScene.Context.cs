@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Numerics;
 
 using Hex.Shell;
 
@@ -11,16 +12,18 @@ namespace Hex.Dawn;
 // The scene as what the parts of the editor with a class of their own are handed (DawnContext). Each of these is the
 // scene's own doing passed on, what's new is the events and the sources the parts add, which the rest of the scene
 // raises and asks at the moments it used to call into them by name.
-internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals
+internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals, IPanels
 {
     private DawnContext? context;
 
     // The parts with a class of their own, made with the context
     private HexLanguages languages = null!;
     private HexTasks tasks = null!;
+    private HexDebugging debugger = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
-    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, commands, options, () => Engine.WindowManager.Wake());
+    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, commands, options,
+        () => Engine.WindowManager.Wake(), () => Engine.WindowManager.RequestFrames());
 
     /* The documents */
 
@@ -31,7 +34,26 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     IReadOnlyList<HexDocument> IDocuments.All => documents;
     bool IDocuments.Open(string path) => Open(path);
 
-    HexDocument? IDocuments.OpenAt(string path)
+    HexDocument IDocuments.Current => document;
+    void IDocuments.OpenAt(string path, int line, int column) => OpenAt(path, line, column);
+
+    void IDocuments.SaveAll(Func<HexDocument, bool> which)
+    {
+        HexDocument was = document;
+        foreach (HexDocument open in documents.ToList())
+        {
+            if (which(open))
+            {
+                Show(open);
+                Save();
+            }
+        }
+
+        if (documents.Contains(was))
+            Show(was);
+    }
+
+    HexDocument? IDocuments.Find(string path)
     {
         string full = Path.GetFullPath(path);
         return documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), full, PlatformPaths.Comparison));
@@ -53,6 +75,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
 
     IReadOnlyList<string> IWorkspace.Folders => workspace.Folders;
     IReadOnlyList<string> IWorkspace.Roots => WorkspaceRoots();
+    string IWorkspace.Relative(string path) => Relative(path);
     void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
     void IWorkspace.Rewatch() => WatchFolders();
     event Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>> IWorkspace.FilesChanged { add => filesChanged += value; remove => filesChanged -= value; }
@@ -138,5 +161,43 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
         tab.Tag = key;
         tab.Renamed = title;
         tab.Views.FirstOrDefault()?.SendWhenReady(line);
+    }
+
+    /* The side bar and the panel */
+
+    // The views of the side bar the parts fill, by the view
+    private readonly Dictionary<HexSide, (string Title, Func<List<UITreeItem>> Rows)> sideViews = [];
+
+    void IPanels.AddSide(HexSide side, string title, Func<List<UITreeItem>> rows) => sideViews[side] = (title, rows);
+
+    void IPanels.ShowSide(HexSide side)
+    {
+        left.Show(true);
+        Side = side;
+    }
+
+    bool IPanels.Showing(HexSide side) => Side == side;
+
+    void IPanels.RefreshSide(HexSide side)
+    {
+        if (Side == side)
+            treeDirty = true;
+    }
+
+    void IPanels.RefreshRows() => sideTree.Refresh();
+    void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
+    Vector4 IPanels.Dim => DimColor;
+    Vector4 IPanels.Error => ErrorColor;
+
+    /// <summary>A view of the side bar a part fills, its rows made again. False when no part fills the one it's on.</summary>
+    private bool RebuildSideView()
+    {
+        if (!sideViews.TryGetValue(Side, out var view))
+            return false;
+
+        UseSideTree(true);
+        treeTitle.Text = view.Title;
+        sideTree.Items = view.Rows();
+        return true;
     }
 }

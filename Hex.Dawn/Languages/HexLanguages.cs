@@ -253,7 +253,7 @@ internal sealed partial class HexLanguages
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
                 string full = Path.GetFullPath(path);
-                HexDocument? of = context.Documents.OpenAt(full);
+                HexDocument? of = context.Documents.Find(full);
                 if (of is null)
                     continue;
 

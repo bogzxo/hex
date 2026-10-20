@@ -18,7 +18,7 @@ internal sealed partial class HexScene
     private void BuildQuiet()
     {
         tabRow = layout.Get<StackPanel>("tab_row");
-        commands.Bind(Key.F11, () => { if (DebugStopped) StepIn(); else ToggleQuiet(); }, whileTyping: true, shift: false);
+        commands.Bind(Key.F11, () => { if (debugger.DebugStopped) debugger.StepIn(); else ToggleQuiet(); }, whileTyping: true, shift: false);
     }
 
     /// <summary>Alt+Z, long lines wrapped at the edge of every editor of code or not, kept in the settings.</summary>
