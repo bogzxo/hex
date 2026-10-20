@@ -12,6 +12,11 @@ internal sealed partial class DuskScene
         TerminalView View() => panel.FocusedView!;
         const string STALE = @"C:\dusk-stale-path";
 
+        // Windows hands a process its PATH once, the registry has it afresh (ProcessEnvironment), which is what this is
+        // about. Linux and macOS have no such thing, a shell's PATH is what its profile makes it
+        if (!OperatingSystem.IsWindows())
+            return;
+
         TerminalProfile? shell = panel.Profiles.Find(profile => profile.Id is "pwsh" or "powershell");
         test.Check("path: there is a PowerShell", () => shell is not null);
         if (shell is null)

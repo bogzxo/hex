@@ -174,7 +174,9 @@ internal sealed partial class DuskScene
         test.Check("keys.hor put new_tab on Ctrl+Shift+T", () => KeyOf("new_tab") == "Ctrl+Shift+T" && KeyOf("palette") == "Ctrl+Shift+P");
         test.Check("the window plugin puts the swap to Dawn on Ctrl+Alt+D", () => KeyOf("dawn_mode") == "Ctrl+Alt+D");
         test.Check("the menus say the keys", () => menu.Menus[0].Items.First(item => item.Label == "New tab").Shortcut == "Ctrl+Shift+T");
-        test.Check("a profile a shell, the machine's in it", () => panel.Profiles.Count >= 2 && panel.Profiles.Exists(profile => profile.Id == "cmd"));
+        test.Check("a profile a shell, the machine's in it", () => OperatingSystem.IsWindows()
+            ? panel.Profiles.Count >= 2 && panel.Profiles.Exists(profile => profile.Id == "cmd")
+            : panel.Profiles.Exists(profile => profile.Id == Path.GetFileName(Environment.GetEnvironmentVariable("SHELL") ?? "sh") || profile.Id is "bash" or "zsh"));
         test.Check("the dusk object has exactly the names the tests know it by", () =>
             host.AnyObject is { } any && any.Properties.Keys.Order().SequenceEqual(ApiNames.Order()));
         test.Check("every command keys.hor names is one a plugin registered", () =>

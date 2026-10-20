@@ -1,0 +1,261 @@
+using System.Numerics;
+using System.Text;
+
+using Horizon.Content;
+using Horizon.HIDL;
+using Horizon.HIDL.Lexing;
+using Horizon.HIDL.Parsing;
+using Horizon.HIDL.Runtime;
+using Horizon.Rendering;
+using Horizon.UI;
+using Horizon.UI.Components;
+
+namespace Hex.Dawn;
+
+// Completing what is typed by what it is being typed into, and going from a name to where it is declared (F12) and to
+// everywhere it is used (Shift+F12).
+internal sealed partial class HexCodeEditing
+{
+    /* Completing what is typed, by what it is being typed into */
+
+    // Every name and key of every file of the workspace, gathered off the editor's thread the first time anything is
+    // completed and again once something changes the files (null until then). It read up to two thousand files on the
+    // editor's thread, the first completion of a big workspace froze Hex
+    internal HashSet<string>? vocabulary;
+    private bool gathering;
+
+    // What the files of the workspace document, by name, gathered with the names (see DawnScene.Docs)
+    internal Dictionary<string, WorkspaceDoc>? docIndex;
+
+    // Which gathering is the one that counts, a change of the workspace while one is going makes it out of date
+    private int vocabularyGeneration;
+
+    /// <summary>Lets go of the names, the files they came from changed.</summary>
+    internal void ForgetVocabulary()
+    {
+        vocabulary = null;
+        docIndex = null;
+        gathering = false;
+        vocabularyGeneration++;
+    }
+
+    private static readonly HashSet<string> NoVocabulary = [];
+
+    /// <summary>The names of the workspace, nothing while they are still being gathered.</summary>
+    private HashSet<string> Vocabulary()
+    {
+        if (vocabulary is not null)
+            return vocabulary;
+
+        if (!gathering)
+        {
+            gathering = true;
+            List<string> roots = [.. context.Workspace.Roots];
+            int generation = vocabularyGeneration;
+            context.Work.InBackground("gathering the names of the workspace...", () => Gather(roots), gathered =>
+            {
+                if (generation != vocabularyGeneration)
+                    return;
+
+                (vocabulary, docIndex) = gathered;
+                gathering = false;
+
+                // Whatever was being typed was completed without them, or found nothing and closed
+                if (code.IsFocused || code.CompletionOpen)
+                    code.Complete(typed: true);
+            }, quiet: true);
+        }
+
+        return NoVocabulary;
+    }
+
+    /// <summary>
+    /// Every name in the files under some folders, the first two thousand of them, and what the documented ones say. For
+    /// the background.
+    /// </summary>
+    private static (HashSet<string> Names, Dictionary<string, WorkspaceDoc> Docs) Gather(IReadOnlyList<string> roots)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var docs = new Dictionary<string, WorkspaceDoc>(StringComparer.Ordinal);
+        foreach (string file in HexSearch.FilesUnder(roots).Take(2000))
+        {
+            string source;
+            try
+            {
+                source = File.ReadAllText(file);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            Token[] tokens = Lexer.Tokenize(source, lenient: true);
+            foreach (Token token in tokens)
+            {
+                if (token.Type == TokenType.Identifier && token.Value.Length > 1)
+                    names.Add(token.Value);
+            }
+
+            foreach (HidlDoc doc in HIDLDocs.Read(tokens))
+                docs.TryAdd(doc.Name, new WorkspaceDoc(doc.Doc, file, doc.Line - 1, doc.Column - 1));
+        }
+
+        return (names, docs);
+    }
+
+    /// <summary>
+    /// What there is to write at the caret of a document. A key of the game's language inside a text that starts with an
+    /// @, one of the words a property takes inside its text (an anchor, a fill), a kind of component after compositor.,
+    /// the properties of the component being made inside its braces, and otherwise the language's words with every name
+    /// of the workspace.
+    /// </summary>
+    internal UICompletionRequest? Completions(CodeEditor editor)
+    {
+        HexDocument? of = documents.FirstOrDefault(open => open.Editor == editor);
+
+        // What the parts complete in some files, the terminal's own files (HexTerminalFiles) and a file of another
+        // language by its language server (HexLanguages)
+        if (of is not null)
+        {
+            foreach (HexCompletionSource source in completionSources)
+            {
+                if (source(of, editor, out bool served) is var offered && served)
+                    return offered;
+            }
+        }
+
+        // The rest is HIDL's, worked out as the language server works it out, with the names of the workspace
+        UITextPosition caret = editor.Document.Caret;
+        return HidlAnalysis.Complete(editor.Text, caret.Line, caret.Column, Vocabulary());
+    }
+
+    /* Going to where something is */
+
+    /// <summary>
+    /// F12. Where what is at the caret is declared. A name goes to its let or const, in this file first and then in the
+    /// workspace, a text naming a key of the game's language to the key in the language's file, a text naming a file
+    /// (an include, a template) to the file.
+    /// </summary>
+    internal void GoToDefinition()
+    {
+        UITextDocument doc = code.Document;
+        UITextPosition caret = doc.Caret;
+        string line = doc.LineAt(caret.Line);
+
+        // A text the caret is in
+        foreach (Token token in Lexer.Tokenize(line, lenient: true))
+        {
+            if (token.Type != TokenType.TextLiteral || caret.Column < token.Col - 1 || caret.Column > token.Col - 1 + token.Length)
+                continue;
+
+            if (Localisation.IsKey(token.Value))
+            {
+                GoToKey(token.Value[1..]);
+                return;
+            }
+
+            string folder = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path))! : context.Windows.BrowseFolder;
+            string named = Path.Combine(folder, token.Value);
+            if (token.Value.Length > 0 && File.Exists(named))
+            {
+                context.Documents.OpenAt(named, 0, 0);
+                return;
+            }
+        }
+
+        var (start, end) = doc.WordAt(caret);
+        if (end <= start)
+        {
+            context.Notices.Say("there is nothing at the caret to go to");
+            return;
+        }
+
+        string word = line[start..end];
+
+        // In this file
+        if (FindDeclaration(code.Text, word) is { } here)
+        {
+            code.GoTo(here.Line, here.Column);
+            context.Notices.Say($"{word} is declared on line {here.Line + 1}");
+            return;
+        }
+
+        // In the workspace
+        foreach (string file in HexSearch.FilesUnder(context.Workspace.Roots))
+        {
+            string source;
+            try
+            {
+                source = File.ReadAllText(file);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            if (!source.Contains(word, StringComparison.Ordinal) || FindDeclaration(source, word) is not { } there)
+                continue;
+
+            context.Documents.OpenAt(file, there.Line, there.Column);
+            context.Notices.Say($"{word} is declared in {context.Workspace.Relative(file)}, line {there.Line + 1}");
+            return;
+        }
+
+        context.Notices.Say($"{word} isn't declared with a let anywhere in {DescribeRoots()}", error: true);
+    }
+
+    /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
+    internal static UITextPosition? FindDeclaration(string source, string name) =>
+        HidlAnalysis.FindDeclaration(source, name) is { } at ? new UITextPosition(at.Line, at.Column) : null;
+
+    /// <summary>Opens the language file of the game at a key, the line of its last part under the ones before it.</summary>
+    internal void GoToKey(string key)
+    {
+        string file = Path.Combine(Localisation.Folder, Localisation.Language + ".hor");
+        if (Localisation.Folder.Length == 0 || !File.Exists(file))
+        {
+            context.Notices.Say("no language is loaded to look the key up in", error: true);
+            return;
+        }
+
+        string[] lines = HexSearch.ReadLines(file);
+        string[] parts = key.Split('.');
+        int line = 0, part = 0;
+
+        for (; line < lines.Length && part < parts.Length; line++)
+        {
+            if (lines[line].TrimStart().StartsWith(parts[part] + ":", StringComparison.Ordinal))
+            {
+                part++;
+                if (part == parts.Length)
+                    break;
+            }
+        }
+
+        context.Documents.OpenAt(file, Math.Min(line, lines.Length - 1), Math.Max(0, lines[Math.Min(line, lines.Length - 1)].Length - lines[Math.Min(line, lines.Length - 1)].TrimStart().Length));
+        context.Notices.Say(part == parts.Length ? $"{key} in {Localisation.Language}" : $"{Localisation.Language} has no {key}, this is as far as it goes", error: part != parts.Length);
+    }
+
+    /// <summary>Shift+F12, every line of the workspace the word at the caret is on as a word of its own, listed on the left.</summary>
+    internal void FindReferences()
+    {
+        var (start, end) = code.Document.WordAt(code.Document.Caret);
+        if (end <= start)
+        {
+            context.Notices.Say("there is no word at the caret to look for");
+            return;
+        }
+
+        string word = code.Document.LineAt(code.Document.Caret.Line)[start..end];
+        List<HexResult> found = HexSearch.FindIn(context.Workspace.Roots, word, new UIFindOptions(WholeWord: true));
+        window.ShowResults($"WHERE {word} IS ({found.Count})", found);
+        context.Notices.Say($"{word} is on {found.Count} lines of {found.Select(result => result.Path).Distinct().Count()} files");
+    }
+
+    /// <summary>What is looked through, said the way a person would.</summary>
+    private string DescribeRoots()
+    {
+        IReadOnlyList<string> roots = context.Workspace.Roots;
+        return roots.Count == 1 ? roots[0] : $"the {roots.Count} folders of the workspace";
+    }
+}

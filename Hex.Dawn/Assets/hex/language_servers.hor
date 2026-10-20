@@ -1,16 +1,20 @@
 // The language servers Hex lints and completes other languages with, the protocol VS Code gets its squiggles through.
 // One entry a server, the command it is started with (on the PATH, or a full path), its arguments, the language id the
 // protocol knows the files by and the files it is for. A server that isn't on the machine is left alone, the file is
-// coloured and nothing is said about it. HIDL isn't in here, its diagnostics come out of the editor itself until it has
-// a server of its own.
+// coloured and nothing is said about it. HIDL isn't in here, Hex is its server: the editor knows a file of it inside,
+// and `Hex --lsp` is the same knowledge for any other editor.
 //
 // What the settings (Editor, Language servers) make of the rest of an entry, all of it optional:
 //   about    a sentence on what it is, said under its name with how it is installed
 //   install  the command line that installs it, run by the usual shell when Install is pressed (empty for a server
-//            that is downloaded by hand, Install opens its releases instead)
-//   update   the command line that updates it, the install one when it doesn't say
+//            that is downloaded by hand, Install opens its releases instead). One for every system, or an object of
+//            them by windows, macos and linux when they differ (a system it doesn't name is downloaded by hand)
+//   update   the command line that updates it, the install one when it doesn't say, by system as install can be
 //   repo     its repository on GitHub, owner/name, where new versions and what changed in them are looked up
 //   version  the arguments that make it say its version, left out for a server that has no way to
+//   reload   the files that have it started again when they're made, changed or taken away in the workspace, for a
+//            server that reads its projects once as it starts and never again (csharp-ls doesn't load a project that
+//            comes after it), by name or *.extension
 //
 // Where a server is can be set in the settings as well, which wins over the command here. ruff lints Python quicker than
 // pyright, swap the python entry for it if you'd rather (`pip install ruff`, command "ruff", args ["server"]).
@@ -19,7 +23,8 @@ let servers = {
         command: "csharp-ls", args: [], language: "csharp", extensions: [".cs"],
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
-        repo: "razzmatazz/csharp-language-server", version: ["--version"]
+        repo: "razzmatazz/csharp-language-server", version: ["--version"],
+        reload: ["*.csproj", "*.sln", "*.slnx", "Directory.Build.props", "Directory.Packages.props", "global.json"]
     },
     python: {
         command: "pyright-langserver", args: ["--stdio"], language: "python", extensions: [".py"],
@@ -34,9 +39,15 @@ let servers = {
     },
     cpp: {
         command: "clangd", args: [], language: "cpp", extensions: [".c", ".h", ".cpp", ".hpp", ".cc"],
-        about: "C and C++. Comes with LLVM, or on its own from clangd's releases.",
-        install: "winget install --id LLVM.LLVM -e --accept-source-agreements --accept-package-agreements",
-        update: "winget upgrade --id LLVM.LLVM -e --accept-source-agreements --accept-package-agreements",
+        about: "C and C++. Comes with LLVM (Homebrew's is keg-only, set where it is: /opt/homebrew/opt/llvm/bin/clangd), or on its own from clangd's releases. On Linux it's the distribution's clangd package.",
+        install: {
+            windows: "winget install --id LLVM.LLVM -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install llvm"
+        },
+        update: {
+            windows: "winget upgrade --id LLVM.LLVM -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew upgrade llvm"
+        },
         repo: "clangd/clangd", version: ["--version"]
     },
     typescript: {

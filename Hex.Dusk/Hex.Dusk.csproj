@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Hex.Dusk.Tests" />
+    <InternalsVisibleTo Include="Hex.Tests" />
     <InternalsVisibleTo Include="Hex" />
   </ItemGroup>
 
@@ -33,6 +33,8 @@
     <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
     <!-- The engine is a submodule at horizon/, the language a submodule inside of that -->
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Terminal\Horizon.Terminal.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
   </ItemGroup>
 

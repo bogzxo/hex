@@ -307,8 +307,7 @@ The engine. `DrawingPanel` sends which button (`e.button`, left or right, and th
 extension doesn't take it), a double click, and the wheel to a drawing that isn't navigable, for the timeline. `Table`
 gets its columns, rows (text, colour, fill, tooltip) and `on_pressed`, `on_activated` exposed to HIDL, and `TreeView`
 its items (text, icon, colour, detail, children, expanded) and `on_pressed`, `on_expanding`. Optionally a cursor a
-drawing can ask for under the pointer. Tests in `Horizon.Tests/UI` for the exposed properties, a line each in the engine
-CLAUDE.md.
+drawing can ask for under the pointer. Tests in `Horizon.Tests/UI` for the exposed properties.
 
 Hex. `hex.menu(items, at)` for a context menu at the pointer, its items `{ label, icon, key, on_pressed }` with
 separators and submenus (the engine's `ContextMenu` and `Menu` underneath, the same as Hex's own). `hex.ask({ title,
@@ -342,7 +341,7 @@ Once the v2 work has landed in the extension, since it's in the same files (`tim
 7. The engine's `Table` and `TreeView` for HIDL, then the move list as a tree and the Data and Inputs tables wide.
 8. The opponent at range, the empty states, the drawers for a narrow window, the key list behind `?`.
 
-Each step gets its checks in `Testing/HexScene.SelfTest.MoveEditor.cs` as it goes, a list that shows more than four
+Each step gets its checks in `Testing/DawnScene.SelfTest.MoveEditor.cs` as it goes, a list that shows more than four
 rows at 1600 by 900 being the first of them, and a screenshot of Blocky's uppercut before and after each, which is how
 "clunky" gets checked rather than argued about.
 

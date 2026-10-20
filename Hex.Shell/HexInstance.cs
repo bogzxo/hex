@@ -43,6 +43,40 @@ public sealed partial class HexInstance : IDisposable
         }
     }
 
+    /// <summary>
+    /// On Linux and macOS a pipe is a socket file in the temp folder (CoreFxPipe_name), and a program that crashed leaves
+    /// it there, after which nobody can listen on the name and every start took it for one already running. One that
+    /// nothing answers on is taken away, before listening. Nothing on Windows, whose pipes go with their program.
+    /// </summary>
+    public static void ClearStale(string pipeName)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string socket = Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + pipeName);
+        if (!File.Exists(socket))
+            return;
+
+        try
+        {
+            using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+            client.Connect(150);
+            return;
+        }
+        catch (Exception)
+        {
+            // Nobody there
+        }
+
+        try
+        {
+            File.Delete(socket);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     /// <param name="woken">Called on the listening thread when a line came, to wake a program that sleeps between frames.</param>
     public HexInstance(HexMode mode, Action? woken = null) : this(PipeOf(mode), woken)
     {
@@ -61,6 +95,7 @@ public sealed partial class HexInstance : IDisposable
 
     private void Listen()
     {
+        ClearStale(pipe);
         while (!stop.IsCancellationRequested)
         {
             try

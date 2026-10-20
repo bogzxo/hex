@@ -47,12 +47,12 @@ internal sealed partial class HexDocument
     /// <summary>The code of the layout as it was last opened or saved, which is what there is to compare it to.</summary>
     public string SavedCode { get; set; } = string.Empty;
 
-    /// <summary>Whether the layout has been changed since it was opened or saved. The editor keeps this up, see HexScene.UpdateState.</summary>
+    /// <summary>Whether the layout has been changed since it was opened or saved. The editor keeps this up, see DawnScene.UpdateState.</summary>
     public bool Modified { get; set; }
 
     /// <summary>
     /// The file's text as it was on the disk when Hex last read or wrote it, line endings and all. Something else writing
-    /// the file (the game, git, Syncthing) is told apart from Hex's own save by it, see HexScene.DiskChanges.
+    /// the file (the game, git, Syncthing) is told apart from Hex's own save by it, see DawnScene.DiskChanges.
     /// </summary>
     public string? DiskText { get; set; }
 
@@ -83,6 +83,9 @@ internal sealed partial class HexDocument
 
     /// <summary>Whether a layout is shown as its designer or as its code. A file of code is only ever its code.</summary>
     public HexView View { get; set; } = HexView.Design;
+
+    /// <summary>Whether it is a layout on screen in its designer, where the designer's keys and menus mean something.</summary>
+    public bool InDesigner => !IsText && View == HexView.Design;
 
     /// <summary>Which view of an extension the file is shown in, while <see cref="View"/> is Extension.</summary>
     public string? ExtensionView { get; set; }

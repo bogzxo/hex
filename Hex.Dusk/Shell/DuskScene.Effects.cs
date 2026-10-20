@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Hex.Core;
 using Hex.Shell;
 
 using Horizon.HIDL.Runtime;
@@ -60,12 +61,13 @@ internal sealed partial class DuskScene
         if (sparks is null)
             return;
 
-        Dictionary<string, IRuntimeValue> editor = SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : [];
-        effects = editor.TryGetValue("effects", out IRuntimeValue? level) && level is StringValue { Value: "none" or "subtle" or "all" } said ? said.Value : "none";
-        effectSparks = editor.TryGetValue("effect_sparks", out IRuntimeValue? sparked) ? sparked is BooleanValue { Value: true } : true;
-        effectGlass = editor.TryGetValue("effect_glass", out IRuntimeValue? glassy) ? glassy is BooleanValue { Value: true } : true;
-        popupGlass = HexGlass.Popup(editor);
-        lightEffects.Read(editor);
+        // Read as Dawn reads them, the editor's section is both modes'
+        HexSettings settings = new(host.Settings.Path);
+        effects = settings.Effects;
+        effectSparks = settings.EffectSparks;
+        effectGlass = settings.EffectGlass;
+        popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+        lightEffects.Read(SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : []);
         ApplyEffects();
     }
 

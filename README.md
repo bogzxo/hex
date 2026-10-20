@@ -79,7 +79,7 @@ It can have a UI too, a view of a file (`hex.view`, offered on the files that sa
 itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
 doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
 and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
-for a file or a folder with Windows' dialogs (`hex.pick_file({ title, folder, filter: ["Programs (*.exe)", "*.exe"] },
+for a file or a folder with Hex's own dialog (`hex.pick_file({ title, folder, filter: ["Pictures", "*.png;*.jpg"] },
 func(path) { ... })`, `hex.pick_folder(func(path) { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
 error }`, for a file that may be half typed.
 
@@ -100,10 +100,19 @@ pages name in `settings.hor`, `extension_tab.hor`), a row for each of them there
 was told (or its default), `hex.set_setting(name, value)` changes it, and Hex keeps the lot in `hex_settings.hor` under
 `extension_settings`. A change made on its tab is told to the extension, `on_setting(hex, name, value)`.
 
+## HIDL's language server
+
+`Hex --lsp` is a language server for HIDL on stdin and stdout, for any editor that speaks the protocol. It knows a file the
+way Dawn does, because it's the same code (`Hex.Core/Hidl`): what the parser didn't like, where running the file went
+wrong and the lints of what it came to, completion (the language's words, the file's and the workspace's names, a kind
+of component after `compositor.` and its properties inside its braces, the words a property like `anchor` takes),
+hovers, where a name is declared (the file, the other open files, then the workspace) and the outline. Dawn doesn't
+start it for its own files, it has all of that inside already.
+
 ## Finding your way round the code
 
-Hex is one scene, `HexScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
-`Shell/HexScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
+Hex is one scene, `DawnScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
+`Shell/DawnScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
 `editor.hor` is the skeleton that includes the parts in `Assets/hex/shell/`, the activity bar, the side bar, the tabs,
 the panel and the properties, each a layout of its own that opens on its own in Hex) and its
 `UpdateState` is a tick of the whole editor in a handful of steps, read that first. Every part of the class says what it is in
@@ -122,7 +131,7 @@ a comment at its top.
 - `Extensions/` loading extensions and everything `hex` is to them, their views, panels and windows.
 - `Workspace/` the folders open, the explorer, the trash, and the work done on other threads over all of the files.
 - `Settings/` `hex_settings.hor`, the settings window and the skin Hex is drawn in.
-- `Platform/` the dialogs of Windows, opening, saving and picking a folder.
+- `Platform/` and `Dialogs/` (in `Hex.Shell`) opening, saving and picking a folder, Hex's own dialog on every system.
 - `Testing/` the self test, a file per part of Hex, and `--check`.
 
 `HEX_PROFILE=20` (or any number of milliseconds) has Hex write out every tick that took longer than that with the steps
@@ -132,9 +141,24 @@ that took it, and when it's closed what every step cost altogether. See `docs/pe
 
 ```
 git clone --recursive https://github.com/bogzxo/hex
-dotnet build Hex.sln
-Horizon.Hex/bin/Debug/net10.0/Horizon.Hex --selftest --exit --size 1600x900
+dotnet build Hex/Hex.csproj
+Hex/bin/Debug/net10.0/Hex --selftest --exit --size 1600x900
 ```
+
+Hex runs on Windows, Linux and macOS, with the .NET 10 SDK on each.
+
+- **Windows** 10 1809 or later (the terminal is ConPTY). Nothing else.
+- **Linux**, Wayland or X11. It draws with Vulkan, so it wants the Vulkan loader and a driver (`libvulkan1` and
+  `mesa-vulkan-drivers` on Debian and Ubuntu, `vulkan-icd-loader` and your GPU's driver on Arch). Its window is SDL's,
+  which comes with it. A desktop that shows apps by their `.desktop` file (GNOME, KDE) wants
+  `scripts/install-desktop.sh` run once, for Hex's name and icon in its dock.
+- **macOS** 11 or later, Apple silicon or Intel. Vulkan is MoltenVK, which comes with it. Shortcuts are on command
+  where they're on control elsewhere, the files say Ctrl either way.
+
+Settings are in `%AppData%\Hex` (or a `settings` folder next to Hex.exe), `~/Library/Application Support/Hex` and
+`~/.config/hex`. A Dusk drop down key is Windows' own there, on Linux and macOS it's the desktop's: bind
+`hex --dusk --toggle` to it in the keyboard settings. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
+-r linux-x64`, `osx-arm64`, `win-x64`) it wants clang on Linux and the Xcode command line tools on a Mac.
 
 The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`
 (the designer, the minute and more of it), `code`, `workspace`, `extensions` and `garbage`, as many as you like. A part

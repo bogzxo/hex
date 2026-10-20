@@ -12,8 +12,8 @@ internal sealed partial class DuskScene
     private UIDialog? chooser;
 
     // The commands used last, over the rest of the palette, kept in Dusk's home (a self test has a home of its own)
-    private HexRecentList? recentCommands;
-    private HexRecentList RecentCommands => recentCommands ??= new(Path.Combine(TerminalFiles.UserFolder, "recent_commands.txt"));
+    private UIRecentList? recentCommands;
+    private UIRecentList RecentCommands => recentCommands ??= new(Path.Combine(TerminalFiles.UserFolder, "recent_commands.txt"));
 
     /// <summary>Ctrl+Shift+P, every command with its key, a few letters narrow it down.</summary>
     private void CommandPalette()
@@ -32,11 +32,11 @@ internal sealed partial class DuskScene
     /// Helper method to ask for one of a list of things, Hex.Shell's chooser (the same Dawn asks with), narrowed down by
     /// what is typed, enter, the first button or a double click picks.
     /// </summary>
-    private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, HexRecentList? recent = null)
+    private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, UIRecentList? recent = null)
     {
         if (chooser is { IsOpen: true })
             chooser.Close();
 
-        chooser = Hex.Shell.HexChooser.Show(chrome, title, message, choices, recent: recent);
+        chooser = UIChooser.Show(chrome, title, message, choices, recent: recent);
     }
 }

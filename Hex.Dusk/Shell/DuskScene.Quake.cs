@@ -2,7 +2,8 @@ namespace Hex.Dusk;
 
 // The quake drop down. A key that works whatever is in front (quake_key in settings.hor, Ctrl+` say) slides Dusk down
 // from the top of the screen and back up out of sight, the window manager doing the sliding on the window's thread and
-// Windows' hotkeys doing the hearing (WindowManager.Quake). The quake command does the same from inside.
+// Windows' hotkeys doing the hearing (WindowManager.Quake). The quake command does the same from inside. On Linux and
+// macOS the desktop's keyboard settings have the key, bound to hex --dusk --toggle, which tells this Dusk (Instance).
 internal sealed partial class DuskScene
 {
     private int quakeHotKey = -1;
@@ -23,7 +24,9 @@ internal sealed partial class DuskScene
 
         quakeHotKey = Engine.WindowManager.RegisterHotKey(wanted);
         if (quakeHotKey < 0)
-            Say($"{wanted} can't be a key for everywhere here", true);
+            Say(OperatingSystem.IsWindows()
+                ? $"{wanted} can't be a key for everywhere here"
+                : $"a key for everywhere is the desktop's here: bind {wanted} to \"{Environment.ProcessPath ?? "hex"} --dusk --toggle\" in its keyboard settings", true);
     }
 
     /// <summary>Whether the key was pressed, every tick.</summary>

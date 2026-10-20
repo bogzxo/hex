@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 /// only, the way any other file of HIDL opens. The canvas, the palette, the inspector and the rest are still in the
 /// scene's Designer folder, this is the door the shell goes through to them.
 /// </summary>
-internal sealed class HexDesignerKind(HexScene scene) : IHexFileKind
+internal sealed class HexDesignerKind(DawnScene scene) : IHexFileKind
 {
     public const string ID = "designer";
 

@@ -1,0 +1,232 @@
+using System.Text.RegularExpressions;
+
+using Horizon.Content;
+using Horizon.HIDL.Lexing;
+using Horizon.HIDL.Parsing;
+using Horizon.UI.Components;
+
+namespace Hex.Core;
+
+/// <summary>A place in a file something was found or is wrong, its line and column from 0, and what is said about it.</summary>
+internal readonly record struct HexResult(string Path, int Line, int Column, string Text);
+
+/// <summary>
+/// The files of a workspace and what's in them: every .hor under some folders, where one is inside of them, every line
+/// something is on, and every file checked for what doesn't parse. Nothing of the editor is read, so all of it goes on
+/// in the background, and is tested on its own.
+/// </summary>
+internal static class HexSearch
+{
+    /// <summary>The folders never looked in for files of a workspace, what gets built, git's own and old builds kept on purpose.</summary>
+    public static readonly HashSet<string> SkippedFolders = new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "Build History" };
+
+    /// <summary>The most lines finding something lists, a search for "e" in a big repository would go on for ever.</summary>
+    public const int MOST_FOUND = 2000;
+
+    /// <summary>Every .hor under some folders, once each.</summary>
+    public static List<string> FilesUnder(IReadOnlyList<string> roots)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<string>();
+        foreach (string root in roots)
+        {
+            foreach (string file in FilesIn(root))
+            {
+                if (seen.Add(file))
+                    files.Add(file);
+            }
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
+    /// (which are the files of another repository, and there are copies of the engine in more than one).
+    /// </summary>
+    public static List<string> FilesIn(string root)
+    {
+        var files = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            string folder = pending.Pop();
+            try
+            {
+                files.AddRange(Directory.GetFiles(folder, "*.hor").Where(file => !Path.GetFileName(file).StartsWith("~syncthing~")));
+
+                foreach (string inside in Directory.GetDirectories(folder))
+                {
+                    string name = Path.GetFileName(inside);
+                    if (SkippedFolders.Contains(name) || name.StartsWith('.') || File.Exists(Path.Combine(inside, ".git")))
+                        continue;
+                    pending.Push(inside);
+                }
+            }
+            catch (Exception)
+            {
+                // A folder that can't be read has no files as far as this goes
+            }
+        }
+
+        files.Sort(StringComparer.OrdinalIgnoreCase);
+        return files;
+    }
+
+    /// <summary>A path as it is inside of the folders looked through, with the name of its folder in front when there is more than one.</summary>
+    public static string RelativeTo(IReadOnlyList<string> roots, string path)
+    {
+        string full = Path.GetFullPath(path);
+        string? root = roots.Where(folder => full.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).OrderByDescending(folder => folder.Length).FirstOrDefault();
+        if (root is null)
+            return full.Replace('\\', '/');
+
+        string inside = Path.GetRelativePath(root, full).Replace('\\', '/');
+        return roots.Count > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : inside;
+    }
+
+    /// <summary>
+    /// Every line something is on in the files under some folders, the first place on each, the case, whole words and a
+    /// regex as the options say. A regex that doesn't build finds nothing.
+    /// </summary>
+    public static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, UIFindOptions options)
+    {
+        var found = new List<HexResult>();
+        Regex? pattern = null;
+        if (options.Regex)
+        {
+            try { pattern = new Regex(query, (options.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); }
+            catch (ArgumentException) { return found; }
+        }
+
+        foreach (string file in FilesUnder(roots))
+        {
+            string[] lines = ReadLines(file);
+            for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
+            {
+                if (FirstMatch(lines[line], query, options, pattern) is { } at)
+                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}"));
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Where something is first on a line as the options say (the pattern built from them for a regex), null for nowhere.</summary>
+    public static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
+    {
+        if (pattern is not null)
+        {
+            try
+            {
+                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
+                {
+                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
+                        return match.Index;
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+            }
+            return null;
+        }
+
+        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
+        {
+            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
+                return at;
+        }
+        return null;
+    }
+
+    /// <summary>The toggles of the find bar that are on, said after what's asked, empty for none.</summary>
+    public static string DescribeOptions(UIFindOptions options)
+    {
+        var on = new List<string>();
+        if (options.MatchCase) on.Add("the case matching");
+        if (options.WholeWord) on.Add("whole words");
+        if (options.Regex) on.Add("as a regex");
+        return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
+    }
+
+    private static bool IsWholeWord(string line, int at, int length) =>
+        (at == 0 || !UITextDocument.IsWordChar(line[at - 1])) && (at + length >= line.Length || !UITextDocument.IsWordChar(line[at + length]));
+
+    /// <summary>Every .hor under some folders parsed, what doesn't parse, and what names a text the game hasn't got.</summary>
+    public static (int Files, List<HexResult> Problems) CheckFiles(IReadOnlyList<string> roots)
+    {
+        List<string> files = FilesUnder(roots);
+        var problems = new List<HexResult>();
+        string Relative(string path) => RelativeTo(roots, path);
+
+        foreach (string file in files)
+        {
+            string source;
+            try
+            {
+                source = File.ReadAllText(file);
+            }
+            catch (Exception e)
+            {
+                problems.Add(new HexResult(file, 0, 0, $"{Relative(file)}  couldn't be read, {e.Message}"));
+                continue;
+            }
+
+            try
+            {
+                new Parser().ProduceSyntaxTree(Lexer.Tokenize(source));
+            }
+            catch (ParseException e)
+            {
+                problems.Add(new HexResult(file, Math.Max(0, e.Line - 1), Math.Max(0, e.Col - 1), $"{Relative(file)}:{e.Line}  {e.Message}"));
+            }
+            catch (Exception e)
+            {
+                problems.Add(new HexResult(file, 0, 0, $"{Relative(file)}  {e.Message}"));
+            }
+
+            foreach (UICodeDiagnostic missing in LocalisationDiagnostics(source))
+                problems.Add(new HexResult(file, missing.Line, missing.Column, $"{Relative(file)}:{missing.Line + 1}  {missing.Message}"));
+        }
+
+        return (files.Count, problems);
+    }
+
+    /// <summary>
+    /// The texts a piece of code names by key ("@main_menu.quit") that the language of its game hasn't got, with no
+    /// languages loaded there is nothing to say.
+    /// </summary>
+    public static IReadOnlyList<UICodeDiagnostic> LocalisationDiagnostics(string text)
+    {
+        if (Localisation.Count == 0 || !text.Contains("\"@", StringComparison.Ordinal))
+            return [];
+
+        var found = new List<UICodeDiagnostic>();
+        foreach (Token token in Lexer.Tokenize(text, lenient: true))
+        {
+            if (token.Type != TokenType.TextLiteral || !Localisation.IsKey(token.Value))
+                continue;
+
+            if (!Localisation.Has(token.Value[1..]))
+                found.Add(new UICodeDiagnostic(token.Line - 1, token.Col - 1, token.Length, $"{Localisation.Language} has no text for {token.Value[1..]}", Warning: true));
+        }
+
+        return found;
+    }
+
+    /// <summary>The lines of a file, none for one that can't be read.</summary>
+    public static string[] ReadLines(string file)
+    {
+        try
+        {
+            return File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+}

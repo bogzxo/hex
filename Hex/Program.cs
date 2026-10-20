@@ -29,6 +29,16 @@ internal static partial class Program
             return 0;
         }
 
+        // HIDL's language server on stdin and stdout, for an editor to start (VS Code, or Hex's own settings), no window
+        if (args.Contains("--lsp"))
+            return Hex.Core.HidlServer.Serve();
+
+        // Started from the Dock or a desktop's launcher, the PATH a terminal would have, off this thread
+        Horizon.Core.Processes.ProcessEnvironment.ImportLoginShell();
+
+        // The terminal's components known to layouts before the first module is made, both modes have them
+        Horizon.UI.Components.TerminalKinds.Register();
+
         HexMode mode = HexIdentity.ModeOf(args, Environment.ProcessPath);
         HexIdentity.Claim(mode);
 
@@ -111,7 +121,7 @@ internal static partial class Program
         DateTime giveUp = DateTime.UtcNow.AddSeconds(20);
         foreach (string file in files)
         {
-            while (!HexInstance.Tell(HexScene.RemotePipe, $"open|{file}|0"))
+            while (!HexInstance.Tell(DawnScene.RemotePipe, $"open|{file}|0"))
             {
                 if (DateTime.UtcNow > giveUp)
                     return;
@@ -154,6 +164,9 @@ internal static partial class Program
           --scale <n>              how big the UI is drawn
           --size <w>x<h>           the window's size
           --selftest [part...]     go through the terminal and say what works, --exit to leave after
+
+        HIDL
+          --lsp                    HIDL's language server on stdin and stdout, for an editor to start, no window
 
         Both keep their settings in the settings folder next to Hex.exe. Inside either, Ctrl+Shift+P is everything
         there is to do, and in Dusk, tui typed at a prompt lists the programs with a screen of their own.
