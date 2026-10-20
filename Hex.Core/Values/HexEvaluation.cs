@@ -59,7 +59,38 @@ internal sealed class HexEvaluation
     /// <summary>The last run that finished since this was last asked, null if none did.</summary>
     public HexValues? TakeFinished() => Interlocked.Exchange(ref finished, null);
 
+    /// <summary>
+    /// Runs a file there and then and comes back with what it came to, on a thread with the room the interpreter wants and
+    /// stopped after a second like any other run. For whoever is off the editor's thread already (the language server).
+    /// </summary>
+    public static HexValues RunNow(string source, string? file, string? directory, IReadOnlyDictionary<string, string> open)
+    {
+        HexValues? done = null;
+        var thread = new Thread(() =>
+        {
+            using var cancel = new CancellationTokenSource();
+            done = Execute(source, file, directory, open, cancel);
+        }, STACK_SIZE)
+        {
+            IsBackground = true,
+            Name = "Hex evaluation now"
+        };
+        thread.Start();
+        thread.Join();
+        return done!;
+    }
+
     private void Evaluate(string source, string? file, string? directory, IReadOnlyDictionary<string, string> open, CancellationTokenSource cancel)
+    {
+        HexValues done = Execute(source, file, directory, open, cancel);
+
+        // A newer run is on its way, nobody wants this one
+        if (running == cancel)
+            finished = done;
+    }
+
+    // A run of a file, stopped after a second, and what it came to
+    private static HexValues Execute(string source, string? file, string? directory, IReadOnlyDictionary<string, string> open, CancellationTokenSource cancel)
     {
         var printed = new List<string>();
         var sources = new HIDLSourceMap();
@@ -100,10 +131,7 @@ internal sealed class HexEvaluation
 
         double took = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
-        // A newer run is on its way, nobody wants this one. One that ran out of time says so
-        if (running != cancel)
-            return;
-
+        // One that ran out of time says so
         if (error is not null && took >= TIME_LIMIT_MS)
             error = "stopped after a second, it was still going";
         runtime.Interpreter.Cancellation = CancellationToken.None;
@@ -112,7 +140,7 @@ internal sealed class HexEvaluation
         foreach (var (name, value) in runtime.UserScope.Variables)
             declared.Add((name, value));
 
-        finished = new HexValues(runtime, declared, error, took, printed, sources, errorAt);
+        return new HexValues(runtime, declared, error, took, printed, sources, errorAt);
     }
 
     private static string ReadInclude(string file, string? folder, IReadOnlyDictionary<string, string> open)

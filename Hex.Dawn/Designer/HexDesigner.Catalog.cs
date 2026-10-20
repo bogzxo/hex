@@ -12,18 +12,8 @@ internal sealed partial class HexDesigner
         "readout", "meter", "graph", "segments", "include"
     ];
 
-    // The properties that are one of a few words, and the words.
-    private static readonly string[] Origins = ["center", "top_left", "top", "top_right", "left", "right", "bottom_left", "bottom", "bottom_right"];
-    internal static readonly Dictionary<string, string[]> Choices = new()
-    {
-        ["anchor"] = Origins,
-        ["pivot"] = Origins,
-        ["align"] = Origins,
-        ["fill"] = ["none", "horizontal", "vertical", "both"],
-        ["direction"] = ["vertical", "horizontal"],
-        ["intro"] = ["none", "pop", "fade", "slide"],
-        ["hover"] = ["none", "grow", "shrink", "lift", "nudge", "pulse", "glow"]
-    };
+    // The properties that are one of a few words, and the words, see HidlComponents
+    internal static Dictionary<string, string[]> Choices => HidlComponents.Choices;
 
     // The numbers that have a slider next to them, and what its ends are.
     private static readonly Dictionary<string, (float Min, float Max)> Ranges = new()

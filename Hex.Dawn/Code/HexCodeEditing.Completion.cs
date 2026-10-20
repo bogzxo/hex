@@ -124,125 +124,9 @@ internal sealed partial class HexCodeEditing
             }
         }
 
-        UITextDocument doc = editor.Document;
-        UITextPosition caret = doc.Caret;
-        string line = doc.LineAt(caret.Line);
-        string before = line[..caret.Column];
-
-        // Inside a text, the quotes before the caret on its line odd in number
-        int quote = before.LastIndexOf('"');
-        if (quote >= 0 && before.Count(character => character == '"') % 2 == 1)
-        {
-            string inside = before[(quote + 1)..];
-
-            if (inside.StartsWith('@'))
-            {
-                var keys = Localisation.Keys.Order(StringComparer.Ordinal)
-                    .Select(key => new UICompletion(key, HexEvaluation.Shorten(Localisation.Get(key), 40)))
-                    .ToList();
-                return new UICompletionRequest(quote + 2, keys);
-            }
-
-            // The words of a property that is one of a few, after its name and a colon
-            string head = before[..quote].TrimEnd();
-            if (head.EndsWith(':'))
-            {
-                string property = TrailingWord(head[..^1].TrimEnd());
-                if (HexDesigner.Choices.TryGetValue(property, out string[]? words))
-                    return new UICompletionRequest(quote + 1, [.. words.Select(word => new UICompletion(word, property))]);
-            }
-
-            return null;
-        }
-
-        string word = doc.WordBeforeCaret();
-        int start = caret.Column - word.Length;
-        string ahead = before[..start];
-
-        // A kind of component, after compositor.
-        if (ahead.EndsWith("compositor.", StringComparison.Ordinal))
-            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(HexDesigner.Describe(kind), 40), kind + "({ "))]);
-
-        // A property of the component being made, where a key goes inside its braces
-        if (ComponentBeingMade(editor.Text, doc, start) is { } kind && UIModule.CreateDetached(kind) is { } made)
-        {
-            string trimmed = ahead.TrimEnd();
-            if (trimmed.Length == 0 || trimmed.EndsWith('{') || trimmed.EndsWith(','))
-            {
-                var properties = made.Object.Properties.Keys
-                    .Where(name => name != "parent")
-                    .Prepend("parent")
-                    .Select(name => new UICompletion(name, HexEvaluation.Shorten(Horizon.UI.Scripting.UIPropertyHelp.Describe(kind, name), 48), name + ": "))
-                    .ToList();
-                return new UICompletionRequest(start, properties);
-            }
-        }
-
-        var items = new List<UICompletion>();
-        var seen = new HashSet<string>();
-        foreach (string keyword in HidlKeywords)
-        {
-            if (seen.Add(keyword)) items.Add(new UICompletion(keyword, "keyword"));
-        }
-
-        foreach (Token token in Lexer.Tokenize(editor.Text, lenient: true))
-        {
-            if (token.Type == TokenType.Identifier && token.Value.Length > 1 && seen.Add(token.Value))
-                items.Add(new UICompletion(token.Value, "in this file"));
-        }
-
-        foreach (string known in Vocabulary().Order(StringComparer.Ordinal))
-        {
-            if (seen.Add(known))
-                items.Add(new UICompletion(known, "in the workspace"));
-        }
-
-        return new UICompletionRequest(start, items);
-    }
-
-    private static readonly string[] HidlKeywords = ["let", "const", "func", "if", "else", "while", "for", "in", "return", "break", "continue", "true", "false", "null", "vec", "include", "compositor"];
-
-    private static string TrailingWord(string text)
-    {
-        int start = text.Length;
-        while (start > 0 && UITextDocument.IsWordChar(text[start - 1])) start--;
-        return text[start..];
-    }
-
-    /// <summary>
-    /// Helper method to find which kind of component the code is in the middle of making at a place, the innermost
-    /// compositor.kind({ that isn't closed yet, null for none.
-    /// </summary>
-    private static string? ComponentBeingMade(string text, UITextDocument doc, int column)
-    {
-        // Everything up to the place, by its offset in the text
-        int offset = 0;
-        for (int line = 0; line < doc.Caret.Line; line++)
-            offset += doc.LineAt(line).Length + 1;
-        offset += column;
-
-        Token[] tokens = Lexer.Tokenize(text[..Math.Min(offset, text.Length)], lenient: true);
-        var open = new Stack<string?>();
-
-        // By the character and not the kind of token, the lexer's names for the brackets are the other way round
-        for (int i = 0; i < tokens.Length; i++)
-        {
-            switch (tokens[i].Value)
-            {
-                case "{":
-                    // compositor . kind ( {
-                    bool made = i >= 4 && tokens[i - 1].Type == TokenType.OpenParenthesis && tokens[i - 2].Type == TokenType.Identifier
-                        && tokens[i - 3].Type == TokenType.Dot && tokens[i - 4] is { Type: TokenType.Identifier, Value: "compositor" };
-                    open.Push(made ? tokens[i - 2].Value : null);
-                    break;
-
-                case "}" when open.Count > 0:
-                    open.Pop();
-                    break;
-            }
-        }
-
-        return open.Count > 0 ? open.Peek() : null;
+        // The rest is HIDL's, worked out as the language server works it out, with the names of the workspace
+        UITextPosition caret = editor.Document.Caret;
+        return HidlAnalysis.Complete(editor.Text, caret.Line, caret.Column, Vocabulary());
     }
 
     /* Going to where something is */
@@ -321,17 +205,8 @@ internal sealed partial class HexCodeEditing
     }
 
     /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
-    internal static UITextPosition? FindDeclaration(string source, string name)
-    {
-        Token[] tokens = Lexer.Tokenize(source, lenient: true);
-        for (int i = 0; i + 1 < tokens.Length; i++)
-        {
-            if (tokens[i].Type is TokenType.Let or TokenType.Const && tokens[i + 1] is { Type: TokenType.Identifier } declared && declared.Value == name)
-                return new UITextPosition(declared.Line - 1, declared.Col - 1);
-        }
-
-        return null;
-    }
+    internal static UITextPosition? FindDeclaration(string source, string name) =>
+        HidlAnalysis.FindDeclaration(source, name) is { } at ? new UITextPosition(at.Line, at.Column) : null;
 
     /// <summary>Opens the language file of the game at a key, the line of its last part under the ones before it.</summary>
     internal void GoToKey(string key)
