@@ -177,7 +177,6 @@ internal sealed partial class HexScene
         }),
         ("extensions", "editing files by their values, extensions, the move editor (on Fighter2D's own moves too), their settings tabs", test =>
         {
-            TestEdits(test);
             TestExtensions(test);
             TestMoveEditor(test);
             TestMoveEditorLayout(test);

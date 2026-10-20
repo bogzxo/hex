@@ -91,7 +91,7 @@ internal sealed partial class HexScene
 
         try
         {
-            if (HexSourceTree.Read(opened.Editor.Text, path, ReadInclude).Find(PathOf(at), out _) is { At.Span.IsKnown: true } node)
+            if (HexSourceTree.Read(opened.Editor.Text, path, ReadInclude).Find(HexValueEdits.PathOf(at), out _) is { At.Span.IsKnown: true } node)
                 OpenAt(path, node.At.Span.Line - 1, node.At.Span.Column - 1);
         }
         catch (Exception)

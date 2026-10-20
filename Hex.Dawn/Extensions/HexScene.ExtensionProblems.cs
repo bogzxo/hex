@@ -54,7 +54,7 @@ internal sealed partial class HexScene
                     return null;
                 }
 
-                if (tree.Find(PathOf(path), out _) is { } node && (node.At.Span.IsKnown ? node.At.Span : node.At.Value) is { IsKnown: true } at)
+                if (tree.Find(HexValueEdits.PathOf(path), out _) is { } node && (node.At.Span.IsKnown ? node.At.Span : node.At.Value) is { IsKnown: true } at)
                     found.Add(new UICodeDiagnostic(at.Line - 1, at.Column - 1, Math.Max(1, at.Length), message, warning));
             }
             else
