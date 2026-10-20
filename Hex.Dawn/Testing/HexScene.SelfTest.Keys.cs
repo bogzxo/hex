@@ -40,7 +40,7 @@ internal sealed partial class HexScene
         test.Check("keys: a command put on another key says so in its menu, the palette and the list, and its old key does nothing", () =>
             Item("Find in Files")!.Shortcut == "Ctrl+Alt+F" && AllCommands().Any(command => command.Text.EndsWith("Find in Files...   (Ctrl+Alt+F)", StringComparison.Ordinal))
             && keysTree!.Items.Any(row => row.Text == "Find in Files" && row.Detail == "Ctrl+Alt+F")
-            && shortcuts.Has(Key.F, true, false, true) && !shortcuts.Has(Key.F, true, true, false) && keyFor is null && keyDialog is not { IsOpen: true });
+            && commands.Keys.Has(Key.F, true, false, true) && !commands.Keys.Has(Key.F, true, true, false) && keyFor is null && keyDialog is not { IsOpen: true });
 
         // Something else onto a key that's somebody's, which then isn't on one, and delete takes a key off
         test.Run(() => KeyPressedFor(Item("Go to File")!, Key.F, control: true, shift: false, alt: true));
@@ -49,7 +49,7 @@ internal sealed partial class HexScene
             Item("Go to File")!.Shortcut == "Ctrl+Alt+F" && Item("Find in Files")!.Shortcut.Length == 0 && rebound.Count == 2);
         test.Run(() => RemoveKeyOf(Item("Go to File")!));
         test.Wait();
-        test.Check("keys: delete on a row takes its key off", () => Item("Go to File")!.Shortcut.Length == 0 && !shortcuts.Has(Key.F, true, false, true));
+        test.Check("keys: delete on a row takes its key off", () => Item("Go to File")!.Shortcut.Length == 0 && !commands.Keys.Has(Key.F, true, false, true));
 
         // Written to a keys.hor and read back
         string file = Path.Combine(testFolder, "selftest_keys.hor");
@@ -68,8 +68,8 @@ internal sealed partial class HexScene
         test.Run(PutKeysBack);
         test.Wait();
         test.Check("keys: reset puts them all back where they were", () =>
-            Item("Go to File")!.Shortcut == "Ctrl+P" && Item("Find in Files")!.Shortcut == "Ctrl+Shift+F" && shortcuts.Has(Key.F, true, true, false)
-            && shortcuts.Has(Key.P, true, false, false) && !shortcuts.Has(Key.F, true, false, true) && rebound.Count == 0);
+            Item("Go to File")!.Shortcut == "Ctrl+P" && Item("Find in Files")!.Shortcut == "Ctrl+Shift+F" && commands.Keys.Has(Key.F, true, true, false)
+            && commands.Keys.Has(Key.P, true, false, false) && !commands.Keys.Has(Key.F, true, false, true) && rebound.Count == 0);
         test.Run(() => keysWindow?.OnClosed?.Invoke());
         test.Wait();
     }

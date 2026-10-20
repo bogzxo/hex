@@ -21,12 +21,6 @@ internal sealed partial class HexScene
     private bool goingPlaces;
     private bool mouseBackWas, mouseForwardWas;
 
-    private void BuildPlaces()
-    {
-        shortcuts.Add(Key.Left, () => GoPlace(back: true), alt: true, whileTyping: true);
-        shortcuts.Add(Key.Right, () => GoPlace(back: false), alt: true, whileTyping: true);
-    }
-
     /// <summary>Every tick, a jump noted as a place to come back to, and the mouse's back and forward buttons.</summary>
     private void UpdatePlaces()
     {

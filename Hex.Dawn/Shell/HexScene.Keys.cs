@@ -139,7 +139,7 @@ internal sealed partial class HexScene
         bool? typing = null;
         if (HexKeys.Read(item.Shortcut) is { } old)
         {
-            typing = shortcuts.Remove(old.Key, old.Control, old.Shift, old.Alt);
+            typing = commands.Keys.Remove(old.Key, old.Control, old.Shift, old.Alt);
             keysTaken.Add(HexKeys.Write(old.Key, old.Control, old.Shift, old.Alt));
         }
 
@@ -147,7 +147,7 @@ internal sealed partial class HexScene
         if (to is { } key)
         {
             tidy = HexKeys.Write(key.Key, key.Control, key.Shift, key.Alt);
-            shortcuts.Remove(key.Key, key.Control, key.Shift, key.Alt);
+            commands.Keys.Remove(key.Key, key.Control, key.Shift, key.Alt);
             bool typesNothing = key.Control || key.Alt || key.Key is >= Key.F1 and <= Key.F25;
             keysTaken.Add(tidy);
 
@@ -163,7 +163,7 @@ internal sealed partial class HexScene
             }
 
             MenuItem picked = item;
-            shortcuts.Add(key.Key, () => PickRebound(picked), control: key.Control, whileTyping: (typing ?? true) && typesNothing, shift: key.Shift, alt: key.Alt);
+            commands.Bind(key.Key, () => PickRebound(picked), control: key.Control, whileTyping: (typing ?? true) && typesNothing, shift: key.Shift, alt: key.Alt);
         }
 
         rebound.RemoveAll(pair => pair.Label == wanted);

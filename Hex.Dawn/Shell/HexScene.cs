@@ -87,7 +87,7 @@ internal sealed partial class HexScene : Scene
     // A change that hasn't been noted as a step to come back to yet, and how long it has to rest still
     private bool recordPending;
     private float settleTimer;
-    private readonly HexShortcuts shortcuts = new();
+    private readonly HexCommands commands = new();
 
     private readonly List<HexDocument> documents = [];
     private HexDocument document = null!;
@@ -174,12 +174,11 @@ internal sealed partial class HexScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        DeclareMenus();
         BuildStatusBar();
         BuildPanel();
         BuildFindBar();
-        BuildPlaces();
         BuildQuiet();
-        BuildSplit();
         BuildConsole();
         BuildTerminal();
         StartRemote();
@@ -191,13 +190,20 @@ internal sealed partial class HexScene : Scene
         BuildTabs();
 
         recent.AddRange(ReadRecent());
-        BuildMenus();
-        BuildShortcuts();
+        AddWindowCommands();
+        AddDocumentCommands();
+        AddWorkspaceCommands();
+        AddSettingsCommands();
+        AddFindCommands();
+        AddCodeCommands();
+        AddDebuggingCommands();
+        AddHelpCommands();
         BuildTasks();
         StartServerChecks();
         BuildEffects();
         BuildModes();
-        BuildSelectionShortcuts();
+        AddDesignerCommands();
+        commands.Build(menu);
         LoadKeys();
         WireViews();
         WireToolbar();

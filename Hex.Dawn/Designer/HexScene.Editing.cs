@@ -299,7 +299,7 @@ internal sealed partial class HexScene
         // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
         // from a terminal are terminal commands (HexScene.Terminal) and go through it
         if (!UpdateKeyCapture() && compositor.Focus is not TerminalView)
-            shortcuts.Update(Engine.Input.Keyboard, typing);
+            commands.Keys.Update(Engine.Input.Keyboard, typing);
     }
 
     /// <summary>

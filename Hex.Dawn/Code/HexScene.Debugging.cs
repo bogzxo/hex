@@ -580,4 +580,20 @@ internal sealed partial class HexScene
 
         return item;
     }
+
+    /// <summary>
+    /// The Run menu's debugging, on VS Code's keys, which go while typing. F5 itself is RunOrPlay's, and F11 is Zen
+    /// Mode's while nothing has stopped (BuildQuiet).
+    /// </summary>
+    private void AddDebuggingCommands()
+    {
+        commands.Add("Run/debug", "Start Debugging", DebugOrContinue, "F5", "debug-alt").IsVisible = () => !LayoutTools && !DebugStopped && IsCSharp(document.Path);
+        commands.Add("Run/debug", "Continue", DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
+        commands.Add("Run/debug", "Step Over", StepOver, "F10", "debug-step-over", HexKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", "Step Into", StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", "Step Out", StepOut, "Shift+F11", "debug-step-out", HexKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", "Stop Debugging", StopDebugging, "Shift+F5", "debug-stop", HexKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", "Restart Debugging", RestartDebugging, "Ctrl+Shift+F5", "debug-restart", HexKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", "Toggle Breakpoint", ToggleBreakpointHere, "F9", "debug-breakpoint", HexKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools && IsCSharp(document.Path);
+    }
 }

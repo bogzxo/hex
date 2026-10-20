@@ -81,9 +81,9 @@ internal sealed partial class HexScene : ITerminalHostUi
         }, string.Empty, HexOwns);
 
         // And the same keys from the editor
-        shortcuts.Add(Key.F6, ToggleTerminalPage, whileTyping: true);
-        shortcuts.Add(Key.GraveAccent, ToggleTerminalFocus, control: true, whileTyping: true, shift: false);
-        shortcuts.Add(Key.GraveAccent, NewTerminal, control: true, whileTyping: true, shift: true);
+        commands.Bind(Key.F6, ToggleTerminalPage, whileTyping: true);
+        commands.Bind(Key.GraveAccent, ToggleTerminalFocus, control: true, whileTyping: true, shift: false);
+        commands.Bind(Key.GraveAccent, NewTerminal, control: true, whileTyping: true, shift: true);
     }
 
     /// <summary>F6, the terminal page brought up with the keyboard in it, or the editor back when it is up.</summary>

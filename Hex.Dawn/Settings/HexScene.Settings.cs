@@ -42,4 +42,9 @@ internal sealed partial class HexScene
         if (settings.Save() is { } problem)
             Say(problem, error: true);
     }
+
+    private void AddSettingsCommands()
+    {
+        commands.Add("File/settings", "Settings...", OpenSettings, "Ctrl+,", "settings-gear", HexKeyUse.Bound);
+    }
 }

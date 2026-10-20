@@ -391,23 +391,99 @@ internal sealed partial class HexScene
         ShowComponentMenu(world);
     }
 
-    private void BuildSelectionShortcuts()
+    /// <summary>
+    /// The designer's commands, the clipboard of components, its zoom, the Layout menu and the keys that move what is
+    /// selected about, which keep out of the way while something is being typed.
+    /// </summary>
+    private void AddDesignerCommands()
     {
-        shortcuts.Add(Key.G, GroupSelected, control: true, shift: false);
-        shortcuts.Add(Key.G, UngroupSelected, control: true, shift: true);
-        shortcuts.Add(Key.D, DuplicateSelected, control: true);
-        shortcuts.Add(Key.A, SelectAll, control: true);
+        Func<bool> design = () => LayoutTools;
+        Func<bool> some = () => LayoutTools && document.Selected is not null;
+
+        // The clipboard, which a text box keeps for itself while it is being typed into
+        commands.Add("Edit/clipboard", "Cut", CutSelected, "Ctrl+X", use: HexKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Copy", CopySelected, "Ctrl+C", "copy", HexKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Paste", Paste, "Ctrl+V", use: HexKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Duplicate", DuplicateSelected, "Ctrl+D", use: HexKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", "Delete", DeleteAll, "Del", "trash", HexKeyUse.Bound).IsVisible = design;
+
+        commands.Add("View/zoom", "Zoom In", () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
+        commands.Add("View/zoom", "Zoom Out", () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
+        commands.Add("View/zoom", "Zoom to Fit", ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
+        commands.Add("View/zoom", "Actual Size", ZoomToActualSize, "Ctrl+1", use: HexKeyUse.Bound).IsVisible = design;
+
+        commands.Add("Run/run", "Play Entrances", PlayIntros, "F5", "play").IsVisible = design;
+
+        commands.ShowMenuWhen("Layout", design);
+        Menu add = commands.AddMenu("Layout/add", "Add", "add");
+        foreach (string kind in Palette)
+            add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
+        commands.Add("Layout/group", "Group", GroupSelected, "Ctrl+G", "group-by-ref-type", HexKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/group", "Ungroup", UngroupSelected, "Ctrl+Shift+G", use: HexKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
+        AddConvertMenu(commands.AddMenu("Layout/group", "Convert To", "arrow-swap"));
+        AddMoveMenu(commands.AddMenu("Layout/move", "Move", "arrow-swap"), some);
+        AddArrangeMenu(commands.AddMenu("Layout/move", "Arrange", "layers"), some);
+        AddAlignMenu(commands.AddMenu("Layout/move", "Align", "symbol-ruler"), some);
+        commands.Add("Layout/select", "Select All", SelectAll, "Ctrl+A", use: HexKeyUse.Bound);
+        commands.Add("Layout/select", "Deselect All", () => Select(null), "Esc").IsEnabled = some;
+        commands.Add("Layout/select", "Show All Layers", ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
+        commands.Add("Layout/select", "Show Code", ShowSelectedCode, icon: "code").IsEnabled = some;
+        FillScreenMenu(commands.AddMenu("Layout/screen", "Screen", "device-desktop"));
+
         // Escape puts away the little window on top first (the settings, a page of help), then what is selected
-        shortcuts.Add(Key.Escape, () => { if (!CloseTopWindow()) Select(null); });
-        shortcuts.Add(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Front), control: true);
-        shortcuts.Add(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Back), control: true);
-        shortcuts.Add(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Forward));
-        shortcuts.Add(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Backward));
+        commands.Bind(Key.Escape, () => { if (!CloseTopWindow()) Select(null); });
+        commands.Bind(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Front), control: true);
+        commands.Bind(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Back), control: true);
+        commands.Bind(Key.RightBracket, () => ReorderSelected(HexDocument.Order.Forward));
+        commands.Bind(Key.LeftBracket, () => ReorderSelected(HexDocument.Order.Backward));
 
         // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
-        shortcuts.Add(Key.Number0, () => { if (LayoutTools) ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
-        shortcuts.Add(Key.Number1, ZoomToActualSize, control: true);
-        shortcuts.Add(Key.Equal, () => { if (LayoutTools) ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center); else ZoomCode(CODE_ZOOM_STEP); }, control: true, whileTyping: true);
-        shortcuts.Add(Key.Minus, () => { if (LayoutTools) ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center); else ZoomCode(1.0f / CODE_ZOOM_STEP); }, control: true, whileTyping: true);
+        commands.Bind(Key.Number0, () => { if (LayoutTools) ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
+        commands.Bind(Key.Equal, () => { if (LayoutTools) ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center); else ZoomCode(CODE_ZOOM_STEP); }, control: true, whileTyping: true);
+        commands.Bind(Key.Minus, () => { if (LayoutTools) ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center); else ZoomCode(1.0f / CODE_ZOOM_STEP); }, control: true, whileTyping: true);
+
+        // With control the arrows move it about the tree instead of about the canvas
+        commands.Bind(Key.Up, () => MoveSelected(-1), control: true);
+        commands.Bind(Key.Down, () => MoveSelected(1), control: true);
+        commands.Bind(Key.Left, () => MoveSelectedAcross(inwards: false), control: true);
+        commands.Bind(Key.Right, () => MoveSelectedAcross(inwards: true), control: true);
+
+        // The arrows move whatever is selected a pixel at a time, for lining things up by eye
+        commands.Bind(Key.Left, () => Nudge(-1, 0));
+        commands.Bind(Key.Right, () => Nudge(1, 0));
+        commands.Bind(Key.Up, () => Nudge(0, 1));
+        commands.Bind(Key.Down, () => Nudge(0, -1));
+    }
+
+    /// <summary>The ways to move what is selected about the tree, for the Layout menu and the menu of a component.</summary>
+    private void AddMoveMenu(Menu into, Func<bool> some)
+    {
+        into.Add("Move Up", () => MoveSelected(-1), "Ctrl+Up", "arrow-up").IsEnabled = some;
+        into.Add("Move Down", () => MoveSelected(1), "Ctrl+Down", "arrow-down").IsEnabled = some;
+        into.Add("Move Out", () => MoveSelectedAcross(inwards: false), "Ctrl+Left", "arrow-left").IsEnabled = some;
+        into.Add("Move In", () => MoveSelectedAcross(inwards: true), "Ctrl+Right", "arrow-right").IsEnabled = some;
+    }
+
+    private void AddArrangeMenu(Menu into, Func<bool> some)
+    {
+        into.Add("Bring to Front", () => ReorderSelected(HexDocument.Order.Front), "Ctrl+]").IsEnabled = some;
+        into.Add("Bring Forward", () => ReorderSelected(HexDocument.Order.Forward), "]").IsEnabled = some;
+        into.Add("Send Backward", () => ReorderSelected(HexDocument.Order.Backward), "[").IsEnabled = some;
+        into.Add("Send to Back", () => ReorderSelected(HexDocument.Order.Back), "Ctrl+[").IsEnabled = some;
+    }
+
+    /// <summary>Lining up is against each other with several things selected, against the container with one.</summary>
+    private void AddAlignMenu(Menu into, Func<bool> some)
+    {
+        into.Add("Align Left", () => Align(Edge.Left)).IsEnabled = some;
+        into.Add("Align Centre", () => Align(Edge.Center)).IsEnabled = some;
+        into.Add("Align Right", () => Align(Edge.Right)).IsEnabled = some;
+        into.AddSeparator();
+        into.Add("Align Top", () => Align(Edge.Top)).IsEnabled = some;
+        into.Add("Align Middle", () => Align(Edge.Middle)).IsEnabled = some;
+        into.Add("Align Bottom", () => Align(Edge.Bottom)).IsEnabled = some;
+        into.AddSeparator();
+        into.Add("Distribute Horizontally", () => Distribute(horizontally: true)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
+        into.Add("Distribute Vertically", () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
     }
 }

@@ -211,4 +211,11 @@ internal sealed partial class HexScene
             into.AddSeparator();
         }
     }
+
+    /// <summary>Helper method to show the layouts in another skin, the one a game would be set to.</summary>
+    private void UseSkin(UISkinChoice skin, string? theme)
+    {
+        UISkins.Use(skin, theme);
+        Say(theme is null ? $"layouts are shown in {skin.Title}" : $"layouts are shown in {skin.Title}, {theme}");
+    }
 }

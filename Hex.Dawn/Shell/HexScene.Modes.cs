@@ -26,7 +26,6 @@ internal sealed partial class HexScene
             OnPressed = SwapMode
         });
 
-        shortcuts.Add(Key.D, SwapMode, control: true, whileTyping: true, alt: true);
         terminals.Commands.Register("hex_dusk", "Hex: Dusk, the terminal, in this window", SwapMode, "Ctrl+Alt+D", HexOwns);
         HexModes.Leaving += mode =>
         {

@@ -6,6 +6,8 @@ using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
+using Key = Silk.NET.Input.Key;
+
 namespace Hex.Dawn;
 
 // Making, opening, saving and closing layouts. Windows asks where, the editor testing itself (which can't click in a dialog of Windows) uses the list on the left to open and its workspace to save.
@@ -451,5 +453,38 @@ internal sealed partial class HexScene
         string language = languages.Contains(Horizon.Content.Localisation.DEFAULT_LANGUAGE) ? Horizon.Content.Localisation.DEFAULT_LANGUAGE : languages[0];
         if (Horizon.Content.Localisation.Load(folder, language) && announce)
             Say($"the texts of this layout are in {language}, out of {folder}");
+    }
+
+    /// <summary>The File menu's files, Edit's undo and redo, and Ctrl+Tab through what is open, all going while typing.</summary>
+    private void AddDocumentCommands()
+    {
+        // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu
+        commands.Add("File/new", "New Scratchpad", NewScratchpad, "Ctrl+N", "new-file", HexKeyUse.BoundWhileTyping);
+        commands.Add("File/new", "New Layout", () => Show(NewDocument()), icon: "layout");
+        commands.Add("File/new", "New File...", () => NewFileIn(workspace.IsEmpty ? browseDirectory : workspace.Folders[0]), icon: "file-add");
+        commands.Add("File/new", "Open...", OpenPressed, "Ctrl+O", "folder-opened", HexKeyUse.BoundWhileTyping);
+        recentMenu = commands.AddMenu("File/new", "Open Recent", "history");
+        FillRecentMenu();
+
+        commands.Add("File/save", "Save", Save, "Ctrl+S", "save", HexKeyUse.BoundWhileTyping);
+        commands.Add("File/save", "Save As...", SaveAs);
+        commands.Add("File/save", "Save All", SaveAll, "Ctrl+Shift+S", "save-all", HexKeyUse.BoundWhileTyping);
+        commands.Add("File/save", "Revert File", RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
+
+        commands.Add("File/close", "Close", Close, "Ctrl+W", "close", HexKeyUse.BoundWhileTyping);
+        commands.Add("File/close", "Close Others", () => CloseAll(except: document), icon: "close-all").IsEnabled = () => documents.Count > 1;
+        commands.Add("File/close", "Close All", () => CloseAll(), icon: "close-all");
+
+        // VS Code's, the file closed last back and the path of the one on screen copied
+        commands.Add("File/close", "Reopen Closed Editor", ReopenClosed, "Ctrl+Shift+T", "history", HexKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;
+        commands.Add("File/path", "Copy Path", () => CopyPath(relative: false), "Shift+Alt+C", "copy", HexKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
+        commands.Add("File/path", "Copy Relative Path", () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
+
+        commands.Add("Edit/history", "Undo", Undo, "Ctrl+Z", "discard", HexKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || recordPending;
+        commands.Add("Edit/history", "Redo", Redo, "Ctrl+Y", "redo", HexKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo;
+
+        // Ctrl+Tab goes through the files that are open, the way every editor does, with shift the other way
+        commands.Bind(Key.Tab, () => CycleDocuments(1), control: true, whileTyping: true, shift: false);
+        commands.Bind(Key.Tab, () => CycleDocuments(-1), control: true, whileTyping: true, shift: true);
     }
 }

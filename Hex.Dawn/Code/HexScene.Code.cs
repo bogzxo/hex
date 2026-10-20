@@ -11,6 +11,8 @@ using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 
+using Key = Silk.NET.Input.Key;
+
 namespace Hex.Dawn;
 
 // Hex as the editor of every .hor there is and not only of layouts. A file that doesn't build a layout (a data file, a
@@ -394,5 +396,63 @@ internal sealed partial class HexScene
         string flat = text.Replace("\r", string.Empty).Replace('\n', ' ');
         while (flat.Contains("  ", StringComparison.Ordinal)) flat = flat.Replace("  ", " ");
         return flat.Length <= most ? flat : flat[..most] + "...";
+    }
+
+    /// <summary>
+    /// The commands of code in any file, the Selection menu (the code editor answers its keys itself), its zoom, going
+    /// about it, checking it, running it and putting it back into its layout. These go while typing, the editor of code
+    /// is where they are wanted most.
+    /// </summary>
+    private void AddCodeCommands()
+    {
+        Func<bool> inCode = () => !LayoutTools;
+
+        commands.Add("Edit/comment", "Toggle Line Comment", () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
+
+        commands.ShowMenuWhen("Selection", inCode);
+        commands.Add("Selection/select", "Select All", () => code.Document.SelectAll(), "Ctrl+A");
+        commands.Add("Selection/select", "Select Line", SelectCaretLine);
+        commands.Add("Selection/select", "Select Word", () => code.Document.SelectWordAt(code.Document.Caret));
+        commands.Add("Selection/lines", "Move Line Up", () => code.Document.MoveLines(-1), "Alt+Up", "arrow-up");
+        commands.Add("Selection/lines", "Move Line Down", () => code.Document.MoveLines(1), "Alt+Down", "arrow-down");
+        commands.Add("Selection/lines", "Duplicate Line", () => code.Document.Duplicate(), "Ctrl+Shift+D", "copy");
+        commands.Add("Selection/carets", "Add Next Occurrence", () => code.Document.AddNextOccurrence(), "Ctrl+D", "selection");
+        commands.Add("Selection/carets", "Add Cursor Above", () => code.Document.AddCaretVertically(-1), "Ctrl+Alt+Up");
+        commands.Add("Selection/carets", "Add Cursor Below", () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down");
+        commands.Add("Selection/carets", "Add Cursors to Line Ends", () => code.Document.CaretsAtLineEnds(), "Ctrl+Shift+L");
+        commands.Add("Selection/carets", "Single Cursor", () => code.Document.CollapseCarets(), "Esc").IsEnabled = () => code.Document.HasExtraCarets;
+        Menu folding = commands.AddMenu("Selection/folding", "Folding", "fold");
+        folding.Add("Fold", () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");
+        folding.Add("Unfold", () => code.UnfoldAtCaret(), "Ctrl+Shift+]", "fold-down");
+        folding.AddSeparator();
+        folding.Add("Fold All", () => code.FoldAll(1));
+        folding.Add("Fold Level 2", () => code.FoldAll(2));
+        folding.Add("Fold Level 3", () => code.FoldAll(3));
+        folding.Add("Unfold All", () => code.UnfoldAll());
+
+        // Their keys are bound with the designer's, which zooms the canvas with the same ones
+        commands.Add("View/zoom", "Zoom In", () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
+        commands.Add("View/zoom", "Zoom Out", () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
+        commands.Add("View/zoom", "Reset Zoom", () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
+
+        commands.Add("Go/symbols", "Go to Definition", GoToDefinition, "F12", "references", HexKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", "Find All References", FindReferences, "Shift+F12", "references", HexKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/problems", "Next Problem", () => StepProblem(1), icon: "arrow-down");
+        commands.Add("Go/problems", "Previous Problem", () => StepProblem(-1), icon: "arrow-up");
+
+        // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
+        commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
+
+        // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
+        commands.Add("Run/run", "Run File", RunCode, "F5", "play").IsVisible = () => !LayoutTools && !IsCSharp(document.Path);
+        commands.Add("Run/run", "Run Behaviour...", OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
+        commands.Bind(Key.F5, () => { if (!LayoutTools) OpenRunner(); }, control: true, whileTyping: true);
+
+        commands.Add("Run/check", "Check All Files", CheckAllFiles, "F8", "check-all", HexKeyUse.BoundWhileTyping);
+        commands.Add("Run/check", "Trigger Completion", () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
+
+        commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: HexKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
+        commands.Add("Run/apply", "Discard Code Changes", RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
+        commands.Add("Run/apply", "Convert to Layout...", MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
     }
 }

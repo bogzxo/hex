@@ -187,4 +187,14 @@ internal sealed partial class HexScene
             ("engine", typeof(UICompositor).Assembly.GetName().Version?.ToString(3) ?? "?"),
             ("dotnet", Environment.Version.ToString())), 300.0f);
     }
+
+    /// <summary>The Help menu.</summary>
+    private void AddHelpCommands()
+    {
+        commands.Add("Help/help", "Keyboard Shortcuts...", OpenKeysWindow, icon: "keyboard");
+        commands.Add("Help/help", "HIDL Reference...", ShowLanguageHelp, icon: "book");
+        commands.Add("Help/help", "Release Notes...", ShowChangelog, icon: "history");
+        commands.Add("Help/help", "Open Hex's Own Layout", () => Open(EDITOR_LAYOUT), icon: "layout");
+        commands.Add("Help/about", "About Hex...", ShowAbout, icon: "info");
+    }
 }

@@ -66,7 +66,7 @@ internal sealed partial class HexScene
 
     private void WriteRecent()
     {
-        RebuildFileMenu();
+        FillRecentMenu();
 
         try
         {
@@ -76,5 +76,23 @@ internal sealed partial class HexScene
         {
             Say($"couldn't keep the list of layouts for next time: {e.Message}", error: true);
         }
+    }
+
+    // File, Open Recent, filled again whenever the files in it change
+    private Menu recentMenu = null!;
+
+    /// <summary>File, Open Recent, the files that were worked on last.</summary>
+    private void FillRecentMenu()
+    {
+        recentMenu.Clear();
+        for (int i = 0; i < recent.Count; i++)
+        {
+            // Numbered, two of them can well have the same name in different folders
+            string path = recent[i];
+            recentMenu.Add($"{i + 1}  {Path.GetFileName(path)}", () => Open(path));
+        }
+
+        recentMenu.AddSeparator();
+        recentMenu.Add("Clear Recently Opened", ForgetRecent).IsEnabled = () => recent.Count > 0;
     }
 }

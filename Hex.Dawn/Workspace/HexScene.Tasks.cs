@@ -208,6 +208,8 @@ internal sealed partial class HexScene
 
     private void BuildTasks()
     {
-        shortcuts.Add(Key.B, RunBuildTask, control: true, whileTyping: true, shift: true);
+        commands.Add("Run/tasks", "Run Task...", ChooseTask, icon: "tasklist");
+        commands.Add("Run/tasks", "Run Build Task", RunBuildTask, "Ctrl+Shift+B", "tools", HexKeyUse.BoundWhileTyping);
+        commands.Add("Run/tasks", "Configure Tasks", ConfigureTasks, icon: "gear");
     }
 }

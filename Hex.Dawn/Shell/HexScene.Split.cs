@@ -23,11 +23,6 @@ internal sealed partial class HexScene
 
     private bool Split => splitLeft is not null && splitRight is not null;
 
-    private void BuildSplit()
-    {
-        shortcuts.Add(Key.BackSlash, ToggleSplit, control: true, whileTyping: true);
-    }
-
     /// <summary>Ctrl+\, the file on screen put on the right of the one shown before it, or back to one side.</summary>
     private void ToggleSplit()
     {

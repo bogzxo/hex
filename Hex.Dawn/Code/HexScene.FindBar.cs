@@ -57,12 +57,17 @@ internal sealed partial class HexScene
         made.Get<Button>("replace_one").OnPressed = ReplaceOne;
         made.Get<Button>("replace_all").OnPressed = ReplaceEvery;
 
+        commands.Add("Edit/find", "Find...", FindInFile, "Ctrl+F", "search", HexKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Find Next", () => FindAgain(forward: true), "F3", use: HexKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Find Previous", () => FindAgain(forward: false), "Shift+F3", use: HexKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", "Replace...", ReplaceInFile, "Ctrl+H", "replace", HexKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+
         // While the bar is open, from the boxes and from the code
-        shortcuts.Add(Key.C, () => { if (FindBarOpen) ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase }); }, whileTyping: true, alt: true);
-        shortcuts.Add(Key.W, () => { if (FindBarOpen) ToggleFindOption(findOptions with { WholeWord = !findOptions.WholeWord }); }, whileTyping: true, alt: true);
-        shortcuts.Add(Key.R, () => { if (FindBarOpen) ToggleFindOption(findOptions with { Regex = !findOptions.Regex }); }, whileTyping: true, alt: true);
-        shortcuts.Add(Key.Enter, () => { if (FindBarOpen) ReplaceEvery(); }, control: true, alt: true, whileTyping: true);
-        shortcuts.Add(Key.Escape, EscapeFindBar, whileTyping: true);
+        commands.Bind(Key.C, () => { if (FindBarOpen) ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase }); }, whileTyping: true, alt: true);
+        commands.Bind(Key.W, () => { if (FindBarOpen) ToggleFindOption(findOptions with { WholeWord = !findOptions.WholeWord }); }, whileTyping: true, alt: true);
+        commands.Bind(Key.R, () => { if (FindBarOpen) ToggleFindOption(findOptions with { Regex = !findOptions.Regex }); }, whileTyping: true, alt: true);
+        commands.Bind(Key.Enter, () => { if (FindBarOpen) ReplaceEvery(); }, control: true, alt: true, whileTyping: true);
+        commands.Bind(Key.Escape, EscapeFindBar, whileTyping: true);
     }
 
     /// <summary>Ctrl+F, the bar opened over the code with what's selected (a word, a line of it) to look for, its text picked out.</summary>

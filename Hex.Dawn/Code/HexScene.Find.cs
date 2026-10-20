@@ -11,6 +11,8 @@ using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
+using Key = Silk.NET.Input.Key;
+
 namespace Hex.Dawn;
 
 // Finding things. In the file (Ctrl+F, F3, Ctrl+H, Ctrl+G), and in every file of the workspace, opening one by a few
@@ -410,5 +412,18 @@ internal sealed partial class HexScene
         if (Side == HexSide.Search)
             Side = HomeSide;
         treeDirty = true;
+    }
+
+    /// <summary>Finding across the workspace, and going to a file, a line or something a file declares by a few letters.</summary>
+    private void AddFindCommands()
+    {
+        commands.Add("Edit/files", "Find in Files...", FindInFiles, "Ctrl+Shift+F", "search", HexKeyUse.BoundWhileTyping);
+
+        commands.Add("Go/open", "Go to File...", QuickOpen, "Ctrl+P", "go-to-file", HexKeyUse.BoundWhileTyping);
+        commands.Add("Go/open", "Go to Line...", GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;
+        commands.Add("Go/open", "Go to Symbol...", GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
+
+        // Ctrl+G groups what is selected in a layout, it only goes to a line where there is code to go about in
+        commands.Bind(Key.G, () => { if (!LayoutTools || compositor.Focus is CodeEditor) GoToLine(); }, control: true, whileTyping: true, shift: false);
     }
 }

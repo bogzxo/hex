@@ -18,7 +18,7 @@ internal sealed class HexShortcuts
         public bool Alt { get; } = alt;
 
         // Null for "don't care", which is what the arrows want (shift makes them go further, they still go)
-        public bool? Shift { get; } = shift;
+        public bool? Shift { get; set; } = shift;
         public bool WhileTyping { get; } = whileTyping;
         public Action Pressed { get; } = pressed;
         public bool WasDown { get; set; }
@@ -32,9 +32,25 @@ internal sealed class HexShortcuts
     /// <param name="control">Whether control has to be held as well. A key that doesn't want it doesn't go off while it is held.</param>
     /// <param name="whileTyping">Whether it also goes off while something is being typed into. Delete and the arrows mean something else in a text box.</param>
     /// <param name="alt">Whether alt has to be held as well, Ctrl+Alt+B being another key than Ctrl+B.</param>
+    /// <param name="shift">
+    /// Whether shift has to be held, or not held. Null for either, unless the same key with shift is something else,
+    /// when it's without (Ctrl+S saves, Ctrl+Shift+S saves everything, and not both).
+    /// </param>
     public void Add(Key key, Action pressed, bool control = false, bool whileTyping = false, bool? shift = null, bool alt = false)
     {
-        shortcuts.Add(new Shortcut(key, control, shift, alt, whileTyping, pressed));
+        var added = new Shortcut(key, control, shift, alt, whileTyping, pressed);
+        foreach (Shortcut other in shortcuts)
+        {
+            if (other.Key != key || other.Control != control || other.Alt != alt)
+                continue;
+
+            if (shift is true && other.Shift is null)
+                other.Shift = false;
+            else if (shift is null && other.Shift is true)
+                added.Shift = false;
+        }
+
+        shortcuts.Add(added);
     }
 
     /// <summary>
