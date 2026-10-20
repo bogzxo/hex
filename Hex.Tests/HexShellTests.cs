@@ -6,12 +6,14 @@ namespace Hex.Tests;
 public class HexShellTests
 {
     [Theory]
-    [InlineData(new[] { "--dusk" }, @"C:\apps\Hex.exe", HexMode.Dusk)]
-    [InlineData(new[] { "--DUSK", "--size", "800x600" }, @"C:\apps\Hex.exe", HexMode.Dusk)]
-    [InlineData(new string[0], @"C:\apps\Dusk.exe", HexMode.Dusk)]
-    [InlineData(new[] { "--open", "a.hor" }, @"C:\apps\Hex.exe", HexMode.Dawn)]
+    [InlineData(new[] { "--dusk" }, "Hex.exe", HexMode.Dusk)]
+    [InlineData(new[] { "--DUSK", "--size", "800x600" }, "Hex.exe", HexMode.Dusk)]
+    [InlineData(new string[0], "Dusk.exe", HexMode.Dusk)]
+    [InlineData(new string[0], "dusk", HexMode.Dusk)]
+    [InlineData(new[] { "--open", "a.hor" }, "Hex.exe", HexMode.Dawn)]
     public void A_start_is_dusk_when_it_says_so_or_is_called_dusk(string[] args, string exe, HexMode mode) =>
-        Assert.Equal(mode, HexIdentity.ModeOf(args, exe));
+        // In a folder written the way this system writes one, a backslash is no separator on Linux or macOS
+        Assert.Equal(mode, HexIdentity.ModeOf(args, Path.Combine(Path.GetTempPath(), "apps", exe)));
 
     [Fact]
     public void The_two_modes_are_two_programs_to_windows()
