@@ -20,7 +20,7 @@ internal sealed partial class HexScene
         var go = new TaskCompletionSource();
         var halfway = new TaskCompletionSource();
         WorkItem? item = null, again = null;
-        UINotification? Card(WorkItem? of) => of is not null && workCards.TryGetValue(of, out var shown) ? shown.Card : null;
+        UINotification? Card(WorkItem? of) => of is not null && workCards.Cards.TryGetValue(of, out var shown) ? shown.Card : null;
 
         test.Run(() =>
         {
@@ -41,7 +41,7 @@ internal sealed partial class HexScene
             && card.Actions.Exists(action => action.Label == "Cancel"));
         test.Check("work: started again while it goes it's the one there is, with the one card", () =>
             ReferenceEquals(item, again) && toasts.Cards.Count(card => card.Text.StartsWith("Doing", StringComparison.Ordinal)) == 1);
-        test.Check("work: the status bar says it's going", () => tasksItem.IsVisible!() && tasksItem.Text.Contains("Doing the self test's work"));
+        test.Check("work: the status bar says it's going", () => workCards.Item!.IsVisible!() && workCards.Item!.Text.Contains("Doing the self test's work"));
         test.Settle(0.2f);
         test.Run(() => Shot("work-status"));
 
@@ -54,7 +54,7 @@ internal sealed partial class HexScene
         test.WaitFor(() => item!.State == WorkState.Succeeded && ended!.Icon == "check", 5.0f);
         test.Check("work: done, its card says so with how long it took and what it wrote", () =>
             ended is { Icon: "check", Progress: null } card && card.Text.StartsWith("Doing the self test's work, done") && card.Actions.Exists(action => action.Label == "Output")
-            && !workCards.ContainsKey(item!));
+            && !workCards.Cards.ContainsKey(item!));
 
         // Cancel, the card's own button
         WorkItem? stopped = null;

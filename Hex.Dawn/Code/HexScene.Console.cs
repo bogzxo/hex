@@ -94,7 +94,7 @@ internal sealed partial class HexScene
         HIDLRuntime runtime = ConsoleRuntime();
         IReadOnlyList<string> before = runtime == consoleRanIn ? [] : consoleDeclared;
 
-        if (!evaluation.Ask(runtime, before, line, printed => consoleOut.Enqueue((Literal(printed), null))))
+        if (!evaluation.Ask(runtime, before, line, printed => consoleOut.Enqueue((UIRichText.Literal(printed), null))))
         {
             consoleRepl?.Write($"\u001b[33m{Said("console.busy")}\u001b[0m\n");
             return;
@@ -115,11 +115,11 @@ internal sealed partial class HexScene
 
         if (HexEvaluation.IsError(answer))
         {
-            ConsoleLine(Literal(answer[1..]), ErrorColor);
+            ConsoleLine(UIRichText.Literal(answer[1..]), ErrorColor);
         }
         else
         {
-            consoleRepl?.Write(TerminalHidlRepl.Coloured(Literal(answer)) + "\n");
+            consoleRepl?.Write(TerminalHidlRepl.Coloured(UIRichText.Literal(answer)) + "\n");
 
             // A line that declares something is declared again in a newer run of the file
             if (consoleAsked is { } asked && (asked.StartsWith("let ", StringComparison.Ordinal) || asked.StartsWith("const ", StringComparison.Ordinal) || asked.StartsWith("func ", StringComparison.Ordinal)))
@@ -137,7 +137,7 @@ internal sealed partial class HexScene
     private void ConsoleLine(string text, Vector4? color)
     {
         TerminalHidlRepl repl = consoleRepl is { IsRunning: true } running && ConsoleView() is not null ? running : EnsureConsole();
-        string plain = Plain(text);
+        string plain = UIRichText.Plain(text);
         string coloured = color == ErrorColor ? $"\u001b[31m{plain}\u001b[0m" : color == DimColor ? $"\u001b[2m{plain}\u001b[0m" : plain;
         repl.Write(coloured + "\n");
     }

@@ -63,9 +63,9 @@ internal sealed partial class HexScene
 
     private string AboutExtension(HexExtension extension)
     {
-        string by = extension.Author.Length > 0 ? Said("extensions.by", ("author", Literal(extension.Author))) : string.Empty;
+        string by = extension.Author.Length > 0 ? Said("extensions.by", ("author", UIRichText.Literal(extension.Author))) : string.Empty;
         string where = extension.BuiltIn ? Said("extensions.built_in") : Said("extensions.own");
-        string text = $"**{Literal(extension.Name)}** {Literal(extension.Version)}  {by}\n{Literal(extension.Description)}\n[color:#7f8a9e]{where}[/color]";
-        return extension.Failed is { } why ? text + "\n[color:#ff7366]" + Literal(why) + "[/color]" : text;
+        string text = $"**{UIRichText.Literal(extension.Name)}** {UIRichText.Literal(extension.Version)}  {by}\n{UIRichText.Literal(extension.Description)}\n[color:#7f8a9e]{where}[/color]";
+        return extension.Failed is { } why ? text + "\n[color:#ff7366]" + UIRichText.Literal(why) + "[/color]" : text;
     }
 }

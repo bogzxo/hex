@@ -94,7 +94,7 @@ internal sealed partial class HexScene
 
         HIDLRuntime runtime = shown.Runtime;
         IReadOnlyList<string> before = runtime == consoleRanIn ? [] : consoleDeclared;
-        if (!evaluation.Ask(runtime, before, snippet, printed => consoleOut.Enqueue((Literal(printed), null))))
+        if (!evaluation.Ask(runtime, before, snippet, printed => consoleOut.Enqueue((UIRichText.Literal(printed), null))))
         {
             Say(Said("console.busy"), error: true);
             return;
@@ -107,7 +107,7 @@ internal sealed partial class HexScene
 
         if (bottom.Selected != CONSOLE_PAGE || !bottom.Shown)
             ShowPanel(CONSOLE_PAGE);
-        ConsoleLine($"[color:accent]>[/color] {function}, {(ticks == 1 ? $"tick {to}" : $"ticks {from + 1} to {to}")}, handed {Literal(view)}", null);
+        ConsoleLine($"[color:accent]>[/color] {function}, {(ticks == 1 ? $"tick {to}" : $"ticks {from + 1} to {to}")}, handed {UIRichText.Literal(view)}", null);
     }
 
     /// <summary>The file run again, its state what it starts as, and the runner back to its first tick.</summary>

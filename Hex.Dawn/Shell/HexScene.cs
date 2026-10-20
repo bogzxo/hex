@@ -310,7 +310,7 @@ internal sealed partial class HexScene : Scene
     private void Say(string message, bool error = false)
     {
         saidAt = System.Environment.TickCount64;
-        messageItem.Text = (error ? "$(error) " : string.Empty) + Plain(message);
+        messageItem.Text = (error ? "$(error) " : string.Empty) + UIRichText.Plain(message);
         messageItem.Color = error ? ErrorColor : null;
         Note(message, error);
     }

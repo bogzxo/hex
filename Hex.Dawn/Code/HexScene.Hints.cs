@@ -88,7 +88,7 @@ internal sealed partial class HexScene
         if (DocOf(word) is { } doc)
         {
             string icon = after.StartsWith(':') || before.EndsWith('.') ? "symbol-field" : "symbol-variable";
-            return $"$({icon}) **{word}**\n\n{Literal(doc.Doc)}{(doc.Where is { } where ? $"\n\n*{where}*" : string.Empty)}";
+            return $"$({icon}) **{word}**\n\n{UIRichText.Literal(doc.Doc)}{(doc.Where is { } where ? $"\n\n*{where}*" : string.Empty)}";
         }
 
         return null;
@@ -104,7 +104,7 @@ internal sealed partial class HexScene
         foreach (string language in Localisation.Languages)
         {
             string? said = Localisation.In(language, key);
-            text.Append("\n- **").Append(language).Append("**  ").Append(said is null ? "*hasn't got it*" : Plain(said));
+            text.Append("\n- **").Append(language).Append("**  ").Append(said is null ? "*hasn't got it*" : UIRichText.Plain(said));
         }
 
         return text.ToString();

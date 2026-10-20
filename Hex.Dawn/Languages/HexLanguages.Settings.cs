@@ -76,23 +76,23 @@ internal sealed partial class HexLanguages
 
     private string ServerStatusOf(HexServerEntry entry)
     {
-        string name = $"**{Literal(entry.Command)}**  [color:#7f8a9e]{Literal(string.Join(" ", entry.Extensions))}[/color]  ";
+        string name = $"**{UIRichText.Literal(entry.Command)}**  [color:#7f8a9e]{UIRichText.Literal(string.Join(" ", entry.Extensions))}[/color]  ";
         if (Installing(entry) is { } going)
-            return name + $"[color:#e5c07b]{Literal(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {Literal(going.Message)}";
+            return name + $"[color:#e5c07b]{UIRichText.Literal(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {UIRichText.Literal(going.Message)}";
         if (serversProbing.Contains(entry.Name) || !serversFound.TryGetValue(entry.Name, out ServerFound? found))
             return name + "looking for it...";
 
         string latest = settings.ServerLatest.TryGetValue(entry.Name, out string? newest) ? newest : string.Empty;
         if (found.Path is null)
         {
-            string out_ = latest.Length > 0 ? $", {Literal(latest)} is the newest" : string.Empty;
-            return name + $"[color:#ff7366]not found[/color]{out_}. {(entry.Install.Length > 0 ? $"`{Literal(entry.Install)}` installs it" : "Download it from its releases")}.";
+            string out_ = latest.Length > 0 ? $", {UIRichText.Literal(latest)} is the newest" : string.Empty;
+            return name + $"[color:#ff7366]not found[/color]{out_}. {(entry.Install.Length > 0 ? $"`{UIRichText.Literal(entry.Install)}` installs it" : "Download it from its releases")}.";
         }
 
-        string version = found.Version is { } said ? Literal(said) : "a version it doesn't say";
-        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{Literal(newer)} is out[/color]"
+        string version = found.Version is { } said ? UIRichText.Literal(said) : "a version it doesn't say";
+        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{UIRichText.Literal(newer)} is out[/color]"
             : latest.Length > 0 && found.Version is not null ? ", the newest" : string.Empty;
-        return name + $"{version}{news}\n[color:#7f8a9e]{Literal(found.Path)}[/color]";
+        return name + $"{version}{news}\n[color:#7f8a9e]{UIRichText.Literal(found.Path)}[/color]";
     }
 
     /// <summary>The servers' section, its rows read from and put in force on the editor.</summary>

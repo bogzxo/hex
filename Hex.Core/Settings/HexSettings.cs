@@ -3,6 +3,7 @@ using System.Globalization;
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
 using Horizon.Logging;
+using Horizon.UI.Drawing;
 
 namespace Hex.Core;
 
@@ -77,8 +78,8 @@ internal sealed class HexSettings
     /// <summary>The effects of light, a glow under the caret, a spotlight under the pointer, rings off clicks, embers behind the pointer.</summary>
     public bool EffectCaretGlow = true, EffectSpotlight, EffectRipples = true, EffectTrail;
 
-    /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (HexGlassDefaults, Hex.Shell's HexGlass draws it).</summary>
-    public float GlassBlur = HexGlassDefaults.BLUR, GlassClarity = HexGlassDefaults.CLARITY, GlassRim = HexGlassDefaults.RIM, GlassBend = HexGlassDefaults.BEND;
+    /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (the engine's UIGlass.Clear to begin with, Hex.Shell's HexGlass draws it).</summary>
+    public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
 
     /// <summary>Whether a file of code loses the spaces at the ends of its lines and gets a newline at its end when saved.</summary>
     public bool TrimWhitespace = true, FinalNewline;

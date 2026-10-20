@@ -12,15 +12,13 @@ namespace Hex.Shell;
 public static class HexGlass
 {
     /// <summary>What the sliders come as, clear glass with a bright rim and a strong lens.</summary>
-    public const float BLUR = Hex.Core.HexGlassDefaults.BLUR, CLARITY = Hex.Core.HexGlassDefaults.CLARITY, RIM = Hex.Core.HexGlassDefaults.RIM, BEND = Hex.Core.HexGlassDefaults.BEND;
+    public static readonly float BLUR = UIGlass.Clear.Blur, CLARITY = UIGlass.Clear.Clarity, RIM = UIGlass.Clear.Rim, BEND = UIGlass.Clear.Bend;
 
     /// <summary>The glass of the dialogs, menus and the palette.</summary>
-    public static UIGlass Popup(float blur, float clarity, float rim, float bend) =>
-        new(Blur: Math.Clamp(blur, 0.0f, 64.0f), Clarity: Math.Clamp(clarity, 0.0f, 1.0f), Rim: Math.Clamp(rim, 0.0f, 1.0f), Bend: Math.Clamp(bend, 0.0f, 24.0f));
+    public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
     /// <summary>The glass of the side panels, out of the same sliders.</summary>
-    public static UIGlass Side(float blur, float clarity, float rim) =>
-        new(Blur: Math.Clamp(blur * 1.2f, 0.0f, 64.0f), Clarity: Math.Clamp(clarity + 0.05f, 0.0f, 1.0f), Rim: Math.Clamp(rim * 0.35f, 0.0f, 1.0f), Bend: 0.0f);
+    public static UIGlass Side(float blur, float clarity, float rim) => UIGlass.Pane(blur, clarity, rim);
 
     /// <summary>The popups' glass as the editor's section of the settings has it, for Dusk, which reads the file.</summary>
     public static UIGlass Popup(IReadOnlyDictionary<string, IRuntimeValue> editor) =>

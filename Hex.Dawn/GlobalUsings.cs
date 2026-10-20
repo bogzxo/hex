@@ -4,8 +4,8 @@ global using Hex.Shell;
 // Where things go and how paths compare on Windows, macOS and Linux (the engine's PlatformPaths)
 global using Horizon.Core.Platform;
 
-// Labels of what somebody wrote, Plain and Literal
-global using static Hex.Dawn.HexMarkup;
+// Labels of what somebody wrote, UIRichText.Plain and Literal
+global using UIRichText = Horizon.UI.Drawing.UIRichText;
 
 // What has no window in it, the settings, the workspace, the files and what is in them (Hex.Core)
 global using Hex.Core;

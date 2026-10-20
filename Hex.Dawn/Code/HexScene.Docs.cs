@@ -112,6 +112,6 @@ internal sealed partial class HexScene
 
     /// <summary>A name's documentation as the end of a hint, nothing if it has none.</summary>
     private string DocHint(string name) => DocOf(name) is { } doc
-        ? $"\n\n{Literal(doc.Doc)}{(doc.Where is { } where ? $"\n\n*{where}*" : string.Empty)}"
+        ? $"\n\n{UIRichText.Literal(doc.Doc)}{(doc.Where is { } where ? $"\n\n*{where}*" : string.Empty)}"
         : string.Empty;
 }

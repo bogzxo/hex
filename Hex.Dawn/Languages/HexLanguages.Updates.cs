@@ -205,7 +205,7 @@ internal sealed partial class HexLanguages
                 context.Settings.Save();
             }));
 
-            context.Notices.Notify($"{entry.Command} {Plain(latest)} is out, you have {have}.", actions: [.. actions]);
+            context.Notices.Notify($"{entry.Command} {UIRichText.Plain(latest)} is out, you have {have}.", actions: [.. actions]);
         }
 
         return behind;
@@ -241,7 +241,7 @@ internal sealed partial class HexLanguages
             string header = have is null
                 ? $"The newest releases of **{entry.Command}**, from [{entry.Repo}]({entry.ReleasesPage}).\n\n"
                 : $"What changed in **{entry.Command}** since {have}, the one on this machine, from [{entry.Repo}]({entry.ReleasesPage}).\n\n";
-            context.Windows.ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, Literal), 560.0f);
+            context.Windows.ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, UIRichText.Literal), 560.0f);
         }, seen: false);
     }
 

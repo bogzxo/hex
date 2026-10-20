@@ -202,8 +202,28 @@ isn't there yet, nothing out of the scene has needed a side or a page of the pan
 Step 4 is done, Languages/ is `HexLanguages` with nothing of the scene in it. The scene makes it, calls `Update` and
 `StartChecks`, and the status bar asks `LinterOf`.
 
-Of step 5, Tasks/ is `HexTasks` and `HexTask`. Find is next and isn't a feature as it stands: half of HexScene.Find is
-the workspace's files listed and searched, which ten other files use. That half comes out first as a static class with
-no window in it (`HexSearch`, for Hex.Core later, unit tested), then the quick open, finding in files and checking all
-files are the feature, its results going to the side through `IPanels`.
+Of step 5, Tasks/ is `HexTasks`, Debugging/ `HexDebugging` (the Debug side through `IPanels`, which is there now),
+Terminal/ `HexTerminalFiles` (Dusk's files known through the documents' sources, hovers and signatures among them) and
+Extensions/ `HexExtensions` (everything of an extension that isn't on screen, the screens behind `IExtensionScreens`,
+which the scene still is). The context grew `IStrings`, the keyboard, and asks and menus and sides for the extensions.
+What was pure came out as static classes with unit tests in Hex.Tests (`HexSearch`, the workspace's files searched,
+and `HexValueEdits`, edits by path, whose self test became unit tests). Find's other half (quick open, finding in files,
+checking every file) hangs off the find bar, the outline and the problems panel, and goes with the chrome. Values (the
+values side, the table, the console, the runner) is woven into the code editor and goes with step 7.
+
+Step 6 is done in its first form: Hex.Core is a project of what has no window in it, the settings, the workspace and
+its trash, backups and names, the search, edits by path and the source trees, the language servers' catalog and
+GitHub's releases, the evaluation of a file, the tasks. Hex.Tests is Hex.Dusk.Tests renamed, testing all of Hex.
+
+## What goes into the engine instead
+
+The plan said Hex.Shell would be the window furniture both modes share. It's the engine's instead, Horizon.UI, so a
+game made with the engine gets it too and Hex keeps only what is Hex's. Done so far, each with tests in Horizon.Tests:
+the commands and keys (`UICommands`, `UIShortcuts`, `UIKeys`, the registry of step 2 as it was), the file browser and
+its dialogs, the chooser and what it remembers (`UIFileBrowser`, `UIFileDialogs`, `UIDialogHost`, `UIChooser`,
+`UIRecentList`), the settings window and its sources (`SettingsWindow`, `ISettingsSource`, `FileSectionSource`,
+`TerminalSettingsSource`), the cards of work in the background (`UIWorkCards`), the glass presets (`UIGlass.Clear`,
+`Lens`, `Pane`) and a label's escaping of what somebody wrote (`UIRichText.Plain`, `Literal`). Hex.Shell is left with
+what is Hex's own, the modes, the single instance, its identity and files, its titles and filters for the dialogs, and
+the catalog of the editor's settings.
 

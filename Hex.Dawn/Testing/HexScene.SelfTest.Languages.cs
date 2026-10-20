@@ -180,7 +180,7 @@ internal sealed partial class HexScene
                 new("v1.1.0", "1.1", "One", "", new DateTimeOffset(2025, 2, 1, 0, 0, 0, TimeSpan.Zero)),
                 new("v1.0.0", "1.0", "Zero", "", new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero))
             ];
-            string since = HexReleases.Changelog(releases, "1.0.0", Literal), newest = HexReleases.Changelog(releases, "1.2.0", Literal);
+            string since = HexReleases.Changelog(releases, "1.0.0", UIRichText.Literal), newest = HexReleases.Changelog(releases, "1.2.0", UIRichText.Literal);
             return since.Contains("## 1.2 · 2025-03-01") && since.Contains("One") && !since.Contains("Zero") && newest.Contains("Two") && !newest.Contains("One");
         });
 

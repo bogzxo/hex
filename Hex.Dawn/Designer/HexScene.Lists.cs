@@ -95,7 +95,7 @@ internal sealed partial class HexScene
             var row = items[i].Get<Button>("row");
             var caption = items[i].Get<Label>("caption");
 
-            caption.Text = hidden ? $"$(eye-closed) {Plain(name)}  (hidden)" : $"$(eye) {Plain(name)}";
+            caption.Text = hidden ? $"$(eye-closed) {UIRichText.Plain(name)}  (hidden)" : $"$(eye) {UIRichText.Plain(name)}";
             caption.Color = hidden ? DimColor : null;
 
             row.OnPressed = () => ToggleLayer(name);

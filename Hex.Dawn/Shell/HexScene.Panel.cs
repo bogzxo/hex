@@ -207,7 +207,7 @@ internal sealed partial class HexScene
             var caption = items[i].Get<Label>("caption");
 
             string where = $"{Path.GetFileName(problem.Path)}:{problem.Line + 1}";
-            caption.Text = $"$({(problem.Warning ? "warning" : "error")})  {Plain(problem.Text)}   {where}";
+            caption.Text = $"$({(problem.Warning ? "warning" : "error")})  {UIRichText.Plain(problem.Text)}   {where}";
             caption.Color = problem.Warning ? WarningColor : ErrorColor;
             row.Tooltip = problem.Path;
             row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
@@ -252,7 +252,7 @@ internal sealed partial class HexScene
     private void FillOutputLine(UILayout row, (string Text, bool Error) line)
     {
         var label = row.Get<Label>("line");
-        label.Text = Plain(line.Text);
+        label.Text = UIRichText.Plain(line.Text);
         label.Color = line.Error ? ErrorColor : DimColor;
     }
 
