@@ -1,0 +1,43 @@
+# Every push and pull request, Hex built against the engine it has as a submodule and its unit tests run, on Windows,
+# Linux and macOS. The self tests want a window and a Vulkan device, so they aren't run here.
+
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master", "development" ]
+  pull_request:
+    branches: [ "master", "development" ]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The engine (bogzxo/horizon at horizon) and the language inside of it
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Build
+        run: dotnet build Hex/Hex.csproj --configuration Release
+
+      - name: Test
+        run: dotnet test Hex.Tests --configuration Release --verbosity normal
