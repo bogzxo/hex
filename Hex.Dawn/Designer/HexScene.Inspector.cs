@@ -19,11 +19,11 @@ internal sealed partial class HexScene
         // The code of a file (or of a layout) has no components, it has what is wrong with it and what running it came to
         if (!LayoutTools)
         {
-            RebuildCodeInspector();
+            running.RebuildCodeInspector();
             return;
         }
 
-        valuesTree.Visible = false;
+        running.ValuesTree.Visible = false;
         inspectorScroll.Visible = true;
 
         editors.Clear();

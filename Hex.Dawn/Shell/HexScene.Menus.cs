@@ -29,7 +29,7 @@ internal sealed partial class HexScene
         if (debugger.DebugStopped || (!LayoutTools && HexDebugging.IsCSharp(document.Path))) debugger.DebugOrContinue();
         else if (LayoutTools) PlayIntros();
         else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && tasks.DefaultTask("run") is { } task) tasks.Run(task);
-        else RunCode();
+        else running.RunCode();
     }
 
     /// <summary>

@@ -43,7 +43,7 @@ internal sealed partial class HexScene : ITerminalHostUi
             Api = HexTerminalApi,
             ApiFunctions = HexApiFunctions,
             ApiFile = Path.Combine(TerminalFiles.UserFolder, TerminalApiDescription.FILE),
-            ProgramFor = profile => profile.Id == CONSOLE_PROFILE ? MakeConsole() : null,
+            ProgramFor = profile => profile.Id == HexRunning.CONSOLE_PROFILE ? running.MakeConsole() : null,
 
             // What a compiler in a terminal says is wrong goes in the Problems panel, until a line is run again
             Problem = (problem, _) => AddTerminalProblem(problem.File, problem.Line, Math.Max(1, problem.Column), problem.Message, problem.Warning),
@@ -63,7 +63,7 @@ internal sealed partial class HexScene : ITerminalHostUi
         terminals.Start();
 
         // The console after the machine's shells, a new terminal is a shell and the console is asked for by name
-        terminalPanel.Profiles.Add(new TerminalProfile("HIDL in this file", string.Empty, "symbol-namespace", CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
+        terminalPanel.Profiles.Add(new TerminalProfile("HIDL in this file", string.Empty, "symbol-namespace", HexRunning.CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
         terminals.Watch();
 
         // The keys of Hex's that have to work while a terminal has the keyboard, as commands of the terminal so the shell

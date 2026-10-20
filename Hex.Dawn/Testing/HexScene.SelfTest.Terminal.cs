@@ -18,7 +18,7 @@ internal sealed partial class HexScene
             terminals.Plugins.Any(plugin => plugin.Name == "Core" && plugin.Failed is null) && terminals.Commands.Contains("split_right") && terminals.Commands.KeyOf("new_tab") == "Ctrl+Shift+T");
         test.Check("terminal: Hex's own keys are terminal commands as well", () => terminals.Commands.KeyOf("hex_terminal") == "F6" && terminals.Commands.KeyOf("hex_panel") == "Ctrl+J");
         test.Check("terminal: the console and the HIDL REPL are profiles", () =>
-            terminals.ProfileCalled(CONSOLE_PROFILE) is { Kind: TerminalProfileKind.Embedded } && terminals.ProfileCalled(TerminalHost.HIDL_PROFILE) is not null);
+            terminals.ProfileCalled(HexRunning.CONSOLE_PROFILE) is { Kind: TerminalProfileKind.Embedded } && terminals.ProfileCalled(TerminalHost.HIDL_PROFILE) is not null);
 
         test.Run(() =>
         {
@@ -61,17 +61,17 @@ internal sealed partial class HexScene
 
         test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split right")));
 
-        test.Run(() => AskConsole("40 + 2"));
-        test.WaitFor(() => consoleAsked is null && LastConsoleLine() == "42", 3.0f);
-        test.Check("terminal: the console is a tab of it, a line run in the file", () => LastConsoleLine() == "42" && ConsoleView() is { } view && terminalPanel.TabOf(view) is not null);
+        test.Run(() => running.AskConsole("40 + 2"));
+        test.WaitFor(() => running.consoleAsked is null && running.LastConsoleLine() == "42", 3.0f);
+        test.Check("terminal: the console is a tab of it, a line run in the file", () => running.LastConsoleLine() == "42" && running.ConsoleView() is { } view && terminalPanel.TabOf(view) is not null);
 
         test.Run(() =>
         {
             settings.RunToTerminal = true;
-            RunCode();
+            running.RunCode();
         });
         test.Wait();
-        test.Check("terminal: with run_to_terminal F5 says what the file did in the console", () => ConsoleSaid($"{document.Name}, run") && runOutput.Count > 0 && ConsoleSaid(runOutput[^1]));
+        test.Check("terminal: with run_to_terminal F5 says what the file did in the console", () => running.ConsoleSaid($"{document.Name}, run") && running.runOutput.Count > 0 && running.ConsoleSaid(running.runOutput[^1]));
         test.Run(() => settings.RunToTerminal = false);
 
         test.Run(() => AddTerminalProblem("Program.cs", 12, 5, "CS1002: ; expected", false));

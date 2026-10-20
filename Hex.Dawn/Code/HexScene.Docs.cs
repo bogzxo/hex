@@ -23,7 +23,7 @@ internal sealed partial class HexScene
     /// </summary>
     private (string Doc, string? Where)? DocOf(string name)
     {
-        if (values is { } ran && valuesOf == document)
+        if (running.LastRun is { } ran && running.LastRunOf == document)
         {
             if (ran.Sources.TryGetDeclaration(name, out var declared) && declared.Doc is { } doc)
                 return (doc, Elsewhere(declared.File, declared.Span.Line));

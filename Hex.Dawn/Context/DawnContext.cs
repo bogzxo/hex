@@ -4,6 +4,7 @@ using Hex.Shell;
 
 using Horizon.Core.Threading;
 using Horizon.Input;
+using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 
@@ -16,7 +17,7 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, UICommands commands, HexOptions options,
+    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, IEditorWindow window, UICommands commands, HexOptions options,
     Action wake, Action redraw, Func<Keyboard> keyboard, Func<bool> typing)
 {
     public IDocuments Documents { get; } = documents;
@@ -28,6 +29,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public ITerminals Terminals { get; } = terminals;
     public IPanels Panels { get; } = panels;
     public IStrings Strings { get; } = strings;
+    public IEditorWindow Window { get; } = window;
     public UICommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
@@ -254,6 +256,15 @@ internal interface IPanels
     /// <summary>The panel's output brought up.</summary>
     void ShowOutput();
 
+    /// <summary>The panel's terminal page brought up, the console's and the terminals' tabs.</summary>
+    void ShowTerminals();
+
+    /// <summary>Whether the panel is up on its terminal page.</summary>
+    bool TerminalsShown { get; }
+
+    /// <summary>The colour of what is only a warning, the skin's.</summary>
+    Vector4 Warning { get; }
+
     /// <summary>The Problems panel put together again, for problems of files that aren't on screen.</summary>
     void RefreshProblems();
 
@@ -275,4 +286,38 @@ internal interface IStrings
 {
     /// <summary>The text of a key, {name} in it filled in.</summary>
     string Said(string key, params (string Name, string Value)[] filled);
+}
+
+/// <summary>
+/// The editor's own window, what a part that has things of its own on screen needs of it: the layout it is made of (the
+/// part's components found in it by name), the chrome popups and windows go over, the editor of code on screen, the
+/// views of a document, the right side, and a few helpers the window has for its sides.
+/// </summary>
+internal interface IEditorWindow
+{
+    /// <summary>The layout the editor is made of, its parts by name.</summary>
+    UILayout Layout { get; }
+
+    /// <summary>What popups, menus and windows go over.</summary>
+    UIModule Chrome { get; }
+
+    UICompositor Compositor { get; }
+
+    /// <summary>The editor of the document on screen, of its code.</summary>
+    CodeEditor Code { get; }
+
+    /// <summary>The document on screen shown as its code, its designer, its table or a view of an extension.</summary>
+    void SwitchView(HexView view);
+
+    /// <summary>The right side made again (the properties of a layout, the values of a file of code).</summary>
+    void RefreshRight();
+
+    /// <summary>A side panel made to be dragged wider or narrower by an edge, as the sides are.</summary>
+    void Grip(UIComponent panel, UIResize edge, bool left);
+
+    /// <summary>A quiet line saying something where a list has nothing in it.</summary>
+    Label Hint(UIComponent into, string text);
+
+    /// <summary>The outline of the code on screen, what it declares and the keys of its objects.</summary>
+    List<OutlineEntry> Outline();
 }

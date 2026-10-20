@@ -11,11 +11,11 @@ namespace Hex.Dawn;
 // a vec of numbers) is, and it is edited as the text it is written as, which goes back into the code in its place and
 // nowhere else, one step to undo, the comments and the spacing of the file left alone. A boolean flips on a double click,
 // the rest get a box over their row. Anything worked out (2 * 4, a spread, what a loop made) goes to the code instead.
-internal sealed partial class HexScene
+internal sealed partial class HexRunning
 {
     private const string VALUE_EDITOR = "value_editor.hor";
 
-    private TextBox? valueBox;
+    internal TextBox? valueBox;
 
     // Where the box goes (over a row of the values, a cell of the table), null while nothing is edited, and where the
     // value being edited is written
@@ -23,7 +23,7 @@ internal sealed partial class HexScene
     private SourceSpan editingSpan;
 
     /// <summary>A double click (or enter) on a row of the values.</summary>
-    private void ActivateValue(UITreeItem item)
+    internal void ActivateValue(UITreeItem item)
     {
         if (item.Tag is not ValueTag { Path.Length: > 0 } tag || tag.At is not { Value.IsKnown: true } at)
             return;
@@ -33,14 +33,14 @@ internal sealed partial class HexScene
         if (!here || !at.Literal)
         {
             GoToValue(tag.Path, at);
-            Say(here ? Said("values.worked_out") : Said("values.elsewhere"));
+            context.Notices.Say(here ? context.Strings.Said("values.worked_out") : context.Strings.Said("values.elsewhere"));
             return;
         }
 
         // The values are of the code as it was a moment ago, and a place in it is only good for that
         if (valuesAsked != (document, code.Document.Version))
         {
-            Say(Said("values.behind"), error: true);
+            context.Notices.Say(context.Strings.Said("values.behind"), error: true);
             return;
         }
 
@@ -94,7 +94,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every tick while a value is edited, the box kept over its row, and put away when the row or the keyboard went.</summary>
-    private void UpdateValueBox()
+    internal void UpdateValueBox()
     {
         if (editingAt is null || valueBox is null)
             return;
@@ -124,7 +124,7 @@ internal sealed partial class HexScene
         string trimmed = text.Trim();
         if (trimmed.Length == 0 || !IsValue(trimmed))
         {
-            Say(Said("values.not_a_value", ("text", trimmed)), error: true);
+            context.Notices.Say(context.Strings.Said("values.not_a_value", ("text", trimmed)), error: true);
             return;
         }
 
@@ -134,7 +134,7 @@ internal sealed partial class HexScene
 
         code.Document.Select(PositionAt(all, span.Index), PositionAt(all, span.Index + span.Length));
         code.Document.Insert(trimmed);
-        Say(Said("values.changed", ("text", trimmed)));
+        context.Notices.Say(context.Strings.Said("values.changed", ("text", trimmed)));
     }
 
     /// <summary>Whether a piece of text is a value of HIDL and nothing more, parsed as the value of a let.</summary>

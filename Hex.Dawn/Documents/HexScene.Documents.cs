@@ -81,8 +81,7 @@ internal sealed partial class HexScene
         MarkSelection();
         // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
         browsing = browsing && !workspace.IsEmpty;
-        runOutput.Clear();
-        consoleRuntime = null;
+        running.Forget();
 
         // Its editor is the one in the code panel (or one of the two side by side), the find bar stays over whichever it is
         PlaceEditors();

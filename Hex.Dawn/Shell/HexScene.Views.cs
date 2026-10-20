@@ -43,11 +43,11 @@ internal sealed partial class HexScene
 
         // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
         document.Module.Enabled = tools;
-        dataTable.Visible = table;
-        tabledFrom = null;
+        running.Table.Visible = table;
+        running.RefreshTable();
 
         // A layout is its designer or its code, a file of code its code or its table when it has one
-        layout.Get<UIComponent>("views").Visible = !document.IsText || HasTable || viewButtons.Count > 0;
+        layout.Get<UIComponent>("views").Visible = !document.IsText || running.HasTable || viewButtons.Count > 0;
         layout.Get<Button>("design_view").Visible = !document.IsText;
         layout.Get<Button>("table_view").Visible = document.IsText;
         layout.Get<Button>("design_view").Selected = tools;
@@ -105,7 +105,7 @@ internal sealed partial class HexScene
         {
             // Round the views a file of code has, its code, its table if it has one, the views of extensions for it
             var round = new List<(HexView View, string? Id)> { (HexView.Code, null) };
-            if (HasTable) round.Add((HexView.Table, null));
+            if (running.HasTable) round.Add((HexView.Table, null));
             round.AddRange(ViewsFor(document).Select(kind => (HexView.Extension, (string?)kind.Id)));
             if (round.Count < 2)
                 return;
@@ -287,7 +287,7 @@ internal sealed partial class HexScene
             _ => null
         };
 
-        if (wanted is not { } view || (view == HexView.Table && !HasTable))
+        if (wanted is not { } view || (view == HexView.Table && !running.HasTable))
         {
             if (wanted is null)
                 viewAsked = null;

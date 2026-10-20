@@ -165,7 +165,7 @@ internal sealed partial class HexScene
         shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
         shown.Add("The next one as well", () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
         shown.AddSeparator();
-        shown.Add("Run the file", RunCode, "F5", "play").IsVisible = () => document.IsText;
+        shown.Add("Run the file", running.RunCode, "F5", "play").IsVisible = () => document.IsText;
         shown.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
         shown.Add("Command palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc");
 

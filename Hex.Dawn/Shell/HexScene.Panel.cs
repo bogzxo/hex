@@ -12,6 +12,9 @@ namespace Hex.Dawn;
 // page on it, it folds down to its tabs, "nothing wrong with this file" took a seventh of the window every time.
 internal sealed partial class HexScene
 {
+    // The page of the panel the terminals and the console are on
+    private const int CONSOLE_PAGE = 2;
+
     private const int PROBLEMS_PAGE = 0, OUTPUT_PAGE = 1;
     private const int MAX_OUTPUT = 400;
     private const float MIN_PANEL = 80.0f, MAX_PANEL = 600.0f;

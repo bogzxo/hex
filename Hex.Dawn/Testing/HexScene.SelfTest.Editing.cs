@@ -109,26 +109,26 @@ internal sealed partial class HexScene
             File.WriteAllText(file, "let pressed_for = 0;\nfunc wander(view) {\n    pressed_for = pressed_for + 1;\n    return view.tick * 2;\n}\n");
             Open(file);
         });
-        test.WaitFor(() => values is { } shown && valuesOf == document && shown.Declared.Any(pair => pair.Name == "wander"), 3.0f);
+        test.WaitFor(() => running.LastRun is { } shown && running.LastRunOf == document && shown.Declared.Any(pair => pair.Name == "wander"), 3.0f);
         test.Run(() =>
         {
-            OpenRunner();
-            runnerFunction.Value = "wander";
-            runnerView.Text = "{ tick: 0 }";
-            RunBehaviour(3);
+            running.OpenRunner();
+            running.runnerFunction.Value = "wander";
+            running.runnerView.Text = "{ tick: 0 }";
+            running.RunBehaviour(3);
         });
-        test.WaitFor(() => ConsoleSaid("state   pressed_for = 3"), 3.0f);
+        test.WaitFor(() => running.ConsoleSaid("state   pressed_for = 3"), 3.0f);
         test.Check("runner: a function called three ticks, what it handed back every tick and the state after in the console", () =>
-            ConsoleSaid("tick 1   0") && ConsoleSaid("tick 3   4") && ConsoleSaid("state   pressed_for = 3") && runnerTick == 3);
+            running.ConsoleSaid("tick 1   0") && running.ConsoleSaid("tick 3   4") && running.ConsoleSaid("state   pressed_for = 3") && running.runnerTick == 3);
 
-        test.Run(() => RunBehaviour(1));
-        test.WaitFor(() => ConsoleSaid("tick 4   6"), 3.0f);
-        test.Check("runner: one tick more goes on from where it got to, its state kept", () => ConsoleSaid("tick 4   6") && ConsoleSaid("pressed_for = 4"));
+        test.Run(() => running.RunBehaviour(1));
+        test.WaitFor(() => running.ConsoleSaid("tick 4   6"), 3.0f);
+        test.Check("runner: one tick more goes on from where it got to, its state kept", () => running.ConsoleSaid("tick 4   6") && running.ConsoleSaid("pressed_for = 4"));
 
         test.Run(() =>
         {
-            runnerWindow?.Parent?.Remove(runnerWindow);
-            runnerWindow = null;
+            running.runnerWindow?.Parent?.Remove(running.runnerWindow);
+            running.runnerWindow = null;
             CloseNow();
         });
         test.Wait();

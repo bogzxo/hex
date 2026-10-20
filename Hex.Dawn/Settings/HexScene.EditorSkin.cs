@@ -78,7 +78,7 @@ internal sealed partial class HexScene
 
         Vector4 box = skin.PanelColor with { W = 1.0f };
         treeScroll.Color = layersScroll.Color = codeScroll.Color = inspectorScroll.Color = box;
-        valuesTree.Color = sideTree.Color = box;
+        running.ValuesTree.Color = sideTree.Color = box;
 
         // What the editor sits on, a little darker than its boxes, and the activity bar darker again, VS Code's
         Engine.Graphics.ClearColor = new Vector4(box.X * 0.65f, box.Y * 0.65f, box.Z * 0.65f, 1.0f);

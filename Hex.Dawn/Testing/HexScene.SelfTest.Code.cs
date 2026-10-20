@@ -65,44 +65,44 @@ internal sealed partial class HexScene
         test.Wait();
         test.Check("code: finding selects what is found", () => code.Document.SelectedText == "names" && code.FoundCount == 1);
 
-        test.Run(RunCode);
+        test.Run(running.RunCode);
         test.Check("code: F5 runs it and lists what it declares", () =>
-            runOutput.Any(said => said.StartsWith("speed = 3")) && runOutput.Any(said => said.StartsWith("added = 2")));
+            running.runOutput.Any(said => said.StartsWith("speed = 3")) && running.runOutput.Any(said => said.StartsWith("added = 2")));
     }
 
     private void TestValuesAndConsole(HexPointerScript test)
     {
         /* What the file comes to, on the right, and the console under it */
 
-        test.WaitFor(() => values is { Error: null } shown && valuesOf == document && shown.Declared.Any(pair => pair.Name == "added"), 3.0f);
+        test.WaitFor(() => running.LastRun is { Error: null } shown && running.LastRunOf == document && shown.Declared.Any(pair => pair.Name == "added"), 3.0f);
         test.Check("values: the right side is what the file comes to, run off the editor's thread", () =>
-            values is { Error: null } shown && shown.Declared.Any(pair => pair.Name == "speed" && pair.Value is NumberValue { Value: 3 })
-            && valuesTree.Visible && valuesTree.Items.Any(item => item.Text == "names" && item.Detail == "{ 1 }"));
-        test.Check("values: a key of an object is found in the code by its path", () => LineOf("names.first") is (2, _));
+            running.LastRun is { Error: null } shown && shown.Declared.Any(pair => pair.Name == "speed" && pair.Value is NumberValue { Value: 3 })
+            && running.ValuesTree.Visible && running.ValuesTree.Items.Any(item => item.Text == "names" && item.Detail == "{ 1 }"));
+        test.Check("values: a key of an object is found in the code by its path", () => running.LineOf("names.first") is (2, _));
         test.Check("outline: says what each thing is, a number, an object and a text", () =>
             HexOutline.Outline(code.Text) is var entries && entries.Any(entry => entry is { Name: "speed", Icon: "symbol-number" })
             && entries.Any(entry => entry is { Name: "names", Icon: "symbol-object" }) && entries.Any(entry => entry is { Name: "first", Icon: "symbol-string" }));
 
-        test.Run(() => AskConsole("speed * 2"));
-        test.WaitFor(() => LastConsoleLine() == "6", 2.0f);
-        test.Check("console: a line runs in what the file came to", () => LastConsoleLine() == "6" && bottom.Selected == CONSOLE_PAGE);
+        test.Run(() => running.AskConsole("speed * 2"));
+        test.WaitFor(() => running.LastConsoleLine() == "6", 2.0f);
+        test.Check("console: a line runs in what the file came to", () => running.LastConsoleLine() == "6" && bottom.Selected == CONSOLE_PAGE);
 
-        test.Run(() => AskConsole("let doubled = speed * 2"));
-        test.WaitFor(() => consoleAsked is null, 2.0f);
+        test.Run(() => running.AskConsole("let doubled = speed * 2"));
+        test.WaitFor(() => running.consoleAsked is null, 2.0f);
         test.Run(() =>
         {
             code.Document.MoveToEnd(false);
             code.Document.Insert("\nlet more = 1;");
         });
-        test.WaitFor(() => values is { } shown && shown.Declared.Any(pair => pair.Name == "more"), 3.0f);
-        test.Run(() => AskConsole("doubled + more"));
-        test.WaitFor(() => consoleAsked is null, 2.0f);
-        test.Check("console: what it declared is still there after the file runs again", () => LastConsoleLine() == "7");
+        test.WaitFor(() => running.LastRun is { } shown && shown.Declared.Any(pair => pair.Name == "more"), 3.0f);
+        test.Run(() => running.AskConsole("doubled + more"));
+        test.WaitFor(() => running.consoleAsked is null, 2.0f);
+        test.Check("console: what it declared is still there after the file runs again", () => running.LastConsoleLine() == "7");
 
-        test.Run(() => AskConsole("func down(n) { return down(n + 1); } down(0)"));
-        test.WaitFor(() => consoleAsked is null, 3.0f);
+        test.Run(() => running.AskConsole("func down(n) { return down(n + 1); } down(0)"));
+        test.WaitFor(() => running.consoleAsked is null, 3.0f);
         test.Check("console: a function that calls itself for ever is stopped and said so, the editor carries on", () =>
-            LastConsoleLine().Contains("deep", StringComparison.Ordinal));
+            running.LastConsoleLine().Contains("deep", StringComparison.Ordinal));
         test.Run(() => code.Document.Undo());
         test.Wait();
 
@@ -111,18 +111,18 @@ internal sealed partial class HexScene
             code.Document.MoveToEnd(false);
             code.Document.Insert("\nlet broken = names.first();");
         });
-        test.WaitFor(() => values is { Error: not null } && code.Diagnostics.Any(problem => !problem.Warning), 3.0f);
+        test.WaitFor(() => running.LastRun is { Error: not null } && code.Diagnostics.Any(problem => !problem.Warning), 3.0f);
         test.Check("values: what goes wrong running it is underlined on the line it went wrong on", () =>
             code.Diagnostics.Any(problem => !problem.Warning && code.Document.LineAt(problem.Line).Contains("broken", StringComparison.Ordinal)));
         test.Run(() => code.Document.Undo());
-        test.WaitFor(() => values is { Error: null } && !code.Diagnostics.Any(problem => !problem.Warning), 3.0f);
+        test.WaitFor(() => running.LastRun is { Error: null } && !code.Diagnostics.Any(problem => !problem.Warning), 3.0f);
         test.Check("values: and goes once it runs again", () => !code.Diagnostics.Any(problem => !problem.Warning));
 
         test.Run(() =>
         {
             code.GoTo(0, 0);
-            var names = (ObjectValue)values!.Runtime.UserScope.Lookup("names");
-            GoToValue("names.first", values.Sources.TryGetKey(names, "first", out var first) ? first : null);
+            var names = (ObjectValue)running.LastRun!.Runtime.UserScope.Lookup("names");
+            running.GoToValue("names.first", running.LastRun.Sources.TryGetKey(names, "first", out var first) ? first : null);
         });
         test.Wait();
         test.Check("values: a click on a value goes to where the run says it was written", () => code.Document.Caret.Line == 2 && code.Document.Caret.Column == 4);
@@ -130,17 +130,17 @@ internal sealed partial class HexScene
         // A value written as itself is edited where it is shown, and goes into the code in its place
         test.Run(() =>
         {
-            if (valuesTree.Items.FirstOrDefault(item => item.Text == "speed") is { } speed)
-                ActivateValue(speed);
+            if (running.ValuesTree.Items.FirstOrDefault(item => item.Text == "speed") is { } speed)
+                running.ActivateValue(speed);
         });
         test.Wait();
         test.Check("values: a double click on a number puts a box over it with the number as it is written", () =>
-            valueBox is { Visible: true, Text: "3" } box && box.IsFocused);
-        test.Run(() => valueBox!.Text = "5");
-        test.Run(() => valueBox!.Submit());
+            running.valueBox is { Visible: true, Text: "3" } box && box.IsFocused);
+        test.Run(() => running.valueBox!.Text = "5");
+        test.Run(() => running.valueBox!.Submit());
         test.Wait();
         test.Check("values: and what is typed goes into the code where the number was and nowhere else", () =>
-            code.Text.StartsWith("let speed = 5;", StringComparison.Ordinal) && code.Text.Contains("first: \"one\"", StringComparison.Ordinal) && valueBox is not { Visible: true });
+            code.Text.StartsWith("let speed = 5;", StringComparison.Ordinal) && code.Text.Contains("first: \"one\"", StringComparison.Ordinal) && running.valueBox is not { Visible: true });
         test.Run(() => code.Document.Undo());
         test.Wait();
         test.Check("values: one step to undo", () => code.Text.StartsWith("let speed = 3;", StringComparison.Ordinal));
@@ -161,14 +161,14 @@ internal sealed partial class HexScene
             System.IO.File.WriteAllText(elsewhereFile, "let picked = greetings;\n");
             Open(docsFile);
         });
-        test.WaitFor(() => values is { } ran && valuesOf == document && ran.Declared.Any(pair => pair.Name == "greetings"), 3.0f);
+        test.WaitFor(() => running.LastRun is { } ran && running.LastRunOf == document && ran.Declared.Any(pair => pair.Name == "greetings"), 3.0f);
         test.Check("docs: a // @doc over a let is its documentation, under the pointer where it is made", () =>
             HoverHint(code, new UITextPosition(2, 6)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal));
         test.Check("docs: and in the tooltip of its value", () =>
-            valuesTree.Items.FirstOrDefault(item => item.Text == "greetings") is { } row && row.Tooltip.Contains("The list of greetings", StringComparison.Ordinal));
+            running.ValuesTree.Items.FirstOrDefault(item => item.Text == "greetings") is { } row && row.Tooltip.Contains("The list of greetings", StringComparison.Ordinal));
 
         test.Run(() => Open(usesFile));
-        test.WaitFor(() => values is { } ran && valuesOf == document && ran.Declared.Any(pair => pair.Name == "first"), 3.0f);
+        test.WaitFor(() => running.LastRun is { } ran && running.LastRunOf == document && ran.Declared.Any(pair => pair.Name == "first"), 3.0f);
         test.Check("docs: in a file that includes it, on the name used there, saying where it was made", () =>
             HoverHint(code, new UITextPosition(1, 20)) is { } said && said.Contains("The list of greetings", StringComparison.Ordinal) && said.Contains("selftest_docs.hor", StringComparison.Ordinal));
 
@@ -285,26 +285,26 @@ internal sealed partial class HexScene
             System.IO.File.WriteAllText(movesFile, "let moves = {\n    jab: { damage: 5, frames: 3 },\n    kick: { damage: 8, frames: 5, low: true }\n};\n");
             Open(movesFile);
         });
-        test.WaitFor(() => HasTable, 3.0f);
+        test.WaitFor(() => running.HasTable, 3.0f);
         test.Check("table: a file of an object of objects has a table to show, next to its code", () =>
-            HasTable && layout.Get<UIComponent>("views").Visible && layout.Get<Button>("table_view").Visible && !layout.Get<Button>("design_view").Visible);
+            running.HasTable && layout.Get<UIComponent>("views").Visible && layout.Get<Button>("table_view").Visible && !layout.Get<Button>("design_view").Visible);
         test.Run(() => SwitchView(HexView.Table));
-        test.WaitFor(() => dataTable.Rows.Count == 2, 2.0f);
+        test.WaitFor(() => running.Table.Rows.Count == 2, 2.0f);
         test.Check("table: a row for every move, a column for every key any of them has, nothing where a move hasn't got one", () =>
-            dataTable.Visible && !codeScroll.Visible && dataTable.Columns.Select(column => column.Title).SequenceEqual(["moves", "damage", "frames", "low"])
-            && dataTable.Rows[0][0].Text == "jab" && dataTable.Rows[1][3].Text == "true" && dataTable.Rows[0][3].Text is null or "");
+            running.Table.Visible && !codeScroll.Visible && running.Table.Columns.Select(column => column.Title).SequenceEqual(["moves", "damage", "frames", "low"])
+            && running.Table.Rows[0][0].Text == "jab" && running.Table.Rows[1][3].Text == "true" && running.Table.Rows[0][3].Text is null or "");
 
-        test.Run(() => ActivateCell(0, 1));
+        test.Run(() => running.ActivateCell(0, 1));
         test.Wait();
-        test.Check("table: a double click on a number puts the box over its cell", () => valueBox is { Visible: true, Text: "5" });
+        test.Check("table: a double click on a number puts the box over its cell", () => running.valueBox is { Visible: true, Text: "5" });
         test.Run(() =>
         {
-            valueBox!.Text = "6";
-            valueBox.Submit();
+            running.valueBox!.Text = "6";
+            running.valueBox.Submit();
         });
-        test.WaitFor(() => dataTable.Rows.Count == 2 && dataTable.Rows[0][1].Text == "6", 3.0f);
+        test.WaitFor(() => running.Table.Rows.Count == 2 && running.Table.Rows[0][1].Text == "6", 3.0f);
         test.Check("table: and what is typed goes into the code in its place, and the table with it", () =>
-            code.Text.Contains("jab: { damage: 6, frames: 3 }", StringComparison.Ordinal) && dataTable.Rows[0][1].Text == "6");
+            code.Text.Contains("jab: { damage: 6, frames: 3 }", StringComparison.Ordinal) && running.Table.Rows[0][1].Text == "6");
 
         // A key only one move has that is a letter off one the others have, and a path that isn't there
         test.Run(() =>
@@ -328,14 +328,14 @@ internal sealed partial class HexScene
             System.IO.File.WriteAllText(english, "let strings = { menu: { quit: \"Quit\", play: \"Play\" } };\n");
             Open(english);
         });
-        test.WaitFor(() => HasTable, 3.0f);
+        test.WaitFor(() => running.HasTable, 3.0f);
         test.Run(() => SwitchView(HexView.Table));
-        test.WaitFor(() => dataTable.Rows.Count == 2, 2.0f);
+        test.WaitFor(() => running.Table.Rows.Count == 2, 2.0f);
         test.Check("table: a file of texts is a row a key and a column a language, every one next to it in its folder", () =>
-            dataTable.Columns.Count == 3 && dataTable.Columns[1].Title == "selftest_en" && dataTable.Columns[2].Title == "selftest_fr"
-            && dataTable.Rows.Any(row => row[0].Text == "menu.quit" && row[1].Text == "Quit" && row[2].Text == "Quitter"));
+            running.Table.Columns.Count == 3 && running.Table.Columns[1].Title == "selftest_en" && running.Table.Columns[2].Title == "selftest_fr"
+            && running.Table.Rows.Any(row => row[0].Text == "menu.quit" && row[1].Text == "Quit" && row[2].Text == "Quitter"));
         test.Check("table: and what a language hasn't got is in red", () =>
-            dataTable.Rows.First(row => row[0].Text == "menu.play")[2] is { Fill: not null } missing && missing.Color == ErrorColor);
+            running.Table.Rows.First(row => row[0].Text == "menu.play")[2] is { Fill: not null } missing && missing.Color == ErrorColor);
 
         test.Run(() =>
         {

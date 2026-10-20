@@ -12,8 +12,81 @@ namespace Hex.Dawn;
 // The right side for a file of code. What the file comes to when it is run, as a tree, a moment after it was last
 // typed into, the way the game that reads it would see it. HIDL is a language of values first, a move list is right
 // when the moves it comes to are, and this is where that is seen. A click on a row goes to where it is in the code.
-internal sealed partial class HexScene
+internal sealed partial class HexRunning
 {
+    private readonly DawnContext context;
+    private readonly IEditorWindow window;
+
+    // What of the editor is used everywhere in here, by the names it had in the scene
+    private HexDocument document => context.Documents.Current;
+    private CodeEditor code => window.Code;
+    private bool LayoutTools => document.InDesigner;
+    private UILayout layout => window.Layout;
+    private UIModule chrome => window.Chrome;
+    private UICompositor compositor => window.Compositor;
+
+    // The right side's panels, which the designer's properties are in when a layout is on screen
+    private readonly StackPanel inspector;
+    private readonly ScrollPanel inspectorScroll;
+
+    /// <summary>A file of HIDL ran without going wrong, by its full path (the extensions hear of it as on_run).</summary>
+    public event Action<string>? Ran;
+
+    /// <summary>
+    /// A file of HIDL run as it is typed, what it comes to on the right side, as a table, in the console and the runner,
+    /// and what that says is wrong with it under its code.
+    /// </summary>
+    public HexRunning(DawnContext with)
+    {
+        context = with;
+        window = with.Window;
+        inspector = layout.Get<StackPanel>("inspector");
+        inspectorScroll = layout.Get<ScrollPanel>("inspector_scroll");
+        BuildValuesTree();
+        BuildTable();
+        BuildConsole();
+        context.Documents.AddDiagnostics(DiagnosticsOf);
+    }
+
+    /// <summary>The run of the file on screen, null until it ran, and the file it was of.</summary>
+    internal HexValues? LastRun => values;
+    internal HexDocument? LastRunOf => valuesOf;
+
+    /// <summary>The tree the values are shown in, and the table, for the window to size.</summary>
+    internal TreeView ValuesTree => valuesTree;
+    internal Table Table => dataTable;
+
+    // The lints of the last clean run, worked out once a run
+    private HexValues? linted;
+    private List<UICodeDiagnostic> lints = [];
+
+    /// <summary>What the last run of a document says is wrong with it, its lints and where running it went wrong.</summary>
+    private IReadOnlyList<UICodeDiagnostic>? DiagnosticsOf(HexDocument of)
+    {
+        if (values is null || valuesOf != of)
+            return null;
+
+        var found = new List<UICodeDiagnostic>();
+        if (values is { Error: null } clean)
+        {
+            if (!ReferenceEquals(linted, clean))
+            {
+                linted = clean;
+                lints = HexLints.Lint(clean, of.Path, context.Strings.Said);
+            }
+
+            found.AddRange(lints);
+        }
+
+        if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran
+            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), PlatformPaths.Comparison))))
+        {
+            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
+        }
+
+        return found;
+    }
+
     // How long the code has to be left alone before it is run again, and the most rows the tree shows
     private const float VALUES_AFTER = 0.35f;
     private const int MAX_VALUE_ROWS = 600;
@@ -45,7 +118,7 @@ internal sealed partial class HexScene
     /// Every tick. Runs the file again once it was left alone for a moment after a change, and takes in what the last run
     /// came to when it is done.
     /// </summary>
-    private void UpdateValues(float dt)
+    internal void UpdateValues(float dt)
     {
         if (evaluation.TakeFinished() is { } done)
         {
@@ -72,13 +145,13 @@ internal sealed partial class HexScene
             // What went wrong running it is underlined where it went wrong, with what doesn't parse and the rest
             if (valuesOf is { } ran)
             {
-                ShowDiagnostics(ran);
+                context.Documents.DiagnosticsChanged(ran);
                 ShowInlineValues(ran, done);
                 if (ran.Path is { } runPath && done.Error is null)
-                    extensions.Raise("on_run", new StringValue(Path.GetFullPath(runPath)));
+                    Ran?.Invoke(Path.GetFullPath(runPath));
             }
             if (!LayoutTools)
-                inspectorDirty = true;
+                window.RefreshRight();
         }
 
         if (!ShowsValues)
@@ -125,13 +198,13 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The folder a document's includes are looked for in.</summary>
-    private string? FolderOf(HexDocument of) => of.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : browseDirectory;
+    internal string? FolderOf(HexDocument of) => of.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : context.Windows.BrowseFolder;
 
     /// <summary>What every open file of code says right now by its full path, for an include of one that isn't saved yet.</summary>
     private Dictionary<string, string> OpenTexts()
     {
         var texts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (HexDocument open in documents)
+        foreach (HexDocument open in context.Documents.All)
         {
             if (open.IsText && open.Path is { } path)
                 texts[Path.GetFullPath(path)] = open.Editor.Text;
@@ -147,7 +220,7 @@ internal sealed partial class HexScene
     /// The right side for code. What the file comes to, as a tree the values view paints itself (a TreeView), with what is
     /// wrong with the file as its first rows. Anything that isn't HIDL, or a layout, says why there is nothing in its place.
     /// </summary>
-    private void RebuildCodeInspector()
+    internal void RebuildCodeInspector()
     {
         // The console is running a line in what the values show, which can change them under the rows being made. They
         // are made once it is done, see UpdateConsole
@@ -163,7 +236,7 @@ internal sealed partial class HexScene
 
         if (!tree)
         {
-            Hint(inspector, !ShowsValues ? document.IsText ? Said("values.not_hidl") : Said("values.layout") : Said("values.running")).Wrap = true;
+            window.Hint(inspector, !ShowsValues ? document.IsText ? context.Strings.Said("values.not_hidl") : context.Strings.Said("values.layout") : context.Strings.Said("values.running")).Wrap = true;
             return;
         }
 
@@ -171,24 +244,24 @@ internal sealed partial class HexScene
         var items = new List<UITreeItem>();
 
         foreach (UICodeDiagnostic error in code.SyntaxErrors)
-            items.Add(ProblemItem($"line {error.Line + 1}: {error.Message}", "error", ErrorColor, () => GoToCode(error.Line, error.Column)));
+            items.Add(ProblemItem($"line {error.Line + 1}: {error.Message}", "error", context.Panels.Error, () => GoToCode(error.Line, error.Column)));
 
         foreach (UICodeDiagnostic warning in code.Diagnostics)
         {
             items.Add(ProblemItem($"line {warning.Line + 1}: {warning.Message}", warning.Warning ? "warning" : "error",
-                warning.Warning ? WarningColor : ErrorColor, () => GoToCode(warning.Line, warning.Column)));
+                warning.Warning ? context.Panels.Warning : context.Panels.Error, () => GoToCode(warning.Line, warning.Column)));
         }
 
         if (shown.Error is { } problem && !shown.ErrorAt.Span.IsKnown)
-            items.Add(ProblemItem(problem, "error", ErrorColor, null));
+            items.Add(ProblemItem(problem, "error", context.Panels.Error, null));
 
-        items.Add(new UITreeItem(Said("values.summary", ("count", shown.Declared.Count.ToString()), ("time", shown.Milliseconds.ToString("0.0"))), "info")
+        items.Add(new UITreeItem(context.Strings.Said("values.summary", ("count", shown.Declared.Count.ToString()), ("time", shown.Milliseconds.ToString("0.0"))), "info")
         {
-            Color = DimColor
+            Color = context.Panels.Dim
         });
 
         if (shown.Declared.Count == 0)
-            items.Add(new UITreeItem(Said("values.nothing")) { Color = DimColor });
+            items.Add(new UITreeItem(context.Strings.Said("values.nothing")) { Color = context.Panels.Dim });
 
         foreach (var (name, value) in shown.Declared)
             items.Add(ValueItem(name, name, value, shown.Sources.TryGetDeclaration(name, out var declared) ? declared : null));
@@ -215,7 +288,7 @@ internal sealed partial class HexScene
     private UITreeItem ProblemItem(string text, string icon, Vector4 color, Action? pressed) =>
         new(text, icon) { IconColor = color, Color = color, Tooltip = text, Tag = new ValueTag(string.Empty, Values.Null, null, pressed) };
 
-    private void GoToCode(int line, int column)
+    internal void GoToCode(int line, int column)
     {
         code.GoTo(line, column);
         code.Focus();
@@ -279,8 +352,8 @@ internal sealed partial class HexScene
         valuesTree.FocusLine = true;
 
         // Dragged wider by its edge like the properties, the two are the one side
-        SideGrip(valuesTree, UIResize.Left, left: false);
-        layout.Get<Button>("hide_right").OnPressed = ToggleProperties;
+        window.Grip(valuesTree, UIResize.Left, left: false);
+        layout.Get<Button>("hide_right").OnPressed = () => context.Panels.PropertiesShown = !context.Panels.PropertiesShown;
         valuesTree.OnExpanding = FillValue;
         valuesTree.OnActivated = ActivateValue;
         valuesTree.OnToggled = item =>
@@ -327,24 +400,24 @@ internal sealed partial class HexScene
         return drawn with { W = 1.0f };
     }
 
-    private static readonly Vector4 SymbolColour = new(0.86f, 0.45f, 0.7f, 1.0f);
-    private static readonly Vector4 SymbolObject = new(0.93f, 0.62f, 0.16f, 1.0f);
-    private static readonly Vector4 SymbolList = new(0.69f, 0.5f, 0.84f, 1.0f);
-    private static readonly Vector4 SymbolText = new(0.81f, 0.57f, 0.47f, 1.0f);
-    private static readonly Vector4 SymbolNumber = new(0.71f, 0.81f, 0.66f, 1.0f);
-    private static readonly Vector4 SymbolConstant = new(0.34f, 0.61f, 0.84f, 1.0f);
-    private static readonly Vector4 SymbolField = new(0.46f, 0.75f, 1.0f, 1.0f);
+    internal static readonly Vector4 SymbolColour = new(0.86f, 0.45f, 0.7f, 1.0f);
+    internal static readonly Vector4 SymbolObject = new(0.93f, 0.62f, 0.16f, 1.0f);
+    internal static readonly Vector4 SymbolList = new(0.69f, 0.5f, 0.84f, 1.0f);
+    internal static readonly Vector4 SymbolText = new(0.81f, 0.57f, 0.47f, 1.0f);
+    internal static readonly Vector4 SymbolNumber = new(0.71f, 0.81f, 0.66f, 1.0f);
+    internal static readonly Vector4 SymbolConstant = new(0.34f, 0.61f, 0.84f, 1.0f);
+    internal static readonly Vector4 SymbolField = new(0.46f, 0.75f, 1.0f, 1.0f);
 
     /// <summary>
     /// Goes to where a value was written, which the run of the file knows (an included file is opened), or failing that
     /// where the outline of the file puts its path.
     /// </summary>
-    private void GoToValue(string path, SourceLocation? at)
+    internal void GoToValue(string path, SourceLocation? at)
     {
         if (at is { Span.IsKnown: true } known)
         {
             if (known.File is { } file && (document.Path is null || !string.Equals(Path.GetFullPath(file), Path.GetFullPath(document.Path), PlatformPaths.Comparison)))
-                OpenAt(file, known.Span.Line - 1, known.Span.Column - 1);
+                context.Documents.OpenAt(file, known.Span.Line - 1, known.Span.Column - 1);
             else
                 code.GoTo(known.Span.Line - 1, known.Span.Column - 1);
             return;
@@ -394,9 +467,9 @@ internal sealed partial class HexScene
     private void ShowValueMenu(string path, IRuntimeValue value)
     {
         var shown = new Menu("value");
-        shown.Add(Said("values.copy_path"), () => UIClipboard.Copy(path), icon: "copy");
-        shown.Add(Said("values.copy_value"), () => UIClipboard.Copy(HexEvaluation.Describe(value)), icon: "copy");
-        shown.Add(Said("values.in_console"), () => AskConsole(path), icon: "terminal");
+        shown.Add(context.Strings.Said("values.copy_path"), () => UIClipboard.Copy(path), icon: "copy");
+        shown.Add(context.Strings.Said("values.copy_value"), () => UIClipboard.Copy(HexEvaluation.Describe(value)), icon: "copy");
+        shown.Add(context.Strings.Said("values.in_console"), () => AskConsole(path), icon: "terminal");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
@@ -430,9 +503,9 @@ internal sealed partial class HexScene
     /// Where something of the file is in its code, by its path, through the outline of the file. Each step of the path is
     /// the first key of that name deeper in than the one before it, an index into a list stays on the list.
     /// </summary>
-    private (int Line, int Column)? LineOf(string path)
+    internal (int Line, int Column)? LineOf(string path)
     {
-        List<OutlineEntry> entries = OutlineHere();
+        List<OutlineEntry> entries = window.Outline();
         int at = -1, depth = -1;
         (int, int)? found = null;
 
@@ -486,4 +559,14 @@ internal sealed partial class HexScene
         if (step.Length > 0)
             yield return step.ToString();
     }
+
+    /// <summary>Another document came on screen, what F5 and the console had of the last one is let go of.</summary>
+    internal void Forget()
+    {
+        runOutput.Clear();
+        consoleRuntime = null;
+    }
+
+    /// <summary>The table made again the next time it's up, the view having changed.</summary>
+    internal void RefreshTable() => tabledFrom = null;
 }

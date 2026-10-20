@@ -114,7 +114,7 @@ internal sealed partial class HexScene
                 return AllCommands();
 
             case '@':
-                return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => GoToCode(entry.Line, entry.Column))))];
+                return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => running.GoToCode(entry.Line, entry.Column))))];
 
             case ':':
                 // A line of every ten, a few letters of the number find the one, and the end of the file
@@ -126,7 +126,7 @@ internal sealed partial class HexScene
                     lines.Add(($"{line}", () =>
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
-                        GoToCode(at, 0);
+                        running.GoToCode(at, 0);
                     }));
                 }
                 return lines;

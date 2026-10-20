@@ -175,6 +175,8 @@ internal sealed partial class HexScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
         DeclareMenus();
+        running = new HexRunning(Context);
+        running.Ran += path => extensions.Raise("on_run", new StringValue(path));
         extensions = new HexExtensions(Context, this);
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
@@ -183,12 +185,9 @@ internal sealed partial class HexScene : Scene
         BuildPanel();
         BuildFindBar();
         BuildQuiet();
-        BuildConsole();
         BuildTerminal();
         StartRemote();
-        BuildValuesTree();
         BuildSideTree();
-        BuildTable();
         BuildExtensionViews();
         toasts = layout.Get<Notifications>("toasts");
         BuildTabs();
@@ -356,11 +355,11 @@ internal sealed partial class HexScene : Scene
         ApplyAskedView();
         Profile.Mark("extensions");
 
-        UpdateTable();
+        running.UpdateTable();
         UpdateTerminal(dt);
         UpdateRemote();
-        UpdateConsole();
-        RunAskedConsole();
+        running.UpdateConsole();
+        running.RunAskedConsole();
         UpdatePanel(dt);
         Profile.Mark("panel");
 
@@ -449,10 +448,10 @@ internal sealed partial class HexScene : Scene
             treeDirty |= Side == HexSide.Explorer;
         }
 
-        UpdateValues(dt);
+        running.UpdateValues(dt);
         UpdateFileChanges();
         languages.Update(dt);
-        UpdateValueBox();
+        running.UpdateValueBox();
     }
 
     /// <summary>

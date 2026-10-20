@@ -213,8 +213,8 @@ internal sealed partial class HexScene
             sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
         rightHead.Size = new Vector2(rightWidth, 24.0f);
-        if (valuesTree.Visible)
-            valuesTree.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, valuesTree)));
+        if (running.ValuesTree.Visible)
+            running.ValuesTree.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, running.ValuesTree)));
 
         FitRows(leftWidth, rightWidth);
 
@@ -234,14 +234,13 @@ internal sealed partial class HexScene
         crumbs.Size = crumbs.Size with { X = centerWidth };
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);
-        FitConsole();
 
         // Whichever of the two is showing has the rest of the middle, the code or the canvas of the designer
         // The table's sideways bar runs along its bottom, which is where the panel's drag tab reaches up to, so it runs that
         // much higher
-        dataTable.BarInset = bottom.Visible ? bottom.GripReach : 0.0f;
-        if (dataTable.Visible)
-            dataTable.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, dataTable)));
+        running.Table.BarInset = bottom.Visible ? bottom.GripReach : 0.0f;
+        if (running.Table.Visible)
+            running.Table.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, running.Table)));
         else if (extensionViews.Visible)
             extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews)));
         else if (!LayoutTools)

@@ -34,8 +34,6 @@ internal sealed partial class HexScene
     // What was last looked for, to look for again
     private string lastFind = string.Empty;
 
-    // What running a file of code last came to, put in the output
-    private readonly List<string> runOutput = [];
 
     // The parts of the editor's own layout that only mean something for a layout, hidden while a file of code is open
     private const string LINK_TEMPLATE = "link.hor";
@@ -157,9 +155,6 @@ internal sealed partial class HexScene
         }
     }
 
-    // The run the lints were last worked out of, and what they said
-    private HexValues? linted;
-    private List<UICodeDiagnostic> lints = [];
 
     // What the localisation check last found in each document, kept to go with what running it found
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> localisationFound = [];
@@ -172,24 +167,7 @@ internal sealed partial class HexScene
     {
         var found = new List<UICodeDiagnostic>(localisationFound.GetValueOrDefault(of) ?? []);
 
-        // What the values of the last run of it say, worked out once a run
-        if (values is { Error: null } clean && valuesOf == of)
-        {
-            if (!ReferenceEquals(linted, clean))
-            {
-                linted = clean;
-                lints = HexLints.Lint(clean, of.Path, Said);
-            }
-
-            found.AddRange(lints);
-        }
-
-        if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran && valuesOf == of
-            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), PlatformPaths.Comparison))))
-        {
-            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
-        }
-
+        // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers
         foreach (var source in diagnosticSources)
             found.AddRange(source(of) ?? []);
         of.Editor.Diagnostics = found;
@@ -307,59 +285,6 @@ internal sealed partial class HexScene
         Say("the code is what the layout says again");
     }
 
-    /// <summary>
-    /// F5 on a file of code. It is run the way a game loads it, includes looked for next to it, and what it declares is
-    /// listed with what each comes to, or what went wrong. Nothing a game would hand it (a compositor) is there.
-    /// </summary>
-    private void RunCode()
-    {
-        runOutput.Clear();
-
-        var runtime = new HIDLRuntime
-        {
-            BaseDirectory = FolderOf(document),
-            Output = line => runOutput.Add($"print: {line}")
-        };
-
-        // Run here and now, somebody asked for it, but not for ever
-        using var cancel = new CancellationTokenSource(1000);
-        runtime.Interpreter.Cancellation = cancel.Token;
-        var (success, result) = runtime.Evaluate(code.Text);
-        runtime.Interpreter.Cancellation = CancellationToken.None;
-
-        if (!success)
-        {
-            runOutput.Add($"didn't run, {result}");
-            Say($"{document.Name} didn't run, {result}", error: true);
-        }
-        else
-        {
-            foreach (var (name, value) in runtime.UserScope.Variables)
-                runOutput.Add($"{name} = {HexEvaluation.Shorten(Describe(value), 240)}");
-
-            Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, see the output");
-        }
-
-        // What it printed and what it declared go in the output, which comes up, or in the console of the terminal page
-        // when the settings say so (run_to_terminal), where it reads like anything else a program printed
-        if (settings.RunToTerminal)
-        {
-            ConsoleLine($"{document.Name}, run", DimColor);
-            foreach (string line in runOutput)
-                ConsoleLine(line, line.StartsWith("didn't run", StringComparison.Ordinal) ? ErrorColor : null);
-        }
-        else
-        {
-            foreach (string line in runOutput)
-                Note(line);
-            ShowPanel(OUTPUT_PAGE);
-        }
-
-        // And the console works in what it left behind
-        consoleRuntime = runtime;
-        inspectorDirty = true;
-    }
-
     private static string Describe(IRuntimeValue value) => HexEvaluation.Describe(value);
 
     /// <summary>
@@ -408,9 +333,9 @@ internal sealed partial class HexScene
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
-        commands.Add("Run/run", "Run File", RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
-        commands.Add("Run/run", "Run Behaviour...", OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
-        commands.Bind(Key.F5, () => { if (!LayoutTools) OpenRunner(); }, control: true, whileTyping: true);
+        commands.Add("Run/run", "Run File", running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
+        commands.Add("Run/run", "Run Behaviour...", running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
+        commands.Bind(Key.F5, () => { if (!LayoutTools) running.OpenRunner(); }, control: true, whileTyping: true);
 
         commands.Add("Run/check", "Check All Files", CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", "Trigger Completion", () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;

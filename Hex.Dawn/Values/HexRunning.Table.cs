@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 // designer of a fighting game looks at frame data. A file of texts (let strings) is a row a key and a column a language,
 // every language next to it in its folder, what one hasn't got in red. A cell written as itself in the file on screen is
 // edited where it is with a double click, the same way as in the values.
-internal sealed partial class HexScene
+internal sealed partial class HexRunning
 {
     private const float KEY_COLUMN = 180.0f, VALUE_COLUMN = 120.0f, TEXT_COLUMN = 320.0f;
 
@@ -45,18 +45,18 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Whether the document on screen has a table to show, which is when its view buttons have one.</summary>
-    private bool HasTable => document.IsText && values is { } shown && valuesOf == document && TableOf(shown) is not null;
+    internal bool HasTable => document.IsText && values is { } shown && valuesOf == document && TableOf(shown) is not null;
 
     private void BuildTable()
     {
         dataTable = layout.Get<Table>("data_table");
         dataTable.Visible = false;
         dataTable.OnActivated = ActivateCell;
-        layout.Get<Button>("table_view").OnPressed = () => SwitchView(HexView.Table);
+        layout.Get<Button>("table_view").OnPressed = () => window.SwitchView(HexView.Table);
     }
 
     /// <summary>Every tick while the table is up, made again when the values it shows were.</summary>
-    private void UpdateTable()
+    internal void UpdateTable()
     {
         if (!dataTable.Visible || values is not { } shown || valuesOf != document || ReferenceEquals(shown, tabledFrom))
             return;
@@ -73,7 +73,7 @@ internal sealed partial class HexScene
 
         if (TableOf(shown) is not { } table)
         {
-            dataTable.Columns.Add(new UITableColumn(Said("table.nothing"), 600.0f));
+            dataTable.Columns.Add(new UITableColumn(context.Strings.Said("table.nothing"), 600.0f));
             dataTable.Refresh();
             return;
         }
@@ -90,7 +90,7 @@ internal sealed partial class HexScene
     /// <summary>What a cell is written in, by what is in it, the way the code colours the same thing.</summary>
     private Vector4? CellColor(IRuntimeValue value) => value switch
     {
-        ObjectValue or ListValue => DimColor,
+        ObjectValue or ListValue => context.Panels.Dim,
         NumberValue => SymbolNumber,
         BooleanValue or NullValue => SymbolConstant,
         _ => null
@@ -186,11 +186,11 @@ internal sealed partial class HexScene
             }
         }
 
-        dataTable.Columns.Add(new UITableColumn(Said("table.key"), KEY_COLUMN + 60.0f));
+        dataTable.Columns.Add(new UITableColumn(context.Strings.Said("table.key"), KEY_COLUMN + 60.0f));
         foreach (var (name, _) in languages)
             dataTable.Columns.Add(new UITableColumn(name, TEXT_COLUMN));
 
-        Vector4 missing = ErrorColor with { W = 0.18f };
+        Vector4 missing = context.Panels.Error with { W = 0.18f };
         foreach (string key in keys)
         {
             var cells = new UITableCell[languages.Count + 1];
@@ -201,7 +201,7 @@ internal sealed partial class HexScene
                 if (languages[l].Texts.TryGetValue(key, out string? text))
                     cells[l + 1] = new UITableCell(text.Replace('\n', ' ')) { Tooltip = text };
                 else
-                    cells[l + 1] = new UITableCell(Said("table.missing")) { Color = ErrorColor, Fill = missing, Tooltip = Said("table.missing_in", ("language", languages[l].Name)) };
+                    cells[l + 1] = new UITableCell(context.Strings.Said("table.missing")) { Color = context.Panels.Error, Fill = missing, Tooltip = context.Strings.Said("table.missing_in", ("language", languages[l].Name)) };
             }
 
             if (KeyIn(shown, strings, key) is { } at)
@@ -249,7 +249,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>A double click on a cell. One written as itself in this file is edited where it is, anything else goes to the code.</summary>
-    private void ActivateCell(int row, int column)
+    internal void ActivateCell(int row, int column)
     {
         if (!tableCells.TryGetValue((row, column), out SourceLocation at))
             return;
@@ -257,7 +257,7 @@ internal sealed partial class HexScene
         bool here = at.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(open), PlatformPaths.Comparison));
         if (column == 0 || !here || !at.Literal || !at.Value.IsKnown)
         {
-            SwitchView(HexView.Code);
+            window.SwitchView(HexView.Code);
             code.GoTo(at.Span.Line - 1, at.Span.Column - 1);
             code.Focus();
             return;
@@ -265,7 +265,7 @@ internal sealed partial class HexScene
 
         if (valuesAsked != (document, code.Document.Version))
         {
-            Say(Said("values.behind"), error: true);
+            context.Notices.Say(context.Strings.Said("values.behind"), error: true);
             return;
         }
 

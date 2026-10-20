@@ -263,13 +263,13 @@ internal sealed partial class HexScene
     /// <summary>The colour of an icon of the outline, the same as the values give the same kind of thing.</summary>
     private static Vector4? OutlineColor(string icon) => icon switch
     {
-        "symbol-object" => SymbolObject,
-        "symbol-array" or "symbol-method" => SymbolList,
-        "symbol-string" => SymbolText,
-        "symbol-number" => SymbolNumber,
-        "symbol-boolean" or "symbol-null" => SymbolConstant,
-        "symbol-color" => SymbolColour,
-        _ => SymbolField
+        "symbol-object" => HexRunning.SymbolObject,
+        "symbol-array" or "symbol-method" => HexRunning.SymbolList,
+        "symbol-string" => HexRunning.SymbolText,
+        "symbol-number" => HexRunning.SymbolNumber,
+        "symbol-boolean" or "symbol-null" => HexRunning.SymbolConstant,
+        "symbol-color" => HexRunning.SymbolColour,
+        _ => HexRunning.SymbolField
     };
 
     /* What was found, Ctrl+Shift+F and Shift+F12, by the file it is in */

@@ -58,7 +58,7 @@ internal sealed partial class HexScene : IExtensionScreens
             defines[name] = new StringValue(value);
 
         IRuntimeValue declared = Values.Null;
-        if (values is { } ran && valuesOf == document)
+        if (running.LastRun is { } ran && running.LastRunOf == document)
         {
             var all = new Dictionary<string, IRuntimeValue>();
             foreach (var (name, value) in ran.Declared)

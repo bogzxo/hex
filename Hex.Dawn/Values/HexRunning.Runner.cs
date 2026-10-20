@@ -11,18 +11,18 @@ namespace Hex.Dawn;
 // the file came to, so what it hands back every tick and what it prints are lines of the console, and the state at the
 // top of the file (pressed_for in the dummy's) is said after. The view can be changed between one tick and the next, Start
 // over runs the file again so its state is what it starts as.
-internal sealed partial class HexScene
+internal sealed partial class HexRunning
 {
-    private WindowPanel? runnerWindow;
-    private Dropdown runnerFunction = null!;
-    private TextBox runnerView = null!;
+    internal WindowPanel? runnerWindow;
+    internal Dropdown runnerFunction = null!;
+    internal TextBox runnerView = null!;
     private NumberBox runnerTicks = null!;
     private Label runnerAt = null!;
 
     // Which tick is next, and how many times the runner has asked, for names of its own in the console's runtime
-    private int runnerTick, runnerRuns;
+    internal int runnerTick, runnerRuns;
 
-    private void OpenRunner()
+    internal void OpenRunner()
     {
         if (runnerWindow is { Visible: true } open)
         {
@@ -68,16 +68,16 @@ internal sealed partial class HexScene
         runnerFunction.Value = functions.Contains(was) ? was : runnerFunction.Options[0];
     }
 
-    private void ShowRunnerTick() => runnerAt.Text = Said("runner.next", ("tick", (runnerTick + 1).ToString()));
+    private void ShowRunnerTick() => runnerAt.Text = context.Strings.Said("runner.next", ("tick", (runnerTick + 1).ToString()));
 
     /// <summary>The function called so many ticks on from where the runner got to, through the console.</summary>
-    private void RunBehaviour(int ticks)
+    internal void RunBehaviour(int ticks)
     {
         FillRunnerFunctions();
         string function = runnerFunction.Value;
         if (values is not { } shown || valuesOf != document || !shown.Declared.Any(pair => pair.Name == function))
         {
-            Say(Said("runner.nothing"), error: true);
+            context.Notices.Say(context.Strings.Said("runner.nothing"), error: true);
             return;
         }
 
@@ -96,7 +96,7 @@ internal sealed partial class HexScene
         IReadOnlyList<string> before = runtime == consoleRanIn ? [] : consoleDeclared;
         if (!evaluation.Ask(runtime, before, snippet, printed => consoleOut.Enqueue((UIRichText.Literal(printed), null))))
         {
-            Say(Said("console.busy"), error: true);
+            context.Notices.Say(context.Strings.Said("console.busy"), error: true);
             return;
         }
 
@@ -105,8 +105,8 @@ internal sealed partial class HexScene
         runnerTick = to;
         ShowRunnerTick();
 
-        if (bottom.Selected != CONSOLE_PAGE || !bottom.Shown)
-            ShowPanel(CONSOLE_PAGE);
+        if (!context.Panels.TerminalsShown)
+            context.Panels.ShowTerminals();
         ConsoleLine($"[color:accent]>[/color] {function}, {(ticks == 1 ? $"tick {to}" : $"ticks {from + 1} to {to}")}, handed {UIRichText.Literal(view)}", null);
     }
 
@@ -116,6 +116,62 @@ internal sealed partial class HexScene
         runnerTick = 0;
         valuesAsked = (null, -1);
         ShowRunnerTick();
-        Say(Said("runner.over"));
+        context.Notices.Say(context.Strings.Said("runner.over"));
+    }
+
+    // What F5 on a file printed and declared, for the output or the console
+    internal readonly List<string> runOutput = [];
+
+    /// <summary>
+    /// F5 on a file of code. It is run the way a game loads it, includes looked for next to it, and what it declares is
+    /// listed with what each comes to, or what went wrong. Nothing a game would hand it (a compositor) is there.
+    /// </summary>
+    internal void RunCode()
+    {
+        runOutput.Clear();
+
+        var runtime = new HIDLRuntime
+        {
+            BaseDirectory = FolderOf(document),
+            Output = line => runOutput.Add($"print: {line}")
+        };
+
+        // Run here and now, somebody asked for it, but not for ever
+        using var cancel = new CancellationTokenSource(1000);
+        runtime.Interpreter.Cancellation = cancel.Token;
+        var (success, result) = runtime.Evaluate(code.Text);
+        runtime.Interpreter.Cancellation = CancellationToken.None;
+
+        if (!success)
+        {
+            runOutput.Add($"didn't run, {result}");
+            context.Notices.Say($"{document.Name} didn't run, {result}", error: true);
+        }
+        else
+        {
+            foreach (var (name, value) in runtime.UserScope.Variables)
+                runOutput.Add($"{name} = {HexEvaluation.Shorten(HexEvaluation.Describe(value), 240)}");
+
+            context.Notices.Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, see the output");
+        }
+
+        // What it printed and what it declared go in the output, which comes up, or in the console of the terminal page
+        // when the settings say so (run_to_terminal), where it reads like anything else a program printed
+        if (context.Settings.Values.RunToTerminal)
+        {
+            ConsoleLine($"{document.Name}, run", context.Panels.Dim);
+            foreach (string line in runOutput)
+                ConsoleLine(line, line.StartsWith("didn't run", StringComparison.Ordinal) ? context.Panels.Error : null);
+        }
+        else
+        {
+            foreach (string line in runOutput)
+                context.Notices.Note(line);
+            context.Panels.ShowOutput();
+        }
+
+        // And the console works in what it left behind
+        consoleRuntime = runtime;
+        window.RefreshRight();
     }
 }

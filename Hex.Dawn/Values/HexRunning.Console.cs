@@ -13,15 +13,13 @@ namespace Hex.Dawn;
 // (TerminalHidlRepl) with Hex's evaluation behind it, which runs a line off the editor's thread and answers later, so
 // it reads the line, colours it, completes the file's names and keeps its history like any other, and looks the same
 // as a git status in the tab next to it.
-internal sealed partial class HexScene
+internal sealed partial class HexRunning
 {
-    private const int CONSOLE_PAGE = 2;
-
     /// <summary>The id of the console's profile.</summary>
-    private const string CONSOLE_PROFILE = "hex_console";
+    internal const string CONSOLE_PROFILE = "hex_console";
 
     // What F5 left behind, used by the console when the values haven't got the file on screen
-    private HIDLRuntime? consoleRuntime;
+    internal HIDLRuntime? consoleRuntime;
 
     // The runtime the console last ran a line in, and what it declared in its lines so far
     private HIDLRuntime? consoleRanIn;
@@ -29,7 +27,7 @@ internal sealed partial class HexScene
 
     // Lines to go into the console, from the thread that runs them, and the line that is waiting for its answer
     private readonly System.Collections.Concurrent.ConcurrentQueue<(string Text, Vector4? Color)> consoleOut = new();
-    private string? consoleAsked;
+    internal string? consoleAsked;
 
     // The REPL of the console's tab, null while there is none
     private TerminalHidlRepl? consoleRepl;
@@ -39,14 +37,14 @@ internal sealed partial class HexScene
     }
 
     /// <summary>The console's program, for the terminal host when a tab of its profile is opened.</summary>
-    private TerminalHidlRepl MakeConsole()
+    internal TerminalHidlRepl MakeConsole()
     {
         var repl = new TerminalHidlRepl(Path.Combine(TerminalFiles.UserFolder, "hex_console_history.txt"))
         {
             Name = "HIDL",
             Where = () => document.Path is { } path ? Path.GetFileName(path) : document.Name,
             RuntimeFor = ConsoleRuntime,
-            Greeting = "\u001b[2m" + Said("console.welcome") + "\u001b[0m"
+            Greeting = "\u001b[2m" + context.Strings.Said("console.welcome") + "\u001b[0m"
         };
         repl.OnLine = ConsoleLineGiven;
         consoleRepl = repl;
@@ -60,21 +58,21 @@ internal sealed partial class HexScene
     /// <summary>The console's tab brought up, made when there isn't one, the panel on its page.</summary>
     private TerminalHidlRepl EnsureConsole()
     {
-        if (bottom.Selected != CONSOLE_PAGE || !bottom.Shown)
-            ShowPanel(CONSOLE_PAGE);
+        if (!context.Panels.TerminalsShown)
+            context.Panels.ShowTerminals();
 
         if (ConsoleView() is { } view && consoleRepl is { IsRunning: true } running)
         {
-            terminalPanel.FocusPane(view);
+            context.Terminals.Host.Panel.FocusPane(view);
             return running;
         }
 
-        terminalPanel.NewTab(terminals.ProfileCalled(CONSOLE_PROFILE));
+        context.Terminals.Host.Panel.NewTab(context.Terminals.Host.ProfileCalled(CONSOLE_PROFILE));
         return consoleRepl!;
     }
 
     /// <summary>Runs a line in the console, bringing it up if it isn't, the right click on a value does this with its path.</summary>
-    private void AskConsole(string line)
+    internal void AskConsole(string line)
     {
         line = line.Trim();
         if (line.Length == 0)
@@ -96,7 +94,7 @@ internal sealed partial class HexScene
 
         if (!evaluation.Ask(runtime, before, line, printed => consoleOut.Enqueue((UIRichText.Literal(printed), null))))
         {
-            consoleRepl?.Write($"\u001b[33m{Said("console.busy")}\u001b[0m\n");
+            consoleRepl?.Write($"\u001b[33m{context.Strings.Said("console.busy")}\u001b[0m\n");
             return;
         }
 
@@ -105,7 +103,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Every tick, what the line that was run printed and came to, into the console.</summary>
-    private void UpdateConsole()
+    internal void UpdateConsole()
     {
         while (consoleOut.TryDequeue(out var printed))
             ConsoleLine(printed.Text, printed.Color);
@@ -115,7 +113,7 @@ internal sealed partial class HexScene
 
         if (HexEvaluation.IsError(answer))
         {
-            ConsoleLine(UIRichText.Literal(answer[1..]), ErrorColor);
+            ConsoleLine(UIRichText.Literal(answer[1..]), context.Panels.Error);
         }
         else
         {
@@ -130,15 +128,15 @@ internal sealed partial class HexScene
 
         // It ran in what the values show, which it may have changed
         if (!LayoutTools)
-            inspectorDirty = true;
+            window.RefreshRight();
     }
 
     /// <summary>A line written into the console, an error in red and anything dim dim, markup taken out of it.</summary>
-    private void ConsoleLine(string text, Vector4? color)
+    internal void ConsoleLine(string text, Vector4? color)
     {
         TerminalHidlRepl repl = consoleRepl is { IsRunning: true } running && ConsoleView() is not null ? running : EnsureConsole();
         string plain = UIRichText.Plain(text);
-        string coloured = color == ErrorColor ? $"\u001b[31m{plain}\u001b[0m" : color == DimColor ? $"\u001b[2m{plain}\u001b[0m" : plain;
+        string coloured = color == context.Panels.Error ? $"\u001b[31m{plain}\u001b[0m" : color == context.Panels.Dim ? $"\u001b[2m{plain}\u001b[0m" : plain;
         repl.Write(coloured + "\n");
     }
 
@@ -150,9 +148,9 @@ internal sealed partial class HexScene
     private Queue<string>? consoleAskedFor;
 
     /// <summary>Every tick, the next line --console asked for, once the last one is answered.</summary>
-    private void RunAskedConsole()
+    internal void RunAskedConsole()
     {
-        consoleAskedFor ??= new Queue<string>(options.Console ?? []);
+        consoleAskedFor ??= new Queue<string>(context.Options.Console ?? []);
         if (consoleAskedFor.Count == 0 || consoleAsked is not null || values is null || valuesOf != document)
             return;
 
@@ -162,7 +160,7 @@ internal sealed partial class HexScene
     /* For the self test */
 
     /// <summary>The last line the console wrote that isn't its prompt, empty for none.</summary>
-    private string LastConsoleLine()
+    internal string LastConsoleLine()
     {
         if (ConsoleView() is not { } view)
             return string.Empty;
@@ -181,7 +179,7 @@ internal sealed partial class HexScene
     }
 
     /// <summary>Whether the console has said something, anywhere in what it has written.</summary>
-    private bool ConsoleSaid(string text)
+    internal bool ConsoleSaid(string text)
     {
         if (ConsoleView() is not { } view)
             return false;
@@ -196,12 +194,12 @@ internal sealed partial class HexScene
         return false;
     }
 
-    private TerminalView? ConsoleView()
+    internal TerminalView? ConsoleView()
     {
         if (consoleRepl is null)
             return null;
 
-        foreach (TerminalTab tab in terminalPanel.Tabs)
+        foreach (TerminalTab tab in context.Terminals.Host.Panel.Tabs)
         {
             foreach (TerminalView view in tab.Views)
             {
