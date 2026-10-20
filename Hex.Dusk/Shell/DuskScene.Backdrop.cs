@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 
+using Hex.Core;
 using Hex.Shell;
 
 using Horizon.Graphics;
@@ -31,12 +32,11 @@ internal sealed partial class DuskScene
         if (!started)
             return;
 
-        Dictionary<string, IRuntimeValue> editor = SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : [];
-        bool on = editor.TryGetValue("backdrop_terminal", out IRuntimeValue? shown) && shown is BooleanValue { Value: true };
-        string named = editor.TryGetValue("backdrop_image", out IRuntimeValue? image) && image is StringValue { Value.Length: > 0 } file ? file.Value : string.Empty;
-        string path = named.Length > 0 ? named : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        // Read as Dawn reads them, the backdrop is the editor's section's for both modes
+        HexSettings settings = new(host.Settings.Path);
+        string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
 
-        if (!on || !File.Exists(path))
+        if (!settings.BackdropTerminal || !File.Exists(path))
         {
             panel.Backdrop = null;
             return;
@@ -49,15 +49,12 @@ internal sealed partial class DuskScene
         }
 
         panel.Backdrop = backdropPicture;
-        panel.BackdropOpacity = Number(editor, "backdrop_opacity", 0.22f);
-        panel.BackdropScale = Number(editor, "terminal_backdrop_scale", 0.5f);
-        // Shares of the window, as Dawn keeps them, a file from before that had pixels pulled back in
-        panel.BackdropOffset = Vector2.Clamp(new Vector2(Number(editor, "terminal_backdrop_across", 0.0f), Number(editor, "terminal_backdrop_up", 0.0f)), new Vector2(-0.5f), Vector2.One);
+        panel.BackdropOpacity = settings.BackdropOpacity;
+        panel.BackdropScale = settings.TerminalBackdropScale;
+        // Shares of the window, as Dawn keeps them (and clamps them, a file from before that had pixels pulled back in)
+        panel.BackdropOffset = new Vector2(settings.TerminalBackdropAcross, settings.TerminalBackdropUp);
         Engine.WindowManager.RequestFrames();
     }
-
-    private static float Number(Dictionary<string, IRuntimeValue> values, string key, float otherwise) =>
-        values.TryGetValue(key, out IRuntimeValue? value) && value is NumberValue number ? number.Value : otherwise;
 
     /// <summary>A button of the settings pressed, the picture chosen with Hex's own dialog or the usual one back.</summary>
     private void SettingPressed(FileSectionSource editor, string key, int which)
