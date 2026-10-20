@@ -2,8 +2,9 @@
 
 A plan for the shape of Hex and of the parts of the engine it leans on, so that a change to one thing is a change in
 one place, a part can be tested without the rest of it, and nobody has to hold a hundred and eight files in their head to
-add a button. Nothing in here has been done yet. Every step below lands on its own, builds, and passes the self tests
-(Dawn's, Dusk's and the engine's) before the next one starts, so the work can stop anywhere and leave things better.
+add a button. Every step below lands on its own, builds, and passes the self tests (Dawn's, Dusk's and the engine's)
+before the next one starts, so the work can stop anywhere and leave things better. What has been done so far is at the
+end, under Progress.
 
 ## Where it stands
 
@@ -175,3 +176,34 @@ event that allocates is not.
 
 Moving files loses `git blame` for whoever doesn't use `--follow`, so every move is a commit of its own with no edits
 in it, which git follows.
+
+## Progress
+
+On the `restructure` branch of hex and of the engine, not pushed.
+
+The work of before the restructure is committed as it was (step 1), apart from the garbled commits, which are on
+origin and stay as they are until somebody decides to rewrite them.
+
+Step 2 is done. `HexCommands` (Shell/HexCommands.cs) declares the bar's menus and their groups (`DeclareMenus` in
+HexScene.Menus), and each part adds its own commands to a group by name, `commands.Add("Edit/find", "Find...",
+FindInFile, "Ctrl+F", "search", HexKeyUse.BoundWhileTyping)`, the key it shows and whether pressing it picks the
+command in the same line. Keys that are nobody's menu item are `commands.Bind`. The palette and keys.hor still read
+the built menus, which is what they did before and needs nothing more yet.
+
+Step 3 is done, with more in the context than the table above says. `DawnContext` (Context/) has `IDocuments`,
+`IWorkspace`, `INotices`, `IWork` (the work and its cards), `IWindows` (a page of text, the settings, the browser, a
+file to choose, a list to choose from), `ISettingsHost` (the settings and the sources of the settings window) and
+`ITerminals` (a command line in a terminal tab of its own), with the commands, the options and waking the editor.
+`HexScene` implements all of them explicitly in Context/HexScene.Context.cs. A part gives back through sources and
+events rather than being called: diagnostics and completions are sources the scene asks, documents opened, typed into
+and closed are events it raises, and so are files changing on the disk and a folder about to be deleted. `IPanels`
+isn't there yet, nothing out of the scene has needed a side or a page of the panel.
+
+Step 4 is done, Languages/ is `HexLanguages` with nothing of the scene in it. The scene makes it, calls `Update` and
+`StartChecks`, and the status bar asks `LinterOf`.
+
+Of step 5, Tasks/ is `HexTasks` and `HexTask`. Find is next and isn't a feature as it stands: half of HexScene.Find is
+the workspace's files listed and searched, which ten other files use. That half comes out first as a static class with
+no window in it (`HexSearch`, for Hex.Core later, unit tested), then the quick open, finding in files and checking all
+files are the feature, its results going to the side through `IPanels`.
+
