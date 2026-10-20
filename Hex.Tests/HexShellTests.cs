@@ -1,6 +1,6 @@
 using Hex.Shell;
 
-namespace Hex.Dusk.Tests;
+namespace Hex.Tests;
 
 /// <summary>What Dawn and Dusk share, which mode a start is and one of a mode at a time.</summary>
 public class HexShellTests

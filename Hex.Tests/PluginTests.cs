@@ -3,7 +3,9 @@ using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;
 using Horizon.UI.Components;
 
-namespace Hex.Dusk.Tests;
+using Hex.Dusk;
+
+namespace Hex.Tests;
 
 /// <summary>
 /// The plugins Dusk loads, the terminal's own out of the engine (Assets/terminal) and Dusk's (Assets/dusk), run in a
@@ -43,6 +45,7 @@ public class PluginTests
                     }),
                     "themes" => Natives.Function("themes", _ => Natives.List(["dark", "light", "horizon"])),
                     "profiles" => Natives.Function("profiles", _ => Natives.List(["pwsh", "cmd", "wsl:Ubuntu", "hidl"])),
+                    "tuis" => Natives.Function("tuis", _ => Natives.List(["files", "git", "processes"])),
                     "profile_name" => Natives.Function("profile_name", args => new StringValue(args.Text(0).ToUpperInvariant())),
                     "setting" => Natives.Function("setting", _ => Values.Bool(true)),
                     "plugin_folder" or "host" or "version" or "platform" => new StringValue(name),

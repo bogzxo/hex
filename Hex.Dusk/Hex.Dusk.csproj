@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Hex.Dusk.Tests" />
+    <InternalsVisibleTo Include="Hex.Tests" />
     <InternalsVisibleTo Include="Hex" />
   </ItemGroup>
 

@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Dawn", "Hex.Dawn\Hex.Da
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Dusk", "Hex.Dusk\Hex.Dusk.csproj", "{654CA32F-B7E7-4CA4-9FB4-07DEA3C61E0A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Dusk.Tests", "Hex.Dusk.Tests\Hex.Dusk.Tests.csproj", "{D7C8DDB0-6981-4343-BDD7-B46504DB6253}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hex.Tests", "Hex.Tests\Hex.Tests.csproj", "{D7C8DDB0-6981-4343-BDD7-B46504DB6253}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
