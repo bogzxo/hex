@@ -28,7 +28,7 @@ internal sealed partial class HexScene
         // C# is debugged, and while something is being debugged F5 goes on from where it stopped
         if (DebugStopped || (!LayoutTools && IsCSharp(document.Path))) DebugOrContinue();
         else if (LayoutTools) PlayIntros();
-        else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && DefaultTask("run") is { } task) RunTask(task);
+        else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && tasks.DefaultTask("run") is { } task) tasks.Run(task);
         else RunCode();
     }
 

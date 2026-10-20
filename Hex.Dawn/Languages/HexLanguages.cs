@@ -163,7 +163,7 @@ internal sealed partial class HexLanguages
     private void RestartServer(HexServerEntry entry)
     {
         StopServer(entry);
-        foreach (HexDocument of in context.Documents.Open.ToList())
+        foreach (HexDocument of in context.Documents.All.ToList())
         {
             if (of.Path is { } path && !linters.ContainsKey(of)
                 && entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase)))

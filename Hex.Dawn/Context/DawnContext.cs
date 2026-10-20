@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, HexCommands commands, HexOptions options, Action wake)
+    ISettingsHost settings, ITerminals terminals, HexCommands commands, HexOptions options, Action wake)
 {
     public IDocuments Documents { get; } = documents;
     public IWorkspace Workspace { get; } = workspace;
@@ -21,6 +21,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public IWork Work { get; } = work;
     public IWindows Windows { get; } = windows;
     public ISettingsHost Settings { get; } = settings;
+    public ITerminals Terminals { get; } = terminals;
     public HexCommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
@@ -40,7 +41,10 @@ internal delegate UICompletionRequest? HexCompletionSource(HexDocument of, CodeE
 internal interface IDocuments
 {
     /// <summary>Every document that is open, in the order of their tabs.</summary>
-    IReadOnlyList<HexDocument> Open { get; }
+    IReadOnlyList<HexDocument> All { get; }
+
+    /// <summary>Opens a file and shows it, the tab it has when it's open already. False when it couldn't be read.</summary>
+    bool Open(string path);
 
     /// <summary>The open document of a file, by its path, null when it isn't open.</summary>
     HexDocument? OpenAt(string path);
@@ -69,6 +73,9 @@ internal interface IWorkspace
 {
     /// <summary>The workspace's folders, none for no workspace.</summary>
     IReadOnlyList<string> Folders { get; }
+
+    /// <summary>The folders things are looked for in, the workspace's, or the repository Hex runs from without one.</summary>
+    IReadOnlyList<string> Roots { get; }
 
     /// <summary>More folders to watch than the workspace's, asked whenever what is watched is put together again.</summary>
     void WatchToo(Func<IEnumerable<string>> folders);
@@ -133,6 +140,12 @@ internal interface IWindows
     /// <summary>Hex's own dialog for a file to open, from a folder, something done with the one picked.</summary>
     void ChooseFile(string title, string folder, (string Name, string Pattern)[] filter, Action<string> picked);
 
+    /// <summary>
+    /// One of a list of things to pick, narrowed down by what is typed (the palette's list), something done with the one
+    /// picked.
+    /// </summary>
+    void Choose(string title, string message, List<(string Text, Action Picked)> choices);
+
     /// <summary>The folder the dialogs start in when nothing says another.</summary>
     string BrowseFolder { get; }
 }
@@ -154,4 +167,14 @@ internal interface ISettingsHost
 
     /// <summary>A row of the window read again, while it is up.</summary>
     void Refresh(string key);
+}
+
+/// <summary>The terminal page under the editor, its tabs.</summary>
+internal interface ITerminals
+{
+    /// <summary>
+    /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
+    /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
+    /// </summary>
+    void RunInTab(string key, string title, string folder, string commandLine);
 }

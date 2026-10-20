@@ -199,7 +199,7 @@ internal sealed partial class HexScene : Scene
         AddCodeCommands();
         AddDebuggingCommands();
         AddHelpCommands();
-        BuildTasks();
+        tasks = new HexTasks(Context);
         languages.StartChecks();
         BuildEffects();
         BuildModes();

@@ -11,15 +11,16 @@ namespace Hex.Dawn;
 // The scene as what the parts of the editor with a class of their own are handed (DawnContext). Each of these is the
 // scene's own doing passed on, what's new is the events and the sources the parts add, which the rest of the scene
 // raises and asks at the moments it used to call into them by name.
-internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost
+internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals
 {
     private DawnContext? context;
 
     // The parts with a class of their own, made with the context
     private HexLanguages languages = null!;
+    private HexTasks tasks = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
-    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, commands, options, () => Engine.WindowManager.Wake());
+    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, commands, options, () => Engine.WindowManager.Wake());
 
     /* The documents */
 
@@ -27,7 +28,8 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
     private readonly List<HexCompletionSource> completionSources = [];
 
-    IReadOnlyList<HexDocument> IDocuments.Open => documents;
+    IReadOnlyList<HexDocument> IDocuments.All => documents;
+    bool IDocuments.Open(string path) => Open(path);
 
     HexDocument? IDocuments.OpenAt(string path)
     {
@@ -50,6 +52,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     private Action<string>? folderDeleting;
 
     IReadOnlyList<string> IWorkspace.Folders => workspace.Folders;
+    IReadOnlyList<string> IWorkspace.Roots => WorkspaceRoots();
     void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
     void IWorkspace.Rewatch() => WatchFolders();
     event Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>> IWorkspace.FilesChanged { add => filesChanged += value; remove => filesChanged -= value; }
@@ -87,6 +90,7 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void IWindows.ChooseFile(string title, string folder, (string Name, string Pattern)[] filter, Action<string> picked) =>
         Ask(HexDialogs.OpenFile(title, folder, filter, DialogHost), picked);
     string IWindows.BrowseFolder => browseDirectory;
+    void IWindows.Choose(string title, string message, List<(string Text, Action Picked)> choices) => ChooseFrom(title, message, choices);
 
     /// <summary>A page in the browser the system has.</summary>
     private void OpenInBrowser(string url)
@@ -111,4 +115,28 @@ internal sealed partial class HexScene : IDocuments, IWorkspace, INotices, IWork
     void ISettingsHost.AddSource(Func<ISettingsSource> source, string? section, Func<UIComponent>? panel, Action? opened, Action? closed) =>
         settingSources.Add((source, section, panel, opened, closed));
     void ISettingsHost.Refresh(string key) => SettingsPage?.Refresh(key);
+
+    /* The terminal page */
+
+    void ITerminals.RunInTab(string key, string title, string folder, string commandLine)
+    {
+        ShowPanel(CONSOLE_PAGE);
+        string line = commandLine + "\r";
+
+        TerminalTab? tab = terminalPanel.Tabs.FirstOrDefault(open => open.Tag is string was && was == key);
+        if (tab?.Views.FirstOrDefault() is { IsRunning: true } view)
+        {
+            terminalPanel.Select(tab);
+            terminalPanel.FocusPane(view);
+            view.Send(line);
+            return;
+        }
+
+        if (tab is not null)
+            terminalPanel.CloseTab(tab);
+        tab = terminalPanel.NewTab(terminals.UsualProfile, folder);
+        tab.Tag = key;
+        tab.Renamed = title;
+        tab.Views.FirstOrDefault()?.SendWhenReady(line);
+    }
 }

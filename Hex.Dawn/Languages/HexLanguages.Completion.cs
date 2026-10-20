@@ -103,7 +103,7 @@ internal sealed partial class HexLanguages
 
             // Only for the word it was asked about, the caret having gone somewhere else is the end of it
             CodeEditor editor = answer.Of.Editor;
-            if (!editor.IsFocused || !context.Documents.Open.Contains(answer.Of))
+            if (!editor.IsFocused || !context.Documents.All.Contains(answer.Of))
                 continue;
 
             UITextPosition caret = editor.Document.Caret;
