@@ -9,7 +9,7 @@
     <!-- AttachConsole for the help, LibraryImport writes unsafe code for it -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <OutputType>Exe</OutputType>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
 
     <!-- The exe's icon in Explorer, the windows get their own at run time (WindowIcon) -->
     <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>

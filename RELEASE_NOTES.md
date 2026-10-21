@@ -1,4 +1,4 @@
-# Hex 0.3.0
+# Hex 0.4.0
 
 Hex is the editor of [Horizon](https://github.com/bogzxo/horizon), the engine, and the IDE of HIDL, the language its
 games, layouts and skins are written in. It's one program with two sides. Started plainly it is **Dawn**, the editor.
@@ -64,11 +64,25 @@ compiled ahead of time, so nothing else needs installing to run it, .NET include
 - **macOS** 11 or later on Apple silicon. Vulkan is MoltenVK, which comes with it. Hex isn't signed, so macOS stops a
   downloaded copy from starting until `xattr -dr com.apple.quarantine Hex` is run on the unpacked folder.
 
-Settings are kept in `%AppData%\Hex`, `~/.config/hex` and `~/Library/Application Support/Hex`.
+Hex keeps everything of its own next to itself, its settings in `settings`, what it keeps in `data` and its compiled
+shaders in `cache`, so a copy carried about takes all of it along. Where it can't write next to itself (a system
+folder) it's `%AppData%\Hex`, `~/.config/hex` and `~/Library/Application Support/Hex` as before.
 
 ## In this release
 
-- Built on .NET 11.
-- C# coloured the way Visual Studio colours it, the control keywords apart from the others.
-- Builds for Windows, Linux and macOS on every push to master, and a release for every version tag.
-- The published Hex starts again, it had stopped at the start on a debugger that a Release build doesn't have.
+- Everything Hex says comes out of its strings file, `Assets/hex/localisation/en-gb.hor`, every menu, notice, dialog,
+  tooltip and setting, so another language is another file.
+- The release notes come from Hex's releases on GitHub, with the history from before them underneath.
+- A Motion section in the settings, how quick the interface moves and how long the caret takes to glide, 0 for nothing
+  moving at all, and in Dusk how long the cursor glides.
+- A preview under the glass sliders that shows what they make as they move. Frosted glass is see through again, it had
+  come out as a solid panel.
+- Settings, data and shader caches next to Hex, see above. The shader cache knows the compiler it was made with and
+  clears out what hasn't been used for a month, and the driver's pipeline cache is kept as it's made.
+- Neither side asks the system about gamepads any more, a broken controller driver had held Hex's window up for a minute.
+- Dusk starts straight away on a machine with WSL but no distribution (it had waited on `wsl` and the profiles plugin
+  failed), and `wsl` gets two seconds to answer, once a run.
+- Up in Dusk brings back the command that was run, as it was run, it had come back scrambled after an edit in the
+  middle of the line. Micro scrolling a long file no longer leaves letters smeared between the rows.
+- Tab completes git, dotnet and friends in Dusk.
+- On Linux and macOS a shell's first line is no longer lost before the terminal is listening.
