@@ -1,3 +1,4 @@
+using Hex.Shell;
 using Horizon.UI.Components;
 
 namespace Hex.Dusk;
@@ -25,7 +26,7 @@ internal sealed partial class DuskScene
         }
         catch (Exception e)
         {
-            Say($"the tabs of last time didn't come back, {e.Message}", error: true);
+            Say(HexText.Get("dusk_session.restore_failed", ("message", e.Message)), error: true);
             return false;
         }
     }
@@ -62,7 +63,7 @@ internal sealed partial class DuskScene
         }
         catch (Exception e)
         {
-            Say($"the tabs couldn't be kept for next time, {e.Message}", error: true);
+            Say(HexText.Get("dusk_session.save_failed", ("message", e.Message)), error: true);
         }
     }
 }

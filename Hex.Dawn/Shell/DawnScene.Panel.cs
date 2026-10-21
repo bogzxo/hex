@@ -219,7 +219,7 @@ internal sealed partial class DawnScene
         }
 
         if (problemList.Count == 0)
-            Hint(problems, workspaceProblems is null ? "nothing wrong with this file, F8 checks every file of the workspace" : "nothing wrong anywhere");
+            Hint(problems, workspaceProblems is null ? Said("panel_tabs.nothing_wrong_here") : Said("panel_tabs.nothing_wrong_anywhere"));
 
         FitRowsTo(problems, problemsScroll);
     }
@@ -263,8 +263,8 @@ internal sealed partial class DawnScene
     private void ShowProblemMenu(HexProblem problem)
     {
         var shown = new Menu("problem");
-        shown.Add("Go there", () => OpenAt(problem.Path, problem.Line, problem.Column), icon: "go-to-file");
-        shown.Add("Copy it", () => UIClipboard.Copy($"{problem.Path}:{problem.Line + 1}  {problem.Text}"), icon: "copy");
+        shown.Add(Said("panel_tabs.go_there"), () => OpenAt(problem.Path, problem.Line, problem.Column), icon: "go-to-file");
+        shown.Add(Said("panel_tabs.copy_it"), () => UIClipboard.Copy($"{problem.Path}:{problem.Line + 1}  {problem.Text}"), icon: "copy");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 

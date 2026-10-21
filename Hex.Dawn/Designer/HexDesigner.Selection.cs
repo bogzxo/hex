@@ -155,7 +155,7 @@ internal sealed partial class HexDesigner
 
         Select(null);
         treeDirty = codeDirty = true;
-        context.Notices.Say(gone.Count == 1 ? "deleted it" : $"deleted {gone.Count} things");
+        context.Notices.Say(gone.Count == 1 ? context.Strings.Said("designer_selection.deleted_one") : context.Strings.Said("designer_selection.deleted_many", ("count", gone.Count.ToString())));
     }
 
     private void GroupSelected()
@@ -168,7 +168,7 @@ internal sealed partial class HexDesigner
 
         Select(group);
         treeDirty = codeDirty = true;
-        context.Notices.Say($"grouped {group.Children.Count} things as {document.NameOf(group)}, click again to get at what's in it");
+        context.Notices.Say(context.Strings.Said("designer_selection.grouped", ("count", group.Children.Count.ToString()), ("name", document.NameOf(group))));
     }
 
     private void UngroupSelected()
@@ -176,7 +176,7 @@ internal sealed partial class HexDesigner
         var groups = document.TopSelection().OfType<Group>().ToList();
         if (groups.Count == 0)
         {
-            context.Notices.Say("there's no group selected to take apart", error: true);
+            context.Notices.Say(context.Strings.Said("designer_selection.no_group"), error: true);
             return;
         }
 
@@ -190,20 +190,20 @@ internal sealed partial class HexDesigner
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        context.Notices.Say($"took {groups.Count} group{(groups.Count == 1 ? string.Empty : "s")} apart");
+        context.Notices.Say(context.Strings.Said(groups.Count == 1 ? "designer_selection.ungrouped_one" : "designer_selection.ungrouped_many", ("count", groups.Count.ToString())));
     }
 
-    // What a container can be changed into, the kind, whether a stack runs across, and what the menu calls it
+    // What a container can be changed into, the kind, whether a stack runs across, and the key of what the menu calls it
     private static readonly (string Kind, bool Across, string Label)[] Containers =
     [
-        ("stack", false, "Stack, down"),
-        ("stack", true, "Stack, across"),
-        ("grid", false, "Grid"),
-        ("panel", false, "Panel"),
-        ("scroll", false, "Scroll"),
-        ("collapsible", false, "Collapsible"),
-        ("tabs", false, "Tabs, a page each"),
-        ("group", false, "Group")
+        ("stack", false, "designer_selection.stack_down"),
+        ("stack", true, "designer_selection.stack_across"),
+        ("grid", false, "designer_selection.grid"),
+        ("panel", false, "designer_selection.panel"),
+        ("scroll", false, "designer_selection.scroll"),
+        ("collapsible", false, "designer_selection.collapsible"),
+        ("tabs", false, "designer_selection.tabs"),
+        ("group", false, "designer_selection.group")
     ];
 
     /// <summary>Whether the one selected is a container that is already this kind, which isn't offered as a change.</summary>
@@ -216,7 +216,7 @@ internal sealed partial class HexDesigner
     {
         foreach (var (kind, across, label) in Containers)
         {
-            into.Add(label, () => ConvertSelected(kind, across), icon: KindIcon(kind)).IsEnabled =
+            into.Add(context.Strings.Said(label), () => ConvertSelected(kind, across), icon: KindIcon(kind)).IsEnabled =
                 () => document.Selected is { } selected && HexDocument.IsContainer(selected) && !IsAlready(kind, across);
         }
     }
@@ -236,7 +236,8 @@ internal sealed partial class HexDesigner
 
         Select(made);
         treeDirty = codeDirty = inspectorDirty = true;
-        context.Notices.Say($"{document.NameOf(made)} is a {kind}{(kind == "stack" ? (across ? " across" : " down") : string.Empty)} now, it was a {was}, Ctrl+Z puts it back");
+        string converted = kind == "stack" ? (across ? "designer_selection.converted_across" : "designer_selection.converted_down") : "designer_selection.converted";
+        context.Notices.Say(context.Strings.Said(converted, ("name", document.NameOf(made)), ("kind", kind), ("was", was)));
     }
 
     private void DuplicateSelected()
@@ -251,7 +252,7 @@ internal sealed partial class HexDesigner
             if (document.Duplicate(original, out string problem) is { } copy)
                 copies.Add(copy);
             else
-                context.Notices.Say($"couldn't copy {document.NameOf(original)}: {problem}", error: true);
+                context.Notices.Say(context.Strings.Said("designer_selection.copy_failed", ("name", document.NameOf(original)), ("problem", problem)), error: true);
         }
 
         if (copies.Count == 0)
@@ -263,7 +264,7 @@ internal sealed partial class HexDesigner
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        context.Notices.Say(copies.Count == 1 ? $"copied it as {document.NameOf(copies[0])}" : $"copied {copies.Count} things");
+        context.Notices.Say(copies.Count == 1 ? context.Strings.Said("designer_selection.copied_one", ("name", document.NameOf(copies[0]))) : context.Strings.Said("designer_selection.copied_many", ("count", copies.Count.ToString())));
     }
 
     private void ReorderSelected(HexDocument.Order order)
@@ -293,7 +294,7 @@ internal sealed partial class HexDesigner
         }
 
         MarkSelection();
-        context.Notices.Say($"selected {document.Selection.Count} things");
+        context.Notices.Say(context.Strings.Said("designer_selection.selected_count", ("count", document.Selection.Count.ToString())));
     }
 
     private void SelectParent()
@@ -309,7 +310,7 @@ internal sealed partial class HexDesigner
 
         if (document.Add("stack", tabs) is { } page)
         {
-            tabs.Tabs = [.. tabs.Tabs, $"Page {tabs.Children.Count}"];
+            tabs.Tabs = [.. tabs.Tabs, context.Strings.Said("designer_selection.page", ("number", tabs.Children.Count.ToString()))];
             tabs.Selected = tabs.Children.Count - 1;
             Select(page);
             treeDirty = codeDirty = true;
@@ -329,7 +330,7 @@ internal sealed partial class HexDesigner
         if (File.Exists(file))
             context.Documents.Open(file);
         else
-            context.Notices.Say($"there's no {include.File} next to the layout", error: true);
+            context.Notices.Say(context.Strings.Said("designer_selection.no_include", ("file", include.File)), error: true);
     }
 
     private Menu ComponentMenu()
@@ -337,36 +338,36 @@ internal sealed partial class HexDesigner
         var shown = new Menu("component");
         Func<bool> any = () => document.Selection.Count > 0;
 
-        shown.Add("Cut", CutSelected, "Ctrl+X").IsEnabled = any;
-        shown.Add("Copy", CopySelected, "Ctrl+C", "copy").IsEnabled = any;
-        shown.Add("Paste", Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
-        shown.Add("Duplicate", DuplicateSelected, "Ctrl+D", "copy").IsEnabled = any;
-        shown.Add("Delete", DeleteAll, "Del", "trash").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.copy"), CopySelected, "Ctrl+C", "copy").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
+        shown.Add(context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", "copy").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash").IsEnabled = any;
         shown.AddSeparator();
 
         // What goes inside of the one selected, a menu of the kinds
-        Menu inside = shown.AddMenu("Add Inside", "add");
+        Menu inside = shown.AddMenu(context.Strings.Said("designer_selection.add_inside"), "add");
         foreach (string kind in Palette)
             inside.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
 
-        AddMoveMenu(shown.AddMenu("Move", "arrow-swap"), any);
-        AddArrangeMenu(shown.AddMenu("Arrange", "layers"), any);
-        AddAlignMenu(shown.AddMenu("Align", "symbol-ruler"), any);
+        AddMoveMenu(shown.AddMenu(context.Strings.Said("designer_selection.move"), "arrow-swap"), any);
+        AddArrangeMenu(shown.AddMenu(context.Strings.Said("designer_selection.arrange"), "layers"), any);
+        AddAlignMenu(shown.AddMenu(context.Strings.Said("designer_selection.align"), "symbol-ruler"), any);
         shown.AddSeparator();
-        shown.Add("Open Included File", OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
-        shown.Add("Group", GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
-        shown.Add("Ungroup", UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
+        shown.Add(context.Strings.Said("designer_selection.open_included"), OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
+        shown.Add(context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
 
         // A container, a group above all, can be had as any other kind of container, what is in it and all
         if (document.Selected is { } container && HexDocument.IsContainer(container))
-            AddConvertMenu(shown.AddMenu("Change into", "arrow-swap"));
+            AddConvertMenu(shown.AddMenu(context.Strings.Said("designer_selection.change_into"), "arrow-swap"));
         shown.AddSeparator();
-        shown.Add("Select parent", SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
-        shown.Add("Select all", SelectAll, "Ctrl+A");
-        shown.Add("Its code", ShowSelectedCode, icon: "code").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.select_parent"), SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
+        shown.Add(context.Strings.Said("designer_selection.select_all_short"), SelectAll, "Ctrl+A");
+        shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, icon: "code").IsEnabled = any;
 
         if (document.Selected is TabPanel)
-            shown.Add("Add a page", AddPage, icon: "add");
+            shown.Add(context.Strings.Said("designer_selection.add_page"), AddPage, icon: "add");
 
         return shown;
     }
@@ -400,34 +401,34 @@ internal sealed partial class HexDesigner
         Func<bool> some = () => LayoutTools && document.Selected is not null;
 
         // The clipboard, which a text box keeps for itself while it is being typed into
-        commands.Add("Edit/clipboard", "Cut", CutSelected, "Ctrl+X", use: UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Copy", CopySelected, "Ctrl+C", "copy", UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Paste", Paste, "Ctrl+V", use: UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Duplicate", DuplicateSelected, "Ctrl+D", use: UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", "Delete", DeleteAll, "Del", "trash", UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.copy"), CopySelected, "Ctrl+C", "copy", UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash", UIKeyUse.Bound).IsVisible = design;
 
-        commands.Add("View/zoom", "Zoom In", () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
-        commands.Add("View/zoom", "Zoom Out", () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
-        commands.Add("View/zoom", "Zoom to Fit", ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
-        commands.Add("View/zoom", "Actual Size", ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_in"), () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
+        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_out"), () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
+        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_to_fit"), ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
+        commands.Add("View/zoom", context.Strings.Said("designer_selection.actual_size"), ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
 
-        commands.Add("Run/run", "Play Entrances", PlayIntros, "F5", "play").IsVisible = design;
+        commands.Add("Run/run", context.Strings.Said("designer_selection.play_entrances"), PlayIntros, "F5", "play").IsVisible = design;
 
         commands.ShowMenuWhen("Layout", design);
-        Menu add = commands.AddMenu("Layout/add", "Add", "add");
+        Menu add = commands.AddMenu("Layout/add", context.Strings.Said("designer_selection.add"), "add");
         foreach (string kind in Palette)
             add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
-        commands.Add("Layout/group", "Group", GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
-        commands.Add("Layout/group", "Ungroup", UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
-        AddConvertMenu(commands.AddMenu("Layout/group", "Convert To", "arrow-swap"));
-        AddMoveMenu(commands.AddMenu("Layout/move", "Move", "arrow-swap"), some);
-        AddArrangeMenu(commands.AddMenu("Layout/move", "Arrange", "layers"), some);
-        AddAlignMenu(commands.AddMenu("Layout/move", "Align", "symbol-ruler"), some);
-        commands.Add("Layout/select", "Select All", SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
-        commands.Add("Layout/select", "Deselect All", () => Select(null), "Esc").IsEnabled = some;
-        commands.Add("Layout/select", "Show All Layers", ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
-        commands.Add("Layout/select", "Show Code", ShowSelectedCode, icon: "code").IsEnabled = some;
-        FillScreenMenu(commands.AddMenu("Layout/screen", "Screen", "device-desktop"));
+        commands.Add("Layout/group", context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
+        AddConvertMenu(commands.AddMenu("Layout/group", context.Strings.Said("designer_selection.convert_to"), "arrow-swap"));
+        AddMoveMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.move"), "arrow-swap"), some);
+        AddArrangeMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.arrange"), "layers"), some);
+        AddAlignMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.align"), "symbol-ruler"), some);
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.select_all"), SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.deselect_all"), () => Select(null), "Esc").IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_all_layers"), ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_code"), ShowSelectedCode, icon: "code").IsEnabled = some;
+        FillScreenMenu(commands.AddMenu("Layout/screen", context.Strings.Said("designer_selection.screen"), "device-desktop"));
 
         // Escape puts away the little window on top first (the settings, a page of help), then what is selected
         commands.Bind(Key.Escape, () => { if (!window.CloseTopWindow()) Select(null); });
@@ -452,33 +453,33 @@ internal sealed partial class HexDesigner
     /// <summary>The ways to move what is selected about the tree, for the Layout menu and the menu of a component.</summary>
     private void AddMoveMenu(Menu into, Func<bool> some)
     {
-        into.Add("Move Up", () => MoveSelected(-1), "Ctrl+Up", "arrow-up").IsEnabled = some;
-        into.Add("Move Down", () => MoveSelected(1), "Ctrl+Down", "arrow-down").IsEnabled = some;
-        into.Add("Move Out", () => MoveSelectedAcross(inwards: false), "Ctrl+Left", "arrow-left").IsEnabled = some;
-        into.Add("Move In", () => MoveSelectedAcross(inwards: true), "Ctrl+Right", "arrow-right").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.move_up"), () => MoveSelected(-1), "Ctrl+Up", "arrow-up").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.move_down"), () => MoveSelected(1), "Ctrl+Down", "arrow-down").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.move_out"), () => MoveSelectedAcross(inwards: false), "Ctrl+Left", "arrow-left").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.move_in"), () => MoveSelectedAcross(inwards: true), "Ctrl+Right", "arrow-right").IsEnabled = some;
     }
 
     private void AddArrangeMenu(Menu into, Func<bool> some)
     {
-        into.Add("Bring to Front", () => ReorderSelected(HexDocument.Order.Front), "Ctrl+]").IsEnabled = some;
-        into.Add("Bring Forward", () => ReorderSelected(HexDocument.Order.Forward), "]").IsEnabled = some;
-        into.Add("Send Backward", () => ReorderSelected(HexDocument.Order.Backward), "[").IsEnabled = some;
-        into.Add("Send to Back", () => ReorderSelected(HexDocument.Order.Back), "Ctrl+[").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.bring_to_front"), () => ReorderSelected(HexDocument.Order.Front), "Ctrl+]").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.bring_forward"), () => ReorderSelected(HexDocument.Order.Forward), "]").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.send_backward"), () => ReorderSelected(HexDocument.Order.Backward), "[").IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.send_to_back"), () => ReorderSelected(HexDocument.Order.Back), "Ctrl+[").IsEnabled = some;
     }
 
     /// <summary>Lining up is against each other with several things selected, against the container with one.</summary>
     private void AddAlignMenu(Menu into, Func<bool> some)
     {
-        into.Add("Align Left", () => Align(Edge.Left)).IsEnabled = some;
-        into.Add("Align Centre", () => Align(Edge.Center)).IsEnabled = some;
-        into.Add("Align Right", () => Align(Edge.Right)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_left"), () => Align(Edge.Left)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_centre"), () => Align(Edge.Center)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_right"), () => Align(Edge.Right)).IsEnabled = some;
         into.AddSeparator();
-        into.Add("Align Top", () => Align(Edge.Top)).IsEnabled = some;
-        into.Add("Align Middle", () => Align(Edge.Middle)).IsEnabled = some;
-        into.Add("Align Bottom", () => Align(Edge.Bottom)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_top"), () => Align(Edge.Top)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_middle"), () => Align(Edge.Middle)).IsEnabled = some;
+        into.Add(context.Strings.Said("designer_selection.align_bottom"), () => Align(Edge.Bottom)).IsEnabled = some;
         into.AddSeparator();
-        into.Add("Distribute Horizontally", () => Distribute(horizontally: true)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
-        into.Add("Distribute Vertically", () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
+        into.Add(context.Strings.Said("designer_selection.distribute_horizontally"), () => Distribute(horizontally: true)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
+        into.Add(context.Strings.Said("designer_selection.distribute_vertically"), () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
     }
 
     /// <summary>The code of the layout, with the caret on the let of what is selected.</summary>

@@ -39,7 +39,7 @@ internal sealed partial class DawnScene
             open.Editor.TextScale = HexDesigner.EDITOR_TEXT * zoom;
 
         SaveSettings();
-        Say($"the code is at {zoom * 100.0f:0}%, Ctrl+0 puts it back");
+        Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
     /// <summary>The size a window is best read at when nobody has said. Bigger on a bigger screen.</summary>
@@ -86,7 +86,7 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
-            Say($"couldn't keep the scale for next time: {e.Message}", error: true);
+            Say(Said("chrome.scale_not_kept", ("reason", e.Message)), error: true);
         }
     }
 

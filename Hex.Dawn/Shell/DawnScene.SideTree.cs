@@ -63,7 +63,7 @@ internal sealed partial class DawnScene
             items.Add(FolderItem(new ExplorerEntry(folder, true, 0, true)));
 
         if (items.Count == 0)
-            items.Add(NoteItem("no folders, File has Add folder", DimColor));
+            items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
 
         sideTree.Items = items;
         ShowOpenInExplorer();
@@ -229,7 +229,7 @@ internal sealed partial class DawnScene
             var item = new UITreeItem(entry.Name, entry.Icon)
             {
                 IconColor = OutlineColor(entry.Icon),
-                Tooltip = $"line {entry.Line + 1}",
+                Tooltip = Said("side_tree.outline_line", ("line", (entry.Line + 1).ToString())),
                 Expanded = !outlineClosed.Contains(key),
                 Tag = new SideTag(
                     Pressed: () =>
@@ -253,7 +253,7 @@ internal sealed partial class DawnScene
         }
 
         if (items.Count == 0)
-            items.Add(NoteItem("nothing declared in here", DimColor));
+            items.Add(NoteItem(Said("side_tree.outline_empty"), DimColor));
 
         // Opening a row only shows what is in it, it doesn't go there, the way an outline does
         sideTree.Items = items;
@@ -318,7 +318,7 @@ internal sealed partial class DawnScene
             file.Detail = file.Children!.Count.ToString();
 
         if (items.Count == 0)
-            items.Add(NoteItem("nothing", DimColor));
+            items.Add(NoteItem(Said("side_tree.results_empty"), DimColor));
 
         sideTree.Items = items;
     }

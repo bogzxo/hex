@@ -57,10 +57,10 @@ internal sealed partial class HexCodeEditing
         made.Get<Button>("replace_one").OnPressed = ReplaceOne;
         made.Get<Button>("replace_all").OnPressed = ReplaceEvery;
 
-        commands.Add("Edit/find", "Find...", FindInFile, "Ctrl+F", "search", UIKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Find Next", () => FindAgain(forward: true), "F3", use: UIKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Find Previous", () => FindAgain(forward: false), "Shift+F3", use: UIKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", "Replace...", ReplaceInFile, "Ctrl+H", "replace", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.find"), FindInFile, "Ctrl+F", "search", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_next"), () => FindAgain(forward: true), "F3", use: UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_previous"), () => FindAgain(forward: false), "Shift+F3", use: UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.replace"), ReplaceInFile, "Ctrl+H", "replace", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
 
         // While the bar is open, from the boxes and from the code
         commands.Bind(Key.C, () => { if (FindBarOpen) ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase }); }, whileTyping: true, alt: true);
@@ -171,7 +171,9 @@ internal sealed partial class HexCodeEditing
             return;
 
         if (!code.FindNext(forward))
-            context.Notices.Say(code.FindError is { } bad ? $"'{lastFind}' isn't a regex that works, {bad}" : $"no '{lastFind}' in {document.Name}", error: true);
+            context.Notices.Say(code.FindError is { } bad
+                ? context.Strings.Said("code_findbar.bad_regex", ("query", lastFind), ("error", bad.ToString()))
+                : context.Strings.Said("code_findbar.not_found", ("query", lastFind), ("file", document.Name)), error: true);
         findStart = code.Document.SelectionStart;
         UpdateFindCount();
     }
@@ -192,7 +194,9 @@ internal sealed partial class HexCodeEditing
             return;
 
         int count = code.ReplaceAll(replaceBox.Text);
-        context.Notices.Say(count > 0 ? $"replaced {count} of '{lastFind}', Ctrl+Z puts them back" : $"no '{lastFind}' in {document.Name}", error: count == 0);
+        context.Notices.Say(count > 0
+            ? context.Strings.Said("code_findbar.replaced", ("count", count.ToString()), ("query", lastFind))
+            : context.Strings.Said("code_findbar.not_found", ("query", lastFind), ("file", document.Name)), error: count == 0);
         UpdateFindCount();
     }
 

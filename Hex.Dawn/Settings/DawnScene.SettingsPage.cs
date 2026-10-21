@@ -60,6 +60,9 @@ internal sealed partial class DawnScene
         }
 
         AddExtensionSections(settingsView);
+
+        // The glass under its sliders, as they make it while they're dragged
+        settingsView.SetPanel(EditorSettingsCatalog.EFFECTS, new GlassPreview(640.0f) { Look = () => (PopupGlass, SideGlass, Glassy) });
         foreach (var added in settingSources)
             added.Opened?.Invoke();
 
@@ -130,14 +133,14 @@ internal sealed partial class DawnScene
 
         public IReadOnlyList<UISetting> Settings { get; } =
         [
-            new("editor_skin", "Dawn's theme", UIFormKind.Choice, "The skin and the theme Dawn is drawn in, Dusk's is the next row.", EditorSettingsCatalog.THEME,
+            new("editor_skin", Said("settings_page.dawn_theme"), UIFormKind.Choice, Said("settings_page.dawn_theme_help"), EditorSettingsCatalog.THEME,
                 [.. EditorSkins().Select(choice => choice.Text)]),
             .. EditorSettingsCatalog.Settings,
-            new("size", "Size", UIFormKind.Choice, "How big Dawn's own parts are drawn, the menus, the tabs and the panels.", PANELS, [.. Scales.Select(DescribeScale)]),
-            new("panels", "Panels", UIFormKind.Text, "The side bar, the right side and the panel under the editor back at the sizes they come at.", PANELS, Buttons: ["Put back"], ButtonsOnly: true),
-            new("layout_skin", "Layouts are shown in", UIFormKind.Choice, "The skin and the theme the designer shows a layout in, the game's own setting and not Dawn's.", EditorSettingsCatalog.DESIGNER,
+            new("size", Said("settings_page.size"), UIFormKind.Choice, Said("settings_page.size_help"), PANELS, [.. Scales.Select(DescribeScale)]),
+            new("panels", Said("settings.editor.panels"), UIFormKind.Text, Said("settings_page.panels_help"), PANELS, Buttons: [Said("settings_page.put_back")], ButtonsOnly: true),
+            new("layout_skin", Said("settings_page.layout_skin"), UIFormKind.Choice, Said("settings_page.layout_skin_help"), EditorSettingsCatalog.DESIGNER,
                 [.. LayoutSkins().Select(choice => choice.Text)]),
-            new("disabled_extensions", "Switched off", UIFormKind.Flags, "The extensions that are off, the rest run. Each one that is on and has settings of its own has a section of them under this.", EXTENSIONS,
+            new("disabled_extensions", Said("settings_page.switched_off"), UIFormKind.Flags, Said("settings_page.switched_off_help"), EXTENSIONS,
                 [.. hex.extensions.All.Select(extension => extension.Id)])
         ];
 
@@ -177,6 +180,8 @@ internal sealed partial class DawnScene
             "glass_clarity" => new NumberValue(hex.settings.GlassClarity),
             "glass_rim" => new NumberValue(hex.settings.GlassRim),
             "glass_bend" => new NumberValue(hex.settings.GlassBend),
+            "ui_animation" => new NumberValue(hex.settings.UiAnimation),
+            "caret_glide" => new NumberValue(hex.settings.CaretGlide),
             "trim_whitespace" => Values.Bool(hex.settings.TrimWhitespace),
             "final_newline" => Values.Bool(hex.settings.FinalNewline),
             "auto_save" => Values.Bool(hex.settings.AutoSave),
@@ -326,6 +331,14 @@ internal sealed partial class DawnScene
                     break;
                 case ("glass_bend", NumberValue bend):
                     settings.GlassBend = Math.Clamp(bend.Value, 0.0f, 24.0f);
+                    hex.ApplyEffects();
+                    break;
+                case ("ui_animation", NumberValue speed):
+                    settings.UiAnimation = Math.Clamp(speed.Value, 0.0f, 3.0f);
+                    hex.ApplyEffects();
+                    break;
+                case ("caret_glide", NumberValue glide):
+                    settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f);
                     hex.ApplyEffects();
                     break;
                 case ("trim_whitespace", BooleanValue trims):

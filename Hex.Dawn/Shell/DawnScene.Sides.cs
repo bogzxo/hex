@@ -105,6 +105,6 @@ internal sealed partial class DawnScene
         bottom.Size = bottom.Size with { Y = 180.0f };
         ApplyPanelSizes();
         SaveSettings();
-        Say("the panels are the size they come at");
+        Say(Said("sides.panels_reset"));
     }
 }

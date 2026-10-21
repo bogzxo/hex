@@ -52,7 +52,7 @@ internal sealed partial class HexCodeEditing
             gathering = true;
             List<string> roots = [.. context.Workspace.Roots];
             int generation = vocabularyGeneration;
-            context.Work.InBackground("gathering the names of the workspace...", () => Gather(roots), gathered =>
+            context.Work.InBackground(context.Strings.Said("code_completion.gathering_names"),() => Gather(roots), gathered =>
             {
                 if (generation != vocabularyGeneration)
                     return;
@@ -166,7 +166,7 @@ internal sealed partial class HexCodeEditing
         var (start, end) = doc.WordAt(caret);
         if (end <= start)
         {
-            context.Notices.Say("there is nothing at the caret to go to");
+            context.Notices.Say(context.Strings.Said("code_completion.nothing_to_go_to"));
             return;
         }
 
@@ -176,7 +176,7 @@ internal sealed partial class HexCodeEditing
         if (FindDeclaration(code.Text, word) is { } here)
         {
             code.GoTo(here.Line, here.Column);
-            context.Notices.Say($"{word} is declared on line {here.Line + 1}");
+            context.Notices.Say(context.Strings.Said("code_completion.declared_on_line", ("word", word), ("line", (here.Line + 1).ToString())));
             return;
         }
 
@@ -197,11 +197,14 @@ internal sealed partial class HexCodeEditing
                 continue;
 
             context.Documents.OpenAt(file, there.Line, there.Column);
-            context.Notices.Say($"{word} is declared in {context.Workspace.Relative(file)}, line {there.Line + 1}");
+            context.Notices.Say(context.Strings.Said("code_completion.declared_in_file", ("word", word), ("file", context.Workspace.Relative(file)), ("line", (there.Line + 1).ToString())));
             return;
         }
 
-        context.Notices.Say($"{word} isn't declared with a let anywhere in {DescribeRoots()}", error: true);
+        IReadOnlyList<string> roots = context.Workspace.Roots;
+        context.Notices.Say(roots.Count == 1
+            ? context.Strings.Said("code_completion.not_declared_in_folder", ("word", word), ("folder", roots[0]))
+            : context.Strings.Said("code_completion.not_declared_in_folders", ("word", word), ("count", roots.Count.ToString())), error: true);
     }
 
     /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
@@ -214,7 +217,7 @@ internal sealed partial class HexCodeEditing
         string file = Path.Combine(Localisation.Folder, Localisation.Language + ".hor");
         if (Localisation.Folder.Length == 0 || !File.Exists(file))
         {
-            context.Notices.Say("no language is loaded to look the key up in", error: true);
+            context.Notices.Say(context.Strings.Said("code_completion.no_language_loaded"), error: true);
             return;
         }
 
@@ -233,7 +236,9 @@ internal sealed partial class HexCodeEditing
         }
 
         context.Documents.OpenAt(file, Math.Min(line, lines.Length - 1), Math.Max(0, lines[Math.Min(line, lines.Length - 1)].Length - lines[Math.Min(line, lines.Length - 1)].TrimStart().Length));
-        context.Notices.Say(part == parts.Length ? $"{key} in {Localisation.Language}" : $"{Localisation.Language} has no {key}, this is as far as it goes", error: part != parts.Length);
+        context.Notices.Say(part == parts.Length
+            ? context.Strings.Said("code_completion.key_in_language", ("key", key), ("language", Localisation.Language))
+            : context.Strings.Said("code_completion.language_has_no_key", ("key", key), ("language", Localisation.Language)), error: part != parts.Length);
     }
 
     /// <summary>Shift+F12, every line of the workspace the word at the caret is on as a word of its own, listed on the left.</summary>
@@ -242,20 +247,14 @@ internal sealed partial class HexCodeEditing
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
-            context.Notices.Say("there is no word at the caret to look for");
+            context.Notices.Say(context.Strings.Said("code_completion.no_word_to_look_for"));
             return;
         }
 
         string word = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         List<HexResult> found = HexSearch.FindIn(context.Workspace.Roots, word, new UIFindOptions(WholeWord: true));
-        window.ShowResults($"WHERE {word} IS ({found.Count})", found);
-        context.Notices.Say($"{word} is on {found.Count} lines of {found.Select(result => result.Path).Distinct().Count()} files");
-    }
-
-    /// <summary>What is looked through, said the way a person would.</summary>
-    private string DescribeRoots()
-    {
-        IReadOnlyList<string> roots = context.Workspace.Roots;
-        return roots.Count == 1 ? roots[0] : $"the {roots.Count} folders of the workspace";
+        window.ShowResults(context.Strings.Said("code_completion.references_title", ("word", word), ("count", found.Count.ToString())), found);
+        context.Notices.Say(context.Strings.Said("code_completion.references_found", ("word", word), ("lines", found.Count.ToString()),
+            ("files", found.Select(result => result.Path).Distinct().Count().ToString())));
     }
 }

@@ -5,6 +5,8 @@ using Horizon.HIDL.Runtime;
 using Horizon.UI;
 using Horizon.UI.Components;
 
+using Hex.Shell;
+
 namespace Hex.Dusk;
 
 // What Dusk adds to the terminal object, on top of what every program's has (TerminalHost.CoreApi), and how it answers
@@ -63,7 +65,7 @@ internal sealed partial class DuskScene : ITerminalHostUi
 
     void ITerminalHostUi.AskText(string title, string message, string initial, Action<string> answered)
     {
-        UIDialog dialog = UIDialog.Show(chrome, title, message, new DialogChoice("OK"), new DialogChoice("Cancel"));
+        UIDialog dialog = UIDialog.Show(chrome, title, message, new DialogChoice(HexText.Get("dusk_plugins.ok")), new DialogChoice(HexText.Get("keys.leave_it")));
         var box = dialog.Body.Add(new TextBox { Text = initial, Size = new Vector2(360, 30), TextScale = 0.14f });
         dialog.Buttons[0].OnPressed = () =>
         {
@@ -83,7 +85,7 @@ internal sealed partial class DuskScene : ITerminalHostUi
     {
         bool opened = newWindow ? HexLauncher.Window(path) : Directory.Exists(path) ? HexLauncher.OpenFolder(path) : HexLauncher.Open(path);
         if (opened)
-            Say(newWindow ? $"a Dawn window on {Path.GetFileName(path)}" : $"{Path.GetFileName(path)} opened in Dawn");
+            Say(HexText.Get(newWindow ? "dusk_plugins.dawn_window_on" : "dusk_plugins.opened_in_dawn", ("name", Path.GetFileName(path))));
         return opened;
     }
 
@@ -92,14 +94,14 @@ internal sealed partial class DuskScene : ITerminalHostUi
     {
         if (HexLauncher.Open(path, line))
         {
-            Say($"{Path.GetFileName(path)} opened in Hex, Dusk takes it in as it is saved");
+            Say(HexText.Get("dusk_plugins.opened_in_hex", ("name", Path.GetFileName(path))));
             return true;
         }
 
         try
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
-            Say($"{Path.GetFileName(path)} opened, Dusk takes it in as it is saved");
+            Say(HexText.Get("dusk_plugins.opened_elsewhere", ("name", Path.GetFileName(path))));
             return true;
         }
         catch (Exception)

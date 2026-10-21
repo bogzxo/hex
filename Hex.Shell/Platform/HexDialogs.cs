@@ -9,15 +9,15 @@ namespace Hex.Shell;
 /// </summary>
 public static class HexDialogs
 {
-    private static readonly (string, string)[] Layouts = [("Horizon files (*.hor)", "*.hor")];
-    private static readonly (string, string)[] Workspaces = [("Hex workspaces (*.hex-workspace)", "*.hex-workspace")];
+    private static (string, string)[] Layouts => [(HexText.Get("dialogs.horizon_files"), "*.hor")];
+    private static (string, string)[] Workspaces => [(HexText.Get("dialogs.hex_workspaces"), "*.hex-workspace")];
 
-    public const string FOLDER_TITLE = "Pick a folder";
-    public const string OPEN_WORKSPACE_TITLE = "Open a workspace";
-    public const string SAVE_WORKSPACE_TITLE = "Save the workspace as";
+    public static string FOLDER_TITLE => HexText.Get("dialogs.folder_title");
+    public static string OPEN_WORKSPACE_TITLE => HexText.Get("dialogs.open_workspace_title");
+    public static string SAVE_WORKSPACE_TITLE => HexText.Get("dialogs.save_workspace_title");
 
-    public const string OPEN_TITLE = "Open a layout";
-    public const string SAVE_TITLE = "Save the layout as";
+    public static string OPEN_TITLE => HexText.Get("dialogs.open_title");
+    public static string SAVE_TITLE => HexText.Get("dialogs.save_title");
 
     /// <param name="directory">The folder it starts in.</param>
     public static Task<string?> Open(string directory, UIDialogHost host) => UIFileDialogs.Open(OPEN_TITLE, directory, Layouts, host);

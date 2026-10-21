@@ -145,7 +145,7 @@ dotnet build Hex/Hex.csproj
 Hex/bin/Debug/net11.0/Hex --selftest --exit --size 1600x900
 ```
 
-Hex runs on Windows, Linux and macOS, with the .NET 10 SDK on each.
+Hex runs on Windows, Linux and macOS, with the .NET 11 SDK on each.
 
 - **Windows** 10 1809 or later (the terminal is ConPTY). Nothing else.
 - **Linux**, Wayland or X11. It draws with Vulkan, so it wants the Vulkan loader and a driver (`libvulkan1` and

@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Shell;
+
 using Horizon.Engine;
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -65,9 +67,13 @@ internal sealed partial class DuskScene
 
     private void PanelChanged()
     {
-        string title = panel.Current?.Title ?? "Dusk";
-        top.Title = panel.Tabs.Count > 0 ? $"{title}  -  Dusk {VERSION}" : $"Dusk {VERSION}";
-        Engine.WindowManager.Title = panel.Tabs.Count > 0 ? $"{title} - Dusk" : "Dusk";
+        string title = panel.Current?.Title ?? HexText.Get("dusk_chrome.name");
+        top.Title = panel.Tabs.Count > 0
+            ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VERSION))
+            : HexText.Get("dusk_chrome.title", ("version", VERSION));
+        Engine.WindowManager.Title = panel.Tabs.Count > 0
+            ? HexText.Get("dusk_chrome.window_title_tab", ("title", title))
+            : HexText.Get("dusk_chrome.name");
 
         // The last tab closed closes the window, as a terminal does
         if (panel.Tabs.Count == 0 && !options.SelfTest)
@@ -77,16 +83,16 @@ internal sealed partial class DuskScene
     private void ShowTabMenu(TerminalTab tab, Vector2 point)
     {
         var shown = new Menu("tab");
-        shown.Add("Close", () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close");
-        shown.Add("Close the others", () =>
+        shown.Add(HexText.Get("tabs.close"), () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close");
+        shown.Add(HexText.Get("tabs.close_others"), () =>
         {
             foreach (TerminalTab other in panel.Tabs.ToArray())
                 if (other != tab) panel.CloseTab(other);
         }, icon: "close-all");
-        shown.Add("Rename", () => host.AskRename(tab), icon: "edit");
+        shown.Add(HexText.Get("code_hints.rename"), () => host.AskRename(tab), icon: "edit");
         shown.AddSeparator();
-        shown.Add("Move left", () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left");
-        shown.Add("Move right", () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right");
+        shown.Add(HexText.Get("dusk_chrome.move_left"), () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left");
+        shown.Add(HexText.Get("dusk_chrome.move_right"), () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right");
         ContextMenu.Show(chrome, point, shown);
     }
 
@@ -94,27 +100,27 @@ internal sealed partial class DuskScene
 
     private void BuildMenus()
     {
-        Menu terminal = menu.AddMenu("Terminal");
+        Menu terminal = menu.AddMenu(HexText.Get("dusk_chrome.terminal"));
         Item(terminal, "New tab", "new_tab", "add");
-        Item(terminal, "New tab with...", "new_tab_with", "list-selection");
+        Item(terminal, HexText.Get("dusk_chrome.new_tab_with"), "new_tab_with", "list-selection");
         terminal.AddSeparator();
-        Item(terminal, "Split right", "split_right", "split-horizontal");
-        Item(terminal, "Split down", "split_down", "split-vertical");
-        Item(terminal, "Close pane", "close_pane", "close");
+        Item(terminal, HexText.Get("dusk_chrome.split_right"), "split_right", "split-horizontal");
+        Item(terminal, HexText.Get("dusk_chrome.split_down"), "split_down", "split-vertical");
+        Item(terminal, HexText.Get("dusk_chrome.close_pane"), "close_pane", "close");
         terminal.AddSeparator();
-        Item(terminal, "Close", "close_tab", "close");
-        Item(terminal, "Close the whole tab", "close_whole_tab", "close-all");
-        Item(terminal, "Rename tab", "rename_tab", "edit");
+        Item(terminal, HexText.Get("tabs.close"), "close_tab", "close");
+        Item(terminal, HexText.Get("dusk_chrome.close_whole_tab"), "close_whole_tab", "close-all");
+        Item(terminal, HexText.Get("dusk_chrome.rename_tab"), "rename_tab", "edit");
         terminal.AddSeparator();
-        Item(terminal, "Settings file", "open_settings", "settings-gear");
-        Item(terminal, "Keys file", "open_keys", "keyboard");
+        Item(terminal, HexText.Get("dusk_chrome.settings_file"), "open_settings", "settings-gear");
+        Item(terminal, HexText.Get("dusk_chrome.keys_file"), "open_keys", "keyboard");
         terminal.AddSeparator();
-        Item(terminal, "Quit", "quit", "sign-out");
+        Item(terminal, HexText.Get("dusk_chrome.quit"), "quit", "sign-out");
 
-        Menu view = menu.AddMenu("View");
-        Item(view, "Command palette", "palette", "search");
+        Menu view = menu.AddMenu(HexText.Get("runner.view"));
+        Item(view, HexText.Get("dusk_chrome.command_palette"), "palette", "search");
         view.AddSeparator();
-        Menu themes = view.AddMenu("Theme", "color-mode");
+        Menu themes = view.AddMenu(HexText.Get("settings.designer.theme"), "color-mode");
         foreach (var (name, title) in Themes())
         {
             string picked = name;
@@ -122,24 +128,24 @@ internal sealed partial class DuskScene
             item.IsChecked = () => settings.Theme == picked;
         }
 
-        Item(view, "Next theme", "theme_next", "color-mode");
-        MenuItem animations = Item(view, "Animations", "animations", "play");
+        Item(view, HexText.Get("dusk_chrome.next_theme"), "theme_next", "color-mode");
+        MenuItem animations = Item(view, HexText.Get("dusk_chrome.animations"), "animations", "play");
         animations.IsChecked = () => settings.Animations;
         view.AddSeparator();
-        Item(view, "Bigger text", "zoom_in", "zoom-in");
-        Item(view, "Smaller text", "zoom_out", "zoom-out");
-        Item(view, "Text as it comes", "zoom_reset", "screen-normal");
+        Item(view, HexText.Get("dusk_chrome.zoom_in"), "zoom_in", "zoom-in");
+        Item(view, HexText.Get("dusk_chrome.zoom_out"), "zoom_out", "zoom-out");
+        Item(view, HexText.Get("dusk_chrome.zoom_reset"), "zoom_reset", "screen-normal");
         view.AddSeparator();
-        Item(view, "Focus left", "focus_left", "arrow-left");
-        Item(view, "Focus right", "focus_right", "arrow-right");
-        Item(view, "Focus up", "focus_up", "arrow-up");
-        Item(view, "Focus down", "focus_down", "arrow-down");
+        Item(view, HexText.Get("dusk_chrome.focus_left"), "focus_left", "arrow-left");
+        Item(view, HexText.Get("dusk_chrome.focus_right"), "focus_right", "arrow-right");
+        Item(view, HexText.Get("dusk_chrome.focus_up"), "focus_up", "arrow-up");
+        Item(view, HexText.Get("dusk_chrome.focus_down"), "focus_down", "arrow-down");
 
-        Menu help = menu.AddMenu("Help");
-        Item(help, "Keyboard shortcuts", "keys", "keyboard");
-        Item(help, "Plugins", "plugins", "extensions");
+        Menu help = menu.AddMenu(HexText.Get("welcome.help"));
+        Item(help, HexText.Get("dusk_chrome.keyboard_shortcuts"), "keys", "keyboard");
+        Item(help, HexText.Get("dusk_chrome.plugins"), "plugins", "extensions");
         help.AddSeparator();
-        help.Add("About Dusk", () => Notify($"Dusk {VERSION}, a terminal made with Horizon. The emulator and the panel are the engine's, this window and its plugins are Dusk."), icon: "info");
+        help.Add(HexText.Get("dusk_chrome.about"), () => Notify(HexText.Get("dusk_chrome.about_text", ("version", VERSION))), icon: "info");
 
         RefreshMenuKeys();
     }
@@ -166,10 +172,10 @@ internal sealed partial class DuskScene
 
     private void BuildStatusBar()
     {
-        messageItem = statusBar.Add(string.Empty, tooltip: "What Dusk last said");
-        themeItem = statusBar.Add(string.Empty, right: true, pressed: () => Run("theme_next"), tooltip: "The theme, click for the next");
-        sizeItem = statusBar.Add(string.Empty, right: true, tooltip: "How many columns and rows the focused terminal has");
-        profileItem = statusBar.Add(string.Empty, right: true, pressed: () => Run("new_tab_with"), tooltip: "The shell of the focused terminal, click for another in a new tab");
+        messageItem = statusBar.Add(string.Empty, tooltip: HexText.Get("dusk_chrome.message_tip"));
+        themeItem = statusBar.Add(string.Empty, right: true, pressed: () => Run("theme_next"), tooltip: HexText.Get("dusk_chrome.theme_tip"));
+        sizeItem = statusBar.Add(string.Empty, right: true, tooltip: HexText.Get("dusk_chrome.size_tip"));
+        profileItem = statusBar.Add(string.Empty, right: true, pressed: () => Run("new_tab_with"), tooltip: HexText.Get("dusk_chrome.profile_tip"));
     }
 
     private (int Columns, int Rows) sizeShown;
@@ -189,7 +195,7 @@ internal sealed partial class DuskScene
         if (size != sizeShown)
         {
             sizeShown = size;
-            sizeItem.Text = view is null ? string.Empty : $"{size.Item1} x {size.Item2}";
+            sizeItem.Text = view is null ? string.Empty : HexText.Get("dusk_chrome.size", ("columns", size.Item1.ToString()), ("rows", size.Item2.ToString()));
         }
 
         TerminalProfile? profile = view?.Profile;

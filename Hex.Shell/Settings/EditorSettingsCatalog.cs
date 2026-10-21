@@ -17,7 +17,7 @@ namespace Hex.Shell;
 public static class EditorSettingsCatalog
 {
     /// <summary>The sections, the part of the window before the dot and the section after it.</summary>
-    public const string THEME = "Appearance · Theme", EFFECTS = "Appearance · Effects", BACKDROP = "Appearance · Backdrop",
+    public const string THEME = "Appearance · Theme", EFFECTS = "Appearance · Effects", MOTION = "Appearance · Motion", BACKDROP = "Appearance · Backdrop",
         CODE = "Editor · Code", FILES = "Editor · Files", DESIGNER = "Editor · Designer";
 
     /// <summary>
@@ -29,49 +29,55 @@ public static class EditorSettingsCatalog
     /// <summary>The buttons of the picture's row, which one is which.</summary>
     public const int CHOOSE_PICTURE = 0, USUAL_PICTURE = 1;
 
+    /// <summary>How long the caret takes to glide about two thirds of the way to where it went, as it comes.</summary>
+    public const float CARET_GLIDE = 0.045f;
+
     public static readonly UISetting[] Settings =
     [
-        new("effects", "Effects", UIFormKind.Choice, "None of them, subtle (the caret glides, a save or a long command that went well throws a burst of sparks, the popups sit on glass) or all (sparks off the caret as you type as well).", EFFECTS, ["none", "subtle", "all"]),
-        new("effect_glass", "Glass", UIFormKind.Flag, "Whether the dialogs, the menus, the palette and the side panels sit over a blur of what is behind them, the way Windows 11 has its own.", EFFECTS),
-        new("effect_sparks", "Sparks", UIFormKind.Flag, "Whether the effects that are on throw sparks, on a save, a long command that went well and as you type.", EFFECTS),
-        new("effect_motion", "Caret glides", UIFormKind.Flag, "Whether the caret glides to where it goes rather than jumping there.", EFFECTS),
-        new("effect_caret_glow", "Glow under the caret", UIFormKind.Flag, "Whether a soft light follows the caret about as you type, and the cursor in Dusk.", EFFECTS),
-        new("effect_spotlight", "Spotlight", UIFormKind.Flag, "Whether a faint light sits under the pointer wherever it goes, the way Windows lit what you were over.", EFFECTS),
-        new("effect_ripples", "Ripples", UIFormKind.Flag, "Whether a ring spreads out of every click.", EFFECTS),
-        new("effect_trail", "Pointer trail", UIFormKind.Flag, "Whether the pointer leaves a few embers behind it when it is moved quickly.", EFFECTS),
-        new("glass_blur", "Glass blur", UIFormKind.Number, "How far what is behind the glass is blurred, in pixels, 0 for clear glass. The side panels take a little more.", EFFECTS, Least: 0.0f, Most: 48.0f, Step: 1.0f, Slider: true),
-        new("glass_clarity", "Glass clarity", UIFormKind.Number, "How much of what is behind the glass shows through the colour of the panel on it, 0 for none of it, 1 for all of it.", EFFECTS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("glass_rim", "Glass rim", UIFormKind.Number, "How bright the silver lining round the edge of the glass is.", EFFECTS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("glass_bend", "Glass bend", UIFormKind.Number, "How far the edge of the popups' glass bends what is behind it, the lens, in pixels, 0 for flat glass.", EFFECTS, Least: 0.0f, Most: 16.0f, Step: 0.5f, Slider: true),
+        new("effects", HexText.Get("settings_catalog.effects_title"), UIFormKind.Choice, HexText.Get("settings_catalog.effects_help"), EFFECTS, ["none", "subtle", "all"]),
+        new("effect_glass", HexText.Get("settings_catalog.effect_glass_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_glass_help"), EFFECTS),
+        new("effect_sparks", HexText.Get("settings_catalog.effect_sparks_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_sparks_help"), EFFECTS),
+        new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), EFFECTS),
+        new("effect_caret_glow", HexText.Get("settings_catalog.effect_caret_glow_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_caret_glow_help"), EFFECTS),
+        new("effect_spotlight", HexText.Get("settings_catalog.effect_spotlight_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_spotlight_help"), EFFECTS),
+        new("effect_ripples", HexText.Get("settings_catalog.effect_ripples_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_ripples_help"), EFFECTS),
+        new("effect_trail", HexText.Get("settings_catalog.effect_trail_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_trail_help"), EFFECTS),
+        new("glass_blur", HexText.Get("settings_catalog.glass_blur_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_blur_help"), EFFECTS, Least: 0.0f, Most: 48.0f, Step: 1.0f, Slider: true),
+        new("glass_clarity", HexText.Get("settings_catalog.glass_clarity_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_clarity_help"), EFFECTS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("glass_rim", HexText.Get("settings_catalog.glass_rim_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_rim_help"), EFFECTS, Least: 0.0f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("glass_bend", HexText.Get("settings_catalog.glass_bend_title"), UIFormKind.Number, HexText.Get("settings_catalog.glass_bend_help"), EFFECTS, Least: 0.0f, Most: 16.0f, Step: 0.5f, Slider: true),
 
-        new("backdrop", "Behind the code", UIFormKind.Flag, "Whether a picture is drawn behind the code, in the bottom right corner of the editor.", BACKDROP),
-        new("backdrop_terminal", "Behind the terminals", UIFormKind.Flag, "Whether the same picture is drawn behind Dusk's terminals as well.", BACKDROP),
-        new("backdrop_image", "Picture", UIFormKind.Text, "The picture's file, a .png or a .jpg, empty for the one that comes with Hex.", BACKDROP, Buttons: ["Choose...", "The usual one"]),
-        new("backdrop_opacity", "Opacity", UIFormKind.Number, "How much of the picture shows through what is written over it.", BACKDROP, Least: 0.05f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_scale", "Size behind the code", UIFormKind.Number, "How tall the picture is drawn behind the code, as a share of the window's height.", BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
-        new("backdrop_across", "In from the right behind the code", UIFormKind.Number, "How far the picture behind the code is in from the editor's right edge, as a share of the window's width.", BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_up", "Up from the bottom behind the code", UIFormKind.Number, "How far the picture behind the code is up from the editor's bottom edge, as a share of the window's height.", BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_scale", "Size behind the terminals", UIFormKind.Number, "How tall the picture is drawn behind Dusk's terminals, as a share of the window's height, its own size and not the code's.", BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_across", "In from the right behind the terminals", UIFormKind.Number, "How far the picture behind the terminals is in from their right edge, as a share of the window's width.", BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("terminal_backdrop_up", "Up from the bottom behind the terminals", UIFormKind.Number, "How far the picture behind the terminals is up from their bottom edge, as a share of the window's height.", BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
-        new("backdrop_wrap", "Code round the picture", UIFormKind.Flag, "Whether wrapped code runs round the shape of what is drawn in the picture rather than over it.", BACKDROP),
-        new("backdrop_wrap_margin", "How far round", UIFormKind.Number, "How far the code keeps off the shape of the picture, in pixels.", BACKDROP, Least: 0.0f, Most: 60.0f, Slider: true),
-        new("wrap_flow", "Words glide", UIFormKind.Number, "How quickly a word the wrap moves glides to its new place, 0 for snapping there.", BACKDROP, Least: 0.0f, Most: 40.0f, Slider: true),
+        new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true),
+        new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), MOTION, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true),
 
-        new("code_zoom", "Code zoom", UIFormKind.Number, "How big the code is written, 1 as it comes. Ctrl and the wheel over the code change it too.", CODE, Least: 0.5f, Most: 3.0f, Step: 0.05f),
-        new("code_font", "Code font", UIFormKind.Text, "The font code is written in, a folder of Assets/fonts (hack, cascadia), empty for the skin's.", CODE),
-        new("wrap_code", "Wrap code", UIFormKind.Flag, "Whether a long line of code wraps at the edge of the editor rather than running off it (Alt+Z).", CODE),
-        new("debugger_path", ".NET debugger", UIFormKind.Text, "Where netcoredbg is, for F5 on C#. Empty looks in a netcoredbg folder next to Hex.exe, the settings folder and the PATH.", CODE),
-        new("run_to_terminal", "Run in a terminal", UIFormKind.Flag, "Whether a file run with Ctrl+F5 runs in a terminal of the panel rather than in the output.", CODE),
+        new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
+        new("backdrop_terminal", HexText.Get("settings_catalog.backdrop_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_terminal_help"), BACKDROP),
+        new("backdrop_image", HexText.Get("settings_catalog.backdrop_image_title"), UIFormKind.Text, HexText.Get("settings_catalog.backdrop_image_help"), BACKDROP, Buttons: [HexText.Get("settings_catalog.backdrop_image_button_0"), HexText.Get("settings_catalog.backdrop_image_button_1")]),
+        new("backdrop_opacity", HexText.Get("settings_catalog.backdrop_opacity_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_opacity_help"), BACKDROP, Least: 0.05f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_scale", HexText.Get("settings_catalog.backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
+        new("backdrop_across", HexText.Get("settings_catalog.backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_up", HexText.Get("settings_catalog.backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_scale", HexText.Get("settings_catalog.terminal_backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_across", HexText.Get("settings_catalog.terminal_backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_up", HexText.Get("settings_catalog.terminal_backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_wrap", HexText.Get("settings_catalog.backdrop_wrap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_wrap_help"), BACKDROP),
+        new("backdrop_wrap_margin", HexText.Get("settings_catalog.backdrop_wrap_margin_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_wrap_margin_help"), BACKDROP, Least: 0.0f, Most: 60.0f, Slider: true),
+        new("wrap_flow", HexText.Get("settings_catalog.wrap_flow_title"), UIFormKind.Number, HexText.Get("settings_catalog.wrap_flow_help"), BACKDROP, Least: 0.0f, Most: 40.0f, Slider: true),
 
-        new("reopen_last", "Reopen the last workspace", UIFormKind.Flag, "Whether the workspace and the files that were open come back when Dawn starts.", FILES),
-        new("trim_whitespace", "Trim trailing spaces", UIFormKind.Flag, "Whether the spaces and tabs at the ends of the lines of a file of code go when it is saved.", FILES),
-        new("final_newline", "End with a newline", UIFormKind.Flag, "Whether a file of code is saved with a newline at its end when it hasn't one.", FILES),
-        new("auto_save", "Save by itself", UIFormKind.Flag, "Whether a file of code is saved by itself a moment after typing in it stops (trailing spaces are left for a save by hand, you might be about to type after them).", FILES),
-        new("auto_save_delay", "After", UIFormKind.Number, "How long typing has to have stopped for, in seconds.", FILES, Least: 0.5f, Most: 10.0f, Step: 0.5f, Slider: true),
+        new("code_zoom", HexText.Get("settings_catalog.code_zoom_title"), UIFormKind.Number, HexText.Get("settings_catalog.code_zoom_help"), CODE, Least: 0.5f, Most: 3.0f, Step: 0.05f),
+        new("code_font", HexText.Get("settings_catalog.code_font_title"), UIFormKind.Text, HexText.Get("settings_catalog.code_font_help"), CODE),
+        new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
+        new("debugger_path", HexText.Get("settings_catalog.debugger_path_title"), UIFormKind.Text, HexText.Get("settings_catalog.debugger_path_help"), CODE),
+        new("run_to_terminal", HexText.Get("settings_catalog.run_to_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.run_to_terminal_help"), CODE),
 
-        new("snap", "Snap", UIFormKind.Whole, "How many pixels the designer snaps what is dragged to, 0 for none.", DESIGNER, Least: 0.0f, Most: 16.0f),
-        new("canvas_handles", "Handles on the canvas", UIFormKind.Flag, "Whether the designer draws the handles that drag a component bigger.", DESIGNER)
+        new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
+        new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
+        new("final_newline", HexText.Get("settings_catalog.final_newline_title"), UIFormKind.Flag, HexText.Get("settings_catalog.final_newline_help"), FILES),
+        new("auto_save", HexText.Get("settings_catalog.auto_save_title"), UIFormKind.Flag, HexText.Get("settings_catalog.auto_save_help"), FILES),
+        new("auto_save_delay", HexText.Get("settings_catalog.auto_save_delay_title"), UIFormKind.Number, HexText.Get("settings_catalog.auto_save_delay_help"), FILES, Least: 0.5f, Most: 10.0f, Step: 0.5f, Slider: true),
+
+        new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
+        new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
     ];
 
     /// <summary>What every one of them comes as.</summary>
@@ -89,6 +95,8 @@ public static class EditorSettingsCatalog
         ["glass_clarity"] = new NumberValue(HexGlass.CLARITY),
         ["glass_rim"] = new NumberValue(HexGlass.RIM),
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
+        ["ui_animation"] = new NumberValue(1.0f),
+        ["caret_glide"] = new NumberValue(CARET_GLIDE),
         ["backdrop"] = Values.Bool(true),
         ["backdrop_terminal"] = Values.Bool(false),
         ["backdrop_image"] = new StringValue(string.Empty),

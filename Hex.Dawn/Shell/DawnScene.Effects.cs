@@ -15,8 +15,8 @@ namespace Hex.Dawn;
 // window stays as idle as it was.
 internal sealed partial class DawnScene
 {
-    // About two thirds of the way to where it went in this long
-    private const float CARET_GLIDE = 0.045f;
+    // How long the caret glides for, about two thirds of the way to where it went in this long, the motion's caret_glide
+    private float CaretGlide => Motion ? settings.CaretGlide : 0.0f;
 
     // How the glass looks, as thick as the four sliders of the effects say. The popups keep most of their colour so the
     // text on them reads, the sides a quieter glass out of the same (HexGlass), there's nothing on most of them but the tree
@@ -65,7 +65,11 @@ internal sealed partial class DawnScene
     private void ApplyEffects()
     {
         foreach (HexDocument open in documents)
-            open.Editor.CaretGlide = Motion ? CARET_GLIDE : 0.0f;
+            open.Editor.CaretGlide = CaretGlide;
+
+        // Everything else of Dawn's that moves, the hovers and the drawers, as quick as the motion says. Not the stage,
+        // a layout being designed moves the way the game it is for will have it
+        compositor.AnimationSpeed = settings.UiAnimation;
 
         if (!EffectsOn)
         {

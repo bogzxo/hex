@@ -74,7 +74,7 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
-            Say($"couldn't keep the list of layouts for next time: {e.Message}", error: true);
+            Say(Said("recent.keep_failed", ("message", e.Message)), error: true);
         }
     }
 
@@ -93,6 +93,6 @@ internal sealed partial class DawnScene
         }
 
         recentMenu.AddSeparator();
-        recentMenu.Add("Clear Recently Opened", ForgetRecent).IsEnabled = () => recent.Count > 0;
+        recentMenu.Add(Said("recent.clear"), ForgetRecent).IsEnabled = () => recent.Count > 0;
     }
 }

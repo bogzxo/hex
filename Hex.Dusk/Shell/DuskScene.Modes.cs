@@ -16,10 +16,10 @@ internal sealed partial class DuskScene
 
     private void BuildModes()
     {
-        modeToggle = top.Add(new Button("Dawn")
+        modeToggle = top.Add(new Button(HexText.Get("dusk_modes.dawn"))
         {
             Icon = "code",
-            Tooltip = "Dawn, the editor, in this window (Ctrl+Alt+D)",
+            Tooltip = HexText.Get("dusk_modes.dawn_tooltip"),
             OnPressed = SwapMode
         });
 
@@ -34,7 +34,7 @@ internal sealed partial class DuskScene
     private void SwapMode()
     {
         if (!HexModes.Swap(panel.FocusedView?.WorkingDirectory))
-            Say("there's no Dawn to swap to", error: true);
+            Say(HexText.Get("dusk_modes.no_dawn"), error: true);
     }
 
     /// <summary>Back from Dawn, the keyboard in the terminal that had it.</summary>

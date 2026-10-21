@@ -243,7 +243,7 @@ internal sealed partial class HexLanguages
                     continue;
 
                 reloadIn.Remove(due);
-                context.Notices.Note($"[Hex] {due.Command} started again, a project of its changed");
+                context.Notices.Note(context.Strings.Said("languages.server_restarted", ("command", due.Command)));
                 RestartServer(due);
             }
         }

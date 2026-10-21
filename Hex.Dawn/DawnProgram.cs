@@ -111,6 +111,10 @@ public static class DawnProgram
 
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
+            // A text editor, nobody plays it with a controller
+            Gamepads = false,
+            // Its settings and caches next to Hex.exe, Program.Main says so already and this says it to the engine
+            FilesBesideProgram = true,
             WindowConfiguration = WindowManagerConfiguration.Default1600x900 with
             {
                 WindowTitle = "Hex",

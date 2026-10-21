@@ -20,6 +20,9 @@ internal sealed partial class DuskScene
     // The same glass as Dawn's popups, as thick as the sliders of the effects say
     private UIGlass popupGlass = HexGlass.Popup(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
 
+    // Dawn's sides' glass out of the same sliders, Dusk has no side panels but shows it in the glass's preview
+    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM);
+
     // How long a command has to have run for it going well to be worth a burst, in seconds. Every ls throwing sparks
     // is the power mode's problem, not a feature
     private const float BURST_AFTER = 2.0f;
@@ -31,6 +34,9 @@ internal sealed partial class DuskScene
 
     private string effects = "none";
     private bool effectSparks = true, effectGlass = true;
+
+    // How quickly Dusk's own UI moves, the motion's ui_animation, Dawn's too
+    private float uiAnimation = 1.0f;
 
     // The pane sparks were thrown off last and where its cursor was, and how many commands had finished in each pane
     private TerminalView? sparkedIn;
@@ -66,7 +72,9 @@ internal sealed partial class DuskScene
         effects = settings.Effects;
         effectSparks = settings.EffectSparks;
         effectGlass = settings.EffectGlass;
+        uiAnimation = settings.UiAnimation;
         popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim);
         lightEffects.Read(SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : []);
         ApplyEffects();
     }
@@ -75,6 +83,9 @@ internal sealed partial class DuskScene
     private void ApplyEffects()
     {
         compositor.PopupGlass = EffectsOn && effectGlass ? popupGlass : null;
+
+        // The terminal's animations off is nothing moving, the menus and the buttons as well as the splits and the cursor
+        compositor.AnimationSpeed = host.Settings.Animations ? uiAnimation : 0.0f;
         if (!EffectsOn || !effectSparks)
             sparks.Clear();
         if (!EffectsOn)

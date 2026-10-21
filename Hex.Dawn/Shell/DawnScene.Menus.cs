@@ -54,39 +54,39 @@ internal sealed partial class DawnScene
     /// </summary>
     private void AddWindowCommands()
     {
-        commands.Add("View/palette", "Command Palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", Said("menus.command_palette"), CommandPalette, "Ctrl+Shift+P", "symbol-misc", UIKeyUse.BoundWhileTyping);
         commands.Bind(Key.F1, CommandPalette, whileTyping: true);
-        commands.Add("View/palette", "Dusk, the Terminal", SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/palette", Said("menus.dusk_terminal"), SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
 
         // VS Code's keys for the side bar, the panel and the command palette
-        commands.Add("View/sides", "Explorer", explorer.ShowExplorer, "Ctrl+Shift+E", "files", UIKeyUse.BoundWhileTyping);
-        commands.Add("View/sides", "Search", () => ShowSide(HexSide.Search), icon: "search");
-        commands.Add("View/sides", "Debug", () => ShowSide(HexSide.Debug), icon: "debug-alt");
-        commands.Add("View/sides", "Outline", explorer.ShowOutline, "Ctrl+Shift+O", "list-tree", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
-        commands.Add("View/sides", "Toolbox", explorer.ShowOutline, "Ctrl+Shift+O", "layout").IsVisible = () => LayoutTools;
-        commands.Add("View/sides", "Problems", () => ShowPanel(PROBLEMS_PAGE), icon: "error");
-        commands.Add("View/sides", "Output", () => ShowPanel(OUTPUT_PAGE), icon: "output");
+        commands.Add("View/sides", Said("menus.explorer"), explorer.ShowExplorer, "Ctrl+Shift+E", "files", UIKeyUse.BoundWhileTyping);
+        commands.Add("View/sides", Said("menus.search"), () => ShowSide(HexSide.Search), icon: "search");
+        commands.Add("View/sides", Said("menus.debug"), () => ShowSide(HexSide.Debug), icon: "debug-alt");
+        commands.Add("View/sides", Said("menus.outline"), explorer.ShowOutline, "Ctrl+Shift+O", "list-tree", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
+        commands.Add("View/sides", Said("menus.toolbox"), explorer.ShowOutline, "Ctrl+Shift+O", "layout").IsVisible = () => LayoutTools;
+        commands.Add("View/sides", Said("menus.problems"), () => ShowPanel(PROBLEMS_PAGE), icon: "error");
+        commands.Add("View/sides", Said("menus.output"), () => ShowPanel(OUTPUT_PAGE), icon: "output");
 
-        commands.Add("View/toggles", "Side Bar", ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
-        commands.Add("View/toggles", "Panel", TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
-        commands.Add("View/toggles", "Properties", ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
-        commands.Add("View/toggles", "Zen Mode", ToggleQuiet, "F11", "screen-full").IsChecked = () => Quiet;
-        commands.Add("View/toggles", "Word Wrap", ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
-        commands.Add("View/toggles", "Code in Hack", codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
-        commands.Add("View/toggles", "Split Editor", ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
+        commands.Add("View/toggles", Said("menus.side_bar"), ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
+        commands.Add("View/toggles", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
+        commands.Add("View/toggles", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
+        commands.Add("View/toggles", Said("menus.zen_mode"), ToggleQuiet, "F11", "screen-full").IsChecked = () => Quiet;
+        commands.Add("View/toggles", Said("menus.word_wrap"), ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
+        commands.Add("View/toggles", Said("menus.code_in_hack"), codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
+        commands.Add("View/toggles", Said("menus.split_editor"), ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
 
         // F7 flips a layout between its designer and its code, the way Visual Studio's designers go
-        commands.Add("View/zoom", "Toggle Designer and Code", ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.IsText;
+        commands.Add("View/zoom", Said("menus.toggle_designer_code"), ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.IsText;
 
-        layoutDebugger.AddTo(commands, "View/look", () => Say(layoutDebugger.IsOn ? "layout debugger on, padding is green, gaps are orange" : "layout debugger off"));
-        Menu size = commands.AddMenu("View/look", "Editor Scale", "zoom-in");
+        layoutDebugger.AddTo(commands, "View/look", () => Say(layoutDebugger.IsOn ? Said("menus.layout_debugger_on") : Said("menus.layout_debugger_off")));
+        Menu size = commands.AddMenu("View/look", Said("menus.editor_scale"), "zoom-in");
         foreach (float scale in Scales)
             size.Add(DescribeScale(scale), () => SetScale(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
 
         // The skin the layouts are shown in, every one there is under Assets/uix and every theme of each. It is the
         // game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set to
         // the same, and the editor itself stays in its flat one
-        AddSkins(commands.AddMenu("View/look", "Layout Skin", "paintcan"));
+        AddSkins(commands.AddMenu("View/look", Said("menus.layout_skin"), "paintcan"));
 
         // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
         commands.Bind(Key.Number0, () => { if (LayoutTools) designer.ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);
@@ -97,6 +97,6 @@ internal sealed partial class DawnScene
         commands.Bind(Key.F5, RunOrPlay, whileTyping: true, shift: false);
 
         // Through the window manager, on the window's thread, asking first like its x does
-        commands.Add("File/exit", "Exit", () => Engine.WindowManager.Close(), "Alt+F4", "close");
+        commands.Add("File/exit", Said("menus.exit"), () => Engine.WindowManager.Close(), "Alt+F4", "close");
     }
 }

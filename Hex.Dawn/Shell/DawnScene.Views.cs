@@ -81,7 +81,7 @@ internal sealed partial class DawnScene
         {
             document.View = view;
             ApplyView();
-            Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : $"the code of {document.Name}");
+            Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : Said("views.code_of", ("name", document.Name)));
             return;
         }
 
@@ -95,7 +95,7 @@ internal sealed partial class DawnScene
 
         document.View = view;
         ApplyView();
-        Say(view == HexView.Design ? $"the designer of {document.Name}" : $"the code of {document.Name}, F7 goes back to the designer");
+        Say(view == HexView.Design ? Said("views.designer_of", ("name", document.Name)) : Said("views.code_of_layout", ("name", document.Name)));
     }
 
     // F7, the designer and the code of a layout, the code and the table of a file of code that has one
@@ -161,23 +161,20 @@ internal sealed partial class DawnScene
     {
         if (!document.IsText || document.Path is not { } path)
         {
-            Say("only a file of code that has a file can be made a layout", error: true);
+            Say(Said("views.make_layout_needs_file"), error: true);
             return;
         }
 
-        UIDialog.Show(chrome, "Make it a layout?", LayoutWarning(Path.GetFileName(path)),
-            new DialogChoice("Make it a layout", () => MakeLayoutNow(path)),
-            new DialogChoice("Cancel"));
+        UIDialog.Show(chrome, Said("views.make_layout_title"), LayoutWarning(Path.GetFileName(path)),
+            new DialogChoice(Said("views.make_layout"), () => MakeLayoutNow(path)),
+            new DialogChoice(Said("keys.leave_it")));
     }
 
     /// <summary>
     /// What a file loses by being a layout, said before it is made one. The designer writes the whole of a layout's file
     /// anew out of the layout it builds whenever it is saved, nothing else in it survives that.
     /// </summary>
-    private static string LayoutWarning(string name) =>
-        $"{name} will open in the designer from now on, and the designer writes the whole file anew out of the layout it builds " +
-        "every time it is saved from there. Anything in it that isn't part of the layout (comments between the components, " +
-        "lets the layout doesn't use, functions, the way it is spaced out) will be gone the first time that happens.";
+    private static string LayoutWarning(string name) => Said("views.layout_warning", ("name", name));
 
     private void MakeLayoutNow(string path)
     {
@@ -193,7 +190,7 @@ internal sealed partial class DawnScene
 
         CloseNow();
         Open(path);
-        Say($"{Path.GetFileName(path)} is a layout now, its designer is open");
+        Say(Said("views.layout_now", ("name", Path.GetFileName(path))));
     }
 
     /* Closing, a tab or the window, asking first */
@@ -227,13 +224,15 @@ internal sealed partial class DawnScene
             return;
         }
 
-        string names = string.Join(", ", unsaved.Take(6).Select(open => open.Name)) + (unsaved.Count > 6 ? $" and {unsaved.Count - 6} more" : string.Empty);
+        string names = string.Join(", ", unsaved.Take(6).Select(open => open.Name));
+        if (unsaved.Count > 6)
+            names = Said("views.names_more", ("names", names), ("count", (unsaved.Count - 6).ToString()));
 
-        closeQuestion = UIDialog.Show(chrome, "Unsaved changes",
-            $"{unsaved.Count} {(unsaved.Count == 1 ? "file has" : "files have")} changes that aren't in {(unsaved.Count == 1 ? "its file" : "their files")}: {names}.",
-            new DialogChoice("Save all", () => SaveAllAndQuit(unsaved)),
-            new DialogChoice("Don't save", QuitNow),
-            new DialogChoice("Cancel"));
+        closeQuestion = UIDialog.Show(chrome, Said("documents.unsaved_title"),
+            unsaved.Count == 1 ? Said("views.unsaved_one", ("names", names)) : Said("views.unsaved_many", ("count", unsaved.Count.ToString()), ("names", names)),
+            new DialogChoice(Said("views.save_all"), () => SaveAllAndQuit(unsaved)),
+            new DialogChoice(Said("documents.dont_save"), QuitNow),
+            new DialogChoice(Said("keys.leave_it")));
     }
 
     private void SaveAllAndQuit(List<HexDocument> unsaved)
@@ -244,7 +243,7 @@ internal sealed partial class DawnScene
             if (open.Path is null)
             {
                 Show(open);
-                Say($"{open.Name} has never been saved, save it somewhere (Ctrl+S) and close again", error: true);
+                Say(Said("views.never_saved", ("name", open.Name)), error: true);
                 return;
             }
 

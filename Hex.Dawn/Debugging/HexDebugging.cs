@@ -27,16 +27,16 @@ internal sealed class HexDebugging
     {
         context = with;
         context.Documents.Opened += PrepareBreakpoints;
-        context.Panels.AddSide(HexSide.Debug, "DEBUG", DebugSide);
+        context.Panels.AddSide(HexSide.Debug, context.Strings.Said("debugging.debug"), DebugSide);
         UICommands commands = context.Commands;
-        commands.Add("Run/debug", "Start Debugging", DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && IsCSharp(context.Documents.Current.Path);
-        commands.Add("Run/debug", "Continue", DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
-        commands.Add("Run/debug", "Step Over", StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", "Step Into", StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", "Step Out", StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", "Stop Debugging", StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", "Restart Debugging", RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", "Toggle Breakpoint", ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && IsCSharp(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && IsCSharp(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.continue"), DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
+        commands.Add("Run/debug", context.Strings.Said("debugging.step_over"), StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", context.Strings.Said("debugging.step_into"), StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", context.Strings.Said("debugging.step_out"), StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        commands.Add("Run/debug", context.Strings.Said("debugging.stop_debugging"), StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
+        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && IsCSharp(context.Documents.Current.Path);
     }
 
     // The breakpoints, by the file's whole path, the lines counted from 0. An editor of the file is handed the set
@@ -87,7 +87,7 @@ internal sealed class HexDebugging
         HexDocument shown = context.Documents.Current;
         if (!shown.IsText || !IsCSharp(shown.Path))
         {
-            context.Notices.Say("breakpoints go in .cs files", error: true);
+            context.Notices.Say(context.Strings.Said("debugging.breakpoints_cs_only"), error: true);
             return;
         }
 
@@ -117,13 +117,13 @@ internal sealed class HexDebugging
 
         if (Debugging)
         {
-            context.Notices.Say("it's running, Shift+F5 stops it");
+            context.Notices.Say(context.Strings.Said("debugging.already_running"));
             return;
         }
 
         if (ProjectsToDebug() is not { Count: > 0 } projects)
         {
-            context.Notices.Say("there's no .csproj to debug in the workspace or over this file", error: true);
+            context.Notices.Say(context.Strings.Said("debugging.no_project"), error: true);
             return;
         }
 
@@ -133,7 +133,7 @@ internal sealed class HexDebugging
             return;
         }
 
-        context.Windows.Choose("Debug which project", "More than one in the workspace, which to build and run under the debugger",
+        context.Windows.Choose(context.Strings.Said("debugging.which_project"), context.Strings.Said("debugging.which_project_text"),
             [.. projects.Select(project => (context.Workspace.Relative(project), (Action)(() => StartDebugging(project))))]);
     }
 
@@ -211,10 +211,10 @@ internal sealed class HexDebugging
 
     // What to say when there's no netcoredbg, where to get one for this machine. Its releases (github.com/Samsung/netcoredbg)
     // have Windows, Linux (x64 and arm64) and Intel Macs, an Apple silicon Mac builds it from its source
-    private static string NoDebugger =>
+    private string NoDebugger =>
         OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64
-            ? "netcoredbg isn't anywhere Hex looks, and its releases have nothing for Apple silicon: build it from github.com/Samsung/netcoredbg and say where in the settings (debugger_path)"
-            : $"netcoredbg isn't anywhere Hex looks, get it from github.com/Samsung/netcoredbg/releases and put it in a netcoredbg folder next to {(OperatingSystem.IsWindows() ? "Hex.exe" : "Hex")} or on the PATH, or say where in the settings (debugger_path)";
+            ? context.Strings.Said("debugging.no_debugger_apple")
+            : context.Strings.Said("debugging.no_debugger", ("exe", OperatingSystem.IsWindows() ? "Hex.exe" : "Hex"));
 
     /// <summary>Builds a project, then runs what it made under the debugger with the breakpoints there are, off the editor's thread.</summary>
     private void StartDebugging(string project)
@@ -228,9 +228,9 @@ internal sealed class HexDebugging
         SaveAllCode();
         building = true;
         debuggedProject = project;
-        context.Notices.Note($"building {Path.GetFileName(project)} to debug it");
+        context.Notices.Note(context.Strings.Said("debugging.building_to_debug", ("project", Path.GetFileName(project))));
         context.Panels.ShowOutput();
-        context.Notices.Say($"building {Path.GetFileName(project)}");
+        context.Notices.Say(context.Strings.Said("debugging.building", ("project", Path.GetFileName(project))));
 
         var breakpointsNow = breakpoints.Where(pair => pair.Value.Count > 0).ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<int>)pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
         _ = Task.Run(() => BuildAndLaunch(project, debugger, breakpointsNow));
@@ -248,7 +248,7 @@ internal sealed class HexDebugging
             debugWork.Enqueue(() =>
             {
                 building = false;
-                context.Notices.Say($"{Path.GetFileName(project)} didn't build, see the output", error: true);
+                context.Notices.Say(context.Strings.Said("debugging.did_not_build", ("project", Path.GetFileName(project))), error: true);
             });
             return;
         }
@@ -260,7 +260,7 @@ internal sealed class HexDebugging
             debugWork.Enqueue(() =>
             {
                 building = false;
-                context.Notices.Say($"couldn't find what {Path.GetFileName(project)} builds ({program})", error: true);
+                context.Notices.Say(context.Strings.Said("debugging.no_program", ("project", Path.GetFileName(project)), ("program", program)), error: true);
             });
             return;
         }
@@ -271,7 +271,7 @@ internal sealed class HexDebugging
             debugWork.Enqueue(() =>
             {
                 building = false;
-                context.Notices.Say("netcoredbg wouldn't start", error: true);
+                context.Notices.Say(context.Strings.Said("debugging.debugger_did_not_start"), error: true);
             });
             return;
         }
@@ -283,12 +283,12 @@ internal sealed class HexDebugging
             building = false;
             if (launched)
             {
-                context.Notices.Say($"debugging {Path.GetFileName(program)}, Shift+F5 stops it");
+                context.Notices.Say(context.Strings.Said("debugging.debugging", ("program", Path.GetFileName(program))));
                 context.Panels.ShowSide(HexSide.Debug);
             }
             else
             {
-                context.Notices.Say($"the debugger couldn't start it, {session.Failed}", error: true);
+                context.Notices.Say(context.Strings.Said("debugging.launch_failed", ("why", $"{session.Failed}")), error: true);
             }
         });
     }
@@ -323,7 +323,7 @@ internal sealed class HexDebugging
             return;
 
         debugging.Stop();
-        context.Notices.Say("stopping it");
+        context.Notices.Say(context.Strings.Said("debugging.stopping"));
     }
 
     /// <summary>Ctrl+Shift+F5, stopped and started again.</summary>
@@ -372,7 +372,9 @@ internal sealed class HexDebugging
                         context.Notices.Note(line.TrimEnd('\r'));
                     break;
                 case DebugEventKind.Ended:
-                    context.Notices.Say(happened.ExitCode >= 0 ? $"{Path.GetFileNameWithoutExtension(debuggedProject)} ended, {happened.ExitCode}" : $"{Path.GetFileNameWithoutExtension(debuggedProject)} ended");
+                    context.Notices.Say(happened.ExitCode >= 0
+                        ? context.Strings.Said("debugging.ended_code", ("project", Path.GetFileNameWithoutExtension(debuggedProject)), ("code", happened.ExitCode.ToString()))
+                        : context.Strings.Said("debugging.ended", ("project", Path.GetFileNameWithoutExtension(debuggedProject))));
                     EndDebugging();
                     return;
             }
@@ -395,7 +397,9 @@ internal sealed class HexDebugging
         }
 
         ShowFrame(stoppedFrame);
-        context.Notices.Say($"stopped, {happened.Text}{(stoppedFrames.Count > 0 && stoppedFrames[stoppedFrame].File is { } at ? $" at {Path.GetFileName(at)}:{stoppedFrames[stoppedFrame].Line + 1}" : string.Empty)}");
+        context.Notices.Say(stoppedFrames.Count > 0 && stoppedFrames[stoppedFrame].File is { } at
+            ? context.Strings.Said("debugging.stopped_at", ("why", $"{happened.Text}"), ("file", Path.GetFileName(at)), ("line", (stoppedFrames[stoppedFrame].Line + 1).ToString()))
+            : context.Strings.Said("debugging.stopped", ("why", $"{happened.Text}")));
         context.Panels.ShowSide(HexSide.Debug);
         context.Redraw();
     }
@@ -449,15 +453,15 @@ internal sealed class HexDebugging
         var items = new List<UITreeItem>();
 
         if (building)
-            items.Add(NoteItem($"building {Path.GetFileName(debuggedProject)}..."));
+            items.Add(NoteItem(context.Strings.Said("debugging.building_side", ("project", Path.GetFileName(debuggedProject)))));
         else if (debugging is null)
-            items.Add(NoteItem("nothing running, F5 builds and debugs the project"));
+            items.Add(NoteItem(context.Strings.Said("debugging.nothing_running")));
         else if (!DebugStopped)
-            items.Add(NoteItem($"{Path.GetFileNameWithoutExtension(debuggedProject)} is running"));
+            items.Add(NoteItem(context.Strings.Said("debugging.running", ("project", Path.GetFileNameWithoutExtension(debuggedProject)))));
 
         if (DebugStopped && stoppedFrames.Count > 0)
         {
-            var stack = new UITreeItem("Call stack", "debug-stackframe") { Expandable = true, Expanded = true, Children = [] };
+            var stack = new UITreeItem(context.Strings.Said("debugging.call_stack"), "debug-stackframe") { Expandable = true, Expanded = true, Children = [] };
             for (int i = 0; i < stoppedFrames.Count; i++)
             {
                 DebugFrame frame = stoppedFrames[i];
@@ -472,10 +476,10 @@ internal sealed class HexDebugging
 
             items.Add(stack);
 
-            var variables = new UITreeItem("Variables", "symbol-variable") { Expandable = true, Expanded = true };
+            var variables = new UITreeItem(context.Strings.Said("debugging.variables"), "symbol-variable") { Expandable = true, Expanded = true };
             if (variablesShown is null || variablesFor != stoppedFrame)
             {
-                variables.Children = [NoteItem("asking...")];
+                variables.Children = [NoteItem(context.Strings.Said("debugging.asking"))];
                 AskVariables(stoppedFrames[stoppedFrame].Id, stoppedFrame);
             }
             else
@@ -486,7 +490,7 @@ internal sealed class HexDebugging
             items.Add(variables);
         }
 
-        var points = new UITreeItem("Breakpoints", "debug-breakpoint") { Expandable = true, Expanded = true, Children = [] };
+        var points = new UITreeItem(context.Strings.Said("debugging.breakpoints"), "debug-breakpoint") { Expandable = true, Expanded = true, Children = [] };
         foreach (var (file, lines) in breakpoints.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
         {
             foreach (int line in lines)
@@ -503,7 +507,7 @@ internal sealed class HexDebugging
         }
 
         if (points.Children.Count == 0)
-            points.Children.Add(NoteItem("F9 or a click in the gutter of a .cs file"));
+            points.Children.Add(NoteItem(context.Strings.Said("debugging.breakpoints_hint")));
         items.Add(points);
         return items;
     }
@@ -532,14 +536,14 @@ internal sealed class HexDebugging
             }
             catch (Exception e)
             {
-                rows.Add(new UITreeItem($"couldn't ask, {e.Message}") { Color = context.Panels.Dim });
+                rows.Add(new UITreeItem(context.Strings.Said("debugging.could_not_ask", ("why", e.Message))) { Color = context.Panels.Dim });
             }
 
             debugWork.Enqueue(() =>
             {
                 if (variablesFor != frameIndex)
                     return;
-                variablesShown = rows.Count > 0 ? rows : [new UITreeItem("nothing in scope") { Color = context.Panels.Dim }];
+                variablesShown = rows.Count > 0 ? rows : [new UITreeItem(context.Strings.Said("debugging.nothing_in_scope")) { Color = context.Panels.Dim }];
                 context.Panels.RefreshSide(HexSide.Debug);
             });
         });
@@ -561,7 +565,7 @@ internal sealed class HexDebugging
             {
                 if (opened.Children is not null)
                     return;
-                opened.Children = [new UITreeItem("asking...") { Color = context.Panels.Dim }];
+                opened.Children = [new UITreeItem(context.Strings.Said("debugging.asking")) { Color = context.Panels.Dim }];
                 _ = Task.Run(async () =>
                 {
                     var inside = new List<UITreeItem>();

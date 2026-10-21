@@ -102,7 +102,7 @@ internal sealed partial class DawnScene
     {
         if (!File.Exists(path))
         {
-            Say($"there is no '{path}'", error: true);
+            Say(Said("documents.no_file", ("path", path)), error: true);
             return false;
         }
 
@@ -118,7 +118,7 @@ internal sealed partial class DawnScene
         if (documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path) == full) is { } already)
         {
             Show(already);
-            Say($"{already.Name} is open already");
+            Say(Said("documents.open_already", ("name", already.Name)));
             return true;
         }
 
@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
         string source = File.ReadAllText(path);
         if (source.Contains('\0'))
         {
-            Say($"{Path.GetFileName(path)} isn't text", error: true);
+            Say(Said("documents.not_text", ("name", Path.GetFileName(path))), error: true);
             return false;
         }
 
@@ -173,11 +173,11 @@ internal sealed partial class DawnScene
         Console.WriteLine($"[Hex] Opened '{path}': {count} components, {target.PreviewCount} stand-in items, round trip {(faithful ? "ok" : "DIFFERS")}.");
 
         if (!faithful)
-            Say($"opened {target.Name}, but it doesn't write back the same", error: true);
+            Say(Said("documents.opened_differs", ("name", target.Name)), error: true);
         else if (message.Length > 0)
             Say(message, error: true);
         else
-            Say($"opened {target.Name}: {count} components, writes back the same");
+            Say(Said("documents.opened", ("name", target.Name), ("count", count.ToString())));
 
         return faithful;
     }
@@ -232,7 +232,7 @@ internal sealed partial class DawnScene
             }
 
             ShowSide(HexSide.Explorer);
-            Say($"files of {browseDirectory}");
+            Say(Said("documents.files_of", ("directory", browseDirectory)));
             return;
         }
 
@@ -253,8 +253,8 @@ internal sealed partial class DawnScene
             && !Horizon.HIDL.Preprocessing.HIDLPreprocessor.IsLayout(document.SavedCode))
         {
             HexDocument warned = document;
-            UIDialog.Show(chrome, "Save it as a layout?", LayoutWarning(Path.GetFileName(typed)),
-                new DialogChoice("Save it", () =>
+            UIDialog.Show(chrome, Said("documents.layout_title"), LayoutWarning(Path.GetFileName(typed)),
+                new DialogChoice(Said("documents.save_it"), () =>
                 {
                     layoutWarned.Add(typed);
                     if (documents.Contains(warned))
@@ -263,7 +263,7 @@ internal sealed partial class DawnScene
                         Save();
                     }
                 }),
-                new DialogChoice("Cancel"));
+                new DialogChoice(Said("keys.leave_it")));
             return;
         }
 
@@ -309,7 +309,7 @@ internal sealed partial class DawnScene
     {
         if (dialog is not null)
         {
-            Say("there is a dialog open already", error: true);
+            Say(Said("documents.dialog_open"), error: true);
             return;
         }
 
@@ -327,7 +327,7 @@ internal sealed partial class DawnScene
         dialogPicked = null;
 
         if (answered.IsFaulted)
-            Say($"the dialog didn't open: {answered.Exception?.InnerException?.Message}", error: true);
+            Say(Said("documents.dialog_failed", ("message", answered.Exception?.InnerException?.Message ?? "")), error: true);
         else if (answered.Result is { } path)
             picked?.Invoke(path);
     }
@@ -375,12 +375,12 @@ internal sealed partial class DawnScene
 
             Console.WriteLine($"[Hex] Saved '{path}'.");
             if (!savingQuietly)
-                Say($"saved {path}");
+                Say(Said("documents.saved", ("path", path)));
             SavedEffects();
         }
         catch (Exception e)
         {
-            Notify($"couldn't save {path}: {e.Message}", error: true, ("Save as...", SaveAs));
+            Notify(Said("documents.save_failed", ("path", path), ("error", e.Message)), error: true, (Said("documents.save_as_button"), SaveAs));
         }
     }
 
@@ -390,16 +390,16 @@ internal sealed partial class DawnScene
         if (document.Modified || document.CodeEdited || document.GenerateCode() != document.SavedCode)
         {
             HexDocument closing = document;
-            UIDialog.Show(chrome, "Unsaved changes", $"{closing.Name} has changes that aren't in its file.",
-                new DialogChoice("Save", () =>
+            UIDialog.Show(chrome, Said("documents.unsaved_title"), Said("documents.unsaved_text", ("name", closing.Name)),
+                new DialogChoice(Said("documents.save"), () =>
                 {
                     Save();
 
                     // Saved on the spot it can go. Waiting on a dialog of Windows it stays until that is answered
                     if (document == closing && !document.Modified && document.GenerateCode() == document.SavedCode) CloseNow();
                 }),
-                new DialogChoice("Don't save", () => { if (document == closing) CloseNow(); }),
-                new DialogChoice("Cancel"));
+                new DialogChoice(Said("documents.dont_save"), () => { if (document == closing) CloseNow(); }),
+                new DialogChoice(Said("keys.leave_it")));
             return;
         }
 
@@ -451,36 +451,36 @@ internal sealed partial class DawnScene
 
         string language = languages.Contains(Horizon.Content.Localisation.DEFAULT_LANGUAGE) ? Horizon.Content.Localisation.DEFAULT_LANGUAGE : languages[0];
         if (Horizon.Content.Localisation.Load(folder, language) && announce)
-            Say($"the texts of this layout are in {language}, out of {folder}");
+            Say(Said("documents.languages_loaded", ("language", language), ("folder", folder)));
     }
 
     /// <summary>The File menu's files, Edit's undo and redo, and Ctrl+Tab through what is open, all going while typing.</summary>
     private void AddDocumentCommands()
     {
         // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu
-        commands.Add("File/new", "New Scratchpad", NewScratchpad, "Ctrl+N", "new-file", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/new", "New Layout", () => Show(NewDocument()), icon: "layout");
-        commands.Add("File/new", "New File...", () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
-        commands.Add("File/new", "Open...", OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
-        recentMenu = commands.AddMenu("File/new", "Open Recent", "history");
+        commands.Add("File/new", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "new-file", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
+        commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
+        commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
+        recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
-        commands.Add("File/save", "Save", Save, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/save", "Save As...", SaveAs);
-        commands.Add("File/save", "Save All", SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/save", "Revert File", RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
+        commands.Add("File/save", Said("documents.save"), Save, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/save", Said("documents.save_as"), SaveAs);
+        commands.Add("File/save", Said("documents.save_all"), SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 
-        commands.Add("File/close", "Close", Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/close", "Close Others", () => CloseAll(except: document), icon: "close-all").IsEnabled = () => documents.Count > 1;
-        commands.Add("File/close", "Close All", () => CloseAll(), icon: "close-all");
+        commands.Add("File/close", Said("documents.close"), Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "close-all").IsEnabled = () => documents.Count > 1;
+        commands.Add("File/close", Said("documents.close_all"), () => CloseAll(), icon: "close-all");
 
         // VS Code's, the file closed last back and the path of the one on screen copied
-        commands.Add("File/close", "Reopen Closed Editor", ReopenClosed, "Ctrl+Shift+T", "history", UIKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;
-        commands.Add("File/path", "Copy Path", () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
-        commands.Add("File/path", "Copy Relative Path", () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
+        commands.Add("File/close", Said("documents.reopen_closed"), ReopenClosed, "Ctrl+Shift+T", "history", UIKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;
+        commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
+        commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
 
-        commands.Add("Edit/history", "Undo", Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending;
-        commands.Add("Edit/history", "Redo", Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo;
+        commands.Add("Edit/history", Said("documents.undo"), Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending;
+        commands.Add("Edit/history", Said("documents.redo"), Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo;
 
         // Ctrl+Tab goes through the files that are open, the way every editor does, with shift the other way
         commands.Bind(Key.Tab, () => CycleDocuments(1), control: true, whileTyping: true, shift: false);
@@ -507,7 +507,7 @@ internal sealed partial class DawnScene
         if (document.Undo())
             designer.Restored("undone");
         else
-            Say("nothing to undo");
+            Say(Said("documents.nothing_to_undo"));
     }
 
     private void Redo()
@@ -526,6 +526,6 @@ internal sealed partial class DawnScene
         if (document.Redo())
             designer.Restored("redone");
         else
-            Say("nothing to redo");
+            Say(Said("documents.nothing_to_redo"));
     }
 }

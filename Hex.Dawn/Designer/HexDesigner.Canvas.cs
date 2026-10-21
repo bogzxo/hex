@@ -22,10 +22,14 @@ internal sealed partial class HexDesigner
     private static readonly Vector2[] Designs = [new(1600, 900), new(1920, 1080), new(1280, 720), new(2560, 1080), new(1080, 1920)];
 
     // Shapes of screen to try a layout out on: its own, and the ones that break layouts made for 16:9
-    private static readonly (string Name, float Aspect)[] Previews =
+    private static readonly (string Menu, string Notice, float Aspect)[] Previews =
     [
-        ("its own shape", 0.0f), ("16:9", 16.0f / 9.0f), ("21:9, an ultrawide", 21.0f / 9.0f), ("32:9, a silly ultrawide", 32.0f / 9.0f),
-        ("4:3", 4.0f / 3.0f), ("9:16, a phone", 9.0f / 16.0f)
+        ("designer_canvas.preview_on_its_own_shape", "designer_canvas.previewing_on_its_own_shape", 0.0f),
+        ("designer_canvas.preview_on_16_9", "designer_canvas.previewing_on_16_9", 16.0f / 9.0f),
+        ("designer_canvas.preview_on_21_9", "designer_canvas.previewing_on_21_9", 21.0f / 9.0f),
+        ("designer_canvas.preview_on_32_9", "designer_canvas.previewing_on_32_9", 32.0f / 9.0f),
+        ("designer_canvas.preview_on_4_3", "designer_canvas.previewing_on_4_3", 4.0f / 3.0f),
+        ("designer_canvas.preview_on_9_16", "designer_canvas.previewing_on_9_16", 9.0f / 16.0f)
     ];
 
     // How far past fitting the screen into the canvas it's zoomed in, and how far it's been dragged about (in the editor's units)
@@ -97,14 +101,14 @@ internal sealed partial class HexDesigner
         canvasPan = around - local * after - canvas.Bounds.Center;
         canvasZoom = zoom;
 
-        context.Notices.Say($"zoomed to {after * 100.0f / compositor.Scale:0}%");
+        context.Notices.Say(context.Strings.Said("designer_canvas.zoomed_to", ("percent", (after * 100.0f / compositor.Scale).ToString("0"))));
     }
 
     internal void ZoomToFit()
     {
         canvasZoom = 1.0f;
         canvasPan = Vector2.Zero;
-        context.Notices.Say("zoomed to fit");
+        context.Notices.Say(context.Strings.Said("designer_canvas.zoomed_to_fit"));
     }
 
     internal void ZoomToActualSize()
@@ -113,7 +117,7 @@ internal sealed partial class HexDesigner
         float fit = CanvasFit(canvas.Bounds, PreviewScreen());
         canvasZoom = fit > 0.0f ? 1.0f / fit : 1.0f;
         canvasPan = Vector2.Zero;
-        context.Notices.Say("actual size");
+        context.Notices.Say(context.Strings.Said("designer_canvas.actual_size"));
     }
 
     /// <summary>
@@ -162,32 +166,34 @@ internal sealed partial class HexDesigner
         codeDirty = inspectorDirty = true;
 
         context.Notices.Say(size is { } made
-            ? $"made for {made.X:0} x {made.Y:0}, {(fit == UIFit.Contain ? "keeping its shape in the middle of other screens" : "stretching out over other screens")}"
-            : "made for any screen: laid out against whatever it's shown on");
+            ? context.Strings.Said(fit == UIFit.Contain ? "designer_canvas.made_for_contain" : "designer_canvas.made_for_stretch",
+                ("width", made.X.ToString("0")), ("height", made.Y.ToString("0")))
+            : context.Strings.Said("designer_canvas.made_for_any_screen"));
     }
 
-    internal static string DescribeDesign(Vector2 size) => $"Design for {size.X:0} x {size.Y:0}";
+    internal static string DescribeDesign(Vector2 size) =>
+        Hex.Shell.HexText.Get("designer_canvas.design_for", ("width", size.X.ToString("0")), ("height", size.Y.ToString("0")));
 
     /// <summary>What screen the layout is made for, how it goes on another one, and what it is previewed on, the Layout menu's Screen.</summary>
     private void FillScreenMenu(Menu made)
     {
-        made.Add("Any Screen", () => SetDesign(null, document.Fit)).IsChecked = () => document.Design is null;
+        made.Add(context.Strings.Said("designer_canvas.any_screen"), () => SetDesign(null, document.Fit)).IsChecked = () => document.Design is null;
         foreach (Vector2 size in Designs)
             made.Add(DescribeDesign(size), () => SetDesign(size, document.Fit)).IsChecked = () => document.Design == size;
 
         made.AddSeparator();
-        made.Add("Contain", () => SetDesign(document.Design ?? DesignSize, UIFit.Contain)).IsChecked =
+        made.Add(context.Strings.Said("designer_canvas.contain"), () => SetDesign(document.Design ?? DesignSize, UIFit.Contain)).IsChecked =
             () => document.Design is not null && document.Fit == UIFit.Contain;
-        made.Add("Stretch", () => SetDesign(document.Design ?? DesignSize, UIFit.Stretch)).IsChecked =
+        made.Add(context.Strings.Said("designer_canvas.stretch"), () => SetDesign(document.Design ?? DesignSize, UIFit.Stretch)).IsChecked =
             () => document.Design is not null && document.Fit == UIFit.Stretch;
 
         made.AddSeparator();
-        foreach (var (name, aspect) in Previews)
+        foreach (var (menu, notice, aspect) in Previews)
         {
-            made.Add($"Preview on {name}", () =>
+            made.Add(context.Strings.Said(menu), () =>
             {
                 previewAspect = aspect;
-                context.Notices.Say($"previewing on {name}");
+                context.Notices.Say(context.Strings.Said(notice));
             }).IsChecked = () => previewAspect == aspect;
         }
     }

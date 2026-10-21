@@ -36,8 +36,8 @@ internal sealed partial class HexExtensions
     private (string, IRuntimeValue)[] Talking(HexExtension extension) =>
     [
         ("title_note", Natives.Action("title_note", args => screens.TitleNote(extension, args.Text(0, string.Empty).ReplaceLineEndings(" ")))),
-        ("say", Natives.Action("say", args => context.Notices.Say($"{extension.Name}: {args.Text(0, string.Empty)}"))),
-        ("notify", Natives.Action("notify", args => context.Notices.Notify($"{extension.Name}: {args.Text(0, string.Empty)}", error: args.Bool(1, false)))),
+        ("say", Natives.Action("say", args => context.Notices.Say(context.Strings.Said("extensions_api.said", ("name", extension.Name), ("text", args.Text(0, string.Empty)))))),
+        ("notify", Natives.Action("notify", args => context.Notices.Notify(context.Strings.Said("extensions_api.said", ("name", extension.Name), ("text", args.Text(0, string.Empty))), error: args.Bool(1, false)))),
         ("command", Natives.Action("command", args =>
         {
             // In the command palette under the extension's name, as long as it is switched on, and on a key if it says one
@@ -120,7 +120,7 @@ internal sealed partial class HexExtensions
             ObjectValue asked = args.Object(0);
             IRuntimeValue then = args[1];
             string folder = Text(asked, "folder") is { } from ? PathFor(extension, from) : context.Windows.BrowseFolder;
-            context.Windows.ChooseFile(Text(asked, "title") ?? $"{extension.Name}, a file", folder, [.. FilterOf(asked)], picked => Picked(extension, then, picked));
+            context.Windows.ChooseFile(Text(asked, "title") ?? context.Strings.Said("extensions_api.pick_file_title", ("name", extension.Name)), folder, [.. FilterOf(asked)], picked => Picked(extension, then, picked));
         })),
         ("pick_folder", Natives.Action("pick_folder", args =>
         {
@@ -283,7 +283,7 @@ internal sealed partial class HexExtensions
     {
         if (!File.Exists(program))
         {
-            context.Notices.Note($"{extension.Name}: there is no '{program}' to start.", error: true);
+            context.Notices.Note(context.Strings.Said("extensions_api.no_program", ("name", extension.Name), ("program", program)), error: true);
             return false;
         }
 
@@ -315,7 +315,7 @@ internal sealed partial class HexExtensions
         }
         catch (Exception e)
         {
-            context.Notices.Note($"{extension.Name}: '{Path.GetFileName(program)}' wouldn't start, {e.Message}", error: true);
+            context.Notices.Note(context.Strings.Said("extensions_api.program_failed", ("name", extension.Name), ("program", Path.GetFileName(program)), ("error", e.Message)), error: true);
             return false;
         }
     }

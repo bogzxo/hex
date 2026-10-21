@@ -19,6 +19,10 @@ internal static partial class Program
 {
     public static int Main(string[] args)
     {
+        // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
+        // before anything asks where. A copy carried about on a stick has it all with it
+        Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+
         if (args.Any(arg => arg is "--help" or "-h" or "-?" or "/?" or "/h"))
         {
             // A Release Hex is a window with no console of its own, the help goes to the one it was typed into

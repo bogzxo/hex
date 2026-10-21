@@ -40,7 +40,7 @@ internal sealed partial class DawnScene
         if (documents.Contains(was))
             Show(was);
 
-        Say(skipped > 0 ? $"saved {saved} files, {skipped} never saved anywhere are left for Ctrl+S" : saved > 0 ? $"saved {saved} files" : "nothing to save");
+        Say(skipped > 0 ? Said("commands.saved_left", ("saved", saved.ToString()), ("skipped", skipped.ToString())) : saved > 0 ? Said("commands.saved", ("saved", saved.ToString())) : Said("commands.nothing_to_save"));
     }
 
     /// <summary>Throws away what isn't saved of the file on screen, for what is in its file.</summary>
@@ -49,14 +49,14 @@ internal sealed partial class DawnScene
         if (document.Path is not { } path)
             return;
 
-        UIDialog.Show(chrome, "Revert the file?", $"What isn't saved of {Path.GetFileName(path)} goes, and it is as it is in its file.",
-            new DialogChoice("Revert", () =>
+        UIDialog.Show(chrome, Said("commands.revert_title"), Said("commands.revert_text", ("file", Path.GetFileName(path))),
+            new DialogChoice(Said("commands.revert"), () =>
             {
                 CloseNow();
                 Open(path);
-                Say($"{Path.GetFileName(path)} is as it is in its file");
+                Say(Said("commands.reverted", ("file", Path.GetFileName(path))));
             }),
-            new DialogChoice("Cancel"));
+            new DialogChoice(Said("keys.leave_it")));
     }
 
     private void ToggleProperties()
@@ -77,9 +77,9 @@ internal sealed partial class DawnScene
     {
         var choices = new List<(string Text, Action Picked)>();
         foreach (OutlineEntry entry in OutlineHere())
-            choices.Add(($"{new string(' ', entry.Depth * 4)}{entry.Name}   line {entry.Line + 1}", () => code.GoTo(entry.Line, entry.Column)));
+            choices.Add((new string(' ', entry.Depth * 4) + Said("commands.symbol_entry", ("name", entry.Name), ("line", (entry.Line + 1).ToString())), () => code.GoTo(entry.Line, entry.Column)));
 
-        ChooseFrom("Go to something in the file", $"What {document.Name} declares and the keys of its objects", choices);
+        ChooseFrom(Said("commands.symbol_title"), Said("commands.symbol_text", ("file", document.Name)), choices);
     }
 
     /// <summary>The next problem there is (or the one before), going round, opened with the caret on it.</summary>
@@ -88,14 +88,14 @@ internal sealed partial class DawnScene
         GatherProblems();
         if (problemList.Count == 0)
         {
-            Say("nothing wrong");
+            Say(Said("commands.nothing_wrong"));
             return;
         }
 
         problemStep = ((problemStep + direction) % problemList.Count + problemList.Count) % problemList.Count;
         HexProblem problem = problemList[problemStep];
         OpenAt(problem.Path, problem.Line, problem.Column);
-        Say($"{problemStep + 1} of {problemList.Count}, {problem.Text}", error: !problem.Warning);
+        Say(Said("commands.problem_step", ("at", (problemStep + 1).ToString()), ("count", problemList.Count.ToString()), ("problem", problem.Text)), error: !problem.Warning);
     }
 
     /// <summary>The code of the layout, with the caret on the let of a name of it.</summary>
@@ -150,7 +150,10 @@ internal sealed partial class DawnScene
     /// A little window with a page of markdown in it that scrolls, out of text_window.hor, for the Help menu. Dragged about
     /// by its title bar, bigger by its corner, gone with its x.
     /// </summary>
-    private WindowPanel ShowText(string title, string markdown, float height = 520.0f)
+    private WindowPanel ShowText(string title, string markdown, float height = 520.0f) => ShowText(title, markdown, out _, height);
+
+    /// <summary>The same with the label the page is in, for a page that is filled in later (the changelog, once GitHub answers).</summary>
+    private WindowPanel ShowText(string title, string markdown, out Label text, float height = 520.0f)
     {
         UILayout made = layout.Instantiate("text_window.hor", chrome.Root);
         var window = made.Get<WindowPanel>("window");
@@ -158,15 +161,9 @@ internal sealed partial class DawnScene
         window.Size = window.Size with { Y = height + 60.0f };
         window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         window.OnClosed = () => window.Parent?.Remove(window);
-        made.Get<Label>("text").Text = markdown;
+        text = made.Get<Label>("text");
+        text.Text = markdown;
         return window;
-    }
-
-    /// <summary>Help, What changed. The changelog, out of Hex's texts like the rest of the help.</summary>
-    private void ShowChangelog()
-    {
-        ReadStrings();
-        ShowText(Said("changelog.title"), Said("changelog.page", ("version", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?")));
     }
 
     private void ShowLanguageHelp()
@@ -187,10 +184,10 @@ internal sealed partial class DawnScene
     /// <summary>The Help menu.</summary>
     private void AddHelpCommands()
     {
-        commands.Add("Help/help", "Keyboard Shortcuts...", OpenKeysWindow, icon: "keyboard");
-        commands.Add("Help/help", "HIDL Reference...", ShowLanguageHelp, icon: "book");
-        commands.Add("Help/help", "Release Notes...", ShowChangelog, icon: "history");
-        commands.Add("Help/help", "Open Hex's Own Layout", () => Open(EDITOR_LAYOUT), icon: "layout");
-        commands.Add("Help/about", "About Hex...", ShowAbout, icon: "info");
+        commands.Add("Help/help", Said("commands.shortcuts"), OpenKeysWindow, icon: "keyboard");
+        commands.Add("Help/help", Said("commands.reference"), ShowLanguageHelp, icon: "book");
+        commands.Add("Help/help", Said("commands.release_notes"), ShowChangelog, icon: "history");
+        commands.Add("Help/help", Said("commands.own_layout"), () => Open(EDITOR_LAYOUT), icon: "layout");
+        commands.Add("Help/about", Said("commands.about"), ShowAbout, icon: "info");
     }
 }

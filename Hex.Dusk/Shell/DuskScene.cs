@@ -6,6 +6,8 @@ using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Drawing;
 
+using Hex.Shell;
+
 namespace Hex.Dusk;
 
 /// <summary>
@@ -94,7 +96,7 @@ internal sealed partial class DuskScene : Scene
             Notify = Notify,
 
             // Dusk has no Problems panel, the first a program says is said in the status bar with how to get to it
-            Problem = (problem, _) => Say($"{Path.GetFileName(problem.File)}:{problem.Line}  {problem.Message}, Ctrl and a click on the path opens it in Hex", !problem.Warning),
+            Problem = (problem, _) => Say(HexText.Get("dusk_scene.problem", ("file", Path.GetFileName(problem.File) ?? string.Empty), ("line", problem.Line.ToString()), ("message", problem.Message)), !problem.Warning),
             Api = DuskApi,
             ApiFunctions = DuskApiFunctions,
             ApiFile = Path.Combine(TerminalFiles.UserFolder, TerminalApiDescription.FILE),
@@ -198,8 +200,8 @@ internal sealed partial class DuskScene : Scene
             return;
 
         closeAsked = false;
-        UIDialog.Show(chrome, "Close Dusk?", $"{panel.Tabs.Count} tabs are open, their shells go with them.",
-            new DialogChoice("Close", () => Quit(0)), new DialogChoice("Stay"));
+        UIDialog.Show(chrome, HexText.Get("dusk_scene.close_title"), HexText.Get("dusk_scene.close_message", ("count", panel.Tabs.Count.ToString())),
+            new DialogChoice(HexText.Get("documents.close"), () => Quit(0)), new DialogChoice(HexText.Get("dusk_scene.stay")));
     }
 
     /// <summary>Says something in the status bar for a while.</summary>

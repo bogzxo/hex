@@ -53,9 +53,9 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminalPanel.OnTabMenu = (tab, point) =>
         {
             var shown = new Menu("terminal tab");
-            shown.Add("Close", () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "close");
-            shown.Add("Rename", () => terminals.AskRename(tab), icon: "edit");
-            shown.Add("Split right", () => terminals.Run("split_right"), terminals.Commands.KeyOf("split_right"), icon: "split-horizontal");
+            shown.Add(Said("tabs.close"), () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "close");
+            shown.Add(Said("explorer_files.rename"), () => terminals.AskRename(tab), icon: "edit");
+            shown.Add(Said("terminal_page.split_right"), () => terminals.Run("split_right"), terminals.Commands.KeyOf("split_right"), icon: "split-horizontal");
             ContextMenu.Show(chrome, point, shown);
         };
 
@@ -63,21 +63,21 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminals.Start();
 
         // The console after the machine's shells, a new terminal is a shell and the console is asked for by name
-        terminalPanel.Profiles.Add(new TerminalProfile("HIDL in this file", string.Empty, "symbol-namespace", HexRunning.CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
+        terminalPanel.Profiles.Add(new TerminalProfile(Said("terminal_page.console_profile"), string.Empty, "symbol-namespace", HexRunning.CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
         terminals.Watch();
 
         // The keys of Hex's that have to work while a terminal has the keyboard, as commands of the terminal so the shell
         // never sees them. A keys.hor can move them like any other
-        terminals.Commands.Register("hex_panel", "Hex: the panel away", TogglePanel, "Ctrl+J", HexOwns);
-        terminals.Commands.Register("hex_terminal", "Hex: the terminal page and back", ToggleTerminalPage, "F6", HexOwns);
-        terminals.Commands.Register("hex_terminal_focus", "Hex: the terminal or the editor", ToggleTerminalFocus, "Ctrl+`", HexOwns);
-        terminals.Commands.Register("hex_new_terminal", "Hex: a new terminal", NewTerminal, "Ctrl+Shift+`", HexOwns);
-        terminals.Commands.Register("hex_run", "Hex: run the file", RunOrPlay, "F5", HexOwns);
-        terminals.Commands.Register("hex_run_to_terminal", "Hex: F5 says what it ran in the terminal, or in the output", () =>
+        terminals.Commands.Register("hex_panel", Said("terminal_page.command_panel"), TogglePanel, "Ctrl+J", HexOwns);
+        terminals.Commands.Register("hex_terminal", Said("terminal_page.command_terminal"), ToggleTerminalPage, "F6", HexOwns);
+        terminals.Commands.Register("hex_terminal_focus", Said("terminal_page.command_terminal_focus"), ToggleTerminalFocus, "Ctrl+`", HexOwns);
+        terminals.Commands.Register("hex_new_terminal", Said("terminal_page.command_new_terminal"), NewTerminal, "Ctrl+Shift+`", HexOwns);
+        terminals.Commands.Register("hex_run", Said("terminal_page.command_run"), RunOrPlay, "F5", HexOwns);
+        terminals.Commands.Register("hex_run_to_terminal", Said("terminal_page.command_run_to_terminal"), () =>
         {
             settings.RunToTerminal = !settings.RunToTerminal;
             SaveSettings();
-            Say(settings.RunToTerminal ? "F5 says what a file did in the terminal" : "F5 says what a file did in the output");
+            Say(settings.RunToTerminal ? Said("terminal_page.runs_to_terminal") : Said("terminal_page.runs_to_output"));
         }, string.Empty, HexOwns);
 
         // And the same keys from the editor
@@ -244,7 +244,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
 
     void ITerminalHostUi.AskText(string title, string message, string initial, Action<string> answered)
     {
-        UIDialog dialog = UIDialog.Show(chrome, title, message, new DialogChoice("OK"), new DialogChoice("Cancel"));
+        UIDialog dialog = UIDialog.Show(chrome, title, message, new DialogChoice(Said("dusk_plugins.ok")), new DialogChoice(Said("keys.leave_it")));
         var box = dialog.Body.Add(new TextBox { Text = initial, Size = new Vector2(360, 30), TextScale = 0.14f });
         dialog.Buttons[0].OnPressed = () =>
         {

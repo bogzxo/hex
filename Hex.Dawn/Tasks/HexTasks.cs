@@ -23,9 +23,9 @@ internal sealed class HexTasks
     {
         context = with;
         UICommands commands = context.Commands;
-        commands.Add("Run/tasks", "Run Task...", ChooseTask, icon: "tasklist");
-        commands.Add("Run/tasks", "Run Build Task", RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
-        commands.Add("Run/tasks", "Configure Tasks", ConfigureTasks, icon: "gear");
+        commands.Add("Run/tasks", context.Strings.Said("tasks.run_task"), ChooseTask, icon: "tasklist");
+        commands.Add("Run/tasks", context.Strings.Said("tasks.run_build_task"), RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
+        commands.Add("Run/tasks", context.Strings.Said("tasks.configure_tasks"), ConfigureTasks, icon: "gear");
     }
 
     /// <summary>The tasks.hor of a workspace's folder, the one in the folder before the one in .hex, null for none.</summary>
@@ -74,7 +74,7 @@ internal sealed class HexTasks
         }
         catch (Exception e)
         {
-            context.Notices.Say($"{Path.GetFileName(file)} wasn't read, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("tasks.file_not_read", ("file", Path.GetFileName(file)), ("reason", e.Message)), error: true);
         }
 
         tasksRead[file] = (written, tasks);
@@ -98,7 +98,7 @@ internal sealed class HexTasks
             return;
         }
 
-        context.Windows.Choose("Run task", "The tasks of the workspace's tasks.hor, each runs in a terminal of its own",
+        context.Windows.Choose(context.Strings.Said("tasks.choose_title"), context.Strings.Said("tasks.choose_prompt"),
             [.. tasks.Select(task => ($"{task.Name}   {task.Command}", (Action)(() => Run(task))))]);
     }
 
@@ -118,7 +118,7 @@ internal sealed class HexTasks
     internal void Run(HexTask task)
     {
         context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), task.Command);
-        context.Notices.Say($"running {task.Name}");
+        context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
     }
 
     /// <summary>Configure Tasks, the workspace's tasks.hor opened, written first with a guess at what it wants when there isn't one.</summary>
@@ -134,7 +134,7 @@ internal sealed class HexTasks
             }
             catch (Exception e)
             {
-                context.Notices.Say($"{TASKS_FILE} couldn't be written, {e.Message}", error: true);
+                context.Notices.Say(context.Strings.Said("tasks.file_not_written", ("file", TASKS_FILE), ("reason", e.Message)), error: true);
                 return;
             }
         }

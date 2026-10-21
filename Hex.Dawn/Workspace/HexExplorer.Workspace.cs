@@ -47,7 +47,7 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"the workspace of last time didn't open, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_workspace.last_workspace_failed", ("message", e.Message)), error: true);
             workspace = new HexWorkspace();
         }
 
@@ -94,7 +94,7 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"couldn't keep the workspace, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_workspace.keep_failed", ("message", e.Message)), error: true);
         }
 
         string last = workspace.FilePath ?? string.Empty;
@@ -116,12 +116,12 @@ internal sealed partial class HexExplorer
             return;
         }
 
-        context.Windows.Prompt("A folder", "The path of the folder", browseDirectory, "Add", string.Empty, typed =>
+        context.Windows.Prompt(context.Strings.Said("explorer_workspace.folder_title"), context.Strings.Said("explorer_workspace.folder_prompt"), browseDirectory, context.Strings.Said("explorer_workspace.add"), string.Empty, typed =>
         {
             if (Directory.Exists(typed.Trim()))
                 picked(typed.Trim());
             else
-                context.Notices.Say($"there is no folder {typed}", error: true);
+                context.Notices.Say(context.Strings.Said("explorer_workspace.no_folder", ("folder", typed)), error: true);
         });
     }
 
@@ -130,13 +130,13 @@ internal sealed partial class HexExplorer
     {
         if (!Directory.Exists(folder))
         {
-            context.Notices.Say($"there is no folder {folder}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_workspace.no_folder", ("folder", folder)), error: true);
             return;
         }
 
         if (!workspace.Add(folder))
         {
-            context.Notices.Say($"{folder} is in the workspace already");
+            context.Notices.Say(context.Strings.Said("explorer_workspace.already_in", ("folder", folder)));
             return;
         }
 
@@ -146,7 +146,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say($"added {folder}, the workspace has {workspace.Folders.Count} folders");
+        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", folder), ("count", workspace.Folders.Count.ToString())));
     }
 
     /// <summary>A workspace of one folder, the one that was open going away (its file stays where it is).</summary>
@@ -164,7 +164,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say($"{Path.GetFileName(folder)} is out of the workspace, nothing in it was touched");
+        context.Notices.Say(context.Strings.Said("explorer_workspace.removed", ("name", Path.GetFileName(folder))));
     }
 
     internal void OpenWorkspaceFile(string path)
@@ -175,7 +175,7 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"{Path.GetFileName(path)} isn't a workspace, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_workspace.not_a_workspace", ("name", Path.GetFileName(path)), ("message", e.Message)), error: true);
             return;
         }
 
@@ -191,7 +191,7 @@ internal sealed partial class HexExplorer
         }
 
         KeepWorkspace();
-        context.Notices.Say($"opened the workspace {workspace.Name}, {workspace.Folders.Count} folders");
+        context.Notices.Say(context.Strings.Said("explorer_workspace.opened", ("name", workspace.Name), ("count", workspace.Folders.Count.ToString())));
     }
 
     internal void SaveWorkspaceAs(string path)
@@ -204,11 +204,11 @@ internal sealed partial class HexExplorer
             KeepWorkspace();
             workspace.Save(path);
             KeepWorkspace();
-            context.Notices.Say($"saved the workspace as {path}");
+            context.Notices.Say(context.Strings.Said("explorer_workspace.saved_as", ("path", path)));
         }
         catch (Exception e)
         {
-            context.Notices.Say($"couldn't save the workspace, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_workspace.save_failed", ("message", e.Message)), error: true);
         }
     }
 
@@ -219,7 +219,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say("the workspace is closed, no folders");
+        context.Notices.Say(context.Strings.Said("explorer_workspace.closed"));
     }
 
     internal void OpenWorkspacePressed()
@@ -278,11 +278,11 @@ internal sealed partial class HexExplorer
     /// <summary>The File menu's folders and workspaces, and Go's back and forward through the places the caret was.</summary>
     internal void AddWorkspaceCommands()
     {
-        commands.Add("File/workspace", "Open Folder...", () => AskFolder(OpenFolder), icon: "folder-opened");
-        commands.Add("File/workspace", "Add Folder to Workspace...", () => AskFolder(AddFolder), icon: "new-folder");
-        commands.Add("File/workspace", "Open Workspace...", OpenWorkspacePressed, icon: "folder-library");
-        commands.Add("File/workspace", "Save Workspace", () => SaveWorkspacePressed(asNew: false)).IsEnabled = () => !workspace.IsEmpty;
-        commands.Add("File/workspace", "Save Workspace As...", () => SaveWorkspacePressed(asNew: true)).IsEnabled = () => !workspace.IsEmpty;
-        commands.Add("File/workspace", "Close Workspace", CloseWorkspace).IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace", context.Strings.Said("welcome.open_folder"), () => AskFolder(OpenFolder), icon: "folder-opened");
+        commands.Add("File/workspace", context.Strings.Said("explorer_workspace.add_folder"), () => AskFolder(AddFolder), icon: "new-folder");
+        commands.Add("File/workspace", context.Strings.Said("explorer_workspace.open_workspace"), OpenWorkspacePressed, icon: "folder-library");
+        commands.Add("File/workspace", context.Strings.Said("explorer_workspace.save_workspace"), () => SaveWorkspacePressed(asNew: false)).IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace", context.Strings.Said("explorer_workspace.save_workspace_as"), () => SaveWorkspacePressed(asNew: true)).IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace", context.Strings.Said("explorer_workspace.close_workspace"), CloseWorkspace).IsEnabled = () => !workspace.IsEmpty;
     }
 }
