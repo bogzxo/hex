@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Hex.Shell;
+
 using Horizon.UI.Components;
 using Horizon.UI.Skinning;
 
@@ -35,7 +37,7 @@ internal sealed partial class DuskScene
             }
         }
 
-        return theme.Length == 0 ? "Dark" : char.ToUpperInvariant(theme[0]) + theme[1..];
+        return theme.Length == 0 ? HexText.Get("dusk_themes.dark") : char.ToUpperInvariant(theme[0]) + theme[1..];
     }
 
     /// <summary>A theme the skin has, or its usual one.</summary>

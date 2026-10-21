@@ -52,7 +52,7 @@ internal sealed partial class HexDesigner
 
         if (!document.Move(moving, by))
         {
-            context.Notices.Say(by < 0 ? "it's the first one in there already" : "it's the last one in there already");
+            context.Notices.Say(context.Strings.Said(by < 0 ? "designer_editing.already_first" : "designer_editing.already_last"));
             return;
         }
 
@@ -88,7 +88,7 @@ internal sealed partial class HexDesigner
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        context.Notices.Say(inwards ? "moved into the container before it" : "moved out of its container");
+        context.Notices.Say(context.Strings.Said(inwards ? "designer_editing.moved_into" : "designer_editing.moved_out"));
     }
 
     /* The clipboard. What was copied is kept as the code that makes it, so it can be put down in another layout */
@@ -102,7 +102,9 @@ internal sealed partial class HexDesigner
             return;
 
         clipboard = document.Copy(copied);
-        context.Notices.Say(copied.Count == 1 ? $"copied {document.NameOf(copied[0])}" : $"copied {copied.Count} things");
+        context.Notices.Say(copied.Count == 1
+            ? context.Strings.Said("designer_editing.copied_one", ("name", document.NameOf(copied[0])))
+            : context.Strings.Said("designer_editing.copied_many", ("count", copied.Count.ToString())));
     }
 
     private void CutSelected()
@@ -112,21 +114,21 @@ internal sealed partial class HexDesigner
 
         CopySelected();
         DeleteAll();
-        context.Notices.Say("cut, paste puts it back down");
+        context.Notices.Say(context.Strings.Said("designer_editing.cut"));
     }
 
     private void Paste()
     {
         if (clipboard.Length == 0)
         {
-            context.Notices.Say("nothing has been copied yet");
+            context.Notices.Say(context.Strings.Said("designer_editing.nothing_copied"));
             return;
         }
 
         var made = document.Paste(clipboard, ContainerForNew(), out string problem);
         if (made.Count == 0)
         {
-            context.Notices.Say($"couldn't paste: {problem}", error: true);
+            context.Notices.Say(context.Strings.Said("designer_editing.paste_failed", ("problem", problem)), error: true);
             return;
         }
 
@@ -136,7 +138,9 @@ internal sealed partial class HexDesigner
 
         MarkSelection();
         treeDirty = codeDirty = true;
-        context.Notices.Say(made.Count == 1 ? $"pasted as {document.NameOf(made[0])}" : $"pasted {made.Count} things");
+        context.Notices.Say(made.Count == 1
+            ? context.Strings.Said("designer_editing.pasted_one", ("name", document.NameOf(made[0])))
+            : context.Strings.Said("designer_editing.pasted_many", ("count", made.Count.ToString())));
     }
 
     /* Lining things up */
@@ -184,7 +188,9 @@ internal sealed partial class HexDesigner
         }
 
         codeDirty = inspectorDirty = true;
-        context.Notices.Say(moving.Count == 1 ? "lined up with its container" : $"lined {moving.Count} things up");
+        context.Notices.Say(moving.Count == 1
+            ? context.Strings.Said("designer_editing.lined_up_one")
+            : context.Strings.Said("designer_editing.lined_up_many", ("count", moving.Count.ToString())));
     }
 
     /// <summary>
@@ -196,7 +202,7 @@ internal sealed partial class HexDesigner
         var moving = document.TopSelection();
         if (moving.Count < 3)
         {
-            context.Notices.Say("select three or more things to space them out");
+            context.Notices.Say(context.Strings.Said("designer_editing.select_three"));
             return;
         }
 
@@ -217,7 +223,7 @@ internal sealed partial class HexDesigner
         }
 
         codeDirty = inspectorDirty = true;
-        context.Notices.Say($"spaced {moving.Count} things out {(horizontally ? "across" : "up and down")}");
+        context.Notices.Say(context.Strings.Said(horizontally ? "designer_editing.spaced_across" : "designer_editing.spaced_up_down", ("count", moving.Count.ToString())));
     }
 
     internal void Select(UIComponent? component)
@@ -234,7 +240,7 @@ internal sealed partial class HexDesigner
         MarkSelection();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
 
-        context.Notices.Say($"{what}, {document.UndoCount} more to undo");
+        context.Notices.Say(context.Strings.Said("designer_editing.restored", ("what", what), ("count", document.UndoCount.ToString())));
     }
 
     /// <summary>

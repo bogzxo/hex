@@ -19,12 +19,10 @@ internal sealed partial class DawnScene
     private HexBackups Backups => backups ??= new HexBackups(BackupFolder);
 
     // The self test keeps its backups apart, or a run of it would leave things to bring back for the next real start.
-    // Windows' where they always were, ~/Library/Application Support/Hex/backups and ~/.local/state/hex/backups elsewhere
+    // The data folder next to Hex.exe, or the user's state folder for a Hex that can't write where it is
     private string BackupFolder => options.SelfTest
         ? Path.Combine(Path.GetTempPath(), "Hex", "self test backups")
-        : OperatingSystem.IsWindows()
-            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Horizon", "Horizon.Hex", "backups")
-            : Path.Combine(Horizon.Core.Platform.PlatformPaths.State("Hex"), "backups");
+        : Path.Combine(Horizon.Core.Platform.PlatformPaths.State("Hex"), "backups");
 
     /// <summary>Every couple of seconds, what has changes kept and what has none any more let go of.</summary>
     private void UpdateBackups(float dt)
@@ -83,7 +81,7 @@ internal sealed partial class DawnScene
         }
 
         if (brought.Count > 0)
-            Notify($"brought back what wasn't saved in {string.Join(", ", brought)}, from before Hex last stopped. Ctrl+Z in each goes back to its file");
+            Notify(Said("backups.restored", ("files", string.Join(", ", brought))));
     }
 
     private bool BringBack(HexBackups.Found backup)

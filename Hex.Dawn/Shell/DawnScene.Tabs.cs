@@ -57,7 +57,7 @@ internal sealed partial class DawnScene
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path ?? $"{shown.Name}, never saved";
+            tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.Tag = shown;
         }
@@ -66,23 +66,27 @@ internal sealed partial class DawnScene
 
         // The window says what is open, with a dot while it has changes, VS Code's way
         string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
-        ((TitleBar)top).Title = $"{name}{(document.Modified || document.CodeEdited ? " *" : string.Empty)}  -  Hex {HexAbout.Version}{(titleNote.Length > 0 ? $" ({titleNote})" : string.Empty)}";
-        Engine.WindowManager.Title = $"{name} - Hex {HexAbout.Version}";
+        bool changed = document.Modified || document.CodeEdited;
+        string version = HexAbout.Version.ToString();
+        ((TitleBar)top).Title = titleNote.Length > 0
+            ? Said(changed ? "tabs.title_changed_note" : "tabs.title_note", ("name", name), ("version", version), ("note", titleNote))
+            : Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name), ("version", version));
+        Engine.WindowManager.Title = Said("tabs.window_title", ("name", name), ("version", version));
     }
 
     private void ShowTabMenu(HexDocument tab)
     {
         var shown = new Menu("tab");
-        shown.Add("Close", () => CloseDocument(tab), "Ctrl+W", icon: "close");
-        shown.Add("Close the others", () => CloseAll(except: tab), icon: "close-all");
-        shown.Add("Close the saved ones", () => CloseAll(onlySaved: true));
-        shown.Add("Close all", () => CloseAll(), icon: "close-all");
+        shown.Add(Said("tabs.close"), () => CloseDocument(tab), "Ctrl+W", icon: "close");
+        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "close-all");
+        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true));
+        shown.Add(Said("tabs.close_all"), () => CloseAll(), icon: "close-all");
         shown.AddSeparator();
-        shown.Add("Open to the side", () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
+        shown.Add(Said("tabs.open_to_side"), () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
         shown.AddSeparator();
-        shown.Add("Copy the path", () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
-        shown.Add("Copy the path in the workspace", () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
-        shown.Add("Reveal in the explorer", () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 

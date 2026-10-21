@@ -44,7 +44,7 @@ internal sealed partial class DawnScene
             if (item.State == WorkState.Succeeded)
                 done(result);
             else if (item.State == WorkState.Failed)
-                Notify($"{doing} went wrong, {item.Error}", error: true);
+                Notify(Said("background.went_wrong", ("doing", doing), ("error", item.Error ?? string.Empty)), error: true);
         }, cancellable: false);
     }
 
@@ -74,13 +74,13 @@ internal sealed partial class DawnScene
             // InBackground's are quick and have no key of their own, they're said in the status bar instead
             Listed = item => !item.Key.StartsWith("background ", StringComparison.Ordinal)
         };
-        workCards.AddTo(statusBar, chrome, "What Hex is doing in the background, click to see it and stop any of it");
+        workCards.AddTo(statusBar, chrome, Said("background.work_tip"));
     }
 
     /// <summary>What a piece of work wrote, in the output under the editor.</summary>
     private void ShowWorkOutput(WorkItem item)
     {
-        Note($"{item.Title}:");
+        Note(Said("background.output_title", ("title", item.Title)));
         foreach (string line in item.Output)
             Note("  " + line);
         ShowPanel(OUTPUT_PAGE);

@@ -29,7 +29,7 @@ internal sealed partial class HexLanguages
     {
         serverStatus.Clear();
         var panel = new StackPanel { Spacing = 6.0f, Padding = new UIEdges(14.0f, 10.0f, 10.0f, 14.0f) };
-        panel.Add(new Label { Text = "[b]On this machine[/b]", Markdown = true, Size = new System.Numerics.Vector2(640.0f, 0.0f), Align = Horizon.Rendering.Origin.TopLeft });
+        panel.Add(new Label { Text = $"[b]{context.Strings.Said("language_settings.on_this_machine")}[/b]", Markdown = true, Size = new System.Numerics.Vector2(640.0f, 0.0f), Align = Horizon.Rendering.Origin.TopLeft });
         foreach (HexServerEntry entry in ServerEntries)
         {
             var line = new Label { Markdown = true, Wrap = true, Size = new System.Numerics.Vector2(640.0f, 0.0f), Align = Horizon.Rendering.Origin.TopLeft };
@@ -80,18 +80,20 @@ internal sealed partial class HexLanguages
         if (Installing(entry) is { } going)
             return name + $"[color:#e5c07b]{UIRichText.Literal(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {UIRichText.Literal(going.Message)}";
         if (serversProbing.Contains(entry.Name) || !serversFound.TryGetValue(entry.Name, out ServerFound? found))
-            return name + "looking for it...";
+            return name + context.Strings.Said("language_settings.looking");
 
         string latest = settings.ServerLatest.TryGetValue(entry.Name, out string? newest) ? newest : string.Empty;
         if (found.Path is null)
         {
-            string out_ = latest.Length > 0 ? $", {UIRichText.Literal(latest)} is the newest" : string.Empty;
-            return name + $"[color:#ff7366]not found[/color]{out_}. {(entry.Install.Length > 0 ? $"`{UIRichText.Literal(entry.Install)}` installs it" : "Download it from its releases")}.";
+            string out_ = latest.Length > 0 ? ", " + context.Strings.Said("language_settings.newest_is", ("version", UIRichText.Literal(latest))) : string.Empty;
+            string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", $"`{UIRichText.Literal(entry.Install)}`"))
+                : context.Strings.Said("language_settings.download_from_releases");
+            return name + $"[color:#ff7366]{context.Strings.Said("language_settings.not_found")}[/color]{out_}. {how}.";
         }
 
-        string version = found.Version is { } said ? UIRichText.Literal(said) : "a version it doesn't say";
-        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{UIRichText.Literal(newer)} is out[/color]"
-            : latest.Length > 0 && found.Version is not null ? ", the newest" : string.Empty;
+        string version = found.Version is { } said ? UIRichText.Literal(said) : context.Strings.Said("language_settings.version_unsaid");
+        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{context.Strings.Said("language_settings.newer_out", ("version", UIRichText.Literal(newer)))}[/color]"
+            : latest.Length > 0 && found.Version is not null ? ", " + context.Strings.Said("language_settings.the_newest") : string.Empty;
         return name + $"{version}{news}\n[color:#7f8a9e]{UIRichText.Literal(found.Path)}[/color]";
     }
 
@@ -105,9 +107,9 @@ internal sealed partial class HexLanguages
             this.languages = languages;
             Settings =
             [
-                new("server_updates", "Look for new versions", UIFormKind.Flag,
-                    "Asks GitHub once a day, as Hex starts, for the newest release of each language server, and offers an update for one on this machine that is behind.",
-                    SERVER_SECTION, Buttons: ["Check now"]),
+                new("server_updates", HexText.Get("language_settings.updates"), UIFormKind.Flag,
+                    HexText.Get("language_settings.updates_help"),
+                    SERVER_SECTION, Buttons: [HexText.Get("language_settings.check_now")]),
                 .. languages.ServerEntries.Select(entry => new UISetting(SERVER_KEY + entry.Name, entry.Command, UIFormKind.Text, HelpOf(entry), SERVER_SECTION,
                     Buttons: entry.Repo.Length > 0 ? [CHOOSE, InstallLabel(entry), CHANGES] : [CHOOSE, InstallLabel(entry)]))
             ];
@@ -117,8 +119,9 @@ internal sealed partial class HexLanguages
 
         private static string HelpOf(HexServerEntry entry)
         {
-            string how = entry.Install.Length > 0 ? $"Installed with {entry.Install}." : entry.Repo.Length > 0 ? $"Downloaded from github.com/{entry.Repo}." : string.Empty;
-            return $"{entry.About} {how} Where it is, empty for {entry.Command} on the PATH.".Trim();
+            string how = entry.Install.Length > 0 ? HexText.Get("language_settings.installed_with", ("command", entry.Install))
+                : entry.Repo.Length > 0 ? HexText.Get("language_settings.downloaded_from", ("repo", entry.Repo)) : string.Empty;
+            return $"{entry.About} {how} {HexText.Get("language_settings.where_help", ("command", entry.Command))}".Trim();
         }
 
         public string Section => SettingsSections.EDITOR;
@@ -195,8 +198,8 @@ internal sealed partial class HexLanguages
     {
         string now = settings.ServerPaths.GetValueOrDefault(entry.Name) ?? serversFound.GetValueOrDefault(entry.Name)?.Path ?? string.Empty;
         string from = now.Length > 0 ? Path.GetDirectoryName(now) ?? context.Windows.BrowseFolder : context.Windows.BrowseFolder;
-        (string, string)[] filter = OperatingSystem.IsWindows() ? [("Programs (*.exe, *.cmd, *.bat)", "*.exe;*.cmd;*.bat")] : [];
-        context.Windows.ChooseFile($"Where {entry.Command} is", from, filter, path =>
+        (string, string)[] filter = OperatingSystem.IsWindows() ? [(context.Strings.Said("language_settings.programs"), "*.exe;*.cmd;*.bat")] : [];
+        context.Windows.ChooseFile(context.Strings.Said("language_settings.where_is", ("command", entry.Command)), from, filter, path =>
         {
             new ServerSource(this).Set(SERVER_KEY + entry.Name, new StringValue(Path.GetFullPath(path)));
             context.Settings.Refresh(SERVER_KEY + entry.Name);

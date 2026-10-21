@@ -36,7 +36,7 @@ internal sealed partial class HexExplorer
 
         if (!IsEditable(entry.Path))
         {
-            context.Notices.Say($"{Path.GetFileName(entry.Path)} isn't text, there is nothing to edit in it here", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_files.not_text", ("name", Path.GetFileName(entry.Path))), error: true);
             return;
         }
 
@@ -49,25 +49,25 @@ internal sealed partial class HexExplorer
         string folder = entry.IsFolder ? entry.Path : Path.GetDirectoryName(entry.Path)!;
 
         if (!entry.IsFolder)
-            shown.Add("Open", () => context.Documents.Open(entry.Path));
+            shown.Add(context.Strings.Said("explorer_files.open"), () => context.Documents.Open(entry.Path));
 
-        shown.Add("New file...", () => NewFileIn(folder));
-        shown.Add("New folder...", () => NewFolderIn(folder));
+        shown.Add(context.Strings.Said("explorer_files.new_file"), () => NewFileIn(folder));
+        shown.Add(context.Strings.Said("explorer_files.new_folder"), () => NewFolderIn(folder));
         shown.AddSeparator();
-        shown.Add("Rename...", () => RenamePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
-        shown.Add("Reveal in File Explorer", () => RevealInExplorer(entry.Path));
-        shown.Add("Delete...", () => DeletePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.reveal"), () => RevealInExplorer(entry.Path));
+        shown.Add(context.Strings.Said("explorer_files.delete_menu"), () => DeletePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
-        shown.Add("Copy the path", () =>
+        shown.Add(context.Strings.Said("explorer_files.copy_path"), () =>
         {
             UIClipboard.Copy(entry.Path);
-            context.Notices.Say($"{entry.Path} is on the clipboard");
+            context.Notices.Say(context.Strings.Said("explorer_files.path_copied", ("path", entry.Path)));
         });
 
         if (entry.IsRoot)
         {
             shown.AddSeparator();
-            shown.Add("Take out of the workspace", () => RemoveFolder(entry.Path));
+            shown.Add(context.Strings.Said("explorer_files.take_out"), () => RemoveFolder(entry.Path));
         }
 
         context.Windows.Menu(shown);
@@ -93,7 +93,7 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"{Path.GetFileName(path)} couldn't be shown, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_files.not_shown", ("name", Path.GetFileName(path)), ("why", e.Message)), error: true);
         }
     }
 
@@ -127,12 +127,12 @@ internal sealed partial class HexExplorer
 
     internal void NewFileIn(string folder)
     {
-        context.Windows.Prompt("New file", $"A file in {folder}, .hor unless it says otherwise", "new.hor", "Make", string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", folder)), "new.hor", context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {
             name = name.Trim();
             if (!IsPlainName(name))
             {
-                context.Notices.Say($"'{name}' can't be the name of a file", error: true);
+                context.Notices.Say(context.Strings.Said("explorer_files.bad_file_name", ("name", name)), error: true);
                 return;
             }
 
@@ -148,7 +148,7 @@ internal sealed partial class HexExplorer
     {
         if (File.Exists(path) || Directory.Exists(path))
         {
-            context.Notices.Say($"there is a {Path.GetFileName(path)} there already", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_files.already_there", ("name", Path.GetFileName(path))), error: true);
             return;
         }
 
@@ -158,26 +158,26 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"couldn't make {path}, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_files.not_made", ("path", path), ("why", e.Message)), error: true);
             return;
         }
 
         workspace.Expanded.Add(Path.GetDirectoryName(Path.GetFullPath(path))!);
         treeDirty = true;
         context.Documents.Open(path);
-        context.Notices.Say($"made {path}");
+        context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
     }
 
     private void NewFolderIn(string folder)
     {
-        context.Windows.Prompt("New folder", $"A folder in {folder}", "new folder", "Make", string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", folder)), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {
             name = name.Trim();
             string path = Path.Combine(folder, name);
 
             if (!IsPlainName(name) || Directory.Exists(path) || File.Exists(path))
             {
-                context.Notices.Say($"'{name}' can't be made there", error: true);
+                context.Notices.Say(context.Strings.Said("explorer_files.bad_folder_name", ("name", name)), error: true);
                 return;
             }
 
@@ -186,14 +186,14 @@ internal sealed partial class HexExplorer
             workspace.Expanded.Add(Path.GetFullPath(path));
             treeDirty = true;
             KeepWorkspace();
-            context.Notices.Say($"made {path}");
+            context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
         });
     }
 
     private void RenamePath(string path)
     {
         string old = Path.GetFileName(path.TrimEnd('\\', '/'));
-        context.Windows.Prompt("Rename", $"What {old} is called from now on", old, "Rename", string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.rename"), context.Strings.Said("explorer_files.rename_text", ("old", old)), old, context.Strings.Said("explorer_files.rename"), string.Empty, name =>
         {
             name = name.Trim();
             if (!IsPlainName(name) || name == old)
@@ -202,7 +202,7 @@ internal sealed partial class HexExplorer
             string to = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, name);
             if (File.Exists(to) || Directory.Exists(to))
             {
-                context.Notices.Say($"there is a {name} there already", error: true);
+                context.Notices.Say(context.Strings.Said("explorer_files.already_there", ("name", name)), error: true);
                 return;
             }
 
@@ -213,7 +213,7 @@ internal sealed partial class HexExplorer
             }
             catch (Exception e)
             {
-                context.Notices.Say($"couldn't rename {old}, {e.Message}", error: true);
+                context.Notices.Say(context.Strings.Said("explorer_files.not_renamed", ("old", old), ("why", e.Message)), error: true);
                 return;
             }
 
@@ -242,7 +242,7 @@ internal sealed partial class HexExplorer
             window.ShowName();
             treeDirty = true;
             KeepWorkspace();
-            context.Notices.Say($"{old} is {name} now");
+            context.Notices.Say(context.Strings.Said("explorer_files.renamed", ("old", old), ("name", name)));
         });
     }
 
@@ -251,10 +251,10 @@ internal sealed partial class HexExplorer
         string name = Path.GetFileName(path.TrimEnd('\\', '/'));
         bool folder = Directory.Exists(path);
 
-        UIDialog.Show(chrome, $"Delete {name}?",
-            folder ? $"{name} and everything in it go in the trash, where they can be got back from." : $"{name} goes in the trash, where it can be got back from.",
-            new DialogChoice("Delete", () => DeleteNow(path)),
-            new DialogChoice("Cancel"));
+        UIDialog.Show(chrome, context.Strings.Said("explorer_files.delete_title", ("name", name)),
+            folder ? context.Strings.Said("explorer_files.delete_folder_text", ("name", name)) : context.Strings.Said("explorer_files.delete_file_text", ("name", name)),
+            new DialogChoice(context.Strings.Said("explorer_files.delete"), () => DeleteNow(path)),
+            new DialogChoice(context.Strings.Said("keys.leave_it")));
     }
 
     /// <summary>Puts a file or a folder in the trash, and closes whatever was open of it.</summary>
@@ -272,7 +272,7 @@ internal sealed partial class HexExplorer
         }
         catch (Exception e)
         {
-            context.Notices.Say($"couldn't delete {Path.GetFileName(full)}, {e.Message}", error: true);
+            context.Notices.Say(context.Strings.Said("explorer_files.not_deleted", ("name", Path.GetFileName(full)), ("why", e.Message)), error: true);
             return;
         }
 
@@ -293,7 +293,7 @@ internal sealed partial class HexExplorer
         tabsDirty = treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say($"{Path.GetFileName(full)} is in the trash");
+        context.Notices.Say(context.Strings.Said("explorer_files.in_trash", ("name", Path.GetFileName(full))));
     }
 
     /// <summary>The icon of a file in the explorer and the lists, by what it is.</summary>
@@ -358,7 +358,7 @@ internal sealed partial class HexExplorer
             // New layouts are saved to wherever was looked at last
             browseDirectory = path;
             treeDirty = true;
-            context.Notices.Say($"files of {browseDirectory}");
+            context.Notices.Say(context.Strings.Said("explorer_files.files_of", ("folder", browseDirectory)));
             return;
         }
 

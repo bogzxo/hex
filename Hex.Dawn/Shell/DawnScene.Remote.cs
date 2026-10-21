@@ -85,12 +85,12 @@ internal sealed partial class DawnScene
         {
             if (!File.Exists(asked.Path))
             {
-                Say($"asked to open {asked.Path}, which isn't there", error: true);
+                Say(Said("remote.missing", ("path", asked.Path)), error: true);
                 continue;
             }
 
             OpenAt(asked.Path, Math.Max(0, asked.Line - 1), 0);
-            Say($"opened {Path.GetFileName(asked.Path)}, asked for by another program");
+            Say(Said("remote.opened", ("name", Path.GetFileName(asked.Path))));
         }
     }
 

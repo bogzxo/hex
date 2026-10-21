@@ -11,7 +11,7 @@ let window = compositor.window({
     intro_time: 0.18,
     resize: "right, bottom",
     min_size: vec(420, 300),
-    title: "Keyboard Shortcuts",
+    title: "@keys.title",
     icon: "keyboard"
 });
 

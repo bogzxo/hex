@@ -87,7 +87,7 @@ internal sealed partial class HexLanguages
 
         RefreshServerStatus();
         var found = new List<(string Name, ServerFound Found)>();
-        context.Work.Start(FIND_WORK + string.Join(',', looking.Select(pair => pair.Entry.Name)), "Looking for the language servers", context =>
+        context.Work.Start(FIND_WORK + string.Join(',', looking.Select(pair => pair.Entry.Name)), context.Strings.Said("language_updates.looking_for_servers"), context =>
         {
             Horizon.Core.Processes.ProcessEnvironment.WaitForLoginShell();
             for (int i = 0; i < looking.Count; i++)
@@ -122,9 +122,9 @@ internal sealed partial class HexLanguages
         int asking = 0;
 
         // Asked again while it goes, it's the one look, and says what it found when it's done the same
-        context.Work.Start(CHECK_WORK, "Looking for new versions of the language servers", async context =>
+        context.Work.Start(CHECK_WORK, context.Strings.Said("language_updates.looking_for_versions"), async context =>
         {
-            context.Report(0.0f, "asking GitHub");
+            context.Report(0.0f, this.context.Strings.Said("language_updates.asking_github"));
             await Parallel.ForEachAsync(repos, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = context.Token }, async (pair, cancel) =>
             {
                 try
@@ -160,11 +160,13 @@ internal sealed partial class HexLanguages
 
             int behind = OfferServerUpdates(again: asked);
             if (problems.Count > 0)
-                context.Notices.Note($"GitHub couldn't be asked about some of the language servers, {string.Join("; ", problems)}", error: latest.Count == 0);
+                context.Notices.Note(context.Strings.Said("language_updates.some_not_asked", ("problems", string.Join("; ", problems))), error: latest.Count == 0);
             if (asked)
             {
-                context.Notices.Say(latest.Count == 0 && problems.Count > 0 ? "GitHub couldn't be asked, see the output"
-                    : behind == 0 ? "every language server on this machine is up to date" : $"{behind} language server{(behind == 1 ? " has" : "s have")} a new version");
+                string count = behind.ToString(CultureInfo.CurrentCulture);
+                context.Notices.Say(latest.Count == 0 && problems.Count > 0 ? context.Strings.Said("language_updates.not_asked")
+                    : behind == 0 ? context.Strings.Said("language_updates.all_up_to_date")
+                    : behind == 1 ? context.Strings.Said("language_updates.one_behind", ("count", count)) : context.Strings.Said("language_updates.many_behind", ("count", count)));
             }
         }, seen: asked);
         RefreshServerStatus();
@@ -195,17 +197,17 @@ internal sealed partial class HexLanguages
             string have = serversFound[entry.Name].Version ?? "?";
             var actions = new List<(string, Action)>
             {
-                (entry.Update.Length > 0 ? "Update" : "Download", () => InstallServer(entry)),
+                (entry.Update.Length > 0 ? context.Strings.Said("language_updates.update") : context.Strings.Said("language_updates.download"), () => InstallServer(entry)),
             };
             if (entry.Repo.Length > 0)
-                actions.Add(("What changed", () => ShowServerChangelog(entry)));
-            actions.Add(("Not this one", () =>
+                actions.Add((context.Strings.Said("language_updates.what_changed"), () => ShowServerChangelog(entry)));
+            actions.Add((context.Strings.Said("language_updates.not_this_one"), () =>
             {
                 settings.ServerSkipped[entry.Name] = latest;
                 context.Settings.Save();
             }));
 
-            context.Notices.Notify($"{entry.Command} {UIRichText.Plain(latest)} is out, you have {have}.", actions: [.. actions]);
+            context.Notices.Notify(context.Strings.Said("language_updates.is_out", ("command", entry.Command), ("latest", UIRichText.Plain(latest)), ("have", have)), actions: [.. actions]);
         }
 
         return behind;
@@ -222,16 +224,16 @@ internal sealed partial class HexLanguages
 
         string? have = serversFound.TryGetValue(entry.Name, out ServerFound? found) ? found.Version : null;
         List<HexRelease> releases = [];
-        context.Notices.Say($"asking GitHub what changed in {entry.Command}...");
-        context.Work.Start(CHANGES_WORK + entry.Name, $"What changed in {entry.Command}", async context =>
+        context.Notices.Say(context.Strings.Said("language_updates.asking_what_changed", ("command", entry.Command)));
+        context.Work.Start(CHANGES_WORK + entry.Name, context.Strings.Said("language_updates.what_changed_in", ("command", entry.Command)), async context =>
         {
-            context.Say($"asking {entry.Repo}");
+            context.Say(this.context.Strings.Said("language_updates.asking_repo", ("repo", entry.Repo)));
             releases = await HexReleases.Recent(entry.Repo, have is null ? 5 : 30, context.Token).ConfigureAwait(false);
         }, item =>
         {
             if (item.State == WorkState.Failed)
             {
-                context.Notices.Say($"GitHub couldn't be asked about {entry.Command}, {item.Error}", error: true);
+                context.Notices.Say(context.Strings.Said("language_updates.not_asked_about", ("command", entry.Command), ("error", $"{item.Error}")), error: true);
                 return;
             }
 
@@ -239,9 +241,9 @@ internal sealed partial class HexLanguages
                 return;
 
             string header = have is null
-                ? $"The newest releases of **{entry.Command}**, from [{entry.Repo}]({entry.ReleasesPage}).\n\n"
-                : $"What changed in **{entry.Command}** since {have}, the one on this machine, from [{entry.Repo}]({entry.ReleasesPage}).\n\n";
-            context.Windows.ShowText($"What changed in {entry.Command}", header + HexReleases.Changelog(releases, have, UIRichText.Literal), 560.0f);
+                ? context.Strings.Said("language_updates.newest_releases_header", ("command", entry.Command), ("repo", entry.Repo), ("page", entry.ReleasesPage)) + "\n\n"
+                : context.Strings.Said("language_updates.changed_since_header", ("command", entry.Command), ("have", have), ("repo", entry.Repo), ("page", entry.ReleasesPage)) + "\n\n";
+            context.Windows.ShowText(context.Strings.Said("language_updates.what_changed_in", ("command", entry.Command)), header + HexReleases.Changelog(releases, have, UIRichText.Literal), 560.0f);
         }, seen: false);
     }
 
@@ -258,7 +260,7 @@ internal sealed partial class HexLanguages
             if (entry.ReleasesPage.Length > 0)
                 context.Windows.OpenInBrowser(entry.ReleasesPage);
             else
-                context.Notices.Say($"{entry.Command} has no way of being installed from here, see language_servers.hor", error: true);
+                context.Notices.Say(context.Strings.Said("language_updates.no_way_to_install", ("command", entry.Command)), error: true);
             return;
         }
 
@@ -273,9 +275,9 @@ internal sealed partial class HexLanguages
         Task stopped = StopServer(entry);
         string? before = found?.Version;
         context.Notices.Note($"> {line}");
-        context.Work.Start(INSTALL_WORK + entry.Name, $"{(there ? "Updating" : "Installing")} {entry.Command}", async context =>
+        context.Work.Start(INSTALL_WORK + entry.Name, there ? context.Strings.Said("language_updates.updating", ("command", entry.Command)) : context.Strings.Said("language_updates.installing", ("command", entry.Command)), async context =>
         {
-            context.Say($"stopping {entry.Command}");
+            context.Say(this.context.Strings.Said("language_updates.stopping", ("command", entry.Command)));
             await stopped.WaitAsync(context.Token).ConfigureAwait(false);
             context.Say(line);
             int code = await RunCommandLine(line, context).ConfigureAwait(false);
@@ -296,15 +298,16 @@ internal sealed partial class HexLanguages
                 ServerFound now = serversFound.GetValueOrDefault(entry.Name) ?? new ServerFound(null, null);
                 if (now.Path is null)
                 {
-                    context.Notices.Notify($"{entry.Command} was {(there ? "updated" : "installed")} but isn't on the PATH Hex has, set where it is in the settings or restart Hex",
-                        error: true, ("Settings", () => context.Windows.OpenSettings(SERVER_SECTION)));
+                    context.Notices.Notify(there ? context.Strings.Said("language_updates.updated_not_on_path", ("command", entry.Command)) : context.Strings.Said("language_updates.installed_not_on_path", ("command", entry.Command)),
+                        error: true, (context.Strings.Said("settings.title"), () => context.Windows.OpenSettings(SERVER_SECTION)));
                     return;
                 }
 
                 string version = now.Version is { } said ? $" {said}" : string.Empty;
                 context.Notices.Say(there && before is not null && now.Version is not null && HexServerCatalog.Same(before, now.Version)
-                    ? $"{entry.Command} was already the newest it could be, {before}"
-                    : $"{entry.Command}{version} is {(there ? "updated" : "installed")}");
+                    ? context.Strings.Said("language_updates.already_newest", ("command", entry.Command), ("before", before))
+                    : there ? context.Strings.Said("language_updates.is_updated", ("command", entry.Command), ("version", version))
+                    : context.Strings.Said("language_updates.is_installed", ("command", entry.Command), ("version", version)));
             });
         });
         RefreshServerStatus();

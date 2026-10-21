@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
             return;
         }
 
-        Say("nothing closed to bring back");
+        Say(Said("conveniences.nothing_closed"));
     }
 
     /// <summary>Copies where the file on screen is, the whole path or the path inside the workspace.</summary>
@@ -71,7 +71,7 @@ internal sealed partial class DawnScene
 
         string copied = relative ? Relative(path) : Path.GetFullPath(path);
         UIClipboard.Copy(copied);
-        Say($"copied {copied}");
+        Say(Said("designer_editing.copied_one", ("name", copied)));
     }
 
     /* Scratchpads */
@@ -97,7 +97,7 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
-            Say($"couldn't make a scratchpad, {e.Message}", error: true);
+            Say(Said("conveniences.no_scratchpad", ("reason", e.Message)), error: true);
         }
     }
 

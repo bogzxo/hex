@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
         foreach (var (label, key) in ReadKeys(keysPath))
         {
             if (!Rebind(label, key))
-                Say($"keys.hor: nothing called {label} to put on {key}", error: true);
+                Say(Said("keys_window.nothing_called", ("label", label), ("key", key)), error: true);
         }
     }
 
@@ -65,7 +65,7 @@ internal sealed partial class DawnScene
             HIDLRuntime runtime = new() { Output = null };
             var (success, message) = runtime.Evaluate(File.ReadAllText(path));
             if (!success || runtime.UserScope.Lookup("keys") is not ObjectValue keys)
-                throw new Exception(success ? "it has to declare an object called 'keys'" : message);
+                throw new Exception(success ? Said("keys_window.needs_keys_object") : message);
 
             foreach (var (label, key) in keys.Properties)
             {
@@ -75,7 +75,7 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
-            Say($"keys.hor didn't read, {e.Message}", error: true);
+            Say(Said("keys_window.unread", ("why", e.Message)), error: true);
         }
 
         return read;
@@ -109,7 +109,7 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
-            Say($"keys.hor couldn't be written, {e.Message}", error: true);
+            Say(Said("keys_window.not_written", ("why", e.Message)), error: true);
         }
     }
 

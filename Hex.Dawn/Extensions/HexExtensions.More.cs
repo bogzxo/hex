@@ -46,7 +46,7 @@ internal sealed partial class HexExtensions
             ObjectValue asked = args.Object(0);
             IRuntimeValue then = args[1];
             context.Windows.Prompt(Text(asked, "title") ?? extension.Name, Text(asked, "text") ?? string.Empty, Text(asked, "value") ?? string.Empty,
-                Text(asked, "button") ?? "OK", Text(asked, "placeholder") ?? string.Empty, typed => Answered(extension, then, new StringValue(typed)));
+                Text(asked, "button") ?? context.Strings.Said("dusk_plugins.ok"), Text(asked, "placeholder") ?? string.Empty, typed => Answered(extension, then, new StringValue(typed)));
         }))
     ];
 
@@ -223,6 +223,6 @@ internal sealed partial class HexExtensions
     private void ReloadExtension(HexExtension extension)
     {
         screens.Reload(extension, () => Start(extension));
-        context.Notices.Say($"{extension.Name} read again");
+        context.Notices.Say(context.Strings.Said("extensions_more.read_again", ("name", extension.Name)));
     }
 }

@@ -80,7 +80,7 @@ internal sealed partial class DawnScene
 
         if (from.Count == 0)
         {
-            Say(back ? "nowhere further back" : "nowhere further on");
+            Say(back ? Said("places.nowhere_back") : Said("places.nowhere_on"));
             return;
         }
 
@@ -102,7 +102,7 @@ internal sealed partial class DawnScene
     /// <summary>Go's back and forward through the places the caret was.</summary>
     private void AddPlaceCommands()
     {
-        commands.Add("Go/places", "Back", () => GoPlace(back: true), "Alt+Left", "arrow-left", UIKeyUse.BoundWhileTyping);
-        commands.Add("Go/places", "Forward", () => GoPlace(back: false), "Alt+Right", "arrow-right", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", Said("places.back"), () => GoPlace(back: true), "Alt+Left", "arrow-left", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", Said("places.forward"), () => GoPlace(back: false), "Alt+Right", "arrow-right", UIKeyUse.BoundWhileTyping);
     }
 }

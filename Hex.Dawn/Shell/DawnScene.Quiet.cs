@@ -28,7 +28,7 @@ internal sealed partial class DawnScene
         foreach (HexDocument open in documents)
             open.Editor.WordWrap = settings.WrapCode;
         SaveSettings();
-        Say(settings.WrapCode ? "long lines wrap at the edge, Alt+Z for not" : "long lines run on past the edge, Alt+Z to wrap them");
+        Say(settings.WrapCode ? Said("quiet.wrap_on") : Said("quiet.wrap_off"));
     }
 
     private void ToggleQuiet()
@@ -40,7 +40,7 @@ internal sealed partial class DawnScene
             if (was.Right) right.Show(true);
             if (was.Panel) bottom.Show(true);
             tabRow.Visible = crumbs.Visible = true;
-            Say("back from quiet");
+            Say(Said("quiet.back"));
             return;
         }
 
@@ -49,6 +49,6 @@ internal sealed partial class DawnScene
         right.Show(false);
         bottom.Show(false);
         tabRow.Visible = crumbs.Visible = false;
-        Say("quiet, F11 to come back");
+        Say(Said("quiet.on"));
     }
 }

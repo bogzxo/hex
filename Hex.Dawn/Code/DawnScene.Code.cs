@@ -50,7 +50,7 @@ internal sealed partial class DawnScene
         editor.Padding = new UIEdges(4);
         editor.FocusLine = true;
         editor.WordWrap = settings.WrapCode;
-        editor.CaretGlide = Motion ? CARET_GLIDE : 0.0f;
+        editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         ShowBackdrop(editor);
@@ -115,7 +115,7 @@ internal sealed partial class DawnScene
         {
             changed.CodeEdited = true;
             tabsDirty = true;
-            Say("the code was changed by hand, Ctrl+Enter puts it into the layout");
+            Say(Said("code.changed_by_hand"));
         }
     }
 
@@ -149,7 +149,7 @@ internal sealed partial class DawnScene
         {
             inspectorDirty |= checkedDocument.IsText;
             if (checkedDocument.Editor.SyntaxError is { } error)
-                Say($"line {error.Line + 1}: {error.Message}", error: true);
+                Say(Said("code.syntax_error", ("line", (error.Line + 1).ToString()), ("message", error.Message)), error: true);
         }
     }
 
@@ -225,7 +225,7 @@ internal sealed partial class DawnScene
         OpenOnExtensionView(opened);
 
         Console.WriteLine($"[Hex] Opened '{path}' as code: {opened.Editor.Document.LineCount} lines.");
-        Say($"opened {opened.Name}, {opened.Editor.Document.LineCount} lines of code");
+        Say(Said("code.opened", ("name", opened.Name), ("count", opened.Editor.Document.LineCount.ToString())));
         return true;
     }
 
@@ -260,7 +260,7 @@ internal sealed partial class DawnScene
         var (success, message) = document.Load(code.Text, document.Path, keepHistory: true);
         if (!success)
         {
-            Say($"the code didn't build, {message}", error: true);
+            Say(Said("code.did_not_build", ("message", message)), error: true);
             return;
         }
 
@@ -268,7 +268,7 @@ internal sealed partial class DawnScene
         document.Record();
         designer.MarkSelection();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
-        Say(message.Length > 0 ? message : $"the code is in the layout, {document.Walk().Count()} components");
+        Say(message.Length > 0 ? message : Said("code.applied", ("count", document.Walk().Count().ToString())));
     }
 
     /// <summary>Throws away what was typed into the code of a layout, for the code the layout is written as.</summary>
@@ -280,7 +280,7 @@ internal sealed partial class DawnScene
         document.CodeEdited = false;
         SetCode(document, document.GenerateCode(), fresh: false);
         tabsDirty = codeDirty = true;
-        Say("the code is what the layout says again");
+        Say(Said("code.reverted"));
     }
 
     private static string Describe(IRuntimeValue value) => HexEvaluation.Describe(value);
@@ -294,53 +294,53 @@ internal sealed partial class DawnScene
     {
         Func<bool> inCode = () => !LayoutTools;
 
-        commands.Add("Edit/comment", "Toggle Line Comment", () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
+        commands.Add("Edit/comment", Said("code.toggle_comment"), () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
 
         commands.ShowMenuWhen("Selection", inCode);
-        commands.Add("Selection/select", "Select All", () => code.Document.SelectAll(), "Ctrl+A");
-        commands.Add("Selection/select", "Select Line", SelectCaretLine);
-        commands.Add("Selection/select", "Select Word", () => code.Document.SelectWordAt(code.Document.Caret));
-        commands.Add("Selection/lines", "Move Line Up", () => code.Document.MoveLines(-1), "Alt+Up", "arrow-up");
-        commands.Add("Selection/lines", "Move Line Down", () => code.Document.MoveLines(1), "Alt+Down", "arrow-down");
-        commands.Add("Selection/lines", "Duplicate Line", () => code.Document.Duplicate(), "Ctrl+Shift+D", "copy");
-        commands.Add("Selection/carets", "Add Next Occurrence", () => code.Document.AddNextOccurrence(), "Ctrl+D", "selection");
-        commands.Add("Selection/carets", "Add Cursor Above", () => code.Document.AddCaretVertically(-1), "Ctrl+Alt+Up");
-        commands.Add("Selection/carets", "Add Cursor Below", () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down");
-        commands.Add("Selection/carets", "Add Cursors to Line Ends", () => code.Document.CaretsAtLineEnds(), "Ctrl+Shift+L");
-        commands.Add("Selection/carets", "Single Cursor", () => code.Document.CollapseCarets(), "Esc").IsEnabled = () => code.Document.HasExtraCarets;
-        Menu folding = commands.AddMenu("Selection/folding", "Folding", "fold");
-        folding.Add("Fold", () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");
-        folding.Add("Unfold", () => code.UnfoldAtCaret(), "Ctrl+Shift+]", "fold-down");
+        commands.Add("Selection/select", Said("designer_selection.select_all"), () => code.Document.SelectAll(), "Ctrl+A");
+        commands.Add("Selection/select", Said("code.select_line"), SelectCaretLine);
+        commands.Add("Selection/select", Said("code.select_word"), () => code.Document.SelectWordAt(code.Document.Caret));
+        commands.Add("Selection/lines", Said("code.move_line_up"), () => code.Document.MoveLines(-1), "Alt+Up", "arrow-up");
+        commands.Add("Selection/lines", Said("code.move_line_down"), () => code.Document.MoveLines(1), "Alt+Down", "arrow-down");
+        commands.Add("Selection/lines", Said("code.duplicate_line"), () => code.Document.Duplicate(), "Ctrl+Shift+D", "copy");
+        commands.Add("Selection/carets", Said("code.add_next_occurrence"), () => code.Document.AddNextOccurrence(), "Ctrl+D", "selection");
+        commands.Add("Selection/carets", Said("code.add_cursor_above"), () => code.Document.AddCaretVertically(-1), "Ctrl+Alt+Up");
+        commands.Add("Selection/carets", Said("code.add_cursor_below"), () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down");
+        commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Ctrl+Shift+L");
+        commands.Add("Selection/carets", Said("code.single_cursor"), () => code.Document.CollapseCarets(), "Esc").IsEnabled = () => code.Document.HasExtraCarets;
+        Menu folding = commands.AddMenu("Selection/folding", Said("code.folding"), "fold");
+        folding.Add(Said("code.fold"), () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");
+        folding.Add(Said("code.unfold"), () => code.UnfoldAtCaret(), "Ctrl+Shift+]", "fold-down");
         folding.AddSeparator();
-        folding.Add("Fold All", () => code.FoldAll(1));
-        folding.Add("Fold Level 2", () => code.FoldAll(2));
-        folding.Add("Fold Level 3", () => code.FoldAll(3));
-        folding.Add("Unfold All", () => code.UnfoldAll());
+        folding.Add(Said("code.fold_all"), () => code.FoldAll(1));
+        folding.Add(Said("code.fold_level_2"), () => code.FoldAll(2));
+        folding.Add(Said("code.fold_level_3"), () => code.FoldAll(3));
+        folding.Add(Said("code.unfold_all"), () => code.UnfoldAll());
 
         // Their keys are bound with the designer's, which zooms the canvas with the same ones
-        commands.Add("View/zoom", "Zoom In", () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
-        commands.Add("View/zoom", "Zoom Out", () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
-        commands.Add("View/zoom", "Reset Zoom", () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
+        commands.Add("View/zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
+        commands.Add("View/zoom", Said("designer_selection.zoom_out"), () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
+        commands.Add("View/zoom", Said("code.reset_zoom"), () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
 
-        commands.Add("Go/symbols", "Go to Definition", codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/symbols", "Find All References", codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/problems", "Next Problem", () => StepProblem(1), icon: "arrow-down");
-        commands.Add("Go/problems", "Previous Problem", () => StepProblem(-1), icon: "arrow-up");
+        commands.Add("Go/symbols", Said("code.go_to_definition"), codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/symbols", Said("code.find_all_references"), codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), icon: "arrow-down");
+        commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), icon: "arrow-up");
 
         // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
-        commands.Add("Run/run", "Run File", running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
-        commands.Add("Run/run", "Run Behaviour...", running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
+        commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
+        commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
         commands.Bind(Key.F5, () => { if (!LayoutTools) running.OpenRunner(); }, control: true, whileTyping: true);
 
-        commands.Add("Run/check", "Check All Files", CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
-        commands.Add("Run/check", "Trigger Completion", () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
+        commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
+        commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
 
-        commands.Add("Run/apply", "Apply Code to Layout", ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
-        commands.Add("Run/apply", "Discard Code Changes", RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
-        commands.Add("Run/apply", "Convert to Layout...", MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
+        commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
+        commands.Add("Run/apply", Said("code.discard_changes"), RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
+        commands.Add("Run/apply", Said("code.convert_to_layout"), MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
     }
 
     /// <summary>The outline of what is in the code editor, by the language of its file.</summary>

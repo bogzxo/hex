@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
             if (open.DiskText is not null)
             {
                 open.DiskText = null;
-                Notify($"{Path.GetFileName(path)} was deleted on the disk, saving it puts it back");
+                Notify(Said("disk_changes.deleted", ("name", Path.GetFileName(path))));
             }
             return;
         }
@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
         if (!HasChanges(open))
         {
             TakeFromDisk(open, text);
-            Say($"{open.Name} changed on the disk and was read again, Ctrl+Z has what it was");
+            Say(Said("disk_changes.read_again", ("name", open.Name)));
             return;
         }
 
@@ -99,7 +99,7 @@ internal sealed partial class DawnScene
             var (success, message) = open.Load(text, open.Path, keepHistory: true);
             if (!success)
             {
-                Say($"{open.Name} changed on the disk into something that doesn't build, {message}", error: true);
+                Say(Said("disk_changes.does_not_build", ("name", open.Name), ("message", message)), error: true);
                 open.DiskText = text;
                 return;
             }
@@ -121,25 +121,25 @@ internal sealed partial class DawnScene
     private void AskAboutDisk(HexDocument open, string text)
     {
         string name = Path.GetFileName(open.Path!);
-        string message = $"{name} changed on the disk, and it has changes here that aren't saved";
+        string message = Said("disk_changes.changed_both", ("name", name));
         Note(message, error: false);
 
         UINotification? card = null;
         card = toasts.Show(message, "warning", null, 0.0f,
-            ("Take the disk's", () =>
+            (Said("disk_changes.take_disks"), () =>
             {
                 card?.Close();
                 if (documents.Contains(open) && open.Path is { } path && ReadNow(path) is { } now)
                     TakeFromDisk(open, now);
             }),
-            ("Keep mine", () =>
+            (Said("disk_changes.keep_mine"), () =>
             {
                 // Saving then writes over the disk's without asking again, that's what was said
                 card?.Close();
                 if (open.Path is { } path)
                     open.DiskText = ReadNow(path) ?? text;
             }),
-            ("Compare", () => CompareWithDisk(open)));
+            (Said("disk_changes.compare"), () => CompareWithDisk(open)));
     }
 
     /// <summary>What the disk has for a file opened next to it, to look at the two.</summary>
@@ -168,7 +168,7 @@ internal sealed partial class DawnScene
             Show(open);
         if (copied is not null)
             OpenToSide(copied);
-        Say($"what the disk has for {open.Name} on the right, as {Path.GetFileName(copy)}");
+        Say(Said("disk_changes.compared", ("name", open.Name), ("copy", Path.GetFileName(copy))));
     }
 
     /// <summary>
@@ -183,8 +183,8 @@ internal sealed partial class DawnScene
             return true;
 
         HexDocument saving = document;
-        UIDialog.Show(chrome, "Changed on the disk", $"{Path.GetFileName(path)} was changed on the disk since Hex read it. Saving writes over that.",
-            new DialogChoice("Save over it", () =>
+        UIDialog.Show(chrome, Said("disk_changes.save_title"), Said("disk_changes.save_text", ("name", Path.GetFileName(path))),
+            new DialogChoice(Said("disk_changes.save_over"), () =>
             {
                 if (!documents.Contains(saving))
                     return;
@@ -192,12 +192,12 @@ internal sealed partial class DawnScene
                 Show(saving);
                 SaveTo(path);
             }),
-            new DialogChoice("Take the disk's", () =>
+            new DialogChoice(Said("disk_changes.take_disks"), () =>
             {
                 if (documents.Contains(saving) && ReadNow(path) is { } latest)
                     TakeFromDisk(saving, latest);
             }),
-            new DialogChoice("Cancel"));
+            new DialogChoice(Said("keys.leave_it")));
         return false;
     }
 }

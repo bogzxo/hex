@@ -48,17 +48,17 @@ internal sealed partial class HexCodeEditing
 
         bool hasSelection = editor.Document.HasSelection;
         var shown = new Menu("code");
-        shown.Add("Go to where it is declared", GoToDefinition, "F12", "references");
-        shown.Add("Find everywhere it is", FindReferences, "Shift+F12", "references");
-        shown.Add("Rename it...", RenameSymbol, "F2", "edit");
+        shown.Add(context.Strings.Said("code_hints.go_to_declared"), GoToDefinition, "F12", "references");
+        shown.Add(context.Strings.Said("code_hints.find_everywhere"), FindReferences, "Shift+F12", "references");
+        shown.Add(context.Strings.Said("code_hints.rename_it"), RenameSymbol, "F2", "edit");
         shown.AddSeparator();
-        shown.Add("Cut", () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X").IsEnabled = () => hasSelection && !editor.ReadOnly;
-        shown.Add("Copy", () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
-        shown.Add("Select all", () => editor.Document.SelectAll(), "Ctrl+A");
+        shown.Add(context.Strings.Said("code_hints.cut"), () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X").IsEnabled = () => hasSelection && !editor.ReadOnly;
+        shown.Add(context.Strings.Said("code_hints.copy"), () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
+        shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A");
         shown.AddSeparator();
-        shown.Add("Comment lines in and out", () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
-        shown.Add("Duplicate the line", () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
-        shown.Add("The next one as well", () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
+        shown.Add(context.Strings.Said("code_hints.toggle_comment"), () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
+        shown.Add(context.Strings.Said("code_hints.duplicate_line"), () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
+        shown.Add(context.Strings.Said("code_hints.next_occurrence"), () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
         shown.AddSeparator();
         window.AddCodeMenu(shown);
 
@@ -76,24 +76,24 @@ internal sealed partial class HexCodeEditing
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
-            context.Notices.Say("the caret isn't on a name", error: true);
+            context.Notices.Say(context.Strings.Said("code_hints.caret_not_on_name"), error: true);
             return;
         }
 
         string name = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         HexDocument here = document;
-        context.Windows.Prompt("Rename", $"Every {name} in {document.Name} as a word of its own becomes", name, "Rename", string.Empty, renamed =>
+        context.Windows.Prompt(context.Strings.Said("code_hints.rename"), context.Strings.Said("code_hints.rename_prompt", ("name", name), ("document", document.Name)), name, context.Strings.Said("code_hints.rename"), string.Empty, renamed =>
         {
             if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
             {
-                context.Notices.Say($"{renamed} can't be a name", error: true);
+                context.Notices.Say(context.Strings.Said("code_hints.not_a_name", ("renamed", renamed)), error: true);
                 return;
             }
 
             // The other files with it, looked for off the editor's thread, a question only if there are any
             List<string> roots = [.. context.Workspace.Roots];
             string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
-            context.Work.InBackground($"looking for {name} in the other files...", () => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
+            context.Work.InBackground(context.Strings.Said("code_hints.looking_in_others", ("name", name)),() => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
                 .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
             {
                 if (!documents.Contains(here))
@@ -105,11 +105,11 @@ internal sealed partial class HexCodeEditing
                     return;
                 }
 
-                string listed = string.Join(", ", others.Take(5).Select(Path.GetFileName)) + (others.Count > 5 ? $" and {others.Count - 5} more" : string.Empty);
-                UIDialog.Show(chrome, "Rename", $"{name} is in {others.Count} other {(others.Count == 1 ? "file" : "files")} of the workspace as well, {listed}. Each is opened with the rename one step to undo, nothing is saved.",
-                    new DialogChoice("Every file", () => RenameEverywhere(here, others, name, renamed)),
-                    new DialogChoice("This file only", () => RenameIn(here, name, renamed)),
-                    new DialogChoice("Cancel"));
+                string listed = string.Join(", ", others.Take(5).Select(Path.GetFileName)) + (others.Count > 5 ? context.Strings.Said("code_hints.and_more", ("count", (others.Count - 5).ToString())) : string.Empty);
+                UIDialog.Show(chrome, context.Strings.Said("code_hints.rename"), context.Strings.Said(others.Count == 1 ? "code_hints.in_other_file" : "code_hints.in_other_files", ("name", name), ("count", others.Count.ToString()), ("listed", listed)),
+                    new DialogChoice(context.Strings.Said("code_hints.every_file"), () => RenameEverywhere(here, others, name, renamed)),
+                    new DialogChoice(context.Strings.Said("code_hints.this_file_only"), () => RenameIn(here, name, renamed)),
+                    new DialogChoice(context.Strings.Said("keys.leave_it")));
             }, quiet: true);
         });
     }
@@ -126,7 +126,7 @@ internal sealed partial class HexCodeEditing
         if (count > 0)
             context.Documents.Rewrite(target, Regex.Replace(text, pattern, renamed));
         if (say)
-            context.Notices.Say($"renamed {name} to {renamed}, {count} places");
+            context.Notices.Say(context.Strings.Said("code_hints.renamed", ("name", name), ("renamed", renamed), ("count", count.ToString())));
         return count;
     }
 
@@ -162,8 +162,8 @@ internal sealed partial class HexCodeEditing
         }
 
         tabsDirty = true;
-        string left = skipped.Count > 0 ? $", not in {string.Join(", ", skipped)} (open in the designer, rename it there)" : string.Empty;
-        context.Notices.Say($"renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}");
+        string left = skipped.Count > 0 ? context.Strings.Said("code_hints.skipped_in_designer", ("skipped", string.Join(", ", skipped))) : string.Empty;
+        context.Notices.Say(context.Strings.Said("code_hints.renamed_everywhere", ("name", name), ("renamed", renamed), ("places", places.ToString()), ("files", files.ToString()), ("left", left)));
     }
 
     /* Swatches */
@@ -172,7 +172,7 @@ internal sealed partial class HexCodeEditing
     internal void PickSwatch(HidlSwatch swatch)
     {
         ColorPicker picker = null!;
-        UIDialog shown = UIDialog.Show(chrome, "Colour", "The colour written at this place in the code", new DialogChoice("Use it", () => WriteSwatch(swatch, picker.Color)), new DialogChoice("Cancel"));
+        UIDialog shown = UIDialog.Show(chrome, context.Strings.Said("code_hints.colour"), context.Strings.Said("code_hints.colour_text"), new DialogChoice(context.Strings.Said("code_hints.use_it"), () => WriteSwatch(swatch, picker.Color)), new DialogChoice(context.Strings.Said("keys.leave_it")));
         picker = layout.Instantiate("colour_dialog.hor", shown.Body).Get<ColorPicker>("picker");
         picker.Color = swatch.Color;
     }
@@ -188,6 +188,6 @@ internal sealed partial class HexCodeEditing
 
         code.Document.Select(new UITextPosition(swatch.Line, swatch.Column), new UITextPosition(swatch.Line, swatch.Column + swatch.Length));
         code.Document.Insert(written);
-        context.Notices.Say($"the colour is {written}");
+        context.Notices.Say(context.Strings.Said("code_hints.colour_is", ("written", written)));
     }
 }

@@ -39,6 +39,9 @@ internal sealed partial class DuskScene
         settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor], CloseSettings, EditorSettingsCatalog.Parts);
         settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
         chrome.Root.Add(settingsView.Window);
+
+        // The glass under its sliders, as they make it while they're dragged
+        settingsView.SetPanel(EditorSettingsCatalog.EFFECTS, new GlassPreview(640.0f) { Look = () => (popupGlass, sideGlass, EffectsOn && effectGlass) });
         settingsView.Page.Search.Focus();
     }
 

@@ -87,12 +87,12 @@ internal sealed partial class DawnScene : IExtensionScreens
             return;
         }
 
-        AskText(title, "The path of the file", folder, "Pick", typed =>
+        AskText(title, Said("context.file_path"), folder, Said("context.pick"), typed =>
         {
             if (File.Exists(typed.Trim()))
                 picked(typed.Trim());
             else
-                context.Notices.Say($"there is no file {typed}", error: true);
+                context.Notices.Say(Said("context.no_file", ("path", typed)), error: true);
         });
     }
 
@@ -196,7 +196,7 @@ internal sealed partial class DawnScene : IExtensionScreens
             var button = layout.Instantiate(VIEW_BUTTON, views).Get<Button>("view_button");
             button.Label = kind.Title;
             button.Icon = kind.Icon;
-            button.Tooltip = $"{kind.Title}, a view of {kind.Owner.Name} (F7 goes round the views)";
+            button.Tooltip = Said("extension_ui.view_tooltip", ("title", kind.Title), ("extension", kind.Owner.Name));
             button.Selected = document.View == HexView.Extension && document.ExtensionView == kind.Id;
             string id = kind.Id;
             button.OnPressed = () => SwitchToExtensionView(id);

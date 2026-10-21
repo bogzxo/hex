@@ -19,14 +19,14 @@ internal sealed partial class DawnScene
 
     private void BuildModes()
     {
-        modeToggle = top.Add(new Button("Dusk")
+        modeToggle = top.Add(new Button(Said("dusk_chrome.name"))
         {
             Icon = "terminal",
-            Tooltip = "Dusk, the terminal, in this window (Ctrl+Alt+D)",
+            Tooltip = Said("modes.toggle_tooltip"),
             OnPressed = SwapMode
         });
 
-        terminals.Commands.Register("hex_dusk", "Hex: Dusk, the terminal, in this window", SwapMode, "Ctrl+Alt+D", HexOwns);
+        terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+D", HexOwns);
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)
@@ -39,7 +39,7 @@ internal sealed partial class DawnScene
     {
         string? folder = explorer.workspace.Folders.Count > 0 ? explorer.workspace.Folders[0] : browseDirectory;
         if (!HexModes.Swap(folder))
-            Say("there's no Dusk to swap to", error: true);
+            Say(Said("modes.no_dusk"), error: true);
     }
 
     /// <summary>The keyboard given up as the editor is left, or Dusk's terminals never get their keys (there's one keyboard).</summary>

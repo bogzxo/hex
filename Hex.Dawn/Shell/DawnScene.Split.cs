@@ -29,21 +29,21 @@ internal sealed partial class DawnScene
         if (Split)
         {
             Unsplit();
-            Say("one file in the middle again");
+            Say(Said("split.joined"));
             return;
         }
 
         HexDocument? other = documents.LastOrDefault(open => open != document && open.IsText && open.Path is not null);
         if (other is null || !document.IsText)
         {
-            Say("open another file of code to put next to this one", error: true);
+            Say(Said("split.needs_other"), error: true);
             return;
         }
 
         splitLeft = other;
         splitRight = document;
         PlaceEditors();
-        Say($"{other.Name} and {document.Name} side by side, Ctrl+\\ for one again");
+        Say(Said("split.split", ("left", other.Name), ("right", document.Name)));
     }
 
     /// <summary>A file opened in the side that isn't on screen, the middle split for it first if it wasn't.</summary>

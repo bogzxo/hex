@@ -81,6 +81,9 @@ internal sealed class HexSettings
     /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (the engine's UIGlass.Clear to begin with, Hex.Shell's HexGlass draws it).</summary>
     public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
 
+    /// <summary>How quickly the UI moves (UICompositor.AnimationSpeed), 1 as it comes and 0 for not at all, and how long the caret glides for, 0 for jumping.</summary>
+    public float UiAnimation = 1.0f, CaretGlide = 0.045f;
+
     /// <summary>Whether a file of code loses the spaces at the ends of its lines and gets a newline at its end when saved.</summary>
     public bool TrimWhitespace = true, FinalNewline;
 
@@ -188,6 +191,8 @@ internal sealed class HexSettings
             GlassClarity = Math.Clamp(Number(values, "glass_clarity", GlassClarity), 0.0f, 1.0f);
             GlassRim = Math.Clamp(Number(values, "glass_rim", GlassRim), 0.0f, 1.0f);
             GlassBend = Math.Clamp(Number(values, "glass_bend", GlassBend), 0.0f, 24.0f);
+            UiAnimation = Math.Clamp(Number(values, "ui_animation", UiAnimation), 0.0f, 3.0f);
+            CaretGlide = Math.Clamp(Number(values, "caret_glide", CaretGlide), 0.0f, 0.3f);
             TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
             FinalNewline = Flag(values, "final_newline", FinalNewline);
             AutoSave = Flag(values, "auto_save", AutoSave);
@@ -307,6 +312,8 @@ internal sealed class HexSettings
             .Add("glass_clarity", GlassClarity)
             .Add("glass_rim", GlassRim)
             .Add("glass_bend", GlassBend)
+            .Add("ui_animation", UiAnimation)
+            .Add("caret_glide", CaretGlide)
             .Add("trim_whitespace", TrimWhitespace)
             .Add("final_newline", FinalNewline)
             .Add("auto_save", AutoSave)

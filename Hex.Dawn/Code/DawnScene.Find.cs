@@ -32,7 +32,7 @@ internal sealed partial class DawnScene
         TextBox box = null!;
         UIDialog shown = UIDialog.Show(chrome, title, message,
             new DialogChoice(go, () => answered(box.Text)),
-            new DialogChoice("Cancel"));
+            new DialogChoice(Said("keys.leave_it")));
 
         box = layout.Instantiate(ASK_TEMPLATE, shown.Body).Get<TextBox>("answer");
         box.Text = start;
@@ -50,7 +50,7 @@ internal sealed partial class DawnScene
 
     private void GoToLine()
     {
-        AskText("Go to line", $"Which line, 1 to {code.Document.LineCount}", string.Empty, "Go", answer =>
+        AskText(Said("find_menu.go_to_line_title"), Said("find_menu.which_line", ("count", code.Document.LineCount.ToString())), string.Empty, Said("find_menu.go"), answer =>
         {
             if (int.TryParse(answer.Trim(), out int line))
             {
@@ -82,7 +82,7 @@ internal sealed partial class DawnScene
     private string DescribeRoots()
     {
         var roots = WorkspaceRoots();
-        return roots.Count == 1 ? roots[0] : $"the {roots.Count} folders of the workspace";
+        return roots.Count == 1 ? roots[0] : Said("find_menu.workspace_folders", ("count", roots.Count.ToString()));
     }
 
     /// <summary>Every .hor of every folder looked through, once each.</summary>
@@ -100,7 +100,7 @@ internal sealed partial class DawnScene
             byName[Relative(file)] = file;
         string[] names = [.. byName.Keys];
 
-        ChooseFrom("Open a file", $"{names.Length} files in {DescribeRoots()}, a few letters narrow them down. > for a command, @ for something in the file, : for a line, # for a text",
+        ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", DescribeRoots())),
             [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))],
             shortestFirst: true, prefixed: QuickOpenPrefix, recent: RecentOpened);
     }
@@ -143,7 +143,7 @@ internal sealed partial class DawnScene
     private void FindInFiles()
     {
         string how = HexSearch.DescribeOptions(codeEditing.findOptions);
-        AskText("Find in files", $"Look for in every .hor in {DescribeRoots()}{how}", codeEditing.lastFind, "Find", query =>
+        AskText(Said("find_menu.find_in_files_title"), Said("find_menu.find_in_files_prompt", ("where", DescribeRoots()), ("how", how)), codeEditing.lastFind, Said("find_menu.find"), query =>
         {
             if (query.Length == 0)
                 return;
@@ -154,10 +154,12 @@ internal sealed partial class DawnScene
             UIFindOptions options = codeEditing.findOptions;
 
             // Every file read off the editor's thread, the results come in when they are all there
-            InBackground($"looking for '{query}' in {where}...", () => HexSearch.FindIn(roots, query, options), found =>
+            InBackground(Said("find_menu.looking_for", ("query", query), ("where", where)), () => HexSearch.FindIn(roots, query, options), found =>
             {
-                ShowResults($"FOUND '{query}' ({found.Count})", found);
-                Say(found.Count > 0 ? $"'{query}' is in {found.Select(result => result.Path).Distinct().Count()} files, {found.Count} lines" : $"no '{query}' in {where}", error: found.Count == 0);
+                ShowResults(Said("find_menu.found_title", ("query", query), ("count", found.Count.ToString())), found);
+                Say(found.Count > 0
+                    ? Said("find_menu.found_in_files", ("query", query), ("files", found.Select(result => result.Path).Distinct().Count().ToString()), ("lines", found.Count.ToString()))
+                    : Said("find_menu.not_found", ("query", query), ("where", where)), error: found.Count == 0);
             });
         });
     }
@@ -171,7 +173,7 @@ internal sealed partial class DawnScene
         List<string> roots = WorkspaceRoots();
         string where = DescribeRoots();
 
-        InBackground($"checking every file in {where}...", () => HexSearch.CheckFiles(roots), checkedFiles =>
+        InBackground(Said("find_menu.checking", ("where", where)), () => HexSearch.CheckFiles(roots), checkedFiles =>
         {
             var (files, problems) = checkedFiles;
 
@@ -183,7 +185,9 @@ internal sealed partial class DawnScene
             foreach (var problem in problems)
                 Console.WriteLine($"[Hex]   {problem.Text}");
 
-            Say(problems.Count == 0 ? $"all {files} files in {where} parse" : $"{problems.Count} problems in {files} files, listed under the editor", error: problems.Count > 0);
+            Say(problems.Count == 0
+                ? Said("find_menu.all_parse", ("files", files.ToString()), ("where", where))
+                : Said("find_menu.problems_found", ("count", problems.Count.ToString()), ("files", files.ToString())), error: problems.Count > 0);
         });
     }
 
@@ -210,11 +214,11 @@ internal sealed partial class DawnScene
     /// <summary>Finding across the workspace, and going to a file, a line or something a file declares by a few letters.</summary>
     private void AddFindCommands()
     {
-        commands.Add("Edit/files", "Find in Files...", FindInFiles, "Ctrl+Shift+F", "search", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/files", Said("find_menu.find_in_files"), FindInFiles, "Ctrl+Shift+F", "search", UIKeyUse.BoundWhileTyping);
 
-        commands.Add("Go/open", "Go to File...", QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
-        commands.Add("Go/open", "Go to Line...", GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;
-        commands.Add("Go/open", "Go to Symbol...", GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
+        commands.Add("Go/open", Said("find_menu.go_to_file"), QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;
+        commands.Add("Go/open", Said("find_menu.go_to_symbol"), GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
 
         // Ctrl+G groups what is selected in a layout, it only goes to a line where there is code to go about in
         commands.Bind(Key.G, () => { if (!LayoutTools || compositor.Focus is CodeEditor) GoToLine(); }, control: true, whileTyping: true, shift: false);

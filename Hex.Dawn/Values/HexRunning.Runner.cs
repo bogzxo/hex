@@ -64,7 +64,7 @@ internal sealed partial class HexRunning
             : [];
 
         string was = runnerFunction.Value;
-        runnerFunction.Options = functions.Length > 0 ? functions : ["none"];
+        runnerFunction.Options = functions.Length > 0 ? functions : [context.Strings.Said("runner_window.none")];
         runnerFunction.Value = functions.Contains(was) ? was : runnerFunction.Options[0];
     }
 
@@ -107,7 +107,11 @@ internal sealed partial class HexRunning
 
         if (!context.Panels.TerminalsShown)
             context.Panels.ShowTerminals();
-        ConsoleLine($"[color:accent]>[/color] {function}, {(ticks == 1 ? $"tick {to}" : $"ticks {from + 1} to {to}")}, handed {UIRichText.Literal(view)}", null);
+        string span = ticks == 1
+            ? context.Strings.Said("runner_window.tick", ("tick", to.ToString()))
+            : context.Strings.Said("runner_window.ticks", ("from", (from + 1).ToString()), ("to", to.ToString()));
+        ConsoleLine("[color:accent]>[/color] " + context.Strings.Said("runner_window.asked",
+            ("function", function), ("span", span), ("view", UIRichText.Literal(view))), null);
     }
 
     /// <summary>The file run again, its state what it starts as, and the runner back to its first tick.</summary>
@@ -133,7 +137,7 @@ internal sealed partial class HexRunning
         var runtime = new HIDLRuntime
         {
             BaseDirectory = FolderOf(document),
-            Output = line => runOutput.Add($"print: {line}")
+            Output = line => runOutput.Add(context.Strings.Said("runner_window.printed", ("line", line)))
         };
 
         // Run here and now, somebody asked for it, but not for ever
@@ -145,21 +149,21 @@ internal sealed partial class HexRunning
         if (!success)
         {
             runOutput.Add($"didn't run, {result}");
-            context.Notices.Say($"{document.Name} didn't run, {result}", error: true);
+            context.Notices.Say(context.Strings.Said("runner_window.failed", ("name", document.Name), ("result", result?.ToString() ?? string.Empty)), error: true);
         }
         else
         {
             foreach (var (name, value) in runtime.UserScope.Variables)
                 runOutput.Add($"{name} = {HexEvaluation.Shorten(HexEvaluation.Describe(value), 240)}");
 
-            context.Notices.Say($"{document.Name} runs, {runtime.UserScope.Variables.Count} things declared, see the output");
+            context.Notices.Say(context.Strings.Said("runner_window.ran", ("name", document.Name), ("count", runtime.UserScope.Variables.Count.ToString())));
         }
 
         // What it printed and what it declared go in the output, which comes up, or in the console of the terminal page
         // when the settings say so (run_to_terminal), where it reads like anything else a program printed
         if (context.Settings.Values.RunToTerminal)
         {
-            ConsoleLine($"{document.Name}, run", context.Panels.Dim);
+            ConsoleLine(context.Strings.Said("runner_window.run_header", ("name", document.Name)), context.Panels.Dim);
             foreach (string line in runOutput)
                 ConsoleLine(line, line.StartsWith("didn't run", StringComparison.Ordinal) ? context.Panels.Error : null);
         }

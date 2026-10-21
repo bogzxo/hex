@@ -26,14 +26,14 @@ internal sealed partial class HexDesigner
 
         if (document.Selected is not { } selected)
         {
-            window.Hint(inspector, "select something in the canvas\nor in the layout on the left");
+            window.Hint(inspector, context.Strings.Said("designer_inspector.select_something"));
             return;
         }
 
         // With several things selected the rows are those of the one picked last, and what is changed in them is
         // changed for all of them that have such a thing to change
         if (document.Selection.Count > 1)
-            layout.Instantiate(NOTE_TEMPLATE, inspector).Get<Label>("note").Text = $"{document.Selection.Count} things selected, a change here goes to\nall of them that have the property";
+            layout.Instantiate(NOTE_TEMPLATE, inspector).Get<Label>("note").Text = context.Strings.Said("designer_inspector.things_selected", ("count", document.Selection.Count.ToString()));
 
         string kind = UIModule.KindOf(selected) ?? selected.GetType().Name;
 
@@ -95,11 +95,11 @@ internal sealed partial class HexDesigner
             if (document.Rename(selected, text))
             {
                 treeDirty = codeDirty = true;
-                context.Notices.Say($"renamed to {text}");
+                context.Notices.Say(context.Strings.Said("designer_inspector.renamed_to", ("name", text)));
             }
             else
             {
-                context.Notices.Say($"'{text}' can't be its name: taken, or not a name a variable can have", error: true);
+                context.Notices.Say(context.Strings.Said("designer_inspector.name_refused", ("name", text)), error: true);
             }
         };
 
@@ -135,7 +135,16 @@ internal sealed partial class HexDesigner
             return section;
 
         section = Editor(EditorTemplate.Section, inspector).Get<Collapsible>("section");
-        section.Title = title;
+        section.Title = title switch
+        {
+            "general" => context.Strings.Said("designer_inspector.section_general"),
+            "placement" => context.Strings.Said("designer_inspector.section_placement"),
+            "hover" => context.Strings.Said("designer_inspector.section_hover"),
+            "entrance" => context.Strings.Said("designer_inspector.section_entrance"),
+            "resizing" => context.Strings.Said("designer_inspector.section_resizing"),
+            "look" => context.Strings.Said("designer_inspector.section_look"),
+            _ => title
+        };
         section.Expanded = !foldedSections.Contains(title);
         section.OnToggled = open =>
         {
@@ -166,7 +175,7 @@ internal sealed partial class HexDesigner
     internal void PlayIntros()
     {
         document.PlayIntros();
-        context.Notices.Say("playing the entrances, F5 does it again");
+        context.Notices.Say(context.Strings.Said("designer_inspector.playing_entrances"));
     }
 
     // The properties that name a piece of art of the skin, the look of anything that has one, a panel's backdrop,
@@ -281,12 +290,12 @@ internal sealed partial class HexDesigner
                 if (ArtProperties.Contains(name) && stage.Skin is { } art)
                 {
                     box.ButtonLabel = "...";
-                    box.Tooltip = "the button shows every piece of art the skin has, to pick one by eye";
+                    box.Tooltip = context.Strings.Said("designer_inspector.art_button_tooltip");
                     box.OnButtonPressed = () => artPicker = ArtPicker.Show(chrome, art, box.Text, chosen =>
                     {
                         box.Text = chosen;
                         Set(target, name, new StringValue(chosen));
-                        context.Notices.Say($"{name} is {chosen}");
+                        context.Notices.Say(context.Strings.Said("designer_inspector.property_is", ("property", name), ("chosen", chosen)));
                     });
                 }
 
@@ -398,7 +407,7 @@ internal sealed partial class HexDesigner
         }
 
         if (others > 0)
-            context.Notices.Say($"{name.Replace('_', ' ')} changed for {others + 1} things");
+            context.Notices.Say(context.Strings.Said("designer_inspector.changed_for_things", ("property", name.Replace('_', ' ')), ("count", (others + 1).ToString())));
 
         codeDirty = true;
 

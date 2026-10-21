@@ -39,38 +39,38 @@ internal sealed partial class DawnScene
         bool Code() => !LayoutTools;
         bool Design() => LayoutTools;
 
-        problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: "What is wrong, click for the list (F8 checks every file)");
-        messageItem = statusBar.Add(string.Empty, pressed: () => ShowPanel(OUTPUT_PAGE), tooltip: "What Hex said last, click for all of it");
+        problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: Said("status_bar.problems_tip"));
+        messageItem = statusBar.Add(string.Empty, pressed: () => ShowPanel(OUTPUT_PAGE), tooltip: Said("status_bar.message_tip"));
 
         // A game started from here (Fight!) reads what's saved as it changes, Defold's hot reload, said while it runs
-        runningItem = statusBar.Add(string.Empty, right: true, tooltip: "A game started from Hex is running, and reads every file it uses again when it's saved here, Ctrl+S and look");
+        runningItem = statusBar.Add(string.Empty, right: true, tooltip: Said("status_bar.running_tip"));
         runningItem.IsVisible = () => Volatile.Read(ref extensions.programsRunning) > 0;
 
         // The work going in the background, on the right before the rest (DawnScene.Background)
         BuildWorkItem();
 
-        caretItem = statusBar.Add("Ln 1, Col 1", right: true, pressed: GoToLine, tooltip: "Go to a line (Ctrl+G)");
+        caretItem = statusBar.Add(Said("status_bar.caret", ("line", "1"), ("column", "1")), right: true, pressed: GoToLine, tooltip: Said("status_bar.caret_tip"));
         caretItem.IsVisible = Code;
         selectionItem = statusBar.Add(string.Empty, right: true);
         selectionItem.IsVisible = Code;
-        indentItem = statusBar.Add("Spaces: 4", right: true, tooltip: "Tab puts four spaces in, a tab in the file is drawn as wide as four");
+        indentItem = statusBar.Add(Said("status_bar.indent", ("count", "4")), right: true, tooltip: Said("status_bar.indent_tip"));
         indentItem.IsVisible = Code;
-        endingsItem = statusBar.Add("CRLF", right: true, pressed: SwapLineEndings, tooltip: "How the lines end in the file, click to swap them");
+        endingsItem = statusBar.Add("CRLF", right: true, pressed: SwapLineEndings, tooltip: Said("status_bar.endings_tip"));
         endingsItem.IsVisible = Code;
-        languageItem = statusBar.Add("HIDL", right: true, tooltip: "What the file is to Hex");
+        languageItem = statusBar.Add("HIDL", right: true, tooltip: Said("status_bar.language_tip"));
         languageItem.IsVisible = Code;
-        codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: "How big the code is drawn (Ctrl+= and Ctrl+-, or Ctrl and the wheel), click for the size it comes at");
+        codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: Said("status_bar.code_zoom_tip"));
         codeZoomItem.IsVisible = () => !LayoutTools && settings.CodeZoom != 1.0f;
 
-        coordsItem = statusBar.Add(string.Empty, right: true, tooltip: "Where the pointer is in the layout, in its units");
+        coordsItem = statusBar.Add(string.Empty, right: true, tooltip: Said("status_bar.coords_tip"));
         coordsItem.IsVisible = Design;
-        componentsItem = statusBar.Add(string.Empty, right: true, pressed: () => ShowSide(HexSide.Design), tooltip: "How many components the layout has, and how many are selected");
+        componentsItem = statusBar.Add(string.Empty, right: true, pressed: () => ShowSide(HexSide.Design), tooltip: Said("status_bar.components_tip"));
         componentsItem.IsVisible = Design;
-        zoomItem = statusBar.Add("$(zoom-in) 100%", right: true, pressed: designer.ZoomToFit, tooltip: "How big the layout is drawn, click to fit it to the canvas (Ctrl+0)");
+        zoomItem = statusBar.Add("$(zoom-in) 100%", right: true, pressed: designer.ZoomToFit, tooltip: Said("status_bar.zoom_tip"));
         zoomItem.IsVisible = Design;
-        skinItem = statusBar.Add(string.Empty, right: true, pressed: ShowSkinMenu, tooltip: "The skin the layout is shown in, a game's setting, click for the others");
+        skinItem = statusBar.Add(string.Empty, right: true, pressed: ShowSkinMenu, tooltip: Said("status_bar.skin_tip"));
         skinItem.IsVisible = Design;
-        screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: "The screen the layout is laid out for");
+        screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: Said("status_bar.screen_tip"));
         screenItem.IsVisible = Design;
 
         caretItem.MinWidth = 120.0f;
@@ -83,7 +83,7 @@ internal sealed partial class DawnScene
             return;
 
         runningShown = extensions.runningName;
-        runningItem.Text = $"$(run) {extensions.runningName} running, saves reload in it";
+        runningItem.Text = $"$(run) {Said("status_bar.running", ("name", extensions.runningName))}";
     }
 
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>
@@ -109,8 +109,8 @@ internal sealed partial class DawnScene
             if (caretShown != (caret.Line, caret.Column, selected, code.Document.Version))
             {
                 caretShown = (caret.Line, caret.Column, selected, code.Document.Version);
-                caretItem.Text = $"Ln {caret.Line + 1}, Col {caret.Column + 1}";
-                selectionItem.Text = selected > 0 ? $"({selected} selected)" : string.Empty;
+                caretItem.Text = Said("status_bar.caret", ("line", (caret.Line + 1).ToString()), ("column", (caret.Column + 1).ToString()));
+                selectionItem.Text = selected > 0 ? Said("status_bar.selection", ("count", selected.ToString())) : string.Empty;
             }
 
             endingsItem.Text = document.CrLf ? "CRLF" : "LF";
@@ -134,8 +134,8 @@ internal sealed partial class DawnScene
         {
             componentsShown = (count, document.Selection.Count);
             componentsItem.Text = document.Selection.Count > 0
-                ? $"$(symbol-class) {count} components, {document.Selection.Count} selected"
-                : $"$(symbol-class) {count} components";
+                ? $"$(symbol-class) {Said("status_bar.components_selected", ("count", count.ToString()), ("selected", document.Selection.Count.ToString()))}"
+                : $"$(symbol-class) {Said("status_bar.components", ("count", count.ToString()))}";
         }
 
         if (designer.canvasZoom != zoomShown)
@@ -155,19 +155,19 @@ internal sealed partial class DawnScene
     private (string Icon, string Language) KindOf(HexDocument shown)
     {
         if (!shown.IsText)
-            return ("layout", "HIDL layout");
+            return ("layout", Said("status_bar.kind_layout"));
 
         string name = shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
         string extension = Path.GetExtension(name);
 
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
-            return ("folder-library", "Hex workspace");
+            return ("folder-library", Said("status_bar.kind_workspace"));
         if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
-            return shown.Editor.Highlighter is { } language ? ("file-code", languages.LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", "Plain text");
+            return shown.Editor.Highlighter is { } language ? ("file-code", languages.LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
-            return ("paintcan", "HIDL skin");
+            return ("paintcan", Said("status_bar.kind_skin"));
         if (shown.Path is { } file && Path.GetFileName(Path.GetDirectoryName(file))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)
-            return ("globe", "HIDL strings");
+            return ("globe", Said("status_bar.kind_strings"));
 
         return ("file-code", "HIDL");
     }
@@ -179,7 +179,7 @@ internal sealed partial class DawnScene
 
         document.CrLf = !document.CrLf;
         codeDirty = tabsDirty = true;
-        Say($"{document.Name} is saved with its lines ended {(document.CrLf ? "\\r\\n (CRLF)" : "\\n (LF)")} from now on, save it to keep that");
+        Say(Said("status_bar.line_endings_swapped", ("name", document.Name), ("ending", document.CrLf ? "\\r\\n (CRLF)" : "\\n (LF)")));
     }
 
     /// <summary>The skins there are, as a menu where the pointer is, from the status bar.</summary>
@@ -215,6 +215,6 @@ internal sealed partial class DawnScene
     private void UseSkin(UISkinChoice skin, string? theme)
     {
         UISkins.Use(skin, theme);
-        Say(theme is null ? $"layouts are shown in {skin.Title}" : $"layouts are shown in {skin.Title}, {theme}");
+        Say(theme is null ? Said("status_bar.skin_shown", ("skin", skin.Title)) : Said("status_bar.skin_shown_theme", ("skin", skin.Title), ("theme", theme)));
     }
 }

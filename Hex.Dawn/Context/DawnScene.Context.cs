@@ -152,12 +152,12 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         }
 
         // Testing itself the path is typed, there's nobody to click through a dialog
-        AskText(title, "The path of the file", folder, "Pick", typed =>
+        AskText(title, Said("context.file_path"), folder, Said("context.pick"), typed =>
         {
             if (File.Exists(typed.Trim()))
                 picked(typed.Trim());
             else
-                Say($"there is no file {typed}", error: true);
+                Say(Said("context.no_file", ("path", typed)), error: true);
         });
     }
 
@@ -194,7 +194,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         }
         catch (Exception e)
         {
-            Say($"{url} couldn't be opened, {e.Message}", error: true);
+            Say(Said("context.url_failed", ("url", url), ("reason", e.Message)), error: true);
         }
     }
 
@@ -347,9 +347,9 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IEditorWindow.AddCodeMenu(Menu menu)
     {
-        menu.Add("Run the file", running.RunCode, "F5", "play").IsVisible = () => document.IsText;
-        menu.Add("Put the code into the layout", ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
-        menu.Add("Command palette...", CommandPalette, "Ctrl+Shift+P", "symbol-misc");
+        menu.Add(Said("context.run_file"), running.RunCode, "F5", "play").IsVisible = () => document.IsText;
+        menu.Add(Said("context.apply_code"), ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
+        menu.Add(Said("context.command_palette"), CommandPalette, "Ctrl+Shift+P", "symbol-misc");
     }
 
     void IWork.InBackground<T>(string doing, Func<T> what, Action<T> done, bool quiet) => InBackground(doing, what, done, quiet);
