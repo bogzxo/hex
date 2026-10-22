@@ -88,8 +88,10 @@ internal sealed partial class DawnScene
         test.Check("d: and still is a while after, with the variable never used as a warning", () =>
             code.Diagnostics.Any(found => found.Message.Contains("Primary expression"))
             && code.Diagnostics.Any(found => found.Line == 13 && found.Warning && found.Message.Contains("never used")));
+        // Counted in this file, the Problems panel has every open file's
         test.Check("d: which is only a hint, quieter than a warning and counted with neither", () =>
-            code.Diagnostics.Any(found => found.Line == 13 && found.Hint) && warningCount == 0 && errorCount > 0);
+            code.Diagnostics.Any(found => found.Line == 13 && found.Hint)
+            && !problemList.Any(problem => problem.Path == document.Path && problem.Warning && !problem.Hint) && problemList.Any(problem => problem.Path == document.Path && !problem.Warning));
 
         // A file opened with something wrong in it says so as it opens, not once it's typed into (serve-d is told
         // lintOnFileOpen "always"), and saved it still does
@@ -104,13 +106,14 @@ internal sealed partial class DawnScene
             document.Path == broken && code.Diagnostics.Any(found => found.Line == 5 && !found.Warning && !found.Message.EndsWith("()", StringComparison.Ordinal)));
         test.Run(Save);
         test.Settle(2.0f);
-        test.Check("d: and saved it still says so", () =>
-            code.Diagnostics.Any(found => found.Line == 5 && !found.Warning) && code.Diagnostics.Any(found => found.Line == 4 && found.Hint));
+        // With a compiler on the PATH serve-d says what dub's build says on save, D-Scanner's hints go then
+        test.Check("d: and saved it still says so", () => code.Diagnostics.Any(found => found.Line == 5 && !found.Warning));
 
         // Text Hex puts into the file itself (what wasn't saved brought back after a crash, the file read again after it
         // changed on the disk) goes to serve-d as a change, what it says is about the text on the screen
         test.Run(() => SetCode(document, "module broken;\n\nvoid main()\n{\n    int fine = 1;\n    fine++;\n    int z = 2 *;\n}\n", fresh: false));
-        test.WaitFor(() => code.Diagnostics.Any(found => found.Line == 6 && !found.Warning), 30.0f);
+        // dmd's check of the text says line 6 sooner than serve-d does, the server's word on the old text has to go too
+        test.WaitFor(() => code.Diagnostics.Any(found => found.Line == 6 && !found.Warning) && !code.Diagnostics.Any(found => found.Message.Contains("unused")), 30.0f);
         test.Check("d: text Hex puts in itself is what serve-d checks, not what's on the disk", () =>
             code.Diagnostics.Any(found => found.Line == 6 && !found.Warning) && !code.Diagnostics.Any(found => found.Message.Contains("unused")));
 

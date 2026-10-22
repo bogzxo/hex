@@ -61,6 +61,39 @@ internal static class HexReleases
         return JsonNode.Parse(await answered.Content.ReadAsStringAsync(cancel).ConfigureAwait(false)) is JsonObject release ? Of(release) : null;
     }
 
+    // Downloads go to wherever GitHub sends them, not its API, without the API's answers asked for and for longer
+    private static readonly HttpClient downloads = MakeDownloads();
+
+    private static HttpClient MakeDownloads()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0";
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hex", version));
+        return client;
+    }
+
+    /// <summary>A file downloaded to a path, how far along it is said as it goes (from 0 to 1, when its size is known).</summary>
+    public static async Task Download(string url, string to, Action<float>? progress = null, CancellationToken cancel = default)
+    {
+        using HttpResponseMessage answered = await downloads.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+        if (!answered.IsSuccessStatusCode)
+            throw new HttpRequestException($"the download said {(int)answered.StatusCode} {answered.ReasonPhrase}");
+
+        long? size = answered.Content.Headers.ContentLength;
+        await using Stream from = await answered.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+        await using FileStream into = File.Create(to);
+        byte[] buffer = new byte[81920];
+        long done = 0;
+        int read;
+        while ((read = await from.ReadAsync(buffer, cancel).ConfigureAwait(false)) > 0)
+        {
+            await into.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
+            done += read;
+            if (size is > 0)
+                progress?.Invoke(done / (float)size.Value);
+        }
+    }
+
     // Why GitHub said no, the hour's questions running out being the one worth saying in words
     private static string Refusal(HttpResponseMessage answered) =>
         answered.StatusCode == System.Net.HttpStatusCode.Forbidden && answered.Headers.TryGetValues("x-ratelimit-remaining", out var left) && left.FirstOrDefault() == "0"

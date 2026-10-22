@@ -17,7 +17,8 @@
 //            comes after it), by name or *.extension
 //   settings what it's told to be, by its sections the way VS Code's settings have them, said as it starts and
 //            whenever it asks (serve-d only says what's wrong with a file outside a dub project as it's opened when
-//            told d.lintOnFileOpen is "always")
+//            told d.lintOnFileOpen is "always"). {root} in a text is the folder the server runs in, serve-d completes
+//            the modules of a lone file's folder once it's one of its d.projectImportPaths
 //
 // Where a server is can be set in the settings as well, which wins over the command here. ruff lints Python quicker than
 // pyright, swap the python entry for it if you'd rather (`pip install ruff`, command "ruff", args ["server"]).
@@ -75,7 +76,7 @@ let servers = {
         about: "D, the server code-d is built on, over DCD and D-Scanner. One program, downloaded from its releases (or built with dub) and put on the PATH or set here. It asks to download DCD the first time it starts, which is what it completes with, and finds the standard library through a D compiler on the PATH (dmd or ldc2).",
         repo: "Pure-D/serve-d", version: ["--version"],
         reload: ["dub.json", "dub.sdl"],
-        settings: { d: { lintOnFileOpen: "always" } }
+        settings: { d: { lintOnFileOpen: "always", projectImportPaths: ["{root}"] } }
     },
     yaml: {
         command: "yaml-language-server", args: ["--stdio"], language: "yaml", extensions: [".yaml", ".yml"],

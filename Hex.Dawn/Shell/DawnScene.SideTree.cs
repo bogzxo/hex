@@ -315,8 +315,12 @@ internal sealed partial class DawnScene
             HexResult found = result;
             string marker = $":{result.Line + 1}  ";
             int cut = result.Text.IndexOf(marker, StringComparison.Ordinal);
-            file.Add(new UITreeItem((cut >= 0 ? result.Text[(cut + marker.Length)..] : result.Text).Trim(), string.Empty)
+            string said = (cut >= 0 ? result.Text[(cut + marker.Length)..] : result.Text).Trim();
+
+            // What was found lit in the line, where it is once the line's indent is gone
+            file.Add(new UITreeItem(said, string.Empty)
             {
+                Mark = result.Found > 0 && result.FoundAt >= 0 ? (result.FoundAt, result.Found) : default,
                 Detail = $"{result.Line + 1}",
                 Tooltip = $"{result.Path}:{result.Line + 1}",
                 Tag = new SideTag(Pressed: () => OpenAt(found.Path, found.Line, found.Column))

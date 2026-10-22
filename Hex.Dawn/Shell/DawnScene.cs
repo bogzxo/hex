@@ -179,6 +179,7 @@ internal sealed partial class DawnScene : Scene
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
         languages = new HexLanguages(Context);
+        codeEditing.languages = languages;
         BuildStatusBar();
         BuildPanel();
         codeEditing.BuildFindBar();

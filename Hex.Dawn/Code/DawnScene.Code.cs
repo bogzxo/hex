@@ -169,6 +169,10 @@ internal sealed partial class DawnScene
     }
 
 
+    // What a diagnostic says without who said it, in brackets at its end ("(dmd)", "(dscanner.style.x)")
+    private static string WithoutSource(string message) =>
+        message.EndsWith(')') && message.LastIndexOf(" (", StringComparison.Ordinal) is var at and > 0 && message.IndexOf(' ', at + 2) < 0 ? message[..at] : message;
+
     // What the localisation check last found in each document, kept to go with what running it found
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> localisationFound = [];
 
@@ -180,12 +184,22 @@ internal sealed partial class DawnScene
     {
         var found = new List<UICodeDiagnostic>(localisationFound.GetValueOrDefault(of) ?? []);
 
-        // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers
+        // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers.
+        // The same thing said twice in the same place is said once, the compiler's check and the build that ran it both
+        // said a string doesn't go in an int, and the Problems panel listed it twice
+        var seen = new HashSet<(int, int, string)>();
         foreach (var source in diagnosticSources)
-            found.AddRange(source(of) ?? []);
+        {
+            foreach (UICodeDiagnostic diagnostic in source(of) ?? [])
+            {
+                if (seen.Add((diagnostic.Line, diagnostic.Column, WithoutSource(diagnostic.Message))))
+                    found.Add(diagnostic);
+            }
+        }
         of.Editor.Diagnostics = found;
-        if (of == document)
-            problemsDirty = true;
+
+        // Every open file's are in the Problems panel, not only the one on screen
+        problemsDirty = true;
     }
 
     /* Text documents */
@@ -340,8 +354,12 @@ internal sealed partial class DawnScene
 
         commands.Add("Go/symbols", Said("code.go_to_definition"), codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/symbols", Said("code.find_all_references"), codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), icon: "arrow-down");
-        commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), icon: "arrow-up");
+        commands.Add("Go/symbols", Said("code.rename_symbol"), codeEditing.RenameSymbol, "F2", "edit", UIKeyUse.Shown).IsVisible = inCode;
+
+        // F8 and Shift+F8 go along what's wrong, VS Code's keys. F8 checked every HIDL file of the workspace, which is
+        // Ctrl+F8 now, and somebody in a C# file who pressed F8 got told 0 files had been checked
+        commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), "F8", "arrow-down", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), "Shift+F8", "arrow-up", UIKeyUse.BoundWhileTyping);
 
         // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
@@ -351,7 +369,7 @@ internal sealed partial class DawnScene
         commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
         commands.Bind(Key.F5, () => { if (!LayoutTools) running.OpenRunner(); }, control: true, whileTyping: true);
 
-        commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
+        commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "Ctrl+F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
 
         commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;

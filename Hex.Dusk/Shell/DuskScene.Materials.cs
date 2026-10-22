@@ -20,8 +20,8 @@ internal sealed partial class DuskScene
     private const float PANE_RADIUS = 12.0f;
     private static readonly UIEdges PaneRoom = new(6.0f, 0.0f, 6.0f, 6.0f);
 
-    // How much of the window's tone is laid over the field of light on glass, the same as Dawn's
-    private const float VEIL = 0.62f;
+    // How much of the window's tone is laid over the field of light on glass, by the glass's clarity the way Dawn's is
+    private float veil = Hex.Shell.HexGlass.Veil(Hex.Shell.HexGlass.CLARITY);
 
     /// <summary>The field of light, a module of the compositor under Dusk's own, behind everything.</summary>
     private void BuildGlow()
@@ -43,7 +43,7 @@ internal sealed partial class DuskScene
         Vector4 window = new(panelColour.X * 0.5f, panelColour.Y * 0.5f, panelColour.Z * 0.5f, 1.0f);
 
         glow.UseSkin(skin);
-        glow.Veil = glassy ? window with { W = VEIL } : window;
+        glow.Veil = glassy ? window with { W = veil } : window;
 
         // The bars are the window and nothing of their own
         top.Color = statusBar.Color = window with { W = 0.0f };

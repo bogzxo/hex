@@ -112,7 +112,10 @@ internal sealed partial class HexExplorer
     {
         if (!options.SelfTest)
         {
-            context.Windows.Pick(HexDialogs.PickFolder(browseDirectory, context.Windows.DialogHost), picked);
+            // From the folder of the file that's open, where Open starts too. It started where files were last opened from
+            string from = context.Documents.Current.Path is { } open && Path.GetDirectoryName(Path.GetFullPath(open)) is { } here && Directory.Exists(here)
+                ? here : browseDirectory;
+            context.Windows.Pick(HexDialogs.PickFolder(from, context.Windows.DialogHost), picked);
             return;
         }
 

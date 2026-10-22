@@ -81,6 +81,9 @@ internal sealed partial class DawnScene
         ChooseFrom(Said("commands.symbol_title"), Said("commands.symbol_text", ("file", document.Name)), choices);
     }
 
+    // How much of a problem the status bar says as F8 goes to it
+    private const int STEP_SAID = 90;
+
     /// <summary>The next problem there is (or the one before), going round, opened with the caret on it.</summary>
     private void StepProblem(int direction)
     {
@@ -94,7 +97,9 @@ internal sealed partial class DawnScene
         problemStep = ((problemStep + direction) % problemList.Count + problemList.Count) % problemList.Count;
         HexProblem problem = problemList[problemStep];
         OpenAt(problem.Path, problem.Line, problem.Column);
-        Say(Said("commands.problem_step", ("at", (problemStep + 1).ToString()), ("count", problemList.Count.ToString()), ("problem", problem.Text)), error: !problem.Warning);
+        // A long message cut short, the whole of it ran over the counts and the caret's place along the status bar
+        string text = problem.Text.Length > STEP_SAID ? problem.Text[..(STEP_SAID - 3)] + "..." : problem.Text;
+        Say(Said("commands.problem_step", ("at", (problemStep + 1).ToString()), ("count", problemList.Count.ToString()), ("problem", text)), error: !problem.Warning);
     }
 
     /// <summary>The code of the layout, with the caret on the let of a name of it.</summary>

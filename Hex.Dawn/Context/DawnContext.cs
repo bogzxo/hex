@@ -250,7 +250,16 @@ internal interface ITerminals
     /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
     /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
     /// </summary>
-    void RunInTab(string key, string title, string folder, string commandLine);
+    void RunInTab(string key, string title, string folder, string commandLine, Action<int>? finished = null);
+
+    /// <summary>How many errors the terminals have said there are (a build's), the ones in the Problems panel.</summary>
+    int TerminalErrors { get; }
+
+    /// <summary>A problem a build said, with the terminals' in the Problems panel and under the code, a line and a column from 1.</summary>
+    void AddProblem(string path, int line, int column, string message, bool warning);
+
+    /// <summary>What the terminals and the builds said is wrong forgotten, a new build is about to say it again.</summary>
+    void ClearProblems();
 
     /// <summary>
     /// Runs a command line in a Dusk window of its own, in a folder, with the shell the terminal page uses, or as a new
@@ -282,6 +291,9 @@ internal interface IPanels
 
     /// <summary>The panel's output brought up.</summary>
     void ShowOutput();
+
+    /// <summary>The panel's problems brought up.</summary>
+    void ShowProblems();
 
     /// <summary>The panel's terminal page brought up, the console's and the terminals' tabs.</summary>
     void ShowTerminals();

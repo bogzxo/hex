@@ -62,6 +62,10 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminals.Blocked = () => chrome.Dialog is not null;
         terminals.Start();
 
+        // What it says is wrong is underlined in the files that are open too, until they're saved
+        diagnosticSources.Add(TerminalDiagnosticsOf);
+        documentSaved += ForgetTerminalProblemsOf;
+
         // The console after the machine's shells, a new terminal is a shell and the console is asked for by name
         terminalPanel.Profiles.Add(new TerminalProfile(Said("terminal_page.console_profile"), string.Empty, "symbol-namespace", HexRunning.CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
         terminals.Watch();

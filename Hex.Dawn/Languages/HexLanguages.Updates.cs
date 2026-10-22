@@ -159,8 +159,12 @@ internal sealed partial class HexLanguages
             RefreshServerStatus();
 
             int behind = OfferServerUpdates(again: asked);
-            if (problems.Count > 0)
-                context.Notices.Note(context.Strings.Said("language_updates.some_not_asked", ("problems", string.Join("; ", problems))), error: latest.Count == 0);
+            // Quiet, not red, GitHub not answering (no network, its limit on asking) is nothing anybody did wrong. Only said
+            // in the output when somebody asked, the look Hex takes by itself as it starts put it there every start
+            if (problems.Count > 0 && asked)
+                context.Notices.Note(context.Strings.Said("language_updates.some_not_asked", ("problems", string.Join("; ", problems))));
+            else if (problems.Count > 0)
+                Console.WriteLine($"[Hex] The newest versions of some language servers weren't asked about, {string.Join("; ", problems)}.");
             if (asked)
             {
                 string count = behind.ToString(CultureInfo.CurrentCulture);

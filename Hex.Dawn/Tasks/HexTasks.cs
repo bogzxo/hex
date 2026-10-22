@@ -37,13 +37,17 @@ internal sealed partial class HexTasks
         return File.Exists(plain) ? plain : File.Exists(hidden) ? hidden : null;
     }
 
-    /// <summary>Every task of every folder of the workspace, in the order the files have them.</summary>
+    /// <summary>
+    /// Every task of the file on screen's nearest tasks.hor (its project's) first, then every folder of the workspace's,
+    /// in the order the files have them.
+    /// </summary>
     private List<HexTask> Tasks()
     {
         var all = new List<HexTask>();
-        foreach (string root in context.Workspace.Roots)
+        var read = new HashSet<string>(PlatformPaths.Comparer);
+        foreach (string? root in (string?[])[TasksFolderFor(context.Documents.Current.Path), .. context.Workspace.Roots])
         {
-            if (TasksFileIn(root) is { } file)
+            if (root is not null && read.Add(Path.GetFullPath(root)) && TasksFileIn(root) is { } file)
                 all.AddRange(TasksOf(file, root));
         }
 
@@ -104,11 +108,16 @@ internal sealed partial class HexTasks
             [.. tasks.Select(task => ($"{task.Name}   {task.Command}", (Action)(() => Run(task))))]);
     }
 
-    /// <summary>Ctrl+Shift+B, the build task, or the list when there is none.</summary>
+    /// <summary>
+    /// Ctrl+Shift+B, the build task, or Set Up F5 for the file on screen when there is none, which knows a dub project
+    /// from a lone file. It wrote a tasks.hor that echoed "nothing to build yet" in a dub project F5 knew how to build.
+    /// </summary>
     private void RunBuildTask()
     {
         if (DefaultTask("build") is { } build)
             Run(build);
+        else if (context.Documents.Current is { IsText: true, Path: not null })
+            SetUpRun();
         else
             ChooseTask();
     }
@@ -122,12 +131,37 @@ internal sealed partial class HexTasks
     /// </summary>
     internal void Run(HexTask task)
     {
+        // Every file of code with changes saved first, the build reads the disk. F5 built what was there before the line
+        // just typed, every IDE saves first
+        context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
+
         string line = CommandLineOf(task, context.Terminals.UsualProfileId);
         if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
             context.Terminals.RunInDusk(task.WorkingFolder(), line);
         else
-            context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line);
+            context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line, exit => Ended(task, exit));
         context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
+    }
+
+    /// <summary>
+    /// A task's shell said it was done, how it went said along the bottom. One that failed with errors a compiler said has
+    /// them brought up in the Problems panel, the way Visual Studio's Error List comes up after a build that broke. It
+    /// said "running build" long after the build was over.
+    /// </summary>
+    private void Ended(HexTask task, int exit)
+    {
+        int errors = context.Terminals.TerminalErrors;
+        if (exit == 0)
+        {
+            context.Notices.Say(context.Strings.Said("tasks.ended", ("name", task.Name)));
+            return;
+        }
+
+        context.Notices.Say(errors > 0
+            ? context.Strings.Said("tasks.failed_with", ("name", task.Name), ("errors", HexText.Count("error", errors)))
+            : context.Strings.Said("tasks.failed", ("name", task.Name), ("code", exit.ToString())), error: true);
+        if (errors > 0)
+            context.Panels.ShowProblems();
     }
 
     /// <summary>

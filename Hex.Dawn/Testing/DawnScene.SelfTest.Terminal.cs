@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
             : "printf '%s\\n' '/tmp/hex/Program.cs(12,5): error CS1002: ; expect''ed'\r"));
         test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("CS1002")), 8.0f);
         test.Check("terminal: a compiler's error in a shell's output is in the Problems panel", () =>
-            problemList.Any(problem => problem.Text == "CS1002: ; expected" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));
+            problemList.Any(problem => problem.Text == "; expected (CS1002)" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));
         // What a Return typed into the shell tells the host, the line goes to the shell and the old problems go
         test.Run(() => terminalPanel.FocusedView?.OnInput?.Invoke("\r"));
         test.Wait();

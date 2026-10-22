@@ -494,6 +494,34 @@ let strings = {
         replaced: "replaced {count} of '{query}', Ctrl+Z puts them back"
     },
 
+    // What a file's language server is asked about its code, going to things, renaming, formatting and fixing
+    code_server: {
+        no_definition: "{server} doesn't know where {word} is declared",
+        definitions_title: "{word}, declared in {count} places",
+        declared_at: "{word} is declared in {file}, line {line}",
+        no_references: "{word} isn't used anywhere the server knows of",
+        references_title: "{word}, {count} places",
+        references_found: "{word} is in {places} in {files}",
+        rename_prompt: "What {name} is called everywhere the language server knows it.",
+        not_renamed: "{server} couldn't rename {name} there",
+        renamed: "{name} is {renamed} now, {places} in {files}, nothing saved",
+        cannot_format: "this file's language server doesn't format files",
+        formatted_already: "nothing to change, it's formatted",
+        formatted: "formatted by {server}",
+        no_fixes_here: "no fixes or refactorings here",
+        fixes_title: "Quick fix",
+        fixes_prompt: "What {server} can do here",
+        applied: "{title}",
+        format_document: "Format Document",
+        quick_fix: "Quick Fix...",
+        show_hover: "Show Hover",
+        add_import: "Add {import}",
+        change_name: "Change {from} to {to}",
+        decompiled: "{word}, from {file} as the server decompiles it, to read",
+        source_not_written: "the source couldn't be written to be read, {why}",
+        no_hover: "nothing's known of {word}"
+    },
+
     code_hints: {
         go_to_declared: "Go to where it is declared",
         find_everywhere: "Find everywhere it is",
@@ -543,12 +571,20 @@ let strings = {
         stop_debugging: "Stop Debugging",
         restart_debugging: "Restart Debugging",
         toggle_breakpoint: "Toggle Breakpoint",
-        breakpoints_cs_only: "breakpoints go in .cs files",
+        breakpoints_cs_only: "breakpoints go in .cs and .d files, C# and D are what Hex debugs",
+        no_lldb: "there's no lldb-dap to debug D with, it comes with LLVM (winget install LLVM.LLVM, or llvm from Homebrew or the distribution)",
         already_running: "it's running, Shift+F5 stops it",
         no_project: "there's no .csproj to debug in the workspace or over this file",
         which_project: "Debug which project",
         which_project_text: "More than one in the workspace, which to build and run under the debugger",
         no_debugger_apple: "netcoredbg isn't anywhere Hex looks, and its releases have nothing for Apple silicon: build it from github.com/Samsung/netcoredbg and say where in the settings (debugger_path)",
+        running_without: "C# runs without the debugger, {why}",
+        running_without_card: "This runs without the debugger, netcoredbg isn't on this machine. Install it and F5 debugs C#, with breakpoints, steps and the variables.",
+        install_netcoredbg: "Install netcoredbg",
+        installing_netcoredbg: "Installing netcoredbg",
+        downloading: "downloading {asset}",
+        unpacking: "unpacking it",
+        netcoredbg_installed: "netcoredbg is installed ({path}), F5 debugs C# now",
         no_debugger: "netcoredbg isn't anywhere Hex looks, get it from github.com/Samsung/netcoredbg/releases and put it in a netcoredbg folder next to {exe} or on the PATH, or say where in the settings (debugger_path)",
         building_to_debug: "building {project} to debug it",
         building: "building {project}",
@@ -863,7 +899,7 @@ let strings = {
         found_in_files: "'{query}' is in {files}, {lines}",
         not_found: "no '{query}' in {where}",
         checking: "checking every file in {where}...",
-        all_parse: "all {files} files in {where} parse",
+        all_parse: "nothing wrong in the {files} files of {where}",
         problems_found: "{count} in {files}, listed under the editor",
         find_in_files: "Find in Files...",
         go_to_file: "Go to File...",
@@ -952,6 +988,9 @@ let strings = {
         choose_title: "Run task",
         choose_prompt: "The tasks of the workspace's tasks.hor, each runs in a terminal of its own",
         running: "running {name}",
+        ended: "{name} done",
+        failed: "{name} failed, it ended with {code}",
+        failed_with: "{name} failed with {errors}, they're in Problems",
         file_not_written: "{file} couldn't be written, {reason}",
         set_up_run: "Set Up F5...",
         setup_title: "Set up F5",
@@ -1024,6 +1063,7 @@ let strings = {
         reset_zoom: "Reset Zoom",
         go_to_definition: "Go to Definition",
         find_all_references: "Find All References",
+        rename_symbol: "Rename Symbol...",
         next_problem: "Next Problem",
         previous_problem: "Previous Problem",
         run_file: "Run File",
@@ -1281,8 +1321,8 @@ let strings = {
         kind_skin: "HIDL skin",
         kind_strings: "HIDL strings",
         line_endings_swapped: "{name} is saved with its lines ended {ending} from now on, save it to keep that",
-        skin_shown: "layouts are shown in {skin}",
-        skin_shown_theme: "layouts are shown in {skin}, {theme}"
+        skin_shown: "layouts are shown in the {skin} skin",
+        skin_shown_theme: "layouts are shown in the {skin} skin, its {theme} theme"
     },
 
     terminal_page: {
@@ -1478,6 +1518,8 @@ let strings = {
         place_one: "1 place",
         place_many: "{count} places",
         problem_one: "1 problem",
-        problem_many: "{count} problems"
+        problem_many: "{count} problems",
+        error_one: "1 error",
+        error_many: "{count} errors"
     }
 };

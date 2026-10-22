@@ -28,8 +28,16 @@ internal sealed partial class DawnScene
     /// </summary>
     private void RunOrPlay()
     {
-        // C# is debugged, and while something is being debugged F5 goes on from where it stopped
-        if (debugger.DebugStopped || (!LayoutTools && HexDebugging.IsCSharp(document.Path))) debugger.DebugOrContinue();
+        // C# is debugged when there's a debugger to do it with, and while something is being debugged F5 goes on from where
+        // it stopped. Without netcoredbg F5 said where to get it and did nothing, now it builds and runs it the way any other
+        // program is, and says once that it isn't being debugged
+        // D is debugged when lldb-dap is here and a D file has a breakpoint, run in the terminal otherwise
+        bool debuggable = (HexDebugging.IsCSharp(document.Path) && debugger.Netcoredbg() is not null)
+            || (HexDebugging.IsD(document.Path) && debugger.DBreakpoints() && HexDebugging.LldbDap() is not null);
+        if (!LayoutTools && HexDebugging.IsCSharp(document.Path) && !debuggable && !debugger.DebugStopped)
+            debugger.SayRunWithoutDebugger();
+
+        if (debugger.DebugStopped || (!LayoutTools && debuggable)) debugger.DebugOrContinue();
         else if (LayoutTools) designer.PlayIntros();
         else if (document.IsText && document.Path is { } path && !IsHidl(path))
         {

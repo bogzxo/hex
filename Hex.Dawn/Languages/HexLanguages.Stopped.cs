@@ -13,6 +13,9 @@ internal sealed partial class HexLanguages
     // The servers that stopped this tick, dealt with after going through them, which starting one again changes
     private readonly List<(LanguageServer Server, string Why)> stoppedNow = [];
 
+    /// <summary>How many times a server started or stopped, for what says which is linting a file to say it again.</summary>
+    internal int ServersChanged { get; private set; }
+
     private void ServersStopped()
     {
         if (stoppedNow.Count == 0)
@@ -27,6 +30,7 @@ internal sealed partial class HexLanguages
     private void ServerStopped(LanguageServer server, string why)
     {
         Console.WriteLine($"[Hex] {server.Name} stopped, {why}");
+        ServersChanged++;
 
         foreach (HexDocument of in linters.Where(pair => pair.Value == server).Select(pair => pair.Key).ToList())
         {
@@ -41,7 +45,7 @@ internal sealed partial class HexLanguages
         string shown = Path.GetFileNameWithoutExtension(CommandOf(entry));
         if (restartedOnce.Add(server.Name))
         {
-            context.Notices.Say(context.Strings.Said("languages.server_restarted_after", ("server", shown)), error: true);
+            context.Notices.Say(context.Strings.Said("languages.server_restarted_after", ("server", shown)));
             RestartServer(entry);
             return;
         }

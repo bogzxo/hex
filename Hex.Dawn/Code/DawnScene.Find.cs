@@ -48,17 +48,9 @@ internal sealed partial class DawnScene
         textDialog = shown;
     }
 
-    private void GoToLine()
-    {
-        AskText(Said("find_menu.go_to_line_title"), Said("find_menu.which_line", ("count", code.Document.LineCount.ToString())), string.Empty, Said("find_menu.go"), answer =>
-        {
-            if (int.TryParse(answer.Trim(), out int line))
-            {
-                code.GoTo(Math.Clamp(line - 1, 0, code.Document.LineCount - 1));
-                code.Focus();
-            }
-        });
-    }
+    // Ctrl+G, quick open with a colon in it, the lines of the file to go to, the way VS Code has it. It was a dialog of
+    // its own with a box, one more kind of window than the rest of Hex has
+    private void GoToLine() => QuickOpenWith(":");
 
     /* The workspace, every .hor of its folders, or of the repository the open file is in when it has none */
 
@@ -99,8 +91,10 @@ internal sealed partial class DawnScene
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
     private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);
 
-    /// <summary>Ctrl+P, opens a file of the workspace by a few letters of its name.</summary>
-    private void QuickOpen()
+    /// <summary>Ctrl+P, opens a file of the workspace by a few letters of its name, or with a prefix typed another of its lists.</summary>
+    private void QuickOpen() => QuickOpenWith(string.Empty);
+
+    private void QuickOpenWith(string typed)
     {
         List<string> files = AllWorkspaceFiles();
         var byName = new Dictionary<string, string>();
@@ -127,7 +121,7 @@ internal sealed partial class DawnScene
         }
 
         ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", where)),
-            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened);
+            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
     }
 
     /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
@@ -192,13 +186,23 @@ internal sealed partial class DawnScene
     /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
     private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
-    /// <summary>Every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game hasn't got.</summary>
+    /// <summary>
+    /// Ctrl+F8, every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game
+    /// hasn't got. With them every D file looked over by the compiler and every C# project built, what's wrong in a file
+    /// nobody has open is there before anybody builds it.
+    /// </summary>
     private void CheckAllFiles()
     {
         List<string> roots = WorkspaceRoots();
         string where = DescribeRoots();
+        string? dChecker = languages.DChecker();
 
-        InBackground(Said("find_menu.checking", ("where", where)), () => HexSearch.CheckFiles(roots), checkedFiles =>
+        InBackground(Said("find_menu.checking", ("where", where)), () =>
+        {
+            var (hidlFiles, hidlProblems) = HexSearch.CheckFiles(roots);
+            var (codeFiles, codeProblems) = HexLanguages.CheckCode(roots, dChecker);
+            return (hidlFiles + codeFiles, (List<HexResult>)[.. hidlProblems, .. codeProblems]);
+        }, checkedFiles =>
         {
             var (files, problems) = checkedFiles;
 

@@ -22,7 +22,7 @@ internal sealed partial class DawnScene
     // How the glass looks, as thick as the four sliders of the effects say. The popups keep most of their colour so the
     // text on them reads, the sides a quieter glass out of the same (HexGlass), there's nothing on most of them but the tree
     private UIGlass PopupGlass => HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-    private UIGlass SideGlass => HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim);
+    private UIGlass SideGlass => HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
 
     private UIModule effectsModule = null!;
     private Sparks sparks = null!;

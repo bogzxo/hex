@@ -35,7 +35,7 @@ internal sealed partial class DawnScene
         test.Check("tasks: a task runs in a tab of its own, named after it", () =>
             terminalPanel.Tabs.Count == tabsBefore + 1 && terminalPanel.Current is { Title: "say" } current && Equals(current.Tag, HexTasks.TabOf(said!)));
         test.Check("tasks: and what it says about an error is in the Problems panel", () =>
-            problemList.Any(problem => problem.Text == "CS1002: ; expected" && problem.Line == 11));
+            problemList.Any(problem => problem.Text == "; expected (CS1002)" && problem.Line == 11));
 
         test.Run(() => tasks.Run(said!));
         test.Wait();
@@ -92,8 +92,9 @@ internal sealed partial class DawnScene
             tasks.SetupWindow is null && tasks.TasksOf(file, root) is var written
             && written.Find(task => task.Name == "build") is { Command: "echo built", Group: "build", Default: true }
             && written.Find(task => task.Name == "run") is { Command: "echo ran", Group: "run", DependsOn: "build", Terminal: HexTask.DUSK });
-        test.Check("tasks: and run, Dusk is asked to build it and then run it in the folder", () =>
-            DuskAsked is { } asked && PlatformPaths.Same(asked.Folder, root) && asked.CommandLine.StartsWith("echo built", StringComparison.Ordinal) && asked.CommandLine.Contains("echo ran"));
+        // In the file's own folder, so the program it makes is next to its code
+        test.Check("tasks: and run, Dusk is asked to build it and then run it in the file's folder", () =>
+            DuskAsked is { } asked && PlatformPaths.Same(asked.Folder, folder) && asked.CommandLine.StartsWith("echo built", StringComparison.Ordinal) && asked.CommandLine.Contains("echo ran"));
         test.Check("tasks: the run goes on only if the build worked, the way each shell says it", () =>
             tasks.TasksOf(file, root).Find(task => task.Name == "run") is { } run
             && tasks.CommandLineOf(run, "pwsh") == "echo built && echo ran"

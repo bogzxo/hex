@@ -22,7 +22,7 @@ internal sealed partial class DuskScene
     private UIGlass popupGlass = HexGlass.Popup(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
 
     // Dawn's sides' glass out of the same sliders, Dusk has no side panels but shows it in the glass's preview
-    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM);
+    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
 
     // How long a command has to have run for it going well to be worth a burst, in seconds. Every ls throwing sparks
     // is the power mode's problem, not a feature
@@ -75,7 +75,8 @@ internal sealed partial class DuskScene
         effectGlass = settings.EffectGlass;
         uiAnimation = settings.UiAnimation;
         popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim);
+        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+        veil = HexGlass.Veil(settings.GlassClarity);
         lightEffects.Read(SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : []);
         ApplyEffects();
     }

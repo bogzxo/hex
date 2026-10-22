@@ -231,7 +231,23 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             Say(Said("tasks.no_dusk"), error: true);
     }
 
-    void ITerminals.RunInTab(string key, string title, string folder, string commandLine)
+    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int>? finished)
+    {
+        // The code keeps the keyboard, the way a task's terminal doesn't take it in VS Code. The build took it and what was
+        // typed next (Ctrl+G and a line) went to the shell
+        UIComponent? had = compositor.Focus;
+        try
+        {
+            StartInTab(key, title, folder, commandLine, finished);
+        }
+        finally
+        {
+            if (had is CodeEditor { Module: not null } editor)
+                editor.Focus();
+        }
+    }
+
+    private void StartInTab(string key, string title, string folder, string commandLine, Action<int>? finished)
     {
         ShowPanel(CONSOLE_PAGE);
         string line = commandLine + "\r";
@@ -242,6 +258,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             terminalPanel.Select(tab);
             terminalPanel.FocusPane(view);
             view.Send(line);
+            WatchTask(view, finished);
             return;
         }
 
@@ -250,8 +267,16 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         tab = terminalPanel.NewTab(terminals.UsualProfile, folder);
         tab.Tag = key;
         tab.Renamed = title;
-        tab.Views.FirstOrDefault()?.SendWhenReady(line);
+        if (tab.Views.FirstOrDefault() is { } made)
+        {
+            made.SendWhenReady(line);
+            WatchTask(made, finished);
+        }
     }
+
+    int ITerminals.TerminalErrors => terminalProblems.Count(problem => !problem.Warning);
+    void ITerminals.AddProblem(string path, int line, int column, string message, bool warning) => AddTerminalProblem(path, line, Math.Max(1, column), message, warning);
+    void ITerminals.ClearProblems() => ClearTerminalProblems();
 
     /* The side bar and the panel */
 
@@ -276,6 +301,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IPanels.RefreshRows() => sideTree.Refresh();
     void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
+    void IPanels.ShowProblems() => ShowPanel(PROBLEMS_PAGE);
     void IPanels.ShowTerminals() => ShowPanel(CONSOLE_PAGE);
     bool IPanels.TerminalsShown => bottom.Shown && bottom.Selected == CONSOLE_PAGE;
     Vector4 IPanels.Warning => WarningColor;

@@ -49,7 +49,11 @@ internal sealed partial class HexLanguages
         with.Documents.Closed += StopLinting;
         with.Documents.Saved += LintSaved;
         with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
+        with.Documents.AddDiagnostics(CheckDiagnosticsOf);
         with.Documents.AddCompletions(ServerCompletions);
+        with.Documents.AddHovers(ServerHover);
+        with.Documents.AddSignatures(ServerSignature);
+        AddServerCommands();
 
         // What changes on the disk in the folders the servers were started in, for what isn't open in them
         with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory));
@@ -191,7 +195,12 @@ internal sealed partial class HexLanguages
     /// <summary>Opens a file of another language in its language server, when there is one for it on this machine.</summary>
     private void StartLinting(HexDocument of)
     {
+        CheckSoon(of, 0.0f);
         if (of.Path is not { } path || of.Editor.Highlighter is null || ReferenceEquals(of.Editor.Highlighter, CodeLanguages.Hidl))
+            return;
+
+        // The framework's source decompiled to be read is no project's, a server started for its folder knew nothing
+        if (PlatformPaths.IsUnder(path, DecompiledFolder))
             return;
 
         if (!serversRead)
@@ -206,6 +215,7 @@ internal sealed partial class HexLanguages
         // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
         context.Workspace.Rewatch();
         linters[of] = server;
+        ServersChanged++;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
     }
@@ -216,6 +226,8 @@ internal sealed partial class HexLanguages
     /// <summary>A file of another language was typed into, its server hears a moment after the typing stops.</summary>
     private void LintChanged(HexDocument changed)
     {
+        CheckSoon(changed);
+        CheckOthersSoon(changed);
         if (linters.ContainsKey(changed))
             lintIn[changed] = LINT_DELAY;
     }
@@ -226,6 +238,7 @@ internal sealed partial class HexLanguages
     /// </summary>
     private void LintSaved(HexDocument saved)
     {
+        CheckSoon(saved, 0.0f);
         if (!linters.TryGetValue(saved, out LanguageServer? server) || saved.Path is not { } path)
             return;
 
@@ -242,6 +255,7 @@ internal sealed partial class HexLanguages
 
         lintIn.Remove(closed);
         lintFound.Remove(closed);
+        ForgetCheck(closed);
         ForgetServerCompletions(closed);
     }
 
@@ -296,6 +310,8 @@ internal sealed partial class HexLanguages
             }
         }
 
+        UpdateChecks(dt);
+        UpdateAnswers();
         ServersStopped();
         AskNext();
         UpdateServerCompletions();

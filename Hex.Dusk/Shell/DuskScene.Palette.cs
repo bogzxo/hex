@@ -18,9 +18,15 @@ internal sealed partial class DuskScene
     /// <summary>Ctrl+Shift+P, every command with its key, a few letters narrow it down.</summary>
     private void CommandPalette()
     {
+        // A title once, the first command that has it with its key. Close pane is on two keys, and said twice it read as
+        // two things
         var choices = new List<(string Text, Action Picked)>();
+        var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (TerminalCommand command in host.Commands.All)
         {
+            if (!titles.Add(command.Title))
+                continue;
+
             string name = command.Name;
             choices.Add(($"{command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () => Run(name)));
         }

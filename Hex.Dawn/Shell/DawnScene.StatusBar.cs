@@ -24,6 +24,9 @@ internal sealed partial class DawnScene
     private (UISkinChoice? Skin, string? Theme) skinShown;
     private HexDocument? languageFor;
 
+    // How many times the language servers had started or stopped when the language item was written, it says so as it happens
+    private int languagesShown;
+
     // How many components the layout has, counted when its tree is put together, not walked again every tick
 
     // What the items were last written from, so a number is only made into text when it changes
@@ -115,9 +118,10 @@ internal sealed partial class DawnScene
 
             endingsItem.Text = document.CrLf ? "CRLF" : "LF";
 
-            if (languageFor != document)
+            if (languageFor != document || languagesShown != languages.ServersChanged)
             {
                 languageFor = document;
+                languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
                 languageItem.Text = $"$({icon}) {language}";
             }
@@ -214,9 +218,15 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>Helper method to show the layouts in another skin, the one a game would be set to.</summary>
+    /// <summary>
+    /// Helper method to show the layouts in another skin, the one a game would be set to. Nothing, and nothing said, for
+    /// the one they're in already, which picking a look put back and said so, "layouts are shown in Flat, horizon".
+    /// </summary>
     private void UseSkin(UISkinChoice skin, string? theme)
     {
+        if (UISkins.Current == skin && (UISkins.Theme ?? skin.UsualTheme) == (theme ?? skin.UsualTheme))
+            return;
+
         UISkins.Use(skin, theme);
         Say(theme is null ? Said("status_bar.skin_shown", ("skin", skin.Title)) : Said("status_bar.skin_shown_theme", ("skin", skin.Title), ("theme", theme)));
     }

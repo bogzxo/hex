@@ -160,6 +160,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdatePanel(float dt)
     {
+        UpdateTerminalProblems();
         if (problemsDirty)
         {
             problemsDirty = false;
@@ -194,8 +195,10 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// Helper method to gather what is wrong. The file that is open first (what doesn't parse, and what the editor
-    /// has to say about it), then whatever F8 found in the rest.
+    /// Helper method to gather what is wrong. The file on screen first (what doesn't parse, and what the editor has to
+    /// say about it), then every other file that's open the same way, then whatever F8, the extensions and the terminal
+    /// found in files that aren't. A file of another tab had what its server said of it nowhere but under its own code,
+    /// VS Code lists every open file's.
     /// </summary>
     private void GatherProblems()
     {
@@ -208,43 +211,83 @@ internal sealed partial class DawnScene
         foreach (UICodeDiagnostic diagnostic in code.Diagnostics)
             problemList.Add(new HexProblem(here, diagnostic.Line, diagnostic.Column, diagnostic.Message, diagnostic.Warning, diagnostic.Hint));
 
+        // The files that are open are said about as they are in their editors, nothing about them from elsewhere
+        var open = new HashSet<string>(PlatformPaths.Comparer);
+        foreach (HexDocument other in documents)
+        {
+            if (other.Path is not { } path || !other.IsText)
+                continue;
+
+            open.Add(Path.GetFullPath(path));
+            if (other == document)
+                continue;
+
+            foreach (UICodeDiagnostic error in other.Editor.SyntaxErrors)
+                problemList.Add(new HexProblem(path, error.Line, error.Column, error.Message, false));
+            foreach (UICodeDiagnostic diagnostic in other.Editor.Diagnostics)
+                problemList.Add(new HexProblem(path, diagnostic.Line, diagnostic.Column, diagnostic.Message, diagnostic.Warning, diagnostic.Hint));
+        }
+
+        bool Elsewhere(string path) => !open.Contains(Path.GetFullPath(path));
+
         if (workspaceProblems is not null)
         {
             foreach (HexResult result in workspaceProblems)
             {
-                // The open file is said about above, as it is now
-                if (document.Path is { } open && string.Equals(Path.GetFullPath(result.Path), Path.GetFullPath(open), PlatformPaths.Comparison))
-                    continue;
-
-                problemList.Add(new HexProblem(result.Path, result.Line, result.Column, result.Text, result.Text.Contains("hasn't got", StringComparison.Ordinal)));
+                if (Elsewhere(result.Path))
+                    problemList.Add(new HexProblem(result.Path, result.Line, result.Column, result.Text, result.Warning || result.Text.Contains("hasn't got", StringComparison.Ordinal)));
             }
         }
 
         foreach (var (file, problem) in extensions.ProblemsElsewhere())
-            problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning));
+        {
+            if (Elsewhere(file))
+                problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning));
+        }
 
-        problemList.AddRange(terminalProblems);
+        // An open file's are among its own diagnostics above, underlined in its code
+        foreach (HexProblem problem in terminalProblems)
+        {
+            if (Elsewhere(problem.Path))
+                problemList.Add(problem);
+        }
 
         // What's only worth a look is listed, and counted with neither
         errorCount = problemList.Count(problem => !problem.Warning);
         warningCount = problemList.Count(problem => problem.Warning && !problem.Hint);
     }
 
-    /// <summary>Helper method to put the rows of the problems together out of what was gathered.</summary>
+    /// <summary>
+    /// Helper method to put the rows of the problems together out of what was gathered, under a row for each file the way
+    /// VS Code has them, the file on screen first. Each row says where on its line first, a long message cut off at the
+    /// panel's edge took where it was with it.
+    /// </summary>
     private void RebuildProblems()
     {
-        var items = layout.Populate(problems, problemList.Count);
-        for (int i = 0; i < items.Count; i++)
+        var groups = problemList.GroupBy(problem => Path.GetFullPath(problem.Path), PlatformPaths.Comparer).ToList();
+        var items = layout.Populate(problems, problemList.Count + groups.Count);
+        int at = 0;
+        foreach (var group in groups)
         {
-            HexProblem problem = problemList[i];
-            var row = items[i].Get<Button>("row");
-            var caption = items[i].Get<Label>("caption");
+            HexProblem first = group.First();
+            var header = items[at++];
+            header.Get<Label>("caption").Text = FileCaption(first.Path, group.Count());
+            header.Get<Label>("caption").Color = null;
+            var headerRow = header.Get<Button>("row");
+            headerRow.Tooltip = first.Path;
+            headerRow.OnPressed = () => OpenAt(first.Path, first.Line, first.Column);
+            headerRow.OnContextMenu = null;
 
-            caption.Text = ProblemCaption(problem);
-            caption.Color = null;
-            row.Tooltip = problem.Path;
-            row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
-            row.OnContextMenu = _ => ShowProblemMenu(problem);
+            foreach (HexProblem problem in group)
+            {
+                var row = items[at].Get<Button>("row");
+                var caption = items[at++].Get<Label>("caption");
+                caption.Text = ProblemCaption(problem);
+                caption.Color = null;
+                row.Tooltip = $"{problem.Text}\n{problem.Path}:{problem.Line + 1}:{problem.Column + 1}";
+                row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
+                row.OnContextMenu = _ => ShowProblemMenu(problem);
+            }
         }
 
         if (problemList.Count == 0)
@@ -257,22 +300,29 @@ internal sealed partial class DawnScene
     private static readonly System.Text.RegularExpressions.Regex ProblemCode = new(@"^(?<said>.*?)\s*\((?<code>[^()\s]+)\)\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
-    /// A row of the problems the way VS Code has them, only its icon in the colour of how bad it is, what's wrong in the
-    /// text's colour, and what the server calls it and where it is quiet after. The whole line was red or yellow, and a
-    /// panel of them shouted.
+    /// A row of the problems, only its icon in the colour of how bad it is, where it is and what the server calls it quiet,
+    /// then what's wrong in the text's colour. The whole line was red or yellow, and a panel of them shouted.
     /// </summary>
     private static string ProblemCaption(HexProblem problem)
     {
         string shade = problem.Hint ? "dim" : problem.Warning ? "warning" : "error";
         string icon = problem.Hint ? "info" : problem.Warning ? "warning" : "error";
-        string where = $"{Path.GetFileName(problem.Path)}:{problem.Line + 1}";
+        string where = $"{problem.Line + 1}:{problem.Column + 1}";
 
         string text = UIRichText.Literal(problem.Text);
         string code = string.Empty;
         if (ProblemCode.Match(text) is { Success: true } named)
-            (text, code) = (named.Groups["said"].Value, named.Groups["code"].Value + "  ");
+            (text, code) = (named.Groups["said"].Value, named.Groups["code"].Value);
 
-        return $"[color:{shade}]$({icon})[/color]  {text}   [color:dim]{code}{where}[/color]";
+        // Where and what it's called up front, quiet, the message last, all a long message loses at the panel's edge is its end
+        return $"      [color:{shade}]$({icon})[/color]  [color:dim]{where}{(code.Length > 0 ? "   " + code : string.Empty)}[/color]   {text}";
+    }
+
+    /// <summary>The row over a file's problems, the file by its name with its folder and how many there are quiet after.</summary>
+    private string FileCaption(string path, int count)
+    {
+        string folder = Path.GetDirectoryName(Relative(path)) ?? string.Empty;
+        return $"$({UIFileKinds.IconOf(path)})  {UIRichText.Literal(Path.GetFileName(path))}   [color:dim]{UIRichText.Literal(folder)}   {count}[/color]";
     }
 
     /// <summary>
@@ -300,8 +350,9 @@ internal sealed partial class DawnScene
                 output.Remove(output.Children[0]);
         }
 
-        // The latest at the bottom, in sight
-        outputScroll.Offset = float.MaxValue;
+        // The latest at the bottom, in sight, once they're laid out (the panel sticks to its end)
+        outputScroll.StickToEnd = true;
+        outputScroll.ScrollToEnd();
     }
 
     private void FillOutputLine(UILayout row, (string Text, bool Error) line)
@@ -312,7 +363,7 @@ internal sealed partial class DawnScene
 
         // A long line goes on under itself, the width of the panel (FitChrome keeps it so), it ran off the right edge
         label.Wrap = true;
-        label.Size = label.Size with { X = MathF.Max(MIN_FLEXIBLE, outputScroll.Size.X - ROW_MARGIN) };
+        label.Size = label.Size with { X = RowWidthOf(outputScroll) };
     }
 
     private void ShowProblemMenu(HexProblem problem)
@@ -323,9 +374,10 @@ internal sealed partial class DawnScene
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
-    private static void FitRowsTo(StackPanel list, ScrollPanel scroll)
-    {
-        float width = MathF.Max(MIN_FLEXIBLE, scroll.Size.X - ROW_MARGIN);
-        Widen(list.Children, width);
-    }
+    private static void FitRowsTo(StackPanel list, ScrollPanel scroll) => Widen(list.Children, RowWidthOf(scroll));
+
+    // How wide a row of a list in the panel is, the width the list was laid out at. It fills the panel, so it has no size
+    // of its own, and the output's lines wrapped at the least a row can be, a column ten letters wide
+    private static float RowWidthOf(ScrollPanel scroll) =>
+        MathF.Max(MIN_FLEXIBLE, (scroll.Bounds.Width > 0.0f ? scroll.Bounds.Width : scroll.Size.X) - ROW_MARGIN);
 }

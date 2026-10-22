@@ -21,10 +21,6 @@ internal sealed partial class DawnScene
     // How far in from its column a card is drawn (twice that is the gap between two), and how round it is
     private const float CARD_INSET = 4.0f, CARD_RADIUS = 12.0f;
 
-    // How much of the window's tone is laid over the field of light on glass, the rest of it is the field. Half let so
-    // much of the light through the window looked washed out
-    private const float VEIL = 0.62f;
-
     // How round the dark well the layouts are shown in is, and the panes of the terminal, inside the middle card
     private const float WELL_RADIUS = 8.0f, TERMINAL_RADIUS = 8.0f;
 
@@ -70,7 +66,8 @@ internal sealed partial class DawnScene
         // The window, the field of light under a veil of its tone on glass, the tone alone without
         glow.Visible = true;
         glow.UseSkin(skin);
-        glow.Veil = glassy ? window with { W = VEIL } : window;
+        // How much of the window's tone is over the field of light, less for clearer glass (HexGlass.Veil)
+        glow.Veil = glassy ? window with { W = HexGlass.Veil(settings.GlassClarity) } : window;
 
         // The bars along the edges are the window, nothing of their own, and the status bar has no line between it and
         // what's over it, they're one surface

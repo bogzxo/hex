@@ -20,7 +20,8 @@ internal sealed partial class HexLanguages
     internal const string SERVER_KEY = "server_path_";
 
     // What the buttons of a server's row say, which is what a press is told apart by
-    internal const string CHOOSE = "Choose...", INSTALL = "Install or update", DOWNLOAD = "Download", CHANGES = "What changed";
+    // What a server's buttons say. Download said so of a server that was there already, it fetches the newest either way
+    internal const string CHOOSE = "Choose...", INSTALL = "Install or update", DOWNLOAD = "Download or update", CHANGES = "What changed";
 
     // The line a server has under the rows, by its name, while the settings are up
     internal readonly Dictionary<string, Label> serverStatus = new(StringComparer.OrdinalIgnoreCase);
@@ -90,8 +91,14 @@ internal sealed partial class HexLanguages
         return Line("success", version + news) + PathLine(found.Path);
     }
 
-    // Where a server that's there is, quiet under its line, lined up with its name behind a dot nobody sees
-    private static string PathLine(string path) => $"\n[color:#00000000]$(circle-filled)[/color]  [color:dim]{UIRichText.MarkdownLiteral(path)}[/color]";
+    // Where a server that's there is, quiet under its line, lined up with its name behind a dot nobody sees. Its extension
+    // the way the file has it, found by the PATH's own it came out shouting ".EXE"
+    private static string PathLine(string path)
+    {
+        string extension = Path.GetExtension(path);
+        string shown = extension.Length > 1 && extension == extension.ToUpperInvariant() ? path[..^extension.Length] + extension.ToLowerInvariant() : path;
+        return $"\n[color:#00000000]$(circle-filled)[/color]  [color:dim]{UIRichText.MarkdownLiteral(shown)}[/color]";
+    }
 
     /// <summary>The servers' section, its rows read from and put in force on the editor.</summary>
     private sealed class ServerSource : ISettingsSource

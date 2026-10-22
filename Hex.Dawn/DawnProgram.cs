@@ -133,6 +133,9 @@ public static class DawnProgram
             }
         });
 
+        // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
+        engine.ScreenshotKey = null;
+
         var scene = new DawnScene(options);
 
         // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which

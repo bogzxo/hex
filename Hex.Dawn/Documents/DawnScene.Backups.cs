@@ -55,6 +55,16 @@ internal sealed partial class DawnScene
         }
     }
 
+    /// <summary>
+    /// A document was saved, its backup goes at once. It waited for the next look two seconds on, and Hex closed in
+    /// between brought back the text from before the save the next time it started, over whatever the file had by then.
+    /// </summary>
+    private void DropSavedBackup(HexDocument saved)
+    {
+        backupSeen.Remove(saved);
+        Backups.Drop(saved.Path, saved.Name);
+    }
+
     /// <summary>A document's backup let go of, it was closed and what it had was saved or thrown away.</summary>
     private void DropBackup(HexDocument closing)
     {
@@ -108,6 +118,18 @@ internal sealed partial class DawnScene
         // Saved after all, there's nothing to bring back
         if (ReadNow(path) is { } onDisk && onDisk.Replace("\r\n", "\n") == backup.Text)
             return false;
+
+        // The file was written after the backup was (a checkout, another editor), what it has now is newer than what was
+        // lost and is never written over by it
+        try
+        {
+            if (File.GetLastWriteTimeUtc(path) > File.GetLastWriteTimeUtc(backup.File))
+                return false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
 
         HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(path), PlatformPaths.Comparison));
         if (open is null)

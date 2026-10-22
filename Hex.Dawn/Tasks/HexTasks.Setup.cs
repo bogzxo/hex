@@ -14,21 +14,32 @@ internal sealed partial class HexTasks
 {
     /// <summary>
     /// A kind of program, what it's called (a key of tasks.presets in the strings), what builds it and what runs it,
-    /// {file} the file from its folder, {exe} the program it makes and {here} the folder it's in as the shell says it.
+    /// {file} the file from its folder, {exe} the program it makes and {here} the folder it's in as the shell says it. A
+    /// project's kind says the files its project has (dub.json, *.csproj), it runs in the nearest folder over the file
+    /// with one of them, a project down in the workspace built where it is and not from the workspace's folder.
     /// </summary>
-    internal sealed record RunPreset(string Key, string Build, string Run);
+    internal sealed record RunPreset(string Key, string Build, string Run, string[]? Projects = null)
+    {
+        /// <summary>
+        /// Whether it's a file's program rather than a project's, run in the file's own folder so what it makes is next
+        /// to it. It was made in the workspace's folder, a program of a folder down in it nowhere near its code.
+        /// </summary>
+        public bool InFilesFolder => Build.Contains("{file}", StringComparison.Ordinal) || Run.Contains("{file}", StringComparison.Ordinal);
+    }
 
+    // dmd and ldc2 with -i, the modules a file imports from its folder built with it (a util.d beside it didn't link), and
+    // -of= quoted whole, Windows PowerShell cut -of=main.exe in two at the dot and dmd made a .obj of nothing
     internal static readonly RunPreset[] Presets =
     [
-        new("d_dub", "dub build", "dub run"),
-        new("d_dmd", "dmd \"{file}\" -of={exe}", "{here}{exe}"),
-        new("d_ldc", "ldc2 \"{file}\" -of={exe}", "{here}{exe}"),
+        new("d_dub", "dub build", "dub run", ["dub.json", "dub.sdl"]),
+        new("d_dmd", "dmd -i -g \"{file}\" \"-of={exe}\"", "{here}{exe}"),
+        new("d_ldc", "ldc2 -i -g \"{file}\" \"-of={exe}\"", "{here}{exe}"),
         new("d_rdmd", "", "rdmd \"{file}\""),
-        new("csharp", "dotnet build", "dotnet run --no-build"),
-        new("rust", "cargo build", "cargo run"),
-        new("go", "go build -o {exe} .", "{here}{exe}"),
-        new("c", "gcc \"{file}\" -o {exe}", "{here}{exe}"),
-        new("cpp", "g++ \"{file}\" -o {exe}", "{here}{exe}"),
+        new("csharp", "dotnet build", "dotnet run --no-build", ["*.csproj", "*.sln", "*.slnx"]),
+        new("rust", "cargo build", "cargo run", ["Cargo.toml"]),
+        new("go", "go build -o \"{exe}\" .", "{here}{exe}", ["go.mod"]),
+        new("c", "gcc \"{file}\" -o \"{exe}\"", "{here}{exe}"),
+        new("cpp", "g++ \"{file}\" -o \"{exe}\"", "{here}{exe}"),
         new("python", "", "python \"{file}\""),
         new("node", "", "node \"{file}\""),
         new("other", "", "")
@@ -71,7 +82,7 @@ internal sealed partial class HexTasks
         setupWindow?.Parent?.Remove(setupWindow);
 
         setupFile = forFile ?? context.Documents.Current.Path;
-        setupRoot = RootFor(setupFile);
+        setupRoot = SetupFolderFor(setupFile);
         UIModule chrome = context.Window.Chrome;
         string Said(string key) => context.Strings.Said("tasks." + key);
 
@@ -170,17 +181,51 @@ internal sealed partial class HexTasks
     }
 
     /// <summary>
-    /// The run task F5 runs for a file, the one of the tasks.hor of the folder it's in (the workspace's folder it's under,
-    /// or its own outside them), null for none. Any folder's run task was run, a D file got another folder's dotnet run.
+    /// The run task F5 runs for a file, the one of the nearest tasks.hor over it (in its project's folder, its own, or the
+    /// workspace's folder it's under), null for none. Any folder's run task was run, a D file got another folder's dotnet run.
     /// </summary>
     internal HexTask? RunTaskFor(string file)
     {
-        string root = RootFor(file);
-        if (TasksFileIn(root) is not { } tasksFile)
+        if (TasksFolderFor(file) is not { } root || TasksFileIn(root) is not { } tasksFile)
             return null;
 
         List<HexTask> tasks = TasksOf(tasksFile, root);
         return tasks.FirstOrDefault(task => task.Default && task.Group == "run") ?? tasks.FirstOrDefault(task => task.Group == "run");
+    }
+
+    /// <summary>
+    /// The nearest folder over a file with a tasks.hor in it, up to the workspace's folder it's in, null for none. Two
+    /// projects in one workspace each have their own, a run of one was the run of both.
+    /// </summary>
+    internal string? TasksFolderFor(string? file)
+    {
+        string root = RootFor(file);
+        if (file is null || Path.GetDirectoryName(Path.GetFullPath(file)) is not { } own || !PlatformPaths.IsUnder(own, root))
+            return TasksFileIn(root) is not null ? root : null;
+
+        for (string? folder = own; folder is not null; folder = Path.GetDirectoryName(folder))
+        {
+            if (TasksFileIn(folder) is not null)
+                return folder;
+            if (PlatformPaths.Same(folder, root))
+                break;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Where Set Up F5 writes a file's tasks, the folder of the tasks.hor it has already, or else where the program it
+    /// looks like runs (its project's folder, its own folder for a lone file), or else the workspace's folder.
+    /// </summary>
+    private string SetupFolderFor(string? file)
+    {
+        if (TasksFolderFor(file) is { } known)
+            return known;
+
+        string root = RootFor(file);
+        int guessed = GuessPreset(root, file);
+        return guessed >= 0 && FolderFor(Presets[guessed], root, file) is { Length: > 0 } folder ? Path.GetFullPath(Path.Combine(root, folder)) : root;
     }
 
     /// <summary>The workspace's folder a file is in, the first one for none, the file's own folder outside them.</summary>
@@ -196,18 +241,11 @@ internal sealed partial class HexTasks
     /// <summary>Which of the kinds a file in a folder most likely is, by its extension and the projects beside it.</summary>
     internal static int GuessPreset(string root, string? file)
     {
+        // A project's files in the file's folder or any over it up to the tasks' folder, a dub project down in the
+        // workspace was taken for a lone file
         string extension = Path.GetExtension(file ?? string.Empty).ToLowerInvariant();
-        bool Beside(params string[] patterns)
-        {
-            try
-            {
-                return patterns.Any(pattern => Directory.EnumerateFiles(root, pattern).Any());
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
+        string from = file is not null && Path.GetDirectoryName(Path.GetFullPath(file)) is { } own ? own : root;
+        bool Beside(params string[] patterns) => ProjectFolder(from, root, patterns) is not null;
 
         string key = extension switch
         {
@@ -226,10 +264,51 @@ internal sealed partial class HexTasks
         return Array.FindIndex(Presets, preset => preset.Key == key);
     }
 
+    /// <summary>
+    /// Where a kind runs from the tasks' folder, the file's own folder for a file's program, its project's for a project's,
+    /// empty for the tasks' folder itself.
+    /// </summary>
+    internal static string FolderFor(RunPreset preset, string root, string? file)
+    {
+        if (file is null || Path.GetDirectoryName(Path.GetFullPath(file)) is not { } own)
+            return string.Empty;
+
+        string? at = preset.InFilesFolder ? own : preset.Projects is { } projects ? ProjectFolder(own, root, projects) : null;
+        if (at is null || PlatformPaths.Same(at, root))
+            return string.Empty;
+
+        string inside = Path.GetRelativePath(root, at);
+        return inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside) ? at : inside;
+    }
+
+    /// <summary>The nearest folder from one up to the tasks' folder with a file of a project's in it, null for none.</summary>
+    internal static string? ProjectFolder(string from, string root, string[] projects)
+    {
+        for (string? folder = from; folder is not null; folder = Path.GetDirectoryName(folder))
+        {
+            try
+            {
+                if (projects.Any(pattern => Directory.EnumerateFiles(folder, pattern).Any()))
+                    return folder;
+            }
+            catch (Exception)
+            {
+                // A folder that can't be read has no project as far as this goes
+            }
+
+            if (PlatformPaths.Same(folder, root) || !PlatformPaths.IsUnder(folder, root))
+                break;
+        }
+
+        return null;
+    }
+
     /// <summary>A kind's lines with the file's name in them, for a shell of a profile (pwsh, cmd, git_bash).</summary>
     internal static (string Build, string Run) Fill(RunPreset preset, string root, string? file, string shell)
     {
-        string relative = file is null ? string.Empty : Path.GetRelativePath(root, file);
+        // From the folder it runs in, the file's own for a file's program
+        string from = FolderFor(preset, root, file) is { Length: > 0 } folder ? Path.GetFullPath(Path.Combine(root, folder)) : root;
+        string relative = file is null ? string.Empty : Path.GetRelativePath(from, file);
         string name = file is null ? Path.GetFileName(root.TrimEnd('/', '\\')) : Path.GetFileNameWithoutExtension(file);
         bool unixShell = !OperatingSystem.IsWindows() || shell.StartsWith("wsl", StringComparison.OrdinalIgnoreCase) || shell.Contains("bash", StringComparison.OrdinalIgnoreCase);
         string exe = OperatingSystem.IsWindows() && !shell.StartsWith("wsl", StringComparison.OrdinalIgnoreCase) ? name + ".exe" : name;
@@ -250,6 +329,8 @@ internal sealed partial class HexTasks
         var (build, run) = Fill(Presets[setupKind.Index], setupRoot, setupFile, context.Terminals.UsualProfileId);
         setupBuild.Text = build;
         setupRun.Text = run;
+        if (setupFolder is not null)
+            setupFolder.Text = FolderFor(Presets[setupKind.Index], setupRoot, setupFile);
     }
 
     // Save, or Save and run, the folder's build and run tasks written, then F5's run if it was asked for

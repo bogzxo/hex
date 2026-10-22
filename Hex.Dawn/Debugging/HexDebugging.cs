@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 
+using Horizon.Core.Threading;
 using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
@@ -15,7 +16,7 @@ namespace Hex.Dawn;
 // Shift+F5 stops it, Ctrl+Shift+F5 starts it again. What it writes goes in the output. netcoredbg is looked for where the
 // settings say (debugger_path), next to the exe (netcoredbg/netcoredbg.exe), in the settings folder and on the PATH.
 // Microsoft's own debugger comes with VS Code's C# extension and is only allowed in Microsoft's editors, so not that.
-internal sealed class HexDebugging
+internal sealed partial class HexDebugging
 {
     private readonly DawnContext context;
 
@@ -29,14 +30,15 @@ internal sealed class HexDebugging
         context.Documents.Opened += PrepareBreakpoints;
         context.Panels.AddSide(HexSide.Debug, context.Strings.Said("debugging.debug"), DebugSide);
         UICommands commands = context.Commands;
-        commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && IsCSharp(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && (IsCSharp(context.Documents.Current.Path) || IsD(context.Documents.Current.Path));
         commands.Add("Run/debug", context.Strings.Said("debugging.continue"), DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_over"), StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_into"), StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_out"), StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.stop_debugging"), StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
         commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && IsCSharp(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && context.Documents.Current.IsText;
+        commands.Add("Run/debug", context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg, icon: "cloud-download").IsVisible = () => NetcoredbgAsset() is not null && Netcoredbg() is null;
     }
 
     // The breakpoints, by the file's whole path, the lines counted from 0. An editor of the file is handed the set
@@ -44,6 +46,9 @@ internal sealed class HexDebugging
 
     private DebugSession? debugging;
     private string debuggedProject = string.Empty;
+
+    // What starts what was debugged last again, Ctrl+Shift+F5
+    private Action? restart;
 
     // Where it stopped, the frames of the stack and the one looked at
     internal IReadOnlyList<DebugFrame> stoppedFrames = [];
@@ -63,10 +68,10 @@ internal sealed class HexDebugging
 
     /* Breakpoints */
 
-    /// <summary>A file's editor shown its breakpoints and given the gutter to put them down with, for a .cs file.</summary>
+    /// <summary>A file's editor shown its breakpoints and given the gutter to put them down with, for a .cs or a .d file.</summary>
     private void PrepareBreakpoints(HexDocument prepared)
     {
-        if (!IsCSharp(prepared.Path))
+        if (!IsCSharp(prepared.Path) && !IsD(prepared.Path))
             return;
 
         string full = Path.GetFullPath(prepared.Path!);
@@ -85,7 +90,7 @@ internal sealed class HexDebugging
     internal void ToggleBreakpointHere()
     {
         HexDocument shown = context.Documents.Current;
-        if (!shown.IsText || !IsCSharp(shown.Path))
+        if (!shown.IsText || (!IsCSharp(shown.Path) && !IsD(shown.Path)))
         {
             context.Notices.Say(context.Strings.Said("debugging.breakpoints_cs_only"), error: true);
             return;
@@ -118,6 +123,13 @@ internal sealed class HexDebugging
         if (Debugging)
         {
             context.Notices.Say(context.Strings.Said("debugging.already_running"));
+            return;
+        }
+
+        // D is built with -g and run under lldb-dap
+        if (IsD(context.Documents.Current.Path))
+        {
+            StartDebuggingD(context.Documents.Current.Path!);
             return;
         }
 
@@ -216,6 +228,91 @@ internal sealed class HexDebugging
             ? context.Strings.Said("debugging.no_debugger_apple")
             : context.Strings.Said("debugging.no_debugger", ("exe", OperatingSystem.IsWindows() ? "Hex.exe" : "Hex"));
 
+    // Whether it was said that C# runs without the debugger, said the first time only
+    private bool saidNoDebugger;
+
+    /// <summary>
+    /// F5 on C# without netcoredbg, it runs without being debugged, which is said the first time on a card that installs
+    /// it where Hex looks for it.
+    /// </summary>
+    internal void SayRunWithoutDebugger()
+    {
+        if (saidNoDebugger)
+            return;
+
+        saidNoDebugger = true;
+        context.Notices.Note(context.Strings.Said("debugging.running_without", ("why", NoDebugger)));
+        if (NetcoredbgAsset() is not null)
+            context.Notices.Notify(context.Strings.Said("debugging.running_without_card"), false, (context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg));
+    }
+
+    private const string NETCOREDBG_REPO = "Samsung/netcoredbg";
+
+    /// <summary>
+    /// The file of netcoredbg's releases for this machine, null for one it has none for (an Apple silicon Mac builds it
+    /// from its source).
+    /// </summary>
+    internal static string? NetcoredbgAsset()
+    {
+        bool arm = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+        if (OperatingSystem.IsWindows())
+            return arm ? null : "netcoredbg-win64.zip";
+        if (OperatingSystem.IsLinux())
+            return arm ? "netcoredbg-linux-arm64.tar.gz" : "netcoredbg-linux-amd64.tar.gz";
+        if (OperatingSystem.IsMacOS())
+            return arm ? null : "netcoredbg-osx-amd64.tar.gz";
+        return null;
+    }
+
+    /// <summary>
+    /// netcoredbg downloaded from its newest release and unpacked into Hex's own folder of things (where it's looked for
+    /// first), on a card while it goes. It said where to get it and left the rest to whoever read that.
+    /// </summary>
+    internal void InstallNetcoredbg()
+    {
+        if (NetcoredbgAsset() is not { } asset)
+        {
+            context.Windows.OpenInBrowser($"https://github.com/{NETCOREDBG_REPO}/releases");
+            return;
+        }
+
+        string into = TerminalFiles.UserFolder;
+        context.Work.Start("netcoredbg", context.Strings.Said("debugging.installing_netcoredbg"), async work =>
+        {
+            // Straight from the newest release's file, GitHub's API allows sixty questions an hour and Hex's version checks
+            // had used them, the download doesn't ask it anything
+            string url = $"https://github.com/{NETCOREDBG_REPO}/releases/latest/download/{asset}";
+
+            string download = Path.Combine(Path.GetTempPath(), asset);
+            await HexReleases.Download(url, download, progress => work.Report(progress, context.Strings.Said("debugging.downloading", ("asset", asset))), work.Token).ConfigureAwait(false);
+            work.Say(context.Strings.Said("debugging.unpacking"));
+            Unpack(download, into);
+            File.Delete(download);
+        }, item =>
+        {
+            if (item.State == WorkState.Succeeded && Netcoredbg() is { } there)
+                context.Notices.Say(context.Strings.Said("debugging.netcoredbg_installed", ("path", there)));
+            else
+                foreach (string said in item.Output)
+                    context.Notices.Note(said, error: true);
+        });
+    }
+
+    /// <summary>A zip or a .tar.gz unpacked into a folder, what's there written over.</summary>
+    internal static void Unpack(string archive, string into)
+    {
+        Directory.CreateDirectory(into);
+        if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            System.IO.Compression.ZipFile.ExtractToDirectory(archive, into, overwriteFiles: true);
+            return;
+        }
+
+        using FileStream file = File.OpenRead(archive);
+        using var unzipped = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionMode.Decompress);
+        System.Formats.Tar.TarFile.ExtractToDirectory(unzipped, into, overwriteFiles: true);
+    }
+
     /// <summary>Builds a project, then runs what it made under the debugger with the breakpoints there are, off the editor's thread.</summary>
     private void StartDebugging(string project)
     {
@@ -228,6 +325,7 @@ internal sealed class HexDebugging
         SaveAllCode();
         building = true;
         debuggedProject = project;
+        restart = () => StartDebugging(project);
         context.Notices.Note(context.Strings.Said("debugging.building_to_debug", ("project", Path.GetFileName(project))));
         context.Panels.ShowOutput();
         context.Notices.Say(context.Strings.Said("debugging.building", ("project", Path.GetFileName(project))));
@@ -240,18 +338,8 @@ internal sealed class HexDebugging
     {
         string folder = Path.GetDirectoryName(project)!;
         var (built, buildSaid) = await Dotnet(folder, "build", project, "-c", "Debug", "-nologo", "-v", "q");
-        foreach (string line in buildSaid.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            debugWork.Enqueue(() => context.Notices.Note(line.TrimEnd('\r')));
-
-        if (built != 0)
-        {
-            debugWork.Enqueue(() =>
-            {
-                building = false;
-                context.Notices.Say(context.Strings.Said("debugging.did_not_build", ("project", Path.GetFileName(project))), error: true);
-            });
+        if (!ReportBuild(buildSaid, folder, built, Path.GetFileName(project)))
             return;
-        }
 
         var (_, target) = await Dotnet(folder, "msbuild", project, "-getProperty:TargetPath", "-p:Configuration=Debug", "-nologo");
         string program = target.Trim();
@@ -265,7 +353,45 @@ internal sealed class HexDebugging
             return;
         }
 
-        DebugSession? session = DebugSession.Start(debugger, ["--interpreter=vscode"]);
+        await LaunchUnder(DebugSession.Start(debugger, ["--interpreter=vscode"]), program, folder, breakpointsNow, DebugSession.CORECLR);
+    }
+
+    /// <summary>
+    /// What a build for debugging said, its lines in the output and what it says is wrong in the Problems panel and under
+    /// the code the way a build task's is (they were lines in the output nobody looked at), and a build that failed said
+    /// so. Whether it built.
+    /// </summary>
+    private bool ReportBuild(string said, string folder, int built, string name)
+    {
+        foreach (string line in said.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            debugWork.Enqueue(() => context.Notices.Note(line.TrimEnd('\r')));
+
+        var problems = new List<TerminalProblem>();
+        var reader = new TerminalProblemReader(TerminalProblemMatcher.Shipped, problems.Add);
+        reader.Feed(said.ReplaceLineEndings("\n") + "\n\n\n");
+        debugWork.Enqueue(() =>
+        {
+            context.Terminals.ClearProblems();
+            foreach (TerminalProblem problem in problems)
+                context.Terminals.AddProblem(Path.IsPathRooted(problem.File) ? problem.File : Path.Combine(folder, problem.File), problem.Line, problem.Column, problem.Message, problem.Warning);
+            if (built != 0 && problems.Any(problem => !problem.Warning))
+                context.Panels.ShowProblems();
+        });
+
+        if (built == 0)
+            return true;
+
+        debugWork.Enqueue(() =>
+        {
+            building = false;
+            context.Notices.Say(context.Strings.Said("debugging.did_not_build", ("project", name)), error: true);
+        });
+        return false;
+    }
+
+    /// <summary>A program launched under a debugger that was started (null for one that wasn't), with the breakpoints there are.</summary>
+    private async Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow, string kind, string? output = null)
+    {
         if (session is null)
         {
             debugWork.Enqueue(() =>
@@ -277,7 +403,7 @@ internal sealed class HexDebugging
         }
 
         debugWork.Enqueue(() => debugging = session);
-        bool launched = await session.Launch(program, [], folder, breakpointsNow);
+        bool launched = await session.Launch(program, [], folder, breakpointsNow, kind, output);
         debugWork.Enqueue(() =>
         {
             building = false;
@@ -329,12 +455,11 @@ internal sealed class HexDebugging
     /// <summary>Ctrl+Shift+F5, stopped and started again.</summary>
     private void RestartDebugging()
     {
-        string project = debuggedProject;
-        if (project.Length == 0)
+        if (restart is not { } again)
             return;
 
         EndDebugging();
-        StartDebugging(project);
+        again();
     }
 
     internal void StepOver() => debugging?.StepOver();
@@ -351,6 +476,8 @@ internal sealed class HexDebugging
         while (debugWork.TryDequeue(out Action? work))
             work();
 
+        // What the program wrote, while it goes and for a moment after
+        ReadProgramOutput();
         if (debugging is null)
             return;
 
@@ -431,6 +558,7 @@ internal sealed class HexDebugging
 
     internal void EndDebugging()
     {
+        ForgetProgramOutput();
         DebugSession? ending = debugging;
         debugging = null;
         building = false;
@@ -528,10 +656,23 @@ internal sealed class HexDebugging
             var rows = new List<UITreeItem>();
             try
             {
-                foreach (DebugScope scope in await session.Scopes(frameId))
+                // The first scope's variables as they are (the locals), the rest folded under their names. lldb-dap says
+                // every global of the program and the registers too, and flat they buried the locals under __imp_ rows
+                IReadOnlyList<DebugScope> scopes = await session.Scopes(frameId);
+                for (int i = 0; i < scopes.Count; i++)
                 {
-                    foreach (DebugVariable variable in await session.Variables(scope.Reference))
-                        rows.Add(VariableItem(session, variable));
+                    if (i > 0)
+                    {
+                        rows.Add(Expanding(new UITreeItem(scopes[i].Name, "symbol-namespace") { Expandable = true }, session, scopes[i].Reference));
+                        continue;
+                    }
+
+                    // Not the compiler's own (dmd's __r103 and __key104 for a foreach), nobody wrote those
+                    foreach (DebugVariable variable in await session.Variables(scopes[i].Reference))
+                    {
+                        if (!variable.Name.StartsWith("__", StringComparison.Ordinal))
+                            rows.Add(VariableItem(session, variable));
+                    }
                 }
             }
             catch (Exception e)
@@ -559,34 +700,37 @@ internal sealed class HexDebugging
             Expandable = variable.Reference > 0
         };
 
-        if (variable.Reference > 0)
-        {
-            item.Tag = new SideTag(Expanding: opened =>
-            {
-                if (opened.Children is not null)
-                    return;
-                opened.Children = [new UITreeItem(context.Strings.Said("debugging.asking")) { Color = context.Panels.Dim }];
-                _ = Task.Run(async () =>
-                {
-                    var inside = new List<UITreeItem>();
-                    try
-                    {
-                        foreach (DebugVariable child in await session.Variables(variable.Reference))
-                            inside.Add(VariableItem(session, child));
-                    }
-                    catch (Exception)
-                    {
-                        // gone on since, nothing to show
-                    }
+        return variable.Reference > 0 ? Expanding(item, session, variable.Reference) : item;
+    }
 
-                    debugWork.Enqueue(() =>
-                    {
-                        opened.Children = inside;
-                        context.Panels.RefreshRows();
-                    });
+    // A row whose children are the variables of a reference (a variable's, a scope's), asked for as it's opened
+    private UITreeItem Expanding(UITreeItem item, DebugSession session, int reference)
+    {
+        item.Tag = new SideTag(Expanding: opened =>
+        {
+            if (opened.Children is not null)
+                return;
+            opened.Children = [new UITreeItem(context.Strings.Said("debugging.asking")) { Color = context.Panels.Dim }];
+            _ = Task.Run(async () =>
+            {
+                var inside = new List<UITreeItem>();
+                try
+                {
+                    foreach (DebugVariable child in await session.Variables(reference))
+                        inside.Add(VariableItem(session, child));
+                }
+                catch (Exception)
+                {
+                    // gone on since, nothing to show
+                }
+
+                debugWork.Enqueue(() =>
+                {
+                    opened.Children = inside;
+                    context.Panels.RefreshRows();
                 });
             });
-        }
+        });
 
         return item;
     }

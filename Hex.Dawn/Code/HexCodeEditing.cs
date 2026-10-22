@@ -30,6 +30,9 @@ internal sealed partial class HexCodeEditing
     internal readonly List<Func<HexDocument, CodeEditor, UITextPosition, string?>> hoverSources = [];
     internal readonly List<Func<HexDocument, string, int, UISignature?>> signatureSources = [];
 
+    // The languages, whose servers go to definitions, find references and rename in their files before Hex does it its way
+    internal HexLanguages? languages;
+
     // Ctrl+F, what was looked for last, and with it what the find bar opens with
     internal string lastFind = string.Empty;
 

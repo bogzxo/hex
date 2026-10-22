@@ -138,6 +138,10 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     internal void GoToDefinition()
     {
+        // A file of a language server's goes where the server says
+        if (languages?.GoToDefinition(document) == true)
+            return;
+
         UITextDocument doc = code.Document;
         UITextPosition caret = doc.Caret;
         string line = doc.LineAt(caret.Line);
@@ -244,6 +248,9 @@ internal sealed partial class HexCodeEditing
     /// <summary>Shift+F12, every line of the workspace the word at the caret is on as a word of its own, listed on the left.</summary>
     internal void FindReferences()
     {
+        if (languages?.FindReferences(document) == true)
+            return;
+
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {

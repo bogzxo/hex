@@ -402,6 +402,7 @@ internal sealed partial class DawnScene
             Remember(path);
             WatchOpenFiles();
             documentSaved?.Invoke(document);
+            DropSavedBackup(document);
             extensions.Raise("on_save", new StringValue(Path.GetFullPath(path)));
 
             Console.WriteLine($"[Hex] Saved '{path}'.");

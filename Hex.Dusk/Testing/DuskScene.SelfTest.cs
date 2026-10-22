@@ -285,8 +285,10 @@ internal sealed partial class DuskScene
         test.Run(() => Run("palette"));
         test.Wait();
         test.Run(() => Shot("palette"));
+        // A title once, Close pane is on two keys and the palette lists it the one time
         test.Check("the command palette comes up with every command, and every look", () => chrome.Dialog is { IsOpen: true }
-            && Descendants(chrome.Dialog).OfType<ListBox>().First().Items.Length == host.Commands.Count + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count);
+            && Descendants(chrome.Dialog).OfType<ListBox>().First().Items.Length == host.Commands.All.Select(command => command.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count);
         test.Check("a few letters narrow it down", () =>
         {
             var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();
