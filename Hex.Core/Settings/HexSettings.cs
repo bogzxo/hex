@@ -118,6 +118,12 @@ internal sealed class HexSettings
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
     public readonly Dictionary<string, string> ServerPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The language servers added in the settings, one a language, in the order they were added. One for a language
+    /// language_servers.hor has a server for as well is used instead of that one (HexLanguages).
+    /// </summary>
+    public readonly List<HexAddedServer> AddedServers = [];
+
     /// <summary>Whether Hex looks for new versions of the language servers on GitHub, once a day as it starts.</summary>
     public bool ServerUpdates = true;
 
@@ -225,6 +231,7 @@ internal sealed class HexSettings
             RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
             if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
             Names(values, "language_server_paths", ServerPaths);
+            ReadAddedServers(values);
             Names(values, "language_server_latest", ServerLatest);
             Names(values, "language_server_skipped", ServerSkipped);
             ServerUpdates = Flag(values, "language_server_updates", ServerUpdates);
@@ -276,6 +283,43 @@ internal sealed class HexSettings
             if (said is StringValue { Value.Length: > 0 } text)
                 into[name] = text.Value;
         }
+    }
+
+    // Helper method to read the language servers added in the settings, an object of them by their language
+    private void ReadAddedServers(Dictionary<string, IRuntimeValue> values)
+    {
+        if (!values.TryGetValue("language_servers_added", out var value) || value is not ObjectValue added)
+            return;
+
+        static string[] Texts(ObjectValue of, string key) =>
+            of.Properties.GetValueOrDefault(key) is ListValue list ? [.. list.Items.OfType<StringValue>().Select(item => item.Value)] : [];
+
+        foreach (var (language, its) in added.Properties)
+        {
+            if (its is not ObjectValue server || server.Properties.GetValueOrDefault("command") is not StringValue { Value.Length: > 0 } command)
+                continue;
+
+            string name = server.Properties.GetValueOrDefault("name") is StringValue { Value.Length: > 0 } named ? named.Value : language;
+            AddedServers.Add(new HexAddedServer(language, name, Texts(server, "extensions"), command.Value, Texts(server, "args")));
+        }
+    }
+
+    // Helper method to write the added language servers, each its name, files, program and what it's started with
+    private HIDLObject AddedServersObject()
+    {
+        static ListValue List(IEnumerable<string> texts) => new([.. texts.Select(text => (IRuntimeValue)new StringValue(text))]);
+
+        var added = new HIDLObject();
+        foreach (HexAddedServer server in AddedServers)
+        {
+            added.Add(server.Language, new HIDLObject()
+                .Add("name", server.Name)
+                .Add("extensions", List(server.Extensions))
+                .Add("command", server.Command.Replace('\\', '/'))
+                .Add("args", List(server.Arguments)));
+        }
+
+        return added;
     }
 
     // Helper method to write texts by name, in the order of their names
@@ -359,6 +403,7 @@ internal sealed class HexSettings
             .Add("run_to_terminal", RunToTerminal)
             .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
             .Add("language_server_paths", Named(ServerPaths, paths: true))
+            .Add("language_servers_added", AddedServersObject())
             .Add("language_server_updates", ServerUpdates)
             .Add("language_servers_checked", ServersChecked)
             .Add("language_server_latest", Named(ServerLatest))

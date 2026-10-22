@@ -25,8 +25,15 @@ internal sealed partial class DawnScene
         });
         test.Wait();
 
-        test.Check("dialogs: open lists the folders and then what the filter lets through, nothing hidden, in a window over the editor", () =>
-            browser!.Window.Parent is not null && browser.Entries is ["..", "inside/", "a.hor"] && PlatformPaths.Same(browser.Folder, folder));
+        test.Check("dialogs: open lists the folders and then every file, nothing hidden, in a window over the editor", () =>
+            browser!.Window.Parent is not null && browser.Entries is ["..", "inside/", "a.hor", "notes.txt"] && PlatformPaths.Same(browser.Folder, folder));
+        test.Check("dialogs: and only what a filter lets through once one is picked", () =>
+        {
+            browser!.Filter = "Horizon files";
+            bool layouts = browser.Entries is ["..", "inside/", "a.hor"];
+            browser.Filter = UIFileBrowser.ALL_FILES;
+            return layouts && browser.Entries.Contains("notes.txt");
+        });
         test.Check("dialogs: the hidden ones are there when asked for", () =>
         {
             browser!.ShowHidden = true;
@@ -54,15 +61,22 @@ internal sealed partial class DawnScene
             return refused && browser.Picked is { IsCompletedSuccessfully: true, Result: { } picked } && PlatformPaths.Same(picked, layout) && browser.Window.Parent is null;
         });
 
-        test.Check("dialogs: saving gives a name its extension, and over a file that's there only when Save is pressed again", () =>
+        test.Check("dialogs: saving keeps the extension typed, gives a name the filter's when one's picked, and over a file that's there only when Save is pressed again", () =>
         {
+            var typed = new UIFileBrowser(UIBrowse.Save, HexDialogs.SAVE_TITLE, folder, "script.d", [("Horizon files", "*.hor")]);
+            DialogHost.Present(typed.Window);
+            typed.Press();
+            bool kept = typed.Picked is { IsCompletedSuccessfully: true, Result: { } script } && PlatformPaths.Same(script, Path.Combine(folder, "script.d"));
+
             var save = new UIFileBrowser(UIBrowse.Save, HexDialogs.SAVE_TITLE, folder, "fresh", [("Horizon files", "*.hor")]);
             DialogHost.Present(save.Window);
+            save.Filter = "Horizon files";
             save.Press();
-            bool fresh = save.Picked is { IsCompletedSuccessfully: true, Result: { } made } && PlatformPaths.Same(made, Path.Combine(folder, "fresh.hor"));
+            bool fresh = kept && save.Picked is { IsCompletedSuccessfully: true, Result: { } made } && PlatformPaths.Same(made, Path.Combine(folder, "fresh.hor"));
 
             var over = new UIFileBrowser(UIBrowse.Save, HexDialogs.SAVE_TITLE, folder, "a", [("Horizon files", "*.hor")]);
             DialogHost.Present(over.Window);
+            over.Filter = "Horizon files";
             over.Press();
             bool asked = !over.Picked.IsCompleted && over.Message.Contains("already");
             over.Press();
@@ -83,6 +97,25 @@ internal sealed partial class DawnScene
             DialogHost.Present(cancelled.Window);
             cancelled.Cancel();
             return foldersOnly && made && picked && cancelled.Picked is { IsCompletedSuccessfully: true, Result: null } && cancelled.Window.Parent is null;
+        });
+
+        test.Check("dialogs: it has the keyboard, down the list and Enter goes into a folder, Backspace on no name back out to it, Enter takes a file", () =>
+        {
+            var keys = new UIFileBrowser(UIBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, [("Horizon files", "*.hor")]);
+            DialogHost.Present(keys.Window);
+            keys.TakeKeyboard();
+            bool has = compositor.Focus is TextBox { Parent: not null } box && Descendants(keys.Window).Contains(box);
+            keys.Key(UIKeyboard.DOWN);
+            keys.Key(UIKeyboard.DOWN);
+            keys.Key(UIKeyboard.ENTER);
+            bool into = PlatformPaths.Same(keys.Folder, inside);
+            keys.Key(UIKeyboard.BACKSPACE);
+            bool back = PlatformPaths.Same(keys.Folder, folder) && keys.Selected == "inside/";
+            for (int i = 0; i < keys.Entries.Count && keys.Selected != "a.hor"; i++)
+                keys.Key(UIKeyboard.DOWN);
+            keys.Key(UIKeyboard.ENTER);
+            return has && into && back && keys.Picked is { IsCompletedSuccessfully: true, Result: { } taken } && PlatformPaths.Same(taken, layout)
+                && keys.Window.Parent is null;
         });
 
         test.Run(() => Directory.Delete(folder, recursive: true));

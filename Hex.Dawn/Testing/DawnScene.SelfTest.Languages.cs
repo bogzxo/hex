@@ -166,7 +166,39 @@ internal sealed partial class DawnScene
 
         test.Check("language servers: the file says how each is installed, where its releases are and how it says its version", () =>
             languages.ServerEntry("csharp") is { Command: "csharp-ls", Repo: "razzmatazz/csharp-language-server", Install.Length: > 0, Update: "dotnet tool update -g csharp-ls", VersionArguments: ["--version"] }
-            && languages.ServerEntry("markdown") is { Install: "", Update: "", Repo.Length: > 0 } && languages.ServerEntries.Count >= 8);
+            && languages.ServerEntry("markdown") is { Install: "", Update: "", Repo.Length: > 0 } && languages.ServerEntries.Count >= 9
+            && languages.ServerEntry("d") is { Command: "serve-d", Repo: "Pure-D/serve-d", VersionArguments: ["--version"] });
+        // A server added in the settings, through the form under the servers, for a language with none and for one with
+        test.Run(() => OpenSettings());
+        test.Settle(0.3f);
+        string NameOf(string id) => CodeLanguages.Languages().First(language => language.Id == id).Name;
+        test.Check("language servers: one added for a language with none, a bar between its files, is a server of its own and in the list", () =>
+        {
+            languages.FillServerForm(NameOf("rust"), "rs| .rlib ", "rust-analyzer-selftest");
+            languages.PressAddServer();
+            return languages.ServerEntry("rust") is { Command: "rust-analyzer-selftest", Extensions: [".rs", ".rlib"] } rust && languages.IsAdded(rust)
+                && LanguageServers.RegistrationFor("main.rs") is { Name: "rust" } && settings.AddedServers.Any(server => server.Language == "rust")
+                && languages.serverStatus.ContainsKey("rust");
+        });
+        test.Run(() => languages.FocusServerForm());
+        test.Settle(0.5f);
+        test.Run(() => Shot("language-servers"));
+        test.Settle(0.2f);
+        test.Check("language servers: one added for a language the file has a server for is used instead, and taken away the file's is back", () =>
+        {
+            languages.FillServerForm(NameOf("python"), ".py", "pylsp-selftest");
+            languages.PressAddServer();
+            bool instead = languages.ServerEntry("python") is { Command: "pylsp-selftest" } && LanguageServers.RegistrationFor("x.py") is { Command: "pylsp-selftest" };
+            languages.RemoveServer("python");
+            languages.RemoveServer("rust");
+            return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("rust") is null
+                && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.rs") is null
+                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("rust");
+        });
+        test.Check("language servers: the files typed are read with a bar between two and a dot on each", () =>
+            HexLanguages.ParseExtensions(" d | .di|*.dd||. ") is [".d", ".di", ".dd"]);
+        test.Run(CloseSettings);
+
         test.Check("language servers: versions are found in what a program prints and put in order by their numbers", () =>
             HexServerCatalog.FindVersion("clangd version 19.1.2 (https://github.com/llvm/llvm-project 7ba7d8e)") == "19.1.2"
             && HexServerCatalog.FindVersion("2024-12-18\n") == "2024-12-18" && HexServerCatalog.FindVersion("no version") is null

@@ -67,6 +67,12 @@ let servers = {
         about: "Markdown, links and headings. One program, downloaded from its releases and put on the PATH or set here.",
         repo: "artempyanykh/marksman", version: ["--version"]
     },
+    d: {
+        command: "serve-d", args: [], language: "d", extensions: [".d", ".di"],
+        about: "D, the server code-d is built on, over DCD and D-Scanner. One program, downloaded from its releases (or built with dub) and put on the PATH or set here. It finds a project by its dub.json or dub.sdl.",
+        repo: "Pure-D/serve-d", version: ["--version"],
+        reload: ["dub.json", "dub.sdl", "dub.selections.json"]
+    },
     yaml: {
         command: "yaml-language-server", args: ["--stdio"], language: "yaml", extensions: [".yaml", ".yml"],
         about: "YAML, Red Hat's, with schemas by the file's name. It has no releases on GitHub, npm is where its versions are.",

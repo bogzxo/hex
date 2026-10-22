@@ -218,6 +218,10 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("help: about fills in what Hex knows, the version", () =>
             help is { Title: "About Hex" } && Descendants(help).OfType<Label>().Any(label => label.Text.StartsWith("# Hex ") && !label.Text.Contains("{version}")));
+        test.Run(() => Shot("window-about"));
+        test.Run(OpenKeysWindow);
+        test.Settle(0.3f);
+        test.Run(() => Shot("window-keys"));
         test.Run(() =>
         {
             foreach (WindowPanel open in chrome.Root.Children.OfType<WindowPanel>().ToList())
@@ -235,7 +239,8 @@ internal sealed partial class DawnScene
             OpenSettings();
             ShowAbout();
         });
-        test.Settle(0.2f);
+        test.Settle(0.3f);
+        test.Run(() => Shot("window-settings-about"));
         test.Run(() => CloseTopWindow());
         test.Wait();
         test.Check("conveniences: escape puts away the little window on top, and only it", () =>

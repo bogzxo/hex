@@ -11,16 +11,6 @@ namespace Hex.Dawn;
 internal sealed partial class HexExplorer
 {
     /* The explorer */
-    // The files the editor opens, .hor first of all, anything else that is text by the look of its name, and whatever a
-    // grammar colours (IsEditable asks the languages too)
-    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".hor", ".hex-workspace", ".txt", ".md", ".json", ".xml", ".tmx", ".tsx", ".tx", ".lua", ".py", ".cs", ".slang", ".hlsl",
-        ".csproj", ".sln", ".props", ".targets", ".yml", ".yaml", ".ini", ".cfg", ".gitignore", ".editorconfig", ".fnt", ".csv"
-    };
-
-    internal static bool IsEditable(string path) => TextExtensions.Contains(Path.GetExtension(path)) || Path.GetExtension(path).Length == 0
-        || Horizon.UI.Scripting.CodeLanguages.ForFile(path) is not null;
 
     internal void ExplorerPressed(ExplorerEntry entry)
     {
@@ -34,12 +24,8 @@ internal sealed partial class HexExplorer
             return;
         }
 
-        if (!IsEditable(entry.Path))
-        {
-            context.Notices.Say(context.Strings.Said("explorer_files.not_text", ("name", Path.GetFileName(entry.Path))), error: true);
-            return;
-        }
-
+        // Any file opens, whatever its name says. One that isn't text asks first (DawnScene.Documents), a list of the
+        // extensions that were text kept every file of a kind nobody had thought of out
         context.Documents.Open(entry.Path);
     }
 
@@ -318,7 +304,7 @@ internal sealed partial class HexExplorer
             ".json" or ".tmx" or ".tsx" or ".xml" or ".yaml" or ".yml" or ".toml" => "json",
             ".slang" or ".hlsl" or ".glsl" => "symbol-color",
             ".cs" or ".csproj" or ".sln" or ".props" or ".targets" => "symbol-class",
-            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" => "code",
+            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" or ".d" or ".di" => "code",
             ".ps1" or ".bash" or ".sh" or ".cmd" or ".bat" => "terminal",
             ".zip" or ".7z" or ".gz" or ".tar" => "file-zip",
             ".pdf" => "file-pdf",
@@ -345,7 +331,7 @@ internal sealed partial class HexExplorer
             ".md" or ".markdown" or ".txt" => syntax.Property,
             ".png" or ".jpg" or ".jpeg" or ".aseprite" or ".ase" or ".gif" or ".bmp" or ".svg" or ".ico" => syntax.Text,
             ".slang" or ".hlsl" or ".glsl" => syntax.Number,
-            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" => syntax.Type,
+            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" or ".d" or ".di" => syntax.Type,
             ".ps1" or ".bash" or ".sh" or ".cmd" or ".bat" => syntax.Builtin,
             _ => null
         };

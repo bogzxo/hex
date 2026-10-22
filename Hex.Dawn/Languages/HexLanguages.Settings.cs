@@ -10,7 +10,8 @@ namespace Hex.Dawn;
 // The language servers' section of the settings (Editor, Language servers). Whether Hex looks for new versions, Check
 // now, and a row a server of language_servers.hor: where it is (empty for its command on the PATH), what it is and how
 // it is installed, and Choose, Install (Download for one there is no command line for) and What changed. Under them
-// what was found of each, where, which version and whether there is a newer one, written again as that changes.
+// every server with what was found of it, where, which version and whether there is a newer one, written again as that
+// changes, and the way to add one of your own (HexLanguages.Editor).
 internal sealed partial class HexLanguages
 {
     internal const string SERVER_SECTION = "Editor · Language servers";
@@ -23,23 +24,6 @@ internal sealed partial class HexLanguages
 
     // The line a server has under the rows, by its name, while the settings are up
     internal readonly Dictionary<string, Label> serverStatus = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>The panel of what was found of each server, for the section under its rows.</summary>
-    private StackPanel MakeServerStatus()
-    {
-        serverStatus.Clear();
-        var panel = new StackPanel { Spacing = 6.0f, Padding = new UIEdges(14.0f, 10.0f, 10.0f, 14.0f) };
-        panel.Add(new Label { Text = $"[b]{context.Strings.Said("language_settings.on_this_machine")}[/b]", Markdown = true, Size = new System.Numerics.Vector2(640.0f, 0.0f), Align = Horizon.Rendering.Origin.TopLeft });
-        foreach (HexServerEntry entry in ServerEntries)
-        {
-            var line = new Label { Markdown = true, Wrap = true, Size = new System.Numerics.Vector2(640.0f, 0.0f), Align = Horizon.Rendering.Origin.TopLeft };
-            serverStatus[entry.Name] = line;
-            panel.Add(line);
-        }
-
-        RefreshServerStatus();
-        return panel;
-    }
 
     // How far the installs that are going had got when the lines under the rows last said
     private int installsShown;
@@ -76,25 +60,25 @@ internal sealed partial class HexLanguages
 
     private string ServerStatusOf(HexServerEntry entry)
     {
-        string name = $"**{UIRichText.Literal(entry.Command)}**  [color:#7f8a9e]{UIRichText.Literal(string.Join(" ", entry.Extensions))}[/color]  ";
+        string name = $"**{UIRichText.MarkdownLiteral(LanguageNameOf(entry))}**  {UIRichText.MarkdownLiteral(entry.Command)}  [color:#7f8a9e]{UIRichText.MarkdownLiteral(string.Join(" | ", entry.Extensions))}[/color]  ";
         if (Installing(entry) is { } going)
-            return name + $"[color:#e5c07b]{UIRichText.Literal(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {UIRichText.Literal(going.Message)}";
+            return name + $"[color:#e5c07b]{UIRichText.MarkdownLiteral(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {UIRichText.MarkdownLiteral(going.Message)}";
         if (serversProbing.Contains(entry.Name) || !serversFound.TryGetValue(entry.Name, out ServerFound? found))
             return name + context.Strings.Said("language_settings.looking");
 
         string latest = settings.ServerLatest.TryGetValue(entry.Name, out string? newest) ? newest : string.Empty;
         if (found.Path is null)
         {
-            string out_ = latest.Length > 0 ? ", " + context.Strings.Said("language_settings.newest_is", ("version", UIRichText.Literal(latest))) : string.Empty;
-            string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", $"`{UIRichText.Literal(entry.Install)}`"))
+            string out_ = latest.Length > 0 ? ", " + context.Strings.Said("language_settings.newest_is", ("version", UIRichText.MarkdownLiteral(latest))) : string.Empty;
+            string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", $"`{UIRichText.MarkdownLiteral(entry.Install)}`"))
                 : context.Strings.Said("language_settings.download_from_releases");
             return name + $"[color:#ff7366]{context.Strings.Said("language_settings.not_found")}[/color]{out_}. {how}.";
         }
 
-        string version = found.Version is { } said ? UIRichText.Literal(said) : context.Strings.Said("language_settings.version_unsaid");
-        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{context.Strings.Said("language_settings.newer_out", ("version", UIRichText.Literal(newer)))}[/color]"
+        string version = found.Version is { } said ? UIRichText.MarkdownLiteral(said) : context.Strings.Said("language_settings.version_unsaid");
+        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{context.Strings.Said("language_settings.newer_out", ("version", UIRichText.MarkdownLiteral(newer)))}[/color]"
             : latest.Length > 0 && found.Version is not null ? ", " + context.Strings.Said("language_settings.the_newest") : string.Empty;
-        return name + $"{version}{news}\n[color:#7f8a9e]{UIRichText.Literal(found.Path)}[/color]";
+        return name + $"{version}{news}\n[color:#7f8a9e]{UIRichText.MarkdownLiteral(found.Path)}[/color]";
     }
 
     /// <summary>The servers' section, its rows read from and put in force on the editor.</summary>

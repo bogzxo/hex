@@ -133,7 +133,6 @@ internal sealed partial class DawnScene
             var row = item.Add(new UITreeItem(name, HexExplorer.FileIcon(file))
             {
                 IconColor = explorer.FileIconColor(file),
-                Color = HexExplorer.IsEditable(file) ? null : DimColor,
                 Tooltip = file,
                 Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
             });
@@ -184,12 +183,9 @@ internal sealed partial class DawnScene
         foreach (string directory in inside)
             items.Add(FileItem(directory, true, Path.GetFileName(directory) + "/"));
 
-        // Every file that is text, a layout or not, the editor opens any of them
+        // Every file, the editor opens any of them, and asks first about one that isn't text
         foreach (string file in files)
-        {
-            if (HexExplorer.IsEditable(file))
-                items.Add(FileItem(file, false, Path.GetFileName(file)));
-        }
+            items.Add(FileItem(file, false, Path.GetFileName(file)));
 
         sideTree.Items = items;
     }

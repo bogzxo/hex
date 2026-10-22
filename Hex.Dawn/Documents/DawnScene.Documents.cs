@@ -98,6 +98,9 @@ internal sealed partial class DawnScene
     /// same layout again: if it doesn't, saving would change it.
     /// </summary>
     /// <returns>Whether it opened and writes back the same.</returns>
+    // What a nothing (a zero byte) in a file that isn't text is shown as once it's opened anyway, the sign for one
+    private const char NOTHING_SHOWN = '\u2400';
+
     public bool Open(string path)
     {
         if (!File.Exists(path))
@@ -122,11 +125,16 @@ internal sealed partial class DawnScene
             return true;
         }
 
-        // A file of code that isn't a layout (data, a language, a skin), or any other text, is edited as the text it is
+        // A file of code that isn't a layout (data, a language, a skin), or any other text, is edited as the text it is.
+        // One with nothing in it but bytes is asked about first, opened anyway it's what it says as text, its nothings
+        // shown as the sign for one, and saved that way
         string source = File.ReadAllText(path);
         if (source.Contains('\0'))
         {
-            Say(Said("documents.not_text", ("name", Path.GetFileName(path))), error: true);
+            string name = Path.GetFileName(path);
+            UIDialog.Show(chrome, Said("documents.binary_title", ("name", name)), Said("documents.binary_body"),
+                new DialogChoice(Said("documents.open_anyway"), () => OpenText(path, source.Replace('\0', NOTHING_SHOWN))),
+                new DialogChoice(Said("documents.leave_it")));
             return false;
         }
 
@@ -216,7 +224,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private UIDialogHost DialogHost => new(window =>
     {
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        DressWindow(window);
         chrome.Root.Add(window);
     }, WorkspaceRoots());
 

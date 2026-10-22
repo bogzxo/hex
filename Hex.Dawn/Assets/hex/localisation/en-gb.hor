@@ -722,7 +722,10 @@ let strings = {
     documents: {
         no_file: "there is no '{path}'",
         open_already: "{name} is open already",
-        not_text: "{name} isn't text",
+        binary_title: "{name} doesn't look like text",
+        binary_body: "It has bytes in it no text has. Opened anyway it's shown as text, and saved from here it's saved as that text, which won't be the file it was.",
+        open_anyway: "Open anyway",
+        leave_it: "Leave it",
         opened_differs: "opened {name}, but it doesn't write back the same",
         opened: "opened {name}: {count} components, writes back the same",
         files_of: "files of {directory}",
@@ -769,7 +772,6 @@ let strings = {
     },
 
     explorer_files: {
-        not_text: "{name} isn't text, there is nothing to edit in it here",
         open: "Open",
         new_file: "New file...",
         new_folder: "New folder...",
@@ -1358,7 +1360,24 @@ let strings = {
         downloaded_from: "Downloaded from github.com/{repo}.",
         where_help: "Where it is, empty for {command} on the PATH.",
         programs: "Programs (*.exe, *.cmd, *.bat)",
-        where_is: "Where {command} is"
+        where_is: "Where {command} is",
+        added_about: "Added in the settings.",
+        add_title: "Add a language server",
+        add_help: "For a language Hex colours that has no server above, or to use another one for it. Pick the language, say which files it's for with a bar between two (.d|.di), and where the server is.",
+        language: "Language",
+        extensions: "Files",
+        server: "Server",
+        server_hint: "the program, a full path or a name on the PATH",
+        arguments: "Arguments",
+        arguments_hint: "--stdio, if it wants it",
+        browse: "Browse...",
+        add: "Add",
+        edit: "Edit",
+        remove: "Remove",
+        added: "{language}'s server is added, the files of it that are open are in it",
+        needs_language: "pick a language first",
+        needs_extensions: "it needs the files it's for, .d|.di",
+        needs_server: "it needs the server, a path or a name on the PATH"
     },
 
     languages: {

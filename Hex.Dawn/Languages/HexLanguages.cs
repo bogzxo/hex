@@ -56,7 +56,7 @@ internal sealed partial class HexLanguages
         with.Workspace.Deleting += StopServersUnder;
 
         // What was found of the servers looked for again as the settings open, in case something was installed since
-        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerStatus, () => ProbeServers(ServerEntries), serverStatus.Clear);
+        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerEditor, () => ProbeServers(ServerEntries), ForgetServerEditor);
     }
 
     /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
@@ -118,30 +118,33 @@ internal sealed partial class HexLanguages
         }
     }
 
-    /// <summary>Helper method to read which servers there are, once, from the file next to the editor.</summary>
+    /// <summary>
+    /// Helper method to read which servers there are, once, from the file next to the editor, with the ones added in the
+    /// settings among them (HexLanguages.Added).
+    /// </summary>
     private void ReadLanguageServers()
     {
         serversRead = true;
-        if (!File.Exists(LANGUAGE_SERVERS))
-            return;
-
-        try
+        if (File.Exists(LANGUAGE_SERVERS))
         {
-            serverEntries = HexServerCatalog.Read(File.ReadAllText(LANGUAGE_SERVERS));
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"[Hex] {LANGUAGE_SERVERS} wasn't read, {e.Message}");
-            return;
+            try
+            {
+                fileEntries = HexServerCatalog.Read(File.ReadAllText(LANGUAGE_SERVERS));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[Hex] {LANGUAGE_SERVERS} wasn't read, {e.Message}");
+            }
         }
 
+        serverEntries = Merged();
         foreach (HexServerEntry entry in serverEntries)
             RegisterServer(entry);
     }
 
-    /// <summary>What a server is started with, where the settings say it is, or the file's command.</summary>
+    /// <summary>What a server is started with, where the settings say it is, or the file's command. One added in the settings is where it was added.</summary>
     private string CommandOf(HexServerEntry entry) =>
-        settings.ServerPaths.TryGetValue(entry.Name, out string? at) && at.Length > 0 ? at : entry.Command;
+        !IsAdded(entry) && settings.ServerPaths.TryGetValue(entry.Name, out string? at) && at.Length > 0 ? at : entry.Command;
 
     // Helper method to say which files a server is for and how it is started, which stops the one that was running (done
     // when the task is, off the editor's thread)

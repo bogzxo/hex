@@ -27,6 +27,16 @@ internal sealed partial class DawnScene
         test.Check("settings: in order, how Hex looks first with both modes' themes in it, then the editor, the terminal and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Appearance", "Editor", "Terminal", "Extensions"])
             && SettingsPage.Settings.Where(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
+        // The pointer down the sections a few pixels at a time, a picture at each, for whoever's looking at how they light
+        Label[] links = [];
+        test.Run(() => links = [.. Descendants(SettingsWindow!).OfType<Label>().Where(label => label.GetType().Name == "SectionLink").Take(6)]);
+        for (int step = 0; step < 24; step++)
+        {
+            int at = step;
+            test.Hover(() => links.Length == 0 ? default : chrome.ToWorld(Vector2.Lerp(links[0].Bounds.Center, links[^1].Bounds.Center, at / 23.0f)));
+            test.Run(() => Shot($"nav-hover-{at:00}"));
+        }
+
         test.Check("settings: the window has a title bar, an x and a grip in its corner", () =>
             SettingsWindow is { Closable: true, ResizeGrip: true } window && compositor.Resolve(window.Title) == "Settings" && !window.CloseBounds.IsEmpty && !window.GripBounds.IsEmpty);
 
