@@ -56,6 +56,8 @@ internal sealed partial class DawnScene
         test.WaitFor(() => code.CompletionOpen && code.Completions.Any(item => item.Text.StartsWith("lengthSquared", StringComparison.Ordinal)), 90.0f);
         test.Check("d: after p. the list is the struct's own, its fields and what it does, from serve-d", () =>
             code.CompletionOpen && code.Completions.Any(item => item.Text == "x") && code.Completions.Any(item => item.Text.StartsWith("lengthSquared", StringComparison.Ordinal)));
+        test.Run(() => Shot("d-completion"));
+        test.Settle(0.2f);
 
         test.Run(() =>
         {

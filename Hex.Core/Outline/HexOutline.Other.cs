@@ -4,13 +4,15 @@ namespace Hex.Core;
 
 // The outline of a file that isn't HIDL, what it declares by the shapes its language writes declarations in, a
 // line at a time, how deep each is by how far in it is. Not a parser and not meant to be one, a language server's
-// symbols are what a file with a server gets, this is for the rest and for before the server has answered. C#, the
+// symbols are what a file with a server gets, this is for the rest and for before the server has answered. C#, D, the
 // shaders, Python, JavaScript and TypeScript, Markdown's headings, the keys of JSON and YAML.
 internal static partial class HexOutline
 {
     private static readonly Regex CsType = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record|interface|enum)\s+(\w+)", RegexOptions.Compiled);
     private static readonly Regex CsMember = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|override|virtual|async|readonly|unsafe|extern|new|required|partial)\s+)+[\w<>\[\],.?() ]+?\s+(\w+)\s*(\(|\{|=>|=|;)", RegexOptions.Compiled);
     private static readonly Regex ShaderFunction = new(@"^(\s*)(?:\[[^\]]*\]\s*)*(?:static\s+|inline\s+)?(struct)\s+(\w+)|^(\s*)(?:\[[^\]]*\]\s*)*[\w<>]+\s+(\w+)\s*\([^;]*$", RegexOptions.Compiled);
+    private static readonly Regex DType = new(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|shared|immutable|const|synchronized|extern\([^)]*\)|align\([^)]*\)|@\w+)\s+)*(class|struct|union|interface|enum|template|mixin\s+template)\s+(\w+)", RegexOptions.Compiled);
+    private static readonly Regex DFunction = new(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|override|nothrow|pure|ref|auto|const|immutable|shared|inout|synchronized|deprecated|extern\([^)]*\)|@\w+)\s+)*([\w!.\[\]*]+(?:\([^)]*\))?)\s+(\w+)\s*(?:\([^)]*\)\s*)?\([^)]*\)\s*(?:(?:const|immutable|shared|inout|nothrow|pure|scope|return|@\w+)\s*)*(?:\{.*|in\b.*|out\b.*|do\b.*|if\s*\(.*)?$", RegexOptions.Compiled);
     private static readonly Regex Python = new(@"^(\s*)(def|class|async def)\s+(\w+)", RegexOptions.Compiled);
     private static readonly Regex Script = new(@"^(\s*)(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|interface|type|enum)\s+(\w+)|^(\s*)(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(", RegexOptions.Compiled);
     private static readonly Regex Heading = new(@"^(#{1,6})\s+(.+?)\s*#*\s*$", RegexOptions.Compiled);
@@ -42,6 +44,20 @@ internal static partial class HexOutline
                     else if (CsMember.Match(row) is { Success: true } member && !NotNames.Contains(member.Groups[2].Value))
                         entries.Add(new OutlineEntry(member.Groups[2].Value, line, member.Groups[2].Index, Depth(member.Groups[1].Value, 4),
                             member.Groups[3].Value == "(" ? "symbol-method" : member.Groups[3].Value is "{" or "=>" ? "symbol-property" : "symbol-field"));
+                    break;
+
+                case ".d" or ".di":
+                    if (DType.Match(row) is { Success: true } dType)
+                        entries.Add(new OutlineEntry(dType.Groups[3].Value, line, dType.Groups[3].Index, Depth(dType.Groups[1].Value, 4), dType.Groups[2].Value switch
+                        {
+                            "interface" => "symbol-interface",
+                            "enum" => "symbol-enum",
+                            "struct" or "union" => "symbol-struct",
+                            "class" => "symbol-class",
+                            _ => "symbol-namespace"
+                        }));
+                    else if (DFunction.Match(row) is { Success: true } dFunction && !NotNames.Contains(dFunction.Groups[2].Value) && !NotNames.Contains(dFunction.Groups[3].Value))
+                        entries.Add(new OutlineEntry(dFunction.Groups[3].Value, line, dFunction.Groups[3].Index, Depth(dFunction.Groups[1].Value, 4), "symbol-method"));
                     break;
 
                 case ".slang" or ".hlsl":

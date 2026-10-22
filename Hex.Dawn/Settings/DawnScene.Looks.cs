@@ -30,19 +30,41 @@ internal sealed partial class DawnScene : IHexLookOwner
         ApplyEffects();
         SaveSettings();
         settingsView?.Refresh();
+
+        // A look saved or deleted is one more or one less in the menu
+        FillLooks();
     }
 
+    // The menu of the looks, filled again as they're saved and deleted
+    private Menu? lookMenu;
+
     /// <summary>
-    /// The looks Hex comes with in a menu of View, ticked while the settings are in one, and the rest of them in the
-    /// settings, so a look is a key or two away in the palette as well (View, Look, Frosted Glass).
+    /// The looks in a menu of View, Hex's and then the ones saved in the settings, ticked while the settings are in one,
+    /// so a look is a key or two away in the palette as well (View, Look, Frosted Glass). Only Hex's three were in it,
+    /// a look of your own was only in the settings.
     /// </summary>
     private void AddLooks(Menu menu)
     {
-        foreach (HexLook look in HexLooks.BuiltIn)
+        lookMenu = menu;
+        FillLooks();
+    }
+
+    private void FillLooks()
+    {
+        if (lookMenu is not { } menu)
+            return;
+
+        menu.Clear();
+        List<HexLook> all = HexLooks.All(settings);
+        for (int i = 0; i < all.Count; i++)
         {
-            HexLook picked = look;
-            MenuItem item = menu.Add(look.Name, () => PickLook(picked));
-            item.IsChecked = () => HexLooks.Current(settings, terminals.Settings.Theme) == picked;
+            // A line between Hex's and the user's own
+            if (i == HexLooks.BuiltIn.Length)
+                menu.AddSeparator();
+
+            HexLook picked = all[i];
+            MenuItem item = menu.Add(picked.Name, () => PickLook(picked));
+            item.IsChecked = () => HexLooks.Current(settings, terminals.Settings.Theme)?.Name == picked.Name;
         }
 
         menu.AddSeparator();

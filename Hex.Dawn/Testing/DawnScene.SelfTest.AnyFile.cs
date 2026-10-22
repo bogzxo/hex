@@ -24,6 +24,12 @@ internal sealed partial class DawnScene
             && entries.Any(entry => entry is { Name: "Grow", Icon: "symbol-method" }) && entries.Any(entry => entry is { Name: "Kind", Icon: "symbol-enum" })
             && !entries.Any(entry => entry.Name == "if"));
         test.Check("any file: and the values side is folded away, there are no values", () => !right.Shown);
+        test.Check("any file: a D file's outline is its types and functions, not what's called in them", () =>
+            HexOutline.Outline("module app;\n\nstruct Point\n{\n    int lengthSquared() const { return 1; }\n}\n\nT twice(T)(T x) { return x * 2; }\n\nvoid main()\n{\n    if (true)\n        writeln(twice(2));\n}\n", "app.d") is var entries
+            && entries.Any(entry => entry is { Name: "Point", Icon: "symbol-struct", Depth: 0 })
+            && entries.Any(entry => entry is { Name: "lengthSquared", Icon: "symbol-method", Depth: 1 })
+            && entries.Any(entry => entry is { Name: "twice", Icon: "symbol-method" }) && entries.Any(entry => entry is { Name: "main", Icon: "symbol-method" })
+            && !entries.Any(entry => entry.Name is "if" or "writeln"));
         test.Check("any file: its icon and its colour say what it is", () => HexExplorer.FileIcon(cs) == "symbol-class" && explorer.FileIconColor(cs) is not null && HexExplorer.FileIcon(md) == "markdown");
 
         test.Run(() => Open(md));

@@ -37,6 +37,19 @@ internal sealed partial class DawnScene
             test.Run(() => Shot($"nav-hover-{at:00}"));
         }
 
+        // A look saved in the settings is in View, Look beside Hex's, and gone from it once it's deleted
+        test.Check("settings: a look saved is in View, Look as well, and deleted it's gone", () =>
+        {
+            const string NAME = "Selftest look";
+            bool Listed() => lookMenu?.Everything().Any(pair => pair.Item.Label == NAME) == true;
+            HexLooks.Save(settings, NAME, terminals.Settings.Theme);
+            ((IHexLookOwner)this).Keep(settings, null);
+            bool saved = Listed();
+            HexLooks.Delete(settings, NAME);
+            ((IHexLookOwner)this).Keep(settings, null);
+            return saved && !Listed() && lookMenu!.Everything().Any(pair => pair.Item.Label == HexLooks.Fluid.Name);
+        });
+
         test.Check("settings: the window has a title bar, an x and a grip in its corner", () =>
             SettingsWindow is { Closable: true, ResizeGrip: true } window && compositor.Resolve(window.Title) == "Settings" && !window.CloseBounds.IsEmpty && !window.GripBounds.IsEmpty);
 

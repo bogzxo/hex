@@ -166,7 +166,7 @@ internal sealed partial class DawnScene
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return ("folder-library", Said("status_bar.kind_workspace"));
         if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
-            return shown.Editor.Highlighter is { } language ? ("file-code", languages.LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
+            return shown.Editor.Highlighter is { } language ? ("file-code", languages.ServerShownOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return ("paintcan", Said("status_bar.kind_skin"));
         if (shown.Path is { } file && Path.GetFileName(Path.GetDirectoryName(file))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)

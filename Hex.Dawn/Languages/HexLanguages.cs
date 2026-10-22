@@ -101,6 +101,13 @@ internal sealed partial class HexLanguages
     /// <summary>The name of the server linting a document, null for none.</summary>
     internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
 
+    /// <summary>
+    /// The program linting a document as somebody knows it, serve-d, csharp-ls, null for none. Its name in
+    /// language_servers.hor was what the status bar said, "D, d".
+    /// </summary>
+    internal string? ServerShownOf(HexDocument of) =>
+        LinterOf(of) is { } name ? Path.GetFileNameWithoutExtension(ServerEntry(name) is { } entry ? CommandOf(entry) : name) : null;
+
     // What language_servers.hor says, read the first time a server is wanted, nothing when it can't be read
     private List<HexServerEntry> serverEntries = [];
 
