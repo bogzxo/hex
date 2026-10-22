@@ -213,6 +213,23 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     TerminalHost ITerminals.Host => terminals;
 
+    string ITerminals.UsualProfileId => terminals.UsualProfile?.Id ?? string.Empty;
+
+    // The self test never starts a Dusk of its own, it says what it would have started it with
+    internal (string Folder, string CommandLine)? DuskAsked { get; private set; }
+
+    void ITerminals.RunInDusk(string folder, string commandLine)
+    {
+        if (options.SelfTest)
+        {
+            DuskAsked = (folder, commandLine);
+            return;
+        }
+
+        if (!HexModes.StartDusk(folder, terminals.UsualProfile?.Id, commandLine))
+            Say(Said("tasks.no_dusk"), error: true);
+    }
+
     void ITerminals.RunInTab(string key, string title, string folder, string commandLine)
     {
         ShowPanel(CONSOLE_PAGE);

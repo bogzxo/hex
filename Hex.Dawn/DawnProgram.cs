@@ -155,6 +155,9 @@ public static class DawnProgram
         engine.Run();
         Hex.Shell.HexModes.Shutdown();
 
+        // The language servers go with the editor. serve-d stayed on after it, with its DCD, one more of each a run
+        Horizon.UI.Scripting.LanguageServers.StopAll();
+
         // Where the time went, with HEX_PROFILE set
         DawnScene.Profile.Report();
     }

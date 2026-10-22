@@ -22,15 +22,26 @@ internal sealed partial class DawnScene
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
     }
 
-    /// <summary>F5, the file run, or the entrances of a layout played in its designer. A file that isn't HIDL runs the run task.</summary>
+    /// <summary>
+    /// F5, the file run, or the entrances of a layout played in its designer. A file that isn't HIDL runs the run task,
+    /// and with no run task Set Up F5 comes up for it. It was run as HIDL, which no D or Python ever was.
+    /// </summary>
     private void RunOrPlay()
     {
         // C# is debugged, and while something is being debugged F5 goes on from where it stopped
         if (debugger.DebugStopped || (!LayoutTools && HexDebugging.IsCSharp(document.Path))) debugger.DebugOrContinue();
         else if (LayoutTools) designer.PlayIntros();
-        else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && tasks.DefaultTask("run") is { } task) tasks.Run(task);
+        else if (document.IsText && document.Path is { } path && !IsHidl(path))
+        {
+            if (tasks.RunTaskFor(path) is { } task) tasks.Run(task);
+            else tasks.SetUpRun(path);
+        }
         else running.RunCode();
     }
+
+    // Whether a file is HIDL, which F5 runs itself, by its extension
+    private static bool IsHidl(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".hor" or ".jab" or ".hex-workspace";
 
     /// <summary>
     /// The menus of the bar and their groups, before anything adds its commands to them. Everything the editor does that

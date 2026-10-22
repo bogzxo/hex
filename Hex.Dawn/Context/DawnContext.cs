@@ -248,6 +248,15 @@ internal interface ITerminals
     /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
     /// </summary>
     void RunInTab(string key, string title, string folder, string commandLine);
+
+    /// <summary>
+    /// Runs a command line in a Dusk window of its own, in a folder, with the shell the terminal page uses, or as a new
+    /// tab of the Dusk that's running when there is one.
+    /// </summary>
+    void RunInDusk(string folder, string commandLine);
+
+    /// <summary>The id of the shell a new terminal starts, pwsh, powershell, cmd, bash, which a command line is written for.</summary>
+    string UsualProfileId { get; }
 }
 
 /// <summary>The side bar and the panel under the editor.</summary>

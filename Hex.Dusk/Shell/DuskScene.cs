@@ -146,15 +146,18 @@ internal sealed partial class DuskScene : Scene
         ReadBackdrop();
         StartInstance();
 
-        // The tabs of last time when there were any and the settings say so, otherwise one of the profile asked for
-        if (options.Profile is null && !options.SelfTest && settings.RestoreSessions && RestoreSession())
+        // The tabs of last time when there were any and the settings say so, otherwise one of the profile asked for (with
+        // the command line it was started to run typed into it, a task of Dawn's)
+        if (options.Profile is null && options.Run is null && !options.SelfTest && settings.RestoreSessions && RestoreSession())
         {
             host.Raise("on_start");
             return;
         }
 
         TerminalProfile? first = host.ProfileCalled(options.Profile ?? string.Empty) ?? host.UsualProfile;
-        panel.NewTab(first, options.StartIn);
+        TerminalTab tab = panel.NewTab(first, options.StartIn);
+        if (options.Run is { Length: > 0 } run)
+            tab.Views.FirstOrDefault()?.SendWhenReady(run + "\r");
         host.Raise("on_start");
     }
 

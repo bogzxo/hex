@@ -49,5 +49,77 @@ internal sealed partial class DawnScene
             ClearTerminalProblems();
         });
         test.Settle(0.3f);
+
+        TestRunSetup(test);
+    }
+
+    /// <summary>Set Up F5, F5 on a D file of a folder with no tasks, what it guesses, what it writes and where it runs it.</summary>
+    private void TestRunSetup(HexPointerScript test)
+    {
+        // The tasks.hor is the one of the workspace's folder the file is in, made by the setup and taken away after
+        string folder = Path.Combine(testFolder, "run_setup"), program = Path.Combine(folder, "app.d");
+        string root = string.Empty, file = string.Empty;
+        test.Run(() =>
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(program, "import std.stdio;\n\nvoid main() { writeln(\"hi\"); }\n");
+            root = tasks.RootFor(program);
+            file = Path.Combine(root, HexTasks.TASKS_FILE);
+            if (File.Exists(file))
+                File.Delete(file);
+            Open(program);
+        });
+        test.Wait();
+        test.Run(RunOrPlay);
+        test.Settle(0.3f);
+        test.Check("tasks: F5 on a D file with no run task sets F5 up, the program guessed and its lines filled in", () =>
+            tasks.SetupWindow is { Visible: true } && tasks.SetupKind.StartsWith("D, this file", StringComparison.Ordinal)
+            && tasks.SetupBuild.Contains("app.d\"") && tasks.SetupBuild.Contains("-of=app") && tasks.SetupRunLine.Contains("app"));
+        test.Run(() => Shot("run-setup"));
+        test.Settle(0.2f);
+
+        // Saved to run in a Dusk of its own, the build first and the run only if it worked, in the shell's own way
+        test.Run(() =>
+        {
+            DuskAsked = null;
+            tasks.FillSetup("echo built", "echo ran", inDusk: true);
+            tasks.PressSetup(run: true);
+        });
+        test.Wait();
+        test.Check("tasks: saved, the folder's tasks.hor has a build and a run that depends on it, to run in Dusk", () =>
+            tasks.SetupWindow is null && tasks.TasksOf(file, root) is var written
+            && written.Find(task => task.Name == "build") is { Command: "echo built", Group: "build", Default: true }
+            && written.Find(task => task.Name == "run") is { Command: "echo ran", Group: "run", DependsOn: "build", Terminal: HexTask.DUSK });
+        test.Check("tasks: and run, Dusk is asked to build it and then run it in the folder", () =>
+            DuskAsked is { } asked && PlatformPaths.Same(asked.Folder, root) && asked.CommandLine.StartsWith("echo built", StringComparison.Ordinal) && asked.CommandLine.Contains("echo ran"));
+        test.Check("tasks: the run goes on only if the build worked, the way each shell says it", () =>
+            tasks.TasksOf(file, root).Find(task => task.Name == "run") is { } run
+            && tasks.CommandLineOf(run, "pwsh") == "echo built && echo ran"
+            && tasks.CommandLineOf(run, "powershell") == "echo built; if ($?) { echo ran }"
+            && tasks.CommandLineOf(run, "cmd") == "echo built && echo ran");
+
+        // Set up again, it starts from what the file says, and the panel here runs it in a tab of its own
+        test.Run(() => tasks.SetUpRun(program));
+        test.Settle(0.2f);
+        test.Check("tasks: set up again it starts from the file's tasks", () => tasks.SetupBuild == "echo built" && tasks.SetupRunLine == "echo ran");
+        test.Run(() =>
+        {
+            tasks.FillSetup("echo built", "echo ran", inDusk: false);
+            tasks.PressSetup(run: true);
+        });
+        test.Settle(0.3f);
+        test.Check("tasks: in the panel it's a terminal tab of its own", () => terminalPanel.Current is { Title: "run" });
+
+        test.Run(() =>
+        {
+            if (terminalPanel.Current is { Title: "run" } tab)
+                terminalPanel.CloseTab(tab);
+            CloseNow();
+            if (File.Exists(file))
+                File.Delete(file);
+        });
+        test.Settle(0.3f);
     }
 }

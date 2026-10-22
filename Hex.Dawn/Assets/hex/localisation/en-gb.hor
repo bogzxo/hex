@@ -953,7 +953,39 @@ let strings = {
         choose_title: "Run task",
         choose_prompt: "The tasks of the workspace's tasks.hor, each runs in a terminal of its own",
         running: "running {name}",
-        file_not_written: "{file} couldn't be written, {reason}"
+        file_not_written: "{file} couldn't be written, {reason}",
+        set_up_run: "Set Up F5...",
+        setup_title: "Set up F5",
+        setup_intro: "F5 on {name} builds it and then runs it, as the build and run tasks of this folder's {file}. Change either line as you like, leave Build empty for a language that runs as it is.",
+        setup_kind: "Program",
+        setup_build: "Build",
+        setup_build_hint: "nothing to build first",
+        setup_run: "Run",
+        setup_run_hint: "the command line that runs it",
+        setup_folder: "Runs in",
+        setup_output: "Output in",
+        setup_in_panel: "The terminal panel here",
+        setup_in_dusk: "A Dusk window of its own",
+        setup_save_run: "Save and run",
+        setup_save: "Save",
+        setup_cancel: "Cancel",
+        setup_needs_run: "it needs a line that runs it",
+        setup_written: "{file} written, F5 builds and runs",
+        no_dusk: "Dusk couldn't be started",
+        presets: {
+            d_dub: "D, a dub project",
+            d_dmd: "D, this file with dmd",
+            d_ldc: "D, this file with ldc2",
+            d_rdmd: "D, this file with rdmd",
+            csharp: "C#, dotnet",
+            rust: "Rust, cargo",
+            go: "Go",
+            c: "C, gcc",
+            cpp: "C++, g++",
+            python: "Python",
+            node: "JavaScript, node",
+            other: "Something else"
+        }
     },
 
     background: {
@@ -1381,7 +1413,9 @@ let strings = {
     },
 
     languages: {
-        server_restarted: "[Hex] {command} started again, a project of its changed"
+        server_restarted: "[Hex] {command} started again, a project of its changed",
+        server_asks: "{command} asks",
+        not_now: "Not now"
     },
 
     modes: {

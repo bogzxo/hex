@@ -258,6 +258,8 @@ internal sealed partial class HexLanguages
             if (server.Failure is { } failure && failed.Add(server.Name))
                 Console.WriteLine($"[Hex] {server.Name} stopped, {failure}");
 
+            TakeTalk(server);
+
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
                 string full = Path.GetFullPath(path);
@@ -271,6 +273,7 @@ internal sealed partial class HexLanguages
             }
         }
 
+        AskNext();
         UpdateServerCompletions();
         UpdateInstallStatus();
     }

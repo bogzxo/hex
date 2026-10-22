@@ -69,7 +69,7 @@ let servers = {
     },
     d: {
         command: "serve-d", args: [], language: "d", extensions: [".d", ".di"],
-        about: "D, the server code-d is built on, over DCD and D-Scanner. One program, downloaded from its releases (or built with dub) and put on the PATH or set here. It finds a project by its dub.json or dub.sdl.",
+        about: "D, the server code-d is built on, over DCD and D-Scanner. One program, downloaded from its releases (or built with dub) and put on the PATH or set here. It asks to download DCD the first time it starts, which is what it completes with, and finds the standard library through a D compiler on the PATH (dmd or ldc2).",
         repo: "Pure-D/serve-d", version: ["--version"],
         reload: ["dub.json", "dub.sdl", "dub.selections.json"]
     },
