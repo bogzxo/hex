@@ -118,6 +118,24 @@ internal sealed partial class DawnScene
                 && keys.Window.Parent is null;
         });
 
+        test.Check("dialogs: Tab goes round what's in it, its buttons and the filter too, and never out to what's behind", () =>
+        {
+            var tabbed = new UIFileBrowser(UIBrowse.Open, HexDialogs.OPEN_TITLE, folder, string.Empty, [("Horizon files", "*.hor")]);
+            DialogHost.Present(tabbed.Window);
+            tabbed.TakeKeyboard();
+            bool inside = true, reachedOpen = false, reachedFilter = false;
+            for (int i = 0; i < 20; i++)
+            {
+                compositor.FocusNext();
+                inside &= compositor.Focus is { } now && Descendants(tabbed.Window).Contains(now);
+                reachedOpen |= compositor.Focus is Button { Label: "Open" };
+                reachedFilter |= compositor.Focus is Dropdown;
+            }
+
+            tabbed.Cancel();
+            return inside && reachedOpen && reachedFilter;
+        });
+
         test.Run(() => Directory.Delete(folder, recursive: true));
     }
 }

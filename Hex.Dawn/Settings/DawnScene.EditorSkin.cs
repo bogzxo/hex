@@ -58,10 +58,21 @@ internal sealed partial class DawnScene
                 all.Add((skin, null, skin.Title));
 
             foreach (string theme in skin.Themes)
-                all.Add((skin, theme, $"{skin.Title}, {theme}"));
+                all.Add((skin, theme, EditorSkinText(skin, theme)));
         }
 
         return all;
+    }
+
+    /// <summary>
+    /// What a theme of a skin the editor can be drawn in is called in the settings. The editor's own skin's by the theme
+    /// alone, "Horizon", others by the theme and the skin. It said "Flat, horizon", and Flat is a look of Hex's as well.
+    /// </summary>
+    private static string EditorSkinText(UISkinChoice skin, string theme)
+    {
+        string named = theme.Replace('_', ' ');
+        named = named.Length > 0 ? char.ToUpperInvariant(named[0]) + named[1..] : named;
+        return skin.Name == TOOL_SKIN_NAME ? named : $"{named}, {skin.Title}";
     }
 
     /// <summary>

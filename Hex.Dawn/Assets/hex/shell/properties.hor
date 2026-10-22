@@ -25,6 +25,7 @@ let inspector_title = compositor.label({
     pivot: "left",
     text: "@properties.title",
     text_scale: 0.14,
+    bold: true,
     color: vec(0.46, 0.52, 0.64, 1)
 });
 

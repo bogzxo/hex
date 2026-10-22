@@ -62,7 +62,11 @@ internal sealed partial class DawnScene
 
     /* The workspace, every .hor of its folders, or of the repository the open file is in when it has none */
 
-    /// <summary>The repository the document on screen is in (the nearest folder up from it with git in it), failing that the folder files are opened from.</summary>
+    /// <summary>
+    /// The repository the document on screen is in (the nearest folder up from it with git in it), failing that the folder
+    /// it's in, and with no file the folder files are opened from. A D file with no git above it looked through Hex's own
+    /// layouts folder.
+    /// </summary>
     private string RepositoryRoot()
     {
         string? from = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : browseDirectory;
@@ -72,21 +76,25 @@ internal sealed partial class DawnScene
                 return at;
         }
 
-        return browseDirectory;
+        return from is not null && Directory.Exists(from) ? from : browseDirectory;
     }
 
     /// <summary>The folders whose files are looked through, the workspace's, or the repository of the open file without one.</summary>
     private List<string> WorkspaceRoots() => explorer.workspace.IsEmpty ? [RepositoryRoot()] : [.. explorer.workspace.Folders];
 
-    /// <summary>What is looked through, said the way a person would.</summary>
+    /// <summary>
+    /// What is looked through, said the way a person would, a folder by its name. Its whole path wrapped in the middle of
+    /// a word in the dialog that asks.
+    /// </summary>
     private string DescribeRoots()
     {
         var roots = WorkspaceRoots();
-        return roots.Count == 1 ? roots[0] : Said("find_menu.workspace_folders", ("count", roots.Count.ToString()));
+        return roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) is { Length: > 0 } name ? name : roots[0]
+            : Said("find_menu.workspace_folders", ("count", roots.Count.ToString()));
     }
 
-    /// <summary>Every .hor of every folder looked through, once each.</summary>
-    private List<string> AllWorkspaceFiles() => HexSearch.FilesUnder(WorkspaceRoots());
+    /// <summary>Every file of every folder looked through that reads as text, once each.</summary>
+    private List<string> AllWorkspaceFiles() => HexSearch.TextFilesUnder(WorkspaceRoots());
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
     private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);
@@ -175,7 +183,7 @@ internal sealed partial class DawnScene
             {
                 ShowResults(Said("find_menu.found_title", ("query", query), ("count", found.Count.ToString())), found);
                 Say(found.Count > 0
-                    ? Said("find_menu.found_in_files", ("query", query), ("files", found.Select(result => result.Path).Distinct().Count().ToString()), ("lines", found.Count.ToString()))
+                    ? Said("find_menu.found_in_files", ("query", query), ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count())), ("lines", HexText.Count("line", found.Count)))
                     : Said("find_menu.not_found", ("query", query), ("where", where)), error: found.Count == 0);
             });
         });
@@ -204,7 +212,7 @@ internal sealed partial class DawnScene
 
             Say(problems.Count == 0
                 ? Said("find_menu.all_parse", ("files", files.ToString()), ("where", where))
-                : Said("find_menu.problems_found", ("count", problems.Count.ToString()), ("files", files.ToString())), error: problems.Count > 0);
+                : Said("find_menu.problems_found", ("count", HexText.Count("problem", problems.Count)), ("files", HexText.Count("file", files))), error: problems.Count > 0);
         });
     }
 

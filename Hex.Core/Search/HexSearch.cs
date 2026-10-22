@@ -24,13 +24,21 @@ internal static class HexSearch
     public const int MOST_FOUND = 2000;
 
     /// <summary>Every .hor under some folders, once each.</summary>
-    public static List<string> FilesUnder(IReadOnlyList<string> roots)
+    public static List<string> FilesUnder(IReadOnlyList<string> roots) => Under(roots, "*.hor");
+
+    /// <summary>
+    /// Every file under some folders that reads as text by its name, once each, what quick open lists and Find in Files
+    /// looks through. A folder of D or C# has no .hor in it, and quick open said there was nothing to open.
+    /// </summary>
+    public static List<string> TextFilesUnder(IReadOnlyList<string> roots) => Under(roots, "*", UIFileKinds.IsText);
+
+    private static List<string> Under(IReadOnlyList<string> roots, string pattern, Func<string, bool>? keep = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
         foreach (string root in roots)
         {
-            foreach (string file in FilesIn(root))
+            foreach (string file in FilesIn(root, pattern, keep))
             {
                 if (seen.Add(file))
                     files.Add(file);
@@ -44,7 +52,7 @@ internal static class HexSearch
     /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
     /// (which are the files of another repository, and there are copies of the engine in more than one).
     /// </summary>
-    public static List<string> FilesIn(string root)
+    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null)
     {
         var files = new List<string>();
         var pending = new Stack<string>();
@@ -55,7 +63,7 @@ internal static class HexSearch
             string folder = pending.Pop();
             try
             {
-                files.AddRange(Directory.GetFiles(folder, "*.hor").Where(file => !Path.GetFileName(file).StartsWith("~syncthing~")));
+                files.AddRange(Directory.GetFiles(folder, pattern).Where(file => !Path.GetFileName(file).StartsWith("~syncthing~") && (keep is null || keep(file))));
 
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
@@ -101,7 +109,7 @@ internal static class HexSearch
             catch (ArgumentException) { return found; }
         }
 
-        foreach (string file in FilesUnder(roots))
+        foreach (string file in TextFilesUnder(roots))
         {
             string[] lines = ReadLines(file);
             for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
@@ -217,12 +225,19 @@ internal static class HexSearch
         return found;
     }
 
-    /// <summary>The lines of a file, none for one that can't be read.</summary>
+    // The biggest file looked through for what's found, a log of a few hundred megabytes isn't code
+    private const long MOST_READ = 4L * 1024 * 1024;
+
+    /// <summary>The lines of a file, none for one that can't be read, is huge, or has nothings (zero bytes) in it and isn't text after all.</summary>
     public static string[] ReadLines(string file)
     {
         try
         {
-            return File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            if (new FileInfo(file).Length > MOST_READ)
+                return [];
+
+            string text = File.ReadAllText(file);
+            return text.Contains('\0') ? [] : text.Replace("\r\n", "\n").Split('\n');
         }
         catch (Exception)
         {

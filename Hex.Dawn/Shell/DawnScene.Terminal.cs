@@ -73,6 +73,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminals.Commands.Register("hex_terminal_focus", Said("terminal_page.command_terminal_focus"), ToggleTerminalFocus, "Ctrl+`", HexOwns);
         terminals.Commands.Register("hex_new_terminal", Said("terminal_page.command_new_terminal"), NewTerminal, "Ctrl+Shift+`", HexOwns);
         terminals.Commands.Register("hex_run", Said("terminal_page.command_run"), RunOrPlay, "F5", HexOwns);
+        terminals.Commands.Register("hex_palette", Said("terminal_page.command_palette"), CommandPalette, "F1", HexOwns);
         terminals.Commands.Register("hex_run_to_terminal", Said("terminal_page.command_run_to_terminal"), () =>
         {
             settings.RunToTerminal = !settings.RunToTerminal;

@@ -7,7 +7,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 /// <summary>One problem, where it is, what it is, and whether it is only a warning.</summary>
-internal readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning);
+internal readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning, bool Hint = false);
 
 // The panel under the editor, put away and brought back with Ctrl+J. Problems is everything wrong with the file that is
 // open and, after F8, with every file of the workspace, a row a problem, a click goes there. Output is everything Hex has
@@ -60,6 +60,10 @@ internal sealed partial class DawnScene
     // How much of the middle the panel took the last time the editor was fitted round it, see FitChrome
     private float panelTaken;
 
+    // How tall the panel is wanted open, as it was dragged or as it comes. What it is is that or what the window has room
+    // for, worked out again every tick, so a tick with too little room doesn't lose it for good
+    private float panelWanted;
+
     private readonly List<HexProblem> problemList = [];
 
     private void BuildPanel()
@@ -73,12 +77,13 @@ internal sealed partial class DawnScene
         bottom.Show(!settings.PanelHidden, instantly: true);
         if (settings.PanelHeight > 0.0f)
             bottom.Size = bottom.Size with { Y = Math.Clamp(settings.PanelHeight, MIN_PANEL, MAX_PANEL) };
+        panelWanted = bottom.Size.Y;
 
         bottom.MinSize = new Vector2(0.0f, MIN_PANEL);
         bottom.MaxSize = new Vector2(0.0f, MAX_PANEL);
         bottom.GripSize = 2.0f;
         bottom.GripReach = 8.0f;
-        bottom.OnResized = size => settings.PanelHeight = size.Y;
+        bottom.OnResized = size => settings.PanelHeight = panelWanted = size.Y;
         bottom.OnResizeEnded = _ => SaveSettings();
         bottom.OnFold = CollapsePanel;
     }
@@ -201,7 +206,7 @@ internal sealed partial class DawnScene
             problemList.Add(new HexProblem(here, error.Line, error.Column, error.Message, false));
 
         foreach (UICodeDiagnostic diagnostic in code.Diagnostics)
-            problemList.Add(new HexProblem(here, diagnostic.Line, diagnostic.Column, diagnostic.Message, diagnostic.Warning));
+            problemList.Add(new HexProblem(here, diagnostic.Line, diagnostic.Column, diagnostic.Message, diagnostic.Warning, diagnostic.Hint));
 
         if (workspaceProblems is not null)
         {
@@ -220,8 +225,9 @@ internal sealed partial class DawnScene
 
         problemList.AddRange(terminalProblems);
 
+        // What's only worth a look is listed, and counted with neither
         errorCount = problemList.Count(problem => !problem.Warning);
-        warningCount = problemList.Count - errorCount;
+        warningCount = problemList.Count(problem => problem.Warning && !problem.Hint);
     }
 
     /// <summary>Helper method to put the rows of the problems together out of what was gathered.</summary>
@@ -234,9 +240,8 @@ internal sealed partial class DawnScene
             var row = items[i].Get<Button>("row");
             var caption = items[i].Get<Label>("caption");
 
-            string where = $"{Path.GetFileName(problem.Path)}:{problem.Line + 1}";
-            caption.Text = $"$({(problem.Warning ? "warning" : "error")})  {UIRichText.Plain(problem.Text)}   {where}";
-            caption.Color = problem.Warning ? WarningColor : ErrorColor;
+            caption.Text = ProblemCaption(problem);
+            caption.Color = null;
             row.Tooltip = problem.Path;
             row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
             row.OnContextMenu = _ => ShowProblemMenu(problem);
@@ -246,6 +251,28 @@ internal sealed partial class DawnScene
             Hint(problems, workspaceProblems is null ? Said("panel_tabs.nothing_wrong_here") : Said("panel_tabs.nothing_wrong_anywhere"));
 
         FitRowsTo(problems, problemsScroll);
+    }
+
+    // What a server says a problem is called, in brackets after what it says about it ("(dscanner.suspicious.unused_variable)")
+    private static readonly System.Text.RegularExpressions.Regex ProblemCode = new(@"^(?<said>.*?)\s*\((?<code>[^()\s]+)\)\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// A row of the problems the way VS Code has them, only its icon in the colour of how bad it is, what's wrong in the
+    /// text's colour, and what the server calls it and where it is quiet after. The whole line was red or yellow, and a
+    /// panel of them shouted.
+    /// </summary>
+    private static string ProblemCaption(HexProblem problem)
+    {
+        string shade = problem.Hint ? "dim" : problem.Warning ? "warning" : "error";
+        string icon = problem.Hint ? "info" : problem.Warning ? "warning" : "error";
+        string where = $"{Path.GetFileName(problem.Path)}:{problem.Line + 1}";
+
+        string text = UIRichText.Literal(problem.Text);
+        string code = string.Empty;
+        if (ProblemCode.Match(text) is { Success: true } named)
+            (text, code) = (named.Groups["said"].Value, named.Groups["code"].Value + "  ");
+
+        return $"[color:{shade}]$({icon})[/color]  {text}   [color:dim]{code}{where}[/color]";
     }
 
     /// <summary>
@@ -282,6 +309,10 @@ internal sealed partial class DawnScene
         var label = row.Get<Label>("line");
         label.Text = UIRichText.Plain(line.Text);
         label.Color = line.Error ? ErrorColor : DimColor;
+
+        // A long line goes on under itself, the width of the panel (FitChrome keeps it so), it ran off the right edge
+        label.Wrap = true;
+        label.Size = label.Size with { X = MathF.Max(MIN_FLEXIBLE, outputScroll.Size.X - ROW_MARGIN) };
     }
 
     private void ShowProblemMenu(HexProblem problem)

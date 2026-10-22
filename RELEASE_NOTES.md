@@ -1,88 +1,90 @@
-# Hex 0.4.0
+# Hex 1.0.0
 
-Hex is the editor of [Horizon](https://github.com/bogzxo/horizon), the engine, and the IDE of HIDL, the language its
-games, layouts and skins are written in. It's one program with two sides. Started plainly it is **Dawn**, the editor.
-Started with `--dusk`, or as a copy of it called Dusk, it is **Dusk**, a terminal in a window of its own. Both are drawn
-by the engine, with the same UI code a game draws its menus with, so what Hex shows of a layout is the real thing.
+ok its actually 1.0 now :3
 
-## Dawn, the editor
+hex is the editor of [Horizon](https://github.com/bogzxo/horizon) and the IDE for HIDL. started normally its
+**Dawn**, the editor. started with `--dusk` its **Dusk**, the terminal. same program, both drawn by Horizon's own UI on
+Vulkan, no electron was harmed in the making of this
 
-VS Code's shape. A title bar with the menus in it, an activity bar and a side bar (the explorer, search, the outline,
-the designer's toolbox), tabs and breadcrumbs over the editor, problems, output and a terminal under it, the properties
-on the right and a status bar. Ctrl+Shift+P is every command there is.
+this one is mostly me going "why does it look like that" at every single panel until it stopped looking like that. the
+whole thing got rebuilt around glass, the keyboard works everywhere, D is a real language in here now, and theres a file
+dialog thats actually nice to use
 
-**Layouts.** A `.hor` file that says `#define layout` opens as its designer. Components come out of a palette onto a
-canvas, there's a tree of the layout, layers, templates, the skin's art to pick from, properties in sections that fold
-and undo throughout. F7 turns the layout into its code and back, and what was typed goes into the layout on the way.
-A save keeps the comments somebody wrote, over the same declaration even after it was renamed or moved.
+## whats new
 
-**HIDL.** Every other `.hor` opens as code, coloured, checked as it is typed and with its outline on the left.
-- Completion as you type, a component's properties inside its braces, the game's text keys after an `@` and the
-  names of the whole workspace everywhere else.
-- F12 goes to a declaration, Shift+F12 finds every use, F8 checks every file of the workspace.
-- Values, the right side of a file, is what the file comes to, run a moment after it was typed into and shown as a
-  tree. A click on a value goes to where it was written.
-- The HIDL console under the editor runs a line in what the file came to.
+### it looks good now (i hope)
 
-**Other languages.** C#, Python, JSON, Markdown, HLSL and Slang among sixty more are coloured with VS Code's own
-grammars, C# in Visual Studio's colours. A language server named in `language_servers.hor` lints a file and completes
-in it, when it is on the machine.
+- **looks**, pick one in Settings > Appearance > Profiles or from the palette (View, Look)
+  - **Fluid Glass** is the default. clear glass that bends whats behind it at the rim, apple liquid glass style
+  - **Frosted Glass** is the calmer milky one, nicer for walls of text
+  - **Flat** takes the glass away completely
+  - change anything and save it as a profile of your own
+- the glass is darker with way more contrast, it was looking washed out af before
+- every panel is a rounded card on the window and every window, dialog, menu and popup is the same stuff now
+- new welcome page, new About window, the toolbox lines up, the side headings are bold, empty panels say so properly
+- the designer's yes/no properties are switches instead of "< yes >" lol
+- the bottom panel slides open and shut instead of snapping (and stopped glitching while it does it)
+- code is a size bigger, it was smaller than the UI text which was kinda cursed
 
-**Debugging C#.** F9 puts a breakpoint on a line, F5 builds the project and runs it under
-[netcoredbg](https://github.com/Samsung/netcoredbg), looked for next to Hex, in the settings folder or on the PATH.
-Where it stops the line is lit and the Debug side has the stack and the variables, on VS Code's keys (F10, F11,
-Shift+F11, Shift+F5).
+### the keyboard actually works
 
-**Tasks.** A `tasks.hor` in the workspace lists its tasks. Ctrl+Shift+B runs the build, and a task runs in a terminal
-tab named after it.
+- Tab goes round every window and dialog and never escapes to whatevers behind it, with a ring on whatever has it
+- Enter or space presses buttons, up and down change dropdowns, Escape closes things (once, not twice)
+- a dialog puts the keyboard on its main button, which is always the one on the right
+- shortcuts go off when you press the key, so Ctrl+Shift+F doesnt turn into a Ctrl+F if you let go of shift first :skull:
 
-**The workspace.** Any number of folders, saved as a `.hex-workspace` and opened again when Hex starts. Ctrl+P opens
-a file by a few letters of its name, Ctrl+Shift+F finds in all of them. Every key is in Help, Keyboard Shortcuts, and
-can be changed there.
+### a file dialog
 
-**Extensions.** An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. It can add commands and
-keys, put up menus, questions, cards and windows, give a file a view of its own, read and write files and change a
-`.hor` by the paths of its values with the file's comments and spacing kept. It is read again by itself when it is
-saved. Hello Dolly and Fighter2D's move editor come with Hex. See `docs/extensions.md`.
+hex has its own file dialog now, the same on windows, linux and mac (on wayland too, where typing into it didnt work)
 
-**HIDL's language server.** `Hex --lsp` is the same knowledge of HIDL for any other editor that speaks the protocol.
+- icons, sizes and dates, back, forward and up, your places down the side
+- type a few letters to jump to a file, Enter opens, Backspace goes up a folder, type a path and it goes there
+- opens any file, not just layouts. if it isnt text it asks first
+- All files is the default filter, Save As keeps your extension and only selects the name
 
-## Dusk, the terminal
+### D !!
 
-Tabs of shells, every tab a tree of splits dragged by their edges, a profile for every shell the machine has
-(PowerShell, cmd, Git Bash, WSL, bash, zsh), a command palette, themes and plugins in HIDL. On Windows it can drop down
-from the top of the screen on a key. On Linux and macOS bind `hex --dusk --toggle` to a key in the desktop's settings.
+- D gets coloured, hex has its own D grammar since textmate didnt have one
+- serve-d gives you errors, warnings, hints and actual context aware autocomplete, it even offers to download DCD
+  for you
+- the outline lists your types and functions
+- remember "D NEARLY works..."? it works now
 
-## Running it
+### language servers
 
-Download the zip for your system from this release, unpack it anywhere and run `Hex` (`Hex.exe` on Windows). It is
-compiled ahead of time, so nothing else needs installing to run it, .NET included.
+- add your own in Settings > Editor > Language servers. pick the language, the files (`.d|.di`), the server, done
+- a server can be given settings and can ask you things
+- a server that crashes gets started again instead of quietly dying, and if it keeps dying it tells you
+- the list shows whats on your machine with a little dot instead of a wall of red text
 
-- **Windows** 10 1809 or later.
+### F5
+
+- **Set Up F5** writes the build and run tasks for you (D, C#, Rust, Go, C, C++, Python, Node, anything really), then F5
+  builds it and runs it
+- tasks can depend on each other and run in the terminal panel or a Dusk window of their own, your pick
+
+### the rest
+
+- Find in Files and quick open (Ctrl+P) go through every text file now, not just .hor
+- the problems panel is calmer, only the icon is red
+- the palette stopped listing random scattered letter matches when real ones exist
+- hex can sit in the windows right click menu and add itself to the PATH (Settings)
+- Dusk got `--window` for a window of its own, sliders for its numbers, and F1 opens the palette from Dawn's terminal panel
+- the window resizes on wayland
+- a ton of fixes. the status bar cutting things off, Close from the palette saving without asking, the panel squishing
+  to one line in a layout's code view, etc etc
+
+## running it
+
+grab the zip for your system from this release, unpack it anywhere and run `Hex` (`Hex.exe` on windows). its compiled
+ahead of time so you dont need to install anything, .NET included
+
+- **Windows** 10 1809 or later
 - **Linux** on Wayland or X11, with the Vulkan loader and a driver (`libvulkan1` and `mesa-vulkan-drivers` on Debian
-  and Ubuntu). `scripts/install-desktop.sh` gives Hex its name and icon in the dock.
-- **macOS** 11 or later on Apple silicon. Vulkan is MoltenVK, which comes with it. Hex isn't signed, so macOS stops a
-  downloaded copy from starting until `xattr -dr com.apple.quarantine Hex` is run on the unpacked folder.
+  and Ubuntu). `scripts/install-desktop.sh` gives Hex its name and icon in the dock
+- **macOS** 11 or later on Apple silicon. Vulkan is MoltenVK, which comes with it. hex isnt signed, so macOS wont start a
+  downloaded copy until you run `xattr -dr com.apple.quarantine Hex` on the unpacked folder
 
-Hex keeps everything of its own next to itself, its settings in `settings`, what it keeps in `data` and its compiled
-shaders in `cache`, so a copy carried about takes all of it along. Where it can't write next to itself (a system
-folder) it's `%AppData%\Hex`, `~/.config/hex` and `~/Library/Application Support/Hex` as before.
-
-## In this release
-
-- Everything Hex says comes out of its strings file, `Assets/hex/localisation/en-gb.hor`, every menu, notice, dialog,
-  tooltip and setting, so another language is another file.
-- The release notes come from Hex's releases on GitHub, with the history from before them underneath.
-- A Motion section in the settings, how quick the interface moves and how long the caret takes to glide, 0 for nothing
-  moving at all, and in Dusk how long the cursor glides.
-- A preview under the glass sliders that shows what they make as they move. Frosted glass is see through again, it had
-  come out as a solid panel.
-- Settings, data and shader caches next to Hex, see above. The shader cache knows the compiler it was made with and
-  clears out what hasn't been used for a month, and the driver's pipeline cache is kept as it's made.
-- Neither side asks the system about gamepads any more, a broken controller driver had held Hex's window up for a minute.
-- Dusk starts straight away on a machine with WSL but no distribution (it had waited on `wsl` and the profiles plugin
-  failed), and `wsl` gets two seconds to answer, once a run.
-- Up in Dusk brings back the command that was run, as it was run, it had come back scrambled after an edit in the
-  middle of the line. Micro scrolling a long file no longer leaves letters smeared between the rows.
-- Tab completes git, dotnet and friends in Dusk.
-- On Linux and macOS a shell's first line is no longer lost before the terminal is listening.
+hex keeps everything of its own next to itself, settings in `settings`, what it keeps in `data` and its compiled shaders
+in `cache`, so a copy you carry around takes all of it with it. where it cant write next to itself (a system folder) its
+`%AppData%\Hex`, `~/.config/hex` and `~/Library/Application Support/Hex`

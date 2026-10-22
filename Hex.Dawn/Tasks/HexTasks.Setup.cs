@@ -101,23 +101,38 @@ internal sealed partial class HexTasks
         setupKind = new Dropdown(kinds) { Size = new Vector2(300.0f, SETUP_FIELD), MaxRows = 12, OnChanged = KindPicked };
         body.Add(SetupField(Said("setup_kind"), setupKind));
 
-        setupBuild = new TextBox { Size = new Vector2(SETUP_WIDTH - SETUP_CAPTION - 10.0f, SETUP_FIELD), Placeholder = Said("setup_build_hint"), MaxLength = 1000 };
+        // Enter in any of its boxes saves and runs, the way the primary button does
+        setupBuild = new TextBox { Size = new Vector2(SETUP_WIDTH - SETUP_CAPTION - 10.0f, SETUP_FIELD), Placeholder = Said("setup_build_hint"), MaxLength = 1000, OnSubmitted = _ => SaveSetup(run: true) };
         body.Add(SetupField(Said("setup_build"), setupBuild));
 
-        setupRun = new TextBox { Size = new Vector2(SETUP_WIDTH - SETUP_CAPTION - 10.0f, SETUP_FIELD), Placeholder = Said("setup_run_hint"), MaxLength = 1000 };
+        setupRun = new TextBox { Size = new Vector2(SETUP_WIDTH - SETUP_CAPTION - 10.0f, SETUP_FIELD), Placeholder = Said("setup_run_hint"), MaxLength = 1000, OnSubmitted = _ => SaveSetup(run: true) };
         body.Add(SetupField(Said("setup_run"), setupRun));
 
-        setupFolder = new TextBox { Size = new Vector2(300.0f, SETUP_FIELD), Text = ".", MaxLength = 400 };
-        body.Add(SetupField(Said("setup_folder"), setupFolder));
+        // Where it runs, the folder of the tasks unless another is typed or picked, as far down from it as it is. Empty
+        // says which folder that is by name, a lone "." told nobody anything
+        string here = Path.GetFileName(setupRoot.TrimEnd('/', '\\')) is { Length: > 0 } rootName ? rootName : setupRoot;
+        setupFolder = new TextBox
+        {
+            Size = new Vector2(SETUP_WIDTH - SETUP_CAPTION - 10.0f - 110.0f, SETUP_FIELD),
+            Placeholder = context.Strings.Said("tasks.setup_folder_here", ("folder", here)),
+            MaxLength = 400,
+            OnSubmitted = _ => SaveSetup(run: true)
+        };
+        var folderLine = SetupField(Said("setup_folder"), setupFolder);
+        folderLine.Add(new Button { Label = Said("setup_browse"), Size = new Vector2(100.0f, SETUP_FIELD), OnPressed = BrowseSetupFolder });
+        body.Add(folderLine);
 
         setupOutput = new Dropdown(Said("setup_in_panel"), Said("setup_in_dusk")) { Size = new Vector2(300.0f, SETUP_FIELD) };
         body.Add(SetupField(Said("setup_output"), setupOutput));
 
-        var foot = body.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 10.0f, Anchor = Origin.Left, Pivot = Origin.Left, Padding = new UIEdges(0.0f, 6.0f, 0.0f, 0.0f) });
-        foot.Add(new Button { Label = Said("setup_save_run"), Primary = true, Size = new Vector2(150.0f, SETUP_FIELD), OnPressed = () => SaveSetup(run: true) });
-        foot.Add(new Button { Label = Said("setup_save"), Size = new Vector2(100.0f, SETUP_FIELD), OnPressed = () => SaveSetup(run: false) });
-        foot.Add(new Button { Label = Said("setup_cancel"), Size = new Vector2(100.0f, SETUP_FIELD), OnPressed = window.Close });
-        setupSaid = foot.Add(new Label { Size = new Vector2(SETUP_WIDTH - 380.0f, SETUP_FIELD), Align = Origin.Left, Wrap = true });
+        // What it says along the bottom on the left, the buttons on the right with the one Enter presses last, as every
+        // dialog of the engine's has them
+        var foot = body.Add(new Panel { Size = new Vector2(SETUP_WIDTH, SETUP_FIELD + 6.0f), Anchor = Origin.Left, Pivot = Origin.Left, Padding = new UIEdges(0.0f, 6.0f, 0.0f, 0.0f) });
+        setupSaid = foot.Add(new Label { Size = new Vector2(SETUP_WIDTH - 390.0f, SETUP_FIELD), Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Wrap = true });
+        var buttons = foot.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 10.0f, Anchor = Origin.Right, Pivot = Origin.Right });
+        buttons.Add(new Button { Label = Said("setup_cancel"), Size = new Vector2(100.0f, SETUP_FIELD), OnPressed = window.Close });
+        buttons.Add(new Button { Label = Said("setup_save"), Size = new Vector2(100.0f, SETUP_FIELD), OnPressed = () => SaveSetup(run: false) });
+        buttons.Add(new Button { Label = Said("setup_save_run"), Primary = true, Size = new Vector2(150.0f, SETUP_FIELD), OnPressed = () => SaveSetup(run: true) });
 
         // What the folder's tasks say already, or the guess at what it is
         setupKind.Index = GuessPreset(setupRoot, setupFile);
@@ -126,7 +141,7 @@ internal sealed partial class HexTasks
         {
             setupRun.Text = run.Command;
             setupBuild.Text = known.Find(task => task.Name == "build")?.Command ?? string.Empty;
-            setupFolder.Text = run.Folder;
+            setupFolder.Text = run.Folder == "." ? string.Empty : run.Folder;
             setupOutput.Index = run.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
 
@@ -134,6 +149,16 @@ internal sealed partial class HexTasks
         chrome.Root.Add(window);
         setupBuild.Focus();
     }
+
+    // Browse beside Runs in, a folder picked and written as far down from the tasks' folder as it is, or whole outside it
+    private void BrowseSetupFolder() => context.Windows.ChooseFolder(picked =>
+    {
+        if (setupFolder is null)
+            return;
+
+        string inside = Path.GetRelativePath(setupRoot, picked);
+        setupFolder.Text = inside.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(inside) ? picked : inside;
+    });
 
     // A line of the window, what it is on the left and its control on the right
     private static StackPanel SetupField(string caption, UIComponent control)

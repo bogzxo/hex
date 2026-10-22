@@ -61,4 +61,11 @@ public static class HexText
 
         return text;
     }
+
+    /// <summary>
+    /// So many of something, said right whether it's one or more, "1 file", "3 files", by the counts' keys (file, line,
+    /// place, problem). The status bar said a word was "in 1 files".
+    /// </summary>
+    public static string Count(string what, int count) =>
+        Get($"counts.{what}_{(count == 1 ? "one" : "many")}", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 }

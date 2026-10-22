@@ -53,7 +53,9 @@ internal sealed partial class HexLanguages
         if (serverAsked.TryGetValue(of, out ServerAsking? asked) && asked.Word == word)
         {
             asked.Typed = editor.CompletionTyped;
-            if (!asked.Answered || !asked.Incomplete || asked.Prefix == prefix)
+            if (!asked.Answered)
+                return asked.Offered ?? Waiting(of, word.Start);
+            if (!asked.Incomplete || asked.Prefix == prefix)
                 return asked.Offered;
         }
 
@@ -86,8 +88,13 @@ internal sealed partial class HexLanguages
             context.Wake();
         }, TaskScheduler.Default);
 
-        return asking.Offered;
+        return asking.Offered ?? Waiting(of, start);
     }
+
+    // The list while the server's still thinking, a quiet row that says who's being asked. The first list from serve-d
+    // takes seconds, and nothing on screen for that long read as completion not working
+    private UICompletionRequest Waiting(HexDocument of, int start) =>
+        new(start, [], context.Strings.Said("languages.completion_waiting", ("server", ServerShownOf(of) ?? "the language server")));
 
     /// <summary>Every tick, what the servers answered is taken in, and the list opens for what is still being typed.</summary>
     private void UpdateServerCompletions()

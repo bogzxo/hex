@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Reflection;
 using System.Text;
 
 using Horizon.Rendering;
@@ -163,6 +162,9 @@ internal sealed partial class DawnScene
         window.OnClosed = () => window.Parent?.Remove(window);
         text = made.Get<Label>("text");
         text.Text = markdown;
+
+        // The keyboard in it, so Escape closes it the first time and the arrows don't go on to the code behind
+        window.TakeKeyboard();
         return window;
     }
 
@@ -170,15 +172,6 @@ internal sealed partial class DawnScene
     {
         ReadStrings();
         ShowText(Said("language.title"), Said("language.page"));
-    }
-
-    private void ShowAbout()
-    {
-        ReadStrings();
-        ShowText(Said("about.title"), Said("about.page",
-            ("version", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?"),
-            ("engine", typeof(UICompositor).Assembly.GetName().Version?.ToString(3) ?? "?"),
-            ("dotnet", Environment.Version.ToString())), 300.0f);
     }
 
     /// <summary>The Help menu.</summary>

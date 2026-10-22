@@ -103,6 +103,8 @@ internal sealed partial class DawnScene
         codeScroll.Color = card;
         foreach (HexDocument open in documents)
             open.Editor.Color = card;
+        if (welcome is not null)
+            welcome.Color = card;
 
         // The terminals of the panel under the editor round cornered like Dusk's, inside the card
         if (terminalPanel is not null)

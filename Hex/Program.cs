@@ -192,6 +192,7 @@ internal static partial class Program
           --dusk                   Dusk rather than Dawn (an exe called dusk.exe is Dusk too)
           --cwd <folder>           the folder the first terminal starts in (what a folder on its own is)
           --profile <id>           which shell the first terminal is
+          --window                 a window of its own rather than a tab of the Dusk that's running
           --scale <n>              how big the UI is drawn
           --size <w>x<h>           the window's size
           --selftest [part...]     go through the terminal and say what works, --exit to leave after

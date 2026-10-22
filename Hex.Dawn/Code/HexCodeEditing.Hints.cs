@@ -163,7 +163,7 @@ internal sealed partial class HexCodeEditing
 
         tabsDirty = true;
         string left = skipped.Count > 0 ? context.Strings.Said("code_hints.skipped_in_designer", ("skipped", string.Join(", ", skipped))) : string.Empty;
-        context.Notices.Say(context.Strings.Said("code_hints.renamed_everywhere", ("name", name), ("renamed", renamed), ("places", places.ToString()), ("files", files.ToString()), ("left", left)));
+        context.Notices.Say(context.Strings.Said("code_hints.renamed_everywhere", ("name", name), ("renamed", renamed), ("places", HexText.Count("place", places)), ("files", HexText.Count("file", files)), ("left", left)));
     }
 
     /* Swatches */

@@ -93,15 +93,21 @@ internal sealed partial class DawnScene
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
     }
 
+    // What a nothing (a zero byte) in a file that isn't text is shown as once it's opened anyway, the sign for one
+    private const char NOTHING_SHOWN = '\u2400';
+
     /// <summary>
     /// Opens a layout file in a tab of its own, and checks that writing it back out and reading that gives the
     /// same layout again: if it doesn't, saving would change it.
     /// </summary>
     /// <returns>Whether it opened and writes back the same.</returns>
-    // What a nothing (a zero byte) in a file that isn't text is shown as once it's opened anyway, the sign for one
-    private const char NOTHING_SHOWN = '\u2400';
+    public bool Open(string path) => Open(path, left: null);
 
-    public bool Open(string path)
+    /// <param name="left">
+    /// What leaving a file that isn't text does, for one picked in the Open dialog the dialog again with it picked, so
+    /// the next file is a key away. Null to just leave it.
+    /// </param>
+    private bool Open(string path, Action? left)
     {
         if (!File.Exists(path))
         {
@@ -132,9 +138,10 @@ internal sealed partial class DawnScene
         if (source.Contains('\0'))
         {
             string name = Path.GetFileName(path);
+            // Opening it is the one that can do harm, Enter and Escape both leave it
             UIDialog.Show(chrome, Said("documents.binary_title", ("name", name)), Said("documents.binary_body"),
-                new DialogChoice(Said("documents.open_anyway"), () => OpenText(path, source.Replace('\0', NOTHING_SHOWN))),
-                new DialogChoice(Said("documents.leave_it")));
+                new DialogChoice(Said("documents.open_anyway"), () => OpenText(path, source.Replace('\0', NOTHING_SHOWN)), Risky: true),
+                new DialogChoice(Said("documents.leave_it"), left));
             return false;
         }
 
@@ -244,11 +251,20 @@ internal sealed partial class DawnScene
             return;
         }
 
-        Ask(HexDialogs.Open(browseDirectory, DialogHost), path =>
+        // From the folder of the file that's open, where the next one wanted most likely is
+        string from = document.Path is { } here && Path.GetDirectoryName(Path.GetFullPath(here)) is { } folder && Directory.Exists(folder) ? folder : browseDirectory;
+        OpenFrom(from, string.Empty);
+    }
+
+    // Helper method to ask for a file to open in a folder, one of its files picked when it's named
+    private void OpenFrom(string folder, string picked)
+    {
+        Ask(HexDialogs.Open(folder, DialogHost, picked), path =>
         {
             // New layouts are saved to wherever was looked at last
-            browseDirectory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
-            Open(path);
+            string inside = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
+            browseDirectory = inside;
+            Open(path, () => OpenFrom(inside, Path.GetFileName(path)));
         });
     }
 
@@ -286,16 +302,22 @@ internal sealed partial class DawnScene
 
     private void SaveAs()
     {
+        // A file of code keeps its own name and kind, a layout is a .hor. A D file was offered as app.hor and saved so
+        HexDocument saved = document;
+        string? kind = saved.IsText && saved.Path is { } own && Path.GetExtension(own) is { Length: > 0 } extension ? extension : null;
+        string fileName = kind is not null ? Path.GetFileName(saved.Path!) : saved.Name + ".hor";
         if (options.SelfTest)
         {
-            SaveTo(Path.Combine(browseDirectory, document.Name + ".hor"));
+            SaveTo(Path.Combine(browseDirectory, fileName));
             return;
         }
 
-        HexDocument saved = document;
         string directory = saved.Path is { } known ? Path.GetDirectoryName(Path.GetFullPath(known))! : browseDirectory;
+        Task<string?> asked = kind is not null
+            ? HexDialogs.SaveFile(directory, fileName, [(Said("dialogs.files_of_kind", ("kind", kind)), "*" + kind)], DialogHost)
+            : HexDialogs.Save(directory, fileName, DialogHost);
 
-        Ask(HexDialogs.Save(directory, saved.Name + ".hor", DialogHost), path =>
+        Ask(asked, path =>
         {
             // The dialog was open for a while, the layout it was about may not be the one on screen any more
             if (!documents.Contains(saved))
@@ -379,6 +401,7 @@ internal sealed partial class DawnScene
             tabsDirty = treeDirty = true;
             Remember(path);
             WatchOpenFiles();
+            documentSaved?.Invoke(document);
             extensions.Raise("on_save", new StringValue(Path.GetFullPath(path)));
 
             Console.WriteLine($"[Hex] Saved '{path}'.");

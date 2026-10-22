@@ -113,9 +113,13 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>Every item of every menu, with the menus it's in, the ones that do something.</summary>
+    /// <summary>
+    /// Every item of every menu, with the menus it's in, the ones that do something. Not the files of Open Recent, which
+    /// come and go and aren't a command to put on a key ("1  app.d" was in the list of keys to set).
+    /// </summary>
     private IEnumerable<(MenuItem Item, string Path)> Commands() =>
-        menu.Menus.SelectMany(bar => bar.Everything()).Where(pair => pair.Item is { IsSeparator: false, Submenu: null, OnPicked: not null });
+        menu.Menus.SelectMany(bar => bar.Everything()).Where(pair => pair.Item is { IsSeparator: false, Submenu: null, OnPicked: not null }
+            && (recentMenu is null || !recentMenu.Items.Contains(pair.Item)));
 
     private static string LabelOf(MenuItem item) => item.Label.TrimEnd('.');
 
@@ -222,6 +226,23 @@ internal sealed partial class DawnScene
         keysTree = made.Get<TreeView>("keys_tree");
         keysFilter = made.Get<TextBox>("keys_filter");
         keysFilter.OnChanged = _ => FillKeysTree();
+
+        // The filter walks the list the way the palette's box does, up and down and the pages, and Enter sets a key for
+        // the row it's on. The arrows did nothing there and the list had to be tabbed to
+        keysFilter.OnKey = key =>
+        {
+            int by = key switch { UIKeyboard.UP => -1, UIKeyboard.DOWN => 1, UIKeyboard.PAGE_UP => -10, UIKeyboard.PAGE_DOWN => 10, _ => 0 };
+            if (by == 0 || keysTree is not { Items.Count: > 0 } list)
+                return;
+
+            int at = list.Selected is { } picked ? list.Items.IndexOf(picked) : -1;
+            list.Selected = list.Items[Math.Clamp(at + by, 0, list.Items.Count - 1)];
+        };
+        keysFilter.OnSubmitted = _ =>
+        {
+            if (keysTree?.Selected is { Tag: MenuItem item })
+                AskForKey(item);
+        };
         keysTree.OnActivated = row =>
         {
             if (row.Tag is MenuItem item)
@@ -278,6 +299,7 @@ internal sealed partial class DawnScene
     private void AskForKey(MenuItem item)
     {
         keyFor = item;
+        keyJustAsked = true;
         keyDialog = UIDialog.Show(chrome, Said("keys.press_title", ("command", LabelOf(item))),
             Said("keys.press_text", ("key", item.Shortcut.Length > 0 ? item.Shortcut : Said("keys.no_key"))),
             new DialogChoice(Said("keys.leave_it")));
@@ -313,17 +335,22 @@ internal sealed partial class DawnScene
             return false;
         }
 
+        // Not the press that asked (Enter in the filter or on a row), which would be the key it was put on
+        if (keyJustAsked)
+        {
+            keyJustAsked = false;
+            return true;
+        }
+
         foreach (Key key in PressableKeys)
         {
             if (!keyboard.WasPressed(key))
                 continue;
 
+            // Escape is the question's own, it cancels it. Closed here first, the same press went on to the window under
+            // it and closed that too
             if (key == Key.Escape && !keyboard.Control && !keyboard.Shift && !keyboard.Alt)
-            {
-                keyDialog.Close();
-                keyFor = null;
                 return true;
-            }
 
             KeyPressedFor(keyFor, key, keyboard.Control, keyboard.Shift, keyboard.Alt);
             break;
@@ -331,6 +358,9 @@ internal sealed partial class DawnScene
 
         return true;
     }
+
+    // Whether the key for a command was asked for this tick, the press that asked is let go
+    private bool keyJustAsked;
 
     private static readonly Key[] PressableKeys = [.. Enum.GetValues<Key>().Distinct().Where(key => !UIKeys.IsHeld(key))];
 

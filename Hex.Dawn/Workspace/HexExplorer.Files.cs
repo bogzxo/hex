@@ -282,7 +282,10 @@ internal sealed partial class HexExplorer
         context.Notices.Say(context.Strings.Said("explorer_files.in_trash", ("name", Path.GetFileName(full))));
     }
 
-    /// <summary>The icon of a file in the explorer and the lists, by what it is.</summary>
+    /// <summary>
+    /// The icon of a file in the explorer and the lists, by what it is. Hex's own files (a workspace, a skin, a language)
+    /// have their own, anything else is what the engine's file dialog draws it with.
+    /// </summary>
     internal static string FileIcon(string path)
     {
         string name = Path.GetFileName(path);
@@ -292,26 +295,10 @@ internal sealed partial class HexExplorer
             return "folder-library";
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return "paintcan";
-        if (extension == ".hor")
-            return Path.GetFileName(Path.GetDirectoryName(path))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true ? "globe" : "file-code";
+        if (extension == ".hor" && Path.GetFileName(Path.GetDirectoryName(path))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)
+            return "globe";
 
-        return extension switch
-        {
-            ".png" or ".jpg" or ".jpeg" or ".aseprite" or ".ase" or ".gif" or ".bmp" or ".svg" or ".ico" => "file-media",
-            ".ttf" or ".otf" or ".fnt" => "symbol-text",
-            ".md" or ".markdown" => "markdown",
-            ".txt" or ".log" => "book",
-            ".json" or ".tmx" or ".tsx" or ".xml" or ".yaml" or ".yml" or ".toml" => "json",
-            ".slang" or ".hlsl" or ".glsl" => "symbol-color",
-            ".cs" or ".csproj" or ".sln" or ".props" or ".targets" => "symbol-class",
-            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" or ".d" or ".di" => "code",
-            ".ps1" or ".bash" or ".sh" or ".cmd" or ".bat" => "terminal",
-            ".zip" or ".7z" or ".gz" or ".tar" => "file-zip",
-            ".pdf" => "file-pdf",
-            ".exe" or ".dll" or ".pdb" or ".so" or ".dylib" or ".bin" => "file-binary",
-            ".wav" or ".ogg" or ".mp3" or ".flac" => "unmute",
-            _ => "file"
-        };
+        return UIFileKinds.IconOf(path);
     }
 
     /// <summary>
@@ -323,18 +310,7 @@ internal sealed partial class HexExplorer
         if (compositor.Skin?.Syntax is not { } syntax)
             return null;
 
-        return Path.GetExtension(path).ToLowerInvariant() switch
-        {
-            ".hor" or ".hexspace" => syntax.Declaration,
-            ".cs" or ".csproj" or ".sln" or ".props" or ".targets" => syntax.Keyword,
-            ".json" or ".yaml" or ".yml" or ".toml" or ".tmx" or ".tsx" or ".xml" => syntax.Call,
-            ".md" or ".markdown" or ".txt" => syntax.Property,
-            ".png" or ".jpg" or ".jpeg" or ".aseprite" or ".ase" or ".gif" or ".bmp" or ".svg" or ".ico" => syntax.Text,
-            ".slang" or ".hlsl" or ".glsl" => syntax.Number,
-            ".py" or ".js" or ".ts" or ".mjs" or ".lua" or ".rs" or ".c" or ".h" or ".cpp" or ".go" or ".d" or ".di" => syntax.Type,
-            ".ps1" or ".bash" or ".sh" or ".cmd" or ".bat" => syntax.Builtin,
-            _ => null
-        };
+        return Path.GetExtension(path).Equals(".hexspace", StringComparison.OrdinalIgnoreCase) ? syntax.Declaration : UIFileKinds.ColourOf(path, syntax);
     }
 
     internal void PickFile(string path, bool isDirectory)

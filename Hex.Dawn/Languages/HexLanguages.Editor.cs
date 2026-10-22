@@ -12,6 +12,9 @@ internal sealed partial class HexLanguages
 {
     private const float EDITOR_WIDTH = 640.0f, CAPTION_WIDTH = 110.0f, FIELD_HEIGHT = 28.0f, ROW_BUTTON_WIDTH = 74.0f;
 
+    // How wide every box of the form is, the server's with Browse after it, so their left and right edges line up
+    private const float BROWSE_WIDTH = 100.0f, FIELD_WIDTH = EDITOR_WIDTH - CAPTION_WIDTH - BROWSE_WIDTH - 10.0f;
+
     // The panel while the settings are up, the rows of the servers in it, and the form for adding one
     private StackPanel? serverRows;
     private Dropdown? addLanguage;
@@ -34,6 +37,7 @@ internal sealed partial class HexLanguages
         serverRows = panel.Add(new StackPanel { Spacing = 6.0f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
         FillServerRows();
 
+        panel.Add(new Spacer { Size = new Vector2(EDITOR_WIDTH, 8.0f) });
         panel.Add(Heading(context.Strings.Said("language_settings.add_title")));
         panel.Add(new Label
         {
@@ -41,21 +45,23 @@ internal sealed partial class HexLanguages
             Wrap = true,
             Size = new Vector2(EDITOR_WIDTH, 0.0f),
             Align = Origin.TopLeft,
+            Anchor = Origin.TopLeft,
+            Pivot = Origin.TopLeft,
             Color = context.Window.Compositor.Skin?.DimTextColor
         });
 
         string[] names = [.. CodeLanguagesList.Select(language => language.Name)];
-        addLanguage = new Dropdown(names) { Size = new Vector2(260.0f, FIELD_HEIGHT), MaxRows = 12, OnChanged = LanguagePicked };
+        addLanguage = new Dropdown(names) { Size = new Vector2(FIELD_WIDTH, FIELD_HEIGHT), MaxRows = 12, OnChanged = LanguagePicked };
         panel.Add(Field(context.Strings.Said("language_settings.language"), addLanguage));
 
-        addExtensions = new TextBox { Size = new Vector2(260.0f, FIELD_HEIGHT), Placeholder = ".d|.di", MaxLength = 200 };
+        addExtensions = new TextBox { Size = new Vector2(FIELD_WIDTH, FIELD_HEIGHT), Placeholder = ".d|.di", MaxLength = 200 };
         panel.Add(Field(context.Strings.Said("language_settings.extensions"), addExtensions));
 
-        addCommand = new TextBox { Size = new Vector2(EDITOR_WIDTH - CAPTION_WIDTH - 110.0f, FIELD_HEIGHT), Placeholder = context.Strings.Said("language_settings.server_hint"), MaxLength = 1024 };
-        var browse = new Button { Label = context.Strings.Said("language_settings.browse"), Size = new Vector2(100.0f, FIELD_HEIGHT), OnPressed = BrowseForServer };
+        addCommand = new TextBox { Size = new Vector2(FIELD_WIDTH, FIELD_HEIGHT), Placeholder = context.Strings.Said("language_settings.server_hint"), MaxLength = 1024 };
+        var browse = new Button { Label = context.Strings.Said("language_settings.browse"), Size = new Vector2(BROWSE_WIDTH, FIELD_HEIGHT), OnPressed = BrowseForServer };
         panel.Add(Field(context.Strings.Said("language_settings.server"), addCommand, browse));
 
-        addArguments = new TextBox { Size = new Vector2(260.0f, FIELD_HEIGHT), Placeholder = context.Strings.Said("language_settings.arguments_hint"), MaxLength = 400 };
+        addArguments = new TextBox { Size = new Vector2(FIELD_WIDTH, FIELD_HEIGHT), Placeholder = context.Strings.Said("language_settings.arguments_hint"), MaxLength = 400 };
         panel.Add(Field(context.Strings.Said("language_settings.arguments"), addArguments));
 
         var foot = panel.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 12.0f, Anchor = Origin.Left, Pivot = Origin.Left });
@@ -73,8 +79,9 @@ internal sealed partial class HexLanguages
         return panel;
     }
 
+    // A heading of the panel, from the left as the rows under it are. Laid in the middle of the panel it sat 5 pixels in
     private static Label Heading(string text) =>
-        new() { Text = $"[b]{UIRichText.Literal(text)}[/b]", Markdown = true, Size = new Vector2(EDITOR_WIDTH, 0.0f), Align = Origin.TopLeft, Padding = new UIEdges(0.0f, 6.0f, 0.0f, 0.0f) };
+        new() { Text = $"[b]{UIRichText.Literal(text)}[/b]", Markdown = true, Size = new Vector2(EDITOR_WIDTH, 0.0f), Align = Origin.TopLeft, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
 
     // A line of the form, what it is on the left and its control (and a button after it) on the right
     private static StackPanel Field(string caption, UIComponent control, UIComponent? after = null)

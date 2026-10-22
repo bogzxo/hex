@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
             SettingsWindow is { Visible: true } window && window.Parent == chrome.Root && SettingsPage is { } page
             && page.Settings.Any(setting => setting.Key == "editor_skin") && page.Settings.Any(setting => setting.Key == "scrollback")
             && page.Settings.Any(setting => setting.Key == "backdrop_image") && page.Settings.Any(setting => setting.Key == "layout_skin")
-            && Value("editor_skin") is StringValue { Value: "Flat, horizon" });
+            && Value("editor_skin") is StringValue { Value: "Horizon" });
         test.Check("settings: in order, how Hex looks first with both modes' themes in it, then the editor, the terminal and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Appearance", "Editor", "Terminal", "Extensions"])
             && SettingsPage.Settings.Where(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
@@ -99,14 +99,14 @@ internal sealed partial class DawnScene
         string? next = null;
         test.Run(() =>
         {
-            next = SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices!.First(choice => choice.StartsWith("Flat, ") && choice != "Flat, horizon");
-            SettingsPage.Enter("editor_skin", new StringValue(next));
+            next = EditorSkins().First(choice => choice.Skin.Name == TOOL_SKIN_NAME && choice.Theme is not null and not "horizon").Text;
+            SettingsPage!.Enter("editor_skin", new StringValue(next));
         });
         test.Settle(0.3f);
         test.Check("settings: the editor goes into another theme of its skin there and then", () =>
-            settings.EditorTheme != "horizon" && settings.EditorSkin == "flat" && compositor.Skin?.Theme == settings.EditorTheme && next!.EndsWith(settings.EditorTheme));
+            settings.EditorTheme != "horizon" && settings.EditorSkin == "flat" && compositor.Skin?.Theme == settings.EditorTheme && next!.Replace(' ', '_').EndsWith(settings.EditorTheme, StringComparison.OrdinalIgnoreCase));
         test.Check("settings: the editor can wear any skin there is, the row has every one of them", () =>
-            SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices is { } listed && listed.Length > UISkins.Available.Count && listed.Any(text => text.StartsWith("Dead Revolver")));
+            SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices is { } listed && listed.Length > UISkins.Available.Count && listed.Any(text => text.Contains("Dead Revolver")));
         // The lists of the sides are the panel's colour, see through on glass, and the code's box the panel itself
         test.Check("settings: boxes, background and all", () =>
             compositor.Skin is { } worn && treeScroll.Color is { } box && box with { W = 1.0f } == worn.PanelColor with { W = 1.0f }

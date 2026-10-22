@@ -18,9 +18,11 @@ public static class HexDialogs
 
     public static string OPEN_TITLE => HexText.Get("dialogs.open_title");
     public static string SAVE_TITLE => HexText.Get("dialogs.save_title");
+    public static string SAVE_FILE_TITLE => HexText.Get("dialogs.save_file_title");
 
     /// <param name="directory">The folder it starts in.</param>
-    public static Task<string?> Open(string directory, UIDialogHost host) => UIFileDialogs.Open(OPEN_TITLE, directory, Layouts, host);
+    /// <param name="picked">A file in it picked as it opens, none for empty.</param>
+    public static Task<string?> Open(string directory, UIDialogHost host, string picked = "") => UIFileDialogs.Open(OPEN_TITLE, directory, Layouts, host, picked);
 
     /// <summary>A workspace file to open (.hex-workspace).</summary>
     public static Task<string?> OpenWorkspace(string directory, UIDialogHost host) => UIFileDialogs.Open(OPEN_WORKSPACE_TITLE, directory, Workspaces, host);
@@ -38,4 +40,8 @@ public static class HexDialogs
 
     /// <param name="name">The name the file is given unless another one is typed.</param>
     public static Task<string?> Save(string directory, string name, UIDialogHost host) => UIFileDialogs.Save(SAVE_TITLE, directory, name, Layouts, host);
+
+    /// <summary>Where to save a file that isn't a layout, its own kind among the filters, nothing of a layout's about it.</summary>
+    public static Task<string?> SaveFile(string directory, string name, IReadOnlyList<(string Name, string Pattern)> filter, UIDialogHost host) =>
+        UIFileDialogs.Save(SAVE_FILE_TITLE, directory, name, filter, host);
 }

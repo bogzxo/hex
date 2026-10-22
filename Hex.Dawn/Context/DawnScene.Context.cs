@@ -34,7 +34,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     /* The documents */
 
-    private Action<HexDocument>? documentOpened, documentEdited, documentClosed;
+    private Action<HexDocument>? documentOpened, documentEdited, documentClosed, documentSaved;
     private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
 
     IReadOnlyList<HexDocument> IDocuments.All => documents;
@@ -92,6 +92,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), Path.GetFullPath(path), PlatformPaths.Comparison));
 
     event Action<HexDocument> IDocuments.Opened { add => documentOpened += value; remove => documentOpened -= value; }
+    event Action<HexDocument> IDocuments.Saved { add => documentSaved += value; remove => documentSaved -= value; }
     event Action<HexDocument> IDocuments.Edited { add => documentEdited += value; remove => documentEdited -= value; }
     event Action<HexDocument> IDocuments.Closed { add => documentClosed += value; remove => documentClosed -= value; }
 

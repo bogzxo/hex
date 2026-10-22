@@ -39,6 +39,5 @@ internal sealed partial class HexDesigner
     private float CaptionWidth => MathF.Round(Math.Clamp(inspectorScroll.Size.X * CAPTION_SHARE, MIN_CAPTION, MAX_CAPTION));
     private float EditorWidth => MathF.Max(MIN_EDITOR_WIDTH, inspectorScroll.Size.X - EDITOR_MARGIN - CaptionWidth);
     private const float EDITOR_HEIGHT = 28;
-    internal const float EDITOR_TEXT = 0.14f;
     private const float PICKER_HEIGHT = 112;
 }

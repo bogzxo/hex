@@ -7,16 +7,34 @@ let welcome = compositor.panel({
     color: vec(0.065, 0.07, 0.092, 1)
 });
 
+// A column in the middle of the canvas, its rows from the left. It hugged the left with half the canvas empty beside it
 let page = compositor.stack({
     parent: welcome,
-    anchor: "top_left",
-    pivot: "top_left",
-    pos: vec(64, -56),
+    anchor: "center",
+    pivot: "center",
+    pos: vec(0, 24),
     spacing: 18
 });
 
-let title = compositor.label({
+// The icon beside the name, the way an app's welcome window has it
+let brand = compositor.stack({
     parent: page,
+    anchor: "left",
+    pivot: "left",
+    spacing: 16,
+    direction: "horizontal"
+});
+
+let icon = compositor.image({
+    parent: brand,
+    anchor: "left",
+    pivot: "left",
+    file: "Assets/hex_icon.png",
+    size: vec(56, 56)
+});
+
+let title = compositor.label({
+    parent: brand,
     anchor: "left",
     pivot: "left",
     text: "@welcome.title",
@@ -55,6 +73,7 @@ let start_title = compositor.label({
     pivot: "left",
     text: "@welcome.start",
     text_scale: 0.17,
+    bold: true,
     align: "left"
 });
 
@@ -118,6 +137,7 @@ let help_title = compositor.label({
     pivot: "left",
     text: "@welcome.help",
     text_scale: 0.17,
+    bold: true,
     align: "left"
 });
 
@@ -173,6 +193,7 @@ let recent_title = compositor.label({
     pivot: "left",
     text: "@welcome.recent",
     text_scale: 0.17,
+    bold: true,
     align: "left"
 });
 

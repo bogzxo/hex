@@ -42,6 +42,10 @@ internal sealed partial class DawnScene
             UILayout made = layout.Instantiate(WELCOME_LAYOUT, canvas);
             welcome = made.Get<Panel>("welcome");
 
+            // The card's own colour, the middle of the window it sits in. Its own near black was a slab in the navy
+            if (compositor.Skin is { } skin)
+                welcome.Color = skin.PanelColor with { W = 1.0f };
+
             made.Get<Button>("new_layout").OnPressed = () => Show(NewDocument());
             made.Get<Button>("open_file").OnPressed = OpenPressed;
             made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);

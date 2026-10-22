@@ -49,6 +49,7 @@ let strings = {
         explorer: "Explorer",
         explorer_of: "Explorer · {workspace}",
         open_a_layout: "No folder open",
+        files_of: "Files · {folder}",
         search: "Search",
         outline_of: "Outline · {file}",
         designer: "Designer",
@@ -459,15 +460,11 @@ let strings = {
 
     about: {
         title: "About Hex",
-        page: [
-            "# Hex {version}",
-            "The layout editor for Horizon and the IDE for HIDL, rendered by Horizon's own UI on Vulkan.",
-            "",
-            "Horizon {engine}, .NET {dotnet}",
-            "",
-            "## Licences",
-            "Icons are **Codicons**, the icons of Visual Studio Code, Copyright (c) Microsoft Corporation, under the Creative Commons Attribution 4.0 International licence (Assets/fonts/codicons in the engine).",
-            "",
+        version: "Version {version}",
+        runs_on: "Horizon {engine}  ·  .NET {dotnet}",
+        tagline: "The layout editor for Horizon and the IDE for HIDL, drawn by Horizon's own UI on Vulkan.",
+        licences: [
+            "Icons are Codicons, the icons of Visual Studio Code, Copyright (c) Microsoft Corporation, under the Creative Commons Attribution 4.0 International licence.",
             "Cascadia Mono is under the SIL Open Font License."
         ]
     },
@@ -484,7 +481,7 @@ let strings = {
         language_has_no_key: "{language} has no {key}, this is as far as it goes",
         no_word_to_look_for: "there is no word at the caret to look for",
         references_title: "WHERE {word} IS ({count})",
-        references_found: "{word} is on {lines} lines of {files} files"
+        references_found: "{word} is on {lines} of {files}"
     },
 
     code_findbar: {
@@ -519,7 +516,7 @@ let strings = {
         this_file_only: "This file only",
         renamed: "renamed {name} to {renamed}, {count} places",
         skipped_in_designer: ", not in {skipped} (open in the designer, rename it there)",
-        renamed_everywhere: "renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}",
+        renamed_everywhere: "renamed {name} to {renamed}, {places} in {files}, none saved yet{left}",
         colour: "Colour",
         colour_text: "The colour written at this place in the code",
         use_it: "Use it",
@@ -627,12 +624,12 @@ let strings = {
         things_selected: "{count} things selected, a change here goes to\nall of them that have the property",
         renamed_to: "renamed to {name}",
         name_refused: "'{name}' can't be its name: taken, or not a name a variable can have",
-        section_general: "general",
-        section_placement: "placement",
-        section_hover: "hover",
-        section_entrance: "entrance",
-        section_resizing: "resizing",
-        section_look: "look",
+        section_general: "General",
+        section_placement: "Placement",
+        section_hover: "Hover",
+        section_entrance: "Entrance",
+        section_resizing: "Resizing",
+        section_look: "Look",
         playing_entrances: "playing the entrances, F5 does it again",
         art_button_tooltip: "the button shows every piece of art the skin has, to pick one by eye",
         property_is: "{property} is {chosen}",
@@ -715,15 +712,17 @@ let strings = {
         folder_title: "Pick a folder",
         open_workspace_title: "Open a workspace",
         save_workspace_title: "Save the workspace as",
-        open_title: "Open a layout",
-        save_title: "Save the layout as"
+        open_title: "Open",
+        save_title: "Save the layout as",
+        save_file_title: "Save as",
+        files_of_kind: "{kind} files"
     },
 
     documents: {
         no_file: "there is no '{path}'",
         open_already: "{name} is open already",
-        binary_title: "{name} doesn't look like text",
-        binary_body: "It has bytes in it no text has. Opened anyway it's shown as text, and saved from here it's saved as that text, which won't be the file it was.",
+        binary_title: "{name} isn't text",
+        binary_body: "Opened as text it can be read, but saved from here it would be damaged.",
         open_anyway: "Open anyway",
         leave_it: "Leave it",
         opened_differs: "opened {name}, but it doesn't write back the same",
@@ -857,15 +856,15 @@ let strings = {
         open_folder: "Open Folder...",
         open_file_prompt: "{count} files in {where}   ·   > commands   @ in this file   : a line   # a text",
         find_in_files_title: "Find in files",
-        find_in_files_prompt: "Look for in every .hor in {where}{how}",
+        find_in_files_prompt: "Look for in every file in {where}{how}",
         find: "Find",
         looking_for: "looking for '{query}' in {where}...",
         found_title: "Found '{query}' ({count})",
-        found_in_files: "'{query}' is in {files} files, {lines} lines",
+        found_in_files: "'{query}' is in {files}, {lines}",
         not_found: "no '{query}' in {where}",
         checking: "checking every file in {where}...",
         all_parse: "all {files} files in {where} parse",
-        problems_found: "{count} problems in {files} files, listed under the editor",
+        problems_found: "{count} in {files}, listed under the editor",
         find_in_files: "Find in Files...",
         go_to_file: "Go to File...",
         go_to_line: "Go to Line...",
@@ -956,13 +955,15 @@ let strings = {
         file_not_written: "{file} couldn't be written, {reason}",
         set_up_run: "Set Up F5...",
         setup_title: "Set up F5",
-        setup_intro: "F5 on {name} builds it and then runs it, as the build and run tasks of this folder's {file}. Change either line as you like, leave Build empty for a language that runs as it is.",
+        setup_intro: "F5 builds and runs {name} with these lines, saved as this folder's {file}. Leave Build empty for a language that runs as it is.",
         setup_kind: "Program",
         setup_build: "Build",
         setup_build_hint: "nothing to build first",
         setup_run: "Run",
         setup_run_hint: "the command line that runs it",
         setup_folder: "Runs in",
+        setup_browse: "Browse...",
+        setup_folder_here: "{folder}, where tasks.hor is",
         setup_output: "Output in",
         setup_in_panel: "The terminal panel here",
         setup_in_dusk: "A Dusk window of its own",
@@ -1292,6 +1293,7 @@ let strings = {
         command_terminal_focus: "Hex: the terminal or the editor",
         command_new_terminal: "Hex: a new terminal",
         command_run: "Hex: run the file",
+        command_palette: "Hex: the command palette",
         command_run_to_terminal: "Hex: F5 says what it ran in the terminal, or in the output",
         runs_to_terminal: "F5 says what a file did in the terminal",
         runs_to_output: "F5 says what a file did in the output"
@@ -1376,12 +1378,13 @@ let strings = {
     },
 
     language_settings: {
+        on_the_path: "{command}, wherever the PATH finds it",
         on_this_machine: "On this machine",
         looking: "looking for it...",
         newest_is: "{version} is the newest",
         installs_it: "{command} installs it",
-        download_from_releases: "Download it from its releases",
-        not_found: "not found",
+        download_from_releases: "download it from its releases",
+        not_found: "not installed",
         version_unsaid: "a version it doesn't say",
         newer_out: "{version} is out",
         the_newest: "the newest",
@@ -1415,7 +1418,12 @@ let strings = {
     languages: {
         server_restarted: "[Hex] {command} started again, a project of its changed",
         server_asks: "{command} asks",
-        not_now: "Not now"
+        not_now: "Not now",
+        completion_waiting: "Asking {server}...",
+        stopped: "stopped",
+        server_restarted_after: "{server} stopped, started it again",
+        server_stopped: "{server} stopped again, {why}",
+        start_again: "Start it again"
     },
 
     modes: {
@@ -1451,6 +1459,7 @@ let strings = {
     side_tree: {
         no_folders: "No folders yet. File, Add Folder puts one in.",
         browsing: "Open a folder with File, Open Folder",
+        open_folder: "Open Folder...",
         outline_line: "line {line}",
         outline_empty: "Nothing declared in here yet",
         results_empty: "nothing"
@@ -1458,5 +1467,17 @@ let strings = {
 
     sides: {
         panels_reset: "the panels are the size they come at"
+    },
+
+    // So many of something, one of it and more than one (HexText.Count)
+    counts: {
+        file_one: "1 file",
+        file_many: "{count} files",
+        line_one: "1 line",
+        line_many: "{count} lines",
+        place_one: "1 place",
+        place_many: "{count} places",
+        problem_one: "1 problem",
+        problem_many: "{count} problems"
     }
 };

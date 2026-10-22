@@ -58,28 +58,40 @@ internal sealed partial class HexLanguages
         }
     }
 
+    /// <summary>
+    /// A server's line in the list, a dot of how it is (there, being installed or behind, missing), the language, the
+    /// program and its files, and what's known of it, quietly. What isn't there isn't an error, it was red, and the
+    /// commands that install them were chips of code wrapping across the page, a wall of them.
+    /// </summary>
     private string ServerStatusOf(HexServerEntry entry)
     {
-        string name = $"**{UIRichText.MarkdownLiteral(LanguageNameOf(entry))}**  {UIRichText.MarkdownLiteral(entry.Command)}  [color:#7f8a9e]{UIRichText.MarkdownLiteral(string.Join(" | ", entry.Extensions))}[/color]  ";
+        string files = UIRichText.MarkdownLiteral(string.Join(" ", entry.Extensions));
+        string Line(string dot, string said) =>
+            $"[color:{dot}]$(circle-filled)[/color]  **{UIRichText.MarkdownLiteral(LanguageNameOf(entry))}**  {UIRichText.MarkdownLiteral(entry.Command)}  [color:dim]{files}  ·  {said}[/color]";
+
         if (Installing(entry) is { } going)
-            return name + $"[color:#e5c07b]{UIRichText.MarkdownLiteral(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")}[/color] {UIRichText.MarkdownLiteral(going.Message)}";
+            return Line("warning", $"{UIRichText.MarkdownLiteral(going.Title.ToLowerInvariant())}{(going.Progress is { } progress and < 1.0f ? $" {progress:P0}" : "...")} {UIRichText.MarkdownLiteral(going.Message)}");
         if (serversProbing.Contains(entry.Name) || !serversFound.TryGetValue(entry.Name, out ServerFound? found))
-            return name + context.Strings.Said("language_settings.looking");
+            return Line("dim", context.Strings.Said("language_settings.looking"));
 
         string latest = settings.ServerLatest.TryGetValue(entry.Name, out string? newest) ? newest : string.Empty;
         if (found.Path is null)
         {
-            string out_ = latest.Length > 0 ? ", " + context.Strings.Said("language_settings.newest_is", ("version", UIRichText.MarkdownLiteral(latest))) : string.Empty;
-            string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", $"`{UIRichText.MarkdownLiteral(entry.Install)}`"))
+            string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", UIRichText.MarkdownLiteral(entry.Install)))
                 : context.Strings.Said("language_settings.download_from_releases");
-            return name + $"[color:#ff7366]{context.Strings.Said("language_settings.not_found")}[/color]{out_}. {how}.";
+            return Line("dim", $"{context.Strings.Said("language_settings.not_found")}, {how}");
         }
 
         string version = found.Version is { } said ? UIRichText.MarkdownLiteral(said) : context.Strings.Said("language_settings.version_unsaid");
-        string news = NewerServerVersion(entry) is { } newer ? $", [color:#e5c07b]{context.Strings.Said("language_settings.newer_out", ("version", UIRichText.MarkdownLiteral(newer)))}[/color]"
-            : latest.Length > 0 && found.Version is not null ? ", " + context.Strings.Said("language_settings.the_newest") : string.Empty;
-        return name + $"{version}{news}\n[color:#7f8a9e]{UIRichText.MarkdownLiteral(found.Path)}[/color]";
+        if (NewerServerVersion(entry) is { } newer)
+            return Line("warning", $"{version}, {context.Strings.Said("language_settings.newer_out", ("version", UIRichText.MarkdownLiteral(newer)))}") + PathLine(found.Path);
+
+        string news = latest.Length > 0 && found.Version is not null ? ", " + context.Strings.Said("language_settings.the_newest") : string.Empty;
+        return Line("success", version + news) + PathLine(found.Path);
     }
+
+    // Where a server that's there is, quiet under its line, lined up with its name behind a dot nobody sees
+    private static string PathLine(string path) => $"\n[color:#00000000]$(circle-filled)[/color]  [color:dim]{UIRichText.MarkdownLiteral(path)}[/color]";
 
     /// <summary>The servers' section, its rows read from and put in force on the editor.</summary>
     private sealed class ServerSource : ISettingsSource
@@ -95,7 +107,8 @@ internal sealed partial class HexLanguages
                     HexText.Get("language_settings.updates_help"),
                     SERVER_SECTION, Buttons: [HexText.Get("language_settings.check_now")]),
                 .. languages.ServerEntries.Select(entry => new UISetting(SERVER_KEY + entry.Name, entry.Command, UIFormKind.Text, HelpOf(entry), SERVER_SECTION,
-                    Buttons: entry.Repo.Length > 0 ? [CHOOSE, InstallLabel(entry), CHANGES] : [CHOOSE, InstallLabel(entry)]))
+                    Buttons: entry.Repo.Length > 0 ? [CHOOSE, InstallLabel(entry), CHANGES] : [CHOOSE, InstallLabel(entry)],
+                    Placeholder: HexText.Get("language_settings.on_the_path", ("command", entry.Command))))
             ];
         }
 

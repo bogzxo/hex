@@ -20,6 +20,7 @@ public static class DuskProgram
     private const string ARGUMENT_APP = "--app";
     private const string ARGUMENT_REAL_KEYS = "--realkeys";
     private const string ARGUMENT_TOGGLE = "--toggle";
+    private const string ARGUMENT_WINDOW = "--window";
     private const string ARGUMENT_RUN = "--run";
 
     /// <summary>
@@ -37,6 +38,8 @@ public static class DuskProgram
     /// The parts that press real keys (keys, history, repl) send them only while Dusk is the window in front, and run only
     /// when named or with <c>--realkeys</c>, so a plain run never types into anything of anybody's.</item>
     /// <item><c>--exit</c> closes once the self test is done, with an exit code of 1 if anything failed.</item>
+    /// <item><c>--window</c> is a window of its own even with a Dusk running, which otherwise takes it as a tab and this
+    /// one leaves, the way Dawn's is.</item>
     /// <item><c>--toggle</c> drops the Dusk that's running down from the top of the screen, or takes it back up, and leaves,
     /// for a key of the desktop's own where there's no key for everywhere of Hex's (Linux and macOS): bind
     /// <c>hex --dusk --toggle</c> in the keyboard settings. With no Dusk running it starts one.</item>
@@ -69,7 +72,8 @@ public static class DuskProgram
         // A Dusk running already takes it as a tab of its own, and this one leaves
         // The command line last, it's the one part that can have a bar in it
         string? run = ValueOf(args, ARGUMENT_RUN);
-        if (!selfTest && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}|{run ?? string.Empty}"))
+        if (!selfTest && !args.Contains(ARGUMENT_WINDOW)
+            && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}|{run ?? string.Empty}"))
             return;
 
         var options = new DuskOptions(

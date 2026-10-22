@@ -219,13 +219,31 @@ internal sealed class HexLookPicker : StackPanel
             Bloom(list, picture, new Vector2(0.55f, 0.05f), 0.45f, palette.Syntax.Directive with { W = 0.5f });
             Bloom(list, picture, new Vector2(0.15f, 0.95f), 0.4f, palette.Syntax.Keyword with { W = 0.5f });
 
-            // A pane on the look's glass over it, or the solid panel when it has none, with two lines of text on it
-            var pane = new UIRect(new Vector2(picture.Min.X + picture.Width * 0.3f, picture.Min.Y + 14.0f), new Vector2(picture.Max.X - 12.0f, picture.Max.Y - 14.0f));
-            Vector4 panel = palette.Panel with { W = 1.0f };
-            if (glass is { } frosted)
+            // What's behind the pane, a few lines of text and a disc of the accent, so how much of it shows through says what
+            // the glass is. The three cards were the same dark pane on the same light, and nobody could tell them apart
+            Vector4 ink = palette.Text;
+            for (int line = 0; line < 3; line++)
             {
-                list.Glass(pane, 8.0f, frosted.Blur * 0.6f, frosted.Bend * 0.5f);
-                list.RoundRect(pane, 8.0f, frosted.Over(panel));
+                float y = picture.Max.Y - 20.0f - line * 14.0f;
+                list.RoundRect(new UIRect(new Vector2(picture.Min.X + 10.0f, y - 4.0f), new Vector2(picture.Max.X - 10.0f - line * 22.0f, y)), 2.0f, ink with { W = 0.5f });
+            }
+            list.RoundRect(UIRect.FromCenter(new Vector2(picture.Min.X + picture.Width * 0.66f, picture.Min.Y + 32.0f), new Vector2(26.0f)), 13.0f, palette.Accent with { W = 1.0f });
+
+            // A pane over it, liquid glass clear with what's behind sharp through it and a bright rim and a light along its
+            // top, frosted milky with what's behind a smudge of colour, flat a solid panel that hides it
+            var pane = new UIRect(new Vector2(picture.Min.X + picture.Width * 0.3f, picture.Min.Y + 12.0f), new Vector2(picture.Max.X - 12.0f, picture.Max.Y - 12.0f));
+            Vector4 panel = palette.Panel with { W = 1.0f };
+            if (glass is { Bend: > 0.0f } liquid)
+            {
+                list.Glass(pane, 8.0f, liquid.Blur * 0.25f, liquid.Bend * 0.5f);
+                list.RoundRect(pane, 8.0f, panel with { W = 0.3f });
+                list.RoundOutline(pane, 8.0f, 1.5f, Vector4.One with { W = 0.5f });
+                list.RoundRect(new UIRect(new Vector2(pane.Min.X + 8.0f, pane.Max.Y - 3.0f), new Vector2(pane.Max.X - 8.0f, pane.Max.Y - 2.0f)), 0.5f, Vector4.One with { W = 0.55f });
+            }
+            else if (glass is { } frosted)
+            {
+                list.Glass(pane, 8.0f, frosted.Blur * 0.6f, 0.0f);
+                list.RoundRect(pane, 8.0f, Vector4.Lerp(panel, Vector4.One, 0.14f) with { W = 0.72f });
                 list.SilverLining(pane, 8.0f, frosted.Rim);
             }
             else
@@ -234,7 +252,6 @@ internal sealed class HexLookPicker : StackPanel
                 list.RoundOutline(pane, 8.0f, 1.0f, palette.Border);
             }
 
-            Vector4 ink = palette.Text;
             list.RoundRect(new UIRect(new Vector2(pane.Min.X + 10.0f, pane.Max.Y - 16.0f), new Vector2(pane.Max.X - 24.0f, pane.Max.Y - 12.0f)), 2.0f, ink with { W = 0.6f });
             list.RoundRect(new UIRect(new Vector2(pane.Min.X + 10.0f, pane.Max.Y - 26.0f), new Vector2(pane.Center.X + 8.0f, pane.Max.Y - 22.0f)), 2.0f, ink with { W = 0.32f });
             list.PopClip();

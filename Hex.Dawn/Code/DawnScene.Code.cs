@@ -41,11 +41,15 @@ internal sealed partial class DawnScene
     /// <summary>Whether a file's code builds a layout, which it does by asking the compositor for its components.</summary>
     private static bool IsLayoutCode(string source) => source.Contains("compositor.", StringComparison.Ordinal);
 
+    // How big code is written at a zoom of 1, a monospaced font a little bigger than the UI's for the same size on screen.
+    // At the UI's own it came out a point smaller than the words round it
+    internal const float CODE_TEXT = 0.155f;
+
     /// <summary>Helper method to set an editor up the way the editor's code is shown, once, when its document is made.</summary>
     private void PrepareEditor(HexDocument prepared)
     {
         CodeEditor editor = prepared.Editor;
-        editor.TextScale = HexDesigner.EDITOR_TEXT * settings.CodeZoom;
+        editor.TextScale = CODE_TEXT * settings.CodeZoom;
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
         editor.WordWrap = settings.WrapCode;
@@ -108,6 +112,10 @@ internal sealed partial class DawnScene
         {
             codeDirty = true;
             documentEdited?.Invoke(changed);
+
+            // What's wrong moves along with the lines typed in above it (CodeEditor), the Problems panel's lines with it
+            if (changed == document)
+                problemsDirty = true;
             return;
         }
 
@@ -138,6 +146,12 @@ internal sealed partial class DawnScene
         {
             settingCode = false;
         }
+
+        // A file's text changed by Hex rather than typed (what wasn't saved brought back, the file read again after it
+        // changed on the disk) is a change all the same to whoever keeps a copy of it. Its language server was never
+        // told, and said what was wrong with the text on the disk under the text on the screen
+        if (!fresh && into.IsText)
+            documentEdited?.Invoke(into);
     }
 
     /// <summary>After the code of a document was parsed, what it says about the texts of the game it names by key.</summary>

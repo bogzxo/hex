@@ -50,7 +50,7 @@ internal sealed partial class DawnScene : Scene
     private Vector4 DimColor => compositor.Skin?.DimTextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 0.62f);
     private Vector4 ErrorColor => compositor.Skin?.ErrorColor ?? new Vector4(1.0f, 0.45f, 0.4f, 1.0f);
     private Vector4 WarningColor => compositor.Skin?.WarningColor ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
-    private static readonly Vector4 FolderColor = new(0.38f, 0.62f, 1.0f, 1.0f);
+    private static readonly Vector4 FolderColor = UIFileKinds.FOLDER;
 
     public override Camera ActiveCamera { get; protected set; }
 

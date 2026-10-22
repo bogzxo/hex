@@ -254,7 +254,7 @@ internal sealed partial class HexCodeEditing
         string word = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         List<HexResult> found = HexSearch.FindIn(context.Workspace.Roots, word, new UIFindOptions(WholeWord: true));
         window.ShowResults(context.Strings.Said("code_completion.references_title", ("word", word), ("count", found.Count.ToString())), found);
-        context.Notices.Say(context.Strings.Said("code_completion.references_found", ("word", word), ("lines", found.Count.ToString()),
-            ("files", found.Select(result => result.Path).Distinct().Count().ToString())));
+        context.Notices.Say(context.Strings.Said("code_completion.references_found", ("word", word), ("lines", HexText.Count("line", found.Count)),
+            ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count()))));
     }
 }

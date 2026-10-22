@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
 
         settings.CodeZoom = zoom;
         foreach (HexDocument open in documents)
-            open.Editor.TextScale = HexDesigner.EDITOR_TEXT * zoom;
+            open.Editor.TextScale = CODE_TEXT * zoom;
 
         SaveSettings();
         Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
@@ -225,16 +225,19 @@ internal sealed partial class DawnScene
 
         // The panel under the editor is as tall as it was dragged open, as long as that leaves the editor or the canvas
         // their least. What the rest of the middle takes is what it took last time without the panel
+        // Not on a tick the code or the canvas hasn't been laid out yet (F7 just swapped them), what it takes isn't known
+        // then and the panel was cut to its least for good, a line of terminal in the code of a layout
         float panelBefore = panelTaken;
-        if (bottom.Visible)
+        UIComponent shown = LayoutTools ? canvas : codeScroll;
+        if (bottom.Visible && shown.Visible && shown.Bounds.Height > 0.0f)
         {
-            UIComponent shown = LayoutTools ? canvas : codeScroll;
             float others = Spoken(center, shown) - panelBefore;
             float gap = center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f;
             float most = Math.Clamp(height - others - gap - MIN_FLEXIBLE, MIN_PANEL, MAX_PANEL);
             bottom.MaxSize = new Vector2(0.0f, most);
-            if (bottom.Size.Y > most)
-                bottom.Size = bottom.Size with { Y = most };
+            float open = Math.Min(Math.Max(panelWanted, MIN_PANEL), most);
+            if (MathF.Abs(bottom.Size.Y - open) > 0.5f)
+                bottom.Size = bottom.Size with { Y = open };
         }
 
         // And what it'll take this tick, as it folds and slides, which is what the editor's fitted round. Fitted round what
@@ -247,6 +250,7 @@ internal sealed partial class DawnScene
         crumbs.Size = crumbs.Size with { X = centerWidth };
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);
+        FitRowsTo(output, outputScroll);
 
         // Whichever of the two is showing has the rest of the middle, the code or the canvas of the designer
         // The table's sideways bar runs along its bottom, which is where the panel's drag tab reaches up to, so it runs that

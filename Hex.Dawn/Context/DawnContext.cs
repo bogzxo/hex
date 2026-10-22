@@ -90,6 +90,9 @@ internal interface IDocuments
     /// <summary>A document was closed.</summary>
     event Action<HexDocument> Closed;
 
+    /// <summary>A document was written to its file.</summary>
+    event Action<HexDocument> Saved;
+
     /// <summary>Something that has diagnostics for documents, which go under their code and in the Problems panel with the rest.</summary>
     void AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source);
 

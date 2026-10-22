@@ -1,8 +1,6 @@
-// The editor of a property that is yes or no.
+// The editor of a property that is yes or no, a switch.
 #define layout
 
-let choice = compositor.selector({
-    size: vec(220, 28),
-    options: ["no", "yes"],
-    text_scale: 0.14
+let toggle = compositor.toggle({
+    size: vec(220, 28)
 });

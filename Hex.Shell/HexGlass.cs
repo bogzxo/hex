@@ -18,11 +18,14 @@ public static class HexGlass
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
     /// <summary>
-    /// The glass of a window that stays up over everything (the settings), the popups' with most of the panel kept and
-    /// hardly a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks
-    /// like a fishbowl.
+    /// The glass of a window that stays up over everything (the settings), the popups' a share less clear and with less of
+    /// a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks like a
+    /// fishbowl. It was held to one clarity for every look, and Fluid's windows came out the same solid navy as Frosted's.
     /// </summary>
-    public static UIGlass Window(UIGlass popup) => popup with { Clarity = MathF.Min(popup.Clarity, 0.3f), Bend = MathF.Min(popup.Bend, 4.0f) };
+    public static UIGlass Window(UIGlass popup) => popup with { Clarity = MathF.Min(popup.Clarity * WINDOW_CLARITY, 0.45f), Bend = MathF.Min(popup.Bend, 6.0f) };
+
+    // How much of the popups' clarity a window keeps
+    private const float WINDOW_CLARITY = 0.78f;
 
     /// <summary>The glass of the side panels, out of the same sliders.</summary>
     public static UIGlass Side(float blur, float clarity, float rim) => UIGlass.Pane(blur, clarity, rim);

@@ -47,6 +47,7 @@ internal sealed partial class HexLanguages
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
         with.Documents.Closed += StopLinting;
+        with.Documents.Saved += LintSaved;
         with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
         with.Documents.AddCompletions(ServerCompletions);
 
@@ -106,7 +107,8 @@ internal sealed partial class HexLanguages
     /// language_servers.hor was what the status bar said, "D, d".
     /// </summary>
     internal string? ServerShownOf(HexDocument of) =>
-        LinterOf(of) is { } name ? Path.GetFileNameWithoutExtension(ServerEntry(name) is { } entry ? CommandOf(entry) : name) : null;
+        LinterOf(of) is { } name ? Path.GetFileNameWithoutExtension(ServerEntry(name) is { } entry ? CommandOf(entry) : name)
+            + (ServerStoppedFor(of) ? " " + context.Strings.Said("languages.stopped") : string.Empty) : null;
 
     // What language_servers.hor says, read the first time a server is wanted, nothing when it can't be read
     private List<HexServerEntry> serverEntries = [];
@@ -156,7 +158,7 @@ internal sealed partial class HexLanguages
     // Helper method to say which files a server is for and how it is started, which stops the one that was running (done
     // when the task is, off the editor's thread)
     private Task RegisterServer(HexServerEntry entry) =>
-        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions);
+        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions, entry.Settings);
 
     /// <summary>
     /// Stops a server, its files let go of. It starts again with the next file of its that is opened, or with
@@ -218,6 +220,20 @@ internal sealed partial class HexLanguages
             lintIn[changed] = LINT_DELAY;
     }
 
+    /// <summary>
+    /// A file of another language was saved, its server told so, with what was typed since it last heard first. Some look
+    /// the whole of a file over only then, serve-d builds it with dub, and never heard it was.
+    /// </summary>
+    private void LintSaved(HexDocument saved)
+    {
+        if (!linters.TryGetValue(saved, out LanguageServer? server) || saved.Path is not { } path)
+            return;
+
+        if (lintIn.Remove(saved))
+            server.Change(path, saved.Editor.Text);
+        server.Saved(path);
+    }
+
     /// <summary>A file of another language was closed, its server is told and forgets it.</summary>
     private void StopLinting(HexDocument closed)
     {
@@ -263,7 +279,7 @@ internal sealed partial class HexLanguages
         {
             LanguageServer server = servers[i];
             if (server.Failure is { } failure && failed.Add(server.Name))
-                Console.WriteLine($"[Hex] {server.Name} stopped, {failure}");
+                stoppedNow.Add((server, failure));
 
             TakeTalk(server);
 
@@ -280,6 +296,7 @@ internal sealed partial class HexLanguages
             }
         }
 
+        ServersStopped();
         AskNext();
         UpdateServerCompletions();
         UpdateInstallStatus();

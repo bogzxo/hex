@@ -93,6 +93,7 @@ internal sealed partial class DawnScene
 
         test.Click(At(() => designer.editors["label"]));
         test.Wait();
+        test.Run(() => Shot("designer-selected"));
         test.Check("inspector: clicking a text box gives it the focus", () => designer.editors["label"].IsFocused);
 
         test.Run(() => TypeInto((TextBox)designer.editors["label"], "Fight"));
@@ -105,10 +106,14 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("inspector: dragging across a number box changes the number", () => Near(button!.Size.X, 40, 1.5f) && Code().Contains("size: vec("));
 
+        // Where it is in the properties, which run on past the bottom of the inspector for a button
+        test.Run(() => inspectorScroll.ScrollIntoView(designer.editors["anchor"]));
+        test.Settle(0.3f);
         test.Click(At(() => designer.editors["anchor"]));
         test.Wait();
         test.Check("dropdown: clicking it opens its list on top of the inspector", () =>
             designer.editors["anchor"] is Dropdown { IsOpen: true } open && chrome.Popup == open);
+        test.Run(() => Shot("designer-dropdown"));
         test.Click(Option("anchor", 1));
         test.Wait();
         test.Check("dropdown: clicking an option chooses it and closes the list", () =>
@@ -210,6 +215,8 @@ internal sealed partial class DawnScene
 
         // Resting on what a property is called says what it does, and so does resting on its editor
         UIComponent CaptionOf(string property) => designer.editors[property].Parent!.Parent!.Children[0];
+        test.Run(() => inspectorScroll.ScrollIntoView(designer.editors["anchor"]));
+        test.Settle(0.3f);
         test.Hover(At(() => CaptionOf("pos")));
         test.Settle(0.8f);
         test.Check("help: resting on a property's name brings up what it does", () =>
@@ -292,7 +299,7 @@ internal sealed partial class DawnScene
         }
 
         test.Check("sections: the properties are in sections by what they are about", () =>
-            Section("intro").Title == "entrance" && Section("pos").Title == "placement" && Section("color").Title == "label");
+            Section("intro").Title == "Entrance" && Section("pos").Title == "Placement" && Section("color").Title == "Label");
         Reveal("intro");
         test.Click(In(() => Section("intro").HeaderBounds, 0.5f, 0.5f));
         test.WaitFor(() => Section("intro").Openness == 0.0f, 1.0f);
