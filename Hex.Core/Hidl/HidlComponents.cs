@@ -59,9 +59,9 @@ internal static class HidlComponents
     public static string KindIcon(string kind) => kind switch
     {
         "stack" => "list-flat",
-        "collapsible" => "fold",
+        "collapsible" => "unfold",
         "grid" => "table",
-        "panel" => "window",
+        "panel" => "primitive-square",
         "scroll" => "list-selection",
         "label" => "symbol-text",
         "button" => "symbol-event",
@@ -75,9 +75,9 @@ internal static class HidlComponents
         "color_picker" => "symbol-color",
         "progress_bar" => "loading",
         "image" => "file-media",
-        "tabs" => "window",
+        "tabs" => "browser",
         "divider" => "dash",
-        "spacer" => "whitespace",
+        "spacer" => "arrow-both",
         "readout" => "dashboard",
         "meter" => "pulse",
         "graph" => "graph",

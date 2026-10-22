@@ -310,6 +310,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IEditorWindow.SwitchView(HexView view) => SwitchView(view);
     void IEditorWindow.RefreshRight() => inspectorDirty = true;
     void IEditorWindow.Grip(UIComponent panel, UIResize edge, bool left) => SideGrip(panel, edge, left);
+    void IEditorWindow.Dress(WindowPanel window) => DressWindow(window);
     Label IEditorWindow.Hint(UIComponent into, string text) => Hint(into, text);
     List<OutlineEntry> IEditorWindow.Outline() => OutlineHere();
 

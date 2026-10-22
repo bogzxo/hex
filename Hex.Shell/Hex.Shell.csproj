@@ -19,6 +19,14 @@
     </None>
   </ItemGroup>
 
+  <!-- The looks are worked on a HexSettings, which is Hex.Core's own, so what does that is the modes' and nobody else's -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hex" />
+    <InternalsVisibleTo Include="Hex.Dawn" />
+    <InternalsVisibleTo Include="Hex.Dusk" />
+    <InternalsVisibleTo Include="Hex.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />

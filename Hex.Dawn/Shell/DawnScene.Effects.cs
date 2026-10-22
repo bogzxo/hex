@@ -6,13 +6,14 @@ using Horizon.UI.Drawing;
 
 namespace Hex.Dawn;
 
-// The effects, all of them off unless asked for (effects in the settings, none, subtle or all, and a switch each under
-// it). Subtle is the caret gliding to where it goes, a burst of sparks on a save and the glass, all is sparks off the
-// caret as it types as well, the power mode people install on purpose. The glass is the dialogs, the menus, the palette
-// and the side panels over a blur of whatever is behind them, Windows 11's acrylic more or less, the compositor
-// drawing in goes to have it (UIGlass in the engine). The sparks are a module of their own over everything that
-// the pointer goes through, a pool of quads that makes no garbage, and with nothing flying nothing is drawn, so an idle
-// window stays as idle as it was.
+// The effects (effects in the settings, none, subtle or all, and a switch each under it). Subtle is the lights, the
+// glow under the caret and whichever others are switched on, and a burst of sparks on a save when the sparks are, all is
+// sparks off the caret as it types as well, the power mode people install on purpose. The glass and the caret's glide
+// are what Hex is made of rather than effects, so they have their own switches and are on as it comes (the Fluid Glass
+// look). The glass is the dialogs, the menus, the palette and the side panels over a blur of whatever is behind them,
+// Apple's Liquid Glass more or less, the compositor drawing in goes to have it (UIGlass in the engine). The sparks are a
+// module of their own over everything that the pointer goes through, a pool of quads that makes no garbage, and with
+// nothing flying nothing is drawn, so an idle window stays as idle as it was.
 internal sealed partial class DawnScene
 {
     // How long the caret glides for, about two thirds of the way to where it went in this long, the motion's caret_glide
@@ -34,14 +35,14 @@ internal sealed partial class DawnScene
 
     private bool EffectsOn => settings.Effects is "subtle" or "all";
 
-    /// <summary>Whether the caret glides.</summary>
-    private bool Motion => EffectsOn && settings.EffectMotion;
+    /// <summary>Whether the caret glides, its own switch whatever the effects are.</summary>
+    private bool Motion => settings.EffectMotion;
 
     /// <summary>Whether a save throws a burst.</summary>
     private bool SaveSparks => EffectsOn && settings.EffectSparks;
 
-    /// <summary>Whether the dialogs, menus, palette and sides are on glass.</summary>
-    private bool Glassy => EffectsOn && settings.EffectGlass;
+    /// <summary>Whether the dialogs, menus, palette and sides are on glass, its own switch whatever the effects are.</summary>
+    private bool Glassy => settings.EffectGlass;
 
     /// <summary>Whether typing throws sparks off the caret.</summary>
     private bool TypingSparks => settings.Effects == "all" && settings.EffectSparks;
@@ -83,7 +84,9 @@ internal sealed partial class DawnScene
         lightEffects.Trail = settings.EffectTrail;
 
         compositor.PopupGlass = Glassy ? PopupGlass : null;
-        left.Glass = right.Glass = bottom.Glass = Glassy ? SideGlass : null;
+
+        // The frame on glass over its field of light, or solid, see DawnScene.Materials
+        DressChrome();
     }
 
     /// <summary>Every tick, sparks off the caret if what is typed into changed since the last.</summary>

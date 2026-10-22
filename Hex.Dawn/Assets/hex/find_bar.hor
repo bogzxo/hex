@@ -1,17 +1,19 @@
 // The find bar, laid over the top right of the code (VS Code's, Lite XL's). What to look for, whether the case has to
 // match, whole words only and a regex, how many there are and which is the one selected, the one before and the next,
-// and a row under it for replacing them, which the chevron (or Ctrl+H) opens. See HexScene.FindBar.
+// and a row under it for replacing them, which the chevron (or Ctrl+H) opens. See HexScene.FindBar. Running, it's dressed
+// as every popup is (DawnScene.Materials), the colours here are for the designer. Its radius is its fields' and its
+// padding together, so the corners inside it and its own run round the same centre.
 #define layout
 
 let find_bar = compositor.panel({
     anchor: "top_right",
     pivot: "top_right",
-    pos: vec(-18, -4),
-    padding: vec(6, 5, 6, 5),
+    pos: vec(-18, -8),
+    padding: vec(6, 6, 6, 6),
     z: 20,
-    radius: 4,
-    color: vec(0.12, 0.13, 0.17, 0.98),
-    outline: vec(0.3, 0.33, 0.42, 1)
+    radius: 14,
+    color: vec(0.12, 0.17, 0.23, 1),
+    outline: vec(0.55, 0.82, 0.92, 0.14)
 });
 
 let find_rows = compositor.stack({ parent: find_bar, anchor: "top_left", pivot: "top_left", spacing: 4 });

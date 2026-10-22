@@ -33,7 +33,7 @@ internal sealed partial class HexRunning
 
         UILayout made = layout.Instantiate("runner.hor", chrome.Root);
         var window = runnerWindow = made.Get<WindowPanel>("window");
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        this.window.Dress(window);
         window.OnClosed = () =>
         {
             window.Parent?.Remove(window);

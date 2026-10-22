@@ -17,6 +17,13 @@ public static class HexGlass
     /// <summary>The glass of the dialogs, menus and the palette.</summary>
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
+    /// <summary>
+    /// The glass of a window that stays up over everything (the settings), the popups' with most of the panel kept and
+    /// hardly a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks
+    /// like a fishbowl.
+    /// </summary>
+    public static UIGlass Window(UIGlass popup) => popup with { Clarity = MathF.Min(popup.Clarity, 0.3f), Bend = MathF.Min(popup.Bend, 4.0f) };
+
     /// <summary>The glass of the side panels, out of the same sliders.</summary>
     public static UIGlass Side(float blur, float clarity, float rim) => UIGlass.Pane(blur, clarity, rim);
 

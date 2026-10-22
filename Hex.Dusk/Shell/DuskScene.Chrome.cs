@@ -51,13 +51,18 @@ internal sealed partial class DuskScene
         panel.OnTabMenu = ShowTabMenu;
     }
 
-    /// <summary>The font a folder of Assets/fonts holds, the first .ttf in it, null for the skin's.</summary>
+    /// <summary>
+    /// The font a folder of Assets/fonts holds, the first .ttf in it, null for the skin's. A folder that isn't there is Hack,
+    /// the skin's font isn't a monospace and the cursor ended up yards past the prompt.
+    /// </summary>
     private static UIFont? FontOf(string folder)
     {
         if (folder.Length == 0)
             return null;
 
         string directory = Path.Combine("Assets", "fonts", folder);
+        if (!Directory.Exists(directory))
+            directory = Path.Combine("Assets", "fonts", "hack");
         if (!Directory.Exists(directory))
             return null;
 

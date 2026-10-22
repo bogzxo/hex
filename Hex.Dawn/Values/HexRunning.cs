@@ -349,7 +349,6 @@ internal sealed partial class HexRunning
     {
         valuesTree = layout.Get<TreeView>("values_tree");
         valuesTree.Visible = false;
-        valuesTree.FocusLine = true;
 
         // Dragged wider by its edge like the properties, the two are the one side
         window.Grip(valuesTree, UIResize.Left, left: false);

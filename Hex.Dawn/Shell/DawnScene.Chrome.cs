@@ -126,8 +126,9 @@ internal sealed partial class DawnScene
 
         fittedLeft = leftWidth;
 
-        // Two to a line, with the gap of their grid between them
-        float button = MathF.Floor((leftWidth - 4.0f) * 0.5f);
+        // Two to a line, with the gap of their grid between them and room down the right for the toolbox's scroll bar, which
+        // sat over the right hand column
+        float button = MathF.Floor((leftWidth - 4.0f - PALETTE_BAR) * 0.5f);
         for (int i = 0; i < designer.paletteButtons.Count; i++)
             designer.paletteButtons[i].Size = designer.paletteButtons[i].Size with { X = button };
     }
@@ -167,6 +168,9 @@ internal sealed partial class DawnScene
     // The most of the side bar's height the toolbox takes before it scrolls
     private const float PALETTE_SHARE = 0.42f;
 
+    // How much of the toolbox's width is left for its scroll bar
+    private const float PALETTE_BAR = 10.0f;
+
     private void FitChrome()
     {
         UIRect screen = chrome.Root.Bounds;
@@ -181,7 +185,8 @@ internal sealed partial class DawnScene
         float sides = activity.Bounds.Width
             + (leftWidth + left.Padding.Total.X) * left.SlideAmount
             + (rightWidth + right.Padding.Total.X) * right.SlideAmount;
-        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides);
+        // The middle's own padding is the room round its card's contents, inside it
+        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides - center.Padding.Total.X);
 
         // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part
         // given its height a column, a params array and a sum of it made garbage every tick
@@ -218,16 +223,24 @@ internal sealed partial class DawnScene
 
         FitRows(leftWidth, rightWidth);
 
-        // The panel under the editor is as tall as it was dragged, as long as that leaves the editor or the canvas their least
+        // The panel under the editor is as tall as it was dragged open, as long as that leaves the editor or the canvas
+        // their least. What the rest of the middle takes is what it took last time without the panel
+        float panelBefore = panelTaken;
         if (bottom.Visible)
         {
             UIComponent shown = LayoutTools ? canvas : codeScroll;
-            float spare = height - Spoken(center, shown) - MIN_FLEXIBLE;
-            float most = Math.Clamp(bottom.Size.Y + spare, panelFolded ? bottom.MinSize.Y : MIN_PANEL, MAX_PANEL);
+            float others = Spoken(center, shown) - panelBefore;
+            float gap = center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f;
+            float most = Math.Clamp(height - others - gap - MIN_FLEXIBLE, MIN_PANEL, MAX_PANEL);
             bottom.MaxSize = new Vector2(0.0f, most);
             if (bottom.Size.Y > most)
                 bottom.Size = bottom.Size with { Y = most };
         }
+
+        // And what it'll take this tick, as it folds and slides, which is what the editor's fitted round. Fitted round what
+        // it took last time the editor was a tick behind it and the two were over each other or apart for that tick
+        panelTaken = PanelTakes();
+        float panelLag = panelTaken - panelBefore;
 
         // The tabs, the breadcrumbs and the panel are the width of the middle, the panel as tall as it was dragged
         docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, centerWidth - toolbar.Bounds.Width) };
@@ -240,16 +253,16 @@ internal sealed partial class DawnScene
         // much higher
         running.Table.BarInset = bottom.Visible ? bottom.GripReach : 0.0f;
         if (running.Table.Visible)
-            running.Table.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, running.Table)));
+            running.Table.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, running.Table) - panelLag));
         else if (extensionViews.Visible)
-            extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews)));
+            extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews) - panelLag));
         else if (!LayoutTools)
         {
-            codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll)));
+            codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll) - panelLag));
             FitSplit();
         }
         else
-            canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas)));
+            canvas.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, canvas) - panelLag));
     }
 
     /// <summary>The right side, what the code of a file comes to, or the properties of what's selected in a layout.</summary>

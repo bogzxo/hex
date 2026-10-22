@@ -86,6 +86,7 @@ internal sealed partial class DuskScene
         test.Run(() => Shot("settings"));
         test.Check("the settings come up as a page, a row a setting, the terminal's and the editor's", () =>
             SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + Hex.Shell.EditorSettingsCatalog.Settings.Length
+                + new Hex.Shell.WindowsSource().Settings.Count
             && page.ValueOf!("theme") is StringValue && page.RowsShown == page.Settings.Count);
         test.Run(() => SettingsPage!.Find("scrollback"));
         test.Settle(0.1f);

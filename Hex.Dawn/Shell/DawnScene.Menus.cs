@@ -87,6 +87,7 @@ internal sealed partial class DawnScene
         // game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set to
         // the same, and the editor itself stays in its flat one
         AddSkins(commands.AddMenu("View/look", Said("menus.layout_skin"), "paintcan"));
+        AddLooks(commands.AddMenu("View/look", Said("looks.menu"), "color-mode"));
 
         // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
         commands.Bind(Key.Number0, () => { if (LayoutTools) designer.ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);

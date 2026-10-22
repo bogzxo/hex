@@ -2,16 +2,16 @@ using Horizon.UI.Components;
 
 namespace Hex.Dusk;
 
-// The self test of the effects in the terminal. Off as they come, the palette over glass and nothing thrown with them
-// subtle, sparks off the cursor as it's typed along a prompt with them all, a burst when a command of a couple of
-// seconds goes well, and nothing left flying or frosted once they're off again.
+// The self test of the effects in the terminal. As they come (the Fluid Glass look) the popups are on glass and nothing
+// is thrown, sparks off the cursor as it's typed along a prompt with them all, a burst when a command of a couple of
+// seconds goes well, and nothing left flying or frosted once they and the glass are off (the Flat look).
 internal sealed partial class DuskScene
 {
     private void TestEffects(DuskScript test)
     {
         TerminalView View() => panel.FocusedView!;
 
-        test.Check("effects: off as they come", () => compositor.PopupGlass is null && sparks.Count == 0);
+        test.Check("effects: as they come the popups are on glass and nothing flies", () => compositor.PopupGlass is not null && sparks.Count == 0);
 
         test.Run(() =>
         {
@@ -68,9 +68,10 @@ internal sealed partial class DuskScene
         test.Run(() =>
         {
             effects = "none";
+            effectGlass = false;
             ApplyEffects();
         });
         test.Wait();
-        test.Check("effects: and off again nothing flies and nothing's frosted", () => sparks.Count == 0 && compositor.PopupGlass is null);
+        test.Check("effects: and off with the glass nothing flies and nothing's frosted", () => sparks.Count == 0 && compositor.PopupGlass is null);
     }
 }

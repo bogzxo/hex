@@ -25,6 +25,13 @@ internal sealed partial class DuskScene
             choices.Add(($"{command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () => Run(name)));
         }
 
+        // Every look there is, Hex's and the user's, a few letters away like everything else (see DuskScene.Looks)
+        foreach (Hex.Shell.HexLook look in Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)))
+        {
+            Hex.Shell.HexLook picked = look;
+            choices.Add((HexText.Get("looks.command", ("name", look.Name)), () => PickLook(picked)));
+        }
+
         ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
     }
 

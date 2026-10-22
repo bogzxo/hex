@@ -51,11 +51,12 @@ let side_bar = compositor.include({
     file: "shell/side_bar.hor"
 });
 
+// The middle is a card on the window like the sides, its padding the room round what's in it inside the card
 let center = compositor.stack({
     parent: body,
     anchor: "top",
     pivot: "top",
-    padding: vec(0, 6, 0, 0),
+    padding: vec(10, 10, 10, 8),
     spacing: 0
 });
 

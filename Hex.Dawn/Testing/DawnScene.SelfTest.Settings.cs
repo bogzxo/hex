@@ -84,8 +84,10 @@ internal sealed partial class DawnScene
             settings.EditorTheme != "horizon" && settings.EditorSkin == "flat" && compositor.Skin?.Theme == settings.EditorTheme && next!.EndsWith(settings.EditorTheme));
         test.Check("settings: the editor can wear any skin there is, the row has every one of them", () =>
             SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices is { } listed && listed.Length > UISkins.Available.Count && listed.Any(text => text.StartsWith("Dead Revolver")));
+        // The lists of the sides are the panel's colour, see through on glass, and the code's box the panel itself
         test.Check("settings: boxes, background and all", () =>
-            compositor.Skin is { } worn && treeScroll.Color == worn.PanelColor with { W = 1.0f });
+            compositor.Skin is { } worn && treeScroll.Color is { } box && box with { W = 1.0f } == worn.PanelColor with { W = 1.0f }
+            && codeScroll.Color == worn.PanelColor with { W = 1.0f });
         test.Run(() => UseEditorTheme("light", save: false));
 
         // The skin swaps on the thread that draws, waited on rather than given a fixed time

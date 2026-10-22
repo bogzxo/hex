@@ -49,10 +49,16 @@ internal sealed partial class DawnScene
     // How many errors and how many warnings there are, for the status bar and the panel's tab
     private int errorCount, warningCount;
 
-    // Whether the panel is folded down to its tabs, and how it could be dragged before it was
-    private bool panelFolded;
+    // Whether the panel is folded down to its tabs, how it could be dragged before it was, and whether it's been folded
+    // or opened since Hex came up (the first time is at once, the window opens with it as it was left)
+    private bool panelFolded, panelFoldSettled;
     private UIResize panelResize;
-    private float panelOpenHeight;
+
+    // Whether it was opened by hand while there's nothing wrong, it stays open then rather than folding itself again
+    private bool panelOpenedByHand;
+
+    // How much of the middle the panel took the last time the editor was fitted round it, see FitChrome
+    private float panelTaken;
 
     private readonly List<HexProblem> problemList = [];
 
@@ -74,11 +80,25 @@ internal sealed partial class DawnScene
         bottom.GripReach = 8.0f;
         bottom.OnResized = size => settings.PanelHeight = size.Y;
         bottom.OnResizeEnded = _ => SaveSettings();
+        bottom.OnFold = CollapsePanel;
     }
 
     /// <summary>
-    /// The panel folded down to its tabs (nothing on the page it's on) or opened back up to the height it was dragged to.
-    /// Folded it can't be dragged, a click on another tab opens it.
+    /// The panel folded down to its tabs by its chevron, or opened again by it or a click on a tab, and kept that way. The
+    /// whole of it put away (Ctrl+J) took the tabs with it, and there was no way to have the tabs and not the panel.
+    /// </summary>
+    private void CollapsePanel(bool fold)
+    {
+        settings.PanelCollapsed = fold;
+        panelOpenedByHand = !fold;
+        SaveSettings();
+    }
+
+    /// <summary>
+    /// The panel folded down to its tabs (nothing on the page it's on) or opened back up to the height it was dragged to,
+    /// eased there by the tab panel itself, its height kept for when it opens. Folded it can't be dragged, a click on
+    /// another tab opens it. It was the height set to the tabs' and back in one go, a snap, and the editor over it a tick
+    /// behind, which flashed a gap or the two over each other.
     /// </summary>
     private void FoldPanel(bool fold)
     {
@@ -86,19 +106,22 @@ internal sealed partial class DawnScene
         if (fold)
         {
             panelResize = bottom.Resizable;
-            panelOpenHeight = bottom.Size.Y;
             bottom.Resizable = UIResize.None;
-            float folded = bottom.Bounds.Max.Y - bottom.HeaderBounds.Min.Y + bottom.Spacing * 0.5f + bottom.Padding.Bottom;
-            bottom.MinSize = new Vector2(0.0f, folded);
-            bottom.Size = bottom.Size with { Y = folded };
         }
         else
-        {
             bottom.Resizable = panelResize;
-            bottom.MinSize = new Vector2(0.0f, MIN_PANEL);
-            bottom.Size = bottom.Size with { Y = Math.Clamp(panelOpenHeight, MIN_PANEL, MAX_PANEL) };
-        }
+
+        bottom.Fold(fold, instantly: !panelFoldSettled);
+        panelFoldSettled = true;
     }
+
+    /// <summary>
+    /// How much of the middle the panel takes as it'll be laid out this tick, as far folded and slid away as it is now,
+    /// and the gap over it, nothing while it's away. The layout comes after the editor is fitted round it.
+    /// </summary>
+    private float PanelTakes() => bottom.Visible
+        ? bottom.FoldedFrom(bottom.Size.Y) * bottom.SlideAmount + (center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f)
+        : 0.0f;
 
     private void TogglePanel()
     {
@@ -140,8 +163,9 @@ internal sealed partial class DawnScene
             problemRowsStale = true;
         }
 
-        bool fold = bottom.Selected == PROBLEMS_PAGE && problemList.Count == 0;
-        if (fold != panelFolded)
+        // Folded by hand, or by itself with nothing wrong on the page showing unless it was opened by hand since
+        bool fold = settings.PanelCollapsed || (bottom.Selected == PROBLEMS_PAGE && problemList.Count == 0 && !panelOpenedByHand);
+        if (fold != panelFolded || !panelFoldSettled)
             FoldPanel(fold);
 
         panelRowsWait -= dt;

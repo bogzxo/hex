@@ -159,7 +159,7 @@ internal sealed partial class DawnScene
         var window = made.Get<WindowPanel>("window");
         window.Title = title;
         window.Size = window.Size with { Y = height + 60.0f };
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        DressWindow(window);
         window.OnClosed = () => window.Parent?.Remove(window);
         text = made.Get<Label>("text");
         text.Text = markdown;

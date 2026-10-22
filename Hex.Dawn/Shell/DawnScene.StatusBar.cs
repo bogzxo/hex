@@ -138,10 +138,13 @@ internal sealed partial class DawnScene
                 : $"$(symbol-class) {Said("status_bar.components", ("count", count.ToString()))}";
         }
 
-        if (designer.canvasZoom != zoomShown)
+        // How big the layout really is drawn against its own pixels, what zooming says too. It said its zoom against fitting
+        // the canvas, 100% for a layout drawn at half its size
+        float actual = document.Module.Scale.X / MathF.Max(0.01f, compositor.Scale) * 100.0f;
+        if (MathF.Abs(actual - zoomShown) >= 0.5f)
         {
-            zoomShown = designer.canvasZoom;
-            zoomItem.Text = $"$(zoom-in) {designer.canvasZoom * 100.0f:0}%";
+            zoomShown = actual;
+            zoomItem.Text = $"$(zoom-in) {actual:0}%";
         }
 
         if (skinShown != (UISkins.Current, UISkins.Theme))

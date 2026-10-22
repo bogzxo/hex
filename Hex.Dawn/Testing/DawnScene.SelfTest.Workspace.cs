@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
         });
         test.Wait();
         test.Check("workspace: two folders added, the explorer has both", () =>
-            explorer.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("EXPLORER")
+            explorer.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("Explorer")
             && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderA) && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderB)
             && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderA, "a.hor")) && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderB, "b.hor")));
         test.Check("workspace: a folder in one of them is shut until it is opened up", () =>

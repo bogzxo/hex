@@ -118,6 +118,12 @@ public sealed partial class HexInstance : IDisposable
                 // another of the mode has the pipe already
                 return;
             }
+            catch (UnauthorizedAccessException)
+            {
+                // another of the mode has it and runs as administrator, so this one can't even say hello down it. It
+                // carries on without a pipe rather than taking the whole window down with a throw nobody catches
+                return;
+            }
         }
     }
 

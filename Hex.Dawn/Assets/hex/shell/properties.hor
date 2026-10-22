@@ -7,7 +7,7 @@
 let right = compositor.stack({
     anchor: "top",
     pivot: "top",
-    padding: vec(6, 6, 6, 6),
+    padding: vec(10, 10, 10, 10),
     spacing: 6,
     slide: "right"
 });

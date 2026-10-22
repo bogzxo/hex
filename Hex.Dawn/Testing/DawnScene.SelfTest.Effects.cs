@@ -1,29 +1,35 @@
 namespace Hex.Dawn;
 
-// The self test of the effects, off as Dawn comes, the caret gliding and a save bursting with them subtle, sparks off the
-// caret as it types with them all, the glass under the sides and the palette while they're on, and nothing left flying
-// (or frosted) once they're off again.
+// The self test of the effects. Everything off first (the effects none, the glass and the glide switched off, which is
+// the Flat look), the caret gliding on its own switch and a save bursting with the effects subtle and the sparks on,
+// sparks off the caret as it types with them all, the glass under the sides and the palette on its own switch whatever
+// the effects are, and everything put back as it was at the end.
 internal sealed partial class DawnScene
 {
     private void TestEffects(HexPointerScript test)
     {
         string file = Path.Combine(testFolder, "effects.txt");
         string was = settings.Effects;
+        bool wasSparks = settings.EffectSparks, wasMotion = settings.EffectMotion, wasGlass = settings.EffectGlass;
 
         test.Run(() =>
         {
             File.WriteAllText(file, "sparks\n");
             Open(file);
             settings.Effects = "none";
+            settings.EffectMotion = false;
+            settings.EffectGlass = false;
             ApplyEffects();
         });
         test.Settle(0.2f);
-        test.Check("effects: off as they come, the caret jumps and nothing flies", () => code.CaretGlide == 0.0f && sparks.Count == 0);
+        test.Check("effects: all off, the caret jumps and nothing flies", () => code.CaretGlide == 0.0f && sparks.Count == 0);
         test.Check("effects: and nothing is on glass", () => compositor.PopupGlass is null && left.Glass is null && compositor.GlassDrawn.Panes == 0);
 
         test.Run(() =>
         {
             settings.Effects = "subtle";
+            settings.EffectSparks = true;
+            settings.EffectMotion = true;
             ApplyEffects();
             code.Focus();
             code.Document.Insert("typed ");
@@ -104,11 +110,14 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             settings.Effects = was;
+            settings.EffectSparks = wasSparks;
+            settings.EffectMotion = wasMotion;
+            settings.EffectGlass = wasGlass;
             ApplyEffects();
             CloseDocument(document);
         });
         test.Settle(0.2f);
-        test.Check("effects: and off again nothing is left flying", () => was != "none" || sparks.Count == 0);
-        test.Check("effects: or on glass", () => was != "none" || (left.Glass is null && compositor.PopupGlass is null));
+        test.Check("effects: and put back nothing is left flying", () => was != "none" || sparks.Count == 0);
+        test.Check("effects: and the glass is as it was", () => wasGlass == (left.Glass is not null) && wasGlass == (compositor.PopupGlass is not null));
     }
 }

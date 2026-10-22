@@ -128,6 +128,9 @@ internal sealed partial class DawnScene : Scene
         // What the editor says, before anything of it is shown, its layouts name the texts by key
         ReadStrings();
 
+        // The field of light the frame's glass sits over, under everything of the editor's, see DawnScene.Materials
+        BuildGlow();
+
         // Bootstrapping. The editor is made of the same thing it makes
         chrome = compositor.CreateModule();
         chrome.ShowInLayoutDebugger = false;

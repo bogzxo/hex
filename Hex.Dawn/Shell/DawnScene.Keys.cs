@@ -210,7 +210,7 @@ internal sealed partial class DawnScene
         UILayout made = layout.Instantiate(KEYS_LAYOUT, chrome.Root);
         var window = keysWindow = made.Get<WindowPanel>("window");
         window.Title = Said("keys.title");
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        DressWindow(window);
         window.OnClosed = () =>
         {
             window.Parent?.Remove(window);

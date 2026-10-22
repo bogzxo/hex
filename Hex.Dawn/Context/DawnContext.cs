@@ -330,6 +330,9 @@ internal interface IEditorWindow
     /// <summary>A side panel made to be dragged wider or narrower by an edge, as the sides are.</summary>
     void Grip(UIComponent panel, UIResize edge, bool left);
 
+    /// <summary>A little window dressed the way every window of the editor's is, its stuff and its glass.</summary>
+    void Dress(WindowPanel window);
+
     /// <summary>A quiet line saying something where a list has nothing in it.</summary>
     Label Hint(UIComponent into, string text);
 

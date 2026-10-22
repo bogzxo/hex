@@ -27,7 +27,6 @@ internal sealed partial class DawnScene
     {
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
-        sideTree.FocusLine = true;
         sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnActivated = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
@@ -52,7 +51,7 @@ internal sealed partial class DawnScene
     /// <summary>The folders of the workspace as a tree, a folder's files read when it is opened and kept until they change.</summary>
     private void RebuildExplorer()
     {
-        treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name.ToUpperInvariant()));
+        treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name));
         explorer.explorerRows.Clear();
         explorerMade = 0;
         UseSideTree(true);
@@ -176,7 +175,8 @@ internal sealed partial class DawnScene
         UseSideTree(true);
         folders.Forget();
 
-        var items = new List<UITreeItem>();
+        // What to do about it first, quietly, then the folder files are opened from
+        var items = new List<UITreeItem> { NoteItem(Said("side_tree.browsing"), DimColor) };
         if (Directory.GetParent(browseDirectory) is { } parent)
             items.Add(FileItem(parent.FullName, true, "../"));
 
@@ -212,7 +212,7 @@ internal sealed partial class DawnScene
 
     private void RebuildOutline()
     {
-        treeTitle.Text = Said("side.outline_of", ("file", document.Name.ToUpperInvariant()));
+        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
 
         List<OutlineEntry> entries = OutlineHere();

@@ -36,12 +36,17 @@ internal sealed partial class DuskScene
             ReadBackdrop();
         };
 
-        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor], CloseSettings, EditorSettingsCatalog.Parts);
-        settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, new WindowsSource()], CloseSettings, EditorSettingsCatalog.Parts,
+            sections: EditorSettingsCatalog.Sections);
+        settingsView.Window.Color = compositor.Skin?.Palette.Raised;
+        settingsView.Window.Glass = effectGlass ? HexGlass.Window(popupGlass) : null;
         chrome.Root.Add(settingsView.Window);
 
         // The glass under its sliders, as they make it while they're dragged
-        settingsView.SetPanel(EditorSettingsCatalog.EFFECTS, new GlassPreview(640.0f) { Look = () => (popupGlass, sideGlass, EffectsOn && effectGlass) });
+        settingsView.SetPanel(EditorSettingsCatalog.GLASS, new GlassPreview(640.0f) { Look = () => (popupGlass, sideGlass, effectGlass) });
+
+        // The profiles of how Hex looks over all of it, see DuskScene.Looks
+        AddLookPicker(settingsView);
         settingsView.Page.Search.Focus();
     }
 
@@ -50,6 +55,7 @@ internal sealed partial class DuskScene
         if (settingsView?.Window is { Parent: { } parent } window)
             parent.Remove(window);
         settingsView = null;
+        lookPicker = null;
         panel.FocusedView?.Focus();
 
         // The editor's section has the effects and the picture, which are Dusk's too

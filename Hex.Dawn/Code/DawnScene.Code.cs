@@ -48,13 +48,14 @@ internal sealed partial class DawnScene
         editor.TextScale = HexDesigner.EDITOR_TEXT * settings.CodeZoom;
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
-        editor.FocusLine = true;
         editor.WordWrap = settings.WrapCode;
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         ShowBackdrop(editor);
-        editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
+        // The code on the middle card's own colour, one surface with the tabs over it and the terminal under it. It was a
+        // charcoal of its own written in here, a third colour in the one card
+        editor.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.14f, 0.2f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
         editor.CompletionSource = codeEditing.Completions;
         editor.OnChecked = _ => CodeChecked(prepared);
@@ -225,7 +226,8 @@ internal sealed partial class DawnScene
         OpenOnExtensionView(opened);
 
         Console.WriteLine($"[Hex] Opened '{path}' as code: {opened.Editor.Document.LineCount} lines.");
-        Say(Said("code.opened", ("name", opened.Name), ("count", opened.Editor.Document.LineCount.ToString())));
+        int lines = opened.Editor.Document.LineCount;
+        Say(Said("code.opened", ("name", opened.Name), ("lines", lines == 1 ? "1 line" : $"{lines} lines")));
         return true;
     }
 

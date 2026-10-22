@@ -100,9 +100,26 @@ internal sealed partial class DawnScene
             byName[Relative(file)] = file;
         string[] names = [.. byName.Keys];
 
-        ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", DescribeRoots())),
-            [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))],
-            shortestFirst: true, prefixed: QuickOpenPrefix, recent: RecentOpened);
+        // The folder by its name and not its whole path, a line along the bottom of the palette and not a paragraph
+        var roots = WorkspaceRoots();
+        string where = roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) : DescribeRoots();
+        List<(string Text, Action Picked)> choices = [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))];
+
+        // Nothing in the workspace (there's none yet), the files worked on last and a folder to open, it said there was
+        // nothing to pick from
+        if (choices.Count == 0)
+        {
+            foreach (string file in recent.Where(File.Exists).Take(10))
+            {
+                string path = file;
+                choices.Add((path, () => OpenAt(path, 0, 0)));
+            }
+
+            choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
+        }
+
+        ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", where)),
+            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened);
     }
 
     /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
