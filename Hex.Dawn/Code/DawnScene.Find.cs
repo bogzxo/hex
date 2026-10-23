@@ -48,21 +48,17 @@ internal sealed partial class DawnScene
         textDialog = shown;
     }
 
-    private void GoToLine()
-    {
-        AskText(Said("find_menu.go_to_line_title"), Said("find_menu.which_line", ("count", code.Document.LineCount.ToString())), string.Empty, Said("find_menu.go"), answer =>
-        {
-            if (int.TryParse(answer.Trim(), out int line))
-            {
-                code.GoTo(Math.Clamp(line - 1, 0, code.Document.LineCount - 1));
-                code.Focus();
-            }
-        });
-    }
+    // Ctrl+G, quick open with a colon in it, the lines of the file to go to, the way VS Code has it. It was a dialog of
+    // its own with a box, one more kind of window than the rest of Hex has
+    private void GoToLine() => QuickOpenWith(":");
 
     /* The workspace, every .hor of its folders, or of the repository the open file is in when it has none */
 
-    /// <summary>The repository the document on screen is in (the nearest folder up from it with git in it), failing that the folder files are opened from.</summary>
+    /// <summary>
+    /// The repository the document on screen is in (the nearest folder up from it with git in it), failing that the folder
+    /// it's in, and with no file the folder files are opened from. A D file with no git above it looked through Hex's own
+    /// layouts folder.
+    /// </summary>
     private string RepositoryRoot()
     {
         string? from = document.Path is { } path ? Path.GetDirectoryName(Path.GetFullPath(path)) : browseDirectory;
@@ -72,27 +68,33 @@ internal sealed partial class DawnScene
                 return at;
         }
 
-        return browseDirectory;
+        return from is not null && Directory.Exists(from) ? from : browseDirectory;
     }
 
     /// <summary>The folders whose files are looked through, the workspace's, or the repository of the open file without one.</summary>
     private List<string> WorkspaceRoots() => explorer.workspace.IsEmpty ? [RepositoryRoot()] : [.. explorer.workspace.Folders];
 
-    /// <summary>What is looked through, said the way a person would.</summary>
+    /// <summary>
+    /// What is looked through, said the way a person would, a folder by its name. Its whole path wrapped in the middle of
+    /// a word in the dialog that asks.
+    /// </summary>
     private string DescribeRoots()
     {
         var roots = WorkspaceRoots();
-        return roots.Count == 1 ? roots[0] : Said("find_menu.workspace_folders", ("count", roots.Count.ToString()));
+        return roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) is { Length: > 0 } name ? name : roots[0]
+            : Said("find_menu.workspace_folders", ("count", HexText.Count("folder", roots.Count)));
     }
 
-    /// <summary>Every .hor of every folder looked through, once each.</summary>
-    private List<string> AllWorkspaceFiles() => HexSearch.FilesUnder(WorkspaceRoots());
+    /// <summary>Every file of every folder looked through that reads as text, once each.</summary>
+    private List<string> AllWorkspaceFiles() => HexSearch.TextFilesUnder(WorkspaceRoots());
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
     private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);
 
-    /// <summary>Ctrl+P, opens a file of the workspace by a few letters of its name.</summary>
-    private void QuickOpen()
+    /// <summary>Ctrl+P, opens a file of the workspace by a few letters of its name, or with a prefix typed another of its lists.</summary>
+    private void QuickOpen() => QuickOpenWith(string.Empty);
+
+    private void QuickOpenWith(string typed)
     {
         List<string> files = AllWorkspaceFiles();
         var byName = new Dictionary<string, string>();
@@ -100,9 +102,30 @@ internal sealed partial class DawnScene
             byName[Relative(file)] = file;
         string[] names = [.. byName.Keys];
 
-        ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", DescribeRoots())),
-            [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))],
-            shortestFirst: true, prefixed: QuickOpenPrefix, recent: RecentOpened);
+        // The folder by its name and not its whole path, a line along the bottom of the palette and not a paragraph
+        var roots = WorkspaceRoots();
+        string where = roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) : DescribeRoots();
+        List<(string Text, Action Picked)> choices = [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))];
+
+        // Nothing in the workspace (there's none yet), the files worked on last and a folder to open, it said there was
+        // nothing to pick from
+        if (choices.Count == 0)
+        {
+            foreach (string file in recent.Where(File.Exists).Take(10))
+            {
+                string path = file;
+                choices.Add((path, () => OpenAt(path, 0, 0)));
+            }
+
+            choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
+        }
+
+        // Ctrl+G's says what it's going along, the file's lines, not quick open's way of finding a file
+        string prompt = typed.StartsWith(':')
+            ? Said("find_menu.go_to_line_prompt", ("lines", HexText.Count("line", code.Document.LineCount)), ("file", document.Path is { } shownPath ? Path.GetFileName(shownPath) : document.Name))
+            : Said("find_menu.open_file_prompt", ("count", HexText.Count("file", names.Length)), ("where", where));
+        ChooseFrom(Said(typed.StartsWith(':') ? "find_menu.go_to_line_title" : "find_menu.open_file_title"), prompt,
+            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
     }
 
     /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
@@ -117,13 +140,15 @@ internal sealed partial class DawnScene
                 return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => running.GoToCode(entry.Line, entry.Column))))];
 
             case ':':
-                // A line of every ten, a few letters of the number find the one, and the end of the file
+                // Every line by its number with what's on it dim after, a few letters of the number find the one. Bare
+                // numbers said nothing of which line was which
                 var lines = new List<(string Text, Action Picked)>();
                 int count = code.Document.LineCount;
                 for (int line = 1; line <= count; line++)
                 {
                     int at = line - 1;
-                    lines.Add(($"{line}", () =>
+                    string on = code.Document.LineAt(at).Trim();
+                    lines.Add((on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
@@ -158,7 +183,7 @@ internal sealed partial class DawnScene
             {
                 ShowResults(Said("find_menu.found_title", ("query", query), ("count", found.Count.ToString())), found);
                 Say(found.Count > 0
-                    ? Said("find_menu.found_in_files", ("query", query), ("files", found.Select(result => result.Path).Distinct().Count().ToString()), ("lines", found.Count.ToString()))
+                    ? Said("find_menu.found_in_files", ("query", query), ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count())), ("lines", HexText.Count("line", found.Count)))
                     : Said("find_menu.not_found", ("query", query), ("where", where)), error: found.Count == 0);
             });
         });
@@ -167,13 +192,23 @@ internal sealed partial class DawnScene
     /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
     private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
-    /// <summary>Every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game hasn't got.</summary>
+    /// <summary>
+    /// Ctrl+F8, every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game
+    /// hasn't got. With them every D file looked over by the compiler and every C# project built, what's wrong in a file
+    /// nobody has open is there before anybody builds it.
+    /// </summary>
     private void CheckAllFiles()
     {
         List<string> roots = WorkspaceRoots();
         string where = DescribeRoots();
+        string? dChecker = languages.DChecker();
 
-        InBackground(Said("find_menu.checking", ("where", where)), () => HexSearch.CheckFiles(roots), checkedFiles =>
+        InBackground(Said("find_menu.checking", ("where", where)), () =>
+        {
+            var (hidlFiles, hidlProblems) = HexSearch.CheckFiles(roots);
+            var (codeFiles, codeProblems) = HexLanguages.CheckCode(roots, dChecker);
+            return (hidlFiles + codeFiles, (List<HexResult>)[.. hidlProblems, .. codeProblems]);
+        }, checkedFiles =>
         {
             var (files, problems) = checkedFiles;
 
@@ -186,8 +221,8 @@ internal sealed partial class DawnScene
                 Console.WriteLine($"[Hex]   {problem.Text}");
 
             Say(problems.Count == 0
-                ? Said("find_menu.all_parse", ("files", files.ToString()), ("where", where))
-                : Said("find_menu.problems_found", ("count", problems.Count.ToString()), ("files", files.ToString())), error: problems.Count > 0);
+                ? Said("find_menu.all_parse", ("files", HexText.Count("file", files)), ("where", where))
+                : Said("find_menu.problems_found", ("count", HexText.Count("problem", problems.Count)), ("files", HexText.Count("file", files))), error: problems.Count > 0);
         });
     }
 

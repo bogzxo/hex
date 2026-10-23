@@ -90,6 +90,9 @@ internal interface IDocuments
     /// <summary>A document was closed.</summary>
     event Action<HexDocument> Closed;
 
+    /// <summary>A document was written to its file.</summary>
+    event Action<HexDocument> Saved;
+
     /// <summary>Something that has diagnostics for documents, which go under their code and in the Problems panel with the rest.</summary>
     void AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source);
 
@@ -100,7 +103,7 @@ internal interface IDocuments
     void AddCompletions(HexCompletionSource source);
 
     /// <summary>Something that says what a word of some files is as the pointer rests on it (markdown), null to leave it to the next.</summary>
-    void AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source);
+    void AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source, bool first = false);
 
     /// <summary>Something that says what a call in some files takes, the argument being typed picked out, null to leave it to the next.</summary>
     void AddSignatures(Func<HexDocument, string, int, UISignature?> source);
@@ -245,9 +248,28 @@ internal interface ITerminals
 
     /// <summary>
     /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
-    /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
+    /// still there, a new one in a folder otherwise, named so. The page is brought up with it. Once it's done how it
+    /// ended and what it wrote are said to whoever asked.
     /// </summary>
-    void RunInTab(string key, string title, string folder, string commandLine);
+    void RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished = null);
+
+    /// <summary>How many errors the terminals have said there are (a build's), the ones in the Problems panel.</summary>
+    int TerminalErrors { get; }
+
+    /// <summary>A problem a build said, with the terminals' in the Problems panel and under the code, a line and a column from 1.</summary>
+    void AddProblem(string path, int line, int column, string message, bool warning);
+
+    /// <summary>What the terminals and the builds said is wrong forgotten, a new build is about to say it again.</summary>
+    void ClearProblems();
+
+    /// <summary>
+    /// Runs a command line in a Dusk window of its own, in a folder, with the shell the terminal page uses, or as a new
+    /// tab of the Dusk that's running when there is one.
+    /// </summary>
+    void RunInDusk(string folder, string commandLine);
+
+    /// <summary>The id of the shell a new terminal starts, pwsh, powershell, cmd, bash, which a command line is written for.</summary>
+    string UsualProfileId { get; }
 }
 
 /// <summary>The side bar and the panel under the editor.</summary>
@@ -270,6 +292,9 @@ internal interface IPanels
 
     /// <summary>The panel's output brought up.</summary>
     void ShowOutput();
+
+    /// <summary>The panel's problems brought up.</summary>
+    void ShowProblems();
 
     /// <summary>The panel's terminal page brought up, the console's and the terminals' tabs.</summary>
     void ShowTerminals();
@@ -329,6 +354,9 @@ internal interface IEditorWindow
 
     /// <summary>A side panel made to be dragged wider or narrower by an edge, as the sides are.</summary>
     void Grip(UIComponent panel, UIResize edge, bool left);
+
+    /// <summary>A little window dressed the way every window of the editor's is, its stuff and its glass.</summary>
+    void Dress(WindowPanel window);
 
     /// <summary>A quiet line saying something where a list has nothing in it.</summary>
     Label Hint(UIComponent into, string text);

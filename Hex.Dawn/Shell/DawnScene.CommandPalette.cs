@@ -42,11 +42,15 @@ internal sealed partial class DawnScene
 
         commands.AddRange(extensions.Commands());
 
-        // The terminal's commands, the same ones Dusk has, under a heading of their own
+        // The terminal's commands, the same ones Dusk has, under a heading of their own, a title once (Dusk's palette has why)
+        var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (TerminalCommand command in terminals.Commands.All)
         {
+            if (!titles.Add(command.Title))
+                continue;
+
             string name = command.Name;
-            commands.Add(($"Terminal: {command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () =>
+            commands.Add(($"Terminal: {HexText.TitleCase(command.Title)}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () =>
             {
                 ShowPanel(CONSOLE_PAGE);
                 terminals.Run(name);
@@ -67,11 +71,11 @@ internal sealed partial class DawnScene
     /// </param>
     /// <param name="recent">The ones picked last, over the rest and remembered in it, the palette's commands, quick open's files.</param>
     private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false,
-        Func<char, List<(string Text, Action Picked)>?>? prefixed = null, UIRecentList? recent = null)
+        Func<char, List<(string Text, Action Picked)>?>? prefixed = null, UIRecentList? recent = null, string typed = "")
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
-        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent);
+        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed);
     }
 }

@@ -34,7 +34,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     /* The documents */
 
-    private Action<HexDocument>? documentOpened, documentEdited, documentClosed;
+    private Action<HexDocument>? documentOpened, documentEdited, documentClosed, documentSaved;
     private readonly List<Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?>> diagnosticSources = [];
 
     IReadOnlyList<HexDocument> IDocuments.All => documents;
@@ -92,13 +92,15 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), Path.GetFullPath(path), PlatformPaths.Comparison));
 
     event Action<HexDocument> IDocuments.Opened { add => documentOpened += value; remove => documentOpened -= value; }
+    event Action<HexDocument> IDocuments.Saved { add => documentSaved += value; remove => documentSaved -= value; }
     event Action<HexDocument> IDocuments.Edited { add => documentEdited += value; remove => documentEdited -= value; }
     event Action<HexDocument> IDocuments.Closed { add => documentClosed += value; remove => documentClosed -= value; }
 
     void IDocuments.AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source) => diagnosticSources.Add(source);
     void IDocuments.DiagnosticsChanged(HexDocument of) => ShowDiagnostics(of);
     void IDocuments.AddCompletions(HexCompletionSource source) => codeEditing.completionSources.Add(source);
-    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source) => codeEditing.hoverSources.Add(source);
+    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source, bool first) =>
+        codeEditing.hoverSources.Insert(first ? 0 : codeEditing.hoverSources.Count, source);
     void IDocuments.AddSignatures(Func<HexDocument, string, int, UISignature?> source) => codeEditing.signatureSources.Add(source);
 
     /* The workspace */
@@ -213,7 +215,40 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     TerminalHost ITerminals.Host => terminals;
 
-    void ITerminals.RunInTab(string key, string title, string folder, string commandLine)
+    string ITerminals.UsualProfileId => terminals.UsualProfile?.Id ?? string.Empty;
+
+    // The self test never starts a Dusk of its own, it says what it would have started it with
+    internal (string Folder, string CommandLine)? DuskAsked { get; private set; }
+
+    void ITerminals.RunInDusk(string folder, string commandLine)
+    {
+        if (options.SelfTest)
+        {
+            DuskAsked = (folder, commandLine);
+            return;
+        }
+
+        if (!HexModes.StartDusk(folder, terminals.UsualProfile?.Id, commandLine))
+            Say(Said("tasks.no_dusk"), error: true);
+    }
+
+    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
+    {
+        // The code keeps the keyboard, the way a task's terminal doesn't take it in VS Code. The build took it and what was
+        // typed next (Ctrl+G and a line) went to the shell
+        UIComponent? had = compositor.Focus;
+        try
+        {
+            StartInTab(key, title, folder, commandLine, finished);
+        }
+        finally
+        {
+            if (had is CodeEditor { Module: not null } editor)
+                editor.Focus();
+        }
+    }
+
+    private void StartInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
     {
         ShowPanel(CONSOLE_PAGE);
         string line = commandLine + "\r";
@@ -224,6 +259,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             terminalPanel.Select(tab);
             terminalPanel.FocusPane(view);
             view.Send(line);
+            WatchTask(view, finished);
             return;
         }
 
@@ -232,8 +268,16 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         tab = terminalPanel.NewTab(terminals.UsualProfile, folder);
         tab.Tag = key;
         tab.Renamed = title;
-        tab.Views.FirstOrDefault()?.SendWhenReady(line);
+        if (tab.Views.FirstOrDefault() is { } made)
+        {
+            made.SendWhenReady(line);
+            WatchTask(made, finished);
+        }
     }
+
+    int ITerminals.TerminalErrors => terminalProblems.Count(problem => !problem.Warning);
+    void ITerminals.AddProblem(string path, int line, int column, string message, bool warning) => AddTerminalProblem(path, line, Math.Max(1, column), message, warning);
+    void ITerminals.ClearProblems() => ClearTerminalProblems();
 
     /* The side bar and the panel */
 
@@ -258,6 +302,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IPanels.RefreshRows() => sideTree.Refresh();
     void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
+    void IPanels.ShowProblems() => ShowPanel(PROBLEMS_PAGE);
     void IPanels.ShowTerminals() => ShowPanel(CONSOLE_PAGE);
     bool IPanels.TerminalsShown => bottom.Shown && bottom.Selected == CONSOLE_PAGE;
     Vector4 IPanels.Warning => WarningColor;
@@ -310,6 +355,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IEditorWindow.SwitchView(HexView view) => SwitchView(view);
     void IEditorWindow.RefreshRight() => inspectorDirty = true;
     void IEditorWindow.Grip(UIComponent panel, UIResize edge, bool left) => SideGrip(panel, edge, left);
+    void IEditorWindow.Dress(WindowPanel window) => DressWindow(window);
     Label IEditorWindow.Hint(UIComponent into, string text) => Hint(into, text);
     List<OutlineEntry> IEditorWindow.Outline() => OutlineHere();
 

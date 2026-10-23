@@ -143,7 +143,9 @@ internal sealed partial class HexDesigner
             "entrance" => context.Strings.Said("designer_inspector.section_entrance"),
             "resizing" => context.Strings.Said("designer_inspector.section_resizing"),
             "look" => context.Strings.Said("designer_inspector.section_look"),
-            _ => title
+
+            // The kind's own, its name with a capital the way the others have one
+            _ => title.Length > 0 ? char.ToUpperInvariant(title[0]) + title[1..] : title
         };
         section.Expanded = !foldedSections.Contains(title);
         section.OnToggled = open =>
@@ -259,11 +261,13 @@ internal sealed partial class HexDesigner
 
             case BooleanValue boolean:
             {
-                var choice = Editor(EditorTemplate.YesNo, into).Get<Selector>("choice");
-                choice.Size = choice.Size with { X = EditorWidth };
-                choice.Value = boolean.Value ? "yes" : "no";
-                choice.OnChanged = chosen => Set(target, name, new BooleanValue(chosen == "yes"));
-                return choice;
+                // A switch, the way a Mac's inspector has yes or no. It was "< yes >" with the accent's arrows either
+                // side, on every other row
+                var toggle = Editor(EditorTemplate.YesNo, into).Get<ToggleButton>("toggle");
+                toggle.Size = toggle.Size with { X = EditorWidth };
+                toggle.State = boolean.Value;
+                toggle.OnPressed = () => Set(target, name, new BooleanValue(toggle.State));
+                return toggle;
             }
 
             case StringValue text when Choices.TryGetValue(name, out var choices):

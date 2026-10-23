@@ -73,6 +73,11 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     internal void RenameSymbol()
     {
+        // A file of a language server's is renamed in the way the server knows the name, everywhere it's that name
+        HexDocument asked = document;
+        if (languages?.Rename(asked, (name, renamed) => RenameByWords(asked, name, renamed, codeOnly: true)) == true)
+            return;
+
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
@@ -82,57 +87,76 @@ internal sealed partial class HexCodeEditing
 
         string name = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         HexDocument here = document;
-        context.Windows.Prompt(context.Strings.Said("code_hints.rename"), context.Strings.Said("code_hints.rename_prompt", ("name", name), ("document", document.Name)), name, context.Strings.Said("code_hints.rename"), string.Empty, renamed =>
+        context.Windows.Prompt(context.Strings.Said("code_hints.rename"), context.Strings.Said("code_hints.rename_prompt", ("name", name), ("document", document.Name)), name, context.Strings.Said("code_hints.rename"), string.Empty,
+            renamed => RenameByWords(here, name, renamed));
+    }
+
+    /// <summary>
+    /// A name renamed as a word of its own, in a document and, when other files of the workspace have it too, in them if
+    /// that's wanted. In the code alone for a language a server can't rename in (D), never in a text or a comment that says
+    /// it, renaming area changed "area " too.
+    /// </summary>
+    private void RenameByWords(HexDocument here, string name, string renamed, bool codeOnly = false)
+    {
+        if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
         {
-            if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
+            context.Notices.Say(context.Strings.Said("code_hints.not_a_name", ("renamed", renamed)), error: true);
+            return;
+        }
+
+        // The other files with it, looked for off the editor's thread, a question only if there are any
+        List<string> roots = [.. context.Workspace.Roots];
+        string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
+        context.Work.InBackground(context.Strings.Said("code_hints.looking_in_others", ("name", name)),() => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
+            .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
+        {
+            if (!documents.Contains(here))
+                return;
+
+            if (others.Count == 0)
             {
-                context.Notices.Say(context.Strings.Said("code_hints.not_a_name", ("renamed", renamed)), error: true);
+                RenameIn(here, name, renamed, codeOnly: codeOnly);
                 return;
             }
 
-            // The other files with it, looked for off the editor's thread, a question only if there are any
-            List<string> roots = [.. context.Workspace.Roots];
-            string? own = here.Path is { } path ? Path.GetFullPath(path) : null;
-            context.Work.InBackground(context.Strings.Said("code_hints.looking_in_others", ("name", name)),() => HexSearch.FindIn(roots, name, new UIFindOptions(MatchCase: true, WholeWord: true))
-                .Select(result => Path.GetFullPath(result.Path)).Where(file => !file.Equals(own, PlatformPaths.Comparison)).Distinct(PlatformPaths.Comparer).ToList(), others =>
-            {
-                if (!documents.Contains(here))
-                    return;
-
-                if (others.Count == 0)
-                {
-                    RenameIn(here, name, renamed);
-                    return;
-                }
-
-                string listed = string.Join(", ", others.Take(5).Select(Path.GetFileName)) + (others.Count > 5 ? context.Strings.Said("code_hints.and_more", ("count", (others.Count - 5).ToString())) : string.Empty);
-                UIDialog.Show(chrome, context.Strings.Said("code_hints.rename"), context.Strings.Said(others.Count == 1 ? "code_hints.in_other_file" : "code_hints.in_other_files", ("name", name), ("count", others.Count.ToString()), ("listed", listed)),
-                    new DialogChoice(context.Strings.Said("code_hints.every_file"), () => RenameEverywhere(here, others, name, renamed)),
-                    new DialogChoice(context.Strings.Said("code_hints.this_file_only"), () => RenameIn(here, name, renamed)),
-                    new DialogChoice(context.Strings.Said("keys.leave_it")));
-            }, quiet: true);
-        });
+            string listed = string.Join(", ", others.Take(5).Select(Path.GetFileName)) + (others.Count > 5 ? context.Strings.Said("code_hints.and_more", ("count", (others.Count - 5).ToString())) : string.Empty);
+            UIDialog.Show(chrome, context.Strings.Said("code_hints.rename"), context.Strings.Said(others.Count == 1 ? "code_hints.in_other_file" : "code_hints.in_other_files", ("name", name), ("count", others.Count.ToString()), ("listed", listed)),
+                new DialogChoice(context.Strings.Said("code_hints.every_file"), () => RenameEverywhere(here, others, name, renamed, codeOnly)),
+                new DialogChoice(context.Strings.Said("code_hints.this_file_only"), () => RenameIn(here, name, renamed, codeOnly: codeOnly)),
+                new DialogChoice(context.Strings.Said("keys.leave_it")));
+        }, quiet: true);
     }
 
     // A name as a word of its own
     private static string NamePattern(string name) => $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}(?![A-Za-z0-9_])";
 
-    /// <summary>A name renamed in one document as one step of its undo, how many places it was.</summary>
-    private int RenameIn(HexDocument target, string name, string renamed, bool say = true)
+    /// <summary>A name renamed in one document as one step of its undo, how many places it was. In the code alone when it says so.</summary>
+    private int RenameIn(HexDocument target, string name, string renamed, bool say = true, bool codeOnly = false)
     {
-        string pattern = NamePattern(name);
         string text = target.Editor.Text;
-        int count = Regex.Matches(text, pattern).Count;
+        int count = 0;
+        string result = Regex.Replace(text, NamePattern(name), match =>
+        {
+            int lineStart = text.LastIndexOf('\n', Math.Max(0, match.Index - 1)) + 1;
+            if (match.Index == 0)
+                lineStart = 0;
+            int lineEnd = text.IndexOf('\n', match.Index) is var end and >= 0 ? end : text.Length;
+            if (codeOnly && HexSearch.InTextOrComment(text[lineStart..lineEnd], match.Index - lineStart))
+                return match.Value;
+
+            count++;
+            return renamed;
+        });
         if (count > 0)
-            context.Documents.Rewrite(target, Regex.Replace(text, pattern, renamed));
+            context.Documents.Rewrite(target, result);
         if (say)
             context.Notices.Say(context.Strings.Said("code_hints.renamed", ("name", name), ("renamed", renamed), ("count", count.ToString())));
         return count;
     }
 
-    private void RenameEverywhere(HexDocument here, List<string> others, string name, string renamed)
+    private void RenameEverywhere(HexDocument here, List<string> others, string name, string renamed, bool codeOnly = false)
     {
-        int places = documents.Contains(here) ? RenameIn(here, name, renamed, say: false) : 0;
+        int places = documents.Contains(here) ? RenameIn(here, name, renamed, say: false, codeOnly: codeOnly) : 0;
         int files = places > 0 ? 1 : 0;
         var skipped = new List<string>();
 
@@ -154,7 +178,7 @@ internal sealed partial class HexCodeEditing
                 open = context.Documents.Find(file);
             }
 
-            if (open is not null && RenameIn(open, name, renamed, say: false) is > 0 and var count)
+            if (open is not null && RenameIn(open, name, renamed, say: false, codeOnly: codeOnly) is > 0 and var count)
             {
                 places += count;
                 files++;
@@ -163,7 +187,7 @@ internal sealed partial class HexCodeEditing
 
         tabsDirty = true;
         string left = skipped.Count > 0 ? context.Strings.Said("code_hints.skipped_in_designer", ("skipped", string.Join(", ", skipped))) : string.Empty;
-        context.Notices.Say(context.Strings.Said("code_hints.renamed_everywhere", ("name", name), ("renamed", renamed), ("places", places.ToString()), ("files", files.ToString()), ("left", left)));
+        context.Notices.Say(context.Strings.Said("code_hints.renamed_everywhere", ("name", name), ("renamed", renamed), ("places", HexText.Count("place", places)), ("files", HexText.Count("file", files)), ("left", left)));
     }
 
     /* Swatches */

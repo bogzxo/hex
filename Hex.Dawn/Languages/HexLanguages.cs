@@ -47,8 +47,13 @@ internal sealed partial class HexLanguages
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
         with.Documents.Closed += StopLinting;
+        with.Documents.Saved += LintSaved;
         with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
+        with.Documents.AddDiagnostics(CheckDiagnosticsOf);
         with.Documents.AddCompletions(ServerCompletions);
+        with.Documents.AddHovers(ServerHover);
+        with.Documents.AddSignatures(ServerSignature);
+        AddServerCommands();
 
         // What changes on the disk in the folders the servers were started in, for what isn't open in them
         with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory));
@@ -56,7 +61,7 @@ internal sealed partial class HexLanguages
         with.Workspace.Deleting += StopServersUnder;
 
         // What was found of the servers looked for again as the settings open, in case something was installed since
-        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerStatus, () => ProbeServers(ServerEntries), serverStatus.Clear);
+        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerEditor, () => ProbeServers(ServerEntries), ForgetServerEditor);
     }
 
     /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
@@ -101,6 +106,14 @@ internal sealed partial class HexLanguages
     /// <summary>The name of the server linting a document, null for none.</summary>
     internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
 
+    /// <summary>
+    /// The program linting a document as somebody knows it, serve-d, csharp-ls, null for none. Its name in
+    /// language_servers.hor was what the status bar said, "D, d".
+    /// </summary>
+    internal string? ServerShownOf(HexDocument of) =>
+        LinterOf(of) is { } name ? Path.GetFileNameWithoutExtension(ServerEntry(name) is { } entry ? CommandOf(entry) : name)
+            + (ServerStoppedFor(of) ? " " + context.Strings.Said("languages.stopped") : string.Empty) : null;
+
     // What language_servers.hor says, read the first time a server is wanted, nothing when it can't be read
     private List<HexServerEntry> serverEntries = [];
 
@@ -118,35 +131,38 @@ internal sealed partial class HexLanguages
         }
     }
 
-    /// <summary>Helper method to read which servers there are, once, from the file next to the editor.</summary>
+    /// <summary>
+    /// Helper method to read which servers there are, once, from the file next to the editor, with the ones added in the
+    /// settings among them (HexLanguages.Added).
+    /// </summary>
     private void ReadLanguageServers()
     {
         serversRead = true;
-        if (!File.Exists(LANGUAGE_SERVERS))
-            return;
-
-        try
+        if (File.Exists(LANGUAGE_SERVERS))
         {
-            serverEntries = HexServerCatalog.Read(File.ReadAllText(LANGUAGE_SERVERS));
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"[Hex] {LANGUAGE_SERVERS} wasn't read, {e.Message}");
-            return;
+            try
+            {
+                fileEntries = HexServerCatalog.Read(File.ReadAllText(LANGUAGE_SERVERS));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[Hex] {LANGUAGE_SERVERS} wasn't read, {e.Message}");
+            }
         }
 
+        serverEntries = Merged();
         foreach (HexServerEntry entry in serverEntries)
             RegisterServer(entry);
     }
 
-    /// <summary>What a server is started with, where the settings say it is, or the file's command.</summary>
+    /// <summary>What a server is started with, where the settings say it is, or the file's command. One added in the settings is where it was added.</summary>
     private string CommandOf(HexServerEntry entry) =>
-        settings.ServerPaths.TryGetValue(entry.Name, out string? at) && at.Length > 0 ? at : entry.Command;
+        !IsAdded(entry) && settings.ServerPaths.TryGetValue(entry.Name, out string? at) && at.Length > 0 ? at : entry.Command;
 
     // Helper method to say which files a server is for and how it is started, which stops the one that was running (done
     // when the task is, off the editor's thread)
     private Task RegisterServer(HexServerEntry entry) =>
-        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions);
+        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions, entry.Settings);
 
     /// <summary>
     /// Stops a server, its files let go of. It starts again with the next file of its that is opened, or with
@@ -179,7 +195,12 @@ internal sealed partial class HexLanguages
     /// <summary>Opens a file of another language in its language server, when there is one for it on this machine.</summary>
     private void StartLinting(HexDocument of)
     {
+        CheckSoon(of, 0.0f);
         if (of.Path is not { } path || of.Editor.Highlighter is null || ReferenceEquals(of.Editor.Highlighter, CodeLanguages.Hidl))
+            return;
+
+        // The framework's source decompiled to be read is no project's, a server started for its folder knew nothing
+        if (PlatformPaths.IsUnder(path, DecompiledFolder))
             return;
 
         if (!serversRead)
@@ -194,6 +215,7 @@ internal sealed partial class HexLanguages
         // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
         context.Workspace.Rewatch();
         linters[of] = server;
+        ServersChanged++;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
     }
@@ -204,8 +226,25 @@ internal sealed partial class HexLanguages
     /// <summary>A file of another language was typed into, its server hears a moment after the typing stops.</summary>
     private void LintChanged(HexDocument changed)
     {
+        CheckSoon(changed);
+        CheckOthersSoon(changed);
         if (linters.ContainsKey(changed))
             lintIn[changed] = LINT_DELAY;
+    }
+
+    /// <summary>
+    /// A file of another language was saved, its server told so, with what was typed since it last heard first. Some look
+    /// the whole of a file over only then, serve-d builds it with dub, and never heard it was.
+    /// </summary>
+    private void LintSaved(HexDocument saved)
+    {
+        CheckSoon(saved, 0.0f);
+        if (!linters.TryGetValue(saved, out LanguageServer? server) || saved.Path is not { } path)
+            return;
+
+        if (lintIn.Remove(saved))
+            server.Change(path, saved.Editor.Text);
+        server.Saved(path);
     }
 
     /// <summary>A file of another language was closed, its server is told and forgets it.</summary>
@@ -216,15 +255,22 @@ internal sealed partial class HexLanguages
 
         lintIn.Remove(closed);
         lintFound.Remove(closed);
+        ForgetCheck(closed);
         ForgetServerCompletions(closed);
     }
+
+    // The documents waiting on a lint or a check, gathered into the same list every tick they're counted down, the
+    // waits change as they're gone through
+    private readonly List<HexDocument> dueNow = [];
 
     /// <summary>Every tick, the changes that are due go to their servers and what the servers said is taken in.</summary>
     internal void Update(float dt)
     {
         if (lintIn.Count > 0)
         {
-            foreach (HexDocument due in lintIn.Keys.ToArray())
+            dueNow.Clear();
+            dueNow.AddRange(lintIn.Keys);
+            foreach (HexDocument due in dueNow)
             {
                 if ((lintIn[due] -= dt) > 0.0f)
                     continue;
@@ -253,7 +299,9 @@ internal sealed partial class HexLanguages
         {
             LanguageServer server = servers[i];
             if (server.Failure is { } failure && failed.Add(server.Name))
-                Console.WriteLine($"[Hex] {server.Name} stopped, {failure}");
+                stoppedNow.Add((server, failure));
+
+            TakeTalk(server);
 
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
@@ -268,6 +316,10 @@ internal sealed partial class HexLanguages
             }
         }
 
+        UpdateChecks(dt);
+        UpdateAnswers();
+        ServersStopped();
+        AskNext();
         UpdateServerCompletions();
         UpdateInstallStatus();
     }

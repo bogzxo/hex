@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
         });
         test.Wait();
         test.Check("workspace: two folders added, the explorer has both", () =>
-            explorer.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("EXPLORER")
+            explorer.workspace.Folders.Count == 2 && browsing && treeTitle.Text.StartsWith("Explorer")
             && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderA) && explorer.explorerRows.Any(row => row.IsFolder && row.Path == folderB)
             && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderA, "a.hor")) && explorer.explorerRows.Any(row => row.Path == Path.Combine(folderB, "b.hor")));
         test.Check("workspace: a folder in one of them is shut until it is opened up", () =>
@@ -217,7 +217,11 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.2f);
         test.Check("help: about fills in what Hex knows, the version", () =>
-            help is { Title: "About Hex" } && Descendants(help).OfType<Label>().Any(label => label.Text.StartsWith("# Hex ") && !label.Text.Contains("{version}")));
+            help is { Title: "About Hex" } && Descendants(help).OfType<Label>().Any(label => label.Text.StartsWith("Version ") && !label.Text.Contains("{version}")));
+        test.Run(() => Shot("window-about"));
+        test.Run(OpenKeysWindow);
+        test.Settle(0.3f);
+        test.Run(() => Shot("window-keys"));
         test.Run(() =>
         {
             foreach (WindowPanel open in chrome.Root.Children.OfType<WindowPanel>().ToList())
@@ -235,7 +239,8 @@ internal sealed partial class DawnScene
             OpenSettings();
             ShowAbout();
         });
-        test.Settle(0.2f);
+        test.Settle(0.3f);
+        test.Run(() => Shot("window-settings-about"));
         test.Run(() => CloseTopWindow());
         test.Wait();
         test.Check("conveniences: escape puts away the little window on top, and only it", () =>

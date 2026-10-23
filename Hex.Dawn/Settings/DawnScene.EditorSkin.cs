@@ -58,10 +58,21 @@ internal sealed partial class DawnScene
                 all.Add((skin, null, skin.Title));
 
             foreach (string theme in skin.Themes)
-                all.Add((skin, theme, $"{skin.Title}, {theme}"));
+                all.Add((skin, theme, EditorSkinText(skin, theme)));
         }
 
         return all;
+    }
+
+    /// <summary>
+    /// What a theme of a skin the editor can be drawn in is called in the settings. The editor's own skin's by the theme
+    /// alone, "Horizon", others by the theme and the skin. It said "Flat, horizon", and Flat is a look of Hex's as well.
+    /// </summary>
+    private static string EditorSkinText(UISkinChoice skin, string theme)
+    {
+        string named = theme.Replace('_', ' ');
+        named = named.Length > 0 ? char.ToUpperInvariant(named[0]) + named[1..] : named;
+        return skin.Name == TOOL_SKIN_NAME ? named : $"{named}, {skin.Title}";
     }
 
     /// <summary>
@@ -76,24 +87,16 @@ internal sealed partial class DawnScene
 
         colouredFor = skin;
 
-        Vector4 box = skin.PanelColor with { W = 1.0f };
-        treeScroll.Color = layersScroll.Color = codeScroll.Color = inspectorScroll.Color = box;
-        running.ValuesTree.Color = sideTree.Color = box;
-
-        // What the editor sits on, a little darker than its boxes, and the activity bar darker again, VS Code's
-        Engine.Graphics.ClearColor = new Vector4(box.X * 0.65f, box.Y * 0.65f, box.Z * 0.65f, 1.0f);
-        activity.Color = new Vector4(box.X * 0.5f, box.Y * 0.5f, box.Z * 0.5f, 1.0f);
-        top.Color = activity.Color;
-
         // Not the panel under the editor, a tab panel's Color is what the tabs that aren't open are written in. It was
         // given the colour of the boxes here and OUTPUT was written in the colour of what it was written on
         bottom.Color = skin.TextColor with { W = 0.6f };
 
-        // The status bar as the engine has it, the panel tinted with the accent and whichever text reads on it, the same
-        // as Dusk's. Half the accent with white on it was a muddy brown in Horizon
-        statusBar.Color = null;
+        // The status bar the colour of the title bar and the activity bar (DressChrome), so the window has one frame round
+        // the editor and not three colours of one. The accent tinted it olive in Horizon, and half the accent was a muddy brown
         statusBar.TextColor = null;
 
-        treeDirty = inspectorDirty = true;
+        // The field of light in the theme's colours, and the frame dressed in them, glass or solid, see DawnScene.Materials
+        glow.UseSkin(skin);
+        DressChrome();
     }
 }

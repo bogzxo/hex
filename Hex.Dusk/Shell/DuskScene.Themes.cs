@@ -84,6 +84,9 @@ internal sealed partial class DuskScene
     {
         if (compositor.Skin is { } skin)
             Engine.Graphics.ClearColor = skin.PanelColor with { W = 1.0f };
+
+        // The bars and the field of light behind them in the theme's colours, see DuskScene.Materials
+        DressChrome();
     }
 
 }

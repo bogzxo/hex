@@ -324,7 +324,7 @@ internal sealed partial class DawnScene
         test.Check("panels: and nothing in the canvas was touched by it", () => document.Selected == box && !designer.dragging);
         test.Check("panels: the rows of the list and the buttons over it are as wide as the list is now", () =>
             tree.Children.Count > 0 && tree.Children.All(row => Near(row.Size.X, treeScroll.Size.X - 24, 1))
-            && Near(designer.paletteButtons[0].Size.X * 2 + 4, treeScroll.Size.X, 2) && tree.Children[0].Bounds.Max.X <= treeScroll.Bounds.Max.X);
+            && Near(designer.paletteButtons[0].Size.X * 2 + 4 + PALETTE_BAR, treeScroll.Size.X, 2) && tree.Children[0].Bounds.Max.X <= treeScroll.Bounds.Max.X);
 
         // The properties on the other side, dragged by their left edge. What a property is set with gets the room
         // Where to take hold of it is read once, before it moves. Asked for again on the way the edge has gone

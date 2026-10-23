@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("terminal: Ctrl+` brings it back with the keyboard in the terminal", () => bottom.Shown && compositor.Focus is TerminalView);
 
-        test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split right")));
+        test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split Right")));
 
         test.Run(() => running.AskConsole("40 + 2"));
         test.WaitFor(() => running.consoleAsked is null && running.LastConsoleLine() == "42", 3.0f);
@@ -89,7 +89,7 @@ internal sealed partial class DawnScene
             : "printf '%s\\n' '/tmp/hex/Program.cs(12,5): error CS1002: ; expect''ed'\r"));
         test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("CS1002")), 8.0f);
         test.Check("terminal: a compiler's error in a shell's output is in the Problems panel", () =>
-            problemList.Any(problem => problem.Text == "CS1002: ; expected" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));
+            problemList.Any(problem => problem.Text == "; expected (CS1002)" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));
         // What a Return typed into the shell tells the host, the line goes to the shell and the old problems go
         test.Run(() => terminalPanel.FocusedView?.OnInput?.Invoke("\r"));
         test.Wait();

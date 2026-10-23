@@ -41,20 +41,25 @@ internal sealed partial class DawnScene
     /// <summary>Whether a file's code builds a layout, which it does by asking the compositor for its components.</summary>
     private static bool IsLayoutCode(string source) => source.Contains("compositor.", StringComparison.Ordinal);
 
+    // How big code is written at a zoom of 1, a monospaced font a little bigger than the UI's for the same size on screen.
+    // At the UI's own it came out a point smaller than the words round it
+    internal const float CODE_TEXT = 0.155f;
+
     /// <summary>Helper method to set an editor up the way the editor's code is shown, once, when its document is made.</summary>
     private void PrepareEditor(HexDocument prepared)
     {
         CodeEditor editor = prepared.Editor;
-        editor.TextScale = HexDesigner.EDITOR_TEXT * settings.CodeZoom;
+        editor.TextScale = CODE_TEXT * settings.CodeZoom;
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
-        editor.FocusLine = true;
         editor.WordWrap = settings.WrapCode;
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         ShowBackdrop(editor);
-        editor.Color = new Vector4(0.055f, 0.06f, 0.08f, 1.0f);
+        // The code on the middle card's own colour, one surface with the tabs over it and the terminal under it. It was a
+        // charcoal of its own written in here, a third colour in the one card
+        editor.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.14f, 0.2f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
         editor.CompletionSource = codeEditing.Completions;
         editor.OnChecked = _ => CodeChecked(prepared);
@@ -107,6 +112,10 @@ internal sealed partial class DawnScene
         {
             codeDirty = true;
             documentEdited?.Invoke(changed);
+
+            // What's wrong moves along with the lines typed in above it (CodeEditor), the Problems panel's lines with it
+            if (changed == document)
+                problemsDirty = true;
             return;
         }
 
@@ -137,6 +146,12 @@ internal sealed partial class DawnScene
         {
             settingCode = false;
         }
+
+        // A file's text changed by Hex rather than typed (what wasn't saved brought back, the file read again after it
+        // changed on the disk) is a change all the same to whoever keeps a copy of it. Its language server was never
+        // told, and said what was wrong with the text on the disk under the text on the screen
+        if (!fresh && into.IsText)
+            documentEdited?.Invoke(into);
     }
 
     /// <summary>After the code of a document was parsed, what it says about the texts of the game it names by key.</summary>
@@ -154,6 +169,10 @@ internal sealed partial class DawnScene
     }
 
 
+    // What a diagnostic says without who said it, in brackets at its end ("(dmd)", "(dscanner.style.x)")
+    private static string WithoutSource(string message) =>
+        message.EndsWith(')') && message.LastIndexOf(" (", StringComparison.Ordinal) is var at and > 0 && message.IndexOf(' ', at + 2) < 0 ? message[..at] : message;
+
     // What the localisation check last found in each document, kept to go with what running it found
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> localisationFound = [];
 
@@ -165,12 +184,22 @@ internal sealed partial class DawnScene
     {
         var found = new List<UICodeDiagnostic>(localisationFound.GetValueOrDefault(of) ?? []);
 
-        // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers
+        // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers.
+        // The same thing said twice in the same place is said once, the compiler's check and the build that ran it both
+        // said a string doesn't go in an int, and the Problems panel listed it twice
+        var seen = new HashSet<(int, int, string)>();
         foreach (var source in diagnosticSources)
-            found.AddRange(source(of) ?? []);
+        {
+            foreach (UICodeDiagnostic diagnostic in source(of) ?? [])
+            {
+                if (seen.Add((diagnostic.Line, diagnostic.Column, WithoutSource(diagnostic.Message))))
+                    found.Add(diagnostic);
+            }
+        }
         of.Editor.Diagnostics = found;
-        if (of == document)
-            problemsDirty = true;
+
+        // Every open file's are in the Problems panel, not only the one on screen
+        problemsDirty = true;
     }
 
     /* Text documents */
@@ -225,7 +254,8 @@ internal sealed partial class DawnScene
         OpenOnExtensionView(opened);
 
         Console.WriteLine($"[Hex] Opened '{path}' as code: {opened.Editor.Document.LineCount} lines.");
-        Say(Said("code.opened", ("name", opened.Name), ("count", opened.Editor.Document.LineCount.ToString())));
+        int lines = opened.Editor.Document.LineCount;
+        Say(Said("code.opened", ("name", opened.Path is { } openedPath ? Path.GetFileName(openedPath) : opened.Name), ("lines", HexText.Count("line", lines))));
         return true;
     }
 
@@ -268,7 +298,7 @@ internal sealed partial class DawnScene
         document.Record();
         designer.MarkSelection();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
-        Say(message.Length > 0 ? message : Said("code.applied", ("count", document.Walk().Count().ToString())));
+        Say(message.Length > 0 ? message : Said("code.applied", ("count", HexText.Count("component", document.Walk().Count()))));
     }
 
     /// <summary>Throws away what was typed into the code of a layout, for the code the layout is written as.</summary>
@@ -324,18 +354,23 @@ internal sealed partial class DawnScene
 
         commands.Add("Go/symbols", Said("code.go_to_definition"), codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/symbols", Said("code.find_all_references"), codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
-        commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), icon: "arrow-down");
-        commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), icon: "arrow-up");
+        commands.Add("Go/symbols", Said("code.rename_symbol"), codeEditing.RenameSymbol, "F2", "edit", UIKeyUse.Shown).IsVisible = inCode;
+
+        // F8 and Shift+F8 go along what's wrong, VS Code's keys. F8 checked every HIDL file of the workspace, which is
+        // Ctrl+F8 now, and somebody in a C# file who pressed F8 got told 0 files had been checked
+        commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), "F8", "arrow-down", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), "Shift+F8", "arrow-up", UIKeyUse.BoundWhileTyping);
 
         // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
-        commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
-        commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
-        commands.Bind(Key.F5, () => { if (!LayoutTools) running.OpenRunner(); }, control: true, whileTyping: true);
+        commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !debugger.CanDebug(document.Path);
+        commands.Add("Run/run", Said("code.run_without_debugging"), RunWithoutDebugging, "Ctrl+F5", "play").IsVisible = () => !LayoutTools && document.Path is { } path && !IsHidl(path);
+        commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = () => !LayoutTools && (document.Path is not { } path || IsHidl(path));
+        commands.Bind(Key.F5, RunWithoutDebugging, control: true, whileTyping: true);
 
-        commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "F8", "check-all", UIKeyUse.BoundWhileTyping);
+        commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "Ctrl+F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;
 
         commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", use: UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;

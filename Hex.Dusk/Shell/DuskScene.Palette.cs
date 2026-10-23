@@ -18,15 +18,36 @@ internal sealed partial class DuskScene
     /// <summary>Ctrl+Shift+P, every command with its key, a few letters narrow it down.</summary>
     private void CommandPalette()
     {
+        // A title once, the first command that has it with its key. Close pane is on two keys, and said twice it read as
+        // two things
         var choices = new List<(string Text, Action Picked)>();
+        var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (TerminalCommand command in host.Commands.All)
         {
+            // Tab 1 to Tab whatever stay on their keys, nobody looks one up in here and they just cluttered the list
+            if (IsTabNumber(command.Name))
+                continue;
+
+            if (!titles.Add(command.Title))
+                continue;
+
             string name = command.Name;
             choices.Add(($"{command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () => Run(name)));
         }
 
+        // Every look there is, Hex's and the user's, a few letters away like everything else (see DuskScene.Looks)
+        foreach (Hex.Shell.HexLook look in Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)))
+        {
+            Hex.Shell.HexLook picked = look;
+            choices.Add((HexText.Get("looks.command", ("name", look.Name)), () => PickLook(picked)));
+        }
+
         ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
     }
+
+    /// <summary>Whether a command is one of the core plugin's tab_1, tab_2 and so on, which pick a tab by its number.</summary>
+    private static bool IsTabNumber(string name) =>
+        name.Length > 4 && name.StartsWith("tab_", StringComparison.Ordinal) && name.Skip(4).All(char.IsAsciiDigit);
 
     /// <summary>
     /// Helper method to ask for one of a list of things, Hex.Shell's chooser (the same Dawn asks with), narrowed down by

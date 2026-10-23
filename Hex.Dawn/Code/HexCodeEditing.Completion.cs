@@ -138,6 +138,10 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     internal void GoToDefinition()
     {
+        // A file of a language server's goes where the server says
+        if (languages?.GoToDefinition(document) == true)
+            return;
+
         UITextDocument doc = code.Document;
         UITextPosition caret = doc.Caret;
         string line = doc.LineAt(caret.Line);
@@ -244,6 +248,9 @@ internal sealed partial class HexCodeEditing
     /// <summary>Shift+F12, every line of the workspace the word at the caret is on as a word of its own, listed on the left.</summary>
     internal void FindReferences()
     {
+        if (languages?.FindReferences(document) == true)
+            return;
+
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)
         {
@@ -254,7 +261,7 @@ internal sealed partial class HexCodeEditing
         string word = code.Document.LineAt(code.Document.Caret.Line)[start..end];
         List<HexResult> found = HexSearch.FindIn(context.Workspace.Roots, word, new UIFindOptions(WholeWord: true));
         window.ShowResults(context.Strings.Said("code_completion.references_title", ("word", word), ("count", found.Count.ToString())), found);
-        context.Notices.Say(context.Strings.Said("code_completion.references_found", ("word", word), ("lines", found.Count.ToString()),
-            ("files", found.Select(result => result.Path).Distinct().Count().ToString())));
+        context.Notices.Say(context.Strings.Said("code_completion.references_found", ("word", word), ("lines", HexText.Count("line", found.Count)),
+            ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count()))));
     }
 }

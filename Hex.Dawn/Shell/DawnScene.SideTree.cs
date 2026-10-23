@@ -27,7 +27,6 @@ internal sealed partial class DawnScene
     {
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
-        sideTree.FocusLine = true;
         sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnActivated = item => (item.Tag as SideTag)?.Pressed?.Invoke();
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
@@ -52,7 +51,7 @@ internal sealed partial class DawnScene
     /// <summary>The folders of the workspace as a tree, a folder's files read when it is opened and kept until they change.</summary>
     private void RebuildExplorer()
     {
-        treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name.ToUpperInvariant()));
+        treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name));
         explorer.explorerRows.Clear();
         explorerMade = 0;
         UseSideTree(true);
@@ -134,7 +133,6 @@ internal sealed partial class DawnScene
             var row = item.Add(new UITreeItem(name, HexExplorer.FileIcon(file))
             {
                 IconColor = explorer.FileIconColor(file),
-                Color = HexExplorer.IsEditable(file) ? null : DimColor,
                 Tooltip = file,
                 Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
             });
@@ -172,34 +170,41 @@ internal sealed partial class DawnScene
             return;
         }
 
-        treeTitle.Text = Said("side.open_a_layout");
+        treeTitle.Text = Said("side.files_of", ("folder", Path.GetFileName(browseDirectory.TrimEnd('\\', '/')) is { Length: > 0 } name ? name : browseDirectory));
         UseSideTree(true);
         folders.Forget();
 
-        var items = new List<UITreeItem>();
+        // A folder to open first, a row that does it the way VS Code's button does, then the folder files are opened from.
+        // It was a quiet note saying which menu to go to, over a blue "../"
+        var items = new List<UITreeItem>
+        {
+            new(Said("side_tree.open_folder"), "folder-opened")
+            {
+                Color = compositor.Skin?.Palette.Highlight,
+                IconColor = compositor.Skin?.Palette.Highlight,
+                Tag = new SideTag(Pressed: () => explorer.AskFolder(explorer.OpenFolder))
+            }
+        };
         if (Directory.GetParent(browseDirectory) is { } parent)
-            items.Add(FileItem(parent.FullName, true, "../"));
+            items.Add(FileItem(parent.FullName, true, "..", "arrow-up"));
 
         var (inside, files) = folders.In(browseDirectory);
         foreach (string directory in inside)
-            items.Add(FileItem(directory, true, Path.GetFileName(directory) + "/"));
+            items.Add(FileItem(directory, true, Path.GetFileName(directory)));
 
-        // Every file that is text, a layout or not, the editor opens any of them
+        // Every file, the editor opens any of them, and asks first about one that isn't text
         foreach (string file in files)
-        {
-            if (HexExplorer.IsEditable(file))
-                items.Add(FileItem(file, false, Path.GetFileName(file)));
-        }
+            items.Add(FileItem(file, false, Path.GetFileName(file)));
 
         sideTree.Items = items;
     }
 
-    private UITreeItem FileItem(string path, bool isDirectory, string text)
+    private UITreeItem FileItem(string path, bool isDirectory, string text, string? icon = null)
     {
-        var item = new UITreeItem(text, isDirectory ? "folder" : HexExplorer.FileIcon(path))
+        var item = new UITreeItem(text, icon ?? (isDirectory ? "folder" : HexExplorer.FileIcon(path)))
         {
-            IconColor = isDirectory ? FolderColor : explorer.FileIconColor(path),
-            Color = isDirectory ? FolderColor : null,
+            IconColor = icon is not null ? DimColor : isDirectory ? FolderColor : explorer.FileIconColor(path),
+            Color = icon is not null ? DimColor : null,
             Tooltip = path,
             Tag = new SideTag(Pressed: () => explorer.PickFile(path, isDirectory))
         };
@@ -212,7 +217,7 @@ internal sealed partial class DawnScene
 
     private void RebuildOutline()
     {
-        treeTitle.Text = Said("side.outline_of", ("file", document.Name.ToUpperInvariant()));
+        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
 
         List<OutlineEntry> entries = OutlineHere();
@@ -305,9 +310,17 @@ internal sealed partial class DawnScene
                 items.Add(file);
             }
 
+            // Under its file a row is what's on the line, the line's number quiet after it. It was the file and the line
+            // again in front of that, "app.d:3  struct Point  3"
             HexResult found = result;
-            file.Add(new UITreeItem(result.Text.Trim(), string.Empty)
+            string marker = $":{result.Line + 1}  ";
+            int cut = result.Text.IndexOf(marker, StringComparison.Ordinal);
+            string said = (cut >= 0 ? result.Text[(cut + marker.Length)..] : result.Text).Trim();
+
+            // What was found lit in the line, where it is once the line's indent is gone
+            file.Add(new UITreeItem(said, string.Empty)
             {
+                Mark = result.Found > 0 && result.FoundAt >= 0 ? (result.FoundAt, result.Found) : default,
                 Detail = $"{result.Line + 1}",
                 Tooltip = $"{result.Path}:{result.Line + 1}",
                 Tag = new SideTag(Pressed: () => OpenAt(found.Path, found.Line, found.Column))

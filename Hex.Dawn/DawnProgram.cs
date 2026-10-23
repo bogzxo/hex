@@ -133,6 +133,9 @@ public static class DawnProgram
             }
         });
 
+        // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
+        engine.ScreenshotKey = null;
+
         var scene = new DawnScene(options);
 
         // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
@@ -154,6 +157,9 @@ public static class DawnProgram
         engine.SetScene(scene);
         engine.Run();
         Hex.Shell.HexModes.Shutdown();
+
+        // The language servers go with the editor. serve-d stayed on after it, with its DCD, one more of each a run
+        Horizon.UI.Scripting.LanguageServers.StopAll();
 
         // Where the time went, with HEX_PROFILE set
         DawnScene.Profile.Report();

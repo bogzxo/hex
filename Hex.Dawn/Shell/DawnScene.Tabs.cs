@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
         {
             HexDocument shown = documents[i];
             StripTab tab = docTabs.Tabs[i];
-            var (icon, _) = KindOf(shown);
+            string icon = IconOfDocument(shown);
 
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
@@ -158,7 +158,7 @@ internal sealed partial class DawnScene
             }
         }
 
-        var (icon, _) = KindOf(document);
+        string icon = IconOfDocument(document);
         crumbParts.Add($"$({icon}) {(document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name)}");
         crumbActions.Add(() => { });
 
@@ -204,4 +204,11 @@ internal sealed partial class DawnScene
 
         return chain;
     }
+
+    /// <summary>
+    /// A document's icon in its tab and its breadcrumb, the one the explorer gives its file, so a file has the one icon
+    /// wherever it shows. A page for everything in the tabs and a C# file with a class's icon in the explorer didn't match.
+    /// </summary>
+    private string IconOfDocument(HexDocument shown) =>
+        shown.IsText && shown.Path is { } path ? HexExplorer.FileIcon(path) : KindOf(shown).Icon;
 }

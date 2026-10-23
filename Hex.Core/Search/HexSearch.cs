@@ -8,7 +8,9 @@ using Horizon.UI.Components;
 namespace Hex.Core;
 
 /// <summary>A place in a file something was found or is wrong, its line and column from 0, and what is said about it.</summary>
-internal readonly record struct HexResult(string Path, int Line, int Column, string Text);
+/// <param name="Found">How long what was found is, 0 for a result that isn't a find.</param>
+/// <param name="FoundAt">Where it starts in the line without its indent, the way a row shows the line.</param>
+internal readonly record struct HexResult(string Path, int Line, int Column, string Text, int Found = 0, int FoundAt = -1, bool Warning = false);
 
 /// <summary>
 /// The files of a workspace and what's in them: every .hor under some folders, where one is inside of them, every line
@@ -24,13 +26,21 @@ internal static class HexSearch
     public const int MOST_FOUND = 2000;
 
     /// <summary>Every .hor under some folders, once each.</summary>
-    public static List<string> FilesUnder(IReadOnlyList<string> roots)
+    public static List<string> FilesUnder(IReadOnlyList<string> roots) => Under(roots, "*.hor");
+
+    /// <summary>
+    /// Every file under some folders that reads as text by its name, once each, what quick open lists and Find in Files
+    /// looks through. A folder of D or C# has no .hor in it, and quick open said there was nothing to open.
+    /// </summary>
+    public static List<string> TextFilesUnder(IReadOnlyList<string> roots) => Under(roots, "*", UIFileKinds.IsText);
+
+    private static List<string> Under(IReadOnlyList<string> roots, string pattern, Func<string, bool>? keep = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
         foreach (string root in roots)
         {
-            foreach (string file in FilesIn(root))
+            foreach (string file in FilesIn(root, pattern, keep))
             {
                 if (seen.Add(file))
                     files.Add(file);
@@ -44,7 +54,7 @@ internal static class HexSearch
     /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
     /// (which are the files of another repository, and there are copies of the engine in more than one).
     /// </summary>
-    public static List<string> FilesIn(string root)
+    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null)
     {
         var files = new List<string>();
         var pending = new Stack<string>();
@@ -55,7 +65,7 @@ internal static class HexSearch
             string folder = pending.Pop();
             try
             {
-                files.AddRange(Directory.GetFiles(folder, "*.hor").Where(file => !Path.GetFileName(file).StartsWith("~syncthing~")));
+                files.AddRange(Directory.GetFiles(folder, pattern).Where(file => !Path.GetFileName(file).StartsWith("~syncthing~") && (keep is null || keep(file))));
 
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
@@ -101,13 +111,18 @@ internal static class HexSearch
             catch (ArgumentException) { return found; }
         }
 
-        foreach (string file in FilesUnder(roots))
+        foreach (string file in TextFilesUnder(roots))
         {
             string[] lines = ReadLines(file);
             for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
             {
                 if (FirstMatch(lines[line], query, options, pattern) is { } at)
-                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}"));
+                {
+                    // How long what was found is, for the row to light it, the query's length or the regex's match
+                    int length = pattern is null ? query.Length : Math.Max(1, pattern.Match(lines[line], at).Length);
+                    int lead = lines[line].Length - lines[line].TrimStart().Length;
+                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}", length, at - lead));
+                }
             }
         }
 
@@ -217,12 +232,59 @@ internal static class HexSearch
         return found;
     }
 
-    /// <summary>The lines of a file, none for one that can't be read.</summary>
+    // The biggest file looked through for what's found, a log of a few hundred megabytes isn't code
+    private const long MOST_READ = 4L * 1024 * 1024;
+
+    /// <summary>
+    /// Whether a place on a line of C-like code is inside a text ("", ``, '') or a comment (// to the end, /* */ on the
+    /// line). A name renamed by the word, and the references a server finds by name, went into strings that said it.
+    /// What starts on a line before isn't known of here.
+    /// </summary>
+    public static bool InTextOrComment(string line, int column)
+    {
+        char quote = '\0';
+        for (int i = 0; i < column && i < line.Length; i++)
+        {
+            char at = line[i];
+            if (quote != '\0')
+            {
+                if (at == '\\' && quote != '`')
+                    i++;
+                else if (at == quote)
+                    quote = '\0';
+                continue;
+            }
+
+            if (at is '"' or '`' or '\'')
+            {
+                quote = at;
+            }
+            else if (at == '/' && i + 1 < line.Length && line[i + 1] == '/')
+            {
+                return true;
+            }
+            else if (at == '/' && i + 1 < line.Length && line[i + 1] == '*')
+            {
+                int end = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                if (end < 0 || end + 2 > column)
+                    return true;
+                i = end + 1;
+            }
+        }
+
+        return quote != '\0';
+    }
+
+    /// <summary>The lines of a file, none for one that can't be read, is huge, or has nothings (zero bytes) in it and isn't text after all.</summary>
     public static string[] ReadLines(string file)
     {
         try
         {
-            return File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
+            if (new FileInfo(file).Length > MOST_READ)
+                return [];
+
+            string text = File.ReadAllText(file);
+            return text.Contains('\0') ? [] : text.Replace("\r\n", "\n").Split('\n');
         }
         catch (Exception)
         {

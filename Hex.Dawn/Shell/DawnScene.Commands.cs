@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Reflection;
 using System.Text;
 
 using Horizon.Rendering;
@@ -40,7 +39,7 @@ internal sealed partial class DawnScene
         if (documents.Contains(was))
             Show(was);
 
-        Say(skipped > 0 ? Said("commands.saved_left", ("saved", saved.ToString()), ("skipped", skipped.ToString())) : saved > 0 ? Said("commands.saved", ("saved", saved.ToString())) : Said("commands.nothing_to_save"));
+        Say(skipped > 0 ? Said("commands.saved_left", ("saved", HexText.Count("file", saved)), ("skipped", HexText.Count("file", skipped))) : saved > 0 ? Said("commands.saved", ("saved", HexText.Count("file", saved))) : Said("commands.nothing_to_save"));
     }
 
     /// <summary>Throws away what isn't saved of the file on screen, for what is in its file.</summary>
@@ -82,6 +81,9 @@ internal sealed partial class DawnScene
         ChooseFrom(Said("commands.symbol_title"), Said("commands.symbol_text", ("file", document.Name)), choices);
     }
 
+    // How much of a problem the status bar says as F8 goes to it
+    private const int STEP_SAID = 90;
+
     /// <summary>The next problem there is (or the one before), going round, opened with the caret on it.</summary>
     private void StepProblem(int direction)
     {
@@ -95,7 +97,9 @@ internal sealed partial class DawnScene
         problemStep = ((problemStep + direction) % problemList.Count + problemList.Count) % problemList.Count;
         HexProblem problem = problemList[problemStep];
         OpenAt(problem.Path, problem.Line, problem.Column);
-        Say(Said("commands.problem_step", ("at", (problemStep + 1).ToString()), ("count", problemList.Count.ToString()), ("problem", problem.Text)), error: !problem.Warning);
+        // A long message cut short, the whole of it ran over the counts and the caret's place along the status bar
+        string text = problem.Text.Length > STEP_SAID ? problem.Text[..(STEP_SAID - 3)] + "..." : problem.Text;
+        Say(Said("commands.problem_step", ("at", (problemStep + 1).ToString()), ("count", problemList.Count.ToString()), ("problem", text)), error: !problem.Warning);
     }
 
     /// <summary>The code of the layout, with the caret on the let of a name of it.</summary>
@@ -159,10 +163,13 @@ internal sealed partial class DawnScene
         var window = made.Get<WindowPanel>("window");
         window.Title = title;
         window.Size = window.Size with { Y = height + 60.0f };
-        window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        DressWindow(window);
         window.OnClosed = () => window.Parent?.Remove(window);
         text = made.Get<Label>("text");
         text.Text = markdown;
+
+        // The keyboard in it, so Escape closes it the first time and the arrows don't go on to the code behind
+        window.TakeKeyboard();
         return window;
     }
 
@@ -170,15 +177,6 @@ internal sealed partial class DawnScene
     {
         ReadStrings();
         ShowText(Said("language.title"), Said("language.page"));
-    }
-
-    private void ShowAbout()
-    {
-        ReadStrings();
-        ShowText(Said("about.title"), Said("about.page",
-            ("version", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?"),
-            ("engine", typeof(UICompositor).Assembly.GetName().Version?.ToString(3) ?? "?"),
-            ("dotnet", Environment.Version.ToString())), 300.0f);
     }
 
     /// <summary>The Help menu.</summary>

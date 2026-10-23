@@ -116,6 +116,42 @@ public static class HexModes
         return true;
     }
 
+    /// <summary>
+    /// A Dusk window of its own on a folder, its first tab in a profile (its id, null for the usual one) with a command
+    /// line typed into it once its shell is up. The Dusk that's running takes it as a new tab instead, when there is one.
+    /// </summary>
+    public static bool StartDusk(string folder, string? profile, string? run)
+    {
+        if (Environment.ProcessPath is not { } exe)
+            return false;
+
+        try
+        {
+            var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
+            start.ArgumentList.Add("--dusk");
+            start.ArgumentList.Add("--cwd");
+            start.ArgumentList.Add(folder);
+            if (profile is { Length: > 0 })
+            {
+                start.ArgumentList.Add("--profile");
+                start.ArgumentList.Add(profile);
+            }
+
+            if (run is { Length: > 0 })
+            {
+                start.ArgumentList.Add("--run");
+                start.ArgumentList.Add(run);
+            }
+
+            Process.Start(start);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Helper method to start a mode as a program of its own, Hex.exe with --dusk for the terminal.</summary>
     private static bool Start(HexMode mode, string? folder)
     {

@@ -11,17 +11,18 @@ using Horizon.UI.Drawing;
 namespace Hex.Dusk;
 
 // Dawn's effects in the terminal, the same switch as Dawn's (effects, effect_sparks and effect_glass in the editor's
-// section of the settings, one setting for both modes). Subtle is the palette, the menus and the settings over a blur of
-// the terminals behind them and a burst of sparks when a command that took a while went well, all is sparks off the
-// cursor as you type at a prompt as well. None of it draws a thing while nothing flies and nothing pops up, and the glass
-// keeps its blur for as long as nothing under it changed, a laptop on its battery pays for neither.
+// section of the settings, one setting for both modes). Subtle is the lights and a burst of sparks when a command that
+// took a while went well and the sparks are on, all is sparks off the cursor as you type at a prompt as well. The glass,
+// the palette, the menus and the settings over a blur of the terminals behind them, is its own switch whatever the
+// effects are. None of it draws a thing while nothing flies and nothing pops up, and the glass keeps its blur for as
+// long as nothing under it changed, a laptop on its battery pays for neither.
 internal sealed partial class DuskScene
 {
     // The same glass as Dawn's popups, as thick as the sliders of the effects say
     private UIGlass popupGlass = HexGlass.Popup(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
 
     // Dawn's sides' glass out of the same sliders, Dusk has no side panels but shows it in the glass's preview
-    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM);
+    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
 
     // How long a command has to have run for it going well to be worth a burst, in seconds. Every ls throwing sparks
     // is the power mode's problem, not a feature
@@ -33,7 +34,7 @@ internal sealed partial class DuskScene
     private readonly HexLightEffects lightEffects = new();
 
     private string effects = "none";
-    private bool effectSparks = true, effectGlass = true;
+    private bool effectSparks, effectGlass = true;
 
     // How quickly Dusk's own UI moves, the motion's ui_animation, Dawn's too
     private float uiAnimation = 1.0f;
@@ -74,7 +75,8 @@ internal sealed partial class DuskScene
         effectGlass = settings.EffectGlass;
         uiAnimation = settings.UiAnimation;
         popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim);
+        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+        veil = HexGlass.Veil(settings.GlassClarity);
         lightEffects.Read(SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : []);
         ApplyEffects();
     }
@@ -82,7 +84,10 @@ internal sealed partial class DuskScene
     /// <summary>The effects as they are now, put in force.</summary>
     private void ApplyEffects()
     {
-        compositor.PopupGlass = EffectsOn && effectGlass ? popupGlass : null;
+        compositor.PopupGlass = effectGlass ? popupGlass : null;
+
+        // The bars on glass over the field of light, or solid, see DuskScene.Materials
+        DressChrome();
 
         // The terminal's animations off is nothing moving, the menus and the buttons as well as the splits and the cursor
         compositor.AnimationSpeed = host.Settings.Animations ? uiAnimation : 0.0f;

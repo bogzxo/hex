@@ -112,7 +112,10 @@ internal sealed partial class HexExplorer
     {
         if (!options.SelfTest)
         {
-            context.Windows.Pick(HexDialogs.PickFolder(browseDirectory, context.Windows.DialogHost), picked);
+            // From the folder of the file that's open, where Open starts too. It started where files were last opened from
+            string from = context.Documents.Current.Path is { } open && Path.GetDirectoryName(Path.GetFullPath(open)) is { } here && Directory.Exists(here)
+                ? here : browseDirectory;
+            context.Windows.Pick(HexDialogs.PickFolder(from, context.Windows.DialogHost), picked);
             return;
         }
 
@@ -146,7 +149,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", folder), ("count", workspace.Folders.Count.ToString())));
+        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", folder), ("count", HexText.Count("folder", workspace.Folders.Count))));
     }
 
     /// <summary>A workspace of one folder, the one that was open going away (its file stays where it is).</summary>
@@ -191,7 +194,7 @@ internal sealed partial class HexExplorer
         }
 
         KeepWorkspace();
-        context.Notices.Say(context.Strings.Said("explorer_workspace.opened", ("name", workspace.Name), ("count", workspace.Folders.Count.ToString())));
+        context.Notices.Say(context.Strings.Said("explorer_workspace.opened", ("name", workspace.Name), ("count", HexText.Count("folder", workspace.Folders.Count))));
     }
 
     internal void SaveWorkspaceAs(string path)

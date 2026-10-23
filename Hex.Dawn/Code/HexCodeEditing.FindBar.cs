@@ -237,7 +237,7 @@ internal sealed partial class HexCodeEditing
         findCount.Text = error ? context.Strings.Said("find.bad_regex")
             : count < 0 ? string.Empty
             : count == 0 ? context.Strings.Said("find.none")
-            : index < 0 ? context.Strings.Said("find.count", ("count", count.ToString()))
+            : index < 0 ? context.Strings.Said("find.count", ("count", HexText.Count("result", count)))
             : context.Strings.Said("find.of", ("index", (index + 1).ToString()), ("count", count.ToString()));
         findCount.Color = error || count == 0 ? context.Panels.Error : context.Panels.Dim;
     }

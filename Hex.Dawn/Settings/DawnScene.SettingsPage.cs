@@ -50,8 +50,10 @@ internal sealed partial class DawnScene
         var sources = new List<ISettingsSource> { new EditorSource(this) };
         sources.AddRange(settingSources.Select(added => added.Source()));
         sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
-        settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts);
-        settingsView.Window.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : null;
+        sources.Add(new WindowsSource());
+        settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts, sections: EditorSettingsCatalog.Sections);
+        settingsView.Window.Color = compositor.Skin?.Palette.Raised;
+        settingsView.Window.Glass = Glassy ? HexGlass.Window(PopupGlass) : null;
         chrome.Root.Add(settingsView.Window);
         foreach (var added in settingSources)
         {
@@ -62,7 +64,10 @@ internal sealed partial class DawnScene
         AddExtensionSections(settingsView);
 
         // The glass under its sliders, as they make it while they're dragged
-        settingsView.SetPanel(EditorSettingsCatalog.EFFECTS, new GlassPreview(640.0f) { Look = () => (PopupGlass, SideGlass, Glassy) });
+        settingsView.SetPanel(EditorSettingsCatalog.GLASS, new GlassPreview(640.0f) { Look = () => (PopupGlass, SideGlass, Glassy) });
+
+        // The profiles of how Hex looks over all of it, see DawnScene.Looks
+        AddLookPicker(settingsView);
         foreach (var added in settingSources)
             added.Opened?.Invoke();
 
@@ -77,6 +82,7 @@ internal sealed partial class DawnScene
         if (settingsView?.Window is { Parent: { } parent } window)
             parent.Remove(window);
         settingsView = null;
+        lookPicker = null;
         settingControls.Clear();
         foreach (var added in settingSources)
             added.Closed?.Invoke();

@@ -61,4 +61,38 @@ public static class HexText
 
         return text;
     }
+
+    /// <summary>
+    /// So many of something, said right whether it's one or more, "1 file", "3 files", by the counts' keys (file, line,
+    /// place, problem). The status bar said a word was "in 1 files".
+    /// </summary>
+    public static string Count(string what, int count) =>
+        Get($"counts.{what}_{(count == 1 ? "one" : "many")}", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+    // The little words a title leaves small, unless one starts it
+    private static readonly HashSet<string> Small = new(StringComparer.Ordinal) { "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "with" };
+
+    /// <summary>
+    /// A command's name written the way a menu's are, every word with a capital but the little ones ("Select last output"
+    /// as "Select Last Output"). The terminal's commands are written like a sentence, the way Dusk's menus are, and in
+    /// Dawn's palette they sat in sentence case between commands in title case.
+    /// </summary>
+    public static string TitleCase(string text)
+    {
+        var titled = new System.Text.StringBuilder(text.Length);
+        bool first = true;
+        foreach (string word in text.Split(' '))
+        {
+            if (titled.Length > 0)
+                titled.Append(' ');
+
+            bool small = !first && Small.Contains(word);
+            titled.Append(word.Length > 0 && !small && char.IsLower(word[0]) ? char.ToUpperInvariant(word[0]) + word[1..] : word);
+
+            // A word after a heading (one that ends in a colon, or a dot between) starts the title again
+            first = word.EndsWith(':') || word == "\u00b7";
+        }
+
+        return titled.ToString();
+    }
 }

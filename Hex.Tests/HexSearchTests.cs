@@ -98,4 +98,16 @@ public sealed class HexSearchTests : IDisposable
         Assert.Equal(string.Empty, HexSearch.DescribeOptions(new UIFindOptions()));
         Assert.Equal(", the case matching, as a regex (the find bar's toggles)", HexSearch.DescribeOptions(new UIFindOptions(MatchCase: true, Regex: true)));
     }
+
+    [Theory]
+    [InlineData("    writeln(\"area \", box.area);", 13, true)]
+    [InlineData("    writeln(\"area \", box.area);", 25, false)]
+    [InlineData("    int area = 2; // the area", 8, false)]
+    [InlineData("    int area = 2; // the area", 26, true)]
+    [InlineData("    /* area */ int area;", 7, true)]
+    [InlineData("    /* area */ int area;", 19, false)]
+    [InlineData("    auto c = 'a'; area();", 18, false)]
+    [InlineData("    auto s = \"say \\\"area\\\"\"; area;", 20, true)]
+    public void A_place_in_a_text_or_a_comment_is_known_from_one_in_the_code(string line, int column, bool inside) =>
+        Assert.Equal(inside, HexSearch.InTextOrComment(line, column));
 }

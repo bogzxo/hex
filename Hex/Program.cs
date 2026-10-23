@@ -25,11 +25,11 @@ internal static partial class Program
 
         if (args.Any(arg => arg is "--help" or "-h" or "-?" or "/?" or "/h"))
         {
-            // A Release Hex is a window with no console of its own, the help goes to the one it was typed into
-            if (OperatingSystem.IsWindows() && !Console.IsOutputRedirected)
-                AttachConsole(ATTACH_PARENT_PROCESS);
+            if (OperatingSystem.IsWindows())
+                ToTheParentConsole();
             Console.WriteLine();
             Console.WriteLine(HELP);
+            Console.Out.Flush();
             return 0;
         }
 
@@ -134,11 +134,38 @@ internal static partial class Program
         }
     }
 
-    private const int ATTACH_PARENT_PROCESS = -1;
+    /// <summary>
+    /// A Release Hex is a window with no console of its own, so the help goes to the one it was typed into. It has no
+    /// standard out at all then, which .NET calls redirected (asking Console.IsOutputRedirected was why --help printed
+    /// nothing), so it's the handle itself that's looked at. One that's there is a pipe or a file and is left be.
+    /// </summary>
+    private static void ToTheParentConsole()
+    {
+        nint output = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (output != 0 && output != -1)
+            return;
+        if (!AttachConsole(ATTACH_PARENT_PROCESS))
+            return;
+
+        // The console it's on now, written to straight, the std handles a GUI exe starts with stay empty after attaching
+        var handle = new Microsoft.Win32.SafeHandles.SafeFileHandle(CreateFileW("CONOUT$", GENERIC_WRITE, FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0), true);
+        if (handle.IsInvalid)
+            return;
+        Console.SetOut(new StreamWriter(new FileStream(handle, FileAccess.Write)) { AutoFlush = true });
+    }
+
+    private const int ATTACH_PARENT_PROCESS = -1, STD_OUTPUT_HANDLE = -11;
+    private const uint GENERIC_WRITE = 0x40000000, FILE_SHARE_WRITE = 0x2, OPEN_EXISTING = 3;
 
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool AttachConsole(int processId);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial nint GetStdHandle(int which);
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial nint CreateFileW(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
 
     private const string HELP = """
         Hex, Dawn the editor and Dusk the terminal, one program.
@@ -165,6 +192,7 @@ internal static partial class Program
           --dusk                   Dusk rather than Dawn (an exe called dusk.exe is Dusk too)
           --cwd <folder>           the folder the first terminal starts in (what a folder on its own is)
           --profile <id>           which shell the first terminal is
+          --window                 a window of its own rather than a tab of the Dusk that's running
           --scale <n>              how big the UI is drawn
           --size <w>x<h>           the window's size
           --selftest [part...]     go through the terminal and say what works, --exit to leave after

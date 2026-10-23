@@ -7,9 +7,10 @@ namespace Hex.Dawn;
 
 // The tasks of a workspace, a tasks.hor in the folder of it (or in a .hex folder in it), one object a task. Run Task in
 // the Run menu or the palette asks which, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task,
-// when there is one. A task runs in a terminal tab named after it, the same tab again the next time while its shell is
-// still there, so a build run twice doesn't leave two tabs behind.
-internal sealed class HexTasks
+// when there is one (and Set Up F5 when there isn't, HexTasks.Setup). A task runs in a terminal tab named after it, the
+// same tab again the next time while its shell is still there, so a build run twice doesn't leave two tabs behind, or
+// in a Dusk window of its own when it says so. One that depends on another runs that first, and goes on only if it worked.
+internal sealed partial class HexTasks
 {
     internal const string TASKS_FILE = "tasks.hor";
 
@@ -26,6 +27,7 @@ internal sealed class HexTasks
         commands.Add("Run/tasks", context.Strings.Said("tasks.run_task"), ChooseTask, icon: "tasklist");
         commands.Add("Run/tasks", context.Strings.Said("tasks.run_build_task"), RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/tasks", context.Strings.Said("tasks.configure_tasks"), ConfigureTasks, icon: "gear");
+        commands.Add("Run/tasks", context.Strings.Said("tasks.set_up_run"), () => SetUpRun(), icon: "debug-alt");
     }
 
     /// <summary>The tasks.hor of a workspace's folder, the one in the folder before the one in .hex, null for none.</summary>
@@ -35,13 +37,17 @@ internal sealed class HexTasks
         return File.Exists(plain) ? plain : File.Exists(hidden) ? hidden : null;
     }
 
-    /// <summary>Every task of every folder of the workspace, in the order the files have them.</summary>
+    /// <summary>
+    /// Every task of the file on screen's nearest tasks.hor (its project's) first, then every folder of the workspace's,
+    /// in the order the files have them.
+    /// </summary>
     private List<HexTask> Tasks()
     {
         var all = new List<HexTask>();
-        foreach (string root in context.Workspace.Roots)
+        var read = new HashSet<string>(PlatformPaths.Comparer);
+        foreach (string? root in (string?[])[TasksFolderFor(context.Documents.Current.Path), .. context.Workspace.Roots])
         {
-            if (TasksFileIn(root) is { } file)
+            if (root is not null && read.Add(Path.GetFullPath(root)) && TasksFileIn(root) is { } file)
                 all.AddRange(TasksOf(file, root));
         }
 
@@ -102,11 +108,16 @@ internal sealed class HexTasks
             [.. tasks.Select(task => ($"{task.Name}   {task.Command}", (Action)(() => Run(task))))]);
     }
 
-    /// <summary>Ctrl+Shift+B, the build task, or the list when there is none.</summary>
+    /// <summary>
+    /// Ctrl+Shift+B, the build task, or Set Up F5 for the file on screen when there is none, which knows a dub project
+    /// from a lone file. It wrote a tasks.hor that echoed "nothing to build yet" in a dub project F5 knew how to build.
+    /// </summary>
     private void RunBuildTask()
     {
         if (DefaultTask("build") is { } build)
             Run(build);
+        else if (context.Documents.Current is { IsText: true, Path: not null })
+            SetUpRun();
         else
             ChooseTask();
     }
@@ -114,12 +125,70 @@ internal sealed class HexTasks
     /// <summary>What the terminal tab of a task is known by, its folder and its name.</summary>
     internal static string TabOf(HexTask task) => $"task\n{task.Root}\n{task.Name}";
 
-    /// <summary>Runs a task in its tab, the one it had before while that shell is still going, a new one otherwise.</summary>
+    /// <summary>
+    /// Runs a task in its tab, the one it had before while that shell is still going, a new one otherwise, or in a Dusk
+    /// window of its own when it says so. The task it depends on first, on the same line, and it only if that worked.
+    /// </summary>
     internal void Run(HexTask task)
     {
-        context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), task.Command);
+        // Every file of code with changes saved first, the build reads the disk. F5 built what was there before the line
+        // just typed, every IDE saves first
+        context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
+
+        string line = CommandLineOf(task, context.Terminals.UsualProfileId);
+        if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
+            context.Terminals.RunInDusk(task.WorkingFolder(), line);
+        else
+            context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line, (exit, said) => Ended(task, exit, said));
         context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
     }
+
+    /// <summary>
+    /// A task's shell said it was done, how it went said along the bottom. One that failed with errors a compiler said has
+    /// them brought up in the Problems panel, the way Visual Studio's Error List comes up after a build that broke. It
+    /// said "running build" long after the build was over. What it wrote is looked at for a fix (HexTasks.Fixes).
+    /// </summary>
+    private void Ended(HexTask task, int exit, string said)
+    {
+        int errors = context.Terminals.TerminalErrors;
+        if (exit == 0)
+        {
+            context.Notices.Say(context.Strings.Said("tasks.ended", ("name", task.Name)));
+            return;
+        }
+
+        context.Notices.Say(errors > 0
+            ? context.Strings.Said("tasks.failed_with", ("name", task.Name), ("errors", HexText.Count("error", errors)))
+            : context.Strings.Said("tasks.failed", ("name", task.Name), ("code", exit.ToString())), error: true);
+        if (errors > 0)
+            context.Panels.ShowProblems();
+        OfferFix(task, said);
+    }
+
+    /// <summary>
+    /// The command line a task runs as in a shell of a profile (its id, pwsh, powershell, cmd, bash), the one it depends on
+    /// in front of it when it says one, the second only if the first worked. Windows PowerShell has no double ampersand,
+    /// it asks $? instead.
+    /// </summary>
+    internal string CommandLineOf(HexTask task, string shell)
+    {
+        if (DependencyOf(task) is not { } first)
+            return task.Command;
+
+        // Run from the task's own folder, the one before it may run somewhere else
+        string before = first.Folder == task.Folder ? first.Command : $"{ChangeFolder(first.WorkingFolder(), shell)} {Then(shell)} {first.Command}";
+        string after = first.Folder == task.Folder ? task.Command : $"{ChangeFolder(task.WorkingFolder(), shell)} {Then(shell)} {task.Command}";
+        return Chain(shell, before, after);
+    }
+
+    /// <summary>Two command lines, the second only if the first worked, in the shell of a profile.</summary>
+    internal static string Chain(string shell, string first, string then) =>
+        shell.Equals("powershell", StringComparison.OrdinalIgnoreCase) ? $"{first}; if ($?) {{ {then} }}" : $"{first} && {then}";
+
+    private static string Then(string shell) => shell.Equals("powershell", StringComparison.OrdinalIgnoreCase) ? ";" : "&&";
+
+    private static string ChangeFolder(string folder, string shell) =>
+        shell.Equals("cmd", StringComparison.OrdinalIgnoreCase) ? $"cd /d \"{folder}\"" : $"cd \"{folder}\"";
 
     /// <summary>Configure Tasks, the workspace's tasks.hor opened, written first with a guess at what it wants when there isn't one.</summary>
     private void ConfigureTasks()

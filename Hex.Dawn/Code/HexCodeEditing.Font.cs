@@ -17,11 +17,22 @@ internal sealed partial class HexCodeEditing
     /// <summary>The font the settings say made (the first time) and handed to every editor of code, null for the skin's.</summary>
     internal void ApplyCodeFont()
     {
+        // A font that isn't there is Hack, a monospace whatever was asked for. A name typed wrong made a font with no lines
+        // in it and took the code down, and then the skin's, which isn't one, and the columns went wandering
         string name = settings.CodeFont;
-        codeFont = name.Length > 0 ? UIFont.Shared(Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", name), name + ".ttf", CODE_FONT_EM) : null;
+        if (name.Length > 0 && !File.Exists(FontFile(name)))
+        {
+            context.Notices.Say(context.Strings.Said("code.no_font", ("name", name)), true);
+            name = HACK;
+        }
+
+        codeFont = name.Length > 0 ? UIFont.Shared(Path.GetDirectoryName(FontFile(name))!, name + ".ttf", CODE_FONT_EM) : null;
         foreach (HexDocument open in documents)
             open.Editor.Font = codeFont;
     }
+
+    // Where a font's file is, Assets/fonts/name/name.ttf
+    private static string FontFile(string name) => Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", name, name + ".ttf");
 
     /// <summary>The code in Hack, or in the skin's font, kept in the settings.</summary>
     internal void ToggleCodeFont()

@@ -23,7 +23,8 @@ internal sealed partial class DuskScene : Scene
     public const string BUILT_IN_PLUGINS = "Assets/dusk/plugins", DEFAULT_KEYS = "Assets/dusk/keys.hor";
 
     private const string SKIN_DIRECTORY = "Assets/uix/flat/", SKIN_FILE = "skin.hor", SKIN_NAME = "flat";
-    public const string VERSION = "0.3";
+    // Hex's version, the two are one program now and Dusk said 0.3 in its title bar while the exe said 0.4.0
+    public static readonly string VERSION = typeof(DuskScene).Assembly.GetName().Version?.ToString(3) ?? "?";
 
     // How long after it comes up Dusk takes the garbage of starting out and gives the memory back
     private const float SETTLE_SECONDS = 3.0f;
@@ -66,6 +67,9 @@ internal sealed partial class DuskScene : Scene
         string beside = AppContext.BaseDirectory;
         var early = new TerminalSettings(TerminalFiles.Settings(options.SelfTest ? null : beside));
         compositor = AddComponent(new UICompositor(camera, SKIN_DIRECTORY, SKIN_FILE, ThemeOrUsual(early.Theme)));
+
+        // The field of light the bars' glass sits over, under everything of Dusk's, see DuskScene.Materials
+        BuildGlow();
         chrome = compositor.CreateModule();
         layout = chrome.LoadLayout(LAYOUT);
 
@@ -142,15 +146,18 @@ internal sealed partial class DuskScene : Scene
         ReadBackdrop();
         StartInstance();
 
-        // The tabs of last time when there were any and the settings say so, otherwise one of the profile asked for
-        if (options.Profile is null && !options.SelfTest && settings.RestoreSessions && RestoreSession())
+        // The tabs of last time when there were any and the settings say so, otherwise one of the profile asked for (with
+        // the command line it was started to run typed into it, a task of Dawn's)
+        if (options.Profile is null && options.Run is null && !options.SelfTest && settings.RestoreSessions && RestoreSession())
         {
             host.Raise("on_start");
             return;
         }
 
         TerminalProfile? first = host.ProfileCalled(options.Profile ?? string.Empty) ?? host.UsualProfile;
-        panel.NewTab(first, options.StartIn);
+        TerminalTab tab = panel.NewTab(first, options.StartIn);
+        if (options.Run is { Length: > 0 } run)
+            tab.Views.FirstOrDefault()?.SendWhenReady(run + "\r");
         host.Raise("on_start");
     }
 

@@ -1,10 +1,14 @@
-// A line of what there is to know where a list has nothing in it yet, "nothing yet, add something".
+// A line of what there is to know where a list has nothing in it yet, "nothing yet, add something". In the middle of
+// the panel's width, the way an empty sidebar says so on a Mac, it sat squeezed into the left like a stray label.
 #define layout
 
 let hint = compositor.label({
-    anchor: "left",
+    anchor: "top",
+    pivot: "top",
+    fill: "horizontal",
     text: "nothing yet",
     text_scale: 0.14,
     color: vec(0.58, 0.6, 0.66, 1),
-    align: "top_left"
+    wrap: true,
+    align: "top"
 });

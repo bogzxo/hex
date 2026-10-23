@@ -21,6 +21,7 @@ namespace Hex.Core;
 /// The files that, made, changed or taken away in the workspace, have the server started again ("*.csproj", "*.sln"),
 /// for a server that reads its projects once as it starts and never again. Empty for none.
 /// </param>
+/// <param name="Settings">What the server is told to be, by its sections, null for nothing (see LanguageServer.Settings).</param>
 internal sealed record HexServerEntry(
     string Name,
     string Command,
@@ -32,7 +33,8 @@ internal sealed record HexServerEntry(
     string Update,
     string Repo,
     string[]? VersionArguments,
-    string[]? Reload = null)
+    string[]? Reload = null,
+    System.Text.Json.Nodes.JsonObject? Settings = null)
 {
     /// <summary>Whether a file is one whose change has the server started again, by its name ("*.csproj" or a whole name).</summary>
     public bool ReloadsFor(string path)
@@ -84,11 +86,24 @@ internal static partial class HexServerCatalog
                 update.Length > 0 ? update : install,
                 Text(server, "repo"),
                 Texts(server, "version"),
-                Texts(server, "reload")));
+                Texts(server, "reload"),
+                server.Properties.GetValueOrDefault("settings") is ObjectValue settings ? Json(settings) as System.Text.Json.Nodes.JsonObject : null));
         }
 
         return entries;
     }
+
+    /// <summary>A value of HIDL as the JSON a language server is told it in, an object, a list, a text, a number or a flag.</summary>
+    public static System.Text.Json.Nodes.JsonNode? Json(IRuntimeValue value) => value switch
+    {
+        ObjectValue entries => new System.Text.Json.Nodes.JsonObject(entries.Properties.Select(pair =>
+            new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(pair.Key, Json(pair.Value)))),
+        ListValue items => new System.Text.Json.Nodes.JsonArray([.. items.Items.Select(Json)]),
+        StringValue text => System.Text.Json.Nodes.JsonValue.Create(text.Value),
+        NumberValue number => System.Text.Json.Nodes.JsonValue.Create(number.Value),
+        BooleanValue flag => System.Text.Json.Nodes.JsonValue.Create(flag.Value),
+        _ => null
+    };
 
     // A text, or one a system ({ windows: ..., macos: ..., linux: ... }), this one's, empty for none
     private static string Text(ObjectValue of, string key) => of.Properties.GetValueOrDefault(key) switch

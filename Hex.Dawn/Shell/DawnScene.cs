@@ -50,7 +50,7 @@ internal sealed partial class DawnScene : Scene
     private Vector4 DimColor => compositor.Skin?.DimTextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 0.62f);
     private Vector4 ErrorColor => compositor.Skin?.ErrorColor ?? new Vector4(1.0f, 0.45f, 0.4f, 1.0f);
     private Vector4 WarningColor => compositor.Skin?.WarningColor ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
-    private static readonly Vector4 FolderColor = new(0.38f, 0.62f, 1.0f, 1.0f);
+    private static readonly Vector4 FolderColor = UIFileKinds.FOLDER;
 
     public override Camera ActiveCamera { get; protected set; }
 
@@ -128,6 +128,9 @@ internal sealed partial class DawnScene : Scene
         // What the editor says, before anything of it is shown, its layouts name the texts by key
         ReadStrings();
 
+        // The field of light the frame's glass sits over, under everything of the editor's, see DawnScene.Materials
+        BuildGlow();
+
         // Bootstrapping. The editor is made of the same thing it makes
         chrome = compositor.CreateModule();
         chrome.ShowInLayoutDebugger = false;
@@ -176,6 +179,7 @@ internal sealed partial class DawnScene : Scene
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
         languages = new HexLanguages(Context);
+        codeEditing.languages = languages;
         BuildStatusBar();
         BuildPanel();
         codeEditing.BuildFindBar();
@@ -196,6 +200,7 @@ internal sealed partial class DawnScene : Scene
         AddFindCommands();
         AddCodeCommands();
         debugger = new HexDebugging(Context);
+        BuildDebugBar();
         AddHelpCommands();
         tasks = new HexTasks(Context);
         languages.StartChecks();
@@ -348,6 +353,7 @@ internal sealed partial class DawnScene : Scene
                 UpdateEffects();
         UpdateAutoSave(dt);
         debugger.Update();
+        UpdateDebugBar();
         ApplyAskedView();
         Profile.Mark("extensions");
 

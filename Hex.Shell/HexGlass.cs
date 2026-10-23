@@ -17,8 +17,35 @@ public static class HexGlass
     /// <summary>The glass of the dialogs, menus and the palette.</summary>
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
-    /// <summary>The glass of the side panels, out of the same sliders.</summary>
-    public static UIGlass Side(float blur, float clarity, float rim) => UIGlass.Pane(blur, clarity, rim);
+    /// <summary>
+    /// The glass of a window that stays up over everything (the settings), the popups' a share less clear and with less of
+    /// a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks like a
+    /// fishbowl. It was held to one clarity for every look, and Fluid's windows came out the same solid navy as Frosted's.
+    /// </summary>
+    public static UIGlass Window(UIGlass popup) => popup with { Clarity = MathF.Min(popup.Clarity * WINDOW_CLARITY, 0.45f), Bend = MathF.Min(popup.Bend, 6.0f) };
+
+    // How much of the popups' clarity a window keeps
+    private const float WINDOW_CLARITY = 0.78f;
+
+    /// <summary>
+    /// The glass of the side panels, out of the same sliders. Liquid glass (a bend) keeps more of its rim there, a light
+    /// along the edge of the side as there is along a popup's, so the side reads as the same stuff as what pops up over it.
+    /// </summary>
+    public static UIGlass Side(float blur, float clarity, float rim, float bend = 0.0f)
+    {
+        UIGlass pane = UIGlass.Pane(blur, clarity, rim);
+        return bend > 0.0f ? pane with { Rim = Math.Clamp(rim * LIQUID_SIDE_RIM, 0.0f, 1.0f) } : pane;
+    }
+
+    // How much of the rim the side of liquid glass keeps
+    private const float LIQUID_SIDE_RIM = 0.6f;
+
+    /// <summary>
+    /// How much of the window's tone is laid over its field of light, by how clear the look's glass is. Clear glass lets
+    /// more of the light through, so there's something under the sides for it to show, frosted keeps the window dimmer.
+    /// One veil for every look had the main window the same in all three, the glass only showing on what popped up.
+    /// </summary>
+    public static float Veil(float clarity) => Math.Clamp(0.95f - clarity * 0.85f, 0.4f, 0.7f);
 
     /// <summary>The popups' glass as the editor's section of the settings has it, for Dusk, which reads the file.</summary>
     public static UIGlass Popup(IReadOnlyDictionary<string, IRuntimeValue> editor) =>

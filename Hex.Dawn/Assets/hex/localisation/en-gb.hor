@@ -46,22 +46,23 @@ let strings = {
 
     // The side bar, its heading for each view and its sections
     side: {
-        explorer: "EXPLORER",
-        explorer_of: "EXPLORER, {workspace}",
-        open_a_layout: "NO LAYOUT OPEN",
-        search: "SEARCH",
-        outline_of: "OUTLINE, {file}",
-        designer: "DESIGNER",
-        toolbox: "TOOLBOX",
-        layers: "LAYERS"
+        explorer: "Explorer",
+        explorer_of: "Explorer · {workspace}",
+        open_a_layout: "No folder open",
+        files_of: "Files · {folder}",
+        search: "Search",
+        outline_of: "Outline · {file}",
+        designer: "Designer",
+        toolbox: "Toolbox",
+        layers: "Layers"
     },
 
     // The panel under the editor
     panel: {
-        problems: "$(error) PROBLEMS",
-        problems_count: "$(error) PROBLEMS  {count}",
-        output: "$(output) OUTPUT",
-        console: "$(terminal) TERMINAL",
+        problems: "$(error) Problems",
+        problems_count: "$(error) Problems  {count}",
+        output: "$(output) Output",
+        console: "$(terminal) Terminal",
         console_placeholder: "Evaluate HIDL in the current file, e.g. moves.jab or len(keys(strings))",
         console_tip: "Runs in the scope of the current file's last run. Enter evaluates, Up and Down recall history"
     },
@@ -87,7 +88,7 @@ let strings = {
     // The find bar over the code
     find: {
         none: "No results",
-        count: "{count} results",
+        count: "{count}",
         of: "{index} of {count}",
         bad_regex: "Invalid regular expression"
     },
@@ -132,8 +133,8 @@ let strings = {
 
     // The column on the right
     properties: {
-        title: "PROPERTIES",
-        file: "VALUES",
+        title: "Properties",
+        file: "Values",
         hide: "Hide the Properties panel (Ctrl+Alt+B). View menu restores it"
     },
 
@@ -195,7 +196,6 @@ let strings = {
             panels_tip: "The side bar, Properties, the bottom panel and the layers list, at their current sizes",
             put_back: "Reset Panel Sizes"
         },
-
         backdrop: {
             heading: [
                 "## Backdrop",
@@ -460,15 +460,11 @@ let strings = {
 
     about: {
         title: "About Hex",
-        page: [
-            "# Hex {version}",
-            "The layout editor for Horizon and the IDE for HIDL, rendered by Horizon's own UI on Vulkan.",
-            "",
-            "Horizon {engine}, .NET {dotnet}",
-            "",
-            "## Licences",
-            "Icons are **Codicons**, the icons of Visual Studio Code, Copyright (c) Microsoft Corporation, under the Creative Commons Attribution 4.0 International licence (Assets/fonts/codicons in the engine).",
-            "",
+        version: "Version {version}",
+        runs_on: "Horizon {engine}  ·  .NET {dotnet}",
+        tagline: "The layout editor for Horizon and the IDE for HIDL, drawn by Horizon's own UI on Vulkan.",
+        licences: [
+            "Icons are Codicons, the icons of Visual Studio Code, Copyright (c) Microsoft Corporation, under the Creative Commons Attribution 4.0 International licence.",
             "Cascadia Mono is under the SIL Open Font License."
         ]
     },
@@ -485,7 +481,7 @@ let strings = {
         language_has_no_key: "{language} has no {key}, this is as far as it goes",
         no_word_to_look_for: "there is no word at the caret to look for",
         references_title: "WHERE {word} IS ({count})",
-        references_found: "{word} is on {lines} lines of {files} files"
+        references_found: "{word} is on {lines} of {files}"
     },
 
     code_findbar: {
@@ -496,6 +492,34 @@ let strings = {
         bad_regex: "'{query}' isn't a regex that works, {error}",
         not_found: "no '{query}' in {file}",
         replaced: "replaced {count} of '{query}', Ctrl+Z puts them back"
+    },
+
+    // What a file's language server is asked about its code, going to things, renaming, formatting and fixing
+    code_server: {
+        no_definition: "{server} doesn't know where {word} is declared",
+        definitions_title: "{word}, declared in {count} places",
+        declared_at: "{word} is declared in {file}, line {line}",
+        no_references: "{word} isn't used anywhere the server knows of",
+        references_title: "{word}, {count} places",
+        references_found: "{word} is in {places} in {files}",
+        rename_prompt: "What {name} is called everywhere the language server knows it.",
+        not_renamed: "{server} couldn't rename {name} there",
+        renamed: "{name} is {renamed} now, {places} in {files}, nothing saved",
+        cannot_format: "this file's language server doesn't format files",
+        formatted_already: "nothing to change, it's formatted",
+        formatted: "formatted by {server}",
+        no_fixes_here: "no fixes or refactorings here",
+        fixes_title: "Quick fix",
+        fixes_prompt: "Fixes and changes for this line",
+        applied: "{title}",
+        format_document: "Format Document",
+        quick_fix: "Quick Fix...",
+        show_hover: "Show Hover",
+        add_import: "Add {import}",
+        change_name: "Change {from} to {to}",
+        decompiled: "{word}, from {file} as the server decompiles it, to read",
+        source_not_written: "the source couldn't be written to be read, {why}",
+        no_hover: "nothing's known of {word}"
     },
 
     code_hints: {
@@ -520,7 +544,7 @@ let strings = {
         this_file_only: "This file only",
         renamed: "renamed {name} to {renamed}, {count} places",
         skipped_in_designer: ", not in {skipped} (open in the designer, rename it there)",
-        renamed_everywhere: "renamed {name} to {renamed}, {places} places in {files} files, none saved yet{left}",
+        renamed_everywhere: "renamed {name} to {renamed}, {places} in {files}, none saved yet{left}",
         colour: "Colour",
         colour_text: "The colour written at this place in the code",
         use_it: "Use it",
@@ -538,7 +562,7 @@ let strings = {
     },
 
     debugging: {
-        debug: "DEBUG",
+        debug: "Debug",
         start_debugging: "Start Debugging",
         continue: "Continue",
         step_over: "Step Over",
@@ -547,35 +571,77 @@ let strings = {
         stop_debugging: "Stop Debugging",
         restart_debugging: "Restart Debugging",
         toggle_breakpoint: "Toggle Breakpoint",
-        breakpoints_cs_only: "breakpoints go in .cs files",
+        breakpoints_cs_only: "breakpoints go in .cs and .d files, C# and D are what Hex debugs",
+        no_lldb: "there's no lldb-dap to debug D with, it comes with LLVM (winget install LLVM.LLVM, or llvm from Homebrew or the distribution)",
         already_running: "it's running, Shift+F5 stops it",
         no_project: "there's no .csproj to debug in the workspace or over this file",
         which_project: "Debug which project",
         which_project_text: "More than one in the workspace, which to build and run under the debugger",
         no_debugger_apple: "netcoredbg isn't anywhere Hex looks, and its releases have nothing for Apple silicon: build it from github.com/Samsung/netcoredbg and say where in the settings (debugger_path)",
+        running_without: "C# runs without the debugger, {why}",
+        running_without_card: "This runs without the debugger, netcoredbg isn't on this machine. Install it and F5 debugs C#, with breakpoints, steps and the variables.",
+        install_netcoredbg: "Install netcoredbg",
+        installing_netcoredbg: "Installing netcoredbg",
+        downloading: "downloading {asset}",
+        unpacking: "unpacking it",
+        netcoredbg_installed: "netcoredbg is installed ({path}), F5 debugs C# now",
         no_debugger: "netcoredbg isn't anywhere Hex looks, get it from github.com/Samsung/netcoredbg/releases and put it in a netcoredbg folder next to {exe} or on the PATH, or say where in the settings (debugger_path)",
         building_to_debug: "building {project} to debug it",
         building: "building {project}",
         did_not_build: "{project} didn't build, see the output",
+        did_not_build_problems: "{project} didn't build, its errors are in Problems",
         no_program: "couldn't find what {project} builds ({program})",
-        debugger_did_not_start: "netcoredbg wouldn't start",
+        debugger_did_not_start: "the debugger wouldn't start",
         debugging: "debugging {program}, Shift+F5 stops it",
         launch_failed: "the debugger couldn't start it, {why}",
         stopping: "stopping it",
-        ended_code: "{project} ended, {code}",
+        ended_code: "{project} exited with code {code}",
         ended: "{project} ended",
+        ended_exception: "{project} ended with the exception it stopped on",
         stopped: "stopped, {why}",
         stopped_at: "stopped, {why} at {file}:{line}",
+        stepped_to: "at {file}:{line}",
         building_side: "building {project}...",
-        nothing_running: "nothing running, F5 builds and debugs the project",
+        nothing_running: "nothing running, F5 debugs",
         running: "{project} is running",
         call_stack: "Call stack",
         variables: "Variables",
         asking: "asking...",
         breakpoints: "Breakpoints",
-        breakpoints_hint: "F9 or a click in the gutter of a .cs file",
+        breakpoints_hint: "F9 or a click in the gutter of a .cs or a .d file",
         could_not_ask: "couldn't ask, {why}",
-        nothing_in_scope: "nothing in scope"
+        nothing_in_scope: "nothing in scope",
+        external_code: "{frames} of external code",
+        watch: "Watch",
+        watch_hint: "Add Watch in the Run menu",
+        add_watch: "Add Watch...",
+        add_watch_title: "Add watch",
+        add_watch_text: "An expression evaluated every time it stops, in the frame looked at. A right click on its row takes it away.",
+        add_button: "Add",
+        evaluate: "Evaluate Expression...",
+        evaluate_title: "Evaluate",
+        evaluate_text: "An expression evaluated in the frame it's stopped in, what it comes to is said in Output too",
+        evaluate_button: "Evaluate",
+        evaluates_when_stopped: "expressions are evaluated where it's stopped, F9 a breakpoint and F5 first",
+        evaluated: "{expression} = {value}",
+        could_not_evaluate: "{expression} couldn't be evaluated here",
+        not_here: "not here",
+        d_stopped: "stopped on {what} at {file}:{line}, F5 ends it",
+        d_ended: "{project} ended on {what}",
+        d_index: "an array index out of bounds",
+        d_assert: "an assert that failed",
+        d_memory: "out of memory",
+        d_throw: "a D exception"
+    },
+
+    debug_bar: {
+        continue: "Continue (F5)",
+        pause: "Pause",
+        step_over: "Step Over (F10)",
+        step_into: "Step Into (F11)",
+        step_out: "Step Out (Shift+F11)",
+        restart: "Restart (Ctrl+Shift+F5)",
+        stop: "Stop (Shift+F5)"
     },
 
     designer_canvas: {
@@ -624,16 +690,16 @@ let strings = {
     },
 
     designer_inspector: {
-        select_something: "select something in the canvas\nor in the layout on the left",
+        select_something: "Select something in the canvas\nor in the layout on the left.",
         things_selected: "{count} things selected, a change here goes to\nall of them that have the property",
         renamed_to: "renamed to {name}",
         name_refused: "'{name}' can't be its name: taken, or not a name a variable can have",
-        section_general: "general",
-        section_placement: "placement",
-        section_hover: "hover",
-        section_entrance: "entrance",
-        section_resizing: "resizing",
-        section_look: "look",
+        section_general: "General",
+        section_placement: "Placement",
+        section_hover: "Hover",
+        section_entrance: "Entrance",
+        section_resizing: "Resizing",
+        section_look: "Look",
         playing_entrances: "playing the entrances, F5 does it again",
         art_button_tooltip: "the button shows every piece of art the skin has, to pick one by eye",
         property_is: "{property} is {chosen}",
@@ -716,14 +782,19 @@ let strings = {
         folder_title: "Pick a folder",
         open_workspace_title: "Open a workspace",
         save_workspace_title: "Save the workspace as",
-        open_title: "Open a layout",
-        save_title: "Save the layout as"
+        open_title: "Open",
+        save_title: "Save the layout as",
+        save_file_title: "Save as",
+        files_of_kind: "{kind} files"
     },
 
     documents: {
         no_file: "there is no '{path}'",
         open_already: "{name} is open already",
-        not_text: "{name} isn't text",
+        binary_title: "{name} isn't text",
+        binary_body: "Opened as text it can be read, but saved from here it would be damaged.",
+        open_anyway: "Open anyway",
+        leave_it: "Leave it",
         opened_differs: "opened {name}, but it doesn't write back the same",
         opened: "opened {name}: {count} components, writes back the same",
         files_of: "files of {directory}",
@@ -770,7 +841,6 @@ let strings = {
     },
 
     explorer_files: {
-        not_text: "{name} isn't text, there is nothing to edit in it here",
         open: "Open",
         new_file: "New file...",
         new_folder: "New folder...",
@@ -812,10 +882,10 @@ let strings = {
         add: "Add",
         no_folder: "there is no folder {folder}",
         already_in: "{folder} is in the workspace already",
-        added: "added {folder}, the workspace has {count} folders",
+        added: "added {folder}, the workspace has {count}",
         removed: "{name} is out of the workspace, nothing in it was touched",
         not_a_workspace: "{name} isn't a workspace, {message}",
-        opened: "opened the workspace {name}, {count} folders",
+        opened: "opened the workspace {name}, {count}",
         saved_as: "saved the workspace as {path}",
         save_failed: "couldn't save the workspace, {message}",
         closed: "the workspace is closed, no folders",
@@ -835,35 +905,37 @@ let strings = {
 
     find_bar: {
         expand: "replace as well (Ctrl+H)",
-        find: "find",
+        find: "Find",
         case: "the case has to match (Alt+C)",
         word: "whole words only (Alt+W)",
         regex: "a regular expression, matched a line at a time (Alt+R)",
         previous: "the one before (Shift+Enter, Shift+F3)",
         next: "the next (Enter, F3)",
         close: "Escape",
-        replace: "replace",
+        replace: "Replace",
         replace_one: "this one, then on to the next (Enter in the box)",
         replace_all: "every one, one step to undo (Ctrl+Alt+Enter)"
     },
 
     find_menu: {
         go_to_line_title: "Go to line",
+        go_to_line_prompt: "{lines} in {file}, a number goes to one",
         which_line: "Which line, 1 to {count}",
         go: "Go",
-        workspace_folders: "the {count} folders of the workspace",
+        workspace_folders: "the {count} of the workspace",
         open_file_title: "Open a file",
-        open_file_prompt: "{count} files in {where}, a few letters narrow them down. > for a command, @ for something in the file, : for a line, # for a text",
+        open_folder: "Open Folder...",
+        open_file_prompt: "{count} in {where}   ·   > commands   @ in this file   : a line   # a text",
         find_in_files_title: "Find in files",
-        find_in_files_prompt: "Look for in every .hor in {where}{how}",
+        find_in_files_prompt: "Look for in every file in {where}{how}",
         find: "Find",
         looking_for: "looking for '{query}' in {where}...",
-        found_title: "FOUND '{query}' ({count})",
-        found_in_files: "'{query}' is in {files} files, {lines} lines",
+        found_title: "Found '{query}' ({count})",
+        found_in_files: "'{query}' is in {files}, {lines}",
         not_found: "no '{query}' in {where}",
         checking: "checking every file in {where}...",
-        all_parse: "all {files} files in {where} parse",
-        problems_found: "{count} problems in {files} files, listed under the editor",
+        all_parse: "nothing wrong in the {files} of {where}",
+        problems_found: "{count} in {files}, listed under the editor",
         find_in_files: "Find in Files...",
         go_to_file: "Go to File...",
         go_to_line: "Go to Line...",
@@ -903,7 +975,7 @@ let strings = {
 
     menus: {
         command_palette: "Command Palette...",
-        dusk_terminal: "Dusk, the Terminal",
+        dusk_terminal: "Dusk (the Terminal)",
         explorer: "Explorer",
         search: "Search",
         debug: "Debug",
@@ -951,7 +1023,47 @@ let strings = {
         choose_title: "Run task",
         choose_prompt: "The tasks of the workspace's tasks.hor, each runs in a terminal of its own",
         running: "running {name}",
-        file_not_written: "{file} couldn't be written, {reason}"
+        ended: "{name} done",
+        failed: "{name} failed, it ended with {code}",
+        failed_with: "{name} failed with {errors}, they're in Problems",
+        needs_imports: "{name} linked without the modules the program imports, dmd compiles them too with -i",
+        add_imports: "Add -i and run again",
+        added_imports: "{name} compiles what it imports now, -i is in its command",
+        file_not_written: "{file} couldn't be written, {reason}",
+        set_up_run: "Set Up F5...",
+        setup_title: "Set Up F5",
+        setup_intro: "Ctrl+F5 builds and runs {name} with these lines, saved as this folder's {file}, and F5 debugs it where there's a debugger. Leave Build empty for a language that runs as it is.",
+        setup_kind: "Program",
+        setup_build: "Build",
+        setup_build_hint: "nothing to build first",
+        setup_run: "Run",
+        setup_run_hint: "the command line that runs it",
+        setup_folder: "Runs in",
+        setup_browse: "Browse...",
+        setup_folder_here: "{folder}, where tasks.hor is",
+        setup_output: "Output in",
+        setup_in_panel: "The terminal panel here",
+        setup_in_dusk: "A Dusk window of its own",
+        setup_save_run: "Save and run",
+        setup_save: "Save",
+        setup_cancel: "Cancel",
+        setup_needs_run: "it needs a line that runs it",
+        setup_written: "{file} written, F5 builds and runs",
+        no_dusk: "Dusk couldn't be started",
+        presets: {
+            d_dub: "D, a dub project",
+            d_dmd: "D, this file with dmd",
+            d_ldc: "D, this file with ldc2",
+            d_rdmd: "D, this file with rdmd",
+            csharp: "C#, dotnet",
+            rust: "Rust, cargo",
+            go: "Go",
+            c: "C, gcc",
+            cpp: "C++, g++",
+            python: "Python",
+            node: "JavaScript, node",
+            other: "Something else"
+        }
     },
 
     background: {
@@ -963,9 +1075,10 @@ let strings = {
     code: {
         changed_by_hand: "the code was changed by hand, Ctrl+Enter puts it into the layout",
         syntax_error: "line {line}: {message}",
-        opened: "opened {name}, {count} lines of code",
+        opened: "opened {name}, {lines} of code",
+        no_font: "there's no font called {name}, the code is in Hack",
         did_not_build: "the code didn't build, {message}",
-        applied: "the code is in the layout, {count} components",
+        applied: "the code is in the layout, {count}",
         reverted: "the code is what the layout says again",
         toggle_comment: "Toggle Line Comment",
         select_line: "Select Line",
@@ -988,10 +1101,12 @@ let strings = {
         reset_zoom: "Reset Zoom",
         go_to_definition: "Go to Definition",
         find_all_references: "Find All References",
+        rename_symbol: "Rename Symbol...",
         next_problem: "Next Problem",
         previous_problem: "Previous Problem",
         run_file: "Run File",
         run_behaviour: "Run Behaviour...",
+        run_without_debugging: "Run Without Debugging",
         check_all_files: "Check All Files",
         trigger_completion: "Trigger Completion",
         apply_to_layout: "Apply Code to Layout",
@@ -1000,8 +1115,8 @@ let strings = {
     },
 
     commands: {
-        saved_left: "saved {saved} files, {skipped} never saved anywhere are left for Ctrl+S",
-        saved: "saved {saved} files",
+        saved_left: "saved {saved}, Ctrl+S for {skipped} never saved anywhere",
+        saved: "saved {saved}",
         nothing_to_save: "nothing to save",
         revert_title: "Revert the file?",
         revert_text: "What isn't saved of {file} goes, and it is as it is in its file.",
@@ -1114,9 +1229,9 @@ let strings = {
 
     settings_catalog: {
         effects_title: "Effects",
-        effects_help: "None of them, subtle (the caret glides, a save or a long command that went well throws a burst of sparks, the popups sit on glass) or all (sparks off the caret as you type as well).",
+        effects_help: "None of them, subtle (the lights switched on under this, and a burst of sparks for a save or a long command that went well when the sparks are on) or all (sparks off the caret as you type as well). The glass and the caret's glide have switches of their own.",
         effect_glass_title: "Glass",
-        effect_glass_help: "Whether the dialogs, the menus, the palette and the side panels sit over a blur of what is behind them, the way Windows 11 has its own.",
+        effect_glass_help: "Whether the dialogs, the menus, the palette and the side panels sit on glass over what is behind them, blurred and bent at the rim.",
         effect_sparks_title: "Sparks",
         effect_sparks_help: "Whether the effects that are on throw sparks, on a save, a long command that went well and as you type.",
         effect_motion_title: "Caret glides",
@@ -1136,11 +1251,11 @@ let strings = {
         glass_rim_title: "Glass rim",
         glass_rim_help: "How bright the silver lining round the edge of the glass is.",
         glass_bend_title: "Glass bend",
-        glass_bend_help: "How far the edge of the popups' glass bends what is behind it, the lens, in pixels, 0 for flat glass.",
+        glass_bend_help: "How far the rim of the popups' glass bends what is behind it, in pixels. 0 is frosted glass, a blur laid flat. More is liquid glass, what's behind bent hard round the rim and split a little into its colours there, the way Apple's is.",
         ui_animation_title: "Interface animation",
         ui_animation_help: "How quickly the menus, buttons and panels move as they light up, slide open and shut, 1 as they come, 2 twice as quick, 0 for nothing moving at all. Dusk keeps still with its animations off as well.",
         caret_glide_title: "Caret glide",
-        caret_glide_help: "How long the caret takes to glide to where it goes, in seconds, 0 for it jumping there. The effects have to be on and the caret gliding, Dusk's cursor has its own in the terminal's settings.",
+        caret_glide_help: "How long the caret takes to glide to where it goes, in seconds, 0 for it jumping there. Caret glides has to be on, Dusk's cursor has its own in the terminal's settings.",
         backdrop_title: "Behind the code",
         backdrop_help: "Whether a picture is drawn behind the code, in the bottom right corner of the editor.",
         backdrop_terminal_title: "Behind the terminals",
@@ -1172,7 +1287,7 @@ let strings = {
         code_zoom_title: "Code zoom",
         code_zoom_help: "How big the code is written, 1 as it comes. Ctrl and the wheel over the code change it too.",
         code_font_title: "Code font",
-        code_font_help: "The font code is written in, a folder of Assets/fonts (hack, cascadia), empty for the skin's.",
+        code_font_help: "The font code is written in, any of the fonts that come with Hex.",
         wrap_code_title: "Wrap code",
         wrap_code_help: "Whether a long line of code wraps at the edge of the editor rather than running off it (Alt+Z).",
         debugger_path_title: ".NET debugger",
@@ -1181,6 +1296,11 @@ let strings = {
         run_to_terminal_help: "Whether a file run with Ctrl+F5 runs in a terminal of the panel rather than in the output.",
         reopen_last_title: "Reopen the last workspace",
         reopen_last_help: "Whether the workspace and the files that were open come back when Dawn starts.",
+        explorer_menu_title: "Open in Hex in Explorer",
+        explorer_menu_help: "Whether right clicking a file, a folder or the inside of a folder in Explorer has Open in Hex, for this Hex.exe and only for you. It's the registry's, not the settings file's, so it shows what Windows has.",
+        explorer_menu_verb: "Open in Hex",
+        user_path_title: "Hex on the PATH",
+        user_path_help: "Whether the folder Hex.exe is in is on your PATH, so hex can be typed in any terminal. Terminals opened after it see it, the ones already open don't. It's the registry's, not the settings file's.",
         trim_whitespace_title: "Trim trailing spaces",
         trim_whitespace_help: "Whether the spaces and tabs at the ends of the lines of a file of code go when it is saved.",
         final_newline_title: "End with a newline",
@@ -1232,27 +1352,28 @@ let strings = {
         screen_tip: "The screen the layout is laid out for",
         running: "{name} running, saves reload in it",
         selection: "({count} selected)",
-        components: "{count} components",
-        components_selected: "{count} components, {selected} selected",
+        components: "{count}",
+        components_selected: "{count}, {selected} selected",
         kind_layout: "HIDL layout",
         kind_workspace: "Hex workspace",
         kind_plain_text: "Plain text",
         kind_skin: "HIDL skin",
         kind_strings: "HIDL strings",
         line_endings_swapped: "{name} is saved with its lines ended {ending} from now on, save it to keep that",
-        skin_shown: "layouts are shown in {skin}",
-        skin_shown_theme: "layouts are shown in {skin}, {theme}"
+        skin_shown: "layouts are shown in the {skin} skin",
+        skin_shown_theme: "layouts are shown in the {skin} skin, its {theme} theme"
     },
 
     terminal_page: {
         split_right: "Split right",
         console_profile: "HIDL in this file",
-        command_panel: "Hex: the panel away",
-        command_terminal: "Hex: the terminal page and back",
-        command_terminal_focus: "Hex: the terminal or the editor",
-        command_new_terminal: "Hex: a new terminal",
-        command_run: "Hex: run the file",
-        command_run_to_terminal: "Hex: F5 says what it ran in the terminal, or in the output",
+        command_panel: "hide the panel",
+        command_terminal: "the terminal page and back",
+        command_terminal_focus: "focus the terminal or the editor",
+        command_new_terminal: "new terminal",
+        command_run: "run the file",
+        command_palette: "Hex's command palette",
+        command_run_to_terminal: "switch where a run says what it did, the terminal or the output",
         runs_to_terminal: "F5 says what a file did in the terminal",
         runs_to_output: "F5 says what a file did in the output"
     },
@@ -1301,22 +1422,48 @@ let strings = {
         read_again: "{name} read again"
     },
 
+    looks: {
+        menu: "Look",
+        all: "Profiles...",
+        picked: "Hex is in {name} now",
+        command: "Look: {name}",
+        about: "How Hex looks in one go, its glass, its lights and how it moves. Fluid Glass and Frosted Glass are what it's made for, Flat takes the glass away. Change anything under this and save it as a profile of your own, the themes go in it too.",
+        save_as: "Save as profile...",
+        update: "Update {name}",
+        delete: "Delete {name}",
+        save_title: "Save as a profile",
+        save_text: "What to call it. The glass, the effects, the motion and both themes go in it as they are now.",
+        save: "Save",
+        cancel: "Cancel",
+        my_look: "My profile",
+        delete_title: "Delete {name}?",
+        delete_text: "The settings stay as they are, only the profile goes.",
+        delete_yes: "Delete",
+        custom: "Custom",
+        custom_about: "not saved as a profile yet",
+        fluid_about: "clear glass, light at the rim",
+        frosted_about: "soft glass, quieter",
+        flat_about: "solid panels, no glass",
+        yours: "your own"
+    },
+
     glass_preview: {
         backdrop: "Hex Dawn Dusk",
         side: "Side",
         popup_on: "Popup on glass",
         glass_off: "The glass is off",
         values: "blur {blur}, clarity {clarity}, rim {rim}, bend {bend}",
-        off_reason: "the effects or the glass switch say solid panels"
+        off_reason: "the glass switch says solid panels"
     },
 
     language_settings: {
+        on_the_path: "{command}, wherever the PATH finds it",
         on_this_machine: "On this machine",
         looking: "looking for it...",
         newest_is: "{version} is the newest",
         installs_it: "{command} installs it",
-        download_from_releases: "Download it from its releases",
-        not_found: "not found",
+        download_from_releases: "download it from its releases",
+        not_found: "not installed",
         version_unsaid: "a version it doesn't say",
         newer_out: "{version} is out",
         the_newest: "the newest",
@@ -1327,11 +1474,35 @@ let strings = {
         downloaded_from: "Downloaded from github.com/{repo}.",
         where_help: "Where it is, empty for {command} on the PATH.",
         programs: "Programs (*.exe, *.cmd, *.bat)",
-        where_is: "Where {command} is"
+        where_is: "Where {command} is",
+        added_about: "Added in the settings.",
+        add_title: "Add a language server",
+        add_help: "For a language Hex colours that has no server above, or to use another one for it. Pick the language, say which files it's for with a bar between two (.d|.di), and where the server is.",
+        language: "Language",
+        extensions: "Files",
+        server: "Server",
+        server_hint: "the program, a full path or a name on the PATH",
+        arguments: "Arguments",
+        arguments_hint: "--stdio, if it wants it",
+        browse: "Browse...",
+        add: "Add",
+        edit: "Edit",
+        remove: "Remove",
+        added: "{language}'s server is added, the files of it that are open are in it",
+        needs_language: "pick a language first",
+        needs_extensions: "it needs the files it's for, .d|.di",
+        needs_server: "it needs the server, a path or a name on the PATH"
     },
 
     languages: {
-        server_restarted: "[Hex] {command} started again, a project of its changed"
+        server_restarted: "[Hex] {command} started again, a project of its changed",
+        server_asks: "{command} asks",
+        not_now: "Not now",
+        completion_waiting: "Asking {server}...",
+        stopped: "stopped",
+        server_restarted_after: "{server} stopped, started it again",
+        server_stopped: "{server} stopped again, {why}",
+        start_again: "Start it again"
     },
 
     modes: {
@@ -1365,13 +1536,37 @@ let strings = {
     },
 
     side_tree: {
-        no_folders: "no folders, File has Add folder",
+        no_folders: "No folders yet. File, Add Folder puts one in.",
+        browsing: "Open a folder with File, Open Folder",
+        open_folder: "Open Folder...",
         outline_line: "line {line}",
-        outline_empty: "nothing declared in here",
+        outline_empty: "Nothing declared in here yet",
         results_empty: "nothing"
     },
 
     sides: {
         panels_reset: "the panels are the size they come at"
+    },
+
+    // So many of something, one of it and more than one (HexText.Count)
+    counts: {
+        file_one: "1 file",
+        file_many: "{count} files",
+        line_one: "1 line",
+        line_many: "{count} lines",
+        place_one: "1 place",
+        place_many: "{count} places",
+        problem_one: "1 problem",
+        problem_many: "{count} problems",
+        error_one: "1 error",
+        error_many: "{count} errors",
+        folder_one: "1 folder",
+        folder_many: "{count} folders",
+        result_one: "1 result",
+        result_many: "{count} results",
+        component_one: "1 component",
+        component_many: "{count} components",
+        frame_one: "1 frame",
+        frame_many: "{count} frames"
     }
 };

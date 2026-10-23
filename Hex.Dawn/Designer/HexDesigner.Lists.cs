@@ -45,7 +45,7 @@ internal sealed partial class HexDesigner
         }
 
         if (components.Count == 0)
-            window.Hint(tree, "nothing yet, add something\nout of the toolbox above");
+            window.Hint(tree, "Nothing here yet. Add something\nfrom the toolbox above.");
 
         RebuildLayers();
     }
@@ -79,7 +79,7 @@ internal sealed partial class HexDesigner
 
         if (names.Count == 0)
         {
-            window.Hint(layers, "none yet, a component gets one\nin its properties, under layer");
+            window.Hint(layers, "No layers yet. A component gets one\nin its properties, under Layer.");
         }
     }
 

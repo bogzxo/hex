@@ -57,8 +57,10 @@ internal sealed partial class DuskScene
         test.Run(() => View().Type("\r"));
         test.Settle(0.3f);
         test.Run(() => Shot("tui-git-log"));
+        // A copy of Hex outside any repository says so quietly instead, with how to make one
         test.Check("and its log, a commit shown beside it (when there is one, Dusk's own repository may have none yet)", () =>
-            Program()!.ScreenText() is { } screen && screen.Contains("What it changed") && (!screen.Contains("enter on a commit") || screen.Contains("No commits yet")));
+            Program()!.ScreenText() is { } screen && (screen.Contains("isn't in a git repository, git init makes one")
+                || screen.Contains("What it changed") && (!screen.Contains("enter on a commit") || screen.Contains("No commits yet"))));
         test.Run(() => View().Type("q"));
         test.Settle(settle);
 

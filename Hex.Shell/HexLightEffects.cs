@@ -29,7 +29,7 @@ public sealed class HexLightEffects
     public bool Spotlight { get; set; }
 
     /// <summary>Whether a click throws a ring out.</summary>
-    public bool Ripples { get; set; } = true;
+    public bool Ripples { get; set; }
 
     /// <summary>Whether a quick pointer leaves embers behind it.</summary>
     public bool Trail { get; set; }
@@ -65,7 +65,7 @@ public sealed class HexLightEffects
 
         CaretGlow = Flag(editor, "effect_caret_glow", true);
         Spotlight = Flag(editor, "effect_spotlight", false);
-        Ripples = Flag(editor, "effect_ripples", true);
+        Ripples = Flag(editor, "effect_ripples", false);
         Trail = Flag(editor, "effect_trail", false);
     }
 }

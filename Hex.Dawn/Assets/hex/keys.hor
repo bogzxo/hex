@@ -37,8 +37,6 @@ let keys_tree = compositor.tree_view({
     size: vec(620, 380),
     anchor: "left",
     pivot: "left",
-    color: vec(0.1, 0.11, 0.145, 1),
-    radius: 6,
     text_scale: 0.14,
     guides: false
 });

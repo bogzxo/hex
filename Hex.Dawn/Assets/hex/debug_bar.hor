@@ -1,0 +1,23 @@
+// The debug bar, laid over the top middle of the code while something's debugged (VS Code's floating one). Going on
+// (or pausing while it runs), the three steps, starting again and stopping, each with its key in its tooltip. See
+// DawnScene.DebugBar. Running, it's dressed as every popup is (DawnScene.Materials), the colours here are for the designer.
+#define layout
+
+let debug_bar = compositor.panel({
+    anchor: "top",
+    pivot: "top",
+    pos: vec(0, -8),
+    padding: vec(6, 4, 6, 4),
+    z: 20,
+    radius: 14,
+    color: vec(0.12, 0.17, 0.23, 1),
+    outline: vec(0.55, 0.82, 0.92, 0.14)
+});
+
+let debug_row = compositor.stack({ parent: debug_bar, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal" });
+let debug_continue = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-continue", style: "button_flat", tooltip: "@debug_bar.continue" });
+let debug_step_over = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-step-over", style: "button_flat", tooltip: "@debug_bar.step_over" });
+let debug_step_into = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-step-into", style: "button_flat", tooltip: "@debug_bar.step_into" });
+let debug_step_out = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-step-out", style: "button_flat", tooltip: "@debug_bar.step_out" });
+let debug_restart = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-restart", style: "button_flat", tooltip: "@debug_bar.restart" });
+let debug_stop = compositor.button({ parent: debug_row, size: vec(30, 26), icon: "debug-stop", style: "button_flat", tooltip: "@debug_bar.stop" });

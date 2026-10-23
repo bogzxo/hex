@@ -20,12 +20,16 @@ public static class DuskProgram
     private const string ARGUMENT_APP = "--app";
     private const string ARGUMENT_REAL_KEYS = "--realkeys";
     private const string ARGUMENT_TOGGLE = "--toggle";
+    private const string ARGUMENT_WINDOW = "--window";
+    private const string ARGUMENT_RUN = "--run";
 
     /// <summary>
     /// Starts the terminal. Without arguments it comes up maximised with the machine's usual shell in a tab.
     /// <list type="bullet">
     /// <item><c>--profile cmd</c> starts with that profile (its id, pwsh, powershell, cmd, git_bash, wsl:Ubuntu) rather than the settings' one.</item>
     /// <item><c>--cwd folder</c> is where the first shell starts, the folder Dusk was started from otherwise.</item>
+    /// <item><c>--run "dub build &amp;&amp; dub run"</c> types a command line into the first tab once its shell is up (Dawn's
+    /// tasks that run in a Dusk of their own start it so).</item>
     /// <item><c>--size 1280x720</c> starts in a window of that size rather than maximised.</item>
     /// <item><c>--scale 1.25</c> draws the window's own parts that much bigger.</item>
     /// <item><c>--selftest</c> opens tabs, splits them, runs the commands and prints how that went, <c>--watch</c> slowly enough to follow.
@@ -34,6 +38,8 @@ public static class DuskProgram
     /// The parts that press real keys (keys, history, repl) send them only while Dusk is the window in front, and run only
     /// when named or with <c>--realkeys</c>, so a plain run never types into anything of anybody's.</item>
     /// <item><c>--exit</c> closes once the self test is done, with an exit code of 1 if anything failed.</item>
+    /// <item><c>--window</c> is a window of its own even with a Dusk running, which otherwise takes it as a tab and this
+    /// one leaves, the way Dawn's is.</item>
     /// <item><c>--toggle</c> drops the Dusk that's running down from the top of the screen, or takes it back up, and leaves,
     /// for a key of the desktop's own where there's no key for everywhere of Hex's (Linux and macOS): bind
     /// <c>hex --dusk --toggle</c> in the keyboard settings. With no Dusk running it starts one.</item>
@@ -64,7 +70,10 @@ public static class DuskProgram
             return;
 
         // A Dusk running already takes it as a tab of its own, and this one leaves
-        if (!selfTest && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}"))
+        // The command line last, it's the one part that can have a bar in it
+        string? run = ValueOf(args, ARGUMENT_RUN);
+        if (!selfTest && !args.Contains(ARGUMENT_WINDOW)
+            && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}|{run ?? string.Empty}"))
             return;
 
         var options = new DuskOptions(
@@ -76,7 +85,8 @@ public static class DuskProgram
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : null,
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             App: args.Contains(ARGUMENT_APP),
-            RealKeys: args.Contains(ARGUMENT_REAL_KEYS));
+            RealKeys: args.Contains(ARGUMENT_REAL_KEYS),
+            Run: run);
 
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
@@ -101,6 +111,9 @@ public static class DuskProgram
                 UpdatesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0
             }
         });
+
+        // F12 is the terminal's, the engine took a screenshot with it and left a folder of them by Hex.exe
+        engine.ScreenshotKey = null;
 
         var scene = new DuskScene(options);
 
@@ -165,4 +178,5 @@ public static class DuskProgram
 /// <param name="Suites">Which parts of the self test to run, empty for all of them.</param>
 /// <param name="App">Whether the self test runs in application mode, as Dusk really runs.</param>
 /// <param name="RealKeys">Whether the parts of the self test that press real keys run without being named, keys, history and repl.</param>
-internal sealed record DuskOptions(bool SelfTest, bool Exit, bool Watch, string? Profile, string StartIn, float? Scale, string[]? Suites = null, bool App = false, bool RealKeys = false);
+/// <param name="Run">A command line typed into the first tab once its shell is up, null for none.</param>
+internal sealed record DuskOptions(bool SelfTest, bool Exit, bool Watch, string? Profile, string StartIn, float? Scale, string[]? Suites = null, bool App = false, bool RealKeys = false, string? Run = null);

@@ -21,6 +21,15 @@ internal sealed class HexTask
     [HidlComment("Whether it is the one of its group run without asking, the first of a group is when none says.")]
     public bool Default { get; set; }
 
+    [HidlComment("Another task of this file run first, this one only once that worked. The run task names the build one.")]
+    public string DependsOn { get; set; } = string.Empty;
+
+    [HidlComment("Where it runs, \"panel\" for a terminal tab under the editor, \"dusk\" for a Dusk window of its own.")]
+    public string Terminal { get; set; } = PANEL;
+
+    /// <summary>What <see cref="Terminal"/> says for a tab under the editor, and for a Dusk window.</summary>
+    public const string PANEL = "panel", DUSK = "dusk";
+
     /// <summary>What it is called, its key in the file.</summary>
     [HidlIgnore]
     public string Name { get; set; } = string.Empty;

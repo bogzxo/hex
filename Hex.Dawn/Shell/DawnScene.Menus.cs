@@ -22,15 +22,53 @@ internal sealed partial class DawnScene
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
     }
 
-    /// <summary>F5, the file run, or the entrances of a layout played in its designer. A file that isn't HIDL runs the run task.</summary>
+    /// <summary>
+    /// F5, the file run, or the entrances of a layout played in its designer. A file that isn't HIDL runs the run task,
+    /// and with no run task Set Up F5 comes up for it. It was run as HIDL, which no D or Python ever was.
+    /// </summary>
     private void RunOrPlay()
     {
-        // C# is debugged, and while something is being debugged F5 goes on from where it stopped
-        if (debugger.DebugStopped || (!LayoutTools && HexDebugging.IsCSharp(document.Path))) debugger.DebugOrContinue();
+        // C# and D are debugged when there's a debugger to do it with (netcoredbg, lldb-dap), breakpoints or not, the way F5
+        // is in VS Code, and Ctrl+F5 runs without it. While something is being debugged F5 goes on from where it stopped.
+        // D was only debugged with a breakpoint and C# always, F5 meant two things. Without netcoredbg F5 builds and runs
+        // C# the way any other program is, and says once that it isn't being debugged
+        bool debuggable = debugger.CanDebug(document.Path);
+        if (!LayoutTools && HexDebugging.IsCSharp(document.Path) && !debuggable && !debugger.DebugStopped)
+            debugger.SayRunWithoutDebugger();
+
+        if (debugger.DebugStopped || (!LayoutTools && debuggable)) debugger.DebugOrContinue();
         else if (LayoutTools) designer.PlayIntros();
-        else if (document.IsText && document.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase) && tasks.DefaultTask("run") is { } task) tasks.Run(task);
+        else if (document.IsText && document.Path is { } path && !IsHidl(path))
+        {
+            if (tasks.RunTaskFor(path) is { } task) tasks.Run(task);
+            else tasks.SetUpRun(path);
+        }
         else running.RunCode();
     }
+
+    /// <summary>
+    /// Ctrl+F5, the file run without the debugger, its run task in the terminal (Set Up F5 when there isn't one), VS Code's
+    /// key for it. A HIDL file has its behaviour run, the runner, as Ctrl+F5 always did.
+    /// </summary>
+    private void RunWithoutDebugging()
+    {
+        if (LayoutTools)
+            return;
+
+        if (document.IsText && document.Path is { } path && !IsHidl(path))
+        {
+            if (tasks.RunTaskFor(path) is { } task) tasks.Run(task);
+            else tasks.SetUpRun(path);
+        }
+        else
+        {
+            running.OpenRunner();
+        }
+    }
+
+    // Whether a file is HIDL, which F5 runs itself, by its extension
+    private static bool IsHidl(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".hor" or ".jab" or ".hex-workspace";
 
     /// <summary>
     /// The menus of the bar and their groups, before anything adds its commands to them. Everything the editor does that
@@ -87,6 +125,7 @@ internal sealed partial class DawnScene
         // game's setting (UISkins) and not the editor's own, a layout looks here the way it will in a game set to
         // the same, and the editor itself stays in its flat one
         AddSkins(commands.AddMenu("View/look", Said("menus.layout_skin"), "paintcan"));
+        AddLooks(commands.AddMenu("View/look", Said("looks.menu"), "color-mode"));
 
         // The canvas in the designer, the code in code, each with a zoom of its own. These go while typing, the code is typed into
         commands.Bind(Key.Number0, () => { if (LayoutTools) designer.ZoomToFit(); else ZoomCode(0.0f); }, control: true, whileTyping: true);

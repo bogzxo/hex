@@ -24,6 +24,9 @@ internal sealed partial class DawnScene
     private (UISkinChoice? Skin, string? Theme) skinShown;
     private HexDocument? languageFor;
 
+    // How many times the language servers had started or stopped when the language item was written, it says so as it happens
+    private int languagesShown;
+
     // How many components the layout has, counted when its tree is put together, not walked again every tick
 
     // What the items were last written from, so a number is only made into text when it changes
@@ -73,7 +76,9 @@ internal sealed partial class DawnScene
         screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: Said("status_bar.screen_tip"));
         screenItem.IsVisible = Design;
 
-        caretItem.MinWidth = 120.0f;
+        // Wide enough that the items after it don't shuffle as the numbers grow a digit, no wider, "Ln 1, Col 1" sat in a
+        // gap twice the others
+        caretItem.MinWidth = 96.0f;
     }
 
     /// <summary>The name of the running game said once, when it changes.</summary>
@@ -105,7 +110,7 @@ internal sealed partial class DawnScene
         if (!LayoutTools)
         {
             UITextPosition caret = code.Document.Caret;
-            int selected = code.Document.HasSelection ? code.Document.SelectedText.Length : 0;
+            int selected = code.Document.HasSelection ? code.Document.SelectedLength : 0;
             if (caretShown != (caret.Line, caret.Column, selected, code.Document.Version))
             {
                 caretShown = (caret.Line, caret.Column, selected, code.Document.Version);
@@ -115,9 +120,10 @@ internal sealed partial class DawnScene
 
             endingsItem.Text = document.CrLf ? "CRLF" : "LF";
 
-            if (languageFor != document)
+            if (languageFor != document || languagesShown != languages.ServersChanged)
             {
                 languageFor = document;
+                languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
                 languageItem.Text = $"$({icon}) {language}";
             }
@@ -134,14 +140,17 @@ internal sealed partial class DawnScene
         {
             componentsShown = (count, document.Selection.Count);
             componentsItem.Text = document.Selection.Count > 0
-                ? $"$(symbol-class) {Said("status_bar.components_selected", ("count", count.ToString()), ("selected", document.Selection.Count.ToString()))}"
-                : $"$(symbol-class) {Said("status_bar.components", ("count", count.ToString()))}";
+                ? $"$(symbol-class) {Said("status_bar.components_selected", ("count", HexText.Count("component", count)), ("selected", document.Selection.Count.ToString()))}"
+                : $"$(symbol-class) {Said("status_bar.components", ("count", HexText.Count("component", count)))}";
         }
 
-        if (designer.canvasZoom != zoomShown)
+        // How big the layout really is drawn against its own pixels, what zooming says too. It said its zoom against fitting
+        // the canvas, 100% for a layout drawn at half its size
+        float actual = document.Module.Scale.X / MathF.Max(0.01f, compositor.Scale) * 100.0f;
+        if (MathF.Abs(actual - zoomShown) >= 0.5f)
         {
-            zoomShown = designer.canvasZoom;
-            zoomItem.Text = $"$(zoom-in) {designer.canvasZoom * 100.0f:0}%";
+            zoomShown = actual;
+            zoomItem.Text = $"$(zoom-in) {actual:0}%";
         }
 
         if (skinShown != (UISkins.Current, UISkins.Theme))
@@ -163,7 +172,7 @@ internal sealed partial class DawnScene
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return ("folder-library", Said("status_bar.kind_workspace"));
         if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
-            return shown.Editor.Highlighter is { } language ? ("file-code", languages.LinterOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
+            return shown.Editor.Highlighter is { } language ? ("file-code", languages.ServerShownOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return ("paintcan", Said("status_bar.kind_skin"));
         if (shown.Path is { } file && Path.GetFileName(Path.GetDirectoryName(file))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)
@@ -211,9 +220,15 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>Helper method to show the layouts in another skin, the one a game would be set to.</summary>
+    /// <summary>
+    /// Helper method to show the layouts in another skin, the one a game would be set to. Nothing, and nothing said, for
+    /// the one they're in already, which picking a look put back and said so, "layouts are shown in Flat, horizon".
+    /// </summary>
     private void UseSkin(UISkinChoice skin, string? theme)
     {
+        if (UISkins.Current == skin && (UISkins.Theme ?? skin.UsualTheme) == (theme ?? skin.UsualTheme))
+            return;
+
         UISkins.Use(skin, theme);
         Say(theme is null ? Said("status_bar.skin_shown", ("skin", skin.Title)) : Said("status_bar.skin_shown_theme", ("skin", skin.Title), ("theme", theme)));
     }

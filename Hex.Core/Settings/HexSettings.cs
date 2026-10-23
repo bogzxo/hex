@@ -33,6 +33,9 @@ internal sealed class HexSettings
     /// <summary>Whether the side bar, the panel under the editor and the properties were put away.</summary>
     public bool SideBarHidden, PanelHidden, PropertiesHidden;
 
+    /// <summary>Whether the panel under the editor was folded down to its tabs by its chevron.</summary>
+    public bool PanelCollapsed;
+
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
 
@@ -66,17 +69,29 @@ internal sealed class HexSettings
     /// <summary>How quickly a word the wrap moves glides to its new line (CodeEditor.FlowRate), 0 to snap.</summary>
     public float WrapFlow = Horizon.UI.Components.CodeEditor.FLOW_RATE;
 
-    /// <summary>The effects, none, subtle (the caret glides, a save throws sparks) or all (sparks as it types too), see DawnScene.Effects.</summary>
+    /// <summary>
+    /// The effects, none, subtle (the lights, and a burst of sparks on a save when the sparks are on) or all (sparks as it
+    /// types too), see DawnScene.Effects. The glass and the caret's glide have switches of their own and don't wait on it.
+    /// </summary>
     public string Effects = "none";
 
     /// <summary>
     /// Whether the effects that are on throw sparks, whether the caret glides, and whether the dialogs, menus, palette and
-    /// side panels sit over a blur of what is behind them.
+    /// side panels sit over a blur of what is behind them. What it all comes as is the Fluid Glass look (Hex.Shell's HexLooks).
     /// </summary>
-    public bool EffectSparks = true, EffectMotion = true, EffectGlass = true;
+    public bool EffectSparks, EffectMotion = true, EffectGlass = true;
 
     /// <summary>The effects of light, a glow under the caret, a spotlight under the pointer, rings off clicks, embers behind the pointer.</summary>
-    public bool EffectCaretGlow = true, EffectSpotlight, EffectRipples = true, EffectTrail;
+    public bool EffectCaretGlow = true, EffectSpotlight, EffectRipples, EffectTrail;
+
+    /// <summary>The look picked last in the settings by its name (one of Hex's three or one of the user's), empty for none.</summary>
+    public string Look = "Fluid Glass";
+
+    /// <summary>
+    /// The looks the user saved, in the order they were made, each the visual settings it sets by their keys in this section
+    /// (and terminal_theme for Dusk's). Hex.Shell's HexLooks is what reads and applies them.
+    /// </summary>
+    public readonly List<(string Name, Dictionary<string, IRuntimeValue> Values)> Looks = [];
 
     /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (the engine's UIGlass.Clear to begin with, Hex.Shell's HexGlass draws it).</summary>
     public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
@@ -102,6 +117,12 @@ internal sealed class HexSettings
 
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
     public readonly Dictionary<string, string> ServerPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The language servers added in the settings, one a language, in the order they were added. One for a language
+    /// language_servers.hor has a server for as well is used instead of that one (HexLanguages).
+    /// </summary>
+    public readonly List<HexAddedServer> AddedServers = [];
 
     /// <summary>Whether Hex looks for new versions of the language servers on GitHub, once a day as it starts.</summary>
     public bool ServerUpdates = true;
@@ -166,6 +187,7 @@ internal sealed class HexSettings
             SideBarHidden = Flag(values, "side_bar_hidden", SideBarHidden);
             PanelHidden = Flag(values, "panel_hidden", PanelHidden);
             PropertiesHidden = Flag(values, "properties_hidden", PropertiesHidden);
+            PanelCollapsed = Flag(values, "panel_collapsed", PanelCollapsed);
             Snap = Number(values, "snap", Snap);
             CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
             if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
@@ -193,6 +215,15 @@ internal sealed class HexSettings
             GlassBend = Math.Clamp(Number(values, "glass_bend", GlassBend), 0.0f, 24.0f);
             UiAnimation = Math.Clamp(Number(values, "ui_animation", UiAnimation), 0.0f, 3.0f);
             CaretGlide = Math.Clamp(Number(values, "caret_glide", CaretGlide), 0.0f, 0.3f);
+            if (values.TryGetValue("look", out var look) && look is StringValue looked) Look = looked.Value;
+            if (values.TryGetValue("looks", out var looks) && looks is ObjectValue saved)
+            {
+                foreach (var (name, its) in saved.Properties)
+                {
+                    if (its is ObjectValue set)
+                        Looks.Add((name, new Dictionary<string, IRuntimeValue>(set.Properties, StringComparer.Ordinal)));
+                }
+            }
             TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
             FinalNewline = Flag(values, "final_newline", FinalNewline);
             AutoSave = Flag(values, "auto_save", AutoSave);
@@ -200,6 +231,7 @@ internal sealed class HexSettings
             RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
             if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
             Names(values, "language_server_paths", ServerPaths);
+            ReadAddedServers(values);
             Names(values, "language_server_latest", ServerLatest);
             Names(values, "language_server_skipped", ServerSkipped);
             ServerUpdates = Flag(values, "language_server_updates", ServerUpdates);
@@ -253,6 +285,43 @@ internal sealed class HexSettings
         }
     }
 
+    // Helper method to read the language servers added in the settings, an object of them by their language
+    private void ReadAddedServers(Dictionary<string, IRuntimeValue> values)
+    {
+        if (!values.TryGetValue("language_servers_added", out var value) || value is not ObjectValue added)
+            return;
+
+        static string[] Texts(ObjectValue of, string key) =>
+            of.Properties.GetValueOrDefault(key) is ListValue list ? [.. list.Items.OfType<StringValue>().Select(item => item.Value)] : [];
+
+        foreach (var (language, its) in added.Properties)
+        {
+            if (its is not ObjectValue server || server.Properties.GetValueOrDefault("command") is not StringValue { Value.Length: > 0 } command)
+                continue;
+
+            string name = server.Properties.GetValueOrDefault("name") is StringValue { Value.Length: > 0 } named ? named.Value : language;
+            AddedServers.Add(new HexAddedServer(language, name, Texts(server, "extensions"), command.Value, Texts(server, "args")));
+        }
+    }
+
+    // Helper method to write the added language servers, each its name, files, program and what it's started with
+    private HIDLObject AddedServersObject()
+    {
+        static ListValue List(IEnumerable<string> texts) => new([.. texts.Select(text => (IRuntimeValue)new StringValue(text))]);
+
+        var added = new HIDLObject();
+        foreach (HexAddedServer server in AddedServers)
+        {
+            added.Add(server.Language, new HIDLObject()
+                .Add("name", server.Name)
+                .Add("extensions", List(server.Extensions))
+                .Add("command", server.Command.Replace('\\', '/'))
+                .Add("args", List(server.Arguments)));
+        }
+
+        return added;
+    }
+
     // Helper method to write texts by name, in the order of their names
     private static HIDLObject Named(Dictionary<string, string> values, bool paths = false)
     {
@@ -277,6 +346,16 @@ internal sealed class HexSettings
             extensions.Add(id, its);
         }
 
+        // the user's looks in the order they were made, each the values it sets
+        var looks = new HIDLObject();
+        foreach (var (name, values) in Looks)
+        {
+            var its = new HIDLObject();
+            foreach (var (key, value) in values)
+                its.Add(key, value);
+            looks.Add(name, its);
+        }
+
         var settings = new HIDLObject()
             .Add("editor_skin", EditorSkin)
             .Add("editor_theme", EditorTheme)
@@ -287,6 +366,7 @@ internal sealed class HexSettings
             .Add("side_bar_hidden", SideBarHidden)
             .Add("panel_hidden", PanelHidden)
             .Add("properties_hidden", PropertiesHidden)
+            .Add("panel_collapsed", PanelCollapsed)
             .Add("snap", Snap)
             .Add("code_zoom", CodeZoom)
             .Add("canvas_handles", CanvasHandles)
@@ -314,6 +394,8 @@ internal sealed class HexSettings
             .Add("glass_bend", GlassBend)
             .Add("ui_animation", UiAnimation)
             .Add("caret_glide", CaretGlide)
+            .Add("look", Look)
+            .Add("looks", looks)
             .Add("trim_whitespace", TrimWhitespace)
             .Add("final_newline", FinalNewline)
             .Add("auto_save", AutoSave)
@@ -321,6 +403,7 @@ internal sealed class HexSettings
             .Add("run_to_terminal", RunToTerminal)
             .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
             .Add("language_server_paths", Named(ServerPaths, paths: true))
+            .Add("language_servers_added", AddedServersObject())
             .Add("language_server_updates", ServerUpdates)
             .Add("language_servers_checked", ServersChecked)
             .Add("language_server_latest", Named(ServerLatest))

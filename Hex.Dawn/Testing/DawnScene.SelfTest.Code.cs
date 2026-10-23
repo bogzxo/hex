@@ -28,7 +28,7 @@ internal sealed partial class DawnScene
         test.Check("code: a file that isn't a layout opens as the code it is, the middle to itself", () =>
             document.IsText && code.Text.StartsWith("let speed") && !canvas.Visible && codeScroll.Children.Contains(code) && code.Bounds.Height > canvas.Size.Y * 0.5f);
         test.Check("code: its outline lists what it declares and the keys in it", () =>
-            treeTitle.Text.StartsWith("OUTLINE") && sideTree.Visible && sideTree.VisibleCount == 3);
+            treeTitle.Text.StartsWith("Outline") && sideTree.Visible && sideTree.VisibleCount == 3);
         test.Check("code: what only a layout has is out of the way", () =>
             !layout.Get<UIComponent>("toolbox").Visible && !layout.Get<UIComponent>("layers_section").Visible);
 
@@ -86,6 +86,36 @@ internal sealed partial class DawnScene
         test.Run(() => running.AskConsole("speed * 2"));
         test.WaitFor(() => running.LastConsoleLine() == "6", 2.0f);
         test.Check("console: a line runs in what the file came to", () => running.LastConsoleLine() == "6" && bottom.Selected == CONSOLE_PAGE);
+
+        // The chevron at the end of the panel's tabs folds it down to them, its tabs still there, and opens it again
+        float open = 0.0f;
+        test.Run(() => open = bottom.Size.Y);
+        // Every tick of the way, how tall it was laid out and how far the code was from meeting it, which a tick behind was
+        // a flash of a gap or the two over each other
+        var heights = new HashSet<float>();
+        float seam = 0.0f;
+        int frames = 0;
+        bool Watch(bool done)
+        {
+            if (bottom.IsFolding)
+                Shot($"panel-fold-{frames++:00}");
+            heights.Add(bottom.Bounds.Height);
+            seam = MathF.Max(seam, MathF.Abs(codeScroll.Bounds.Min.Y - bottom.Bounds.Max.Y));
+            return done;
+        }
+
+        test.Click(() => chrome.ToWorld(bottom.FoldBounds.Center));
+        test.WaitFor(() => Watch(bottom.Folded && !bottom.IsFolding), 2.0f);
+        test.Wait();
+        test.Check("panel: its chevron folds it down to its tabs", () => panelFolded && bottom.Folded && bottom.Bounds.Height < open && bottom.Visible);
+        test.Check("panel: over a few ticks, not in one", () => heights.Count >= 4);
+        test.Check("panel: with the code meeting it every tick of the way", () => seam < 1.0f);
+        test.Run(() => { heights.Clear(); seam = 0.0f; });
+        test.Click(() => chrome.ToWorld(bottom.FoldBounds.Center));
+        test.WaitFor(() => Watch(!bottom.Folded && !bottom.IsFolding), 2.0f);
+        test.Wait();
+        test.Check("panel: and opens the same way", () => heights.Count >= 4 && seam < 1.0f);
+        test.Check("panel: and opens it again as tall as it was", () => !panelFolded && !settings.PanelCollapsed && MathF.Abs(bottom.Bounds.Height - open) < 1.0f);
 
         test.Run(() => running.AskConsole("let doubled = speed * 2"));
         test.WaitFor(() => running.consoleAsked is null, 2.0f);
