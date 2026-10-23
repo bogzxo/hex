@@ -56,7 +56,8 @@ internal sealed partial class HexDebugging
         debuggedProject = entry;
         restart = () => StartDebuggingD(entry);
         context.Panels.ShowOutput();
-        context.Notices.Say(context.Strings.Said("debugging.building", ("project", Path.GetFileName(entry))));
+        context.Panels.ShowSide(HexSide.Debug);
+        context.Notices.Say(context.Strings.Said("debugging.building", ("project", HexLanguages.DubProjectOf(entry) is { } dub ? Path.GetFileName(dub) : Path.GetFileName(entry))));
 
         var breakpointsNow = breakpoints.Where(pair => pair.Value.Count > 0).ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<int>)pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
         _ = Task.Run(() => BuildAndLaunchD(entry, debugger, breakpointsNow));
@@ -83,6 +84,19 @@ internal sealed partial class HexDebugging
         if (lastDEntry is { } last && File.Exists(last) && full.StartsWith(Path.GetDirectoryName(last)! + Path.DirectorySeparatorChar, PlatformPaths.Comparison) && HasMain(last))
             return last;
 
+        return MainFileOf(full, context.Workspace.Roots) ?? full;
+    }
+
+    /// <summary>
+    /// The first D file with main in a file's folder or up to three over it (not past a workspace's root), null for none.
+    /// What Set Up F5 builds for a module of a program too, it wrote dmd util.d and the linker asked for an entry point.
+    /// </summary>
+    internal static string? MainFileOf(string file, IReadOnlyList<string> roots)
+    {
+        string full = Path.GetFullPath(file);
+        if (HasMain(full))
+            return full;
+
         string? folder = Path.GetDirectoryName(full);
         for (int up = 0; up < 4 && folder is not null; up++, folder = Path.GetDirectoryName(folder))
         {
@@ -99,11 +113,11 @@ internal sealed partial class HexDebugging
                 break;
             }
 
-            if (context.Workspace.Roots.Any(root => PlatformPaths.Same(root, folder)))
+            if (roots.Any(root => PlatformPaths.Same(root, folder)))
                 break;
         }
 
-        return full;
+        return null;
     }
 
     private static bool HasMain(string path)

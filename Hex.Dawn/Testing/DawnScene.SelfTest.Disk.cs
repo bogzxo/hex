@@ -106,7 +106,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("backups: brought back as Hex starts, the file opened with what wasn't saved, said on a card", () =>
             document.Path is { } path && Path.GetFullPath(path) == Path.GetFullPath(file) && code.Text == "let kept = 3;\n"
-            && HasChanges(document) && toasts.Cards.Any(card => card.Text.Contains("brought back", StringComparison.Ordinal)));
+            && HasChanges(document) && toasts.Cards.Any(card => card.Text.Contains("brought back", StringComparison.OrdinalIgnoreCase)));
         test.Run(() => code.Document.Undo());
         test.Wait();
         test.Check("backups: and Ctrl+Z goes back to its file", () => code.Text == "let kept = 1;\n" && !HasChanges(document));

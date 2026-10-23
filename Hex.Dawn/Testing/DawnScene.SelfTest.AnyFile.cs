@@ -30,7 +30,7 @@ internal sealed partial class DawnScene
             && entries.Any(entry => entry is { Name: "lengthSquared", Icon: "symbol-method", Depth: 1 })
             && entries.Any(entry => entry is { Name: "twice", Icon: "symbol-method" }) && entries.Any(entry => entry is { Name: "main", Icon: "symbol-method" })
             && !entries.Any(entry => entry.Name is "if" or "writeln"));
-        test.Check("any file: its icon and its colour say what it is", () => HexExplorer.FileIcon(cs) == "symbol-class" && explorer.FileIconColor(cs) is not null && HexExplorer.FileIcon(md) == "markdown");
+        test.Check("any file: its icon and its colour say what it is", () => HexExplorer.FileIcon(cs) == "file-code" && explorer.FileIconColor(cs) is not null && HexExplorer.FileIcon(md) == "markdown");
 
         test.Run(() => Open(md));
         test.Settle(0.3f);

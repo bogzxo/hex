@@ -1,10 +1,11 @@
-// One line of the output under the editor, something Hex said or a file that was run printed.
+// One line of the output under the editor, something Hex said or a file that was run printed. The same size as a
+// row of Problems beside it, it was a size smaller.
 #define layout
 
 let line = compositor.label({
     anchor: "left",
     pos: vec(6, 0),
     text: "something that was said",
-    text_scale: 0.13,
+    text_scale: 0.14,
     align: "left"
 });

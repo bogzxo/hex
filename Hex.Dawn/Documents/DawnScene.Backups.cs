@@ -82,6 +82,9 @@ internal sealed partial class DawnScene
         if (found.Count == 0)
             return;
 
+        // A file Hex was started on stays on screen, what's brought back opens behind it. It came up under a tab of another
+        // folder brought back on top of it
+        HexDocument? was = document;
         var brought = new List<string>();
         foreach (var backup in found)
         {
@@ -89,6 +92,9 @@ internal sealed partial class DawnScene
                 brought.Add(backup.Name);
             Backups.Remove(backup);
         }
+
+        if (options.Open is not null && was is { Path: not null } && documents.Contains(was) && document != was)
+            Show(was);
 
         if (brought.Count > 0)
             Notify(Said("backups.restored", ("files", string.Join(", ", brought))));

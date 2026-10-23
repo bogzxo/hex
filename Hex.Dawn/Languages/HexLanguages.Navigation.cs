@@ -296,14 +296,16 @@ internal sealed partial class HexLanguages
 
         When(server.References(path, caret.Line, caret.Column), all =>
         {
-            // The project's own when some are in it. serve-d says every name like it in the standard library as well, and
-            // nothing there can use a name of the project's
+            // The project's own only. serve-d says every name like it in the standard library as well, and nothing there can
+            // use a name of the project's. For a name of the library's (writeln) it said the library's 309 places and none of
+            // the project's, so the project's uses are looked for by the word instead
+            var lines = new Dictionary<string, string[]>(PlatformPaths.Comparer);
             var places = all.Where(place => PlatformPaths.IsUnder(place.Path, server.RootDirectory) || context.Workspace.Roots.Any(root => PlatformPaths.IsUnder(place.Path, root))).ToList();
             if (places.Count == 0)
-                places = [.. all];
+                places = WordPlaces(word);
 
             // Never a text or a comment that says the name, which serve-d counted as using it
-            places = [.. places.Where(place => !HexSearch.InTextOrComment(LineOf(place), place.Character))];
+            places = [.. places.Where(place => !HexSearch.InTextOrComment(LineOf(place, lines), place.Character))];
 
             if (places.Count == 0)
             {
@@ -337,12 +339,18 @@ internal sealed partial class HexLanguages
         context.Window.ShowResults(title, found);
     }
 
-    // The line of a place, read off the editor that has its file open or the disk
-    private string LineOf(LanguageServerPlace place)
+    // The line of a place, read off the editor that has its file open or the disk, each file once for all its places
+    private string LineOf(LanguageServerPlace place, Dictionary<string, string[]> lines)
     {
-        string[] text = context.Documents.Find(place.Path) is { } open ? open.Editor.Text.Split('\n') : HexSearch.ReadLines(place.Path);
+        if (!lines.TryGetValue(place.Path, out string[]? text))
+            lines[place.Path] = text = context.Documents.Find(place.Path) is { } open ? open.Editor.Text.Split('\n') : HexSearch.ReadLines(place.Path);
         return place.Line < text.Length ? text[place.Line] : string.Empty;
     }
+
+    // Every place in the workspace's files a word is said as a word of its own, as places a server would have said
+    private List<LanguageServerPlace> WordPlaces(string word) =>
+        [.. HexSearch.FindIn(context.Workspace.Roots.ToList(), word, new UIFindOptions(MatchCase: true, WholeWord: true))
+            .Select(found => new LanguageServerPlace(found.Path, found.Line, found.Column, found.Line, found.Column + word.Length))];
 
     /// <summary>
     /// Where on a place's line its name is, from where the place starts. serve-d says a declaration from its start, int
@@ -474,8 +482,10 @@ internal sealed partial class HexLanguages
             return;
         }
 
+        // What fixes the line first, the refactors after. csharp-ls put Extract local function over the fix for a
+        // misspelt name, and Enter took it
         context.Windows.Choose(context.Strings.Said("code_server.fixes_title"), context.Strings.Said("code_server.fixes_prompt", ("server", server is null ? "the compiler" : ShownName(server))),
-            [.. actions.Select(action => (action.Title, (Action)(() => TakeAction(server, action))))]);
+            [.. actions.OrderBy(action => action.Fixes ? 0 : 1).Select(action => (action.Title, (Action)(() => TakeAction(server, action))))]);
     }
 
     // A fix picked, its edits made and its command run (which may ask for more edits, taken as they come)

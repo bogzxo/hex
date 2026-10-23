@@ -81,7 +81,10 @@ internal sealed partial class HexTasks
     {
         setupWindow?.Parent?.Remove(setupWindow);
 
+        // A D module of a program is set up as the program, the file with main, a lone module of its own doesn't link
         setupFile = forFile ?? context.Documents.Current.Path;
+        if (HexDebugging.IsD(setupFile) && HexLanguages.DubProjectOf(Path.GetFullPath(setupFile!)) is null)
+            setupFile = HexDebugging.MainFileOf(setupFile!, context.Workspace.Roots) ?? setupFile;
         setupRoot = SetupFolderFor(setupFile);
         UIModule chrome = context.Window.Chrome;
         string Said(string key) => context.Strings.Said("tasks." + key);

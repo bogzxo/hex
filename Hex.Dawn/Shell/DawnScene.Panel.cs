@@ -309,19 +309,22 @@ internal sealed partial class DawnScene
         string icon = problem.Hint ? "info" : problem.Warning ? "warning" : "error";
         string where = $"{problem.Line + 1}:{problem.Column + 1}";
 
-        string text = UIRichText.Literal(problem.Text);
+        // A compiler's backticks round a name as quotes, they came out as they are
+        string text = UIRichText.Literal(problem.Text.Replace('`', '\''));
         string code = string.Empty;
         if (ProblemCode.Match(text) is { Success: true } named)
             (text, code) = (named.Groups["said"].Value, named.Groups["code"].Value);
 
-        // Where and what it's called up front, quiet, the message last, all a long message loses at the panel's edge is its end
-        return $"      [color:{shade}]$({icon})[/color]  [color:dim]{where}{(code.Length > 0 ? "   " + code : string.Empty)}[/color]   {text}";
+        // Where up front, quiet, then the message, and what it's called after it quiet too. With the code between them the
+        // messages of a server that names none started further left than the rest
+        return $"      [color:{shade}]$({icon})[/color]  [color:dim]{where}[/color]   {text}{(code.Length > 0 ? $"   [color:dim]{code}[/color]" : string.Empty)}";
     }
 
     /// <summary>The row over a file's problems, the file by its name with its folder and how many there are quiet after.</summary>
     private string FileCaption(string path, int count)
     {
-        string folder = Path.GetDirectoryName(Relative(path)) ?? string.Empty;
+        // With slashes the way quick open writes a path, it said dubapp\source here and dubapp/source there
+        string folder = (Path.GetDirectoryName(Relative(path)) ?? string.Empty).Replace('\\', '/');
         return $"$({UIFileKinds.IconOf(path)})  {UIRichText.Literal(Path.GetFileName(path))}   [color:dim]{UIRichText.Literal(folder)}   {count}[/color]";
     }
 

@@ -76,7 +76,9 @@ internal sealed partial class DawnScene
         screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: Said("status_bar.screen_tip"));
         screenItem.IsVisible = Design;
 
-        caretItem.MinWidth = 120.0f;
+        // Wide enough that the items after it don't shuffle as the numbers grow a digit, no wider, "Ln 1, Col 1" sat in a
+        // gap twice the others
+        caretItem.MinWidth = 96.0f;
     }
 
     /// <summary>The name of the running game said once, when it changes.</summary>

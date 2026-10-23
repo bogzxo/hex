@@ -155,7 +155,7 @@ internal sealed partial class HexDebugging
     {
         if (DebugStopped)
         {
-            debugging!.Continue();
+            GoOn();
             return;
         }
 
@@ -367,6 +367,7 @@ internal sealed partial class HexDebugging
         restart = () => StartDebugging(project);
         context.Notices.Note(context.Strings.Said("debugging.building_to_debug", ("project", Path.GetFileName(project))));
         context.Panels.ShowOutput();
+        context.Panels.ShowSide(HexSide.Debug);
         context.Notices.Say(context.Strings.Said("debugging.building", ("project", Path.GetFileName(project))));
 
         var breakpointsNow = breakpoints.Where(pair => pair.Value.Count > 0).ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<int>)pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
@@ -432,6 +433,7 @@ internal sealed partial class HexDebugging
         debugWork.Enqueue(() =>
         {
             building = false;
+            context.Panels.RefreshSide(HexSide.Debug);
             context.Notices.Say(context.Strings.Said(listed ? "debugging.did_not_build_problems" : "debugging.did_not_build", ("project", name)), error: true);
         });
         return false;
@@ -523,11 +525,31 @@ internal sealed partial class HexDebugging
 
     internal void StepOut() => debugging?.StepOut();
 
+    /// <summary>
+    /// On from where it stopped. Stopped on a D exception there's nowhere to go on to, druntime leaves an exception to a
+    /// debugger that's there and halts, so the program is ended and what ended it said. F5 stopped on it again for ever.
+    /// </summary>
+    private void GoOn()
+    {
+        if (dStoppedOn is { } what)
+        {
+            string ended = Path.GetFileNameWithoutExtension(debuggedProject);
+            StopDebugging();
+            context.Notices.Say(context.Strings.Said("debugging.d_ended", ("project", ended), ("what", what)), error: true);
+            return;
+        }
+
+        debugging!.Continue();
+    }
+
+    // What kind of D exception it's stopped on, null while it isn't
+    private string? dStoppedOn;
+
     /// <summary>The debug bar's first button, on from where it stopped, or a pause where it is while it runs.</summary>
     internal void ContinueOrPause()
     {
         if (DebugStopped)
-            debugging!.Continue();
+            GoOn();
         else if (debugging is { State: DebugState.Running } running)
             running.Pause();
     }
@@ -553,6 +575,7 @@ internal sealed partial class HexDebugging
                     Stopped(happened);
                     break;
                 case DebugEventKind.Continued:
+                    dStoppedOn = null;
                     ClearExecutionLine();
                     stoppedFrames = [];
                     context.Panels.RefreshSide(HexSide.Debug);
@@ -595,6 +618,7 @@ internal sealed partial class HexDebugging
         if (why.StartsWith("exception", StringComparison.Ordinal))
             endedByException = true;
         string? dWhat = DExceptionOf(stoppedFrames);
+        dStoppedOn = dWhat;
 
         // The frame of the program's own code nearest the top, the debugger's steps into the framework go past that
         for (int i = 0; i < stoppedFrames.Count; i++)
