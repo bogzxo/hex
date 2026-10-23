@@ -494,6 +494,9 @@ internal sealed partial class DawnScene
         commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
         commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
         commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
+
+        // A folder right under a file, the way they're opened one after the other, not down with the workspaces
+        commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "folder-opened", UIKeyUse.BoundWhileTyping);
         recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
