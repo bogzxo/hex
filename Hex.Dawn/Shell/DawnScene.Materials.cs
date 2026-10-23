@@ -116,14 +116,17 @@ internal sealed partial class DawnScene
             well.Radius = WELL_RADIUS;
         }
 
-        // The find bar is a popup over the code like the palette and the menus, the same stuff and the same round
-        if (codeEditing?.findBar is { } findBar)
+        // The find bar and the debug bar are popups over the code like the palette and the menus, the same stuff and the
+        // same round
+        foreach (Panel? bar in (Panel?[])[codeEditing?.findBar, debugBar])
         {
-            findBar.Color = skin.Palette.Raised;
-            findBar.Radius = skin.PopupRadius;
-            findBar.Outline = skin.BorderColor;
-            findBar.Glass = glassy ? PopupGlass : null;
-            findBar.Lift = POPUP_LIFT;
+            if (bar is null)
+                continue;
+            bar.Color = skin.Palette.Raised;
+            bar.Radius = skin.PopupRadius;
+            bar.Outline = skin.BorderColor;
+            bar.Glass = glassy ? PopupGlass : null;
+            bar.Lift = POPUP_LIFT;
         }
 
         // The windows that are up, the settings, the keys, a page of help

@@ -95,10 +95,10 @@ internal sealed partial class DawnScene
     }
 
     // The tasks running in a terminal, the count of commands it had done as it was sent, and who wants to know it ended
-    private readonly List<(TerminalView View, int Before, Action<int> Finished)> taskWatches = [];
+    private readonly List<(TerminalView View, int Before, Action<int, string> Finished)> taskWatches = [];
 
-    /// <summary>A command sent to a terminal is watched until the shell says it's done, then how it ended is said.</summary>
-    private void WatchTask(TerminalView view, Action<int>? finished)
+    /// <summary>A command sent to a terminal is watched until the shell says it's done, then how it ended and what it wrote are said.</summary>
+    private void WatchTask(TerminalView view, Action<int, string>? finished)
     {
         if (finished is not null)
             taskWatches.Add((view, view.Screen.Finished, finished));
@@ -118,7 +118,7 @@ internal sealed partial class DawnScene
             else if (view.Screen.Finished > before && view.Screen.AtPrompt)
             {
                 taskWatches.RemoveAt(i);
-                finished(view.Screen.LastExit);
+                finished(view.Screen.LastExit, view.Screen.LastOutput());
             }
         }
 

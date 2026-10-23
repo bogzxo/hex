@@ -99,7 +99,8 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IDocuments.AddDiagnostics(Func<HexDocument, IReadOnlyList<UICodeDiagnostic>?> source) => diagnosticSources.Add(source);
     void IDocuments.DiagnosticsChanged(HexDocument of) => ShowDiagnostics(of);
     void IDocuments.AddCompletions(HexCompletionSource source) => codeEditing.completionSources.Add(source);
-    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source) => codeEditing.hoverSources.Add(source);
+    void IDocuments.AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source, bool first) =>
+        codeEditing.hoverSources.Insert(first ? 0 : codeEditing.hoverSources.Count, source);
     void IDocuments.AddSignatures(Func<HexDocument, string, int, UISignature?> source) => codeEditing.signatureSources.Add(source);
 
     /* The workspace */
@@ -231,7 +232,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             Say(Said("tasks.no_dusk"), error: true);
     }
 
-    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int>? finished)
+    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
     {
         // The code keeps the keyboard, the way a task's terminal doesn't take it in VS Code. The build took it and what was
         // typed next (Ctrl+G and a line) went to the shell
@@ -247,7 +248,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         }
     }
 
-    private void StartInTab(string key, string title, string folder, string commandLine, Action<int>? finished)
+    private void StartInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
     {
         ShowPanel(CONSOLE_PAGE);
         string line = commandLine + "\r";

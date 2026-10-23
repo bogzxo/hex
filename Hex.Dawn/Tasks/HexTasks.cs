@@ -139,16 +139,16 @@ internal sealed partial class HexTasks
         if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
             context.Terminals.RunInDusk(task.WorkingFolder(), line);
         else
-            context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line, exit => Ended(task, exit));
+            context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line, (exit, said) => Ended(task, exit, said));
         context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
     }
 
     /// <summary>
     /// A task's shell said it was done, how it went said along the bottom. One that failed with errors a compiler said has
     /// them brought up in the Problems panel, the way Visual Studio's Error List comes up after a build that broke. It
-    /// said "running build" long after the build was over.
+    /// said "running build" long after the build was over. What it wrote is looked at for a fix (HexTasks.Fixes).
     /// </summary>
-    private void Ended(HexTask task, int exit)
+    private void Ended(HexTask task, int exit, string said)
     {
         int errors = context.Terminals.TerminalErrors;
         if (exit == 0)
@@ -162,6 +162,7 @@ internal sealed partial class HexTasks
             : context.Strings.Said("tasks.failed", ("name", task.Name), ("code", exit.ToString())), error: true);
         if (errors > 0)
             context.Panels.ShowProblems();
+        OfferFix(task, said);
     }
 
     /// <summary>
@@ -171,8 +172,7 @@ internal sealed partial class HexTasks
     /// </summary>
     internal string CommandLineOf(HexTask task, string shell)
     {
-        if (task.DependsOn.Length == 0 || task.DependsOn == task.Name || TasksFileIn(task.Root) is not { } file
-            || TasksOf(file, task.Root).FirstOrDefault(other => other.Name == task.DependsOn) is not { } first)
+        if (DependencyOf(task) is not { } first)
             return task.Command;
 
         // Run from the task's own folder, the one before it may run somewhere else

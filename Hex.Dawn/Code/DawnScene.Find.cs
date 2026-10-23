@@ -82,7 +82,7 @@ internal sealed partial class DawnScene
     {
         var roots = WorkspaceRoots();
         return roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) is { Length: > 0 } name ? name : roots[0]
-            : Said("find_menu.workspace_folders", ("count", roots.Count.ToString()));
+            : Said("find_menu.workspace_folders", ("count", HexText.Count("folder", roots.Count)));
     }
 
     /// <summary>Every file of every folder looked through that reads as text, once each.</summary>
@@ -120,7 +120,11 @@ internal sealed partial class DawnScene
             choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
         }
 
-        ChooseFrom(Said("find_menu.open_file_title"), Said("find_menu.open_file_prompt", ("count", names.Length.ToString()), ("where", where)),
+        // Ctrl+G's says what it's going along, the file's lines, not quick open's way of finding a file
+        string prompt = typed.StartsWith(':')
+            ? Said("find_menu.go_to_line_prompt", ("lines", HexText.Count("line", code.Document.LineCount)), ("file", document.Path is { } shownPath ? Path.GetFileName(shownPath) : document.Name))
+            : Said("find_menu.open_file_prompt", ("count", HexText.Count("file", names.Length)), ("where", where));
+        ChooseFrom(Said(typed.StartsWith(':') ? "find_menu.go_to_line_title" : "find_menu.open_file_title"), prompt,
             choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
     }
 
@@ -136,13 +140,15 @@ internal sealed partial class DawnScene
                 return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => running.GoToCode(entry.Line, entry.Column))))];
 
             case ':':
-                // A line of every ten, a few letters of the number find the one, and the end of the file
+                // Every line by its number with what's on it dim after, a few letters of the number find the one. Bare
+                // numbers said nothing of which line was which
                 var lines = new List<(string Text, Action Picked)>();
                 int count = code.Document.LineCount;
                 for (int line = 1; line <= count; line++)
                 {
                     int at = line - 1;
-                    lines.Add(($"{line}", () =>
+                    string on = code.Document.LineAt(at).Trim();
+                    lines.Add((on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
@@ -215,7 +221,7 @@ internal sealed partial class DawnScene
                 Console.WriteLine($"[Hex]   {problem.Text}");
 
             Say(problems.Count == 0
-                ? Said("find_menu.all_parse", ("files", files.ToString()), ("where", where))
+                ? Said("find_menu.all_parse", ("files", HexText.Count("file", files)), ("where", where))
                 : Said("find_menu.problems_found", ("count", HexText.Count("problem", problems.Count)), ("files", HexText.Count("file", files))), error: problems.Count > 0);
         });
     }

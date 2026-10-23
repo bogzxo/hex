@@ -255,7 +255,7 @@ internal sealed partial class DawnScene
 
         Console.WriteLine($"[Hex] Opened '{path}' as code: {opened.Editor.Document.LineCount} lines.");
         int lines = opened.Editor.Document.LineCount;
-        Say(Said("code.opened", ("name", opened.Name), ("lines", lines == 1 ? "1 line" : $"{lines} lines")));
+        Say(Said("code.opened", ("name", opened.Path is { } openedPath ? Path.GetFileName(openedPath) : opened.Name), ("lines", HexText.Count("line", lines))));
         return true;
     }
 
@@ -298,7 +298,7 @@ internal sealed partial class DawnScene
         document.Record();
         designer.MarkSelection();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;
-        Say(message.Length > 0 ? message : Said("code.applied", ("count", document.Walk().Count().ToString())));
+        Say(message.Length > 0 ? message : Said("code.applied", ("count", HexText.Count("component", document.Walk().Count()))));
     }
 
     /// <summary>Throws away what was typed into the code of a layout, for the code the layout is written as.</summary>
@@ -365,9 +365,10 @@ internal sealed partial class DawnScene
         commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
-        commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !HexDebugging.IsCSharp(document.Path);
-        commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = inCode;
-        commands.Bind(Key.F5, () => { if (!LayoutTools) running.OpenRunner(); }, control: true, whileTyping: true);
+        commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !debugger.CanDebug(document.Path);
+        commands.Add("Run/run", Said("code.run_without_debugging"), RunWithoutDebugging, "Ctrl+F5", "play").IsVisible = () => !LayoutTools && document.Path is { } path && !IsHidl(path);
+        commands.Add("Run/run", Said("code.run_behaviour"), running.OpenRunner, "Ctrl+F5", "debug-alt").IsVisible = () => !LayoutTools && (document.Path is not { } path || IsHidl(path));
+        commands.Bind(Key.F5, RunWithoutDebugging, control: true, whileTyping: true);
 
         commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "Ctrl+F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space").IsVisible = inCode;

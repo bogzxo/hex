@@ -27,6 +27,7 @@ internal sealed partial class HexDebugging
     public HexDebugging(DawnContext with)
     {
         context = with;
+        SweepProgramOutputs();
         context.Documents.Opened += PrepareBreakpoints;
         context.Panels.AddSide(HexSide.Debug, context.Strings.Said("debugging.debug"), DebugSide);
         UICommands commands = context.Commands;
@@ -39,6 +40,7 @@ internal sealed partial class HexDebugging
         commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
         commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && context.Documents.Current.IsText;
         commands.Add("Run/debug", context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg, icon: "cloud-download").IsVisible = () => NetcoredbgAsset() is not null && Netcoredbg() is null;
+        AddWatchCommands();
     }
 
     // The breakpoints, by the file's whole path, the lines counted from 0. An editor of the file is handed the set
@@ -77,6 +79,43 @@ internal sealed partial class HexDebugging
         string full = Path.GetFullPath(prepared.Path!);
         prepared.Editor.Breakpoints = BreakpointsOf(full);
         prepared.Editor.OnGutterPressed = line => ToggleBreakpoint(full, line);
+
+        // Once for each document, opened again it's the same one
+        UITextDocument document = prepared.Editor.Document;
+        if (following.Add(document))
+            document.LinesMoved += (at, by) => MoveBreakpoints(full, document, at, by);
+    }
+
+    // The documents whose breakpoints follow their lines already
+    private readonly HashSet<UITextDocument> following = [];
+
+    /// <summary>
+    /// Lines put in or taken out of a file, its breakpoints moved along with the lines they were on, the way VS Code's
+    /// are. A line opened above one by Enter at its start used to leave the breakpoint on the blank line.
+    /// </summary>
+    private void MoveBreakpoints(string full, UITextDocument document, UITextPosition at, int by)
+    {
+        if (by == 0 || !breakpoints.TryGetValue(full, out SortedSet<int>? lines) || lines.Count == 0)
+            return;
+
+        // Put in at the start of a line (nothing but its indent before), the line itself went down with the rest
+        bool fromStart = by > 0 && at.Line < document.LineCount && string.IsNullOrWhiteSpace(document.LineAt(at.Line));
+        var moved = new SortedSet<int>();
+        foreach (int line in lines)
+        {
+            if (by > 0)
+                moved.Add(line > at.Line || (line == at.Line && fromStart) ? line + by : line);
+            else
+                moved.Add(line > at.Line ? line + by : line > at.Line + by ? at.Line + by : line);
+        }
+
+        if (moved.SetEquals(lines))
+            return;
+
+        lines.Clear();
+        lines.UnionWith(moved);
+        debugging?.SetBreakpoints(full, lines);
+        context.Panels.RefreshSide(HexSide.Debug);
     }
 
     private SortedSet<int> BreakpointsOf(string full)
@@ -361,7 +400,7 @@ internal sealed partial class HexDebugging
     /// the code the way a build task's is (they were lines in the output nobody looked at), and a build that failed said
     /// so. Whether it built.
     /// </summary>
-    private bool ReportBuild(string said, string folder, int built, string name)
+    private bool ReportBuild(string said, string folder, int built, string name, string? builtFile = null)
     {
         foreach (string line in said.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             debugWork.Enqueue(() => context.Notices.Note(line.TrimEnd('\r')));
@@ -369,12 +408,21 @@ internal sealed partial class HexDebugging
         var problems = new List<TerminalProblem>();
         var reader = new TerminalProblemReader(TerminalProblemMatcher.Shipped, problems.Add);
         reader.Feed(said.ReplaceLineEndings("\n") + "\n\n\n");
+        // A link that failed says where in no file, its errors are put on the file that was built instead, the way Visual
+        // Studio lists a linker's errors. "entry point must be defined" was only ever in the output
+        if (built != 0 && builtFile is not null && !problems.Any(problem => !problem.Warning))
+        {
+            foreach (string line in LinkErrorsIn(said))
+                problems.Add(new TerminalProblem(builtFile, 1, 1, line, false, "link"));
+        }
+
+        bool listed = problems.Any(problem => !problem.Warning);
         debugWork.Enqueue(() =>
         {
             context.Terminals.ClearProblems();
             foreach (TerminalProblem problem in problems)
                 context.Terminals.AddProblem(Path.IsPathRooted(problem.File) ? problem.File : Path.Combine(folder, problem.File), problem.Line, problem.Column, problem.Message, problem.Warning);
-            if (built != 0 && problems.Any(problem => !problem.Warning))
+            if (built != 0 && listed)
                 context.Panels.ShowProblems();
         });
 
@@ -384,10 +432,17 @@ internal sealed partial class HexDebugging
         debugWork.Enqueue(() =>
         {
             building = false;
-            context.Notices.Say(context.Strings.Said("debugging.did_not_build", ("project", name)), error: true);
+            context.Notices.Say(context.Strings.Said(listed ? "debugging.did_not_build_problems" : "debugging.did_not_build", ("project", name)), error: true);
         });
         return false;
     }
+
+    // A linker's errors as dmd and MSVC's link say them
+    private static readonly System.Text.RegularExpressions.Regex LinkError = new(@"^(?:Error: .+|.*\berror LNK\d+: .+)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>The first few lines of what a build said that are a linker's errors, each once.</summary>
+    internal static IEnumerable<string> LinkErrorsIn(string said) =>
+        said.Split('\n').Select(line => line.Trim()).Where(line => LinkError.IsMatch(line)).Distinct().Take(5);
 
     /// <summary>A program launched under a debugger that was started (null for one that wasn't), with the breakpoints there are.</summary>
     private async Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow, string kind, string? output = null)
@@ -402,7 +457,7 @@ internal sealed partial class HexDebugging
             return;
         }
 
-        debugWork.Enqueue(() => debugging = session);
+        debugWork.Enqueue(() => (debugging, endedByException, debuggingKind) = (session, false, kind));
         bool launched = await session.Launch(program, [], folder, breakpointsNow, kind, output);
         debugWork.Enqueue(() =>
         {
@@ -443,7 +498,7 @@ internal sealed partial class HexDebugging
     private void SaveAllCode() => context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
 
     /// <summary>Shift+F5, the program and the debugger ended.</summary>
-    private void StopDebugging()
+    internal void StopDebugging()
     {
         if (debugging is null)
             return;
@@ -453,7 +508,7 @@ internal sealed partial class HexDebugging
     }
 
     /// <summary>Ctrl+Shift+F5, stopped and started again.</summary>
-    private void RestartDebugging()
+    internal void RestartDebugging()
     {
         if (restart is not { } again)
             return;
@@ -466,7 +521,16 @@ internal sealed partial class HexDebugging
 
     internal void StepIn() => debugging?.StepIn();
 
-    private void StepOut() => debugging?.StepOut();
+    internal void StepOut() => debugging?.StepOut();
+
+    /// <summary>The debug bar's first button, on from where it stopped, or a pause where it is while it runs.</summary>
+    internal void ContinueOrPause()
+    {
+        if (DebugStopped)
+            debugging!.Continue();
+        else if (debugging is { State: DebugState.Running } running)
+            running.Pause();
+    }
 
     /* What happened, every tick */
 
@@ -494,14 +558,22 @@ internal sealed partial class HexDebugging
                     context.Panels.RefreshSide(HexSide.Debug);
                     break;
                 case DebugEventKind.Output:
+                    // lldb-dap's own console talk (how to use its console, the binary it set, the process it attached to)
+                    // is VS Code's debug console's, not the program's, and it buried what the program wrote
                     int tab = happened.Text.IndexOf('\t');
+                    if (debuggingKind != DebugSession.CORECLR && happened.Text.AsSpan(0, Math.Max(0, tab)).SequenceEqual("console"))
+                        break;
                     foreach (string line in happened.Text[(tab + 1)..].TrimEnd('\r', '\n').Split('\n'))
                         context.Notices.Note(line.TrimEnd('\r'));
                     break;
                 case DebugEventKind.Ended:
-                    context.Notices.Say(happened.ExitCode >= 0
-                        ? context.Strings.Said("debugging.ended_code", ("project", Path.GetFileNameWithoutExtension(debuggedProject)), ("code", happened.ExitCode.ToString()))
-                        : context.Strings.Said("debugging.ended", ("project", Path.GetFileNameWithoutExtension(debuggedProject))));
+                    // netcoredbg says 0 for a program its unhandled exception ended, it's said what ended it instead
+                    string ended = Path.GetFileNameWithoutExtension(debuggedProject);
+                    context.Notices.Say(endedByException && happened.ExitCode <= 0
+                        ? context.Strings.Said("debugging.ended_exception", ("project", ended))
+                        : happened.ExitCode >= 0
+                            ? context.Strings.Said("debugging.ended_code", ("project", ended), ("code", happened.ExitCode.ToString()))
+                            : context.Strings.Said("debugging.ended", ("project", ended)));
                     EndDebugging();
                     return;
             }
@@ -512,11 +584,22 @@ internal sealed partial class HexDebugging
     {
         stoppedFrames = happened.Frames;
         stoppedFrame = 0;
+        stops++;
+        frameNames.Clear();
+        // The reason alone for the usual stops, lldb's text after it said it again ("step, step in")
+        string why = happened.Text;
+        int comma = why.IndexOf(", ", StringComparison.Ordinal);
+        string reason = comma >= 0 ? why[..comma] : why;
+        if (reason is "breakpoint" or "step" or "pause" or "entry" or "goto" or "function breakpoint" or "data breakpoint")
+            why = reason;
+        if (why.StartsWith("exception", StringComparison.Ordinal))
+            endedByException = true;
+        string? dWhat = DExceptionOf(stoppedFrames);
 
         // The frame of the program's own code nearest the top, the debugger's steps into the framework go past that
         for (int i = 0; i < stoppedFrames.Count; i++)
         {
-            if (stoppedFrames[i].File is { } file && File.Exists(file))
+            if (OwnCode(stoppedFrames[i]))
             {
                 stoppedFrame = i;
                 break;
@@ -524,9 +607,11 @@ internal sealed partial class HexDebugging
         }
 
         ShowFrame(stoppedFrame);
+        // A step says only where it got to, there's no news in having stepped. A D exception says what kind it was
+        string said = why == "step" ? "debugging.stepped_to" : dWhat is not null ? "debugging.d_stopped" : "debugging.stopped_at";
         context.Notices.Say(stoppedFrames.Count > 0 && stoppedFrames[stoppedFrame].File is { } at
-            ? context.Strings.Said("debugging.stopped_at", ("why", $"{happened.Text}"), ("file", Path.GetFileName(at)), ("line", (stoppedFrames[stoppedFrame].Line + 1).ToString()))
-            : context.Strings.Said("debugging.stopped", ("why", $"{happened.Text}")));
+            ? context.Strings.Said(said, ("why", why), ("what", dWhat ?? string.Empty), ("file", Path.GetFileName(at)), ("line", (stoppedFrames[stoppedFrame].Line + 1).ToString()))
+            : context.Strings.Said("debugging.stopped", ("why", dWhat ?? why)));
         context.Panels.ShowSide(HexSide.Debug);
         context.Redraw();
     }
@@ -590,16 +675,31 @@ internal sealed partial class HexDebugging
         if (DebugStopped && stoppedFrames.Count > 0)
         {
             var stack = new UITreeItem(context.Strings.Said("debugging.call_stack"), "debug-stackframe") { Expandable = true, Expanded = true, Children = [] };
-            for (int i = 0; i < stoppedFrames.Count; i++)
+            for (int i = 0; i < stoppedFrames.Count;)
             {
-                DebugFrame frame = stoppedFrames[i];
-                int index = i;
-                stack.Children.Add(new UITreeItem(frame.Name, i == stoppedFrame ? "debug-stackframe-focused" : "debug-stackframe-dot")
+                // A run of frames with no code of the program's (the runtime's, the system's) folded into one row, the
+                // way VS Code folds external code. Six rows of druntime and kernel32 buried the two that mattered
+                int run = i;
+                while (run < stoppedFrames.Count && !OwnCode(stoppedFrames[run]))
+                    run++;
+
+                if (run - i >= 2)
                 {
-                    Detail = frame.File is { } file ? $"{Path.GetFileName(file)}:{frame.Line + 1}" : string.Empty,
-                    Color = frame.File is { } there && File.Exists(there) ? null : context.Panels.Dim,
-                    Tag = new SideTag(Pressed: () => ShowFrame(index))
-                });
+                    var external = new UITreeItem(context.Strings.Said("debugging.external_code", ("frames", HexText.Count("frame", run - i))), "debug-stackframe-dot")
+                    {
+                        Color = context.Panels.Dim,
+                        Expandable = true,
+                        Children = []
+                    };
+                    for (int j = i; j < run; j++)
+                        external.Children.Add(FrameItem(j));
+                    stack.Children.Add(external);
+                    i = run;
+                    continue;
+                }
+
+                stack.Children.Add(FrameItem(i));
+                i++;
             }
 
             items.Add(stack);
@@ -617,6 +717,9 @@ internal sealed partial class HexDebugging
 
             items.Add(variables);
         }
+
+        if (watches.Count > 0 || DebugStopped)
+            items.Add(WatchSection());
 
         var points = new UITreeItem(context.Strings.Said("debugging.breakpoints"), "debug-breakpoint") { Expandable = true, Expanded = true, Children = [] };
         foreach (var (file, lines) in breakpoints.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -642,6 +745,70 @@ internal sealed partial class HexDebugging
 
     // A row that only says something
     private UITreeItem NoteItem(string text) => new(text) { Color = context.Panels.Dim };
+
+    /// <summary>
+    /// Whether a frame is in a file of the program's own that's there to show, in the workspace or open. druntime's
+    /// entrypoint.d is on the disk too, with the compiler, and it isn't anybody's code to step through.
+    /// </summary>
+    private bool OwnCode(DebugFrame frame) =>
+        frame.File is { } file && File.Exists(file)
+        && (context.Workspace.Roots.Any(root => Path.GetFullPath(file).StartsWith(Path.GetFullPath(root).TrimEnd('\\', '/') + Path.DirectorySeparatorChar, PlatformPaths.Comparison))
+            || context.Documents.All.Any(open => open.Path is { } path && PlatformPaths.Same(path, file)));
+
+    // A frame of the stack a row, pressed it's the one looked at
+    private UITreeItem FrameItem(int index)
+    {
+        DebugFrame frame = stoppedFrames[index];
+        return new UITreeItem(FrameName(frame), index == stoppedFrame ? "debug-stackframe-focused" : "debug-stackframe-dot")
+        {
+            Detail = frame.File is { } file && OwnCode(frame) ? $"{Path.GetFileName(file)}:{frame.Line + 1}" : string.Empty,
+            Color = OwnCode(frame) ? null : context.Panels.Dim,
+            Tag = new SideTag(Pressed: () => ShowFrame(index))
+        };
+    }
+
+    // The names of the frames of this stop worked out from their code, by the frame's id
+    private readonly Dictionary<int, string> frameNames = [];
+
+    /// <summary>
+    /// What a frame is called, the debugger's name, or for one it named by its address (lldb with dmd's PDBs, which name
+    /// main and nothing else) the function of its own file it's in, out of the outline.
+    /// </summary>
+    private string FrameName(DebugFrame frame)
+    {
+        if (!frame.Name.StartsWith("0x", StringComparison.Ordinal) || !OwnCode(frame))
+            return frame.Name;
+        if (frameNames.TryGetValue(frame.Id, out string? named))
+            return named;
+
+        string text;
+        try
+        {
+            text = context.Documents.All.FirstOrDefault(open => open.Path is { } path && PlatformPaths.Same(path, frame.File!))?.Editor.Text ?? File.ReadAllText(frame.File!);
+        }
+        catch (IOException)
+        {
+            return frame.Name;
+        }
+
+        // The last function that starts at or above its line, the one the line is in
+        string? function = null;
+        foreach (OutlineEntry entry in HexOutline.Outline(text, frame.File))
+        {
+            if (entry.Line > frame.Line)
+                break;
+            if (entry.Icon == "symbol-method")
+                function = entry.Name;
+        }
+
+        return frameNames[frame.Id] = function ?? frame.Name;
+    }
+
+    // Which debugger the session is under, DebugSession's kind of it
+    private string debuggingKind = DebugSession.CORECLR;
+
+    // Whether what it stopped on last was an exception, what ended the program when the debugger says it ended well
+    private bool endedByException;
 
     // The scopes of a frame and the variables of each, off the editor's thread, handed back as rows
     private void AskVariables(int frameId, int frameIndex)

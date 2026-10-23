@@ -101,7 +101,9 @@ internal sealed partial class HexLanguages
         if (checking is not null || checkIn.Count == 0)
             return;
 
-        foreach (HexDocument due in checkIn.Keys.ToArray())
+        dueNow.Clear();
+        dueNow.AddRange(checkIn.Keys);
+        foreach (HexDocument due in dueNow)
         {
             if ((checkIn[due] -= dt) > 0.0f)
                 continue;

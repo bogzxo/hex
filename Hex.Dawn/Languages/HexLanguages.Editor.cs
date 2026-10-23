@@ -108,11 +108,14 @@ internal sealed partial class HexLanguages
         {
             bool added = IsAdded(entry);
             var row = serverRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Anchor = Origin.Left, Pivot = Origin.Left });
+
+            // Every line wraps at one width, room left for Edit and Remove whether a row has them or not. The added ones
+            // wrapped shorter than the rest and the list looked ragged
             var line = row.Add(new Label
             {
                 Markdown = true,
                 Wrap = true,
-                Size = new Vector2(added ? EDITOR_WIDTH - (ROW_BUTTON_WIDTH + 8.0f) * 2.0f : EDITOR_WIDTH, 0.0f),
+                Size = new Vector2(EDITOR_WIDTH - (ROW_BUTTON_WIDTH + 8.0f) * 2.0f, 0.0f),
                 Align = Origin.TopLeft
             });
             serverStatus[entry.Name] = line;

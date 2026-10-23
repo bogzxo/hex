@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("terminal: Ctrl+` brings it back with the keyboard in the terminal", () => bottom.Shown && compositor.Focus is TerminalView);
 
-        test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split right")));
+        test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split Right")));
 
         test.Run(() => running.AskConsole("40 + 2"));
         test.WaitFor(() => running.consoleAsked is null && running.LastConsoleLine() == "42", 3.0f);

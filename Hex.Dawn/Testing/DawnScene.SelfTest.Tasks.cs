@@ -53,7 +53,7 @@ internal sealed partial class DawnScene
         TestRunSetup(test);
     }
 
-    /// <summary>Set Up F5, F5 on a D file of a folder with no tasks, what it guesses, what it writes and where it runs it.</summary>
+    /// <summary>Set Up F5, Ctrl+F5 on a D file of a folder with no tasks, what it guesses, what it writes and where it runs it.</summary>
     private void TestRunSetup(HexPointerScript test)
     {
         // The tasks.hor is the one of the workspace's folder the file is in, made by the setup and taken away after
@@ -72,9 +72,10 @@ internal sealed partial class DawnScene
             Open(program);
         });
         test.Wait();
-        test.Run(RunOrPlay);
+        // F5 debugs D when lldb-dap is here, Ctrl+F5 runs it without, its run task or Set Up F5
+        test.Run(RunWithoutDebugging);
         test.Settle(0.3f);
-        test.Check("tasks: F5 on a D file with no run task sets F5 up, the program guessed and its lines filled in", () =>
+        test.Check("tasks: Ctrl+F5 on a D file with no run task sets F5 up, the program guessed and its lines filled in", () =>
             tasks.SetupWindow is { Visible: true } && tasks.SetupKind.StartsWith("D, this file", StringComparison.Ordinal)
             && tasks.SetupBuild.Contains("app.d\"") && tasks.SetupBuild.Contains("-of=app") && tasks.SetupRunLine.Contains("app"));
         test.Run(() => Shot("run-setup"));

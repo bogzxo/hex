@@ -64,4 +64,38 @@ public sealed class HexDebuggingTests : IDisposable
         else
             Assert.True(asset is null || asset.EndsWith(".tar.gz", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData("    int area = box.width * box.height;", 21, "box.width")]
+    [InlineData("    int area = box.width * box.height;", 16, "box")]
+    [InlineData("    int area = box.width * box.height;", 4, "int")]
+    [InlineData("    sum += n;", 11, "n")]
+    [InlineData("    sum += n;", 12, "n")]
+    [InlineData("    sum += n;", 8, "")]
+    [InlineData("    x = 42;", 9, "")]
+    [InlineData("", 0, "")]
+    public void The_expression_at_a_column_takes_what_its_a_member_of(string line, int column, string expected) =>
+        Assert.Equal(expected, HexDebugging.ExpressionAt(line, column));
+
+    [Fact]
+    public void A_links_errors_are_its_error_lines_each_once()
+    {
+        string said = """
+            app.obj : error LNK2019: unresolved external symbol _D12folder_tests6reader10readMyFileFZv referenced in function _Dmain
+            app.exe : fatal error LNK1120: 3 unresolved externals
+            Error: linker exited with status 1120
+                   C:\link.exe /NOLOGO "app.obj"
+            Error: undefined reference to `void folder_tests.reader.readMyFile()`
+                   referenced from `_Dmain`
+            Error: undefined reference to `void folder_tests.reader.readMyFile()`
+            """;
+
+        Assert.Equal(
+        [
+            "app.obj : error LNK2019: unresolved external symbol _D12folder_tests6reader10readMyFileFZv referenced in function _Dmain",
+            "app.exe : fatal error LNK1120: 3 unresolved externals",
+            "Error: linker exited with status 1120",
+            "Error: undefined reference to `void folder_tests.reader.readMyFile()`"
+        ], HexDebugging.LinkErrorsIn(said));
+    }
 }

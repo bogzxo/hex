@@ -50,7 +50,7 @@ internal sealed partial class DawnScene
                 continue;
 
             string name = command.Name;
-            commands.Add(($"Terminal: {command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () =>
+            commands.Add(($"Terminal: {HexText.TitleCase(command.Title)}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () =>
             {
                 ShowPanel(CONSOLE_PAGE);
                 terminals.Run(name);

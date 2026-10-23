@@ -200,6 +200,7 @@ internal sealed partial class DawnScene : Scene
         AddFindCommands();
         AddCodeCommands();
         debugger = new HexDebugging(Context);
+        BuildDebugBar();
         AddHelpCommands();
         tasks = new HexTasks(Context);
         languages.StartChecks();
@@ -352,6 +353,7 @@ internal sealed partial class DawnScene : Scene
                 UpdateEffects();
         UpdateAutoSave(dt);
         debugger.Update();
+        UpdateDebugBar();
         ApplyAskedView();
         Profile.Mark("extensions");
 

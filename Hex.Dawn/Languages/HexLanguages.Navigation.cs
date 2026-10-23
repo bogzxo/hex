@@ -43,9 +43,11 @@ internal sealed partial class HexLanguages
             }
         }
 
-        foreach (LanguageServer server in LanguageServers.Running)
+        // By index, a foreach over the list as an IReadOnlyList made an enumerator every tick
+        IReadOnlyList<LanguageServer> running = LanguageServers.Running;
+        for (int i = 0; i < running.Count; i++)
         {
-            while (server.TryTakeEdits(out var edits))
+            while (running[i].TryTakeEdits(out var edits))
                 ApplyEdits(edits);
         }
     }
@@ -96,7 +98,7 @@ internal sealed partial class HexLanguages
             hovering = (of, version, at.Line, at.Column);
             When(server.Hover(path, at.Line, at.Column), said =>
             {
-                hovered = (of, version, at.Line, at.Column, said);
+                hovered = (of, version, at.Line, at.Column, said is null ? null : Printable(said));
                 if (said is not null)
                     editor.AskAgain();
             });
@@ -130,14 +132,46 @@ internal sealed partial class HexLanguages
         {
             if (said is null)
                 context.Notices.Say(context.Strings.Said("code_server.no_hover", ("word", word)));
-            else
-                context.Windows.ShowText(word, said, Math.Clamp(HOVER_FRAME + said.Split('\n').Length * HOVER_LINE, HOVER_FRAME + HOVER_LINE * 2.0f, HOVER_TALLEST));
+            else if (context.Documents.Current == of && of.Editor.Document.Caret == caret)
+            {
+                // Blank lines run together, serve-d's hover of a struct came with a dozen and the window was mostly empty.
+                // An answer for a caret that's moved on since isn't shown, it came up over the file F12 had opened
+                // In the hover's own box under the caret, the one the pointer gets, not a window over the line it's about
+                of.Editor.ShowHoverAtCaret(Printable(BlankLines.Replace(said.Trim(), "\n\n")));
+            }
         });
     }
 
-    // How tall the hover's window is, its title and edges, a line of what it says, and the most it gets. One line said in
-    // a window a third of the screen tall was mostly nothing
-    private const float HOVER_FRAME = 90.0f, HOVER_LINE = 22.0f, HOVER_TALLEST = 420.0f;
+    /// <summary>
+    /// A server's markdown with the characters the UI font doesn't have put as ones it does, dashes and arrows and the
+    /// like. phobos's docs said "Throws ? In case of" for an em dash.
+    /// </summary>
+    internal static string Printable(string markdown)
+    {
+        if (!markdown.Any(c => c > '~'))
+            return markdown;
+
+        var printable = new System.Text.StringBuilder(markdown.Length);
+        foreach (char c in markdown)
+        {
+            printable.Append(c switch
+            {
+                '–' or '—' or '−' => "-",
+                '‘' or '’' => "'",
+                '“' or '”' => "\"",
+                '…' => "...",
+                '→' => "->",
+                '←' => "<-",
+                ' ' => " ",
+                _ => c.ToString()
+            });
+        }
+
+        return printable.ToString();
+    }
+
+    // Two blank lines or more, with whatever spaces are on them
+    private static readonly System.Text.RegularExpressions.Regex BlankLines = new(@"\n(?:[ \t]*\n){2,}", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     // What the server last said a call takes and where the caret was, and whether it's being asked
     private (HexDocument? Of, int Version, UITextPosition Caret, UISignature? Said) signed;

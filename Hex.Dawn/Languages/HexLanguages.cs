@@ -259,12 +259,18 @@ internal sealed partial class HexLanguages
         ForgetServerCompletions(closed);
     }
 
+    // The documents waiting on a lint or a check, gathered into the same list every tick they're counted down, the
+    // waits change as they're gone through
+    private readonly List<HexDocument> dueNow = [];
+
     /// <summary>Every tick, the changes that are due go to their servers and what the servers said is taken in.</summary>
     internal void Update(float dt)
     {
         if (lintIn.Count > 0)
         {
-            foreach (HexDocument due in lintIn.Keys.ToArray())
+            dueNow.Clear();
+            dueNow.AddRange(lintIn.Keys);
+            foreach (HexDocument due in dueNow)
             {
                 if ((lintIn[due] -= dt) > 0.0f)
                     continue;

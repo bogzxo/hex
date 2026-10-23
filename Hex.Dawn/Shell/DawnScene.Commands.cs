@@ -39,7 +39,7 @@ internal sealed partial class DawnScene
         if (documents.Contains(was))
             Show(was);
 
-        Say(skipped > 0 ? Said("commands.saved_left", ("saved", saved.ToString()), ("skipped", skipped.ToString())) : saved > 0 ? Said("commands.saved", ("saved", saved.ToString())) : Said("commands.nothing_to_save"));
+        Say(skipped > 0 ? Said("commands.saved_left", ("saved", HexText.Count("file", saved)), ("skipped", HexText.Count("file", skipped))) : saved > 0 ? Said("commands.saved", ("saved", HexText.Count("file", saved))) : Said("commands.nothing_to_save"));
     }
 
     /// <summary>Throws away what isn't saved of the file on screen, for what is in its file.</summary>

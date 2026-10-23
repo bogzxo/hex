@@ -72,17 +72,29 @@ internal sealed partial class DuskScene
 
     private void PanelChanged()
     {
-        string title = panel.Current?.Title ?? HexText.Get("dusk_chrome.name");
+        ShowTitle();
+
+        // The last tab closed closes the window, as a terminal does
+        if (panel.Tabs.Count == 0 && !options.SelfTest)
+            Quit(0);
+    }
+
+    private string? titleShown;
+
+    /// <summary>
+    /// The title bar and the window say what the tab says. A shell moving folders doesn't tell the panel anything, so the
+    /// status bar asks again every frame, or the window stayed "Windows PowerShell" while the tab said "hexbuild".
+    /// </summary>
+    private void ShowTitle()
+    {
+        titleShown = panel.Current?.Title;
+        string title = titleShown ?? HexText.Get("dusk_chrome.name");
         top.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VERSION))
             : HexText.Get("dusk_chrome.title", ("version", VERSION));
         Engine.WindowManager.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.window_title_tab", ("title", title))
             : HexText.Get("dusk_chrome.name");
-
-        // The last tab closed closes the window, as a terminal does
-        if (panel.Tabs.Count == 0 && !options.SelfTest)
-            Quit(0);
     }
 
     private void ShowTabMenu(TerminalTab tab, Vector2 point)
@@ -185,6 +197,7 @@ internal sealed partial class DuskScene
 
     private (int Columns, int Rows) sizeShown;
     private TerminalProfile? profileShown;
+    private string? shellShown;
     private string themeShown = string.Empty;
 
     private void UpdateStatusBar()
@@ -203,11 +216,17 @@ internal sealed partial class DuskScene
             sizeItem.Text = view is null ? string.Empty : HexText.Get("dusk_chrome.size", ("columns", size.Item1.ToString()), ("rows", size.Item2.ToString()));
         }
 
+        // Named like the tab, the profile only gives it its icon
         TerminalProfile? profile = view?.Profile;
-        if (profile != profileShown)
+        string? title = panel.Current?.Title;
+        if (title != titleShown)
+            ShowTitle();
+
+        if (profile != profileShown || title != shellShown)
         {
             profileShown = profile;
-            profileItem.Text = profile is null ? string.Empty : $"$({profile.Icon}) {profile.Name}";
+            shellShown = title;
+            profileItem.Text = view is null || title is null ? string.Empty : $"$({profile?.Icon ?? "terminal"}) {title}";
         }
 
         if (themeShown != settings.Theme)

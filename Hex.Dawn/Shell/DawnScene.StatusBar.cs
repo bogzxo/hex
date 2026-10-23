@@ -108,7 +108,7 @@ internal sealed partial class DawnScene
         if (!LayoutTools)
         {
             UITextPosition caret = code.Document.Caret;
-            int selected = code.Document.HasSelection ? code.Document.SelectedText.Length : 0;
+            int selected = code.Document.HasSelection ? code.Document.SelectedLength : 0;
             if (caretShown != (caret.Line, caret.Column, selected, code.Document.Version))
             {
                 caretShown = (caret.Line, caret.Column, selected, code.Document.Version);
@@ -138,8 +138,8 @@ internal sealed partial class DawnScene
         {
             componentsShown = (count, document.Selection.Count);
             componentsItem.Text = document.Selection.Count > 0
-                ? $"$(symbol-class) {Said("status_bar.components_selected", ("count", count.ToString()), ("selected", document.Selection.Count.ToString()))}"
-                : $"$(symbol-class) {Said("status_bar.components", ("count", count.ToString()))}";
+                ? $"$(symbol-class) {Said("status_bar.components_selected", ("count", HexText.Count("component", count)), ("selected", document.Selection.Count.ToString()))}"
+                : $"$(symbol-class) {Said("status_bar.components", ("count", HexText.Count("component", count)))}";
         }
 
         // How big the layout really is drawn against its own pixels, what zooming says too. It said its zoom against fitting

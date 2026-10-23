@@ -28,12 +28,11 @@ internal sealed partial class DawnScene
     /// </summary>
     private void RunOrPlay()
     {
-        // C# is debugged when there's a debugger to do it with, and while something is being debugged F5 goes on from where
-        // it stopped. Without netcoredbg F5 said where to get it and did nothing, now it builds and runs it the way any other
-        // program is, and says once that it isn't being debugged
-        // D is debugged when lldb-dap is here and a D file has a breakpoint, run in the terminal otherwise
-        bool debuggable = (HexDebugging.IsCSharp(document.Path) && debugger.Netcoredbg() is not null)
-            || (HexDebugging.IsD(document.Path) && debugger.DBreakpoints() && HexDebugging.LldbDap() is not null);
+        // C# and D are debugged when there's a debugger to do it with (netcoredbg, lldb-dap), breakpoints or not, the way F5
+        // is in VS Code, and Ctrl+F5 runs without it. While something is being debugged F5 goes on from where it stopped.
+        // D was only debugged with a breakpoint and C# always, F5 meant two things. Without netcoredbg F5 builds and runs
+        // C# the way any other program is, and says once that it isn't being debugged
+        bool debuggable = debugger.CanDebug(document.Path);
         if (!LayoutTools && HexDebugging.IsCSharp(document.Path) && !debuggable && !debugger.DebugStopped)
             debugger.SayRunWithoutDebugger();
 
@@ -45,6 +44,26 @@ internal sealed partial class DawnScene
             else tasks.SetUpRun(path);
         }
         else running.RunCode();
+    }
+
+    /// <summary>
+    /// Ctrl+F5, the file run without the debugger, its run task in the terminal (Set Up F5 when there isn't one), VS Code's
+    /// key for it. A HIDL file has its behaviour run, the runner, as Ctrl+F5 always did.
+    /// </summary>
+    private void RunWithoutDebugging()
+    {
+        if (LayoutTools)
+            return;
+
+        if (document.IsText && document.Path is { } path && !IsHidl(path))
+        {
+            if (tasks.RunTaskFor(path) is { } task) tasks.Run(task);
+            else tasks.SetUpRun(path);
+        }
+        else
+        {
+            running.OpenRunner();
+        }
     }
 
     // Whether a file is HIDL, which F5 runs itself, by its extension

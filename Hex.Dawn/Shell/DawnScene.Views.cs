@@ -258,7 +258,7 @@ internal sealed partial class DawnScene
     {
         // What wasn't saved was saved or thrown away when asked, there's nothing to bring back next time
         Backups.DropAll();
-        debugger.EndDebugging();
+        debugger.Quit();
         closeConfirmed = true;
         Engine.WindowManager.Close();
     }

@@ -8,10 +8,10 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The language servers' section of the settings (Editor, Language servers). Whether Hex looks for new versions, Check
-// now, and a row a server of language_servers.hor: where it is (empty for its command on the PATH), what it is and how
-// it is installed, and Choose, Install (Download for one there is no command line for) and What changed. Under them
-// every server with what was found of it, where, which version and whether there is a newer one, written again as that
-// changes, and the way to add one of your own (HexLanguages.Editor).
+// now, and a row a server of language_servers.hor, where it is (empty for its command on the PATH), what it is and how
+// it is installed, and Choose, Install or update (a download for one there's no command line for) and What changed.
+// Under them every server with what was found of it, where, which version and whether there is a newer one, written
+// again as that changes, and the way to add one of your own (HexLanguages.Editor).
 internal sealed partial class HexLanguages
 {
     internal const string SERVER_SECTION = "Editor · Language servers";
@@ -19,9 +19,9 @@ internal sealed partial class HexLanguages
     // What a server's row is keyed by, after this its name
     internal const string SERVER_KEY = "server_path_";
 
-    // What the buttons of a server's row say, which is what a press is told apart by
-    // What a server's buttons say. Download said so of a server that was there already, it fetches the newest either way
-    internal const string CHOOSE = "Choose...", INSTALL = "Install or update", DOWNLOAD = "Download or update", CHANGES = "What changed";
+    // What a server's buttons say, which is what a press is told apart by. Download says the same as Install now, the two
+    // were different widths and threw the rows' buttons out of line, and the self test still asks for it by that name
+    internal const string CHOOSE = "Choose...", INSTALL = "Install or update", DOWNLOAD = INSTALL, CHANGES = "What changed";
 
     // The line a server has under the rows, by its name, while the settings are up
     internal readonly Dictionary<string, Label> serverStatus = new(StringComparer.OrdinalIgnoreCase);
@@ -114,12 +114,10 @@ internal sealed partial class HexLanguages
                     HexText.Get("language_settings.updates_help"),
                     SERVER_SECTION, Buttons: [HexText.Get("language_settings.check_now")]),
                 .. languages.ServerEntries.Select(entry => new UISetting(SERVER_KEY + entry.Name, entry.Command, UIFormKind.Text, HelpOf(entry), SERVER_SECTION,
-                    Buttons: entry.Repo.Length > 0 ? [CHOOSE, InstallLabel(entry), CHANGES] : [CHOOSE, InstallLabel(entry)],
+                    Buttons: entry.Repo.Length > 0 ? [CHOOSE, INSTALL, CHANGES] : [CHOOSE, INSTALL],
                     Placeholder: HexText.Get("language_settings.on_the_path", ("command", entry.Command))))
             ];
         }
-
-        private static string InstallLabel(HexServerEntry entry) => entry.Install.Length > 0 ? INSTALL : DOWNLOAD;
 
         private static string HelpOf(HexServerEntry entry)
         {
@@ -187,7 +185,7 @@ internal sealed partial class HexLanguages
                 case CHOOSE:
                     languages.ChooseServer(entry);
                     break;
-                case INSTALL or DOWNLOAD:
+                case INSTALL:
                     languages.InstallServer(entry);
                     break;
                 case CHANGES:

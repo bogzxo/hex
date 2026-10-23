@@ -24,6 +24,10 @@ internal sealed partial class DuskScene
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (TerminalCommand command in host.Commands.All)
         {
+            // Tab 1 to Tab whatever stay on their keys, nobody looks one up in here and they just cluttered the list
+            if (IsTabNumber(command.Name))
+                continue;
+
             if (!titles.Add(command.Title))
                 continue;
 
@@ -40,6 +44,10 @@ internal sealed partial class DuskScene
 
         ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
     }
+
+    /// <summary>Whether a command is one of the core plugin's tab_1, tab_2 and so on, which pick a tab by its number.</summary>
+    private static bool IsTabNumber(string name) =>
+        name.Length > 4 && name.StartsWith("tab_", StringComparison.Ordinal) && name.Skip(4).All(char.IsAsciiDigit);
 
     /// <summary>
     /// Helper method to ask for one of a list of things, Hex.Shell's chooser (the same Dawn asks with), narrowed down by

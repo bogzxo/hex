@@ -103,7 +103,7 @@ internal interface IDocuments
     void AddCompletions(HexCompletionSource source);
 
     /// <summary>Something that says what a word of some files is as the pointer rests on it (markdown), null to leave it to the next.</summary>
-    void AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source);
+    void AddHovers(Func<HexDocument, CodeEditor, UITextPosition, string?> source, bool first = false);
 
     /// <summary>Something that says what a call in some files takes, the argument being typed picked out, null to leave it to the next.</summary>
     void AddSignatures(Func<HexDocument, string, int, UISignature?> source);
@@ -248,9 +248,10 @@ internal interface ITerminals
 
     /// <summary>
     /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
-    /// still there, a new one in a folder otherwise, named so. The page is brought up with it.
+    /// still there, a new one in a folder otherwise, named so. The page is brought up with it. Once it's done how it
+    /// ended and what it wrote are said to whoever asked.
     /// </summary>
-    void RunInTab(string key, string title, string folder, string commandLine, Action<int>? finished = null);
+    void RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished = null);
 
     /// <summary>How many errors the terminals have said there are (a build's), the ones in the Problems panel.</summary>
     int TerminalErrors { get; }
