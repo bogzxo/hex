@@ -20,11 +20,15 @@
 //            told d.lintOnFileOpen is "always"). {root} in a text is the folder the server runs in, serve-d completes
 //            the modules of a lone file's folder once it's one of its d.projectImportPaths
 //
+// {solution} in an argument is the solution in the folder the server runs in, the one named after the folder or the
+// first, and where there's none the argument goes with the flag in front of it. csharp-ls looked for solutions all the
+// way down and loaded the engine's in Fighter2D's external folder instead of Fighter2D's own.
+//
 // Where a server is can be set in the settings as well, which wins over the command here. ruff lints Python quicker than
 // pyright, swap the python entry for it if you'd rather (`pip install ruff`, command "ruff", args ["server"]).
 let servers = {
     csharp: {
-        command: "csharp-ls", args: [], language: "csharp", extensions: [".cs"],
+        command: "csharp-ls", args: ["--solution", "{solution}"], language: "csharp", extensions: [".cs"],
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
         repo: "razzmatazz/csharp-language-server", version: ["--version"],
