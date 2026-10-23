@@ -1,16 +1,12 @@
-# Hex 1.0.1
+# Hex 1.0.2
 
-a little hotfix for [1.0.0](https://github.com/bogzxo/hex/releases/tag/v1.0.0), everything in there still goes
+another little hotfix, on top of [1.0.1](https://github.com/bogzxo/hex/releases/tag/v1.0.1)
 
 ## fixes
 
-- lists scroll smoothly now instead of jumping a whole row at a time and smearing the rows into each other. the
-  autocomplete, the file dialog, the palette, dropdowns, the explorer and the other side lists, tables, and the code
-  itself when the caret goes off the edge
-- the scroll wheel over the autocomplete list scrolls the list, it used to scroll the code underneath it lol
-- in the file dialog, click a file and press a letter and it jumps to the first file starting with it, the way explorer
-  and finder do. before the letter just got stuck on the end of the name and found nothing
-- Open Folder sits right under Open in the File menu now, on Ctrl+Alt+O
+- pasting code copied out of a browser crashed hex outright (or did nothing at all in a debug build). the clipboard
+  couldn't be read and the error came out somewhere nothing could catch it. on windows hex reads the clipboard itself
+  now, and whatever the window library complains about goes in the log instead of killing the program
 
 ## running it
 
