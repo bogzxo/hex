@@ -281,7 +281,6 @@ internal sealed partial class HexExplorer
     /// <summary>The File menu's folders and workspaces, and Go's back and forward through the places the caret was.</summary>
     internal void AddWorkspaceCommands()
     {
-        commands.Add("File/workspace", context.Strings.Said("welcome.open_folder"), () => AskFolder(OpenFolder), icon: "folder-opened");
         commands.Add("File/workspace", context.Strings.Said("explorer_workspace.add_folder"), () => AskFolder(AddFolder), icon: "new-folder");
         commands.Add("File/workspace", context.Strings.Said("explorer_workspace.open_workspace"), OpenWorkspacePressed, icon: "folder-library");
         commands.Add("File/workspace", context.Strings.Said("explorer_workspace.save_workspace"), () => SaveWorkspacePressed(asNew: false)).IsEnabled = () => !workspace.IsEmpty;
