@@ -116,7 +116,6 @@ internal sealed partial class DawnScene
                 string path = file;
                 choices.Add((path, () => OpenAt(path, 0, 0)));
             }
-
             choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
         }
 
