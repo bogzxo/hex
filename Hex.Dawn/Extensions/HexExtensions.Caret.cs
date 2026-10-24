@@ -9,6 +9,9 @@ namespace Hex.Dawn;
 //
 //   hex.caret()                                            { line, column, text, selected }, null when it isn't code
 //   hex.replace_text({ line, column }, { line, column }, text, caret)   one step to undo, the caret that far into the text
+//   hex.selection()                                        { from, to, caret, text }, from before to, null when it isn't code
+//   hex.select({ line, column }, { line, column })         a selection with the caret at the second, or only a caret, shown
+//   hex.lines(first, last)                                 the lines as they are written, all of them without the two
 //   on_tab(hex, file)                                      Tab pressed with nothing selected, true when it took the key
 internal sealed partial class HexExtensions
 {
@@ -49,8 +52,52 @@ internal sealed partial class HexExtensions
                 ? new UITextPosition(from.Line, from.Column + caret)
                 : new UITextPosition(from.Line + before.Count(character => character == '\n'), caret - lastBreak - 1));
             return Values.Null;
+        })),
+        ("selection", Natives.Function("selection", _ =>
+        {
+            if (!context.Documents.Current.IsText)
+                return Values.Null;
+
+            UITextDocument text = context.Documents.Current.Editor.Document;
+            return Natives.Object(
+                ("from", PlaceOf(text.SelectionStart)),
+                ("to", PlaceOf(text.SelectionEnd)),
+                ("caret", PlaceOf(text.Caret)),
+                ("text", new StringValue(text.SelectedText)));
+        })),
+        ("select", Natives.Function("select", args =>
+        {
+            if (!context.Documents.Current.IsText)
+                return new StringValue("the file on screen is a layout, not code");
+
+            // The caret put there the way going to a place does, scrolled to and in the middle if it was far away
+            CodeEditor editor = context.Documents.Current.Editor;
+            UITextPosition from = PositionOf(editor.Document, args.Object(0));
+            UITextPosition to = args.Has(1) && args[1] is ObjectValue end ? PositionOf(editor.Document, end) : from;
+            editor.GoTo(to.Line, to.Column);
+            if (from != to)
+                editor.Document.Select(from, to);
+            return Values.Null;
+        })),
+        ("lines", Natives.Function("lines", args =>
+        {
+            if (!context.Documents.Current.IsText)
+                return Values.Null;
+
+            // HIDL's split trims what it splits and drops what's empty, which is no use for lines of code
+            UITextDocument text = context.Documents.Current.Editor.Document;
+            int first = Math.Clamp(args.Has(0) ? args.Integer(0) - 1 : 0, 0, text.LineCount - 1);
+            int last = Math.Clamp(args.Has(1) ? args.Integer(1) - 1 : text.LineCount - 1, first, text.LineCount - 1);
+            var lines = new ListValue();
+            for (int line = first; line <= last; line++)
+                lines.Items.Add(new StringValue(text.LineAt(line)));
+            return lines;
         }))
     ];
+
+    // A place in the text as an extension has it, a { line, column } from 1
+    private static ObjectValue PlaceOf(UITextPosition at) =>
+        Natives.Object(("line", new NumberValue(at.Line + 1)), ("column", new NumberValue(at.Column + 1)));
 
     // A { line, column } from 1 as a place in the text, kept inside it
     private static UITextPosition PositionOf(UITextDocument text, ObjectValue at) =>

@@ -99,7 +99,10 @@ as one step, and `hex.undo_file(file)` and `hex.redo_file(file)`. A file that is
 It can write where somebody is typing as well. `hex.caret()` is the caret of the file on screen, `{ line, column, text,
 selected }` (lines and columns from 1, `text` the line it's on), null when the file is a layout, and `hex.replace_text({
 line, column }, { line, column }, text, caret)` puts text over that much of the file as one step to undo, the caret left
-`caret` characters into what was written (at its end without one). An extension with an `on_tab(hex, file)` is asked
+`caret` characters into what was written (at its end without one). `hex.selection()` is `{ from, to, caret, text }`,
+from before to whichever way it was dragged, `hex.select(from, to)` selects (the caret at `to`) or with one place puts
+the caret there, scrolled to, and `hex.lines(first, last)` is the lines as they're written, every one of them without
+the two (HIDL's `split` trims and drops empty ones, no use for code). An extension with an `on_tab(hex, file)` is asked
 first when Tab is pressed in code with nothing selected, and true back means it took the key and nothing is indented.
 Emmet (`extensions/emmet`) is that, `ul>li.item$*3` written out as the HTML it stands for on Tab in the files it's on for
 and on Ctrl+E in any of them.
