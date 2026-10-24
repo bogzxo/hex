@@ -113,12 +113,19 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
     public List<(string Name, string Key)> CommandKeys { get; } = [];
 
     /// <summary>Calls one of its functions if it has one by that name. False if it went wrong, which switches it off.</summary>
-    public bool Raise(string name, params IRuntimeValue[] arguments)
+    public bool Raise(string name, params IRuntimeValue[] arguments) => Raise(name, arguments, out _);
+
+    /// <summary>Calls one of its functions if it has one by that name, with what it handed back (null if it hasn't one).</summary>
+    public bool Raise(string name, IRuntimeValue[] arguments, out IRuntimeValue returned)
     {
+        returned = Values.Null;
         if (Runtime is not { } runtime || Failed is not null || !runtime.UserScope.Variables.TryGetValue(name, out IRuntimeValue? function) || !Values.IsFunction(function))
             return true;
 
-        return Call(() => runtime.Invoke(function, arguments));
+        IRuntimeValue result = Values.Null;
+        bool fine = Call(() => result = runtime.Invoke(function, arguments));
+        returned = result;
+        return fine;
     }
 
     /// <summary>Calls a function it handed over (a command), false if it went wrong, which switches it off.</summary>

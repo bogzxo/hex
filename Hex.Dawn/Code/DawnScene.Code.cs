@@ -61,6 +61,7 @@ internal sealed partial class DawnScene
         // charcoal of its own written in here, a third colour in the one card
         editor.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.14f, 0.2f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
+        editor.OnTab = () => extensions.Tab(prepared);
         editor.CompletionSource = codeEditing.Completions;
         editor.OnChecked = _ => CodeChecked(prepared);
         editor.HoverSource = codeEditing.HoverHint;

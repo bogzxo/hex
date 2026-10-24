@@ -41,10 +41,18 @@ The workspace is any number of folders (File, Open folder, Add folder), a tree i
 
 ## Extensions
 
-An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The ones that come with Hex are in
-`Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are switched on and off on their page
-of the settings (the puzzle piece on the activity bar), and one that goes wrong is switched off for the rest of the run
-and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the first of them.
+An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The two that come with Hex (the layout
+designer and Dusk's settings) are in `Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are
+switched on and off on their page of the settings (the puzzle piece on the activity bar), and one that goes wrong is
+switched off for the rest of the run and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the
+first of them.
+
+The rest are installed from [hex-extensions](https://github.com/bogzxo/hex-extensions), the catalog, on Extensions,
+Available in the settings. Hex syncs it once a day as it starts (and on Check now), lists every extension in it with
+Install on the ones that aren't here and Update on the ones that are behind, and puts a card up when one you installed
+has a newer version. An install goes in the `extensions` folder next to Hex and starts straight away. The catalog can be
+another repository (owner/name) or a folder on your machine laid out the same, for writing one. Hex's tests have it as
+a submodule, `git submodule update --init` after a clone.
 
 ```
 let extension = { name: "Hello Dolly", description: "...", version: "1.0.0", author: "bogz" };
@@ -88,6 +96,13 @@ kept, one step of the file's undo a call (null when it went, why it didn't as a 
 "damage"], 8)`, `hex.insert(file, path, key, value, after)`, `hex.remove(file, path)`, `hex.rename(file, path, key)`,
 `hex.reorder(file, path, keys)`, `hex.edits(file, [{ edit: path, value }, { insert: path, key, value }, ...])` for several
 as one step, and `hex.undo_file(file)` and `hex.redo_file(file)`. A file that isn't open is opened behind the one on screen.
+It can write where somebody is typing as well. `hex.caret()` is the caret of the file on screen, `{ line, column, text,
+selected }` (lines and columns from 1, `text` the line it's on), null when the file is a layout, and `hex.replace_text({
+line, column }, { line, column }, text, caret)` puts text over that much of the file as one step to undo, the caret left
+`caret` characters into what was written (at its end without one). An extension with an `on_tab(hex, file)` is asked
+first when Tab is pressed in code with nothing selected, and true back means it took the key and nothing is indented.
+Emmet (`extensions/emmet`) is that, `ul>li.item$*3` written out as the HTML it stands for on Tab in the files it's on for
+and on Ctrl+E in any of them.
 `hex.problems(file, [{ path or line, message, warning }])` puts what it finds wrong in Hex's problems, `hex.watch(path)`
 has it told `on_file_changed(hex, path)`, `hex.open(file, path)` opens a file at a value, `hex.copy(text)` puts text on
 the clipboard. See `docs/extensions.md`, the move editor (Fighter2D's moves, `extensions/move_editor`) is all of it at

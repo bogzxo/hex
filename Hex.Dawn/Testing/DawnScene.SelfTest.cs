@@ -199,6 +199,8 @@ internal sealed partial class DawnScene
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
         ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away", TestAnyFile),
+        ("emmet", "Emmet, an abbreviation in an .html file written out on Tab, undone in one step, and a word that isn't one left to indent", TestEmmet),
+        ("catalog", "the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),

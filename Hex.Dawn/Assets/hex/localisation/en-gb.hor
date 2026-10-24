@@ -252,7 +252,7 @@ let strings = {
         extensions: {
             page: [
                 "## Extensions",
-                "HIDL scripts that extend Hex. Each is a folder containing an `extension.hor`. Built-in extensions live in `Assets/hex/extensions`; your own go in an `extensions` folder next to the executable. An extension starts as soon as it is enabled and is stopped when disabled."
+                "HIDL scripts that extend Hex. Each is a folder containing an `extension.hor`. Built-in extensions live in `Assets/hex/extensions`; your own go in an `extensions` folder next to the executable, and so do the ones installed from the catalog on Extensions, Available. An extension starts as soon as it is enabled and is stopped when disabled."
             ]
         }
     },
@@ -266,6 +266,39 @@ let strings = {
         built_in: "Built in",
         own: "User extension",
         open: "Extensions"
+    },
+
+    // The extensions that can be installed, out of the catalog on GitHub, on Extensions, Available and in the cards
+    extension_catalog: {
+        look: "Check for extensions",
+        look_help: "Once a day as Hex starts, sync the catalog of extensions and put up a card when one you installed from it has a newer version.",
+        check_now: "Check now",
+        source: "Catalog",
+        source_help: "Where extensions are installed from. A GitHub repository (owner/name, its main branch) or a folder on this machine with a folder for each extension.",
+        reading: "Reading the extension catalog",
+        syncing: "Syncing the extension catalog",
+        up_to_date: "The catalog has {count} extensions, and everything installed from it is up to date",
+        updates: "Updates are out for {count} of your extensions",
+        failed: "The extension catalog ({source}) couldn't be synced: {why}",
+        newer_out: "{name} {version} is out, you have {installed}",
+        update: "Update",
+        install: "Install",
+        see_all: "Extensions",
+        working: "Working...",
+        installing: "Installing {name}",
+        updating: "Updating {name}",
+        install_failed: "{name} couldn't be installed: {why}",
+        installed: "Installed {name} {version}",
+        updated: "Updated {name} to {version}",
+        line: "{count} extensions in {source}.",
+        line_syncing: "Syncing {source}...",
+        line_failed: "{source} couldn't be synced, {why}. What's listed is from the last sync.",
+        line_empty: "Nothing from {source} yet, press Check now to sync it.",
+        not_installed: "Not installed",
+        comes_with_hex: "Comes with Hex",
+        own_by_that_name: "A folder of your own by this name is installed, so it's left alone",
+        behind: "You have {installed}",
+        installed_line: "Installed, up to date"
     },
 
     // The windows of the Help menu. The release notes come from Hex's releases on GitHub, page is the history from

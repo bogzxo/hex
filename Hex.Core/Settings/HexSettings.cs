@@ -144,6 +144,24 @@ internal sealed class HexSettings
     // The extensions that are switched off, by the name of their folder
     public readonly HashSet<string> DisabledExtensions = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Where the extensions that can be installed come from, a GitHub repository (owner/name, its main branch) or a folder
+    /// on this machine laid out the same, a folder an extension.
+    /// </summary>
+    public string ExtensionCatalog = DEFAULT_CATALOG;
+
+    /// <summary>The catalog Hex comes set to, the extensions of its own repository on GitHub.</summary>
+    public const string DEFAULT_CATALOG = "bogzxo/hex-extensions";
+
+    /// <summary>Whether Hex looks at the catalog for new versions of the extensions installed out of it, once a day as it starts.</summary>
+    public bool ExtensionUpdates = true;
+
+    /// <summary>When it last looked (UTC, round trip), empty for never.</summary>
+    public string ExtensionsChecked = string.Empty;
+
+    // The extensions that were installed out of the catalog, by the name of their folder, the ones offered updates
+    public readonly HashSet<string> CatalogExtensions = new(StringComparer.OrdinalIgnoreCase);
+
     // What every extension was told on its page of the settings, by the name of its folder and then of the setting.
     // Kept for one that isn't there any more as well, it might come back
     public readonly Dictionary<string, Dictionary<string, IRuntimeValue>> ExtensionSettings = new(StringComparer.OrdinalIgnoreCase);
@@ -247,6 +265,15 @@ internal sealed class HexSettings
             {
                 foreach (IRuntimeValue name in off.Items)
                     if (name is StringValue { Value: { } named }) DisabledExtensions.Add(named);
+            }
+
+            if (values.TryGetValue("extension_catalog", out var catalog) && catalog is StringValue { Value.Length: > 0 } catalogNamed) ExtensionCatalog = catalogNamed.Value;
+            ExtensionUpdates = Flag(values, "extension_updates", ExtensionUpdates);
+            if (values.TryGetValue("extensions_checked", out var catalogLooked) && catalogLooked is StringValue catalogLookedWhen) ExtensionsChecked = catalogLookedWhen.Value;
+            if (values.TryGetValue("catalog_extensions", out var installed) && installed is ListValue fromCatalog)
+            {
+                foreach (IRuntimeValue name in fromCatalog.Items)
+                    if (name is StringValue { Value: { } named }) CatalogExtensions.Add(named);
             }
 
             if (byExtension is null && values.TryGetValue("extension_settings", out var told) && told is ObjectValue inOld)
@@ -415,7 +442,11 @@ internal sealed class HexSettings
             .Add("backdrop_up", BackdropUp)
             .Add("backdrop_opacity", BackdropOpacity)
             .Add("last_workspace", LastWorkspace.Replace('\\', '/'))
-            .Add("disabled_extensions", Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)));
+            .Add("disabled_extensions", Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))
+            .Add("extension_catalog", ExtensionCatalog.Replace('\\', '/'))
+            .Add("extension_updates", ExtensionUpdates)
+            .Add("extensions_checked", ExtensionsChecked)
+            .Add("catalog_extensions", Horizon.HIDL.Library.Natives.List(CatalogExtensions.Order(StringComparer.OrdinalIgnoreCase)));
 
         // the editor's and the extensions' sections of Hex's one settings file, the terminal's kept as it is
         string text = Horizon.UI.Components.SettingsSections.Write(path, (Horizon.UI.Components.SettingsSections.EDITOR, settings),

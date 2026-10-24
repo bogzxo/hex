@@ -255,6 +255,7 @@ internal sealed partial class DawnScene : Scene
         // Last, an extension's on_start finds the editor up and a file open
         extensions.StartAll();
         extensions.WatchFolders();
+        extensions.StartCatalog();
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
