@@ -116,6 +116,8 @@ public static class DuskProgram
                 WindowTitle = "Dusk",
                 WindowIcon = HexIdentity.ICON,
                 CustomFrame = true,
+                // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
+                ScaleToDisplay = !selfTest,
                 AppId = "hex-dusk",
                 Mode = selfTest && !options.App ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,

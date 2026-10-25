@@ -71,7 +71,8 @@ internal sealed partial class HexExplorer
         try
         {
             if (OperatingSystem.IsWindows())
-                System.Diagnostics.Process.Start("exe", $"/select,\"{path}\"");
+                // Backslashes, explorer opens Documents instead of picking anything for a path written with forward ones
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{Path.GetFullPath(path)}\"");
             else if (OperatingSystem.IsMacOS())
                 System.Diagnostics.Process.Start("open", ["-R", path]);
             else if (!ShowInFileManager(path))

@@ -94,6 +94,32 @@ let ext_view = compositor.panel({
     clip: true
 });
 
+// A picture opened from the explorer, in place of code, see DawnScene.Images
+let image_view = compositor.panel({
+    layer: "image",
+    parent: center,
+    size: vec(840, 250),
+    clip: true,
+    color: vec(0.04, 0.045, 0.06, 1)
+});
+
+let image_picture = compositor.image({
+    parent: image_view,
+    anchor: "center",
+    pivot: "center",
+    size: vec(64, 64)
+});
+
+let image_info = compositor.label({
+    parent: image_view,
+    anchor: "bottom_left",
+    pivot: "bottom_left",
+    pos: vec(10, 8),
+    text: "",
+    text_scale: 0.13,
+    color: vec(0.46, 0.52, 0.64, 1)
+});
+
 // The panel under the editor, the problems, the output and the console
 let panel = compositor.include({
     parent: center,
@@ -121,4 +147,4 @@ let toasts = compositor.notifications({
     text_scale: 0.14
 });
 
-compositor.hidden_layers(["files", "code", "table", "extension", "values"]);
+compositor.hidden_layers(["files", "code", "table", "extension", "image", "values"]);

@@ -12,14 +12,33 @@ let left = compositor.stack({
     slide: "left"
 });
 
-let tree_title = compositor.label({
+// The title of what the side bar is on, with a button at the far end that reads the files again from the disk
+let tree_head = compositor.panel({
     parent: left,
+    fill: "horizontal",
+    size: vec(0, 22),
+    color: vec(0, 0, 0, 0)
+});
+
+let tree_title = compositor.label({
+    parent: tree_head,
     anchor: "left",
     pivot: "left",
     text: "@side.explorer",
     text_scale: 0.14,
     bold: true,
     color: vec(0.46, 0.52, 0.64, 1)
+});
+
+let tree_refresh = compositor.button({
+    parent: tree_head,
+    anchor: "right",
+    pivot: "right",
+    size: vec(22, 22),
+    icon: "refresh",
+    tooltip: "@side.refresh_tip",
+    style: "button_flat",
+    animated: false
 });
 
 let toolbox = compositor.collapsible({

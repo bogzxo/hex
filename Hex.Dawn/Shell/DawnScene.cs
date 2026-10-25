@@ -168,9 +168,16 @@ internal sealed partial class DawnScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        ReadBackdropAhead();
         DeclareMenus();
         codeEditing = new HexCodeEditing(Context);
         explorer = new HexExplorer(Context);
+        git = new HexGit(Context);
+
+        // Whether git is there at all is asked by running it once, a good 25 ms the first tick waited for as the editor
+        // came up. Asked on another thread now, it's known long before then
+        _ = Hex.Core.Git.GitProcess.InstalledNow;
+        BuildGit();
         explorer.FoldersChanged += codeEditing.ForgetVocabulary;
         running = new HexRunning(Context);
         designer = new HexDesigner(Context);
@@ -207,6 +214,12 @@ internal sealed partial class DawnScene : Scene
         BuildEffects();
         BuildModes();
         designer.AddDesignerCommands();
+        WireRefresh();
+        BuildImageView();
+        BuildDiffs();
+        BuildHistory();
+        BuildConflicts();
+        BuildPeek();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -400,6 +413,9 @@ internal sealed partial class DawnScene : Scene
         designer.UpdateRecord(dt);
         UpdateKeys();
 
+        // After the keys, so Escape in the box over a text on the canvas puts the box away and doesn't deselect too
+        designer.UpdateTextEdit();
+
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
         {
@@ -453,8 +469,10 @@ internal sealed partial class DawnScene : Scene
         }
 
         running.UpdateValues(dt);
+        UpdatePeek(dt);
         UpdateFileChanges();
         languages.Update(dt);
+        git.Update(dt);
         running.UpdateValueBox();
     }
 

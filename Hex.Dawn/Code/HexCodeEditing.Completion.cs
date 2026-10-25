@@ -215,13 +215,25 @@ internal sealed partial class HexCodeEditing
     internal static UITextPosition? FindDeclaration(string source, string name) =>
         HidlAnalysis.FindDeclaration(source, name) is { } at ? new UITextPosition(at.Line, at.Column) : null;
 
-    /// <summary>Opens the language file of the game at a key, the line of its last part under the ones before it.</summary>
+    /// <summary>
+    /// Opens the language file of the game at a key. Found where the file says it is when it runs (the text in Hex when
+    /// it's open there), and by the line of its last part under the ones before it when it doesn't.
+    /// </summary>
     internal void GoToKey(string key)
     {
         string file = Path.Combine(Localisation.Folder, Localisation.Language + ".hor");
         if (Localisation.Folder.Length == 0 || !File.Exists(file))
         {
             context.Notices.Say(context.Strings.Said("code_completion.no_language_loaded"), error: true);
+            return;
+        }
+
+        string full = Path.GetFullPath(file);
+        string source = context.Documents.Find(full) is { IsText: true } open ? open.Editor.Text : File.ReadAllText(full);
+        if (HexLanguageEdits.Find(source, full, key) is var (keyLine, keyColumn))
+        {
+            context.Documents.OpenAt(full, keyLine, keyColumn);
+            context.Notices.Say(context.Strings.Said("code_completion.key_in_language", ("key", key), ("language", Localisation.Language)));
             return;
         }
 

@@ -38,8 +38,9 @@ internal sealed partial class DawnScene
     private void BuildStatusBar()
     {
         statusBar = layout.Get<StatusBar>("status_bar");
+        BuildBranchItem();
 
-        bool Code() => !LayoutTools;
+        bool Code() => !LayoutTools && document.Picture is null;
         bool Design() => LayoutTools;
 
         problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: Said("status_bar.problems_tip"));
@@ -94,6 +95,11 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>
     private void UpdateStatusBar()
     {
+        UpdateBranchItem();
+        UpdateImageView();
+        UpdateConflicts();
+        UpdateInlays();
+
         if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)
         {
             messageItem.Text = string.Empty;

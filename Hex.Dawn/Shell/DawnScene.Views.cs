@@ -37,9 +37,11 @@ internal sealed partial class DawnScene
         // A view an extension made for the file goes where the code is, see DawnScene.UIScriptedLayout
         ApplyExtensionViews();
         bool extension = document.View == HexView.Extension;
+        bool picture = document.Picture is not null;
 
         canvas.Visible = tools;
-        codeScroll.Visible = !tools && !table && !extension;
+        codeScroll.Visible = !tools && !table && !extension && !picture;
+        imageView.Visible = picture;
 
         // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
         document.Module.Enabled = tools;
@@ -60,7 +62,7 @@ internal sealed partial class DawnScene
         play.Label = Said(tools ? "toolbar.play" : "toolbar.run");
         play.Tooltip = Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
 
-        if (tools || table || extension)
+        if (tools || table || extension || picture)
             code.Unfocus();
         else
             code.Focus();

@@ -37,6 +37,7 @@ let strings = {
     activity: {
         explorer: "Explorer (Ctrl+Shift+E)",
         search: "Search (Ctrl+Shift+F)",
+        git: "Source Control, what's changed, staged and committed (Ctrl+Shift+G)",
         outline: "Outline (Ctrl+Shift+O)",
         design: "Toolbox, components and layers (Ctrl+Shift+O)",
         debug: "Debug, the stack, the variables and the breakpoints (F5 starts)",
@@ -54,7 +55,10 @@ let strings = {
         outline_of: "Outline · {file}",
         designer: "Designer",
         toolbox: "Toolbox",
-        layers: "Layers"
+        layers: "Layers",
+        refresh: "Refresh the explorer",
+        refresh_tip: "Read the files again from the disk, for what changed outside of Hex",
+        refreshed: "read the files and git again"
     },
 
     // The panel under the editor
@@ -117,7 +121,7 @@ let strings = {
     // What Hex opens on when nothing is open
     welcome: {
         title: "Hex",
-        subtitle: "The IDE for HIDL and Horizon, {version}\nA code-driven WYSIWYG layout editor.",
+        subtitle: "A different kind of text editor, for a different kind of person; v{version}\nHex does not collect anything from you, nor does it try to push first party extensions into your face.",
         start: "Start",
         new_layout: "New Layout",
         open_file: "Open File...",
@@ -777,7 +781,7 @@ let strings = {
         change_into: "Change into",
         select_parent: "Select parent",
         select_all_short: "Select all",
-        its_code: "Its code",
+        its_code: "Go to its declaration",
         add_page: "Add a page",
         zoom_in: "Zoom In",
         zoom_out: "Zoom Out",
@@ -789,7 +793,7 @@ let strings = {
         select_all: "Select All",
         deselect_all: "Deselect All",
         show_all_layers: "Show All Layers",
-        show_code: "Show Code",
+        show_code: "Go to Declaration",
         screen: "Screen",
         move_up: "Move Up",
         move_down: "Move Down",
@@ -807,6 +811,27 @@ let strings = {
         align_bottom: "Align Bottom",
         distribute_horizontally: "Distribute Horizontally",
         distribute_vertically: "Distribute Vertically"
+    },
+
+    // Editing what a component says right on the canvas (a double click, or Enter), and going to the key of the game's
+    // language a text names (Ctrl+F12)
+    designer_texts: {
+        edit_text: "Edit Text",
+        edit_text_short: "Edit text",
+        go_to_text: "Go to Text in Language File",
+        its_text: "Go to its text",
+        editing: "editing its {property}, Enter keeps it, Escape leaves it",
+        editing_key: "editing {key} in {file}, Enter keeps it, Escape leaves it",
+        left: "left the text as it was",
+        nothing_to_edit: "{name} has no text to edit",
+        changed: "{name}'s {property} says \"{text}\" now, Ctrl+Z puts it back",
+        key_written: "{key} says \"{text}\" in {file} now, Ctrl+Z puts it back",
+        key_added: "{file} had no {key}, it's in there now saying \"{text}\"",
+        key_undone: "{key} in {file} is back to what it said",
+        key_redone: "{key} says \"{text}\" in {file} again",
+        language_unsaved: "{file} is open with changes that aren't saved, save it first and the text can go in",
+        not_written: "couldn't write {key} into {file}, {why}",
+        not_a_key: "{name}'s text is written in the layout, not a key of a language, so here's where it's declared"
     },
 
     dialogs: {
@@ -1323,6 +1348,14 @@ let strings = {
         code_font_help: "The font code is written in, any of the fonts that come with Hex.",
         wrap_code_title: "Wrap code",
         wrap_code_help: "Whether a long line of code wraps at the edge of the editor rather than running off it (Alt+Z).",
+        git_blame_title: "Inline blame",
+        git_blame_help: "Whether the line the caret is on says faintly at its end who last changed it, when, and the commit, from git.",
+        minimap_title: "Minimap",
+        minimap_help: "Whether the whole of the code is drawn small down the right of the editor, a slider over what you can see to drag.",
+        inlay_hints_title: "Inlay hints",
+        inlay_hints_help: "Whether the names of the parameters a call passes to are written faintly in among the code, from HIDL and from the language servers that say them.",
+        git_autofetch_title: "Fetch in the background",
+        git_autofetch_help: "Whether the workspace's git repositories are fetched from their remotes every few minutes, so how far behind a branch is shows without asking.",
         debugger_path_title: ".NET debugger",
         debugger_path_help: "Where netcoredbg is, for F5 on C#. Empty looks in a netcoredbg folder next to Hex.exe, the settings folder and the PATH.",
         run_to_terminal_title: "Run in a terminal",
@@ -1369,6 +1402,144 @@ let strings = {
         joined: "one file in the middle again",
         needs_other: "open another file of code to put next to this one",
         split: "{left} and {right} side by side, Ctrl+\\ for one again"
+    },
+
+    // Diffs, a file's changes in a tab of their own
+    diff: {
+        open_changes: "Open Changes",
+        compare_saved: "Compare with Saved",
+        next_change: "Next Change",
+        previous_change: "Previous Change",
+        not_in_git: "this file isn't in a git repository",
+        title: "{name} (changes)",
+        title_staged: "{name} (staged)",
+        title_saved: "{name} (unsaved)",
+        no_changes: "{name} has no changes there",
+        shown: "{name}, {count}",
+        last_change: "that's the last change",
+        first_change: "that's the first change"
+    },
+
+    // Peek, a declaration shown over the code
+    peek: {
+        command: "Peek Definition",
+        nothing: "nothing to peek at there",
+        text: "Where it's declared, Open goes there",
+        open: "Open",
+        close: "Close"
+    },
+
+    // Merge conflicts, settled a side at a time
+    conflicts: {
+        accept_current: "Accept Current Change",
+        accept_incoming: "Accept Incoming Change",
+        accept_both: "Accept Both Changes",
+        note: "Alt+1 keeps current, Alt+2 incoming, Alt+3 both",
+        found: "{count} to settle, Alt+1 keeps current, Alt+2 incoming, Alt+3 both, Alt+F5 the next",
+        none: "no conflict at or after the caret",
+        kept_current: "kept the current change, Ctrl+Z to have the conflict again",
+        kept_incoming: "kept the incoming change, Ctrl+Z to have the conflict again",
+        kept_both: "kept both changes, Ctrl+Z to have the conflict again"
+    },
+
+    // What a file was, local history and git's
+    history: {
+        local_command: "Local History...",
+        git_command: "File History...",
+        none_kept: "nothing of {name} is kept yet, a copy is kept every time it's saved",
+        local_title: "Local history of {name}",
+        local_text: "A copy every time it was saved, pick one to compare or put back",
+        version_title: "The version of {when}",
+        version_text: "Compare it with the file as it is, or put it back (Ctrl+Z has the file as it was again)",
+        compare: "Compare",
+        restore: "Put it back",
+        diff_title: "{name} ({when})",
+        restored: "the version of {when} is back, Ctrl+Z for what it was",
+        no_commits: "git has no commits of {name}",
+        git_title: "History of {name}",
+        git_text: "The commits that changed it, newest first, pick one to see what it did",
+        commit_title: "{name} @ {commit}"
+    },
+
+    // Pictures opened in a tab of their own
+    images: {
+        opened: "{name}, {width} by {height}",
+        not_read: "{name} couldn't be read as a picture",
+        info: "{width} × {height}   {zoom}%"
+    },
+
+    // Git, the branch in the status bar and its list
+    git: {
+        branch_tip: "The branch checked out and how far it is from what it follows, click to switch to another",
+        branches_title: "Branches",
+        branches_text: "On {branch}, pick one to switch to",
+        new_branch: "+ Create a new branch...",
+        checked_out: "checked out",
+        remote: "remote",
+        new_branch_title: "A new branch",
+        new_branch_text: "Made where HEAD is and checked out",
+        new_branch_button: "Create",
+        switched: "on {branch} now",
+        switch_failed: "Couldn't switch to {branch}, git said {why}",
+        details: "Details",
+        switch_details: "git switch {branch}",
+        blame_note: "{author}, {when} · {summary}",
+        blame_uncommitted: "You, not committed yet",
+        blame_command: "Show the Commit of This Line",
+        blame_window: "Commit {commit}",
+        side_title: "Source Control",
+        side_command: "Source Control",
+        commit_command: "Commit...",
+        stage_file: "Stage This File",
+        unstage_file: "Unstage This File",
+        branches_command: "Switch Branch...",
+        not_installed: "git isn't on this machine (or not on the PATH), install it and start Hex again",
+        no_repository: "No git repository in the workspace",
+        reading: "Asking git...",
+        no_changes: "Nothing to commit, everything is as committed",
+        commit_staged: "Commit {count} staged",
+        commit_all: "Commit all {count}",
+        commit_tip: "Commit what's staged, or every change when nothing is (Ctrl+Alt+Enter)",
+        merge_changes: "Merge Changes  {count}",
+        staged_changes: "Staged Changes  {count}",
+        changes: "Changes  {count}",
+        stage: "Stage",
+        unstage: "Unstage",
+        stage_all: "Stage All",
+        unstage_all: "Unstage All",
+        discard: "Discard Changes",
+        discard_all: "Discard All Changes",
+        open_file: "Open File",
+        discard_title: "Discard changes",
+        discard_text: "Throw away the changes to {what}? Files git doesn't know go to the trash, the rest go back to what was last staged or committed.",
+        discard_yes: "Discard",
+        discard_no: "Keep them",
+        commit_title: "Commit to {branch}",
+        commit_text_staged: "What's staged goes in",
+        commit_text_all: "Nothing's staged, so all {count} changes go in",
+        commit_button: "Commit",
+        commit_placeholder: "What changed",
+        commit_hint: "A summary on the first line, a blank line, then as much as it takes, Markdown and all. Ctrl+Enter commits",
+        summary_length: "Summary {length} characters, {best} or fewer reads best. Ctrl+Enter commits",
+        summary_too_long: "Summary {length} characters, past {most} it's cut short in logs and on GitHub. Ctrl+Enter commits",
+        committed: "committed, {message}",
+        failed: "{doing} didn't work, git said {why}",
+        show_change: "Show Change",
+        stage_change: "Stage Change",
+        revert_change: "Revert Change",
+        no_change_here: "there's no change of git's on this line",
+        resolve_first: "{count} still in conflict, resolve them and stage them before committing",
+        fetch: "Fetch",
+        pull: "Pull",
+        push: "Push",
+        sync: "Sync",
+        syncing: "syncing",
+        publish: "Publish Branch",
+        sync_tip: "Pull what the remote has and push what it hasn't, or publish a branch that isn't on the remote yet",
+        no_remote: "this repository has no remote to fetch from or push to",
+        remote_done: "{doing} done",
+        change_staged: "that change is staged",
+        change_reverted: "that change is back to what git has, Ctrl+Z to have it again"
     },
 
     status_bar: {
@@ -1441,6 +1612,7 @@ let strings = {
     },
 
     dusk_scene: {
+        handed_over: "{title} opened here, Dusk is the default terminal",
         problem: "{file}:{line}  {message}, Ctrl and a click on the path opens it in Hex",
         close_title: "Close Dusk?",
         close_message: "{count} tabs are open, their shells go with them.",
@@ -1589,6 +1761,10 @@ let strings = {
     counts: {
         file_one: "1 file",
         file_many: "{count} files",
+        conflict_one: "1 conflict",
+        conflict_many: "{count} conflicts",
+        change_one: "1 change",
+        change_many: "{count} changes",
         line_one: "1 line",
         line_many: "{count} lines",
         place_one: "1 place",

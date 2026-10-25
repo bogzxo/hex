@@ -6,7 +6,7 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The pointer on the canvas. A click selects what's under it, a drag moves what's selected, and where it is in the layout
-// is in the status bar. The edges of what's selected are Handles, zooming and panning Canvas.
+// is in the status bar. The edges of what's selected are Handles, zooming and panning Canvas, a double click Texts.
 internal sealed partial class HexDesigner
 {
     // Dragging a component around the canvas
@@ -50,6 +50,9 @@ internal sealed partial class HexDesigner
 
         // Where the pointer is in the layout, in its own units, for lining things up by number
         ShowCoords(overCanvas, inLayout);
+
+        // A double click edits the text of what's under it, worked out alongside everything below (see Texts)
+        TrackClicks(pointer, pressed, released, overCanvas, inLayout);
 
         // The hover of what is pointed at, so it can be seen while it is set up. Not while it is being dragged about
         HoldHover(overCanvas && !dragging ? document.Module.FindAt(pointer.Position) : null);

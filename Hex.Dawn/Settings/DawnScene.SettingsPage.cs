@@ -159,6 +159,10 @@ internal sealed partial class DawnScene
             "code_zoom" => new NumberValue(hex.settings.CodeZoom),
             "code_font" => new StringValue(hex.settings.CodeFont),
             "wrap_code" => Values.Bool(hex.settings.WrapCode),
+            "git_blame" => Values.Bool(hex.settings.GitBlame),
+            "minimap" => Values.Bool(hex.settings.Minimap),
+            "inlay_hints" => Values.Bool(hex.settings.InlayHints),
+            "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
@@ -240,6 +244,21 @@ internal sealed partial class DawnScene
                     settings.WrapCode = wrap.Value;
                     foreach (HexDocument open in hex.documents)
                         open.Editor.WordWrap = wrap.Value;
+                    break;
+                case ("git_blame", BooleanValue blame):
+                    settings.GitBlame = blame.Value;
+                    break;
+                case ("git_autofetch", BooleanValue fetch):
+                    settings.GitAutoFetch = fetch.Value;
+                    break;
+                case ("minimap", BooleanValue minimap):
+                    settings.Minimap = minimap.Value;
+                    foreach (HexDocument open in hex.documents)
+                        open.Editor.Minimap = minimap.Value;
+                    break;
+                case ("inlay_hints", BooleanValue inlays):
+                    settings.InlayHints = inlays.Value;
+                    hex.ForgetInlays();
                     break;
                 case ("run_to_terminal", BooleanValue run):
                     settings.RunToTerminal = run.Value;

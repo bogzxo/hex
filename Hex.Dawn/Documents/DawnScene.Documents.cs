@@ -131,6 +131,10 @@ internal sealed partial class DawnScene
             return true;
         }
 
+        // A picture is shown as the picture it is
+        if (IsPicture(path))
+            return OpenPicture(path);
+
         // A file of code that isn't a layout (data, a language, a skin), or any other text, is edited as the text it is.
         // One with nothing in it but bytes is asked about first, opened anyway it's what it says as text, its nothings
         // shown as the sign for one, and saved that way
@@ -270,6 +274,10 @@ internal sealed partial class DawnScene
 
     private void Save()
     {
+        // A picture or a diff is looked at, there's nothing of Hex's in it to write
+        if (document.Picture is not null || document.DiffOf is not null)
+            return;
+
         // A file of code that has had #define layout typed into it is a layout the next time it is opened, which it is
         // told before it is saved that way
         if (document.IsText && document.Path is { } typed && !layoutWarned.Contains(typed)
@@ -451,7 +459,16 @@ internal sealed partial class DawnScene
         DropBackup(document);
         designer.recordPending = false;
 
-        Show(documents.Count > 0 ? documents[^1] : NewDocument());
+        if (documents.Count > 0)
+        {
+            Show(documents[^1]);
+            return;
+        }
+
+        // The last tab gone is the welcome again, the same as Hex starting with nothing open, not a blank layout in the
+        // designer. Hex is a code editor before it's anything else
+        Show(NewDocument());
+        startedWith = document;
     }
 
     // Where the languages of the files of a folder are, by the folder, null for nowhere
@@ -514,8 +531,8 @@ internal sealed partial class DawnScene
         commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
         commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
 
-        commands.Add("Edit/history", Said("documents.undo"), Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending;
-        commands.Add("Edit/history", Said("documents.redo"), Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo;
+        commands.Add("Edit/history", Said("documents.undo"), Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending || designer.CanUndoText;
+        commands.Add("Edit/history", Said("documents.redo"), Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo || designer.CanRedoText;
 
         // Ctrl+Tab goes through the files that are open, the way every editor does, with shift the other way
         commands.Bind(Key.Tab, () => CycleDocuments(1), control: true, whileTyping: true, shift: false);
@@ -539,6 +556,10 @@ internal sealed partial class DawnScene
             return;
         }
 
+        // A text of the game's language written from the canvas is a step of its own, in its place among the layout's
+        if (designer.UndoText())
+            return;
+
         if (document.Undo())
             designer.Restored("undone");
         else
@@ -557,6 +578,9 @@ internal sealed partial class DawnScene
             code.Document.Redo();
             return;
         }
+
+        if (designer.RedoText())
+            return;
 
         if (document.Redo())
             designer.Restored("redone");

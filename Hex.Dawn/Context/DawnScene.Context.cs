@@ -27,6 +27,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     private HexDesigner designer = null!;
     private HexCodeEditing codeEditing = null!;
     private HexExplorer explorer = null!;
+    private HexGit git = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
     private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, commands, options,
@@ -174,6 +175,9 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IWindows.Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed) =>
         AskText(title, text, value, button, typed, box => box.Placeholder = placeholder);
+
+    void IWindows.PromptLines(string title, string text, string value, string button, string language, Func<string, (string Text, bool Warning)>? note, Action<string> typed) =>
+        AskLines(title, text, value, button, language, note, typed);
 
     void IWindows.Menu(Menu menu) => contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
     void IWindows.MenuAt(Menu menu, Vector2 at) => contextMenu = ContextMenu.ShowAt(chrome, at, menu);
@@ -385,6 +389,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     }
 
     void IEditorWindow.ShowDeclaration(string name) => ShowDeclaration(name);
+    void IEditorWindow.GoToKey(string key) => codeEditing.GoToKey(key);
     bool IEditorWindow.CloseTopWindow() => CloseTopWindow();
     Horizon.Input.Mouse IEditorWindow.Mouse => Engine.Input.Mouse;
 
@@ -393,6 +398,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IEditorWindow.AddCodeMenu(Menu menu)
     {
+        AddConflictMenu(menu);
         menu.Add(Said("context.run_file"), running.RunCode, "F5", "play").IsVisible = () => document.IsText;
         menu.Add(Said("context.apply_code"), ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
         menu.Add(Said("context.command_palette"), CommandPalette, "Ctrl+Shift+P", "symbol-misc");

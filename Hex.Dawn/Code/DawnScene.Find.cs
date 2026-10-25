@@ -86,7 +86,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>Every file of every folder looked through that reads as text, once each.</summary>
-    private List<string> AllWorkspaceFiles() => HexSearch.TextFilesUnder(WorkspaceRoots());
+    private List<string> AllWorkspaceFiles() => HexSearch.OpenableFilesUnder(WorkspaceRoots(), IsPicture);
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
     private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);

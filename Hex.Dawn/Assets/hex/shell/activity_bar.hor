@@ -38,6 +38,20 @@ let act_search = compositor.button({
     hover_time: 0.08
 });
 
+let act_git = compositor.button({
+    parent: activity,
+    indicator: "left",
+    icon: "source-control",
+    style: "button_flat",
+    size: vec(38, 38),
+    lbl_scale: 0.2,
+    animated: false,
+    tooltip: "@activity.git",
+    hover: "grow",
+    hover_amount: 0.1,
+    hover_time: 0.08
+});
+
 let act_outline = compositor.button({
     parent: activity,
     indicator: "left",

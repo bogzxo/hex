@@ -364,7 +364,12 @@ internal sealed partial class HexDesigner
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.select_parent"), SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
         shown.Add(context.Strings.Said("designer_selection.select_all_short"), SelectAll, "Ctrl+A");
-        shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, icon: "code").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, "F12", "code").IsEnabled = any;
+
+        // What it says, edited over it on the canvas, and the key of the language that says it when it's one
+        shown.Add(context.Strings.Said("designer_texts.its_text"), GoToSelectedText, "Ctrl+F12", "symbol-key").IsVisible = () => SelectedKey() is not null;
+        shown.Add(context.Strings.Said("designer_texts.edit_text_short"), EditSelectedText, "Enter", "edit").IsVisible =
+            () => document.Selected is { } selected && TextOf(selected) is not null;
 
         if (document.Selected is TabPanel)
             shown.Add(context.Strings.Said("designer_selection.add_page"), AddPage, icon: "add");
@@ -427,7 +432,12 @@ internal sealed partial class HexDesigner
         commands.Add("Layout/select", context.Strings.Said("designer_selection.select_all"), SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
         commands.Add("Layout/select", context.Strings.Said("designer_selection.deselect_all"), () => Select(null), "Esc").IsEnabled = some;
         commands.Add("Layout/select", context.Strings.Said("designer_selection.show_all_layers"), ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
-        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_code"), ShowSelectedCode, icon: "code").IsEnabled = some;
+        // F12 goes to where what's selected is declared, the way it goes from a name in the code, and Ctrl+F12 to the key
+        // of the language its text names. Enter edits that text on the canvas, as a double click does
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_code"), ShowSelectedCode, "F12", "code", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_texts.go_to_text"), GoToSelectedText, "Ctrl+F12", "symbol-key", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_texts.edit_text"), EditSelectedText, "Enter", "edit", UIKeyUse.Bound).IsEnabled =
+            () => LayoutTools && document.Selected is { } selected && TextOf(selected) is not null;
         FillScreenMenu(commands.AddMenu("Layout/screen", context.Strings.Said("designer_selection.screen"), "device-desktop"));
 
         // Escape puts away the little window on top first (the settings, a page of help), then what is selected
@@ -482,7 +492,7 @@ internal sealed partial class HexDesigner
         into.Add(context.Strings.Said("designer_selection.distribute_vertically"), () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
     }
 
-    /// <summary>The code of the layout, with the caret on the let of what is selected.</summary>
+    /// <summary>F12 in the designer, the code of the layout with the caret on the let of what is selected.</summary>
     private void ShowSelectedCode()
     {
         if (document.Selected is { } selected)

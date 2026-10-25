@@ -109,6 +109,18 @@ internal sealed class HexSettings
     /// <summary>Whether long lines of code are wrapped at the edge of the editor (Alt+Z).</summary>
     public bool WrapCode;
 
+    /// <summary>Whether the line the caret is on says faintly at its end who last changed it and when, git blame.</summary>
+    public bool GitBlame = true;
+
+    /// <summary>Whether the code is drawn small down the right of the editor, a slider over what's in sight.</summary>
+    public bool Minimap = true;
+
+    /// <summary>Whether the names of parameters and the like are written faintly in among the code, inlay hints.</summary>
+    public bool InlayHints = true;
+
+    /// <summary>Whether the workspace's repositories are fetched from their remotes every few minutes, for behind to be known.</summary>
+    public bool GitAutoFetch = true;
+
     /// <summary>Whether F5 says what a file printed and declared in the console of the terminal page rather than the output.</summary>
     public bool RunToTerminal;
 
@@ -219,6 +231,10 @@ internal sealed class HexSettings
             BackdropWrapMargin = Math.Clamp(Number(values, "backdrop_wrap_margin", BackdropWrapMargin), 0.0f, 80.0f);
             WrapFlow = Math.Clamp(Number(values, "wrap_flow", WrapFlow), 0.0f, 60.0f);
             WrapCode = Flag(values, "wrap_code", WrapCode);
+            GitBlame = Flag(values, "git_blame", GitBlame);
+            Minimap = Flag(values, "minimap", Minimap);
+            InlayHints = Flag(values, "inlay_hints", InlayHints);
+            GitAutoFetch = Flag(values, "git_autofetch", GitAutoFetch);
             if (values.TryGetValue("effects", out var effects) && effects is StringValue { Value: "none" or "subtle" or "all" } effected) Effects = effected.Value;
             EffectSparks = Flag(values, "effect_sparks", EffectSparks);
             EffectMotion = Flag(values, "effect_motion", EffectMotion);
@@ -407,6 +423,10 @@ internal sealed class HexSettings
             .Add("backdrop_wrap_margin", BackdropWrapMargin)
             .Add("wrap_flow", WrapFlow)
             .Add("wrap_code", WrapCode)
+            .Add("git_blame", GitBlame)
+            .Add("minimap", Minimap)
+            .Add("inlay_hints", InlayHints)
+            .Add("git_autofetch", GitAutoFetch)
             .Add("effects", Effects)
             .Add("effect_sparks", EffectSparks)
             .Add("effect_motion", EffectMotion)

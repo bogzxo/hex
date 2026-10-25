@@ -53,6 +53,7 @@ internal sealed partial class DawnScene
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
         editor.WordWrap = settings.WrapCode;
+        editor.Minimap = settings.Minimap;
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);

@@ -31,6 +31,8 @@
     <PublishTrimmed>true</PublishTrimmed>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
+    <!-- The native compiler's own Hex.pdb, 100 MB of it, came along anyway when Visual Studio published -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
 
   <!--

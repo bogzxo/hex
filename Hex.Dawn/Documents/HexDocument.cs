@@ -90,6 +90,18 @@ internal sealed partial class HexDocument
     /// <summary>Which view of an extension the file is shown in, while <see cref="View"/> is Extension.</summary>
     public string? ExtensionView { get; set; }
 
+    /// <summary>The picture a picture file is, shown in place of any code, null for every other file. Never saved.</summary>
+    public Horizon.Graphics.Texture? Picture { get; set; }
+
+    /// <summary>The file a diff tab shows the changes of, null for every tab that isn't one. A diff is only looked at, never saved.</summary>
+    public string? DiffOf { get; set; }
+
+    /// <summary>Which changes of <see cref="DiffOf"/> it shows (git's unstaged or staged, against the disk), so each has a tab of its own.</summary>
+    public string DiffKind { get; set; } = string.Empty;
+
+    /// <summary>The line each change of a diff tab starts on, for going from one to the next.</summary>
+    public IReadOnlyList<int> DiffChanges { get; set; } = [];
+
     /// <summary>Whether the code of a layout was changed by hand since it was last written out of the layout, and not applied yet.</summary>
     public bool CodeEdited { get; set; }
 

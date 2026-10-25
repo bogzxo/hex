@@ -266,7 +266,8 @@ internal sealed partial class HexDesigner
         if (recordPending && !compositor.Pointer.Down && (settleTimer -= dt) <= 0.0f)
         {
             recordPending = false;
-            document.Record();
+            if (document.Record())
+                ForgetUndoneTexts();
         }
     }
 }

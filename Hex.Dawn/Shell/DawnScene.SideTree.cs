@@ -65,6 +65,7 @@ internal sealed partial class DawnScene
             items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
 
         sideTree.Items = items;
+        DecorateRows();
         ShowOpenInExplorer();
     }
 
@@ -96,6 +97,7 @@ internal sealed partial class DawnScene
 
         explorer.explorerRows.Add((entry.Path, true, item));
         explorerMade++;
+        DecorateRow(item, entry.Path, true, entry.IsRoot ? null : FolderColor);
 
         if (open)
             FillFolder(item);
@@ -139,6 +141,7 @@ internal sealed partial class DawnScene
 
             explorer.explorerRows.Add((file, false, row));
             explorerMade++;
+            DecorateRow(row, file, false, null);
         }
     }
 
@@ -197,6 +200,7 @@ internal sealed partial class DawnScene
             items.Add(FileItem(file, false, Path.GetFileName(file)));
 
         sideTree.Items = items;
+        DecorateRows();
     }
 
     private UITreeItem FileItem(string path, bool isDirectory, string text, string? icon = null)
@@ -220,7 +224,7 @@ internal sealed partial class DawnScene
         treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
 
-        List<OutlineEntry> entries = OutlineHere();
+        List<OutlineEntry> entries = KeptOutline();
         var items = new List<UITreeItem>();
         var open = new List<(int Depth, UITreeItem Item, string Key)>();
 

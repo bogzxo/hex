@@ -82,6 +82,7 @@ internal sealed partial class DawnScene
         commands.Declare("View", "palette", "sides", "toggles", "zoom", "look");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
+        commands.Declare("Git", "changes", "branches", "sync", "history");
         commands.Declare("Layout", "add", "group", "move", "select", "screen");
         commands.Declare("Help", "help", "about");
     }

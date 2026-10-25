@@ -147,6 +147,7 @@ internal sealed partial class DawnScene
             TestDraggingEdges(test);
             TestSlidingSides(test);
             TestSettings(test);
+            TestLayoutTexts(test);
         }),
         ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>
         {
@@ -158,6 +159,11 @@ internal sealed partial class DawnScene
             TestDocs(test);
             TestArt(test);
             TestCodeFont(test);
+            TestZoomKeepsPlace(test);
+            TestMinimap(test);
+            TestTodos(test);
+            TestPeek(test);
+            TestInlays(test);
             TestLanguages(test);
             TestTable(test);
             TestLayoutAsCode(test);
@@ -198,14 +204,20 @@ internal sealed partial class DawnScene
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
-        ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away", TestAnyFile),
+        ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away, pictures", test =>
+        {
+            TestPictures(test);
+            TestAnyFile(test);
+        }),
         ("emmet", "Emmet, an abbreviation in an .html file written out on Tab, undone in one step, and a word that isn't one left to indent", TestEmmet),
         ("tools", "the catalog's editing extensions on the real editor, Text tools sorting the selected lines, a snippet written out and gone through on Tab", TestTools),
         ("catalog","the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
+        ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
+        ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

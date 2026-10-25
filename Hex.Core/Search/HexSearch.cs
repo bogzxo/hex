@@ -34,6 +34,10 @@ internal static class HexSearch
     /// </summary>
     public static List<string> TextFilesUnder(IReadOnlyList<string> roots) => Under(roots, "*", UIFileKinds.IsText);
 
+    /// <summary>The files quick open lists, every one that reads as text and whatever else the editor opens (pictures).</summary>
+    public static List<string> OpenableFilesUnder(IReadOnlyList<string> roots, Func<string, bool> alsoOpens) =>
+        Under(roots, "*", path => UIFileKinds.IsText(path) || alsoOpens(path));
+
     private static List<string> Under(IReadOnlyList<string> roots, string pattern, Func<string, bool>? keep = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

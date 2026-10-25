@@ -182,12 +182,13 @@ public class CatalogExtensionTests
 
     /* Pretty JSON */
 
-    private static FakeHex Json(string text)
+    private static FakeHex Json(string text, bool trailingCommas = true)
     {
         var hex = FakeHex.Load("pretty_json", before: hex =>
         {
             hex.Settings["indent"] = new NumberValue(4);
             hex.Settings["check_on_save"] = Values.True;
+            hex.Settings["trailing_commas"] = trailingCommas ? Values.True : Values.False;
         });
         hex.File = "C:/data/thing.json";
         hex.Text = text;
@@ -214,10 +215,41 @@ public class CatalogExtensionTests
     [InlineData("{\"a\" 1}", "line 1, column 6")]
     public void What_isnt_json_is_said_where_and_left_as_it_is(string text, string where)
     {
-        var hex = Json(text);
+        // Strict, so the comma before the } counts as wrong
+        var hex = Json(text, trailingCommas: false);
         hex.Run("Format JSON");
         Assert.Equal(text, hex.Text);
         Assert.Contains(hex.Said, said => said.Contains(where, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_comma_after_the_last_item_is_fine_and_formatted_away()
+    {
+        var hex = Json("{\n  \"a\": [1, 2,],\n  \"b\": {\"c\": true,},\n}");
+        hex.Run("Check JSON");
+        Assert.Contains(hex.Said, said => said.Contains("strict JSON wouldn't take", StringComparison.Ordinal));
+
+        hex.Call("on_save", hex.Object, new StringValue(hex.File));
+        Assert.Empty(hex.Problems);
+
+        hex.Run("Format JSON");
+        Assert.Equal("{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    }\n}\n", hex.Text);
+
+        // Still no empty items, a comma on its own is wrong either way
+        hex = Json("[1,,2]");
+        hex.Run("Format JSON");
+        Assert.Equal("[1,,2]", hex.Text);
+        hex = Json("{,}");
+        hex.Run("Format JSON");
+        Assert.Equal("{,}", hex.Text);
+    }
+
+    [Fact]
+    public void Strict_calls_a_comma_after_the_last_item_wrong_on_save()
+    {
+        var hex = Json("[1, 2,]", trailingCommas: false);
+        hex.Call("on_save", hex.Object, new StringValue(hex.File));
+        Assert.Equal(["1: a comma before the ] with nothing after it"], hex.Problems);
     }
 
     [Fact]

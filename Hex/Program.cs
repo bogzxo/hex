@@ -22,6 +22,7 @@ internal static partial class Program
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
         if (args.Any(arg => arg is "--help" or "-h" or "-?" or "/?" or "/h"))
         {

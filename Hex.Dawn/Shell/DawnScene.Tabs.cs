@@ -59,6 +59,7 @@ internal sealed partial class DawnScene
             tab.IconColor = shown.IsText ? null : FolderColor;
             tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
+            tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
         }
 
@@ -134,6 +135,10 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, the breadcrumbs, put together again when the file, the caret's line or the selection moved.</summary>
     private void UpdateCrumbs()
     {
+        // Asked every tick, so a change to the outline is worked out once the typing stops
+        if (!LayoutTools)
+            KeptOutline();
+
         var now = (document, code.Document.Version, code.Document.Caret.Line, LayoutTools ? document.Selected : null, document.View);
         if (crumbsFor == now)
             return;
@@ -178,7 +183,7 @@ internal sealed partial class DawnScene
         else
         {
             // The lets and keys the caret is inside of, by the outline
-            foreach (var entry in OutlineAt(code.Text, code.Document.Caret.Line, document?.Path))
+            foreach (var entry in OutlineAt(KeptOutline(), code.Document.Caret.Line))
             {
                 crumbParts.Add(entry.Depth == 0 ? $"$(symbol-variable) {entry.Name}" : $"$(symbol-field) {entry.Name}");
                 crumbActions.Add(() => code.GoTo(entry.Line, entry.Column));
@@ -189,10 +194,10 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The entries of the outline a line is inside of, the outermost first, by how deep each is.</summary>
-    private static List<OutlineEntry> OutlineAt(string text, int line, string? path = null)
+    private static List<OutlineEntry> OutlineAt(List<OutlineEntry> outline, int line)
     {
         var chain = new List<OutlineEntry>();
-        foreach (OutlineEntry entry in HexOutline.Outline(text, path))
+        foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > line)
                 break;

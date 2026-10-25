@@ -63,8 +63,12 @@ public static class DawnProgram
         {
             // The test makes and saves layouts of its own, somewhere nobody's work is in the way of it
             workspace = Path.Combine(Path.GetTempPath(), "horizon-hex-selftest");
-            if (Directory.Exists(workspace))
-                Directory.Delete(workspace, recursive: true);
+            if (!TryClear(workspace))
+            {
+                // Another Hex has it open (a second test going at the same time), so this one has a folder of its own
+                workspace += "-" + System.Environment.ProcessId;
+                TryClear(workspace);
+            }
 
             // And the terminal's files (Dusk's, %AppData%\Dusk) in a home of the test's own, so nobody's settings, keys
             // or plugins are read or written by it
@@ -120,6 +124,8 @@ public static class DawnProgram
                 WindowTitle = "Hex",
                 WindowIcon = HexIdentity.ICON,
                 CustomFrame = true,
+                // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
+                ScaleToDisplay = !selfTest,
                 AppId = "hex-dawn",
 
 
@@ -136,7 +142,9 @@ public static class DawnProgram
         // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("engine made");
         var scene = new DawnScene(options);
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
         // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
         // is the one mode and nothing else
@@ -198,6 +206,28 @@ public static class DawnProgram
             return [];
 
         return [.. args.Skip(index + 1).TakeWhile(value => !value.StartsWith("--"))];
+    }
+
+    /// <summary>
+    /// Helper method to empty the self test's folder, false when something has it open. The git suite's repository has
+    /// git's read only objects in it, which Directory.Delete won't touch, so they're made writable first.
+    /// </summary>
+    private static bool TryClear(string folder)
+    {
+        if (!Directory.Exists(folder))
+            return true;
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(folder, recursive: true);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static Vector2? ParseSize(string? text)

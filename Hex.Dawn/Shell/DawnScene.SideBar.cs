@@ -19,7 +19,10 @@ internal enum HexSide
     Design,
 
     // Debugging, the stack where it stopped, the variables and the breakpoints
-    Debug
+    Debug,
+
+    // Git, what's changed in the repositories of the workspace, staged or not, and committing it
+    SourceControl
 }
 
 // The activity bar down the left and the side bar next to it, VS Code's. A file of code has the explorer, search and
@@ -74,6 +77,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").OnPressed = () => ShowSide(HexSide.Outline);
         layout.Get<Button>("act_design").OnPressed = () => ShowSide(HexSide.Design);
         layout.Get<Button>("act_debug").OnPressed = () => ShowSide(HexSide.Debug);
+        layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
         layout.Get<Button>("act_extensions").OnPressed = () =>
         {
@@ -126,8 +130,11 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").Selected = side == HexSide.Outline;
         layout.Get<Button>("act_design").Selected = side == HexSide.Design;
         layout.Get<Button>("act_debug").Selected = side == HexSide.Debug;
+        layout.Get<Button>("act_git").Selected = side == HexSide.SourceControl;
         layout.Get<Button>("act_outline").Visible = !tools;
         layout.Get<Button>("act_design").Visible = tools;
+        if (refreshButton is not null)
+            refreshButton.Visible = side == HexSide.Explorer;
         treeScroll.Offset = 0;
     }
 }
