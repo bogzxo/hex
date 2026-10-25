@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
         sources.AddRange(settingSources.Select(added => added.Source()));
         sources.Add(new TerminalSettingsSource(terminals, EditorSettingsCatalog.THEME));
         sources.Add(new WindowsSource());
+        sources.Add(new DefaultTerminalSource(said => Notify(said, error: true)));
         settingsView = new SettingsWindow(sources, CloseSettings, EditorSettingsCatalog.Parts, sections: EditorSettingsCatalog.Sections);
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = Glassy ? HexGlass.Window(PopupGlass) : null;

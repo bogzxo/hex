@@ -146,6 +146,14 @@ internal sealed partial class DuskScene : Scene
         ReadBackdrop();
         StartInstance();
 
+        // Started by Windows for a console it's passing on, which is the first tab, a shell of its own would only be in the way
+        if (options.Handoff)
+        {
+            handoffWaitingSince = System.Environment.TickCount64;
+            host.Raise("on_start");
+            return;
+        }
+
         // The tabs of last time when there were any and the settings say so, otherwise one of the profile asked for (with
         // the command line it was started to run typed into it, a task of Dawn's)
         if (options.Profile is null && options.Run is null && !options.SelfTest && settings.RestoreSessions && RestoreSession())
@@ -246,6 +254,7 @@ internal sealed partial class DuskScene : Scene
         UpdateKeys();
         UpdateQuake();
         UpdateInstance();
+        UpdateHandoffs();
         UpdateStatusBar();
         host.Update(dt);
         UpdateSession(dt);

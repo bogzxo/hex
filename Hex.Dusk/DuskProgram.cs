@@ -22,6 +22,7 @@ public static class DuskProgram
     private const string ARGUMENT_TOGGLE = "--toggle";
     private const string ARGUMENT_WINDOW = "--window";
     private const string ARGUMENT_RUN = "--run";
+    private const string ARGUMENT_EXEC = "-e";
 
     /// <summary>
     /// Starts the terminal. Without arguments it comes up maximised with the machine's usual shell in a tab.
@@ -47,7 +48,20 @@ public static class DuskProgram
     /// </summary>
     public static void Run(string[] args)
     {
+        // What a desktop's default terminal is started with to run something, -e and the command (xdg-terminal-exec,
+        // GNOME's setting), the rest of the line being the command and nothing of Dusk's
+        int exec = Array.FindIndex(args, arg => arg == ARGUMENT_EXEC);
+        string? command = exec >= 0 && exec + 1 < args.Length ? string.Join(' ', args[(exec + 1)..].Select(Quoted)) : null;
+        if (exec >= 0)
+            args = args[..exec];
+
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
+
+        // Windows started this for a console it's passing on (COM adds -Embedding to the command line it was told), and
+        // it comes to this Dusk whatever other Dusk is running, the console can't be told to one of them
+        bool handoff = args.Any(arg => arg.Equals("-Embedding", StringComparison.OrdinalIgnoreCase) || arg.Equals("/Embedding", StringComparison.OrdinalIgnoreCase));
+        if (OperatingSystem.IsWindows() && !selfTest)
+            ListenForConsoles(handoff);
 
         // A folder that was named is meant from where Dusk was started, the rest (its skin, fonts, plugins) is next to it
         string startIn = ValueOf(args, ARGUMENT_CWD) is { } named ? Path.GetFullPath(named) : Directory.GetCurrentDirectory();
@@ -71,8 +85,8 @@ public static class DuskProgram
 
         // A Dusk running already takes it as a tab of its own, and this one leaves
         // The command line last, it's the one part that can have a bar in it
-        string? run = ValueOf(args, ARGUMENT_RUN);
-        if (!selfTest && !args.Contains(ARGUMENT_WINDOW)
+        string? run = ValueOf(args, ARGUMENT_RUN) ?? command;
+        if (!selfTest && !handoff && !args.Contains(ARGUMENT_WINDOW)
             && Hex.Shell.HexInstance.Tell(Hex.Shell.HexMode.Dusk, $"tab|{startIn}|{ValueOf(args, ARGUMENT_PROFILE) ?? string.Empty}|{run ?? string.Empty}"))
             return;
 
@@ -86,7 +100,8 @@ public static class DuskProgram
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             App: args.Contains(ARGUMENT_APP),
             RealKeys: args.Contains(ARGUMENT_REAL_KEYS),
-            Run: run);
+            Run: run,
+            Handoff: handoff);
 
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
@@ -139,6 +154,28 @@ public static class DuskProgram
             StartIn: folder is not null && Directory.Exists(folder) ? Path.GetFullPath(folder) : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             Scale: null));
 
+    /// <summary>
+    /// Takes the consoles Windows passes on (DuskHandoff), when Dusk is the default terminal or Windows started this Dusk
+    /// for one, and starts or stops taking them as the settings switch it.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void ListenForConsoles(bool handoff)
+    {
+        if (handoff || HexDefaultTerminal.Installed)
+            DuskHandoff.Listen();
+
+        DefaultTerminalSource.Switched += on =>
+        {
+            if (on)
+                DuskHandoff.Listen();
+            else
+                DuskHandoff.Stop();
+        };
+    }
+
+    // A word of a command put back together, quoted when it has a space in it
+    private static string Quoted(string word) => word.Contains(' ') && !word.StartsWith('"') ? $"\"{word}\"" : word;
+
     private static string? ValueOf(string[] args, string name)
     {
         int index = Array.IndexOf(args, name);
@@ -179,4 +216,4 @@ public static class DuskProgram
 /// <param name="App">Whether the self test runs in application mode, as Dusk really runs.</param>
 /// <param name="RealKeys">Whether the parts of the self test that press real keys run without being named, keys, history and repl.</param>
 /// <param name="Run">A command line typed into the first tab once its shell is up, null for none.</param>
-internal sealed record DuskOptions(bool SelfTest, bool Exit, bool Watch, string? Profile, string StartIn, float? Scale, string[]? Suites = null, bool App = false, bool RealKeys = false, string? Run = null);
+internal sealed record DuskOptions(bool SelfTest, bool Exit, bool Watch, string? Profile, string StartIn, float? Scale, string[]? Suites = null, bool App = false, bool RealKeys = false, string? Run = null, bool Handoff = false);

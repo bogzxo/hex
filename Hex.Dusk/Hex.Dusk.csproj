@@ -9,7 +9,7 @@
     <OutputType>Library</OutputType>
 
     <!-- Dusk's own version, what About says -->
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <InvariantGlobalization>true</InvariantGlobalization>

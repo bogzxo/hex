@@ -175,7 +175,16 @@ Hex runs on Windows, Linux and macOS, with the .NET 11 SDK on each.
 
 Settings are in `%AppData%\Hex` (or a `settings` folder next to Hex.exe), `~/Library/Application Support/Hex` and
 `~/.config/hex`. A Dusk drop down key is Windows' own there, on Linux and macOS it's the desktop's: bind
-`hex --dusk --toggle` to it in the keyboard settings. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
+`hex --dusk --toggle` to it in the keyboard settings.
+
+Dusk can be the system's terminal, Terminal, System, Dusk as the default terminal, in either mode's settings. On Windows
+a console program started from anywhere but a terminal (cmd from the Run box, a script double clicked) then opens in
+Dusk, a tab of the Dusk that's open or a Dusk of its own. Windows passes a console on through Windows Terminal's
+console host (it's the only one that hands consoles to a terminal), so Windows Terminal has to be installed, it comes
+with Windows 11, but the program shows up in Dusk. It's `HKCU\Console\%%Startup` and Dusk registered as a COM server
+under `HKCU\Software\Classes`, nothing needing admin, and switching it off puts back the terminal that was the default
+before. On Linux it's Dusk first in `xdg-terminals.list` and GNOME's own terminal setting, and Dusk takes `-e command`
+the way a desktop's terminal is asked to run something. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
 -r linux-x64`, `osx-arm64`, `win-x64`) it wants clang on Linux and the Xcode command line tools on a Mac.
 
 The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`

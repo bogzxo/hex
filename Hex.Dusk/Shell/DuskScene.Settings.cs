@@ -36,7 +36,7 @@ internal sealed partial class DuskScene
             ReadBackdrop();
         };
 
-        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, new WindowsSource()], CloseSettings, EditorSettingsCatalog.Parts,
+        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))], CloseSettings, EditorSettingsCatalog.Parts,
             sections: EditorSettingsCatalog.Sections);
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = effectGlass ? HexGlass.Window(popupGlass) : null;
