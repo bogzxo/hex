@@ -94,5 +94,100 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("launch: and the designer as ever once it isn't, the toolbar back", () =>
             plainPage is not { Visible: true } && toolbar.Visible && LayoutTools && right.Shown == !settings.PropertiesHidden);
+
+        TestPlainStart(test, Path.Combine(ofCode, "src", "main.go"));
+        TestRunButton(test);
+    }
+
+    // The plain start as a Go folder has it, no Untitled tab, no HIDL and Ln 1 in the status bar, New File first and New
+    // Layout last, and the empty layout gone for good once main.go opens
+    private void TestPlainStart(HexPointerScript test, string goFile)
+    {
+        // A button of the layout says its text by key, "@welcome.open_file", the one made in code says it
+        bool Says(Button button, string key) => button.Label == Said(key) || button.Label == "@" + key;
+        int IndexIn(UIComponent list, string key) => list.Children.ToList().FindIndex(child => child is Button { } button && Says(button, key));
+        test.Run(() =>
+        {
+            welcomeWanted = plainWelcome = true;
+            Show(NewDocument());
+            CloseAll();
+        });
+        test.Settle(0.3f);
+        test.Check("launch: started on code the empty layout has no tab, and the status bar says nothing of HIDL or where the caret is", () =>
+            PlainStart && documents.Count == 1 && docTabs.Tabs.Count == 0
+            && languageItem.IsVisible?.Invoke() == false && caretItem.IsVisible?.Invoke() == false);
+        test.Check("launch: its Start list is New File, Open File, Open Folder, the palette and New Layout last", () =>
+            plainPage is not null && Descendant<Button>(plainPage, button => Says(button, "welcome.new_file"))?.Parent is { } start
+            && IndexIn(start, "welcome.new_file") < IndexIn(start, "welcome.open_file")
+            && IndexIn(start, "welcome.open_file") < IndexIn(start, "welcome.open_folder")
+            && IndexIn(start, "welcome.commands") < IndexIn(start, "welcome.new_layout")
+            && IndexIn(start, "welcome.new_layout") < IndexIn(start, "welcome.keys"));
+
+        test.Run(() => Open(goFile));
+        test.Settle(0.3f);
+        test.Check("launch: opening main.go leaves the one tab, the empty layout closed and not hidden", () =>
+            documents.Count == 1 && document.Path is { } open && PlatformPaths.Same(open, goFile) && docTabs.Tabs.Count == 1
+            && !PlainStart && languageItem.IsVisible?.Invoke() == true);
+
+        // Back to the designer's welcome the way every other test has it
+        test.Run(() =>
+        {
+            CloseDocument(document);
+            plainWelcome = false;
+            document.View = HexView.Design;
+            ApplyView();
+        });
+        test.Settle(0.3f);
+        test.Check("launch: and the designer's welcome keeps New Layout first with New File after it", () =>
+            welcome is { Visible: true } && Descendant<Button>(welcome, button => Says(button, "welcome.new_layout"))?.Parent is { } start
+            && IndexIn(start, "welcome.new_layout") < IndexIn(start, "welcome.new_file")
+            && IndexIn(start, "welcome.new_file") < IndexIn(start, "welcome.open_file"));
+        test.Run(() => welcomeWanted = false);
+    }
+
+    // Run only over what has something to run, a layout plays, a .go has a preset, a log or markdown has nothing
+    private void TestRunButton(HexPointerScript test)
+    {
+        string folder = Path.Combine(testFolder, "launch_run");
+        string log = Path.Combine(folder, "app.log"), rej = Path.Combine(folder, "fix.rej"), md = Path.Combine(folder, "notes.md"), go = Path.Combine(folder, "main.go");
+        test.Run(() =>
+        {
+            Directory.CreateDirectory(folder);
+            System.IO.File.WriteAllText(log, "started\n");
+            System.IO.File.WriteAllText(rej, "@@ -1 +1 @@\n");
+            System.IO.File.WriteAllText(md, "# notes\n");
+            System.IO.File.WriteAllText(go, "package main\n");
+        });
+        test.Check("launch: Run is there for a layout, and for a .go Hex can set a run up for", () =>
+            Runnable(startedWith ?? document) && OpenBehindFor(go) is { } goDocument && Runnable(goDocument));
+        test.Check("launch: and not for a .log, a .rej or markdown, which have nothing to run", () =>
+            OpenBehindFor(log) is { } logDocument && !Runnable(logDocument) && OpenBehindFor(rej) is { } rejDocument && !Runnable(rejDocument)
+            && OpenBehindFor(md) is { } mdDocument && !Runnable(mdDocument));
+        test.Run(() => Open(log));
+        test.Settle(0.2f);
+        test.Check("launch: the toolbar's Run is hidden with the log on screen", () => !layout.Get<Button>("play_button").Visible);
+        test.Run(() =>
+        {
+            foreach (HexDocument open in documents.Where(open => open.Path is { } path && PlatformPaths.IsUnder(path, folder)).ToList())
+                CloseDocument(open);
+        });
+        test.Settle(0.2f);
+    }
+
+    // Helper method to open a file as text behind the one on screen for a check, the document it has
+    private HexDocument? OpenBehindFor(string path) => ((IDocuments)this).OpenBehind(path);
+
+    // Helper method to find a component inside another one, the first that's the kind and passes
+    private static T? Descendant<T>(UIComponent inside, Func<T, bool> passes) where T : UIComponent
+    {
+        foreach (UIComponent child in inside.Children)
+        {
+            if (child is T found && passes(found))
+                return found;
+            if (Descendant(child, passes) is { } deeper)
+                return deeper;
+        }
+
+        return null;
     }
 }

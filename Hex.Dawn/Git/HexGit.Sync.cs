@@ -21,6 +21,7 @@ internal sealed partial class HexGit
         fetchIn = FetchEvery;
         context.Commands.Add("Git/sync", context.Strings.Said("git.fetch"), () => Remote(FirstRepository(), RemoteWork.Fetch), icon: "cloud-download");
         context.Commands.Add("Git/sync", context.Strings.Said("git.pull"), () => Remote(FirstRepository(), RemoteWork.Pull), icon: "arrow-down");
+        context.Commands.Add("Git/sync", context.Strings.Said("git.pull_rebase"), () => Remote(FirstRepository(), RemoteWork.Pull, pullMode: "rebase"), icon: "arrow-down");
         context.Commands.Add("Git/sync", context.Strings.Said("git.push"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "arrow-up");
         context.Commands.Add("Git/sync", context.Strings.Said("git.sync"), () => AskSync(FirstRepository()), icon: "sync");
         context.Commands.Add("Git/sync", context.Strings.Said("git.publish"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
@@ -116,7 +117,8 @@ internal sealed partial class HexGit
         }
     }
 
-    private void Remote(Repository? repository, RemoteWork work)
+    // A pull is the way the setting says, unless it was asked for another way this once (Pull (Rebase))
+    private void Remote(Repository? repository, RemoteWork work, string? pullMode = null)
     {
         if (repository?.Status is not { } status || syncing)
             return;
@@ -129,7 +131,7 @@ internal sealed partial class HexGit
 
         string branch = status.Branch ?? string.Empty;
         bool upstream = status.Upstream is not null;
-        string mode = context.Settings.Values.GitPullMode;
+        string mode = pullMode ?? context.Settings.Values.GitPullMode;
         string pull = GitRepository.PullFlag(mode) is { } flag ? $"git pull {flag}" : "git pull";
         string doing = work switch
         {

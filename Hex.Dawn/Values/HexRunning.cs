@@ -112,7 +112,7 @@ internal sealed partial class HexRunning
     private TreeView valuesTree = null!;
 
     /// <summary>Whether the file on screen is one whose values are shown, any file of HIDL that isn't a layout.</summary>
-    private bool ShowsValues => document.IsText && ReferenceEquals(code.Highlighter, Horizon.UI.Scripting.CodeLanguages.Hidl);
+    internal bool ShowsValues => document.IsText && ReferenceEquals(code.Highlighter, Horizon.UI.Scripting.CodeLanguages.Hidl);
 
     /// <summary>
     /// Every tick. Runs the file again once it was left alone for a moment after a change, and takes in what the last run

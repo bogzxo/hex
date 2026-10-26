@@ -12,7 +12,7 @@ internal sealed partial class DawnScene
         (string File, string Text, string Language)[] nearest =
         [
             ("App.svelte", "<script>\n  let count = 0;\n</script>\n\n<button on:click={() => count++}>{count}</button>\n", "html"),
-            ("Cargo.toml", "[package]\nname = \"thing\"\nversion = \"0.1.0\"\n", "ini"),
+            ("Cargo.toml", "[package]\nname = \"thing\"\nversion = \"0.1.0\"\n", "toml"),
             ("x.rej", "--- a/x.cs\n+++ b/x.cs\n@@ -1,2 +1,2 @@\n-old\n+new\n", "diff")
         ];
 

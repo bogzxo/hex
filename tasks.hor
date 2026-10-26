@@ -1,11 +1,12 @@
-// The tasks of this folder, each a command line Dawn runs in a terminal tab of its own. Run Task in the Run menu
-// picks one, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task. What a compiler
-// says in one goes in the Problems panel.
+// The tasks of Hex's own repository, each a command line Dawn runs in a terminal tab of its own. Ctrl+Shift+B builds
+// Hex and F5 on a file that isn't HIDL runs it, in a window of its own so it doesn't hand itself to the Hex it was
+// started from. A build into the folder the running Hex is in moves its locked files aside first, and once it built a
+// card offers Restart into the New Build. What a compiler says in one goes in the Problems panel.
 
 let tasks = {
     build: {
         // The command line, run by the usual shell.
-        command: "dotnet build",
+        command: "dotnet build Hex/Hex.csproj",
         // Where it runs, from the workspace's folder. The folder itself when it doesn't say.
         folder: ".",
         // build, test or run. Ctrl+Shift+B runs the build one, F5 on a file that isn't HIDL the run one.
@@ -17,32 +18,31 @@ let tasks = {
         // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
         terminal: "panel",
     },
-    test: {
-        // The command line, run by the usual shell.
-        command: "dotnet test",
-        // Where it runs, from the workspace's folder. The folder itself when it doesn't say.
+    build_all: {
+        // Everything of the solution, the tests and Dusk with it.
+        command: "dotnet build Hex.sln",
         folder: ".",
-        // build, test or run. Ctrl+Shift+B runs the build one, F5 on a file that isn't HIDL the run one.
-        group: "test",
-        // Whether it is the one of its group run without asking, the first of a group is when none says.
+        group: "build",
         default: false,
-        // Another task of this file run first, this one only once that worked. The run task names the build one.
         depends_on: "",
-        // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
+        terminal: "panel",
+    },
+    test: {
+        // The unit tests, the self tests are Hex.exe --selftest.
+        command: "dotnet test Hex.Tests/Hex.Tests.csproj",
+        folder: ".",
+        group: "test",
+        default: true,
+        depends_on: "",
         terminal: "panel",
     },
     run: {
-        // The command line, run by the usual shell.
-        command: "dotnet run",
-        // Where it runs, from the workspace's folder. The folder itself when it doesn't say.
+        // Hex built and started, --window so it's a window of its own and not handed to the Hex that's running.
+        command: "dotnet run --project Hex/Hex.csproj --no-build -- --window",
         folder: ".",
-        // build, test or run. Ctrl+Shift+B runs the build one, F5 on a file that isn't HIDL the run one.
         group: "run",
-        // Whether it is the one of its group run without asking, the first of a group is when none says.
-        default: false,
-        // Another task of this file run first, this one only once that worked. The run task names the build one.
-        depends_on: "",
-        // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
+        default: true,
+        depends_on: "build",
         terminal: "panel",
     },
 };

@@ -20,6 +20,32 @@ internal sealed partial class DawnScene
     private void WireToolbar()
     {
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
+        WireExplorerMenu();
+    }
+
+    /// <summary>
+    /// What the explorer's menu does with the rest of the editor, Open in Terminal a terminal tab in the folder and Find in
+    /// Folder the search view looking only in it.
+    /// </summary>
+    private void WireExplorerMenu()
+    {
+        explorer.OpenTerminalIn = folder =>
+        {
+            ShowPanel(CONSOLE_PAGE);
+            terminalPanel.NewTab(terminals.UsualProfile, folder);
+        };
+
+        explorer.FindInFolder = (_, scope) =>
+        {
+            FindInFiles();
+            if (searchView is null)
+                return;
+
+            ShowSearchScope(true);
+            searchInclude.Text = scope;
+            if (searchQuery.Text.Length > 0)
+                SearchNow();
+        };
     }
 
     /// <summary>

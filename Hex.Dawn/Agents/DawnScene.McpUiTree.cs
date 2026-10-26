@@ -43,8 +43,11 @@ internal sealed partial class DawnScene
     /// <summary>A point in window pixels as the compositors' world has it, where the agent's pointer goes.</summary>
     private Vector2 McpWorld(Vector2 window) => camera.ScreenToWorld(window);
 
-    /// <summary>What a component says, its text, label or what's typed in it, its icons left out.</summary>
-    private static string McpTextOf(UIComponent component) => Plain(component switch
+    /// <summary>
+    /// What a component says, its text, label or what's typed in it, its icons left out and its @ keys put into the words
+    /// they show as. An agent looking for "Properties" found "@properties.title" and nothing to click.
+    /// </summary>
+    private string McpTextOf(UIComponent component) => Plain(compositor.Resolve(component switch
     {
         Label shown => shown.Text,
         Button pressed => pressed.Label,
@@ -52,7 +55,7 @@ internal sealed partial class DawnScene
         TextBox box => box.Text,
         CodeEditor code => $"({code.Document.LineCount} lines of code)",
         _ => string.Empty
-    });
+    }));
 
     private static string Plain(string text) => IconPattern().Replace(text, string.Empty).Replace('\n', ' ').Trim();
 
@@ -99,7 +102,7 @@ internal sealed partial class DawnScene
 
         string text = McpTextOf(component);
         if (text.Length == 0 && component.Tooltip.Length > 0)
-            text = $"tip: {Plain(component.Tooltip)}";
+            text = $"tip: {Plain(compositor.Resolve(component.Tooltip))}";
 
         into.Add(new HexScreenNode(id, component.GetType().Name, text, names.GetValueOrDefault(component), McpBox(module, component.Bounds), depth,
             component.EnabledInHierarchy, component.IsFocused, component.IsInteractive, target));
@@ -177,7 +180,7 @@ internal sealed partial class DawnScene
             Func<Vector2?> target = () => McpCenter(McpBox(module, bar.ItemBounds(item)));
             mcpTargets[id] = target;
             string text = Plain(item.Text);
-            into.Add(new HexScreenNode(id, "StatusItem", item.Tooltip.Length > 0 ? $"{text}  (tip: {Plain(item.Tooltip)})" : text, null,
+            into.Add(new HexScreenNode(id, "StatusItem", item.Tooltip.Length > 0 ? $"{text}  (tip: {Plain(compositor.Resolve(item.Tooltip))})" : text, null,
                 McpBox(module, bar.ItemBounds(item)), depth, true, false, item.OnPressed is not null, target));
         }
     }

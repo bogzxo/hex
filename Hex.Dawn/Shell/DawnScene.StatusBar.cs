@@ -46,7 +46,8 @@ internal sealed partial class DawnScene
         statusBar = layout.Get<StatusBar>("status_bar");
         BuildBranchItem();
 
-        bool Code() => !LayoutTools && document.Picture is null;
+        // The plain welcome is over an empty layout nobody opened, it isn't HIDL at Ln 1, Col 1 to anybody looking at it
+        bool Code() => !LayoutTools && document.Picture is null && !plainShown;
         bool Design() => LayoutTools;
 
         problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: Said("status_bar.problems_tip"));

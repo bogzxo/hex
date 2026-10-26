@@ -24,6 +24,9 @@ internal static partial class Program
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
         Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
+        // The old exe and dlls a build of Hex over itself moved aside go, see HexSelfBuild
+        Hex.Core.Projects.HexSelfBuild.CleanUpSoon();
+
         if (args.Any(arg => arg is "--help" or "-h" or "-?" or "/?" or "/h"))
         {
             if (OperatingSystem.IsWindows())

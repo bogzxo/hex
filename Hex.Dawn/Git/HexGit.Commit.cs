@@ -11,6 +11,10 @@ internal sealed partial class HexGit
     // What happens once a commit went in
     private enum CommitThen { Nothing, Push, Sync }
 
+    // What the commit is told besides its message, the hooks skipped or a Signed-off-by line added
+    [Flags]
+    private enum CommitFlags { None = 0, NoVerify = 1, SignOff = 2 }
+
     // The message of a commit that was taken back, by its repository's root, what the next commit's box starts with
     private readonly Dictionary<string, string> undone = new(PlatformPaths.Comparer);
 
@@ -23,6 +27,8 @@ internal sealed partial class HexGit
     {
         context.Commands.Add("Git/changes", context.Strings.Said("git.commit_push"), () => AskCommit(FirstRepository(), CommitThen.Push), icon: "arrow-up");
         context.Commands.Add("Git/changes", context.Strings.Said("git.commit_sync"), () => AskCommit(FirstRepository(), CommitThen.Sync), icon: "sync");
+        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_no_verify"), () => AskCommit(FirstRepository(), CommitThen.Nothing, CommitFlags.NoVerify), icon: "check");
+        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_signoff"), () => AskCommit(FirstRepository(), CommitThen.Nothing, CommitFlags.SignOff), icon: "check");
         context.Commands.Add("Git/changes", context.Strings.Said("git.amend_command"), () => AskAmend(FirstRepository()), icon: "edit");
         context.Commands.Add("Git/changes", context.Strings.Said("git.undo_command"), () => UndoLastCommit(FirstRepository()), icon: "discard");
     }
@@ -34,6 +40,8 @@ internal sealed partial class HexGit
         menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
         menu.Add(context.Strings.Said("git.commit_push"), () => AskCommit(repository, CommitThen.Push), icon: "arrow-up");
         menu.Add(context.Strings.Said("git.commit_sync"), () => AskCommit(repository, CommitThen.Sync), icon: "sync");
+        menu.Add(context.Strings.Said("git.commit_no_verify"), () => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify), icon: "check");
+        menu.Add(context.Strings.Said("git.commit_signoff"), () => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff), icon: "check");
         menu.AddSeparator();
         menu.Add(context.Strings.Said("git.amend_command"), () => AskAmend(repository), icon: "edit");
         menu.Add(context.Strings.Said("git.undo_command"), () => UndoLastCommit(repository), icon: "discard");
@@ -70,7 +78,7 @@ internal sealed partial class HexGit
     /// </summary>
     private void AskCommit(Repository? repository) => AskCommit(repository, CommitThen.Nothing);
 
-    private void AskCommit(Repository? repository, CommitThen then)
+    private void AskCommit(Repository? repository, CommitThen then, CommitFlags flags = CommitFlags.None)
     {
         if (repository?.Status is not { } status)
             return;
@@ -86,14 +94,14 @@ internal sealed partial class HexGit
         string[] all = [.. status.Files.Where(pair => pair.Value.Change is not (GitChange.Ignored or GitChange.Conflicted)).Select(pair => pair.Key)];
         if (all.Length == 0 && !anyStaged)
         {
-            context.Notices.Say(context.Strings.Said("git.no_changes"));
+            context.Notices.Say(context.Strings.Said("git_branch.nothing_to_commit"));
             return;
         }
 
         string branch = status.Branch ?? "HEAD";
         if (anyStaged || context.Settings.Values.GitSmartCommit == "always")
         {
-            PromptCommit(repository, branch, all, anyStaged, then);
+            PromptCommit(repository, branch, all, anyStaged, then, flags);
             return;
         }
 
@@ -124,13 +132,13 @@ internal sealed partial class HexGit
                     return;
                 }
 
-                PromptCommit(repository, branch, all, anyStaged: false, then);
+                PromptCommit(repository, branch, all, anyStaged: false, then, flags);
             });
     }
 
     // The box for the commit's message, and the commit once it's typed, everything staged first when nothing was. It starts
     // with the message of a commit just taken back, or what git wrote for a merge going on
-    private void PromptCommit(Repository repository, string branch, string[] all, bool anyStaged, CommitThen then)
+    private void PromptCommit(Repository repository, string branch, string[] all, bool anyStaged, CommitThen then, CommitFlags flags)
     {
         string root = repository.Git.Root;
         string start = undone.GetValueOrDefault(root) ?? MergeOf(repository) ?? string.Empty;
@@ -142,11 +150,14 @@ internal sealed partial class HexGit
                 if (message.Length == 0)
                     return;
 
-                Run(repository, "git commit", () =>
+                // Said the way the terminal would have it, so a card of a hook that said no names what was run
+                bool noVerify = flags.HasFlag(CommitFlags.NoVerify), signOff = flags.HasFlag(CommitFlags.SignOff);
+                string doing = "git commit" + (noVerify ? " --no-verify" : string.Empty) + (signOff ? " --signoff" : string.Empty);
+                Run(repository, doing, () =>
                 {
                     if (!anyStaged && repository.Git.Stage(all) is { } failed)
                         return failed;
-                    return repository.Git.Commit(message);
+                    return flags == CommitFlags.None ? repository.Git.Commit(message) : repository.Git.Commit(message, noVerify, signOff);
                 }, context.Strings.Said("git.committed", ("message", message.Split('\n')[0])), () =>
                 {
                     undone.Remove(root);

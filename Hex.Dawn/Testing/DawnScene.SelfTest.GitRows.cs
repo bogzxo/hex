@@ -212,7 +212,7 @@ internal sealed partial class DawnScene
             Git(merge, "add", "a.txt");
             git.Refresh(merge);
         });
-        test.WaitFor(() => CommitRow()?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 5.0f);
+        test.WaitFor(() => Heading()?.Children?.Any(row => row.Text == Said("git.merge_changes")) == false && CommitRow()?.Text == Said("git.commit_merge"), 5.0f);
         test.Click(TreeRow(CommitRow));
         test.WaitFor(() => CommitBox() is not null, 3.0f);
         test.Check("merge: the commit box starts with git's message for the merge, its # lines left out", () =>

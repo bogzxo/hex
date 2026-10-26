@@ -31,6 +31,7 @@ internal sealed partial class HexTasks
         commands.Add("Run/tasks", context.Strings.Said("tasks.run_build_task"), RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/tasks", context.Strings.Said("tasks.configure_tasks"), ConfigureTasks, icon: "gear");
         commands.Add("Run/tasks", context.Strings.Said("tasks.set_up_run"), () => SetUpRun(), icon: "debug-alt");
+        AddSelfBuildCommands();
     }
 
     /// <summary>The tasks.hor of a workspace's folder, the one in the folder before the one in .hex, null for none.</summary>
@@ -141,10 +142,18 @@ internal sealed partial class HexTasks
         string line = CommandLineOf(task, context.Terminals.UsualProfileId);
         Exits.Remove(TabOf(task));
         if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
+        {
             context.Terminals.RunInDusk(task.WorkingFolder(), line);
-        else
+            context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
+            return;
+        }
+
+        // A build over Hex's own folder has Hex's files moved aside first, it's known how it ends in a tab of the panel
+        RunMindingSelf(task, () =>
+        {
             context.Terminals.RunInTab(TabOf(task), task.Name, task.WorkingFolder(), line, (exit, said) => Ended(task, exit, said));
-        context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
+            context.Notices.Say(context.Strings.Said("tasks.running", ("name", task.Name)));
+        });
     }
 
     /// <summary>
@@ -155,6 +164,7 @@ internal sealed partial class HexTasks
     private void Ended(HexTask task, int exit, string said)
     {
         Exits[TabOf(task)] = exit;
+        SelfBuildEnded(task, exit);
         int errors = context.Terminals.TerminalErrors;
         if (exit == 0)
         {
@@ -216,18 +226,28 @@ internal sealed partial class HexTasks
         context.Documents.Open(file);
     }
 
-    /// <summary>A tasks.hor to start from, dotnet's when the folder has a project or a solution in it, a stand-in otherwise.</summary>
+    /// <summary>
+    /// A tasks.hor to start from, dotnet's when the folder has a solution or a project (built, tested, and its startup
+    /// project run after the build), a stand-in otherwise.
+    /// </summary>
     // HIDLSerializer reads and writes a task by its members, the trimmer of a published Hex has to be told to keep them
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(HexTask))]
     internal static string TasksTemplate(string root)
     {
-        bool dotnet = Directory.EnumerateFiles(root, "*.sln").Any() || Directory.EnumerateFiles(root, "*.csproj").Any();
+        // The solution (or the project) the folder builds, one a level or two down too, and its startup project to run
+        string? target = Hex.Core.Projects.DotnetSolutions.BuildTargetIn(root)
+            ?? Directory.EnumerateFiles(root, "*.sln").Concat(Directory.EnumerateFiles(root, "*.slnx")).Concat(Directory.EnumerateFiles(root, "*.csproj")).FirstOrDefault();
         var tasks = new HIDLObject();
-        if (dotnet)
+        if (target is not null)
         {
-            tasks.Add("build", HIDLSerializer.ToObject(new HexTask { Command = "dotnet build", Group = "build", Default = true }));
-            tasks.Add("test", HIDLSerializer.ToObject(new HexTask { Command = "dotnet test", Group = "test" }));
-            tasks.Add("run", HIDLSerializer.ToObject(new HexTask { Command = "dotnet run", Group = "run" }));
+            string built = Argument(root, target);
+            var projects = Hex.Core.Projects.DotnetSolutions.ProjectsOf(target);
+            string? startup = Hex.Core.Projects.DotnetSolutions.StartupProject(projects, Path.GetFileNameWithoutExtension(target));
+            tasks.Add("build", HIDLSerializer.ToObject(new HexTask { Command = $"dotnet build {built}", Group = "build", Default = true }));
+            tasks.Add("test", HIDLSerializer.ToObject(new HexTask { Command = $"dotnet test {built}", Group = "test" }));
+            tasks.Add("run", HIDLSerializer.ToObject(startup is null
+                ? new HexTask { Command = "dotnet run", Group = "run" }
+                : new HexTask { Command = $"dotnet run --project {Argument(root, startup)} --no-build", Group = "run", DependsOn = "build" }));
         }
         else
         {
@@ -240,5 +260,12 @@ internal sealed partial class HexTasks
             .Comment("says in one goes in the Problems panel.")
             .Let("tasks", tasks)
             .Write();
+    }
+
+    // A file of the folder as a command line run there names it, from the folder with forward slashes, quoted with a space
+    private static string Argument(string root, string file)
+    {
+        string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+        return relative.Contains(' ') ? $"\"{relative}\"" : relative;
     }
 }

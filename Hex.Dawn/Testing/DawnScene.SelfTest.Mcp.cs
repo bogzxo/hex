@@ -136,10 +136,13 @@ internal sealed partial class DawnScene
         test.Check("mcp: arguments a tool doesn't take come back as its failure, with what it does take", () =>
             HexMcpTestClient.Failed(answer) && Answered().Contains("'path' is required", StringComparison.Ordinal));
 
-        // Hung up on, the status bar's item goes, and the server goes with its file when it's switched off
+        // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar
+        // jumping about) and then goes, and the server goes with its file when it's switched off
         test.Run(() => client?.Dispose());
-        test.WaitFor(() => McpClients == 0 && mcpItem.IsVisible?.Invoke() == false, 3.0f);
-        test.Check("mcp: a client hanging up takes the status bar's item with it", () => McpClients == 0 && mcpItem.IsVisible?.Invoke() == false);
+        test.WaitFor(() => McpClients == 0, 3.0f);
+        test.Check("mcp: a client hanging up is counted off, its item staying a moment", () => McpClients == 0 && mcpItem.IsVisible?.Invoke() == true);
+        test.Run(() => mcpLastOn -= MCP_LINGER_MS);
+        test.Check("mcp: and then the status bar's item goes", () => mcpItem.IsVisible?.Invoke() == false);
         test.Run(() =>
         {
             StopMcp();

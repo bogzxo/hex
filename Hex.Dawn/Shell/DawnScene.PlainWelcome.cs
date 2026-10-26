@@ -65,6 +65,33 @@ internal sealed partial class DawnScene
         return false;
     }
 
+    /// <summary>Whether the plain welcome is up over the empty layout, which then has no tab and nothing in the status bar.</summary>
+    internal bool PlainStart => plainShown;
+
+    /// <summary>
+    /// The empty layout the plain welcome was over closed for good once a real file is open beside it, so opening x.go
+    /// leaves the one tab for x.go and not an untitled layout nobody asked for next to it.
+    /// </summary>
+    private void DropPlainLayout()
+    {
+        if (!plainWelcome || plainFor is not { } empty || empty == document || documents.Count < 2 || !documents.Contains(empty))
+            return;
+
+        // Touched it's somebody's work now, it stays
+        plainFor = null;
+        if (empty.Path is not null || empty.IsText || empty.Modified || empty.CodeEdited || empty.Module.Root.Children.Any())
+            return;
+
+        stage.RemoveModule(empty.Module);
+        documents.Remove(empty);
+        documentClosed?.Invoke(empty);
+        ForgetExtensionViews(empty);
+        DropBackup(empty);
+        if (startedWith == empty)
+            startedWith = null;
+        tabsDirty = true;
+    }
+
     /// <summary>
     /// The toolbar and the Properties put away while the plain welcome is up, and back as it goes. The view itself is
     /// put back by whatever took the welcome away (a file opened, F7).
@@ -79,6 +106,9 @@ internal sealed partial class DawnScene
             return;
 
         plainShown = plain;
+
+        // The empty layout's tab goes while the welcome is over it, and comes back with the designer
+        tabsDirty = true;
         if (plain)
         {
             // Nothing typed goes into the layout's code under the welcome

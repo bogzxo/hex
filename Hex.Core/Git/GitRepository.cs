@@ -4,7 +4,7 @@ namespace Hex.Core.Git;
 /// A repository on the disk, found from a file or a folder in it, and what Hex asks of it. Every call runs git and
 /// waits, so it's all for a background thread (HexGit in Dawn does the asking and brings the answers back).
 /// </summary>
-internal sealed class GitRepository
+internal sealed partial class GitRepository
 {
     /// <summary>The folder the working tree starts in, the one with .git in it.</summary>
     public string Root { get; }

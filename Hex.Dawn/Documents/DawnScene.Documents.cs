@@ -88,6 +88,7 @@ internal sealed partial class DawnScene
 
         ApplyView();
         FoldValuesFor(shown);
+        properties?.DocumentShown();
         explorer.KeepWorkspace();
         WatchOpenFiles();
         tabsDirty = treeDirty = inspectorDirty = codeDirty = true;

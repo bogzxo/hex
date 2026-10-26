@@ -412,9 +412,9 @@ internal sealed partial class DawnScene
         test.Check("views: the code button shows its code instead, the middle to itself", () =>
             document.View == HexView.Code && !canvas.Visible && codeScroll.Visible && codeScroll.Children.Contains(code)
             && layout.Get<Button>("code_view").Selected && code.IsFocused);
-        test.Check("views: with the explorer and what is wrong with it round it, not the tools of a layout", () =>
+        test.Check("views: with the explorer and what is wrong with it round it, not the tools of a layout, the properties its file's", () =>
             !layout.Get<UIComponent>("toolbox").Visible && !layout.Get<UIComponent>("layers_section").Visible
-            && layout.Get<Label>("inspector_title").Text == compositor.Resolve("@properties.file") && !treeTitle.Text.StartsWith("LAYOUT"));
+            && layout.Get<Label>("inspector_title").Text == compositor.Resolve("@properties.title") && properties.Shows == HexPropertiesShows.Files && !treeTitle.Text.StartsWith("LAYOUT"));
 
         test.Run(() =>
         {

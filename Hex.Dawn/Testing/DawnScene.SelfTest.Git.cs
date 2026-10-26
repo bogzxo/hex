@@ -428,6 +428,9 @@ internal sealed partial class DawnScene
             DeleteGitFolder(nest);
         });
 
+        // Branch work from the Git menu in a repository of its own, merged, renamed, tagged, reverted and deleted
+        TestGitBranches(test);
+
         // A merge with a conflict in a repository of its own, the box for the commit that finishes it filled in from git's
         TestMergeMessage(test, SideRows);
 

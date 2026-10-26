@@ -24,6 +24,7 @@ internal sealed partial class HexGit
         context.Commands.Add("Git/changes", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
         context.Commands.Add("Git/changes", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
         context.Commands.Add("Git/branches", context.Strings.Said("git.branches_command"), () => ShowBranches(context.Documents.Current.Path), icon: "git-branch");
+        BuildBranchOps();
     }
 
     // The repository of the file on screen, or the workspace's first
@@ -105,7 +106,8 @@ internal sealed partial class HexGit
         }
 
         // A merge going on says so above Commit, which finishes it once the conflicts are settled
-        if (MergeOf(repository) is not null)
+        bool merge = MergeOf(repository) is not null;
+        if (merge)
         {
             items.Add(new UITreeItem(context.Strings.Said("git.merging"), "git-merge")
             {
@@ -115,15 +117,19 @@ internal sealed partial class HexGit
             });
         }
 
-        // With nothing staged and the setting saying never, Commit stages nothing for you and says so on its row
+        // With nothing staged and the setting saying never, Commit stages nothing for you and says so on its row. A merge's
+        // Commit finishes it whatever is staged, so it says no more than that, and with nothing changed there's no count
+        // of nothing to give, only a dim Commit
         int count = conflicts.Count + staged.Count + changes.Count;
         bool never = staged.Count == 0 && context.Settings.Values.GitSmartCommit == "never";
-        string commit = staged.Count > 0 ? context.Strings.Said("git.commit_staged", ("count", staged.Count.ToString()))
+        string commit = merge ? context.Strings.Said("git.commit_merge")
+            : count == 0 ? context.Strings.Said("git.commit_plain")
+            : staged.Count > 0 ? context.Strings.Said("git.commit_staged", ("count", staged.Count.ToString()))
             : never ? context.Strings.Said("git.commit_nothing_staged")
             : context.Strings.Said("git.commit_all", ("count", count.ToString()));
         items.Add(new UITreeItem(commit, "check")
         {
-            Color = count > 0 && !never ? null : context.Panels.Dim,
+            Color = merge || count > 0 && !never ? null : context.Panels.Dim,
             Tooltip = context.Strings.Said("git.commit_tip"),
             Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
             Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
@@ -131,7 +137,10 @@ internal sealed partial class HexGit
 
         if (count == 0)
         {
-            items.Add(Note(context.Strings.Said("git.no_changes")));
+            // Short enough for the side as narrow as it comes, the whole of it on the pointer
+            UITreeItem none = Note(context.Strings.Said("git.no_changes"));
+            none.Tooltip = context.Strings.Said("git_branch.nothing_to_commit");
+            items.Add(none);
             return;
         }
 

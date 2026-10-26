@@ -61,6 +61,8 @@ internal sealed partial class DawnScene
         var play = layout.Get<Button>("play_button");
         play.Label = Said(tools ? "toolbar.play" : "toolbar.run");
         play.Tooltip = Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
+        play.Visible = Runnable(document);
+        layout.Get<UIComponent>("tools_rule3").Visible = play.Visible;
 
         if (tools || table || extension || picture)
             code.Unfocus();
@@ -70,6 +72,24 @@ internal sealed partial class DawnScene
         // The side bar is the view each kind of document was left on, put back the next time round
         sideShown = null;
         treeDirty = inspectorDirty = tabsDirty = problemsDirty = true;
+    }
+
+    // The files F5 has something for without a task, the kinds Set Up F5 has a preset for (HexTasks.Presets)
+    private static readonly string[] runnableExtensions = [".d", ".di", ".cs", ".rs", ".go", ".c", ".cpp", ".cc", ".cxx", ".py", ".js", ".mjs"];
+
+    /// <summary>
+    /// Whether Run means anything for a document, what RunOrPlay would do with it. A layout plays, HIDL runs, a file with
+    /// a run task or of a language Hex can set up a run for runs. A log, a .rej, markdown or plain text has nothing to run
+    /// and a Run button over them only ever opened Set Up F5 for nothing.
+    /// </summary>
+    internal bool Runnable(HexDocument shown)
+    {
+        if (!shown.IsText || debugger.DebugStopped)
+            return true;
+        if (shown.Picture is not null || shown.Path is not { } path)
+            return false;
+
+        return IsHidl(path) || runnableExtensions.Contains(Path.GetExtension(path).ToLowerInvariant()) || tasks.RunTaskFor(path) is not null;
     }
 
     /// <summary>Shows a layout as its designer or as its code. The code typed into goes into the layout on its way to the designer.</summary>
@@ -234,7 +254,7 @@ internal sealed partial class DawnScene
             unsaved.Count == 1 ? Said("views.unsaved_one", ("names", names)) : Said("views.unsaved_many", ("count", unsaved.Count.ToString()), ("names", names)),
             new DialogChoice(Said("views.save_all"), () => SaveAllAndQuit(unsaved)),
             new DialogChoice(Said("documents.dont_save"), QuitNow),
-            new DialogChoice(Said("keys.leave_it")));
+            new DialogChoice(Said("keys.leave_it"), () => restartInto = null));
     }
 
     private void SaveAllAndQuit(List<HexDocument> unsaved)
@@ -262,6 +282,7 @@ internal sealed partial class DawnScene
         Backups.DropAll();
         debugger.Quit();
         closeConfirmed = true;
+        StartRestart();
         Engine.WindowManager.Close();
     }
 

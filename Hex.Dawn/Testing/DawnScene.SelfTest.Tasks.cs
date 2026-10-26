@@ -19,7 +19,7 @@ internal sealed partial class DawnScene
         });
         test.Check("tasks: the template of a dotnet folder reads back as its build, test and run", () =>
             tasks.TasksOf(file, folder) is var read && read.Select(task => task.Name).SequenceEqual(["build", "test", "run"])
-            && read[0] is { Command: "dotnet build", Group: "build", Default: true } && read[0].WorkingFolder() == Path.GetFullPath(folder));
+            && read[0] is { Command: "dotnet build Thing.csproj", Group: "build", Default: true } && read[0].WorkingFolder() == Path.GetFullPath(folder));
 
         // A task that says what a compiler would, written without the shell's echo of it matching (the error is in a file)
         test.Run(() =>

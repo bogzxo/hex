@@ -19,6 +19,7 @@ internal sealed partial class HexDesigner
         inspectorScroll.Visible = true;
 
         editors.Clear();
+        inspectorRows.Clear();
         foreach (var child in inspector.Children.ToArray())
             inspector.Remove(child);
 
@@ -211,6 +212,29 @@ internal sealed partial class HexDesigner
         caption.Tooltip = help;
         room.Tooltip = help;
         editors[name] = editor;
+        inspectorRows[name] = (row.Get<UIComponent>("row"), section);
+    }
+
+    // Every row of the inspector by its property and the section it's in, for the Properties panel's filter
+    private readonly Dictionary<string, (UIComponent Row, UIComponent Section)> inspectorRows = [];
+
+    /// <summary>
+    /// The rows narrowed down to the properties whose names have some text in them, the sections left with none taken away
+    /// with them, everything back for an empty filter. The Properties panel's filter box.
+    /// </summary>
+    internal void FilterRows(string text)
+    {
+        text = text.Trim();
+        var shownSections = new HashSet<UIComponent>();
+        foreach (var (name, (row, section)) in inspectorRows)
+        {
+            row.Visible = text.Length == 0 || name.Replace('_', ' ').Contains(text, StringComparison.OrdinalIgnoreCase) || name.Contains(text, StringComparison.OrdinalIgnoreCase);
+            if (row.Visible)
+                shownSections.Add(section);
+        }
+
+        foreach (var (_, section) in inspectorRows.Values)
+            section.Visible = text.Length == 0 || shownSections.Contains(section);
     }
 
     /// <summary>A number box of an editor's template, given its value, its width and what a change does.</summary>

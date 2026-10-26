@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 
+using Hex.Core.Projects;
+
 using Horizon.Core.Threading;
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -377,7 +379,21 @@ internal sealed partial class HexDebugging
     private async Task BuildAndLaunch(string project, string debugger, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow)
     {
         string folder = Path.GetDirectoryName(project)!;
+
+        // Hex debugging Hex builds into the folder it runs from, its locked files are moved aside first (HexSelfBuild)
+        List<string> moved = [];
+        try
+        {
+            if ((await HexSelfBuild.OutputFoldersOf($"dotnet build \"{project}\"", folder, DotnetProjects.Shared)).Any(HexSelfBuild.IsRunningFolder))
+                moved = HexSelfBuild.MoveAside(HexSelfBuild.RunningFolder);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException)
+        {
+            // Not knowing where it builds to, it builds and says what went wrong if it was over Hex
+        }
+
         var (built, buildSaid) = await Dotnet(folder, "build", project, "-c", "Debug", "-nologo", "-v", "q");
+        HexSelfBuild.PutBack(moved);
         if (!ReportBuild(buildSaid, folder, built, Path.GetFileName(project)))
             return;
 
@@ -393,7 +409,9 @@ internal sealed partial class HexDebugging
             return;
         }
 
-        await LaunchUnder(DebugSession.Start(debugger, ["--interpreter=vscode"]), program, folder, breakpointsNow, DebugSession.CORECLR);
+        // With what its launchSettings.json says, and --window for a Hex so it doesn't hand itself to this one
+        List<string> arguments = DotnetLaunch.ArgumentsFor(project, program, HexSelfBuild.RunningExe);
+        await LaunchUnder(DebugSession.Start(debugger, ["--interpreter=vscode"]), program, folder, breakpointsNow, DebugSession.CORECLR, arguments: arguments);
     }
 
     /// <summary>
@@ -447,7 +465,7 @@ internal sealed partial class HexDebugging
         said.Split('\n').Select(line => line.Trim()).Where(line => LinkError.IsMatch(line)).Distinct().Take(5);
 
     /// <summary>A program launched under a debugger that was started (null for one that wasn't), with the breakpoints there are.</summary>
-    private async Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow, string kind, string? output = null)
+    private async Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow, string kind, string? output = null, IReadOnlyList<string>? arguments = null)
     {
         if (session is null)
         {
@@ -460,7 +478,7 @@ internal sealed partial class HexDebugging
         }
 
         debugWork.Enqueue(() => (debugging, endedByException, debuggingKind) = (session, false, kind));
-        bool launched = await session.Launch(program, [], folder, breakpointsNow, kind, output);
+        bool launched = await session.Launch(program, arguments ?? [], folder, breakpointsNow, kind, output);
         debugWork.Enqueue(() =>
         {
             building = false;

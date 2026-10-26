@@ -364,7 +364,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("language mode: Foo.cs.orig is C#, with the C# icon in the explorer and its tab", () =>
             code.Highlighter?.Name == "C#" && HexExplorer.FileIcon(orig) == HexExplorer.FileIcon("Foo.cs") && HexExplorer.FileIcon(orig) != "file"
-            && explorer.FileIconColor(orig) == explorer.FileIconColor("Foo.cs") && IconOfDocument(document) == HexExplorer.FileIcon("Foo.cs"));
+            && explorer.FileIconColor(orig) == compositor.Skin?.Syntax?.Comment && IconOfDocument(document) == HexExplorer.FileIcon("Foo.cs"));
         test.Run(() => Open(menu));
         test.Wait();
         test.Check("language mode: menu.hor.orig is HIDL in the status bar", () =>

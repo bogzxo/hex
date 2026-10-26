@@ -177,7 +177,7 @@ internal sealed partial class DawnScene
             TestCompletion(test);
             TestParity(test);
         }),
-        ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
+        ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
             // The explorer is the side bar of a file of code, which the code's part leaves on screen
             OnCode(test, dataFile);
@@ -188,6 +188,7 @@ internal sealed partial class DawnScene
             TestKeys(test);
             TestDiskChanges(test);
             TestBackups(test);
+            TestExplorerOps(test);
         }),
         ("extensions", "editing files by their values, extensions, the move editor (on Fighter2D's own moves too), their settings tabs", test =>
         {
@@ -223,6 +224,7 @@ internal sealed partial class DawnScene
         ("tools", "the catalog's editing extensions on the real editor, Text tools sorting the selected lines, a snippet written out and gone through on Tab", TestTools),
         ("catalog","the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
+        ("properties", "the Properties panel, a file of a C# project given Copy if newer and a Build Action, several files, a folder, a picture, a component", TestProperties),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),

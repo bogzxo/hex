@@ -62,6 +62,8 @@ internal sealed partial class DawnScene
     {
         right.ToggleShown();
         settings.PropertiesHidden = !right.Shown;
+        if (!right.Shown && properties is not null)
+            properties.Pinned = false;
         SaveSettings();
     }
 

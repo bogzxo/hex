@@ -79,8 +79,9 @@ internal sealed partial class HexGit
     }
 
     // A branch's row, its name bright, the one checked out said so in the accent, what it follows dim, when it last
-    // moved in a date's colour and its last commit's subject quiet at the end
-    private static List<(string Text, UIChoiceTone Tone)> BranchRow(GitBranch branch, string where)
+    // moved in a date's colour and its last commit's subject quiet at the end. Every list of branches has them, Merge
+    // Branch and the rest of BranchOps too, so a branch looks the same wherever it's picked
+    internal static List<(string Text, UIChoiceTone Tone)> BranchRow(GitBranch branch, string where)
     {
         var row = new List<(string Text, UIChoiceTone Tone)> { (branch.Name, UIChoiceTone.Primary) };
         if (branch.Current)

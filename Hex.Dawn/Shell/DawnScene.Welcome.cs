@@ -28,6 +28,7 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, the welcome put up or taken down for what is open.</summary>
     private void UpdateWelcome()
     {
+        DropPlainLayout();
         bool welcoming = Welcoming;
 
         // Started on code, the empty layout goes to its code view once and the welcome goes over its code. Only once for
@@ -80,8 +81,11 @@ internal sealed partial class DawnScene
         if (compositor.Skin is { } skin)
             page.Color = skin.PanelColor with { W = 1.0f };
 
-        made.Get<Button>("new_layout").OnPressed = () => Show(NewDocument());
-        made.Get<Button>("open_file").OnPressed = OpenPressed;
+        var newLayout = made.Get<Button>("new_layout");
+        var openFile = made.Get<Button>("open_file");
+        newLayout.OnPressed = () => Show(NewDocument());
+        openFile.OnPressed = OpenPressed;
+        PutNewFile(into == codeScroll, newLayout, openFile, made.Get<Button>("commands"));
         made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
         made.Get<Button>("commands").OnPressed = CommandPalette;
         made.Get<Button>("keys").OnPressed = OpenKeysWindow;
@@ -105,5 +109,45 @@ internal sealed partial class DawnScene
             Hint(list, Said("welcome.no_recent"));
 
         return page;
+    }
+
+    /// <summary>
+    /// A New File put in the Start list, made like Open File beside it. On the plain welcome it goes first and New Layout
+    /// goes to the bottom, somebody who writes Go wants a file before a layout, on the designer's welcome it sits after
+    /// New Layout.
+    /// </summary>
+    private void PutNewFile(bool plain, Button newLayout, Button like, Button last)
+    {
+        if (like.Parent is not { } start)
+            return;
+
+        var newFile = new Button
+        {
+            Label = Said("welcome.new_file"),
+            Icon = "file-add",
+            Style = like.Style,
+            LabelScale = like.LabelScale,
+            Anchor = like.Anchor,
+            Pivot = like.Pivot,
+            Hover = like.Hover,
+            HoverAmount = like.HoverAmount,
+            HoverTime = like.HoverTime,
+            OnPressed = NewFileFromWelcome,
+        };
+
+        int IndexOf(UIComponent child) => start.Children.ToList().IndexOf(child);
+
+        start.Insert(plain ? IndexOf(newLayout) : IndexOf(newLayout) + 1, newFile);
+        if (plain)
+            start.MoveChild(newLayout, IndexOf(last));
+    }
+
+    /// <summary>The welcome's New File, asked for by name in the first folder of the workspace, a scratchpad with none open.</summary>
+    private void NewFileFromWelcome()
+    {
+        if (explorer.workspace.IsEmpty)
+            NewScratchpad();
+        else
+            explorer.NewFileIn(explorer.workspace.Folders[0]);
     }
 }

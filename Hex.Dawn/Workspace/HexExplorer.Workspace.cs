@@ -166,7 +166,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", folder), ("count", HexText.Count("folder", workspace.Folders.Count))));
+        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)) is { Length: > 0 } named ? named : folder), ("count", HexText.Count("folder", workspace.Folders.Count))));
     }
 
     /// <summary>A workspace of one folder, the one that was open going away (its file stays where it is).</summary>

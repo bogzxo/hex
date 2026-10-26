@@ -17,6 +17,7 @@ internal sealed partial class DawnScene
     private readonly List<string> crumbParts = [];
     private readonly List<Action> crumbActions = [];
     private (HexDocument? Document, int Version, int Line, UIComponent? Selected, HexView View) crumbsFor;
+    private bool crumbsPlain;
 
     private void BuildTabs()
     {
@@ -43,6 +44,16 @@ internal sealed partial class DawnScene
     {
         tabButtons.Clear();
 
+        // The plain welcome over the empty layout is no file anybody opened, so no tab says "Untitled". Only ever the one
+        // document then, so the tabs left still line up with the documents
+        if (plainShown && documents.Count == 1)
+        {
+            docTabs.Tabs.Clear();
+            docTabs.Selected = -1;
+            RetitleWindow();
+            return;
+        }
+
         while (docTabs.Tabs.Count > documents.Count)
             docTabs.Tabs.RemoveAt(docTabs.Tabs.Count - 1);
         while (docTabs.Tabs.Count < documents.Count)
@@ -64,7 +75,12 @@ internal sealed partial class DawnScene
         }
 
         docTabs.Selected = documents.IndexOf(document);
+        RetitleWindow();
+    }
 
+    /// <summary>The title bar and the window's title said for what is open.</summary>
+    private void RetitleWindow()
+    {
         // The window says what is open, with a dot while it has changes, VS Code's way
         string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
         bool changed = document.Modified || document.CodeEdited;
@@ -88,6 +104,8 @@ internal sealed partial class DawnScene
         shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
+        shown.AddSeparator();
+        shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
@@ -140,12 +158,20 @@ internal sealed partial class DawnScene
             KeptOutline();
 
         var now = (document, code.Document.Version, code.Document.Caret.Line, LayoutTools ? document.Selected : null, document.View);
-        if (crumbsFor == now)
+        if (crumbsFor == now && crumbsPlain == plainShown)
             return;
 
         crumbsFor = now;
+        crumbsPlain = plainShown;
         crumbParts.Clear();
         crumbActions.Clear();
+
+        // Nothing to say where the plain welcome is, it's no file
+        if (plainShown)
+        {
+            crumbs.Set(crumbParts);
+            return;
+        }
 
         // The folders, from the workspace's (or the repository's) down, the file with its icon
         if (document.Path is { } path)
