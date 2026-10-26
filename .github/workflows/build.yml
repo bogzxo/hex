@@ -87,4 +87,10 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "Hex $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --generate-notes
+        # A tag with a dash in it (v1.6.0-rc.1), or notes whose title says preview, go out as a prerelease, which the
+        # update check and GitHub's latest leave alone
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "Hex $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --generate-notes $prerelease
