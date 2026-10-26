@@ -10,6 +10,7 @@ namespace Hex.Tests;
 /// The extensions of the catalog that came after Emmet (Text tools, Snippets, Pretty JSON and the TODO list), each run
 /// against a <see cref="FakeHex"/> with a file on screen, the way Dawn runs it, and what they did to the file read back.
 /// </summary>
+[Collection(Timed.NAME)]
 public class CatalogExtensionTests
 {
     /* Text tools */
