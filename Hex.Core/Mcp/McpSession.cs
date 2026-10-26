@@ -37,9 +37,13 @@ internal sealed class McpSession : IDisposable
     /// <summary>Starts reading, once <see cref="Closed"/> is set, so a client that's gone at once still says so.</summary>
     public McpSession Start()
     {
+        started = true;
         new Thread(Read) { IsBackground = true, Name = "mcp session" }.Start();
         return this;
     }
+
+    // Once reading, the input is the reading thread's to close
+    private volatile bool started;
 
     /// <summary>Waits for the client to go, for no longer than a while, true when it went.</summary>
     public bool Wait(int milliseconds = Timeout.Infinite) => done.Wait(milliseconds);
@@ -61,6 +65,8 @@ internal sealed class McpSession : IDisposable
         {
             // The client went, or was cut off
         }
+
+        try { input.Dispose(); } catch (Exception) { }
 
         // What's being answered still goes out before the end, a client that wrote its last request and closed its side
         // waits for the answer on the other
@@ -129,7 +135,14 @@ internal sealed class McpSession : IDisposable
     {
         closed = true;
         try { output.Dispose(); } catch (Exception) { }
-        try { input.Dispose(); } catch (Exception) { }
+
+        // Not from here while it's being read, on Linux and macOS closing a pipe waits for a read on it to end, and the
+        // read only ends when the client hangs up. The reading thread closes it once it does
+        if (!started)
+        {
+            try { input.Dispose(); } catch (Exception) { }
+        }
+
         Close();
     }
 }
