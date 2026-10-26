@@ -288,8 +288,11 @@ internal sealed partial class DawnScene
             compositor.Skin is { Theme: "light", PanelColor.X: > 0.8f, TextColor.X: < 0.3f } && DimColor.X < 0.3f);
         test.Run(() => UseEditorTheme("horizon", save: false));
 
-        // The picture behind the code, the girl unless told otherwise, moved, sized and made fainter by its sliders
+        // The picture behind the code, off as it comes (it took from the contrast of the code) and switched on here. The
+        // girl unless told otherwise, moved, sized and made fainter by its sliders
+        test.Check("settings: the picture behind the code is off as it comes", () => !settings.BackdropOn && code.Backdrop is null);
         test.Run(() => SettingsPage!.GoTo(Hex.Shell.EditorSettingsCatalog.BACKDROP));
+        Enter("backdrop", Values.Bool(true));
         test.Wait();
         test.Check("settings: a section for the picture behind the code, the one Hex comes with in every editor, set with sliders", () =>
             settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null && code.BackdropShape is { Rows: > 0 }
@@ -339,6 +342,9 @@ internal sealed partial class DawnScene
         test.Run(() => SettingsPage!.OnButton!("backdrop_image", Hex.Shell.EditorSettingsCatalog.USUAL_PICTURE));
         test.Wait();
         test.Check("settings: and the row's button puts the usual one back", () => settings.BackdropImage.Length == 0 && Value("backdrop_image") is StringValue { Value: "" });
+        test.Run(() => SettingsPage!.Reset("backdrop"));
+        test.Wait();
+        test.Check("settings: and its reset puts it off again", () => !settings.BackdropOn && code.Backdrop is null);
 
         // The designer
         Enter("snap", new NumberValue(HexSettings.Grids[1]));

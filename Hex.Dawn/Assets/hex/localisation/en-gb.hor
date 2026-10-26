@@ -776,11 +776,12 @@ let strings = {
         zoomed_to: "zoomed to {percent}%",
         zoomed_to_fit: "zoomed to fit",
         actual_size: "actual size",
-        made_for_contain: "made for {width} x {height}, keeping its shape in the middle of other screens",
-        made_for_stretch: "made for {width} x {height}, stretching out over other screens",
+        made_for_contain: "made for {width} × {height}, keeping its shape in the middle of other screens",
+        made_for_stretch: "made for {width} × {height}, stretching out over other screens",
         made_for_any_screen: "made for any screen: laid out against whatever it's shown on",
-        design_for: "Design for {width} x {height}",
+        design_for: "Design for {width} × {height}",
         any_screen: "Any Screen",
+        screen_any: "{size}, this screen",
         contain: "Contain",
         stretch: "Stretch"
     },
@@ -1330,7 +1331,7 @@ let strings = {
         theme_tip: "The theme, click for the next",
         size_tip: "How many columns and rows the focused terminal has",
         profile_tip: "The shell of the focused terminal, click for another in a new tab",
-        size: "{columns} x {rows}"
+        size: "{columns} × {rows}"
     },
 
     dusk_modes: {
@@ -1407,6 +1408,15 @@ let strings = {
         sticky_scroll_help: "Whether the lines the top of the code is inside of (the class, the function) stay held at the top as it scrolls, so you always know where you are.",
         format_on_save_title: "Format on save",
         format_on_save_help: "Whether Ctrl+S has the file's language server format it before it's written. A file with no server that formats is saved as it is, and so is one whose server takes longer than three quarters of a second.",
+        files_exclude_title: "Files exclude",
+        files_exclude_help: "Globs of files and folders left out everywhere, the explorer, quick open, Find in Files and the watcher. ** is any number of folders, * any part of a name, a slash at the end only folders. VS Code's files.exclude.",
+        files_exclude_placeholder: "**/*.log",
+        search_exclude_title: "Search exclude",
+        search_exclude_help: "Globs left out of quick open, Find in Files and the watcher but still shown in the explorer, what gets built and what package managers fetch. On top of Files exclude. VS Code's search.exclude.",
+        search_exclude_placeholder: "**/fixtures",
+        search_use_ignore_files_title: "Use .gitignore",
+        search_use_ignore_files_help: "Whether quick open, Find in Files and the watcher leave out what each .gitignore says, the one at the top of a folder and the ones in the folders under it. The explorer still shows those files.",
+        add_pattern: "Add Pattern",
         status_tabs: "Tab Size: {count}",
         status_tip: "How the file is indented, by the settings, its .editorconfig or how it already was. Click for Editor, Text in the settings"
     },
@@ -1519,7 +1529,7 @@ let strings = {
         auto_save_help: "Whether a file of code is saved by itself a moment after typing in it stops (trailing spaces are left for a save by hand, you might be about to type after them).",
         auto_save_delay_title: "Auto save delay",
         auto_save_delay_help: "How long typing has to have stopped for, in seconds.",
-        files_associations_title: "Files associations",
+        files_associations_title: "File associations",
         files_associations_help: "Which language a file is opened as by a pattern of its name, *.orig as csharp say, for files whose extension says nothing or the wrong thing. The value is a language id, the ones Change Language Mode (Ctrl+K M) lists.",
         files_associations_key_placeholder: "*.orig",
         files_associations_value_placeholder: "csharp",
@@ -1575,6 +1585,9 @@ let strings = {
         cursor_style: "caret block underline editor.cursorStyle",
         sticky_scroll: "sticky scroll breadcrumbs scope editor.stickyScroll.enabled",
         format_on_save: "format prettier formatter editor.formatOnSave",
+        files_exclude: "files.exclude hide hidden ignore glob explorer watcher exclude",
+        search_exclude: "search.exclude ignore glob quick open find in files node_modules watcher exclude files.watcherExclude",
+        search_use_ignore_files: "search.useIgnoreFiles gitignore ignore files git",
         git_blame: "blame annotate git.blame.editorDecoration.enabled",
         git_autofetch: "autofetch git.autofetch",
         git_confirm_sync: "git.confirmSync",
@@ -1606,6 +1619,9 @@ let strings = {
         // What the settings page says of its own, the engine's page is given these (Hex.Shell's SettingsPageTexts)
         title: "Settings",
         search_placeholder: "Search settings (@modified, @id:, @section:)",
+        search_placeholder_common: "Search settings (@common, @modified, @id:, @section:)",
+        commonly_used: "Commonly used",
+        filter_common: "Commonly used settings",
         reset_to_default: "Reset to default",
         reset_to: "Reset to {value}",
         on: "On",
@@ -1681,6 +1697,30 @@ let strings = {
         now_on: "{title} is on now",
         now_off: "{title} is off now",
         back_to_window: "Ctrl+, in the file goes back to the settings window at the setting the caret is on"
+    },
+
+    // VS Code's settings brought over, and VS Code's names in Hex's settings file
+    settings_import: {
+        palette_user: "Preferences: Import VS Code Settings...",
+        palette_workspace: "Preferences: Import VS Code Workspace Settings...",
+        title: "Import VS Code settings",
+        title_workspace: "Import VS Code workspace settings",
+        from: "From {path}. Every setting ticked is set in Hex, the rest stay as they are.",
+        row: "{id} {value} -> {title} {hex}",
+        not_in_hex: "{id} {value}, not in Hex yet",
+        cant_take: "{id} {value}, {title} can't take that",
+        user_only: "{id}, {title} is only ever the user's, not a folder's",
+        empty: "there's nothing in the file",
+        import: "Import {count} settings",
+        import_one: "Import 1 setting",
+        leave: "Leave it",
+        none_found: "no VS Code settings found, looked for the settings.json of Code, Code - Insiders and VSCodium",
+        no_workspace_file: "{folder} has no .vscode\\settings.json",
+        doesnt_read: "{path} doesn't read, {error}",
+        imported: "{count} VS Code settings imported",
+        imported_left: "{count} VS Code settings imported, {left} left out that Hex hasn't got or can't take",
+        show_modified: "Show modified",
+        vscode_name: "{id} is VS Code's name, Hex calls it {key}"
     },
 
     split: {
@@ -1960,7 +2000,7 @@ let strings = {
         components_tip: "How many components the layout has, and how many are selected",
         zoom_tip: "How big the layout is drawn, click to fit it to the canvas (Ctrl+0)",
         skin_tip: "The skin the layout is shown in, a game's setting, click for the others",
-        screen_tip: "The screen the layout is laid out for",
+        screen_tip: "The screen the layout is made for, or for a layout made for any screen the one Hex is on that it is previewed on. Click for the Screen menu",
         running: "{name} running, saves reload in it",
         selection: "({count} selected)",
         components: "{count}",
@@ -2187,6 +2227,7 @@ let strings = {
         open_folder: "Open Folder...",
         outline_line: "line {line}",
         outline_empty: "Nothing declared in here yet",
+        results_most: "showing the first {count}, narrow the search",
         results_empty: "nothing"
     },
 

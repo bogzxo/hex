@@ -36,9 +36,15 @@ internal sealed partial class HexDesigner
     private readonly UIComponent palette;
     private readonly Label treeTitle;
 
-    // The screen the layouts being edited are made for, scaled to whatever room the canvas has.
-    internal static readonly Vector2 DesignSize = new(1600, 900);
-    internal static readonly UIRect DesignScreen = new(DesignSize / -2.0f, DesignSize / 2.0f);
+    // The screen a layout that doesn't say which it's made for is laid out and previewed on, the one Hex is on, so a 4K
+    // screen previews at 3840 x 2160 instead of a 1600 x 900 that was the same on every screen. A window that doesn't follow
+    // its screen (a self test, the same size anywhere) and one that doesn't know its screen yet get 1600 x 900
+    internal static Vector2 DesignSize =>
+        Horizon.Engine.GameEngine.Instance?.WindowManager is { ScreenSize: { X: >= 320.0f, Y: >= 240.0f } screen } ? screen : UsualDesign;
+
+    internal static UIRect DesignScreen => new(DesignSize / -2.0f, DesignSize / 2.0f);
+
+    private static readonly Vector2 UsualDesign = new(1600, 900);
 
     // How long a layout has to be left alone before how it is now is a step to come back to
     internal const float SETTLE_TIME = 0.3f;

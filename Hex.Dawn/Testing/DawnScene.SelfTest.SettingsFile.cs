@@ -1,3 +1,4 @@
+using Horizon.HIDL.Runtime;
 using Horizon.UI.Components;
 
 using Hex.Shell;
@@ -148,6 +149,7 @@ internal sealed partial class DawnScene
         TestSettingsPairsFile(test, () => file);
         TestSettingsFileProblems(test, () => file);
         TestSettingsTruthfulProblems(test);
+        TestVsCodeImport(test, () => file);
 
         // Everything as it was, the test's own settings again and nothing watched
         test.Run(() =>
@@ -292,6 +294,113 @@ internal sealed partial class DawnScene
             settings.Minimap == minimapWas && SettingsPage is { } page && page.Search.Text.StartsWith(Horizon.UI.Components.SettingsPage.MODIFIED, StringComparison.Ordinal));
         test.Run(() => CloseSettings());
         test.Wait();
+    }
+
+    /// <summary>
+    /// VS Code's settings brought over. A settings.json with comments and a comma after its last setting read, each id put
+    /// in Hex's words, all of them set at once, then the preview with one switch turned off leaving that one alone. Then
+    /// VS Code's name for a setting written in Hex's file said in Problems with Hex's name. The user's file is the test's.
+    /// </summary>
+    private void TestVsCodeImport(HexPointerScript test, Func<string> userFile)
+    {
+        string json = Path.Combine(testFolder, "selftest_vscode_settings.json");
+        const string TEXT = "{\n    // the way VS Code writes one\n    \"editor.tabSize\": 3,\n    /* rulers at two columns */\n    \"editor.rulers\": [80, 100],\n"
+            + "    \"files.associations\": { \"*.orig\": \"csharp\" },\n    \"editor.fontSize\": 21,\n    \"editor.wordWrap\": \"on\",\n    \"foo.bar\": 1,\n}\n";
+        VsCodeImported? imported = null;
+
+        void Start(int tabSize)
+        {
+            new TextSettingsSource(this).Set("tab_size", new NumberValue(tabSize));
+            new EditorSource(this).Set("wrap_code", Values.Bool(false));
+            new EditorSource(this).Set("code_zoom", new NumberValue(1.0f));
+        }
+
+        test.Check("vscode: JSONC parse", () =>
+        {
+            File.WriteAllText(json, TEXT);
+            var read = VsCodeSettings.Read(File.ReadAllText(json));
+            return read.Count == 6 && read["editor.tabSize"].GetInt32() == 3 && read["foo.bar"].GetInt32() == 1 && read["editor.rulers"].GetArrayLength() == 2;
+        });
+
+        test.Check("vscode: mapping", () =>
+        {
+            string[] fonts = ["hack", "cascadia_mono"];
+            var plan = VsCodeSettings.Plan(VsCodeSettings.Read(TEXT), fonts).ToDictionary(setting => setting.Id);
+            var family = VsCodeSettings.Plan(VsCodeSettings.Read("{ \"editor.fontFamily\": \"'Fira Code', 'Cascadia Mono', monospace\", \"editor.cursorStyle\": \"block-outline\" }"), fonts);
+            return plan["editor.tabSize"] is { Key: "tab_size", Value: NumberValue { Value: 3.0f } }
+                && plan["editor.rulers"] is { Key: "rulers", Value: StringValue { Value: "80, 100" } }
+                && plan["files.associations"] is { Key: "files_associations", Value: ObjectValue { Properties: { } pairs } } && pairs["*.orig"] is StringValue { Value: "csharp" }
+                && plan["editor.fontSize"] is { Key: "code_zoom", Value: NumberValue { Value: 1.5f } }
+                && plan["editor.wordWrap"] is { Key: "wrap_code", Value: BooleanValue { Value: true } }
+                && plan["foo.bar"] is { Key: null, Mapped: false }
+                && family[0] is { Key: "code_font", Value: StringValue { Value: "cascadia_mono" } } && family[1].Value is StringValue { Value: "block" };
+        });
+
+        test.Run(() =>
+        {
+            Start(4);
+            imported = Import(json, all: true);
+        });
+        test.Wait();
+        test.Check("vscode: apply", () =>
+            settings.TabSize == 3 && HexSettings.RulersText(settings.Rulers) == "80, 100" && settings.FileAssociations.GetValueOrDefault("*.orig") == "csharp"
+            && MathF.Abs(settings.CodeZoom - 1.5f) < 0.01f && settings.WrapCode && imported is { Set: 5 });
+        test.Check("vscode: unmapped report", () => imported is { Left: ["foo.bar"] }
+            && toasts.Cards.Any(card => !card.Closed && card.Text.Contains("5 VS Code settings imported, 1 left out", StringComparison.Ordinal)));
+
+        // The preview, a switch a setting and foo.bar dim, the tab size's switch off leaving the tab size as it was
+        List<ToggleButton> toggles = [];
+        test.Run(() =>
+        {
+            Start(4);
+            Import(json, all: false);
+            if (textDialog is { IsOpen: true } dialog)
+                toggles = [.. Everything(dialog.Body).OfType<ToggleButton>()];
+        });
+        test.Wait();
+        test.Check("vscode: preview shows mapped and unmapped rows", () =>
+            textDialog is { IsOpen: true } dialog && toggles.Count == 5 && toggles.All(toggle => toggle.State)
+            && toggles[0].Label == "editor.tabSize 3 -> " + Array.Find(EditorSettingsCatalog.Text, row => row.Key == "tab_size")!.Title + " 3" && dialog.Buttons[0].Label == "Import 5 settings"
+            && Everything(dialog.Body).OfType<Label>().Any(label => label.Text.Contains("foo.bar 1, not in Hex yet", StringComparison.Ordinal)));
+        test.Run(() =>
+        {
+            toggles[0].State = false;
+            toggles[0].OnPressed?.Invoke();
+        });
+        test.Wait();
+        test.Check("vscode: the button counts what's ticked", () => textDialog?.Buttons[0].Label == "Import 4 settings");
+        test.Run(() => textDialog?.Buttons[0].OnPressed?.Invoke());
+        test.Wait();
+        test.Check("vscode: unticking a row skips it", () =>
+            textDialog is not { IsOpen: true } && settings.TabSize == 4 && settings.WrapCode && MathF.Abs(settings.CodeZoom - 1.5f) < 0.01f);
+
+        test.Check("vscode: palette lists both import commands", () =>
+            AllCommands() is var all && all.Any(command => command.Text == "Preferences: Import VS Code Settings...")
+            && all.Any(command => command.Text == "Preferences: Import VS Code Workspace Settings..."));
+
+        // VS Code's name in Hex's own file, said with Hex's at its line. Writing the file puts every setting back too
+        IEnumerable<HexProblem> Mine() => problemList.Where(problem => PlatformPaths.Same(problem.Path, userFile()));
+        test.Run(() =>
+        {
+            File.Delete(json);
+            File.WriteAllText(userFile(), "let settings = {\n    editor: {\n        \"editor.tabSize\": 2\n    }\n};\n");
+        });
+        test.WaitFor(() => Mine().Any(), 3.0f);
+        test.Check("vscode: diagnostic", () =>
+            Mine().ToList() is [{ Line: 2, Column: 8, Warning: true } only] && only.Text == "editor.tabSize is VS Code's name, Hex calls it tab_size");
+        test.Run(() => File.WriteAllText(userFile(), "let settings = {\n    editor: {\n        tab_size: 4\n    }\n};\n"));
+        test.WaitFor(() => !Mine().Any() && settings.TabSize == 4, 3.0f);
+    }
+
+    // Everything inside a component, all the way down
+    private static IEnumerable<UIComponent> Everything(UIComponent of)
+    {
+        foreach (UIComponent child in of.Children)
+        {
+            yield return child;
+            foreach (UIComponent deeper in Everything(child))
+                yield return deeper;
+        }
     }
 
     // The card that says the settings file doesn't read

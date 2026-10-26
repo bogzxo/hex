@@ -12,6 +12,9 @@ public static class SettingsPageTexts
     {
         Title = Said("title"),
         SearchPlaceholder = Said("search_placeholder"),
+        SearchPlaceholderCommon = Said("search_placeholder_common"),
+        CommonlyUsed = Said("commonly_used"),
+        FilterCommon = Said("filter_common"),
         ResetToDefault = Said("reset_to_default"),
         ResetTo = Said("reset_to"),
         On = Said("on"),

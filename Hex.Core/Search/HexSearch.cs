@@ -19,8 +19,17 @@ internal readonly record struct HexResult(string Path, int Line, int Column, str
 /// </summary>
 internal static class HexSearch
 {
-    /// <summary>The folders never looked in for files of a workspace, what gets built, git's own and old builds kept on purpose.</summary>
+    /// <summary>
+    /// The folders the look for repositories inside of the workspace never goes into (HexGit.Nested), what gets built,
+    /// git's own and old builds kept on purpose. The files of a workspace go by <see cref="Excluded"/> instead.
+    /// </summary>
     public static readonly HashSet<string> SkippedFolders = new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "Build History" };
+
+    /// <summary>
+    /// What a walk of the files of a workspace leaves out, asked as each walk starts. Dawn has it go by its settings
+    /// (files_exclude, search_exclude and search_use_ignore_files), anything else by what they come as.
+    /// </summary>
+    public static Func<HexExcludes> Excluded { get; set; } = static () => HexExcludes.Usual;
 
     /// <summary>The most lines finding something lists, a search for "e" in a big repository would go on for ever.</summary>
     public const int MOST_FOUND = 2000;
@@ -42,9 +51,10 @@ internal static class HexSearch
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
+        HexExcludes excludes = Excluded();
         foreach (string root in roots)
         {
-            foreach (string file in FilesIn(root, pattern, keep))
+            foreach (string file in FilesIn(root, pattern, keep, excludes))
             {
                 if (seen.Add(file))
                     files.Add(file);
@@ -55,28 +65,45 @@ internal static class HexSearch
     }
 
     /// <summary>
-    /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
-    /// (which are the files of another repository, and there are copies of the engine in more than one).
+    /// Every .hor under a folder, leaving out what files_exclude and search_exclude say (what gets built, git's own, old
+    /// builds), what each .gitignore on the way down says while search_use_ignore_files is on, and the checkouts of
+    /// submodules (which are the files of another repository, and there are copies of the engine in more than one). A
+    /// dot folder that's none of those is looked in, .github/workflows has files people open.
     /// </summary>
-    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null)
+    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null, HexExcludes? excludes = null)
     {
+        HexExcludes leftOut = excludes ?? Excluded();
         var files = new List<string>();
-        var pending = new Stack<string>();
-        pending.Push(root);
+
+        // Each folder with where it is inside the root and the .gitignores from the root down to it, shared until a
+        // folder has one of its own
+        var pending = new Stack<(string Folder, string Relative, HexIgnoreFile[] Ignores)>();
+        pending.Push((root, string.Empty, []));
 
         while (pending.Count > 0)
         {
-            string folder = pending.Pop();
+            var (folder, relative, ignores) = pending.Pop();
             try
             {
-                files.AddRange(Directory.GetFiles(folder, pattern).Where(file => !Path.GetFileName(file).StartsWith("~syncthing~") && (keep is null || keep(file))));
+                if (leftOut.UseIgnoreFiles && HexIgnoreFile.In(folder, relative) is { } own)
+                    ignores = [.. ignores, own];
+
+                string Inside(string name) => relative.Length == 0 ? name : $"{relative}/{name}";
+                bool Out(string inside, bool isFolder) => leftOut.Skipped(inside, isFolder) || (ignores.Length > 0 && HexIgnoreFile.Ignored(ignores, inside, isFolder));
+
+                foreach (string file in Directory.GetFiles(folder, pattern))
+                {
+                    string name = Path.GetFileName(file);
+                    if (!name.StartsWith("~syncthing~") && !Out(Inside(name), false) && (keep is null || keep(file)))
+                        files.Add(file);
+                }
 
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
-                    string name = Path.GetFileName(inside);
-                    if (SkippedFolders.Contains(name) || name.StartsWith('.') || File.Exists(Path.Combine(inside, ".git")))
+                    string under = Inside(Path.GetFileName(inside));
+                    if (Out(under, true) || File.Exists(Path.Combine(inside, ".git")))
                         continue;
-                    pending.Push(inside);
+                    pending.Push((inside, under, ignores));
                 }
             }
             catch (Exception)

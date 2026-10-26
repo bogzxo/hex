@@ -73,6 +73,7 @@ internal sealed partial class DawnScene
         // Dawn's window is the editor's, the other parts fold away the first time it opens and a search puts the
         // editor's rows a little over the rest. Reset all settings asks first
         settingsView.Page.HomePart = EDITOR_PART;
+        settingsView.Page.Common = CommonSettings;
 
         // Drawn smaller than the screen would have it (a size picked small on a big screen, the self test at 1 on 4K), the
         // page zooms its text and its controls up to what the screen's usual size would draw them at
@@ -106,10 +107,30 @@ internal sealed partial class DawnScene
         foreach (var added in settingSources)
             added.Opened?.Invoke();
 
+        // A section asked for goes there, otherwise the window opens where it was left this run, its section, its search
+        // and its scroll. A setting gone to after this (Ctrl+, in the settings file) wins over that too
         if (section is not null)
             settingsView.Page.GoTo(section);
+        else if (settingsLeft is { } left && (!options.SelfTest || reopenWhereLeftInTest))
+            settingsView.Page.Restore(left.Group, left.Query, left.Offset);
         settingsView.Page.Search.Focus();
     }
+
+    // Where the settings were left the last time the window closed this run, opened there again. Not kept in a file,
+    // the next run starts at the top the way it always has
+    private (string? Group, string Query, float Offset)? settingsLeft;
+
+    // The self test opens the window afresh every time, what its parts go by, but for its own check of opening it where
+    // it was left
+    private bool reopenWhereLeftInTest;
+
+    // The settings people change the most, at the top of the window as Commonly used in this order, VS Code's list for
+    // the editor and the terminal's look and shell after it. One the window hasn't got a row for is passed over
+    private static readonly string[] CommonSettings =
+    [
+        "tab_size", "insert_spaces", "code_font", "code_zoom", "wrap_code", "auto_save", "format_on_save", "render_whitespace", "rulers", "minimap",
+        "editor_skin", "files_associations", "font", "text_scale", "profile"
+    ];
 
     // The part of the settings that's the editor's, what Dawn's window is for
     private const string EDITOR_PART = "Editor";
@@ -138,7 +159,10 @@ internal sealed partial class DawnScene
     private void CloseSettings()
     {
         if (settingsView?.Window is { Parent: { } parent } window)
+        {
+            settingsLeft = settingsView.Page.Place;
             parent.Remove(window);
+        }
         settingsView = null;
         lookPicker = null;
         userScopeTab = workspaceScopeTab = null;

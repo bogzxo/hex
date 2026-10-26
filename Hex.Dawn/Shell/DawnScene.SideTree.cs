@@ -23,12 +23,12 @@ internal sealed partial class DawnScene
     // The outline's rows that were closed, by their name and line, so they stay closed while the file is typed into
     private readonly HashSet<string> outlineClosed = new(StringComparer.Ordinal);
 
-    // What the explorer leaves out past the folders search skips (.git, bin, node_modules), VS Code's files.exclude out of
-    // the box. Every other dot file and dot folder shows, .github, .gitignore and .editorconfig are files people edit
-    private static readonly HashSet<string> HiddenInExplorer = new(StringComparer.OrdinalIgnoreCase) { ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db" };
-
     private void BuildSideTree()
     {
+        // Every walk of the workspace's files goes by the settings' files_exclude, search_exclude and .gitignores, read
+        // as each one starts, so a settings file read again or a folder's own settings count straight away
+        HexSearch.Excluded = () => settings is { } kept ? HexExcludes.Of(kept) : HexExcludes.Usual;
+
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
         sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
@@ -119,12 +119,23 @@ internal sealed partial class DawnScene
         item.Children = [];
         var (inside, files) = folders.In(folder);
         int depth = 1;
-        for (UITreeItem? at = item.Parent; at is not null; at = at.Parent) depth++;
+        UITreeItem root = item;
+        for (UITreeItem? at = item.Parent; at is not null; at = at.Parent)
+        {
+            depth++;
+            root = at;
+        }
+
+        // Only what files.exclude says is gone from the explorer, .github, .env, bin and node_modules all show the way
+        // they do in VS Code. Search.exclude and the .gitignores are quick open's and Find in Files' business
+        HexExcludes excludes = HexExcludes.Of(settings);
+        string top = root.Tooltip ?? folder;
+        bool Hidden(string path, bool isFolder) => excludes.Hidden(HexExcludes.Relative(top, path), isFolder);
 
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
-            if (HexSearch.SkippedFolders.Contains(name) || HiddenInExplorer.Contains(name) || name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(directory, true))
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
@@ -133,7 +144,7 @@ internal sealed partial class DawnScene
         foreach (string file in files)
         {
             string name = Path.GetFileName(file);
-            if (name.StartsWith("~syncthing~") || HiddenInExplorer.Contains(name) || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(file, false))
                 continue;
 
             var entry = new ExplorerEntry(file, false, depth, false);
@@ -342,8 +353,21 @@ internal sealed partial class DawnScene
         if (items.Count == 0)
             items.Add(NoteItem(Said("side_tree.results_empty"), DimColor));
 
+        // Finding stops at its most, said over them so nobody takes the list for all there is
+        if (results.Count >= HexSearch.MOST_FOUND)
+            items.Insert(0, NoteItem(ResultsMostText, DimColor));
+
         sideTree.Items = items;
     }
+
+    /// <summary>The line over the results when finding stopped at its most.</summary>
+    private string ResultsMostText => Said("side_tree.results_most", ("count", HexSearch.MOST_FOUND.ToString()));
+
+    /// <summary>
+    /// What the files of the workspace leave out changed (files_exclude, search_exclude, the .gitignores). The explorer
+    /// is put together again with what's hidden now, quick open and Find in Files read it the next time they walk.
+    /// </summary>
+    private void ExcludesChanged() => treeDirty |= Side == HexSide.Explorer;
 
     /// <summary>The list in the side bar, whatever its view is.</summary>
     private void RebuildTree()

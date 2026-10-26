@@ -54,7 +54,7 @@ internal sealed partial class HexSettings
     /// The picture behind the code (see DawnScene.Backdrop), whether it's there, which (empty for the girl that comes with
     /// Hex), how big against its pixels, how far from the bottom right corner it is, along and up, and how much of it shows.
     /// </summary>
-    public bool BackdropOn = true;
+    public bool BackdropOn;
 
     /// <summary>Whether wrapped code runs round what is drawn in the picture instead of over it (see CodeEditor.BackdropShape).</summary>
     public bool BackdropWrap = true;
@@ -185,6 +185,28 @@ internal sealed partial class HexSettings
     /// glob wins (CodeLanguages.SetAssociations), plaintext for none.
     /// </summary>
     public readonly Dictionary<string, string> FileAssociations = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What files.exclude comes as in VS Code, the folders of other version controls and the litter of file browsers,
+    /// gone from the explorer and from everything else.
+    /// </summary>
+    public static readonly string[] UsualFilesExclude = ["**/.git", "**/.svn", "**/.hg", "**/CVS", "**/.DS_Store", "**/Thumbs.db", "**/.vs"];
+
+    /// <summary>
+    /// What search.exclude comes as, what gets built and what package managers fetch, still in the explorer but not in
+    /// quick open, Find in Files or the watcher. Old builds kept on purpose too.
+    /// </summary>
+    public static readonly string[] UsualSearchExclude = ["**/node_modules", "**/bin", "**/obj", "**/venv", "**/.venv", "**/__pycache__", "**/target",
+        "**/dist", "**/.terraform", "**/.gradle", "**/.tox", "**/.pytest_cache", "**/Build History"];
+
+    /// <summary>
+    /// The globs of files.exclude and search.exclude (see HexExcludes). Each change is a new array and never one changed
+    /// in place, a walk off the editor's thread goes by the one it started with.
+    /// </summary>
+    public string[] FilesExclude = UsualFilesExclude, SearchExclude = UsualSearchExclude;
+
+    /// <summary>Whether the walk of the files leaves out what each .gitignore says as well, search.useIgnoreFiles.</summary>
+    public bool SearchUseIgnoreFiles = true;
 
     /// <summary>
     /// The language servers added in the settings, one a language, in the order they were added. One for a language
@@ -369,6 +391,9 @@ internal sealed partial class HexSettings
             FileAssociations.Clear();
             Names(values, "files_associations", FileAssociations);
         }
+        if (values.GetValueOrDefault("files_exclude") is ListValue filesExclude) FilesExclude = Patterns(filesExclude);
+        if (values.GetValueOrDefault("search_exclude") is ListValue searchExclude) SearchExclude = Patterns(searchExclude);
+        SearchUseIgnoreFiles = Flag(values, "search_use_ignore_files", SearchUseIgnoreFiles);
         ReadLanguageOverrides(values);
         ReadAddedServers(values);
         Names(values, "language_server_latest", ServerLatest);
@@ -403,6 +428,10 @@ internal sealed partial class HexSettings
 
     private static bool Flag(Dictionary<string, IRuntimeValue> values, string key, bool otherwise) =>
         values.TryGetValue(key, out var value) && value is BooleanValue flag ? flag.Value : otherwise;
+
+    /// <summary>The globs of a list as they're kept, trimmed, what isn't a text or is empty left out and each once.</summary>
+    public static string[] Patterns(ListValue list) =>
+        [.. list.Items.OfType<StringValue>().Select(item => item.Value.Trim()).Where(pattern => pattern.Length > 0).Distinct(StringComparer.Ordinal)];
 
     /// <summary>
     /// The columns of the rulers out of what was typed, "80, 120" being 80 and 120. Anything that isn't a whole number
@@ -608,6 +637,9 @@ internal sealed partial class HexSettings
             .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
             .Add("language_server_paths", Named(ServerPaths, paths: true))
             .Add("files_associations", Named(FileAssociations))
+            .Add("files_exclude", Horizon.HIDL.Library.Natives.List(FilesExclude))
+            .Add("search_exclude", Horizon.HIDL.Library.Natives.List(SearchExclude))
+            .Add("search_use_ignore_files", SearchUseIgnoreFiles)
             .Add(LANGUAGE_OVERRIDES, LanguageOverridesObject())
             .Add("language_servers_added", AddedServersObject())
             .Add("language_server_updates", ServerUpdates)

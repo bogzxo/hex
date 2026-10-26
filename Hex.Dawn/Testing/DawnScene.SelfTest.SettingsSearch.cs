@@ -142,6 +142,30 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Run(() => Shot("settings-search-ranked"));
         test.Check("search: best hit first", () => page.KeysShown is [ "code_font", .. ] && page.IsRowInView("code_font"));
+
+        // The key and the pill after it apart. Code zoom is found by its keyword font, and its key was measured short and
+        // painted whole, so it read code_zoofont with the pill over its end
+        test.Run(() => page.Find("font"));
+        test.Settle(0.2f);
+        test.Run(() => Shot("settings-search-pill"));
+        test.Check("search: pill after the key, code_zoom's font pill starts past the end of its key", () =>
+            page.KeyParts("code_zoom") is { } parts && !parts.FoundBy.IsEmpty && !parts.Key.IsEmpty && parts.FoundBy.Min.X >= parts.Key.Max.X && !parts.KeyCut
+            && page.FoundByShown("code_zoom") is { } by && by.Contains("font", StringComparison.OrdinalIgnoreCase));
+        test.Check("search: pill after the key, no key's words are painted past its own edge", () =>
+            page.KeysShown.Count > 0 && page.KeysShown.All(key => page.KeyParts(key) is { } parts && parts.KeyPainted.Max.X <= parts.Key.Max.X + 0.5f));
+
+        // Forgiving about how it's typed, spaces, underscores and VS Code's dotted ids all find the row they mean first
+        foreach (var (typed, key) in new[] { ("tabsize", "tab_size"), ("tab size", "tab_size"), ("editor.tabsize", "tab_size"), ("editor.tabSize", "tab_size"), ("word wrap", "wrap_code"), ("wordwrap", "wrap_code"), ("editor.wordWrap", "wrap_code") })
+        {
+            test.Run(() => page.Find(typed));
+            test.Check($"search: forgiving, {typed} puts {key} first", () => page.KeysShown.FirstOrDefault() == key);
+        }
+
+        var tabSize = new UISetting("tab_size", "Tab size", UIFormKind.Whole, string.Empty);
+        test.Check("search: forgiving, a word as it's written still ranks over the same found run together", () =>
+            Horizon.UI.Components.SettingsPage.Score(tabSize, "size") > Horizon.UI.Components.SettingsPage.Score(tabSize, "bsize")
+            && Horizon.UI.Components.SettingsPage.Score(tabSize, "tab") > Horizon.UI.Components.SettingsPage.Score(tabSize, "tabsi")
+            && Horizon.UI.Components.SettingsPage.Score(tabSize, "bsize") > 0 && Horizon.UI.Components.SettingsPage.Undotted("*.orig") == "*.orig");
         test.Run(() => page.Find("wordwrap"));
         test.Wait();
         test.Run(() => Shot("settings-search-found-by"));
@@ -151,7 +175,7 @@ internal sealed partial class DawnScene
         // The page's own words are en-gb's
         test.Run(() => page.Find("@id:git_blame"));
         test.Check("strings: from en-gb, how many a search found", () =>
-            page.FoundText == Said("settings_page.found_one").Replace("{count}", "1") && page.Search.Placeholder == Said("settings_page.search_placeholder"));
+            page.FoundText == Said("settings_page.found_one").Replace("{count}", "1") && page.Search.Placeholder == Said("settings_page.search_placeholder_common"));
         test.Run(() => page.Find("zzqqxx"));
         test.Check("strings: from en-gb, a search that found nothing", () =>
             page.SaysNothingFound && page.NothingText == Said("settings_page.nothing_found").Replace("{query}", "zzqqxx"));

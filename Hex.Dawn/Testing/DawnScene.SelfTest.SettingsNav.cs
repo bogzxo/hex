@@ -181,10 +181,121 @@ internal sealed partial class DawnScene
             || Group("explorer_menu") == WindowsSource.GROUP && Group("user_path") == WindowsSource.GROUP
             && !page.Settings.Any(setting => setting.Group == EditorSettingsCatalog.FILES && setting.Key is "explorer_menu" or "user_path"));
 
+        TestSettingsCommon(test);
+        TestSettingsRemembered(test);
+    }
+
+    // Commonly used at the top of the sections down the left, a click or Enter on it leaving only those rows in their
+    // own order through @common in the search, a chip there that one Backspace takes out
+    private void TestSettingsCommon(HexPointerScript test)
+    {
+        SettingsPage page = null!;
+        string[] common = [];
+        test.Run(() =>
+        {
+            page = SettingsPage!;
+            compositor.Focus = null;
+            page.Find(string.Empty);
+            common =[.. page.Common.Where(key => page.Settings.Any(setting => setting.Key == key))];
+        });
+        test.Wait();
+        test.Run(() => Shot("settings-common-nav"));
+        test.Check("settings common: Commonly used is the first entry down the left", () =>
+            page.CommonFirst && page.CommonText == Said("settings_page.commonly_used") && common.Length >= 10 && common.Contains("font") && common.Contains("tab_size"));
+
+        test.Click(In(() => page.CommonBounds, 0.4f, 0.5f));
+        test.Wait();
+        test.Run(() => Shot("settings-common-rows"));
+        test.Check("settings common: a click leaves only the commonly used rows, in their own order", () =>
+            page.ShowingCommon && page.KeysShown.SequenceEqual(common) && page.SectionsShown.Count > 0);
+        test.Check("settings common: the search has @common in it as a chip", () =>
+            page.Search.Text.Trim() == SettingsPage.COMMON && page.SearchChips.Any(chip => chip.Word == SettingsPage.COMMON && !chip.Bounds.IsEmpty));
+
+        // One Backspace after it takes the whole chip out, the rows come back
+        test.Run(() =>
+        {
+            page.Search.Focus();
+            page.Press(UIKeyboard.BACKSPACE);
+        });
+        test.Wait();
+        test.Check("settings common: Backspace after the chip takes all of it out", () =>
+            page.Search.Text.Length == 0 && !page.ShowingCommon && page.KeysShown.Count > common.Length && page.SearchChips.Count == 0);
+
+        // The keyboard gets to it like any section, Home from a link, and Enter on it goes into the first of its rows
+        test.Run(() =>
+        {
+            page.FocusNav();
+            page.Press(UIKeyboard.HOME);
+        });
+        test.Check("settings common: Home down the left goes up to Commonly used", () => page.CommonFocused);
+        test.Run(() => page.Press(UIKeyboard.DOWN));
+        test.Check("settings common: and Down goes on to the first part's heading", () => page.FocusedPart == page.PartsShown.FirstOrDefault());
+        test.Run(() =>
+        {
+            page.Press(UIKeyboard.UP);
+            page.Press(UIKeyboard.ENTER);
+        });
+        test.Wait();
+        test.Check("settings common: Enter on it shows the commonly used and goes into the first of them", () =>
+            page.ShowingCommon && page.KeysShown.SequenceEqual(common) && page.FocusedKey == common[0]);
+        test.Run(() =>
+        {
+            compositor.Focus = null;
+            page.Find(string.Empty);
+        });
+        test.Wait();
+    }
+
+    // The window opens where it was left this run, its section, its search and its scroll, and a section or a setting
+    // asked for still wins over that
+    private void TestSettingsRemembered(HexPointerScript test)
+    {
+        SettingsPage page = null!;
+        string? group = null;
+        test.Run(() =>
+        {
+            page = SettingsPage!;
+            reopenWhereLeftInTest = true;
+            page.GoTo(EditorSettingsCatalog.GIT);
+        });
+        test.Settle(0.3f);
+        test.Run(() => page.Find("blame"));
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            group = page.CurrentGroup;
+            compositor.Focus = null;
+            CloseSettings();
+        });
+        test.Wait();
+
+        // Ctrl+, for real on the keyboard
+        test.Run(() => GameEngine.Instance.Input.Play(new InputScript().Chord(0.05f, Key.ControlLeft, Key.Comma)));
+        test.WaitFor(() => SettingsPage is { Restoring: false }, 3.0f);
+        test.Settle(0.3f);
+        test.Run(() => Shot("settings-remembered"));
+        test.Check("settings remembered: Ctrl+, opens it again on the same search and section", () =>
+            SettingsPage is { } again && again != page && again.Search.Text == "blame" && group == EditorSettingsCatalog.GIT && again.CurrentGroup == group
+            && again.IsRowShown("git_blame"));
+
+        // A section asked for wins over where it was left
         test.Run(() =>
         {
             compositor.Focus = null;
             CloseSettings();
+            OpenSettings(EditorSettingsCatalog.THEME);
+        });
+        test.Settle(0.4f);
+        test.Check("settings remembered: OpenSettings of a section still lands on it, nothing typed", () =>
+            SettingsPage is { } theme && theme.CurrentGroup == EditorSettingsCatalog.THEME && theme.Search.Text.Length == 0);
+
+        // Where it's left now is the theme with nothing typed, and the tests after this start from nothing
+        test.Run(() =>
+        {
+            compositor.Focus = null;
+            CloseSettings();
+            settingsLeft = null;
+            reopenWhereLeftInTest = false;
         });
         test.Wait();
     }

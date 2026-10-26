@@ -5,7 +5,8 @@ using Horizon.HIDL.Runtime;
 namespace Hex.Dawn;
 
 // What's wrong with a settings file written by hand, the user's and the folder's .hex\settings.hor, said where it stays
-// in sight. A file that doesn't read at its line, a key Hex hasn't got (with the one it probably meant), a key the folder
+// in sight. A file that doesn't read at its line, a key Hex hasn't got (with the one it probably meant), VS Code's name
+// for a setting written where Hex's goes (with Hex's), a key the folder
 // can't have its own way, a value of the wrong kind, a number past its ends and a choice that isn't one of them, each at
 // its key's line. Underlined in the file while it's open, in Problems either way, worked out again whenever either file
 // is read again or saved, so they go the moment the file is right.
@@ -69,7 +70,8 @@ internal sealed partial class DawnScene
 
         void Add(string section, string key, string message)
         {
-            var (line, column) = LineOfSetting(text, section, key);
+            // A VS Code id is written in quotes, which the usual way of finding a key's line doesn't know
+            var (line, column) = VsCodeSettings.HexKeyOf(key) is null ? LineOfSetting(text, section, key) : LineOfQuotedKey(text, key);
             found.Add(new HexProblem(path, line, column, message, true));
         }
 
@@ -79,7 +81,12 @@ internal sealed partial class DawnScene
             foreach (var (name, value) in all)
             {
                 if (value is not ObjectValue)
+                {
+                    // A VS Code id at the top, the way VS Code's own file has them
+                    if (VsCodeName(name) is { } vscode)
+                        Add("settings", name, vscode);
                     continue;
+                }
 
                 if (name is not (SettingsSections.EDITOR or SettingsSections.TERMINAL or SettingsSections.EXTENSIONS))
                     Add("settings", name, Unknown("settings", name, [SettingsSections.EDITOR, SettingsSections.TERMINAL, SettingsSections.EXTENSIONS]));
@@ -149,6 +156,9 @@ internal sealed partial class DawnScene
     // What's wrong with one key of the editor's section, null for nothing
     private static string? EditorSettingProblem(string key, IRuntimeValue value, bool folder)
     {
+        if (VsCodeName(key) is { } vscode)
+            return vscode;
+
         if (!EditorKeys.Contains(key))
             return Unknown(SettingsSections.EDITOR, key, EditorKeys);
 
@@ -188,6 +198,9 @@ internal sealed partial class DawnScene
     // What's wrong with one key of the terminal's section, null for nothing
     private static string? TerminalSettingProblem(string key, IRuntimeValue value)
     {
+        if (VsCodeName(key) is { } vscode)
+            return vscode;
+
         if (Array.Find(TerminalSettings.Described, setting => setting.Key == key) is not { } info)
             return Unknown(SettingsSections.TERMINAL, key, TerminalSettings.Described.Select(setting => setting.Key));
 
@@ -219,6 +232,25 @@ internal sealed partial class DawnScene
         ObjectValue => "object",
         _ => null
     };
+
+    // A key that's VS Code's name for one of Hex's, said with Hex's name, null for any other key
+    private static string? VsCodeName(string key) =>
+        VsCodeSettings.HexKeyOf(key) is { } hex ? Said("settings_import.vscode_name", ("id", key), ("key", hex)) : null;
+
+    // The first line that sets a key written in quotes, the way a VS Code id is, the top when none does
+    private static (int Line, int Column) LineOfQuotedKey(string text, string key)
+    {
+        string quoted = $"\"{key}\"";
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(quoted, StringComparison.Ordinal))
+                return (i, lines[i].Length - trimmed.Length);
+        }
+
+        return (0, 0);
+    }
 
     // A number past its ends, what it's clamped to said, null for one inside them or one that has none
     private static string? Clamped(string key, float value, float least, float most)

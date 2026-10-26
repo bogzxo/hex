@@ -228,6 +228,8 @@ internal sealed partial class DawnScene
         test.Run(() => SettingsPage!.Find(string.Empty));
         test.Wait();
 
+        TestExcludeSettings(test);
+
         /* Kept in the file */
 
         // Only what isn't what it comes as is written, the ones changed here and nothing else of the editor's
@@ -247,7 +249,10 @@ internal sealed partial class DawnScene
                 RenderWhitespace = "boundary",
                 CursorStyle = "underline",
                 StickyScroll = false,
-                FormatOnSave = true
+                FormatOnSave = true,
+                FilesExclude = ["**/*.log"],
+                SearchExclude = ["**/fixtures", "vendor/"],
+                SearchUseIgnoreFiles = false
             };
             if (written.Save() is not null)
                 return false;
@@ -255,6 +260,7 @@ internal sealed partial class DawnScene
             var read = new HexSettings(file);
             return read is { TabSize: 3, InsertSpaces: false, DetectIndentation: false, LineNumbers: false, IndentGuides: false, UseEditorConfig: false }
                 && read is { RenderWhitespace: "boundary", CursorStyle: "underline", StickyScroll: false, FormatOnSave: true } && read.Rulers.SequenceEqual([80, 120])
+                && read is { SearchUseIgnoreFiles: false } && read.FilesExclude.SequenceEqual(["**/*.log"]) && read.SearchExclude.SequenceEqual(["**/fixtures", "vendor/"])
                 && SettingsSections.Read(file) is { } all && SettingsSections.Section(all, SettingsSections.EDITOR).Keys.Order(StringComparer.Ordinal)
                     .SequenceEqual(keys.Order(StringComparer.Ordinal));
         });

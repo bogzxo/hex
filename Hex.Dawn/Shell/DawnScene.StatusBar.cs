@@ -80,7 +80,7 @@ internal sealed partial class DawnScene
         zoomItem.IsVisible = Design;
         skinItem = statusBar.Add(string.Empty, right: true, pressed: ShowSkinMenu, tooltip: Said("status_bar.skin_tip"));
         skinItem.IsVisible = Design;
-        screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: Said("status_bar.screen_tip"));
+        screenItem = statusBar.Add(string.Empty, right: true, pressed: () => designer.ShowScreenMenu(chrome, compositor.Pointer.Position), tooltip: Said("status_bar.screen_tip"));
         screenItem.IsVisible = Design;
 
         // Wide enough that the items after it don't shuffle as the numbers grow a digit, no wider, "Ln 1, Col 1" sat in a
@@ -111,6 +111,15 @@ internal sealed partial class DawnScene
         {
             messageItem.Text = string.Empty;
             messageItem.Color = null;
+        }
+
+        // The screen the layout is made for, or the one it's previewed on, which follows Hex onto another screen. It said
+        // 1600 x 900 whatever the layout was made for and whatever screen it was on
+        if (LayoutTools)
+        {
+            string screen = $"$(device-desktop) {designer.ScreenText()}";
+            if (screenItem.Text != screen)
+                screenItem.Text = screen;
         }
 
         if (problemsShown != (errorCount, warningCount))

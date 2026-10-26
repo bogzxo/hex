@@ -23,13 +23,13 @@ public static class EditorSettingsCatalog
     /// </summary>
     public const string PROFILES = "Appearance · Profiles", THEME = "Appearance · Theme", GLASS = "Appearance · Glass", EFFECTS = "Appearance · Effects",
         MOTION = "Appearance · Motion", BACKDROP = "Appearance · Backdrop", TEXT = "Editor · Text", CODE = "Editor · Code", FILES = "Editor · Files",
-        GIT = "Editor · Git", RUN = "Editor · Run and debug", DESIGNER = "Editor · Designer";
+        GIT = "Editor · Git", RUN = "Editor · Run and debug", DESIGNER = "Editor · Designer", SEARCH = "Editor · Search";
 
     /// <summary>
     /// The sections in the order they're shown inside their parts, the editor's text first and the profiles first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CODE, FILES, GIT, RUN, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP];
+    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP];
 
     /// <summary>
     /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
@@ -55,8 +55,20 @@ public static class EditorSettingsCatalog
         TextChoice("render_whitespace", ["none", "selection", "boundary", "all"]),
         TextChoice("cursor_style", ["line", "block", "underline"]),
         new("sticky_scroll", HexText.Get("settings_text.sticky_scroll_title"), UIFormKind.Flag, HexText.Get("settings_text.sticky_scroll_help"), TEXT),
-        new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES)
+        new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES),
+        Patterns("files_exclude"),
+        Patterns("search_exclude"),
+        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH)
     ]);
+
+    /// <summary>
+    /// A row of globs of Editor, Search, a line a pattern with its own pencil and bin. Its words are in settings_text,
+    /// files_exclude_title, its sentence files_exclude_help and what a new one looks like files_exclude_placeholder. The
+    /// button under them says Add Pattern (a list row's <see cref="UISetting.ValuePlaceholder"/>, it has no values).
+    /// </summary>
+    private static UISetting Patterns(string key) =>
+        new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.List, HexText.Get($"settings_text.{key}_help"), SEARCH,
+            KeyPlaceholder: HexText.Get($"settings_text.{key}_placeholder"), ValuePlaceholder: HexText.Get("settings_text.add_pattern"));
 
     /// <summary>The buttons of the picture's row, which one is which.</summary>
     public const int CHOOSE_PICTURE = 0, USUAL_PICTURE = 1;
@@ -203,7 +215,7 @@ public static class EditorSettingsCatalog
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
         ["ui_animation"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(CARET_GLIDE),
-        ["backdrop"] = Values.Bool(true),
+        ["backdrop"] = Values.Bool(false),
         ["backdrop_terminal"] = Values.Bool(false),
         ["backdrop_image"] = new StringValue(string.Empty),
         ["backdrop_opacity"] = new NumberValue(0.22f),
@@ -248,6 +260,9 @@ public static class EditorSettingsCatalog
         ["auto_save"] = Values.Bool(false),
         ["auto_save_delay"] = new NumberValue(1.0f),
         ["files_associations"] = new ObjectValue(),
+        ["files_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualFilesExclude),
+        ["search_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualSearchExclude),
+        ["search_use_ignore_files"] = Values.Bool(true),
         ["snap"] = new NumberValue(0.0f),
         ["canvas_handles"] = Values.Bool(true)
     };

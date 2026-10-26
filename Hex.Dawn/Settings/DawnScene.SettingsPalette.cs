@@ -3,8 +3,8 @@ using Horizon.HIDL.Runtime;
 namespace Hex.Dawn;
 
 // The settings in the command palette the way VS Code has them, Preferences and what it does. The window, the user's
-// file and the folder's, the settings somebody changed, every section of the window by its name, and every switch of
-// the editor's flipped without opening anything. Only the palette has them, the menus have the few that matter.
+// file and the folder's, the settings somebody changed, VS Code's settings brought over, every section of the window by
+// its name, and every switch of the editor's flipped without opening anything. Only the palette has them, the menus have the few that matter.
 internal sealed partial class DawnScene
 {
     /// <summary>Every Preferences command, for the palette.</summary>
@@ -15,11 +15,9 @@ internal sealed partial class DawnScene
             (Said("settings_palette.open_ui"), () => OpenSettings(null)),
             (Said("settings_palette.open_user_file"), OpenSettingsFile),
             (Said("settings_palette.open_workspace_file"), OpenWorkspaceSettingsFile),
-            (Said("settings_palette.show_modified"), () =>
-            {
-                OpenSettings(null);
-                SettingsPage?.AddToSearch(Horizon.UI.Components.SettingsPage.MODIFIED);
-            })
+            (Said("settings_palette.show_modified"), ShowModifiedSettings),
+            (Said("settings_import.palette_user"), ImportVsCodeSettings),
+            (Said("settings_import.palette_workspace"), ImportVsCodeWorkspaceSettings)
         };
 
         foreach (string section in SettingsPaletteSections())

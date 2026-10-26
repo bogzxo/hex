@@ -21,9 +21,6 @@ internal sealed class HexFolders : IDisposable
     private readonly ConcurrentQueue<(string Path, LanguageServerFileChange Change)> files = new();
     private const int MOST_FILE_CHANGES = 2000;
 
-    // Folders whose files change all the time and mean nothing to a server, a build's and git's
-    private static readonly string[] Unwatched = ["bin", "obj", ".git", ".vs", "node_modules"];
-
     /// <summary>The folders inside of a folder and its files, sorted by name, nothing for one that can't be read.</summary>
     public (string[] Folders, string[] Files) In(string folder)
     {
@@ -71,23 +68,23 @@ internal sealed class HexFolders : IDisposable
                 watcher.Created += (_, e) =>
                 {
                     Changed(e.FullPath);
-                    FileChanged(e.FullPath, LanguageServerFileChange.Created);
+                    FileChanged(root, e.FullPath, LanguageServerFileChange.Created);
                 };
                 watcher.Deleted += (_, e) =>
                 {
                     Changed(e.FullPath);
-                    FileChanged(e.FullPath, LanguageServerFileChange.Deleted);
+                    FileChanged(root, e.FullPath, LanguageServerFileChange.Deleted);
                 };
                 watcher.Renamed += (_, e) =>
                 {
                     Changed(e.OldFullPath);
                     Changed(e.FullPath);
-                    FileChanged(e.OldFullPath, LanguageServerFileChange.Deleted);
-                    FileChanged(e.FullPath, LanguageServerFileChange.Created);
+                    FileChanged(root, e.OldFullPath, LanguageServerFileChange.Deleted);
+                    FileChanged(root, e.FullPath, LanguageServerFileChange.Created);
                 };
 
                 // What's in a file changing changes nothing the explorer shows, only what a server knows
-                watcher.Changed += (_, e) => FileChanged(e.FullPath, LanguageServerFileChange.Changed);
+                watcher.Changed += (_, e) => FileChanged(root, e.FullPath, LanguageServerFileChange.Changed);
 
                 // Too much at once (a build, a checkout), it says nothing about what, so everything is read again
                 watcher.Error += (_, _) => changed.Enqueue(string.Empty);
@@ -101,16 +98,15 @@ internal sealed class HexFolders : IDisposable
         }
     }
 
-    private void FileChanged(string path, LanguageServerFileChange change)
+    private void FileChanged(string root, string path, LanguageServerFileChange change)
     {
         if (files.Count >= MOST_FILE_CHANGES)
             return;
 
-        foreach (string part in path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-        {
-            if (Array.Exists(Unwatched, folder => folder.Equals(part, StringComparison.OrdinalIgnoreCase)))
-                return;
-        }
+        // Anything in a folder files_exclude or search_exclude leaves out (a build's, git's, node_modules) changes all
+        // the time and means nothing to a server
+        if (HexSearch.Excluded().InSkippedFolder(HexExcludes.Relative(root, path)))
+            return;
 
         // A folder's own writes (its time changing) are nothing
         if (change == LanguageServerFileChange.Changed && Directory.Exists(path))

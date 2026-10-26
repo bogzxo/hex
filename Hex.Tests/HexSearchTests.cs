@@ -28,7 +28,7 @@ public sealed class HexSearchTests : IDisposable
     }
 
     [Fact]
-    public void The_files_are_every_hor_but_what_gets_built_git_and_submodules()
+    public void The_files_are_every_hor_but_what_gets_built_git_and_submodules_dot_folders_included()
     {
         Write("a.hor", "let a = 1;");
         Write("ui/b.hor", "let b = 2;");
@@ -42,7 +42,7 @@ public sealed class HexSearchTests : IDisposable
 
         List<string> files = HexSearch.FilesUnder([root]);
 
-        Assert.Equal(["a.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
+        Assert.Equal([".hidden/e.hor", "a.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
     }
 
     [Fact]

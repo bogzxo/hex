@@ -19,9 +19,10 @@ internal sealed partial class DawnScene
         test.Check("settings looks: the editor comes first, then the terminal, how Hex looks and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(["Editor", "Terminal", "Appearance", "Extensions"])
             && SettingsPage.Settings.Where(setting => setting.Group == EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
-        test.Check("settings looks: the sections go Editor · Text first, then Code, Files and Git, with Profiles first of Appearance", () =>
+        test.Check("settings looks: the sections go Editor · Text first, then Code, Files, Search and Git, with Profiles first of Appearance", () =>
             SettingsPage!.SectionsShown.ToList() is { Count: > 0 } shown && shown[0] == EditorSettingsCatalog.TEXT
-            && shown.IndexOf(EditorSettingsCatalog.CODE) == 1 && shown.IndexOf(EditorSettingsCatalog.FILES) == 2 && shown.IndexOf(EditorSettingsCatalog.GIT) == 3
+            && shown.IndexOf(EditorSettingsCatalog.CODE) == 1 && shown.IndexOf(EditorSettingsCatalog.FILES) == 2 && shown.IndexOf(EditorSettingsCatalog.SEARCH) == 3
+            && shown.IndexOf(EditorSettingsCatalog.GIT) == 4
             && shown.IndexOf(EditorSettingsCatalog.PROFILES) > shown.IndexOf(EditorSettingsCatalog.DESIGNER)
             && shown.IndexOf(EditorSettingsCatalog.PROFILES) < shown.IndexOf(EditorSettingsCatalog.THEME));
         test.Check("settings looks: the git rows are under Editor · Git", () =>

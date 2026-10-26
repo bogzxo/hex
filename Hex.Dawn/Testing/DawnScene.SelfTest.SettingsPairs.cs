@@ -6,8 +6,8 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// The self test of the settings round on the window itself. Files associations as a list of pairs set with the pointer
-// and the keyboard, every free text row saying what goes in it, the page using a big screen, and the sections down the
+// The self test of the settings round on the window itself. File associations as a list of pairs set with the pointer
+// and the keyboard, search_exclude as a list of globs the same way, every free text row saying what goes in it, the page using a big screen, and the sections down the
 // left following a search. The pairs in the file and the file's problems agreeing with what reading it does are at the
 // end, see TestSettingsPairsFile and TestSettingsTruthfulProblems
 internal sealed partial class DawnScene
@@ -38,10 +38,14 @@ internal sealed partial class DawnScene
             && page.PairBounds(ASSOCIATIONS) is { AddItem.IsEmpty: false } && Shown().Count == 0 && !page.IsModified!(ASSOCIATIONS));
 
         // Add Item with the pointer, two boxes with what goes in them, Enter puts the pair in
+        test.Check("settings pairs: it's called File associations", () => page.TitleShown(ASSOCIATIONS) is { } title && title.Contains("File associations", StringComparison.Ordinal));
+        test.Run(() => Shot("settings-pairs-empty"));
         test.Click(() => page.PairBounds(ASSOCIATIONS) is { } parts ? chrome.ToWorld(parts.AddItem.Center) : test.Pointer.Position);
         test.Wait();
         test.Check("settings pairs: Add Item opens a line of two boxes with the keyboard in the first, *.orig and csharp in them dim", () =>
             page.PairsShown(ASSOCIATIONS) is { Editing: 0, KeyBox: { Placeholder: "*.orig" } keyBox, ValueBox.Placeholder: "csharp" } && compositor.Focus == keyBox);
+        test.Check("settings pairs: adding one puts out the flash of going to the row, no flood of the accent over the line being typed", () =>
+            page.FlashingKey is null);
         test.Run(() => Shot("settings-pairs-typing"));
         Type("*.orig", "csharp");
         test.Run(() => page.Press(UIKeyboard.ENTER));
@@ -102,6 +106,8 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("settings pairs: its reset empties it and it's no longer changed", () => Kept().Count == 0 && Shown().Count == 0 && !page.IsModified!(ASSOCIATIONS));
 
+        TestSettingsList(test);
+
         /* Every line of text says what goes in it */
 
         test.Check("settings placeholders: every free text row of the editor's says what goes in it, the rulers 80, 120", () =>
@@ -113,6 +119,102 @@ internal sealed partial class DawnScene
 
         TestSettingsBigDisplay(test);
         TestSettingsNavFollowsSearch(test);
+    }
+
+    // Search exclude as a list, VS Code's search.exclude, a line a glob with a pencil and a bin and Add Pattern under them.
+    // Added with the pointer and put in with Enter, edited and left with the keyboard, and taken out with Delete
+    private void TestSettingsList(HexPointerScript test)
+    {
+        const string SEARCH_EXCLUDE = "search_exclude";
+        SettingsPage page = null!;
+        IReadOnlyList<string> Shown() => page.ListShown(SEARCH_EXCLUDE)?.Items ?? [];
+        void Type(string item) => test.Run(() =>
+        {
+            if (page.ListShown(SEARCH_EXCLUDE) is { Box: { } box })
+                box.Text = item;
+        });
+
+        test.Run(() =>
+        {
+            page = SettingsPage!;
+            page.Find(string.Empty);
+            page.Reveal(SEARCH_EXCLUDE);
+        });
+        test.Settle(0.4f);
+        test.Check("settings list: Editor · Search has files_exclude and search_exclude as lists with Add Pattern, and Use .gitignore", () =>
+            page.Settings.FirstOrDefault(setting => setting.Key == SEARCH_EXCLUDE) is { Kind: UIFormKind.List, Group: EditorSettingsCatalog.SEARCH, ValuePlaceholder: "Add Pattern", KeyPlaceholder: "**/fixtures" }
+            && page.Settings.Any(setting => setting is { Key: "files_exclude", Kind: UIFormKind.List, Group: EditorSettingsCatalog.SEARCH })
+            && page.Settings.Any(setting => setting is { Key: "search_use_ignore_files", Kind: UIFormKind.Flag })
+            && EditorSettingsCatalog.Sections.SkipWhile(section => section != EditorSettingsCatalog.FILES).Skip(1).FirstOrDefault() == EditorSettingsCatalog.SEARCH);
+        test.Check("settings list: VS Code's search.exclude as it comes, a pencil and a bin a line, Add Pattern under them", () =>
+            Shown().SequenceEqual(HexSettings.UsualSearchExclude) && page.ListBounds(SEARCH_EXCLUDE) is { Add.IsEmpty: false } parts
+            && parts.Edits.Length == Shown().Count && parts.Removes.Length == Shown().Count && !page.IsModified!(SEARCH_EXCLUDE));
+
+        test.Click(() => page.ListBounds(SEARCH_EXCLUDE) is { } parts ? chrome.ToWorld(parts.Add.Center) : test.Pointer.Position);
+        test.Wait();
+        test.Check("settings list: Add Pattern opens a box at the end with the keyboard in it, **/fixtures in it dim, and no flash", () =>
+            page.ListShown(SEARCH_EXCLUDE) is { Editing: var editing, Box: { Placeholder: "**/fixtures" } box } && editing == HexSettings.UsualSearchExclude.Length
+            && compositor.Focus == box && page.FlashingKey is null);
+        test.Run(() => Shot("settings-list-typing"));
+        Type("**/fixtures");
+        test.Run(() => page.Press(UIKeyboard.ENTER));
+        test.Wait();
+        test.Check("settings list: Enter keeps **/fixtures, at the end, the row changed and the keyboard on its pencil", () =>
+            settings.SearchExclude.LastOrDefault() == "**/fixtures" && Shown().LastOrDefault() == "**/fixtures" && page.IsModified!(SEARCH_EXCLUDE)
+            && page.ListShown(SEARCH_EXCLUDE)!.Value.Editing < 0 && page.KeyWithKeyboard == SEARCH_EXCLUDE);
+        test.Run(() => Shot("settings-list-one"));
+
+        // The keyboard, Enter on the pencil opens the line with what it has, Escape leaves it, Enter again keeps a new one
+        test.Run(() => page.Press(UIKeyboard.ENTER));
+        test.Wait();
+        test.Check("settings list: Enter on the pencil opens the line with what it has", () =>
+            page.ListShown(SEARCH_EXCLUDE) is { Box.Text: "**/fixtures" } shown && shown.Editing == Shown().Count - 1);
+        Type("**/nope");
+        test.Run(() => page.Press(UIKeyboard.ESCAPE));
+        test.Wait();
+        test.Check("settings list: Escape leaves it as it was, the window still up", () =>
+            settings.SearchExclude.LastOrDefault() == "**/fixtures" && page.ListShown(SEARCH_EXCLUDE)!.Value.Editing < 0 && SettingsPage is not null
+            && page.KeyWithKeyboard == SEARCH_EXCLUDE);
+        test.Run(() => page.Press(UIKeyboard.ENTER));
+        test.Wait();
+        Type("**/test_data/");
+        test.Run(() => page.Press(UIKeyboard.ENTER));
+        test.Wait();
+        test.Check("settings list: and Enter keeps what it's edited to in its place", () =>
+            settings.SearchExclude.LastOrDefault() == "**/test_data/" && !settings.SearchExclude.Contains("**/fixtures") && Shown().Count == HexSettings.UsualSearchExclude.Length + 1);
+
+        // Found by a glob in it, the glob said after its key
+        test.Run(() => page.Find("pycache"));
+        test.Wait();
+        test.Check("settings list: searching a glob in it finds the row, the glob said after its key", () =>
+            page.IsRowShown(SEARCH_EXCLUDE) && page.FoundByShown(SEARCH_EXCLUDE) is { } by && by.StartsWith("**/__", StringComparison.Ordinal) && by.Contains("pycache", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            page.Find(string.Empty);
+            page.Reveal(SEARCH_EXCLUDE);
+        });
+        test.Settle(0.3f);
+
+        // Delete on its pencil takes the line out
+        test.Run(() =>
+        {
+            if (page.ListBounds(SEARCH_EXCLUDE) is { Edits.Length: > 0 } parts)
+                Descendants(SettingsWindow!).OfType<Button>().FirstOrDefault(button => button.Bounds == parts.Edits[^1])?.Focus();
+            page.Press(UIKeyboard.DELETE);
+        });
+        test.Wait();
+        test.Check("settings list: Delete on a line's pencil takes it out, back to what it comes as", () =>
+            settings.SearchExclude.SequenceEqual(HexSettings.UsualSearchExclude) && Shown().SequenceEqual(HexSettings.UsualSearchExclude)
+            && !page.IsModified!(SEARCH_EXCLUDE) && page.KeyWithKeyboard == SEARCH_EXCLUDE);
+
+        // The bin with the pointer, and the reset puts it back
+        test.Click(() => page.ListBounds(SEARCH_EXCLUDE) is { Removes.Length: > 0 } parts ? chrome.ToWorld(parts.Removes[0].Center) : test.Pointer.Position);
+        test.Wait();
+        test.Check("settings list: the bin takes its glob out", () => !settings.SearchExclude.Contains("**/node_modules") && page.IsModified!(SEARCH_EXCLUDE));
+        test.Run(() => page.Reset(SEARCH_EXCLUDE));
+        test.Wait();
+        test.Check("settings list: its reset puts VS Code's back", () =>
+            settings.SearchExclude.SequenceEqual(HexSettings.UsualSearchExclude) && Shown().SequenceEqual(HexSettings.UsualSearchExclude) && !page.IsModified!(SEARCH_EXCLUDE));
     }
 
     // The page on a big screen, the window most of it, the rows past their old 1120 and the text zoomed to suit
@@ -194,6 +296,37 @@ internal sealed partial class DawnScene
         test.Run(() => SettingsPage!.Reset(ASSOCIATIONS));
         test.Wait();
         test.Check("settings pairs file: its reset takes it out of the file", () => !Editor().ContainsKey(ASSOCIATIONS) && !SettingsPage!.IsModified!(ASSOCIATIONS));
+
+        // A glob added to files_exclude by the keyboard alone, Down along the lines' buttons to Add Pattern, Enter, typed
+        // and Enter again, lands in the file as a list
+        const string FILES_EXCLUDE = "files_exclude";
+        test.Run(() => SettingsPage!.Reveal(FILES_EXCLUDE));
+        test.WaitFor(() => SettingsPage?.KeyWithKeyboard == FILES_EXCLUDE, 2.0f);
+        test.Run(() =>
+        {
+            int buttons = (SettingsPage!.ListShown(FILES_EXCLUDE)?.Items.Count ?? 0) * 2;
+            for (int i = 0; i < buttons; i++)
+                SettingsPage.Press(UIKeyboard.DOWN);
+            SettingsPage.Press(UIKeyboard.ENTER);
+        });
+        test.Wait();
+        test.Check("settings list file: Down to Add Pattern and Enter opens a box at the end", () =>
+            SettingsPage!.ListShown(FILES_EXCLUDE) is { Box: { } box } shown && shown.Editing == shown.Items.Count && compositor.Focus == box);
+        test.Run(() =>
+        {
+            if (SettingsPage!.ListShown(FILES_EXCLUDE) is { Box: { } box })
+                box.Text = "**/fixtures";
+            SettingsPage.Press(UIKeyboard.ENTER);
+        });
+        test.Wait();
+        test.Check("settings list file: and Enter writes files_exclude to the file as a list with **/fixtures at its end", () =>
+            Editor().GetValueOrDefault(FILES_EXCLUDE) is ListValue { Items: { Count: > 0 } items } && items[^1] is StringValue { Value: "**/fixtures" }
+            && File.ReadAllText(file()).Contains("\"**/fixtures\"", StringComparison.Ordinal) && settings.FilesExclude[^1] == "**/fixtures");
+        test.Run(() => SettingsPage!.Reset(FILES_EXCLUDE));
+        test.Wait();
+        test.Check("settings list file: its reset takes it out of the file", () =>
+            !Editor().ContainsKey(FILES_EXCLUDE) && settings.FilesExclude.SequenceEqual(HexSettings.UsualFilesExclude));
+
         test.Run(() =>
         {
             if (document.Path is { } path && PlatformPaths.Same(Path.GetFullPath(path), Path.GetFullPath(file())))

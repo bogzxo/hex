@@ -8,7 +8,8 @@ namespace Hex.Dawn;
 // How code is typed and drawn, the tab size, spaces or tabs, working out how a file is already indented, the line
 // numbers and the guides, and a project's .editorconfig having the last word. The rulers, the whitespace drawn, the
 // caret's look and sticky scroll too, and formatting on save which is a row of Editor, Files. The rows are the settings
-// window's Editor, Text, at the very top of it, and every change goes straight onto every open file.
+// window's Editor, Text, at the very top of it, and every change goes straight onto every open file. What the files of
+// the workspace leave out (files_exclude, search_exclude and the .gitignores) are rows of Editor, Search kept here too.
 internal sealed partial class DawnScene
 {
     // How many lines are looked at to work out how a file is indented, the top of a file says it well enough
@@ -156,6 +157,9 @@ internal sealed partial class DawnScene
             "cursor_style" => new StringValue(hex.settings.CursorStyle),
             "sticky_scroll" => Values.Bool(hex.settings.StickyScroll),
             "format_on_save" => Values.Bool(hex.settings.FormatOnSave),
+            "files_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.FilesExclude),
+            "search_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.SearchExclude),
+            "search_use_ignore_files" => Values.Bool(hex.settings.SearchUseIgnoreFiles),
             _ => null
         };
 
@@ -206,6 +210,24 @@ internal sealed partial class DawnScene
                 case ("format_on_save", BooleanValue format):
                     settings.FormatOnSave = format.Value;
                     break;
+
+                // What the walk of the files leaves out, nothing of an open file's. The explorer shows it straight away,
+                // quick open and Find in Files go by it the next time they look
+                case ("files_exclude", ListValue patterns):
+                    settings.FilesExclude = HexSettings.Patterns(patterns);
+                    hex.ExcludesChanged();
+                    hex.SaveSettings();
+                    return;
+                case ("search_exclude", ListValue patterns):
+                    settings.SearchExclude = HexSettings.Patterns(patterns);
+                    hex.ExcludesChanged();
+                    hex.SaveSettings();
+                    return;
+                case ("search_use_ignore_files", BooleanValue ignore):
+                    settings.SearchUseIgnoreFiles = ignore.Value;
+                    hex.ExcludesChanged();
+                    hex.SaveSettings();
+                    return;
                 default:
                     return;
             }
