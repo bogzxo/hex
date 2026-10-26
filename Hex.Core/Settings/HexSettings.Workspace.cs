@@ -22,7 +22,7 @@ internal sealed partial class HexSettings
         "wrap_code", "minimap", "inlay_hints", "semantic_highlighting", "code_font", "code_zoom",
         "trim_whitespace", "final_newline", "auto_save", "auto_save_delay",
         "files_exclude", "search_exclude", "search_use_ignore_files",
-        "git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_confirm_sync", "git_smart_commit",
+        "git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_account", "git_confirm_sync", "git_smart_commit",
         "git_subject_length", "git_line_length",
         "run_to_terminal", "debugger_path", "snap", "canvas_handles", LANGUAGE_OVERRIDES
     };

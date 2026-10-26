@@ -116,7 +116,7 @@ internal sealed partial class HexGit
         foreach (Repository repository in WorkspaceRepositories())
         {
             if (repository.HasRemote)
-                context.Work.InBackground("git fetch", repository.Git.Fetch, _ => repository.Dirty(now: true), quiet: true);
+                context.Work.InBackground("git fetch", repository.Git.FetchUnattended, _ => repository.Dirty(now: true), quiet: true);
         }
     }
 

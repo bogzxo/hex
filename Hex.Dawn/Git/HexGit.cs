@@ -113,6 +113,7 @@ internal sealed partial class HexGit
 
         UpdateChanges(dt);
         UpdateBlame(dt);
+        GitProcess.Account = context.Settings.Values.GitAccount;
         UpdateSync(dt);
     }
 

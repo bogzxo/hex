@@ -325,6 +325,7 @@ internal sealed partial class DawnScene
             "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
             "git_autofetch_interval" => new NumberValue(hex.settings.GitAutoFetchInterval),
             "git_pull_mode" => new StringValue(hex.settings.GitPullMode),
+            "git_account" => new StringValue(hex.settings.GitAccount),
             "git_confirm_sync" => Values.Bool(hex.settings.GitConfirmSync),
             "git_smart_commit" => new StringValue(hex.settings.GitSmartCommit),
             "git_subject_length" => new NumberValue(hex.settings.GitSubjectLength),
@@ -437,6 +438,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("git_pull_mode", StringValue { Value: "default" or "merge" or "rebase" or "ff_only" } pull):
                     settings.GitPullMode = pull.Value;
+                    break;
+                case ("git_account", StringValue account):
+                    settings.GitAccount = account.Value.Trim();
                     break;
                 case ("git_confirm_sync", BooleanValue confirm):
                     settings.GitConfirmSync = confirm.Value;

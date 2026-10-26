@@ -13,19 +13,19 @@ internal sealed partial class DawnScene
 {
     // The rows of Editor · Git in the order the settings window shows them
     private static readonly string[] GitSettingKeys =
-        ["git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_confirm_sync", "git_smart_commit", "git_subject_length", "git_line_length"];
+        ["git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_account", "git_confirm_sync", "git_smart_commit", "git_subject_length", "git_line_length"];
 
     // A command of the Git menu by its label, as the palette and the menu run it
     private MenuItem? GitCommand(string label) => menu.Menus.FirstOrDefault(bar => bar.Title == "Git")?.Everything().Select(pair => pair.Item).FirstOrDefault(item => item.Label == label);
 
     private void TestGitSettings(HexPointerScript test, string repo)
     {
-        // Git Settings... opens the window at Editor · Git, which has its eight rows
+        // Git Settings... opens the window at Editor · Git, which has its nine rows
         test.Run(() => GitCommand(Said("git.settings_command"))?.OnPicked?.Invoke());
         test.WaitFor(() => SettingsPage?.CurrentGroup == EditorSettingsCatalog.GIT, 3.0f);
         test.Check("settings: Git Settings... in the palette opens the settings at Editor · Git", () =>
             SettingsPage is { } page && page.CurrentGroup == EditorSettingsCatalog.GIT);
-        test.Check("settings: Editor · Git has its eight rows", () =>
+        test.Check("settings: Editor · Git has its nine rows", () =>
             SettingsPage!.Settings.Where(setting => setting.Group == EditorSettingsCatalog.GIT).Select(setting => setting.Key).SequenceEqual(GitSettingKeys));
 
         // Every row changed is put in force and lit as changed, and its reset puts it back
@@ -44,7 +44,7 @@ internal sealed partial class DawnScene
         });
         test.Check("settings: every git row changed is lit as changed, and its reset puts it back", () =>
             allChanged && allReset && settings.GitPullMode == "default" && settings.GitSmartCommit == "ask" && settings.GitAutoFetchInterval == 3.0f
-            && settings.GitSubjectLength == 50 && settings.GitLineLength == 72 && settings.GitConfirmSync && settings.GitBlame);
+            && settings.GitSubjectLength == 50 && settings.GitLineLength == 72 && settings.GitConfirmSync && settings.GitBlame && settings.GitAccount.Length == 0);
         test.Run(CloseSettings);
 
         // What they're set to is written to the file and read back
@@ -60,14 +60,15 @@ internal sealed partial class DawnScene
                 GitConfirmSync = false,
                 GitSmartCommit = "never",
                 GitSubjectLength = 40,
-                GitLineLength = 90
+                GitLineLength = 90,
+                GitAccount = "someone"
             };
             written.Save();
             read = new HexSettings(file);
             File.Delete(file);
         });
         test.Check("settings: the git settings are kept in the file and read back", () =>
-            read is { GitAutoFetchInterval: 7.0f, GitPullMode: "ff_only", GitConfirmSync: false, GitSmartCommit: "never", GitSubjectLength: 40, GitLineLength: 90 });
+            read is { GitAutoFetchInterval: 7.0f, GitPullMode: "ff_only", GitConfirmSync: false, GitSmartCommit: "never", GitSubjectLength: 40, GitLineLength: 90, GitAccount: "someone" });
 
         // Commit with nothing staged asks first, and Cancel stages nothing
         string stage = Said("git.smart_stage");
