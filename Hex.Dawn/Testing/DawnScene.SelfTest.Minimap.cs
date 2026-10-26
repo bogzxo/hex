@@ -30,9 +30,14 @@ internal sealed partial class DawnScene
         MinimapShot(test, "minimap.png");
         test.Check("minimap: it's on and the code starts at the top", () => code.Minimap && TopLine() == 0);
 
+        // How many rows the minimap shows decides how far down its bottom is. The code is shorter with the panel open
+        // under it (the console's test leaves it open), a click there brought line 279 to the middle and the top was 259,
+        // which a check for more than 300 lines took for the click going nowhere
+        int shown = 0;
+        test.Run(() => shown = code.MinimapRowTops.Count);
         test.Click(() => InMinimap(0.95f));
         test.Settle(0.3f);
-        test.Check("minimap: a click near its bottom goes a long way down the file", () => TopLine() > 300);
+        test.Check("minimap: a click near its bottom goes a long way down the file", () => shown > 100 && TopLine() > shown * 0.6f);
 
         // The slider is where the code in sight is, dragged back to the top it takes the code back there
         test.Drag(() => InMinimap(0.95f), () => InMinimap(0.01f));

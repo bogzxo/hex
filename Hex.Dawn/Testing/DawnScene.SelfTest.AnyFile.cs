@@ -85,12 +85,16 @@ internal sealed partial class DawnScene
         test.Run(() => CloseDocument(document));
         test.Settle(0.2f);
 
+        // Closed without asking, the notes were typed into and a question about saving them sat over every part after this one
         test.Run(() =>
         {
             foreach (string file in new[] { cs, md, json })
             {
                 if (documents.Find(open => open.Path == file) is { } open)
-                    CloseDocument(open);
+                {
+                    Show(open);
+                    CloseNow();
+                }
             }
         });
         test.Settle(0.2f);

@@ -55,6 +55,7 @@ internal sealed partial class DuskScene
         ("repl", "the HIDL REPL as a profile, typed into for real", TestRepl),
         ("line", "the line typed at a prompt coloured, in PowerShell and cmd, cmd's marks out of its prompt", TestLine),
         ("output", "what programs write coloured by rules, the shipped ones and a plugin's", TestOutput),
+        ("scroll", "the scroll bar and the minimap, the thumb dragged, the track paged, the minimap pressed and dragged, reading up while more is written", TestScroll),
         ("panes", "tabs moved, panes swapped and renamed, the settings window, the mouse and the bell, the drop down", TestPanes),
         ("tui", "the programs with a screen of their own, the file picker, git, the processes, the REPL and the settings", TestTui),
         ("blocks", "the shell's marks, the commands as blocks, find, rerun, a line in a split, typing into every pane", TestBlocks),

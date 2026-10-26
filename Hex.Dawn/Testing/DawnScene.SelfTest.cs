@@ -207,6 +207,7 @@ internal sealed partial class DawnScene
         {
             OnCode(test, dataFile);
             TestTerminal(test);
+            TestTerminalScroll(test);
             TestDuskFiles(test);
         }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
