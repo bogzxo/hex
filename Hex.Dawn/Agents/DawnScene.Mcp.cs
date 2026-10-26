@@ -26,6 +26,11 @@ internal sealed partial class DawnScene
     private float mcpFoldersWait;
     private int mcpClientsShown;
 
+    // When an agent was last on, the item stays a while after so a client that connects for every call (hexmcp, a
+    // script) doesn't have the status bar jumping about as the item comes and goes
+    private const long MCP_LINGER_MS = 15_000;
+    private long mcpLastOn;
+
     /// <summary>The status bar's item and the server, when the settings or the command line say so.</summary>
     private void BuildMcp()
     {
@@ -34,7 +39,7 @@ internal sealed partial class DawnScene
             OpenSettings(null);
             settingsView?.Reveal("mcp_server");
         }, tooltip: Said("mcp.status_tip", ("clients", string.Empty)));
-        mcpItem.IsVisible = () => mcpClientsShown > 0;
+        mcpItem.IsVisible = () => mcpClientsShown > 0 || System.Environment.TickCount64 - mcpLastOn < MCP_LINGER_MS;
         ApplyMcp();
     }
 
@@ -148,6 +153,7 @@ internal sealed partial class DawnScene
             if (clients.Count > mcpClientsShown && clients.LastOrDefault() is { } newest && newest != "connecting")
                 Say(Said("mcp.connected", ("client", newest)));
             mcpClientsShown = clients.Count;
+            mcpLastOn = System.Environment.TickCount64;
             mcpItem.Text = clients.Count > 1 ? $"$(robot) {Said("mcp.status_many", ("count", clients.Count.ToString()))}" : $"$(robot) {Said("mcp.status")}";
             mcpItem.Tooltip = Said("mcp.status_tip", ("clients", string.Join(", ", clients)));
         }
