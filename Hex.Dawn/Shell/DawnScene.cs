@@ -292,6 +292,9 @@ internal sealed partial class DawnScene : Scene
         if (document.IsText)
             OpenOnExtensionView(document);
 
+        // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
+        BuildMcp();
+
         if (options.SelfTest)
             StartSelfTest();
         else if (options.Check.Length == 0)
@@ -392,6 +395,7 @@ internal sealed partial class DawnScene : Scene
         running.UpdateTable();
         UpdateTerminal(dt);
         UpdateRemote();
+        UpdateMcp(dt);
         running.UpdateConsole();
         running.RunAskedConsole();
         UpdatePanel(dt);

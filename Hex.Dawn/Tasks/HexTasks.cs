@@ -19,6 +19,9 @@ internal sealed partial class HexTasks
     // what the files said, kept until one of them is written again
     private readonly Dictionary<string, (DateTime Written, List<HexTask> Tasks)> tasksRead = [];
 
+    /// <summary>How each task's last run ended, by its tab (TabOf), gone while it runs again. For an agent asking how a build went.</summary>
+    internal readonly Dictionary<string, int> Exits = new(StringComparer.Ordinal);
+
     /// <summary>The tasks of the workspace, the Run menu's.</summary>
     public HexTasks(DawnContext with)
     {
@@ -41,7 +44,7 @@ internal sealed partial class HexTasks
     /// Every task of the file on screen's nearest tasks.hor (its project's) first, then every folder of the workspace's,
     /// in the order the files have them.
     /// </summary>
-    private List<HexTask> Tasks()
+    internal List<HexTask> Tasks()
     {
         var all = new List<HexTask>();
         var read = new HashSet<string>(PlatformPaths.Comparer);
@@ -136,6 +139,7 @@ internal sealed partial class HexTasks
         context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
 
         string line = CommandLineOf(task, context.Terminals.UsualProfileId);
+        Exits.Remove(TabOf(task));
         if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
             context.Terminals.RunInDusk(task.WorkingFolder(), line);
         else
@@ -150,6 +154,7 @@ internal sealed partial class HexTasks
     /// </summary>
     private void Ended(HexTask task, int exit, string said)
     {
+        Exits[TabOf(task)] = exit;
         int errors = context.Terminals.TerminalErrors;
         if (exit == 0)
         {

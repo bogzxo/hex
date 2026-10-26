@@ -114,6 +114,8 @@ public static class EditorSettingsCatalog
         new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
         new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), CODE),
         new("inlay_hints", HexText.Get("settings_catalog.inlay_hints_title"), UIFormKind.Flag, HexText.Get("settings_catalog.inlay_hints_help"), CODE),
+        new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
+        Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
 
         new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
         new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
@@ -134,6 +136,7 @@ public static class EditorSettingsCatalog
 
         new("debugger_path", HexText.Get("settings_catalog.debugger_path_title"), UIFormKind.Text, HexText.Get("settings_catalog.debugger_path_help"), RUN, Placeholder: HexText.Get("settings_catalog.debugger_path_placeholder")),
         new("run_to_terminal", HexText.Get("settings_catalog.run_to_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.run_to_terminal_help"), RUN),
+        new("mcp_server", HexText.Get("settings_catalog.mcp_server_title"), UIFormKind.Flag, HexText.Get("settings_catalog.mcp_server_help"), RUN),
 
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
         new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
@@ -245,6 +248,8 @@ public static class EditorSettingsCatalog
         ["git_blame"] = Values.Bool(true),
         ["minimap"] = Values.Bool(true),
         ["inlay_hints"] = Values.Bool(true),
+        ["semantic_highlighting"] = Values.Bool(true),
+        ["csharp_colors"] = new StringValue("resharper"),
         ["git_autofetch"] = Values.Bool(true),
         ["git_autofetch_interval"] = new NumberValue(3.0f),
         ["git_pull_mode"] = new StringValue("default"),
@@ -254,6 +259,7 @@ public static class EditorSettingsCatalog
         ["git_line_length"] = new NumberValue(72.0f),
         ["debugger_path"] = new StringValue(string.Empty),
         ["run_to_terminal"] = Values.Bool(false),
+        ["mcp_server"] = Values.Bool(false),
         ["reopen_last"] = Values.Bool(false),
         ["trim_whitespace"] = Values.Bool(true),
         ["final_newline"] = Values.Bool(false),

@@ -20,4 +20,5 @@ namespace Hex.Dawn;
 /// <param name="Files">Every file the command line named, in its order, each at its line and column. The last is the one shown.</param>
 /// <param name="Folder">The folder the workspace is, only its own tabs and backups brought back, null for the workspace of last time.</param>
 /// <param name="Fresh">Whether the editor starts clean, no workspace, tabs, backups or last file brought back, settings and keys still read.</param>
-internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null, bool Fresh = false, HexLaunchFile[]? Files = null);
+/// <param name="Mcp">Whether the MCP server for agents is up for this run whatever the settings say, see DawnScene.Mcp.</param>
+internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null, bool Fresh = false, HexLaunchFile[]? Files = null, bool Mcp = false);

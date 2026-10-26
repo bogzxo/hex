@@ -170,6 +170,7 @@ internal sealed partial class DawnScene
             TestTodos(test);
             TestPeek(test);
             TestInlays(test);
+            TestSemanticHidl(test);
             TestLanguages(test);
             TestTable(test);
             TestLayoutAsCode(test);
@@ -227,8 +228,15 @@ internal sealed partial class DawnScene
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
+        ("semantic", "semantic highlighting, HIDL's names by what they are, C# through csharp-ls in ReSharper's colours when it's on this machine", test =>
+        {
+            TestSemanticHidl(test);
+            TestSemanticCSharp(test);
+            TestSemanticD(test);
+        }),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
+        ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

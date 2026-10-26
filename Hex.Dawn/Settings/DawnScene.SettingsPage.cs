@@ -320,6 +320,8 @@ internal sealed partial class DawnScene
             "git_blame" => Values.Bool(hex.settings.GitBlame),
             "minimap" => Values.Bool(hex.settings.Minimap),
             "inlay_hints" => Values.Bool(hex.settings.InlayHints),
+            "semantic_highlighting" => Values.Bool(hex.settings.SemanticHighlighting),
+            "csharp_colors" => new StringValue(hex.settings.CSharpColors),
             "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
             "git_autofetch_interval" => new NumberValue(hex.settings.GitAutoFetchInterval),
             "git_pull_mode" => new StringValue(hex.settings.GitPullMode),
@@ -328,6 +330,7 @@ internal sealed partial class DawnScene
             "git_subject_length" => new NumberValue(hex.settings.GitSubjectLength),
             "git_line_length" => new NumberValue(hex.settings.GitLineLength),
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
+            "mcp_server" => Values.Bool(hex.settings.McpServer),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
             "backdrop_terminal" => Values.Bool(hex.settings.BackdropTerminal),
@@ -457,8 +460,20 @@ internal sealed partial class DawnScene
                     settings.InlayHints = inlays.Value;
                     hex.ForgetInlays();
                     break;
+                case ("semantic_highlighting", BooleanValue semantic):
+                    settings.SemanticHighlighting = semantic.Value;
+                    hex.ForgetSemantics();
+                    break;
+                case ("csharp_colors", StringValue { Value: "resharper" or "visual_studio" or "skin" } csharp):
+                    settings.CSharpColors = csharp.Value;
+                    hex.languages.ApplyCSharpColors();
+                    break;
                 case ("run_to_terminal", BooleanValue run):
                     settings.RunToTerminal = run.Value;
+                    break;
+                case ("mcp_server", BooleanValue agents):
+                    settings.McpServer = agents.Value;
+                    hex.ApplyMcp();
                     break;
                 case ("backdrop", BooleanValue on):
                     settings.BackdropOn = on.Value;

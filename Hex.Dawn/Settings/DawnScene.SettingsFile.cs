@@ -383,6 +383,12 @@ internal sealed partial class DawnScene
             codeEditing.ApplyCodeFont();
         if (now.InlayHints != was.InlayHints)
             ForgetInlays();
+        if (now.SemanticHighlighting != was.SemanticHighlighting)
+            ForgetSemantics();
+        if (now.CSharpColors != was.CSharpColors)
+            languages.ApplyCSharpColors();
+        if (now.McpServer != was.McpServer)
+            ApplyMcp();
         if (now.GitSmartCommit != was.GitSmartCommit)
             ((IPanels)this).RefreshSide(HexSide.SourceControl);
 

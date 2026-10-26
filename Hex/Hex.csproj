@@ -14,6 +14,9 @@
     <!-- The exe's icon in Explorer, the windows get their own at run time (WindowIcon) -->
     <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>
 
+    <!-- The console a Debug Hex gets only from whoever started it, see app.manifest -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>

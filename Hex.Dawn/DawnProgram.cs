@@ -25,6 +25,7 @@ public static class DawnProgram
     private const string ARGUMENT_FOLDER = "--folder";
     private const string ARGUMENT_WINDOW = "--window";
     private const string ARGUMENT_FRESH = "--fresh";
+    private const string ARGUMENT_MCP = "--mcp";
 
     // The self test's folders in the temp folder, each run's ending in its process id
     private const string SELF_TEST_FOLDER = "horizon-hex-selftest-";
@@ -55,6 +56,7 @@ public static class DawnProgram
     /// <item><c>--goto b.cs:12:3</c> (or <c>-g</c>) is one more file at a line and column, the way code -g has it.</item>
     /// <item><c>--window</c> is a window of its own whatever is running, a file or a folder isn't handed over (the terminal's dawn -window).</item>
     /// <item><c>--fresh</c> starts clean, on the explorer, with no workspace, tabs, backups or last file of before. Settings and keys are read as ever.</item>
+    /// <item><c>--mcp</c> puts the MCP server up for agents whatever the settings say (Hex.exe started by a client with it is the bridge to it instead, see McpBridge).</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
     /// </list>
     /// </summary>
@@ -134,6 +136,7 @@ public static class DawnProgram
             Line: files.Count > 0 ? files[^1].Line : 0,
             Folder: folder,
             Fresh: args.Contains(ARGUMENT_FRESH),
+            Mcp: args.Contains(ARGUMENT_MCP),
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);

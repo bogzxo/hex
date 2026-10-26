@@ -106,6 +106,7 @@ internal sealed partial class DawnScene
         UpdateImageView();
         UpdateConflicts();
         UpdateInlays();
+        UpdateSemantics();
 
         if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)
         {

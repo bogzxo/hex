@@ -42,8 +42,9 @@ internal sealed partial class HexLanguages
     {
         context = with;
 
-        // C# in the colours Visual Studio shows it in, whatever the skin, the way it looks where most of it is written
-        CodeLanguages.SetColors("source.cs", UISyntaxColors.VisualStudioDark(), UISyntaxColors.VisualStudioLight());
+        // C# in ReSharper's colours whatever the skin (or Visual Studio's, or the skin's, as the settings say), the way it
+        // looks where most of it is written
+        ApplyCSharpColors();
 
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;

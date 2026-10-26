@@ -1521,6 +1521,9 @@ let strings = {
         minimap_help: "Whether the whole of the code is drawn small down the right of the editor, a slider over what you can see to drag.",
         inlay_hints_title: "Inlay hints",
         inlay_hints_help: "Whether the names of the parameters a call passes to are written faintly in among the code, from HIDL and from the language servers that say them.",
+        semantic_highlighting_title: "Semantic highlighting",
+        semantic_highlighting_help: "Whether names are coloured by what they are, a class, a method, a field, a parameter, ReSharper's way. Asked of the language servers that say it, and worked out by Hex itself for HIDL, and for D while its server doesn't say. A line being typed on goes back to the plain colours until the typing stops.",
+        csharp_colors_title: "C# colours",
         git_autofetch_title: "Fetch in the background",
         git_autofetch_help: "Whether the workspace's git repositories are fetched from their remotes every few minutes, so how far behind a branch is shows without asking.",
         git_autofetch_interval_title: "Background fetch interval",
@@ -1540,6 +1543,8 @@ let strings = {
         debugger_path_placeholder: "C:/tools/netcoredbg/netcoredbg.exe",
         run_to_terminal_title: "Run in a terminal",
         run_to_terminal_help: "Whether a file run with Ctrl+F5 runs in a terminal of the panel rather than in the output.",
+        mcp_server_title: "Agents (MCP server)",
+        mcp_server_help: "Whether AI agents like Claude Code can drive this Hex over the Model Context Protocol, look at it, click, type and run commands. Only programs on this machine run by you, with the token in the settings folder, get in. Claude Code connects with claude mcp add hex -- Hex.exe --mcp",
         reopen_last_title: "Reopen the last workspace",
         reopen_last_help: "Whether the workspace and the files that were open come back when Dawn starts.",
         default_terminal_title: "Dusk as the default terminal",
@@ -1592,7 +1597,14 @@ let strings = {
         git_smart_commit_always: "Always stage everything",
         git_smart_commit_always_help: "Stages every change and commits it without asking.",
         git_smart_commit_never: "Never",
-        git_smart_commit_never_help: "Commits nothing and says nothing is staged."
+        git_smart_commit_never_help: "Commits nothing and says nothing is staged.",
+        csharp_colors_row: "The colours C# is shown in, whatever the skin.",
+        csharp_colors_resharper: "ReSharper",
+        csharp_colors_resharper_help: "ReSharper's colours, Rider's Dark scheme on a dark skin and ReSharper's classic ones on a light skin. Types purple, methods green, fields teal.",
+        csharp_colors_visual_studio: "Visual Studio",
+        csharp_colors_visual_studio_help: "Visual Studio's own colours for C#, dark or light to go with the skin.",
+        csharp_colors_skin: "The skin's",
+        csharp_colors_skin_help: "Whatever colours the skin gives code, the same as every other language."
     },
 
     settings_keywords: {
@@ -1609,6 +1621,8 @@ let strings = {
         final_newline: "eol end of file newline files.insertFinalNewline",
         minimap: "minimap overview editor.minimap.enabled",
         inlay_hints: "parameter hints editor.inlayHints.enabled",
+        semantic_highlighting: "semantic tokens colour identifiers resharper editor.semanticHighlighting.enabled",
+        csharp_colors: "colour scheme colors csharp c# resharper rider visual studio theme",
         line_numbers: "gutter editor.lineNumbers",
         rulers: "ruler column guide line length editor.rulers",
         render_whitespace: "whitespace dots spaces tabs invisibles editor.renderWhitespace",
@@ -1631,7 +1645,8 @@ let strings = {
         effect_motion: "animation smooth caret editor.cursorSmoothCaretAnimation",
         backdrop: "wallpaper background image",
         backdrop_terminal: "wallpaper background image",
-        backdrop_image: "wallpaper background image"
+        backdrop_image: "wallpaper background image",
+        mcp_server: "mcp agent claude ai model context protocol automation"
     },
 
     settings_page: {
@@ -2254,6 +2269,17 @@ let strings = {
     // The files Hex was started on
     launch: {
         missing: "not there, so not opened: {files}"
+    },
+
+    mcp: {
+        status: "Agent",
+        status_many: "{count} agents",
+        status_tip: "An agent is driving Hex over MCP ({clients}), click for the settings",
+        started: "the MCP server for agents is up, Claude Code connects with claude mcp add hex -- Hex.exe --mcp",
+        stopped: "the MCP server for agents is off",
+        failed: "the MCP server for agents couldn't start, {why}",
+        connected: "{client} connected over MCP",
+        instructions: "This is Hex, a code editor, running on the user's machine. hex_screenshot shows the window, hex_ui_tree lists what's on it with ids hex_click takes. Coordinates are window pixels, the same in both. Prefer the direct tools (hex_open, hex_editor, hex_run_command) over clicking where they do the job."
     },
 
     side_tree: {

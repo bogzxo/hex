@@ -150,6 +150,17 @@ internal sealed partial class HexSettings
     /// <summary>Whether the names of parameters and the like are written faintly in among the code, inlay hints.</summary>
     public bool InlayHints = true;
 
+    /// <summary>Whether names are coloured by what they are (a class, a field, a parameter), from the language servers and from HIDL itself.</summary>
+    public bool SemanticHighlighting = true;
+
+    /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
+    public string CSharpColors = "resharper";
+    /// <summary>
+    /// Whether agents can drive Hex over MCP, its server up on a pipe only this user on this machine can open. Off as it
+    /// comes, and never a folder's to switch on (see WorkspaceKeys), a repository somebody cloned mustn't open the door.
+    /// </summary>
+    public bool McpServer;
+
     /// <summary>Whether the workspace's repositories are fetched from their remotes every few minutes, for behind to be known.</summary>
     public bool GitAutoFetch = true;
 
@@ -338,6 +349,9 @@ internal sealed partial class HexSettings
         GitBlame = Flag(values, "git_blame", GitBlame);
         Minimap = Flag(values, "minimap", Minimap);
         InlayHints = Flag(values, "inlay_hints", InlayHints);
+        SemanticHighlighting = Flag(values, "semantic_highlighting", SemanticHighlighting);
+        if (values.TryGetValue("csharp_colors", out var csharp) && csharp is StringValue { Value: "resharper" or "visual_studio" or "skin" } colored) CSharpColors = colored.Value;
+        McpServer = Flag(values, "mcp_server", McpServer);
         GitAutoFetch = Flag(values, "git_autofetch", GitAutoFetch);
         GitAutoFetchInterval = Math.Clamp(Number(values, "git_autofetch_interval", GitAutoFetchInterval), 1.0f, 60.0f);
         if (values.TryGetValue("git_pull_mode", out var pull) && pull is StringValue { Value: "default" or "merge" or "rebase" or "ff_only" } pulled) GitPullMode = pulled.Value;
@@ -595,6 +609,9 @@ internal sealed partial class HexSettings
             .Add("git_blame", GitBlame)
             .Add("minimap", Minimap)
             .Add("inlay_hints", InlayHints)
+            .Add("semantic_highlighting", SemanticHighlighting)
+            .Add("csharp_colors", CSharpColors)
+            .Add("mcp_server", McpServer)
             .Add("git_autofetch", GitAutoFetch)
             .Add("git_autofetch_interval", GitAutoFetchInterval)
             .Add("git_pull_mode", GitPullMode)
