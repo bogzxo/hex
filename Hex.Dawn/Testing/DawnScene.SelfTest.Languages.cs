@@ -1,3 +1,5 @@
+using Key = Silk.NET.Input.Key;
+
 using Horizon.HIDL.Runtime;
 using Horizon.UI.Scripting;
 
@@ -174,11 +176,11 @@ internal sealed partial class DawnScene
         string NameOf(string id) => CodeLanguages.Languages().First(language => language.Id == id).Name;
         test.Check("language servers: one added for a language with none, a bar between its files, is a server of its own and in the list", () =>
         {
-            languages.FillServerForm(NameOf("rust"), "rs| .rlib ", "rust-analyzer-selftest");
+            languages.FillServerForm(NameOf("lua"), "lua| .luau ", "lua-ls-selftest");
             languages.PressAddServer();
-            return languages.ServerEntry("rust") is { Command: "rust-analyzer-selftest", Extensions: [".rs", ".rlib"] } rust && languages.IsAdded(rust)
-                && LanguageServers.RegistrationFor("main.rs") is { Name: "rust" } && settings.AddedServers.Any(server => server.Language == "rust")
-                && languages.serverStatus.ContainsKey("rust");
+            return languages.ServerEntry("lua") is { Command: "lua-ls-selftest", Extensions: [".lua", ".luau"] } lua && languages.IsAdded(lua)
+                && LanguageServers.RegistrationFor("main.lua") is { Name: "lua" } && settings.AddedServers.Any(server => server.Language == "lua")
+                && languages.serverStatus.ContainsKey("lua");
         });
         test.Run(() => languages.FocusServerForm());
         test.Settle(0.5f);
@@ -190,10 +192,10 @@ internal sealed partial class DawnScene
             languages.PressAddServer();
             bool instead = languages.ServerEntry("python") is { Command: "pylsp-selftest" } && LanguageServers.RegistrationFor("x.py") is { Command: "pylsp-selftest" };
             languages.RemoveServer("python");
-            languages.RemoveServer("rust");
-            return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("rust") is null
-                && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.rs") is null
-                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("rust");
+            languages.RemoveServer("lua");
+            return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("lua") is null
+                && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.lua") is null
+                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("lua");
         });
         test.Check("language servers: the files typed are read with a bar between two and a dot on each", () =>
             HexLanguages.ParseExtensions(" d | .di|*.dd||. ") is [".d", ".di", ".dd"]);
@@ -229,6 +231,9 @@ internal sealed partial class DawnScene
         });
         test.Run(CloseSettings);
 
+        TestLanguageModes(test, folder);
+        TestLanguageReach(test, folder);
+
         test.Run(() =>
         {
             foreach (HexDocument open in documents.Where(open => open.Path is { } path && path.StartsWith(folder, PlatformPaths.Comparison)).ToList())
@@ -244,5 +249,139 @@ internal sealed partial class DawnScene
                 Show(before);
         });
         test.Wait();
+    }
+
+    /// <summary>
+    /// Change Language Mode, Ctrl+K M and the status bar listing every language, one picked colouring the file and kept
+    /// by its path, Configure File Association writing files_associations, and a backup the language of what it was a
+    /// copy of.
+    /// </summary>
+    private void TestLanguageModes(HexPointerScript test, string folder)
+    {
+        string weird = Path.Combine(folder, "notes.weird"), file = Path.Combine(folder, "selftest_language_settings.hor");
+        HexSettings? was = null;
+        ListBox Chooser() => Descendants(textDialog!.Body).OfType<ListBox>().First();
+        bool Lists(string row) => textDialog is { IsOpen: true } && Chooser().Items.Contains(row);
+        void Pick(Func<string, bool> row)
+        {
+            ListBox list = Chooser();
+            int at = Array.FindIndex(list.Items, text => row(text));
+            list.Choose(at);
+            list.OnActivated!(list.Items[at]);
+        }
+
+        // Settings of the test's own, no folder's file written by a language picked and the user's file left alone
+        test.Run(() =>
+        {
+            was = settings;
+            if (File.Exists(file))
+                File.Delete(file);
+            settings = new HexSettings(file);
+            System.IO.File.WriteAllText(weird, "import os\n\ndef greet(name):\n    return 42\n");
+            Open(weird);
+        });
+        test.Wait();
+        test.Check("language mode: a file of an extension nobody knows is plain text", () =>
+            code.Highlighter is null && languageItem.Text.Contains(Said("status_bar.kind_plain_text")));
+
+        test.Run(() =>
+        {
+            commands.Keys.Update(pressed => pressed == Key.K, control: true, shift: false, alt: false, typing: false);
+            commands.Keys.Update(pressed => pressed == Key.M, control: false, shift: false, alt: false, typing: false);
+        });
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.Check("language mode: Ctrl+K M lists Auto Detect, Plain Text, Configure File Association and every language", () =>
+            textDialog is { IsOpen: true } && Chooser().Items is var rows
+            && rows[0] == Said("language_mode.auto_detect", ("language", Said("language_mode.plain_text")))
+            && rows[1] == Said("language_mode.current", ("row", Said("language_mode.plain_text")))
+            && rows.Contains(Said("language_mode.configure", ("extension", ".weird")))
+            && CodeLanguages.Languages().All(language => rows.Contains($"{language.Name} ({language.Id})")) && rows.Contains("HIDL (hidl)"));
+        test.Run(() => Pick(row => row == "Python (python)"));
+        test.WaitFor(() => code.KindAt(2, 0) is not null, 3.0f);
+        test.Check("language mode: picking Python colours the file as Python, the status bar says so and the folder's settings keep it", () =>
+            code.Highlighter?.Name == "Python" && code.KindAt(2, 0) == SyntaxKind.Keyword && languageItem.Text.Contains("Python")
+            && settings.LanguageOverrides.TryGetValue(Path.GetFullPath(weird), out string? kept) && kept == "python"
+            && CodeLanguages.OverrideOf(weird) == "python");
+
+        test.Click(() => chrome.ToWorld(statusBar.ItemBounds(languageItem).Center));
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.Check("language mode: a click on the language in the status bar opens the same list, Python marked", () =>
+            Lists(Said("language_mode.current", ("row", "Python (python)"))) && Lists(Said("language_mode.plain_text")));
+        string autoDetect = Said("language_mode.auto_detect", ("language", "|"));
+        test.Run(() => Pick(row => row.StartsWith(autoDetect[..autoDetect.IndexOf('|')], StringComparison.Ordinal)));
+        test.Wait();
+        test.Check("language mode: Auto Detect lets it go, plain text again and nothing kept", () =>
+            code.Highlighter is null && CodeLanguages.OverrideOf(weird) is null && settings.LanguageOverrides.Count == 0);
+
+        // Configure File Association, every .weird Python, in the user's settings and after a restart
+        test.Run(ChangeLanguageMode);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.Run(() => Pick(row => row == Said("language_mode.configure", ("extension", ".weird"))));
+        test.WaitFor(() => Lists("Python (python)"), 3.0f);
+        test.Run(() => Pick(row => row == "Python (python)"));
+        test.Wait();
+        test.Check("language mode: Configure File Association writes files_associations to the user's settings and colours the file", () =>
+            File.ReadAllText(file) is var text && text.Contains("files_associations", StringComparison.Ordinal)
+            && text.Contains("\"*.weird\": \"python\"", StringComparison.Ordinal)
+            && code.Highlighter?.Name == "Python" && settings.FileAssociations["*.weird"] == "python");
+        test.Run(() =>
+        {
+            CloseNow();
+            CodeLanguages.SetAssociations([]);
+            settings = new HexSettings(file);
+        });
+        test.Wait();
+        test.Run(() => Open(weird));
+        test.Wait();
+        test.Check("language mode: and read again as Hex starts, the file opens as Python", () =>
+            settings.FileAssociations.GetValueOrDefault("*.weird") == "python" && code.Highlighter?.Name == "Python" && languageItem.Text.Contains("Python"));
+
+        // A file set to a language is kept by the folder's own settings, by its path in the folder
+        string workspace = Path.Combine(folder, "language_workspace"), inside = Path.Combine(workspace, "src", "tool.weird");
+        test.Check("language mode: a language picked is kept in the folder's file by its path there, and read back", () =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(inside)!);
+            var kept = new HexSettings(null);
+            kept.LoadWorkspace(workspace);
+            kept.SetLanguageOverride(inside, "rust");
+            bool written = File.ReadAllText(HexSettings.WorkspacePathOf(workspace)).Contains("\"src/tool.weird\": \"rust\"", StringComparison.Ordinal);
+            var read = new HexSettings(null);
+            read.LoadWorkspace(workspace);
+            bool back = read.LanguageOverrides.GetValueOrDefault(Path.GetFullPath(inside)) == "rust";
+            read.LoadWorkspace(null);
+            return written && back && read.LanguageOverrides.Count == 0;
+        });
+
+        // Backups, the inner extension decides, and a .hor set to plain text says so
+        string orig = Path.Combine(folder, "Foo.cs.orig"), menu = Path.Combine(folder, "menu.hor.orig"), plain = Path.Combine(folder, "plain.hor");
+        test.Run(() =>
+        {
+            System.IO.File.WriteAllText(orig, "public class Foo { }\n");
+            System.IO.File.WriteAllText(menu, "let title = \"menu\";\n");
+            System.IO.File.WriteAllText(plain, "let title = \"plain\";\n");
+            Open(orig);
+        });
+        test.Wait();
+        test.Check("language mode: Foo.cs.orig is C#, with the C# icon in the explorer and its tab", () =>
+            code.Highlighter?.Name == "C#" && HexExplorer.FileIcon(orig) == HexExplorer.FileIcon("Foo.cs") && HexExplorer.FileIcon(orig) != "file"
+            && explorer.FileIconColor(orig) == compositor.Skin?.Syntax?.Comment && IconOfDocument(document) == HexExplorer.FileIcon("Foo.cs"));
+        test.Run(() => Open(menu));
+        test.Wait();
+        test.Check("language mode: menu.hor.orig is HIDL in the status bar", () =>
+            ReferenceEquals(code.Highlighter, CodeLanguages.Hidl) && languageItem.Text.EndsWith(" HIDL", StringComparison.Ordinal));
+        test.Run(() => Open(plain));
+        test.Wait();
+        test.Run(() => PickLanguage(document, CodeLanguages.PLAIN_TEXT));
+        test.Wait();
+        test.Check("language mode: a .hor set to plain text is Plain text in the status bar and not parsed", () =>
+            code.Highlighter is null && !code.CheckSyntax && languageItem.Text.Contains(Said("status_bar.kind_plain_text")));
+        test.Run(() =>
+        {
+            PickLanguage(document, null);
+            settings = was!;
+        });
+        test.Wait();
+        test.Check("language mode: the settings back, the association goes with them", () =>
+            CodeLanguages.Detect(weird) is null && ReferenceEquals(CodeLanguages.ForFile(plain), CodeLanguages.Hidl));
     }
 }

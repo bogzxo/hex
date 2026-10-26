@@ -25,4 +25,25 @@ public sealed class HexTasksFixTests
     [InlineData("gcc main.c -o main")]
     [InlineData(".\\app.exe")]
     public void AnythingElseIsLeftAlone(string command) => Assert.Null(HexTasks.WithImports(command));
+
+    [Fact]
+    public void TheTasksTemplateHasACommaAfterEveryKeyAndReadsBack()
+    {
+        string folder = Directory.CreateTempSubdirectory("hex-tasks-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "app.csproj"), "<Project />");
+            string written = HexTasks.TasksTemplate(folder);
+
+            Assert.Contains("        terminal: \"panel\",\n    },\n};\n", written);
+            var runtime = new Horizon.HIDL.HIDLRuntime { Output = null };
+            Assert.True(runtime.Evaluate(written).success);
+            var tasks = Assert.IsType<Horizon.HIDL.Runtime.ObjectValue>(runtime.UserScope.Lookup("tasks"));
+            Assert.Equal(["build", "test", "run"], tasks.Properties.Keys);
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
 }

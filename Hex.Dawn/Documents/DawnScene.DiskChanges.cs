@@ -31,6 +31,10 @@ internal sealed partial class DawnScene
         if (open is null)
             return;
 
+        // A picture isn't text to read again, the tab keeps the picture it opened with
+        if (open.Picture is not null)
+            return;
+
         if (!File.Exists(path))
         {
             if (open.DiskText is not null)
@@ -82,7 +86,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>Whether a document has anything in it that isn't in its file.</summary>
-    private static bool HasChanges(HexDocument open) => open.IsText
+    internal static bool HasChanges(HexDocument open) => open.IsText
         ? open.Editor.Text != open.SavedCode || open.CrLf != open.SavedCrLf
         : open.Modified || open.CodeEdited || open.GenerateCode() != open.SavedCode;
 

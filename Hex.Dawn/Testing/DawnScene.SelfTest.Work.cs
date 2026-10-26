@@ -8,10 +8,16 @@ namespace Hex.Dawn;
 // why with its output, the status bar's count, and an install of a language server by its command line, pressed twice.
 internal sealed partial class DawnScene
 {
-    /// <summary>A picture of the window as it is, into the folder DAWN_SELFTEST_SHOTS names, for whoever wants to look. Nothing without it.</summary>
+    /// <summary>
+    /// A picture of the window as it is, into the folder HEX_SELFTEST_SHOTS names like every other part's pictures, for
+    /// whoever wants to look. DAWN_SELFTEST_SHOTS was this one's own name for it and still works. Nothing without either.
+    /// </summary>
     private void Shot(string name)
     {
-        if (System.Environment.GetEnvironmentVariable("DAWN_SELFTEST_SHOTS") is { Length: > 0 } folder)
+        string? folder = System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS");
+        if (string.IsNullOrEmpty(folder))
+            folder = System.Environment.GetEnvironmentVariable("DAWN_SELFTEST_SHOTS");
+        if (!string.IsNullOrEmpty(folder))
             Engine.CaptureScreenshot(Path.Combine(folder, name + ".png"));
     }
 

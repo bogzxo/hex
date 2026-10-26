@@ -196,11 +196,24 @@ internal interface IWindows
     /// </summary>
     void Choose(string title, string message, List<(string Text, Action Picked)> choices);
 
+    /// <summary>
+    /// The same with rows in their parts, a symbol, the text bright and a folder, a remote or an author dim after it, or a
+    /// commit's hash, subject, author and date each in a colour of its own.
+    /// </summary>
+    void Choose(string title, string message, List<UIChoice> choices);
+
     /// <summary>A question with buttons, the label of the one pressed handed on.</summary>
     void Ask(string title, string text, string[] buttons, Action<string> answered);
 
     /// <summary>A line of text asked for, what was typed handed on, enter or the button.</summary>
     void Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed);
+
+    /// <summary>
+    /// More than a line of text asked for (a commit's message), in a box coloured as a language (by a file name of it,
+    /// COMMIT.md), Enter a new line and Ctrl+Enter or the button done. <paramref name="note"/> says something under the box
+    /// about what's typed as it's typed, a warning in the warning colour.
+    /// </summary>
+    void PromptLines(string title, string text, string value, string button, string language, Func<string, (string Text, bool Warning)>? note, Action<string> typed);
 
     /// <summary>A menu where the pointer is.</summary>
     void Menu(Menu menu);
@@ -378,6 +391,9 @@ internal interface IEditorWindow
 
     /// <summary>The code of the layout on screen, the caret on what a name of it declares.</summary>
     void ShowDeclaration(string name);
+
+    /// <summary>The file of the game's language that's loaded opened at a key of it ("main_menu.quit").</summary>
+    void GoToKey(string key);
 
     /// <summary>The little window on top (the settings, a page of help) taken down, false when there is none.</summary>
     bool CloseTopWindow();

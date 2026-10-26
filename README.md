@@ -41,10 +41,18 @@ The workspace is any number of folders (File, Open folder, Add folder), a tree i
 
 ## Extensions
 
-An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The ones that come with Hex are in
-`Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are switched on and off on their page
-of the settings (the puzzle piece on the activity bar), and one that goes wrong is switched off for the rest of the run
-and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the first of them.
+An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The two that come with Hex (the layout
+designer and Dusk's settings) are in `Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are
+switched on and off on their page of the settings (the puzzle piece on the activity bar), and one that goes wrong is
+switched off for the rest of the run and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the
+first of them.
+
+The rest are installed from [hex-extensions](https://github.com/bogzxo/hex-extensions), the catalog, on Extensions,
+Available in the settings. Hex syncs it once a day as it starts (and on Check now), lists every extension in it with
+Install on the ones that aren't here and Update on the ones that are behind, and puts a card up when one you installed
+has a newer version. An install goes in the `extensions` folder next to Hex and starts straight away. The catalog can be
+another repository (owner/name) or a folder on your machine laid out the same, for writing one. Hex's tests have it as
+a submodule, `git submodule update --init` after a clone.
 
 ```
 let extension = { name: "Hello Dolly", description: "...", version: "1.0.0", author: "bogz" };
@@ -53,7 +61,7 @@ let welcome_greetings = ["Hello, Dolly!", "..."];
 // Called once Hex is up, with what an extension may do to it
 func on_start(hex) {
     hex.title_note(math.pick(welcome_greetings));
-    hex.command("Another greeting", func(hex) {
+    hex.command("Another greeting", hex => {
         hex.title_note(math.pick(welcome_greetings));
     });
 }
@@ -61,8 +69,8 @@ func on_start(hex) {
 
 What `hex` has for now. `hex.title_note(text)` puts a few words after Hex in the title bar, in brackets. `hex.say(text)`
 says something in the status bar, `hex.notify(text)` puts a card up in the corner (`hex.notify(text, true)` an error
-that stays). `hex.command(name, func(hex) { ... })` puts a command in the command palette under the extension's name,
-and `hex.command(name, func(hex) { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
+that stays). `hex.command(name, hex => { ... })` puts a command in the command palette under the extension's name,
+and `hex.command(name, hex => { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
 `hex.file()` is the path of the file on screen. `hex.version`, `hex.name` and `hex.folder` are Hex's version, the
 extension's name and its folder. Besides `on_start(hex)`, an extension hears about `on_open(hex, file)` and
 `on_save(hex, file)`, and `on_change(hex, file)` a moment after a file is typed into. What it prints goes in the output
@@ -71,16 +79,16 @@ read again by itself when a `.hor` of its folder changes, its views back on the 
 is save and look rather than starting Hex again.
 
 It can ask things. `hex.menu([{ label, icon, key, on_pressed, enabled }, "-", { label, items: [...] }])` puts a menu up at
-the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, func(hex,
-pressed) { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, func(hex, typed) {
-... })` a line of text.
+the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, (hex,
+pressed) => { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, (hex, typed) =>
+{ ... })` a line of text.
 
 It can have a UI too, a view of a file (`hex.view`, offered on the files that say its `#define` and opened on them by
 itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
 doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
 and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
 for a file or a folder with Hex's own dialog (`hex.pick_file({ title, folder, filter: ["Pictures", "*.png;*.jpg"] },
-func(path) { ... })`, `hex.pick_folder(func(path) { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
+path => { ... })`, `hex.pick_folder(path => { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
 error }`, for a file that may be half typed.
 
 It can change a file by the paths of its values, written where they are in the text with the file's comments and spacing
@@ -88,6 +96,16 @@ kept, one step of the file's undo a call (null when it went, why it didn't as a 
 "damage"], 8)`, `hex.insert(file, path, key, value, after)`, `hex.remove(file, path)`, `hex.rename(file, path, key)`,
 `hex.reorder(file, path, keys)`, `hex.edits(file, [{ edit: path, value }, { insert: path, key, value }, ...])` for several
 as one step, and `hex.undo_file(file)` and `hex.redo_file(file)`. A file that isn't open is opened behind the one on screen.
+It can write where somebody is typing as well. `hex.caret()` is the caret of the file on screen, `{ line, column, text,
+selected }` (lines and columns from 1, `text` the line it's on), null when the file is a layout, and `hex.replace_text({
+line, column }, { line, column }, text, caret)` puts text over that much of the file as one step to undo, the caret left
+`caret` characters into what was written (at its end without one). `hex.selection()` is `{ from, to, caret, text }`,
+from before to whichever way it was dragged, `hex.select(from, to)` selects (the caret at `to`) or with one place puts
+the caret there, scrolled to, and `hex.lines(first, last)` is the lines as they're written, every one of them without
+the two (HIDL's `split` trims and drops empty ones, no use for code). An extension with an `on_tab(hex, file)` is asked
+first when Tab is pressed in code with nothing selected, and true back means it took the key and nothing is indented.
+Emmet (`extensions/emmet`) is that, `ul>li.item$*3` written out as the HTML it stands for on Tab in the files it's on for
+and on Ctrl+E in any of them.
 `hex.problems(file, [{ path or line, message, warning }])` puts what it finds wrong in Hex's problems, `hex.watch(path)`
 has it told `on_file_changed(hex, path)`, `hex.open(file, path)` opens a file at a value, `hex.copy(text)` puts text on
 the clipboard. See `docs/extensions.md`, the move editor (Fighter2D's moves, `extensions/move_editor`) is all of it at
@@ -108,6 +126,51 @@ wrong and the lints of what it came to, completion (the language's words, the fi
 of component after `compositor.` and its properties inside its braces, the words a property like `anchor` takes),
 hovers, where a name is declared (the file, the other open files, then the workspace) and the outline. Dawn doesn't
 start it for its own files, it has all of that inside already.
+
+## Agents (MCP)
+
+Hex can be driven by an AI agent over the Model Context Protocol, Claude Code or anything else that speaks it, and the
+agent uses it the way you do. It looks at the window, clicks, types, presses keys and runs commands, and it reads the
+code, the problems and the terminal without needing a screenshot for any of it. It's off as it comes. Switch on Agents
+(MCP server) in the settings, under Editor, Run and debug, or start Hex with `--mcp` for the one run. Hex then puts its
+server up on a pipe that only you can open, only from this machine, and only with the token it writes into
+`settings/mcp` next to Hex.exe. A folder's own `.hex/settings.hor` can't switch it on, a repository you cloned doesn't
+get to open that door. While an agent is connected the status bar says Agent on the right, and a click on it takes you
+to the setting.
+
+Claude Code is connected like this.
+
+```
+claude mcp add hex -- C:\path\to\Hex.exe --mcp
+```
+
+Started by a client like that, `Hex.exe --mcp` has no window. It finds the Hex that has the folder the client was started
+in open (`--folder` says another), starts one on that folder with the server on when none has and waits for it to come
+up, and then passes the client's stdin and stdout through to it. Every other client that starts its servers over stdio
+is set up the same, the command is Hex.exe and the argument `--mcp`. A project can carry it for Claude Code in its
+`.mcp.json` as well.
+
+```json
+{ "mcpServers": { "hex": { "command": "C:/path/to/Hex.exe", "args": ["--mcp"] } } }
+```
+
+`Hex --mcp` typed at a prompt rather than started by a client is plain Hex with the server on.
+
+The tools, all named `hex_` something. `screenshot` (a PNG of the window or a part of it, scaled down if you like),
+`ui_tree` (what's on screen with ids, the rows of trees, tabs, the status bar's items and the menus too), `click` (by
+id, by the text on it or at a point, left, right or double), `type`, `key` (Ctrl+Shift+P and the like, chords one after
+another), `scroll` and `hover`. `commands` and `run_command` for the command palette. `open`, `documents`, `editor`
+(the current file's text, caret and selection) and `set_selection`. `problems`, `outline` and `find_in_files`.
+`definition`, `symbol_info` and `references`, through HIDL or the file's language server. `terminal_read` and
+`terminal_send` for the panel's terminal, `run_task` and `task_output` for the tasks. `settings_get` and
+`settings_set`. `wait_for` (Hex idle, a file open, a dialog up or gone, text on screen or gone, a message, a file's
+problems). And `selftest`, which runs suites of the self test in a Hex of its own and says what passed, never in the one
+you're working in.
+
+Every call runs on Hex's own thread a tick at a time, so a click is a move, a press and a let go like a hand's, and an
+idle Hex wakes for it at once. Points are window pixels, the same in a screenshot as in a click. Moving the real mouse
+takes the pointer back from the agent. The server is `Hex.Core/Mcp` (the protocol, the pipe, the bridge) and
+`Hex.Dawn/Agents` (the tools), `Hex --selftest mcp` tests it in the editor and `McpTests` without one.
 
 ## Finding your way round the code
 
@@ -157,7 +220,16 @@ Hex runs on Windows, Linux and macOS, with the .NET 11 SDK on each.
 
 Settings are in `%AppData%\Hex` (or a `settings` folder next to Hex.exe), `~/Library/Application Support/Hex` and
 `~/.config/hex`. A Dusk drop down key is Windows' own there, on Linux and macOS it's the desktop's: bind
-`hex --dusk --toggle` to it in the keyboard settings. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
+`hex --dusk --toggle` to it in the keyboard settings.
+
+Dusk can be the system's terminal, Terminal, System, Dusk as the default terminal, in either mode's settings. On Windows
+a console program started from anywhere but a terminal (cmd from the Run box, a script double clicked) then opens in
+Dusk, a tab of the Dusk that's open or a Dusk of its own. Windows passes a console on through Windows Terminal's
+console host (it's the only one that hands consoles to a terminal), so Windows Terminal has to be installed, it comes
+with Windows 11, but the program shows up in Dusk. It's `HKCU\Console\%%Startup` and Dusk registered as a COM server
+under `HKCU\Software\Classes`, nothing needing admin, and switching it off puts back the terminal that was the default
+before. On Linux it's Dusk first in `xdg-terminals.list` and GNOME's own terminal setting, and Dusk takes `-e command`
+the way a desktop's terminal is asked to run something. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
 -r linux-x64`, `osx-arm64`, `win-x64`) it wants clang on Linux and the Xcode command line tools on a Mac.
 
 The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`

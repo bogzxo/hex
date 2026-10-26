@@ -106,7 +106,8 @@ internal sealed class DuskScript
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[Dusk self-test] a step threw: {e.Message}");
+                Console.WriteLine($"[Dusk self-test] step threw: {e.GetType().Name}: {e.Message}");
+                Console.WriteLine("[Dusk self-test] FAIL: a step threw");
                 Failed++;
             }
 
@@ -137,7 +138,21 @@ internal sealed class DuskScript
 
         if (step.Target is null)
         {
-            if (elapsed >= step.Duration || step.Until?.Invoke() == true)
+            // A wait whose question blows up is over, with a failure counted for it once, and the test goes on
+            bool done;
+            try
+            {
+                done = elapsed >= step.Duration || step.Until?.Invoke() == true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[Dusk self-test] step threw: {e.GetType().Name}: {e.Message}");
+                Console.WriteLine("[Dusk self-test] FAIL: a wait threw");
+                Failed++;
+                done = true;
+            }
+
+            if (done)
                 current = null;
             return;
         }

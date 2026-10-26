@@ -4,7 +4,7 @@
 
 let welcome = compositor.panel({
     fill: "both",
-    color: vec(0.065, 0.07, 0.092, 1)
+    color: vec(0.065, 0.07, 0.092, 1),
 });
 
 // A column in the middle of the canvas, its rows from the left. It hugged the left with half the canvas empty beside it
@@ -13,7 +13,7 @@ let page = compositor.stack({
     anchor: "center",
     pivot: "center",
     pos: vec(0, 24),
-    spacing: 18
+    spacing: 18,
 });
 
 // The icon beside the name, the way an app's welcome window has it
@@ -22,7 +22,7 @@ let brand = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 16,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let icon = compositor.image({
@@ -30,7 +30,7 @@ let icon = compositor.image({
     anchor: "left",
     pivot: "left",
     file: "Assets/hex_icon.png",
-    size: vec(56, 56)
+    size: vec(56, 56),
 });
 
 let title = compositor.label({
@@ -39,7 +39,7 @@ let title = compositor.label({
     pivot: "left",
     text: "@welcome.title",
     text_scale: 0.5,
-    align: "left"
+    align: "left",
 });
 
 let subtitle = compositor.label({
@@ -49,7 +49,7 @@ let subtitle = compositor.label({
     text: "@welcome.subtitle",
     text_scale: 0.16,
     color: vec(0.58, 0.6, 0.66, 1),
-    align: "left"
+    align: "left",
 });
 
 let columns = compositor.stack({
@@ -57,14 +57,14 @@ let columns = compositor.stack({
     anchor: "top_left",
     pivot: "top_left",
     spacing: 64,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let start = compositor.stack({
     parent: columns,
     anchor: "top",
     pivot: "top",
-    spacing: 4
+    spacing: 4,
 });
 
 let start_title = compositor.label({
@@ -74,7 +74,7 @@ let start_title = compositor.label({
     text: "@welcome.start",
     text_scale: 0.17,
     bold: true,
-    align: "left"
+    align: "left",
 });
 
 let new_layout = compositor.button({
@@ -87,7 +87,7 @@ let new_layout = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let open_file = compositor.button({
@@ -100,7 +100,7 @@ let open_file = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let open_folder = compositor.button({
@@ -113,7 +113,7 @@ let open_folder = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let commands = compositor.button({
@@ -126,7 +126,7 @@ let commands = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let help_gap = compositor.spacer({ parent: start, size: vec(0, 14) });
@@ -138,7 +138,7 @@ let help_title = compositor.label({
     text: "@welcome.help",
     text_scale: 0.17,
     bold: true,
-    align: "left"
+    align: "left",
 });
 
 let keys = compositor.button({
@@ -151,7 +151,7 @@ let keys = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let language = compositor.button({
@@ -164,7 +164,7 @@ let language = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let changes = compositor.button({
@@ -177,14 +177,14 @@ let changes = compositor.button({
     lbl_scale: 0.15,
     hover: "nudge",
     hover_amount: 4,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let recent_column = compositor.stack({
     parent: columns,
     anchor: "top",
     pivot: "top",
-    spacing: 4
+    spacing: 4,
 });
 
 let recent_title = compositor.label({
@@ -194,7 +194,7 @@ let recent_title = compositor.label({
     text: "@welcome.recent",
     text_scale: 0.17,
     bold: true,
-    align: "left"
+    align: "left",
 });
 
 // A button a file that was worked on lately, put in by the editor
@@ -204,5 +204,5 @@ let recent = compositor.stack({
     pivot: "left",
     template: "link.hor",
     preview_count: 3,
-    spacing: 2
+    spacing: 2,
 });

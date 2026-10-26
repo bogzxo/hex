@@ -28,7 +28,7 @@ public sealed class HexSearchTests : IDisposable
     }
 
     [Fact]
-    public void The_files_are_every_hor_but_what_gets_built_git_and_submodules()
+    public void The_files_are_every_hor_but_what_gets_built_git_and_submodules_dot_folders_included()
     {
         Write("a.hor", "let a = 1;");
         Write("ui/b.hor", "let b = 2;");
@@ -42,7 +42,7 @@ public sealed class HexSearchTests : IDisposable
 
         List<string> files = HexSearch.FilesUnder([root]);
 
-        Assert.Equal(["a.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
+        Assert.Equal([".hidden/e.hor", "a.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
     }
 
     [Fact]
@@ -76,6 +76,86 @@ public sealed class HexSearchTests : IDisposable
     {
         Write("a.hor", "let a = (1);");
         Assert.Empty(HexSearch.FindIn([root], "(", new UIFindOptions(Regex: true)));
+    }
+
+    [Fact]
+    public void A_regex_that_doesnt_build_says_why()
+    {
+        Write("a.hor", "let a = (1);");
+
+        HexSearchOutcome outcome = HexSearch.Search([root], "(", new UIFindOptions(Regex: true));
+
+        Assert.Empty(outcome.Found);
+        Assert.False(string.IsNullOrEmpty(outcome.Error));
+        Assert.Null(HexSearch.Search([root], @"\(", new UIFindOptions(Regex: true)).Error);
+    }
+
+    [Fact]
+    public void Every_match_on_a_line_is_a_result_of_its_own()
+    {
+        Write("a.txt", "    foo foo foo\nbar foo");
+
+        List<HexResult> found = HexSearch.FindIn([root], "foo", new UIFindOptions());
+
+        Assert.Equal(4, found.Count);
+        Assert.Equal([(0, 4), (0, 8), (0, 12), (1, 4)], found.Select(result => (result.Line, result.Column)));
+        Assert.Equal([0, 4, 8], found.Take(3).Select(result => result.FoundAt));
+        Assert.All(found, result => Assert.Equal(3, result.Found));
+        Assert.Equal([(4, 3), (8, 3)], HexSearch.AllMatches("bar foo foo", "foo", new UIFindOptions(), null));
+    }
+
+    [Fact]
+    public void The_files_to_include_and_exclude_narrow_the_search()
+    {
+        Write("src/a.cs", "needle");
+        Write("src/notes.md", "needle");
+        Write("src/deep/b.cs", "needle");
+        Write("docs/c.md", "needle");
+        Write("top.cs", "needle");
+        List<string> Found(string include, string exclude) =>
+            [.. HexSearch.Search([root], "needle", new UIFindOptions(), include, exclude).Found.Select(result => HexSearch.RelativeTo([root], result.Path)).Order()];
+
+        Assert.Equal(5, Found(string.Empty, string.Empty).Count);
+        Assert.Equal(["src/a.cs", "src/deep/b.cs", "src/notes.md"], Found("src/**", string.Empty));
+        Assert.Equal(["src/a.cs", "src/deep/b.cs"], Found("src/**", "*.md"));
+        Assert.Equal(["src/a.cs", "src/deep/b.cs", "top.cs"], Found(string.Empty, "*.md"));
+        Assert.Equal(["src/a.cs", "src/notes.md", "top.cs"], Found("src, top.cs", "deep"));
+        Assert.Equal(["docs/c.md", "src/notes.md", "top.cs"], Found("*.{md,txt}, top.cs", string.Empty));
+        Assert.Equal(["*.{md,txt}", "top.cs"], HexScope.Split("*.{md,txt}, top.cs,"));
+    }
+
+    [Fact]
+    public void Replacing_in_files_puts_the_groups_in_and_keeps_the_bom_and_crlf()
+    {
+        string path = Path.Combine(root, "a.txt");
+        byte[] bom = [0xEF, 0xBB, 0xBF];
+        File.WriteAllBytes(path, [.. bom, .. System.Text.Encoding.UTF8.GetBytes("let a = 1; let b = 22;\r\nlet c = 3;\r\n")]);
+        var options = new UIFindOptions(Regex: true);
+        List<HexResult> found = HexSearch.FindIn([root], @"(\w) = (\d+)", options);
+        Assert.Equal(3, found.Count);
+
+        // The match of c dismissed from the list, it stays as it is
+        List<HexReplaced> done = HexSearch.ReplaceIn(found.Where(result => result.Line == 0), @"(\w) = (\d+)", "$2 = $1", options);
+
+        HexReplaced only = Assert.Single(done);
+        Assert.Equal(2, only.Count);
+        byte[] written = File.ReadAllBytes(path);
+        Assert.Equal(bom, written[..3]);
+        Assert.Equal("let 1 = a; let 22 = b;\r\nlet c = 3;\r\n", System.Text.Encoding.UTF8.GetString(written[3..]));
+    }
+
+    [Fact]
+    public void Replacing_in_an_open_file_goes_through_the_editor_and_leaves_the_disk_alone()
+    {
+        string path = Write("a.txt", "foo foo\n");
+        List<HexResult> found = HexSearch.FindIn([root], "foo", new UIFindOptions());
+        string? rewritten = null;
+
+        List<HexReplaced> done = HexSearch.ReplaceIn(found, "foo", "bar", new UIFindOptions(), _ => "foo foo\nfoo\n", (_, text) => rewritten = text);
+
+        Assert.Equal(2, Assert.Single(done).Count);
+        Assert.Equal("bar bar\nfoo\n", rewritten);
+        Assert.Equal("foo foo\n", File.ReadAllText(path));
     }
 
     [Fact]

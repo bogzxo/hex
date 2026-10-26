@@ -16,7 +16,7 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // Finding things. In the file (Ctrl+F, F3, Ctrl+H, Ctrl+G), and in every file of the workspace, opening one by a few
-// letters of its name (Ctrl+P), every line something is on (Ctrl+Shift+F) and every file checked for what is wrong (F8).
+// letters of its name (Ctrl+P), every match in the search view (Ctrl+Shift+F) and every file checked for what is wrong (F8).
 internal sealed partial class DawnScene
 {
     /* Finding and going places */
@@ -86,7 +86,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>Every file of every folder looked through that reads as text, once each.</summary>
-    private List<string> AllWorkspaceFiles() => HexSearch.TextFilesUnder(WorkspaceRoots());
+    private List<string> AllWorkspaceFiles() => HexSearch.OpenableFilesUnder(WorkspaceRoots(), IsPicture);
 
     /// <summary>A file by where it is in the workspace, with the name of its folder in front when there is more than one.</summary>
     private string Relative(string path) => HexSearch.RelativeTo(WorkspaceRoots(), path);
@@ -105,19 +105,15 @@ internal sealed partial class DawnScene
         // The folder by its name and not its whole path, a line along the bottom of the palette and not a paragraph
         var roots = WorkspaceRoots();
         string where = roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) : DescribeRoots();
-        List<(string Text, Action Picked)> choices = [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))];
+        List<UIChoice> choices = [.. names.Select(name => FileChoice(name, byName[name]))];
 
         // Nothing in the workspace (there's none yet), the files worked on last and a folder to open, it said there was
         // nothing to pick from
         if (choices.Count == 0)
         {
             foreach (string file in recent.Where(File.Exists).Take(10))
-            {
-                string path = file;
-                choices.Add((path, () => OpenAt(path, 0, 0)));
-            }
-
-            choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
+                choices.Add(FileChoice(file, file));
+            choices.Add(new UIChoice(Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)) { Icon = "folder-opened" });
         }
 
         // Ctrl+G's says what it's going along, the file's lines, not quick open's way of finding a file
@@ -128,27 +124,48 @@ internal sealed partial class DawnScene
             choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
     }
 
+    /// <summary>
+    /// A file of quick open's, VS Code's way, its icon, its name bright and its folder dim after it. It's known (and ranked
+    /// and remembered) by the whole of where it is in the workspace, so a folder typed still finds it.
+    /// </summary>
+    private UIChoice FileChoice(string shown, string path)
+    {
+        string folder = Path.GetDirectoryName(shown)?.Replace('\\', '/') ?? string.Empty;
+        return new UIChoice(Path.GetFileName(shown), () => OpenAt(path, 0, 0))
+        {
+            Detail = folder,
+            Icon = HexExplorer.FileIcon(path),
+            IconColor = explorer.FileIconColor(path),
+            Id = shown
+        };
+    }
+
     /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
-    private List<(string Text, Action Picked)>? QuickOpenPrefix(char prefix)
+    private List<UIChoice>? QuickOpenPrefix(char prefix)
     {
         switch (prefix)
         {
             case '>':
-                return AllCommands();
+                return PaletteChoices();
 
             case '@':
-                return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => running.GoToCode(entry.Line, entry.Column))))];
+                return [.. OutlineHere().Select(entry => new UIChoice(entry.Name, () => running.GoToCode(entry.Line, entry.Column))
+                {
+                    Icon = entry.Icon,
+                    IconColor = OutlineColor(entry.Icon),
+                    Id = new string(' ', entry.Depth * 2) + entry.Name
+                })];
 
             case ':':
                 // Every line by its number with what's on it dim after, a few letters of the number find the one. Bare
                 // numbers said nothing of which line was which
-                var lines = new List<(string Text, Action Picked)>();
+                var lines = new List<UIChoice>();
                 int count = code.Document.LineCount;
                 for (int line = 1; line <= count; line++)
                 {
                     int at = line - 1;
                     string on = code.Document.LineAt(at).Trim();
-                    lines.Add((on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
+                    lines.Add(UIChoice.Of(on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
@@ -157,39 +174,19 @@ internal sealed partial class DawnScene
                 return lines;
 
             case '#':
-                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {HexEvaluation.Shorten(Localisation.Get(key), 60)}", (Action)(() => codeEditing.GoToKey(key))))];
+                // A text by its key, what it says dim after it
+                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key =>
+                {
+                    string says = HexEvaluation.Shorten(Localisation.Get(key), 60);
+                    return new UIChoice(key, () => codeEditing.GoToKey(key)) { Detail = says, Icon = "symbol-string", Id = $"{key}   {says}" };
+                })];
 
             default:
                 return null;
         }
     }
 
-    /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left, as the find bar's toggles say.</summary>
-    private void FindInFiles()
-    {
-        string how = HexSearch.DescribeOptions(codeEditing.findOptions);
-        AskText(Said("find_menu.find_in_files_title"), Said("find_menu.find_in_files_prompt", ("where", DescribeRoots()), ("how", how)), codeEditing.lastFind, Said("find_menu.find"), query =>
-        {
-            if (query.Length == 0)
-                return;
-
-            codeEditing.lastFind = query;
-            List<string> roots = WorkspaceRoots();
-            string where = DescribeRoots();
-            UIFindOptions options = codeEditing.findOptions;
-
-            // Every file read off the editor's thread, the results come in when they are all there
-            InBackground(Said("find_menu.looking_for", ("query", query), ("where", where)), () => HexSearch.FindIn(roots, query, options), found =>
-            {
-                ShowResults(Said("find_menu.found_title", ("query", query), ("count", found.Count.ToString())), found);
-                Say(found.Count > 0
-                    ? Said("find_menu.found_in_files", ("query", query), ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count())), ("lines", HexText.Count("line", found.Count)))
-                    : Said("find_menu.not_found", ("query", query), ("where", where)), error: found.Count == 0);
-            });
-        });
-    }
-
-    /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
+    /// <summary>Every place in every file of the workspace something is, as a word of its own if it says so.</summary>
     private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
     /// <summary>
@@ -226,13 +223,26 @@ internal sealed partial class DawnScene
         });
     }
 
-    private const string SEARCH_EMPTY_TEMPLATE = "search_empty.hor", ASK_TEMPLATE = "ask.hor";
+    private const string ASK_TEMPLATE = "ask.hor";
 
-    /// <summary>Lists the places something was found in the side bar's search view, and shows it.</summary>
+    /// <summary>
+    /// Lists the places something was found in the side bar's search view, and shows it. What the references of a name
+    /// came to (Shift+F12) is listed with the boxes empty, they didn't find it.
+    /// </summary>
     private void ShowResults(string title, List<HexResult> found)
     {
         results = found;
         resultsTitle = title;
+        resultsFound = null;
+        searchError = null;
+
+        // A search still going, or waiting to go, isn't wanted any more
+        searchAsked++;
+        searchWait = -1.0f;
+        if (searchView is not null)
+            searchQuery.Text = string.Empty;
+        ShowSearchMessage();
+
         left.Show(true);
         Side = HexSide.Search;
         treeScroll.Offset = 0;
@@ -241,6 +251,9 @@ internal sealed partial class DawnScene
     private void CloseResults()
     {
         results = null;
+        resultsFound = null;
+        searchError = null;
+        ShowSearchMessage();
         if (Side == HexSide.Search)
             Side = HomeSide;
         treeDirty = true;
@@ -250,6 +263,7 @@ internal sealed partial class DawnScene
     private void AddFindCommands()
     {
         commands.Add("Edit/files", Said("find_menu.find_in_files"), FindInFiles, "Ctrl+Shift+F", "search", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/files", Said("find_menu.replace_in_files"), ReplaceInFiles, "Ctrl+Shift+H", "replace-all", UIKeyUse.BoundWhileTyping);
 
         commands.Add("Go/open", Said("find_menu.go_to_file"), QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;

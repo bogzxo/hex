@@ -22,6 +22,10 @@ internal static partial class Program
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
+
+        // The old exe and dlls a build of Hex over itself moved aside go, see HexSelfBuild
+        Hex.Core.Projects.HexSelfBuild.CleanUpSoon();
 
         if (args.Any(arg => arg is "--help" or "-h" or "-?" or "/?" or "/h"))
         {
@@ -36,6 +40,17 @@ internal static partial class Program
         // HIDL's language server on stdin and stdout, for an editor to start (VS Code, or Hex's own settings), no window
         if (args.Contains("--lsp"))
             return Hex.Core.HidlServer.Serve();
+
+        // An MCP client's way in, its stdin and stdout passed to the Hex that has the folder open (started if none has),
+        // no window of its own. Typed at a prompt rather than started by a client it's Hex with the server on instead
+        if (args.Contains("--mcp") && !args.Contains("--window") && Hex.Core.McpBridge.StdinIsAClient())
+            return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
+
+#if DEBUG
+        // A Debug Hex's console for its log, made here now Windows doesn't hand one out by itself (app.manifest)
+        if (OperatingSystem.IsWindows())
+            ConsoleForTheLog(args);
+#endif
 
         // Started from the Dock or a desktop's launcher, the PATH a terminal would have, off this thread
         Horizon.Core.Processes.ProcessEnvironment.ImportLoginShell();
@@ -76,6 +91,11 @@ internal static partial class Program
     private static string[] Dropped(string[] args, HexMode mode, out List<string> more)
     {
         more = [];
+
+        // Dawn reads its own paths, anywhere in the line and with a line and column after them, see HexLaunch
+        if (mode == HexMode.Dawn)
+            return args;
+
         int first = Array.FindIndex(args, arg => arg.StartsWith('-'));
         if (first < 0)
             first = args.Length;
@@ -154,6 +174,29 @@ internal static partial class Program
         Console.SetOut(new StreamWriter(new FileStream(handle, FileAccess.Write)) { AutoFlush = true });
     }
 
+    /// <summary>
+    /// A console for a Debug Hex's log when it was started with none to inherit and nowhere else for its output to go,
+    /// from Explorer or a shortcut, the way it always had one. The manifest says detached so a console isn't made for
+    /// every start, the bridge of an MCP client and the default terminal's -Embedding start among them, both of which
+    /// handed their console to Dusk and left a stray one about.
+    /// </summary>
+    private static void ConsoleForTheLog(string[] args)
+    {
+        if (args.Any(arg => arg is "--mcp" or "--lsp" or "-Embedding" or "/Embedding") || GetConsoleWindow() != 0)
+            return;
+
+        nint output = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (output == 0 || output == -1)
+            AllocConsole();
+    }
+
+    [LibraryImport("kernel32.dll")]
+    private static partial nint GetConsoleWindow();
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AllocConsole();
+
     private const int ATTACH_PARENT_PROCESS = -1, STD_OUTPUT_HANDLE = -11;
     private const uint GENERIC_WRITE = 0x40000000, FILE_SHARE_WRITE = 0x2, OPEN_EXISTING = 3;
 
@@ -199,6 +242,12 @@ internal static partial class Program
 
         HIDL
           --lsp                    HIDL's language server on stdin and stdout, for an editor to start, no window
+
+        Agents (MCP)
+          --mcp                    started by an MCP client, the way in to the Hex that has the folder open (one is
+                                   started when none has), stdin and stdout the client's. Typed at a prompt or with
+                                   --window, Dawn with its MCP server on whatever the settings say
+          --folder <folder>        with --mcp, the folder it's for, where it was started otherwise
 
         Both keep their settings in the settings folder next to Hex.exe. Inside either, Ctrl+Shift+P is everything
         there is to do, and in Dusk, tui typed at a prompt lists the programs with a screen of their own.

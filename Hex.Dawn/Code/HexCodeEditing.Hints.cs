@@ -57,7 +57,8 @@ internal sealed partial class HexCodeEditing
         shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A");
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.toggle_comment"), () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
-        shown.Add(context.Strings.Said("code_hints.duplicate_line"), () => editor.Document.Duplicate(), "Ctrl+Shift+D", "copy");
+        shown.Add(context.Strings.Said("code.toggle_block_comment"), () => editor.Document.ToggleBlockComment(), "Shift+Alt+A", "comment");
+        shown.Add(context.Strings.Said("code_hints.duplicate_line"), () => editor.Document.CopyLines(1), "Shift+Alt+Down", "copy");
         shown.Add(context.Strings.Said("code_hints.next_occurrence"), () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
         shown.AddSeparator();
         window.AddCodeMenu(shown);

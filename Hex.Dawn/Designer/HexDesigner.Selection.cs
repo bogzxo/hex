@@ -171,6 +171,10 @@ internal sealed partial class HexDesigner
         context.Notices.Say(context.Strings.Said("designer_selection.grouped", ("count", group.Children.Count.ToString()), ("name", document.NameOf(group))));
     }
 
+    // Whether Ungroup has something to take apart, a group among what's selected that isn't inside something else
+    // selected, the ones UngroupSelected goes by
+    private bool CanUngroup() => document.TopSelection().OfType<Group>().Any();
+
     private void UngroupSelected()
     {
         var groups = document.TopSelection().OfType<Group>().ToList();
@@ -356,7 +360,7 @@ internal sealed partial class HexDesigner
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.open_included"), OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
         shown.Add(context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
-        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
+        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = CanUngroup;
 
         // A container, a group above all, can be had as any other kind of container, what is in it and all
         if (document.Selected is { } container && HexDocument.IsContainer(container))
@@ -364,7 +368,12 @@ internal sealed partial class HexDesigner
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.select_parent"), SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
         shown.Add(context.Strings.Said("designer_selection.select_all_short"), SelectAll, "Ctrl+A");
-        shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, icon: "code").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, "F12", "code").IsEnabled = any;
+
+        // What it says, edited over it on the canvas, and the key of the language that says it when it's one
+        shown.Add(context.Strings.Said("designer_texts.its_text"), GoToSelectedText, "Ctrl+F12", "symbol-key").IsVisible = () => SelectedKey() is not null;
+        shown.Add(context.Strings.Said("designer_texts.edit_text_short"), EditSelectedText, "Enter", "edit").IsVisible =
+            () => document.Selected is { } selected && TextOf(selected) is not null;
 
         if (document.Selected is TabPanel)
             shown.Add(context.Strings.Said("designer_selection.add_page"), AddPage, icon: "add");
@@ -419,7 +428,9 @@ internal sealed partial class HexDesigner
         foreach (string kind in Palette)
             add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
         commands.Add("Layout/group", context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
-        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
+        // Only there to be picked with a group selected, so its key is Source Control's the rest of the time rather than
+        // an Ungroup saying there's no group (UICommands passes a key on from a command that can't be picked)
+        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = CanUngroup;
         AddConvertMenu(commands.AddMenu("Layout/group", context.Strings.Said("designer_selection.convert_to"), "arrow-swap"));
         AddMoveMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.move"), "arrow-swap"), some);
         AddArrangeMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.arrange"), "layers"), some);
@@ -427,7 +438,12 @@ internal sealed partial class HexDesigner
         commands.Add("Layout/select", context.Strings.Said("designer_selection.select_all"), SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
         commands.Add("Layout/select", context.Strings.Said("designer_selection.deselect_all"), () => Select(null), "Esc").IsEnabled = some;
         commands.Add("Layout/select", context.Strings.Said("designer_selection.show_all_layers"), ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
-        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_code"), ShowSelectedCode, icon: "code").IsEnabled = some;
+        // F12 goes to where what's selected is declared, the way it goes from a name in the code, and Ctrl+F12 to the key
+        // of the language its text names. Enter edits that text on the canvas, as a double click does
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.show_code"), ShowSelectedCode, "F12", "code", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_texts.go_to_text"), GoToSelectedText, "Ctrl+F12", "symbol-key", UIKeyUse.Bound).IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_texts.edit_text"), EditSelectedText, "Enter", "edit", UIKeyUse.Bound).IsEnabled =
+            () => LayoutTools && document.Selected is { } selected && TextOf(selected) is not null;
         FillScreenMenu(commands.AddMenu("Layout/screen", context.Strings.Said("designer_selection.screen"), "device-desktop"));
 
         // Escape puts away the little window on top first (the settings, a page of help), then what is selected
@@ -482,7 +498,7 @@ internal sealed partial class HexDesigner
         into.Add(context.Strings.Said("designer_selection.distribute_vertically"), () => Distribute(horizontally: false)).IsEnabled = () => LayoutTools && document.Selection.Count >= 3;
     }
 
-    /// <summary>The code of the layout, with the caret on the let of what is selected.</summary>
+    /// <summary>F12 in the designer, the code of the layout with the caret on the let of what is selected.</summary>
     private void ShowSelectedCode()
     {
         if (document.Selected is { } selected)

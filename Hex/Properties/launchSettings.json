@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Hex": {
+      "commandName": "Project",
+      "commandLineArgs": "--window"
+    }
+  }
+}

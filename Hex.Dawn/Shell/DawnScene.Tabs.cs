@@ -17,6 +17,7 @@ internal sealed partial class DawnScene
     private readonly List<string> crumbParts = [];
     private readonly List<Action> crumbActions = [];
     private (HexDocument? Document, int Version, int Line, UIComponent? Selected, HexView View) crumbsFor;
+    private bool crumbsPlain;
 
     private void BuildTabs()
     {
@@ -43,6 +44,16 @@ internal sealed partial class DawnScene
     {
         tabButtons.Clear();
 
+        // The plain welcome over the empty layout is no file anybody opened, so no tab says "Untitled". Only ever the one
+        // document then, so the tabs left still line up with the documents
+        if (plainShown && documents.Count == 1)
+        {
+            docTabs.Tabs.Clear();
+            docTabs.Selected = -1;
+            RetitleWindow();
+            return;
+        }
+
         while (docTabs.Tabs.Count > documents.Count)
             docTabs.Tabs.RemoveAt(docTabs.Tabs.Count - 1);
         while (docTabs.Tabs.Count < documents.Count)
@@ -59,11 +70,17 @@ internal sealed partial class DawnScene
             tab.IconColor = shown.IsText ? null : FolderColor;
             tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
+            tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
         }
 
         docTabs.Selected = documents.IndexOf(document);
+        RetitleWindow();
+    }
 
+    /// <summary>The title bar and the window's title said for what is open.</summary>
+    private void RetitleWindow()
+    {
         // The window says what is open, with a dot while it has changes, VS Code's way
         string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
         bool changed = document.Modified || document.CodeEdited;
@@ -87,6 +104,8 @@ internal sealed partial class DawnScene
         shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
+        shown.AddSeparator();
+        shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
@@ -134,13 +153,25 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, the breadcrumbs, put together again when the file, the caret's line or the selection moved.</summary>
     private void UpdateCrumbs()
     {
+        // Asked every tick, so a change to the outline is worked out once the typing stops
+        if (!LayoutTools)
+            KeptOutline();
+
         var now = (document, code.Document.Version, code.Document.Caret.Line, LayoutTools ? document.Selected : null, document.View);
-        if (crumbsFor == now)
+        if (crumbsFor == now && crumbsPlain == plainShown)
             return;
 
         crumbsFor = now;
+        crumbsPlain = plainShown;
         crumbParts.Clear();
         crumbActions.Clear();
+
+        // Nothing to say where the plain welcome is, it's no file
+        if (plainShown)
+        {
+            crumbs.Set(crumbParts);
+            return;
+        }
 
         // The folders, from the workspace's (or the repository's) down, the file with its icon
         if (document.Path is { } path)
@@ -178,7 +209,7 @@ internal sealed partial class DawnScene
         else
         {
             // The lets and keys the caret is inside of, by the outline
-            foreach (var entry in OutlineAt(code.Text, code.Document.Caret.Line, document?.Path))
+            foreach (var entry in OutlineAt(KeptOutline(), code.Document.Caret.Line))
             {
                 crumbParts.Add(entry.Depth == 0 ? $"$(symbol-variable) {entry.Name}" : $"$(symbol-field) {entry.Name}");
                 crumbActions.Add(() => code.GoTo(entry.Line, entry.Column));
@@ -189,10 +220,10 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The entries of the outline a line is inside of, the outermost first, by how deep each is.</summary>
-    private static List<OutlineEntry> OutlineAt(string text, int line, string? path = null)
+    private static List<OutlineEntry> OutlineAt(List<OutlineEntry> outline, int line)
     {
         var chain = new List<OutlineEntry>();
-        foreach (OutlineEntry entry in HexOutline.Outline(text, path))
+        foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > line)
                 break;

@@ -13,6 +13,10 @@ internal static class HexFixes
     /// <summary>"Did you mean ...?" after an error that names something a letter or two off a name there is, empty otherwise.</summary>
     public static string LikelyFix(string error, string code)
     {
+        // The language says it itself now, for a name nobody declared and a member a list or a text hasn't got
+        if (error.Contains("did you mean", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
         var named = new List<string>();
         foreach (Match quoted in Regex.Matches(error, "'([A-Za-z_][A-Za-z0-9_]*)'"))
             named.Add(quoted.Groups[1].Value);
@@ -28,7 +32,7 @@ internal static class HexFixes
             if (token.Type == TokenType.Identifier)
                 known.Add(token.Value);
         }
-        foreach (string word in new[] { "print", "include", "keys", "values", "has", "range", "len", "text", "number", "format", "typeof", "error", "defined", "definition", "merge", "math", "vec" })
+        foreach (string word in new[] { "print", "include", "keys", "values", "entries", "has", "range", "len", "text", "number", "format", "typeof", "error", "defined", "definition", "merge", "math", "vec" })
             known.Add(word);
         if (error.IndexOf("It has ", StringComparison.Ordinal) is >= 0 and var listed)
         {

@@ -1,16 +1,18 @@
 // keys, laid out with Horizon.Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
+// The filter and the hint are as wide as the window leaves them, and the list as tall, see DawnScene.KeysWindow.
+// The list is a table, its columns (Command, Keybinding, When, Source) are put on it there too.
 #define layout
 
 
 let window = compositor.window({
-    size: vec(640, 520),
+    size: vec(820, 600),
     z: 10,
     padding: vec(10, 10, 10, 10),
     intro: "pop",
     intro_time: 0.18,
-    resize: "right, bottom",
-    min_size: vec(420, 300),
+    resize: "all",
+    min_size: vec(520, 360),
     title: "@keys.title",
     icon: "keyboard"
 });
@@ -21,20 +23,34 @@ let rows = compositor.stack({
     spacing: 8
 });
 
-let keys_filter = compositor.textbox({
+let keys_search = compositor.stack({
     parent: rows,
-    size: vec(620, 28),
     anchor: "left",
     pivot: "left",
+    spacing: 8,
+    direction: "horizontal"
+});
+
+let keys_filter = compositor.textbox({
+    parent: keys_search,
+    size: vec(764, 28),
     padding: vec(8, 5, 8, 5),
     placeholder: "@keys.filter",
     text_scale: 0.14,
     max_length: 80
 });
 
+let keys_record = compositor.button({
+    parent: keys_search,
+    size: vec(28, 28),
+    icon: "record-keys",
+    style: "button_flat",
+    tooltip: "@keys.record_tip"
+});
+
 let keys_tree = compositor.tree_view({
     parent: rows,
-    size: vec(620, 380),
+    size: vec(800, 460),
     anchor: "left",
     pivot: "left",
     text_scale: 0.14,
@@ -51,11 +67,18 @@ let keys_foot = compositor.stack({
 
 let keys_hint = compositor.label({
     parent: keys_foot,
-    size: vec(440, 28),
+    size: vec(586, 28),
     text: "@keys.hint",
     text_scale: 0.13,
-    color: vec(0.6, 0.62, 0.68, 1),
     align: "left"
+});
+
+let keys_open_file = compositor.button({
+    parent: keys_foot,
+    size: vec(28, 28),
+    icon: "file-code",
+    style: "button_flat",
+    tooltip: "@keys.open_file_tip"
 });
 
 let keys_reset = compositor.button({

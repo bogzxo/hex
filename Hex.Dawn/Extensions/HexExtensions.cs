@@ -17,6 +17,9 @@ internal sealed partial class HexExtensions
 {
     private const string BUILT_IN_EXTENSIONS = "Assets/hex/extensions", OWN_EXTENSIONS = "extensions";
 
+    // The catalog checked out as a submodule of Hex's repository, for the tests (Hex doesn't ship it)
+    internal const string CATALOG_SUBMODULE = "hex-extensions";
+
     // The section of the settings the extensions are switched on and off in
     internal const string SETTINGS = "Extensions · Installed";
 
@@ -39,6 +42,9 @@ internal sealed partial class HexExtensions
 
         // What they find wrong with a file goes under its code and in the Problems panel with the rest
         context.Documents.AddDiagnostics(of => of.Path is { } path && extensionFound.ContainsKey(Path.GetFullPath(path)) ? [.. ProblemsOf(path)] : null);
+
+        // The catalog of the ones that can be installed, Extensions, Available (HexExtensions.Catalog)
+        context.Settings.AddSource(() => new CatalogSource(this), AVAILABLE, MakeCatalogPanel, FillCatalogRows, ForgetCatalogPanel);
     }
 
     /// <summary>Every tick, the keys of their commands, on_change, their folders read again and the files they watch.</summary>
@@ -59,15 +65,22 @@ internal sealed partial class HexExtensions
     /// </summary>
     internal void Find()
     {
-        foreach (var (folder, builtIn) in new[] { (BUILT_IN_EXTENSIONS, true), (OWN_EXTENSIONS, false) })
+        var folders = new List<(string, bool)> { (Path.Combine(AppContext.BaseDirectory, BUILT_IN_EXTENSIONS), true), (OwnFolder, false) };
+
+        // The self test has the ones that moved out to the catalog as if they came with Hex, out of the hex-extensions
+        // submodule, so every part of it finds them there from the start the way it always did
+        if (context.Options.SelfTest && FindUp(AppContext.BaseDirectory, CATALOG_SUBMODULE) is { } over)
+            folders.Add((Path.Combine(over, CATALOG_SUBMODULE), true));
+
+        foreach (var (full, builtIn) in folders)
         {
-            string full = Path.Combine(AppContext.BaseDirectory, folder);
             if (!Directory.Exists(full))
                 continue;
 
             foreach (string inside in Directory.GetDirectories(full).Order(StringComparer.OrdinalIgnoreCase))
             {
-                if (!File.Exists(Path.Combine(inside, HexExtension.FILE)))
+                // One by a folder name that's been found already isn't loaded twice, the first one found is it
+                if (!File.Exists(Path.Combine(inside, HexExtension.FILE)) || all.Any(found => found.Id.Equals(Path.GetFileName(inside), StringComparison.OrdinalIgnoreCase)))
                     continue;
 
                 var extension = new HexExtension(inside, builtIn) { Enabled = !context.Settings.Values.DisabledExtensions.Contains(Path.GetFileName(inside)) };

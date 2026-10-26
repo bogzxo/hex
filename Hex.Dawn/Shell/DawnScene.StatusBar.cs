@@ -20,9 +20,15 @@ internal sealed partial class DawnScene
     private string runningShown = string.Empty;
     private float codeZoomShown = -1.0f;
 
+    // The indentation the status bar says, spaces or a tab and how wide, written again only when it changes
+    private (bool Tabs, int Size) indentShown;
+
     // What the skin and the kind of file were last written for. Every tick wrote them anew, garbage a tick for nothing
     private (UISkinChoice? Skin, string? Theme) skinShown;
     private HexDocument? languageFor;
+
+    // What the document was coloured with when the language item was written, a language picked changes it
+    private ICodeHighlighter? languageShownWith;
 
     // How many times the language servers had started or stopped when the language item was written, it says so as it happens
     private int languagesShown;
@@ -38,8 +44,10 @@ internal sealed partial class DawnScene
     private void BuildStatusBar()
     {
         statusBar = layout.Get<StatusBar>("status_bar");
+        BuildBranchItem();
 
-        bool Code() => !LayoutTools;
+        // The plain welcome is over an empty layout nobody opened, it isn't HIDL at Ln 1, Col 1 to anybody looking at it
+        bool Code() => !LayoutTools && document.Picture is null && !plainShown;
         bool Design() => LayoutTools;
 
         problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: Said("status_bar.problems_tip"));
@@ -56,11 +64,11 @@ internal sealed partial class DawnScene
         caretItem.IsVisible = Code;
         selectionItem = statusBar.Add(string.Empty, right: true);
         selectionItem.IsVisible = Code;
-        indentItem = statusBar.Add(Said("status_bar.indent", ("count", "4")), right: true, tooltip: Said("status_bar.indent_tip"));
+        indentItem = statusBar.Add(Said("status_bar.indent", ("count", "4")), right: true, pressed: () => OpenSettings(Hex.Shell.EditorSettingsCatalog.TEXT), tooltip: Said("settings_text.status_tip"));
         indentItem.IsVisible = Code;
         endingsItem = statusBar.Add("CRLF", right: true, pressed: SwapLineEndings, tooltip: Said("status_bar.endings_tip"));
         endingsItem.IsVisible = Code;
-        languageItem = statusBar.Add("HIDL", right: true, tooltip: Said("status_bar.language_tip"));
+        languageItem = statusBar.Add("HIDL", right: true, pressed: ChangeLanguageMode, tooltip: Said("language_mode.status_tip"));
         languageItem.IsVisible = Code;
         codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: Said("status_bar.code_zoom_tip"));
         codeZoomItem.IsVisible = () => !LayoutTools && settings.CodeZoom != 1.0f;
@@ -73,7 +81,7 @@ internal sealed partial class DawnScene
         zoomItem.IsVisible = Design;
         skinItem = statusBar.Add(string.Empty, right: true, pressed: ShowSkinMenu, tooltip: Said("status_bar.skin_tip"));
         skinItem.IsVisible = Design;
-        screenItem = statusBar.Add($"$(device-desktop) {HexDesigner.DesignSize.X:0} x {HexDesigner.DesignSize.Y:0}", right: true, tooltip: Said("status_bar.screen_tip"));
+        screenItem = statusBar.Add(string.Empty, right: true, pressed: () => designer.ShowScreenMenu(chrome, compositor.Pointer.Position), tooltip: Said("status_bar.screen_tip"));
         screenItem.IsVisible = Design;
 
         // Wide enough that the items after it don't shuffle as the numbers grow a digit, no wider, "Ln 1, Col 1" sat in a
@@ -94,10 +102,26 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>
     private void UpdateStatusBar()
     {
+        UpdateBranchItem();
+        UpdateLanguageModes();
+        UpdateImageView();
+        UpdateConflicts();
+        UpdateInlays();
+        UpdateSemantics();
+
         if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)
         {
             messageItem.Text = string.Empty;
             messageItem.Color = null;
+        }
+
+        // The screen the layout is made for, or the one it's previewed on, which follows Hex onto another screen. It said
+        // 1600 x 900 whatever the layout was made for and whatever screen it was on
+        if (LayoutTools)
+        {
+            string screen = $"$(device-desktop) {designer.ScreenText()}";
+            if (screenItem.Text != screen)
+                screenItem.Text = screen;
         }
 
         if (problemsShown != (errorCount, warningCount))
@@ -120,9 +144,18 @@ internal sealed partial class DawnScene
 
             endingsItem.Text = document.CrLf ? "CRLF" : "LF";
 
-            if (languageFor != document || languagesShown != languages.ServersChanged)
+            // Spaces 2 or Tab Size 4, the file's own as the settings, its .editorconfig or how it was indented made it
+            (bool Tabs, int Size) indent = (code.Document.Indent.StartsWith('\t'), code.TabSize);
+            if (indentShown != indent)
+            {
+                indentShown = indent;
+                indentItem.Text = Said(indent.Tabs ? "settings_text.status_tabs" : "status_bar.indent", ("count", indent.Size.ToString()));
+            }
+
+            if (languageFor != document || languagesShown != languages.ServersChanged || !ReferenceEquals(languageShownWith, document.Editor.Highlighter))
             {
                 languageFor = document;
+                languageShownWith = document.Editor.Highlighter;
                 languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
                 languageItem.Text = $"$({icon}) {language}";
@@ -166,12 +199,13 @@ internal sealed partial class DawnScene
         if (!shown.IsText)
             return ("layout", Said("status_bar.kind_layout"));
 
+        // A backup is what it was a copy of, menu.hor.orig HIDL, and a file set to another language by hand is that
         string name = shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
-        string extension = Path.GetExtension(name);
+        string extension = Path.GetExtension(CodeLanguages.WithoutBackupSuffix(name));
 
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return ("folder-library", Said("status_bar.kind_workspace"));
-        if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
+        if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase) || !ReferenceEquals(shown.Editor.Highlighter, CodeLanguages.Hidl))
             return shown.Editor.Highlighter is { } language ? ("file-code", languages.ServerShownOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return ("paintcan", Said("status_bar.kind_skin"));

@@ -1,8 +1,10 @@
+// kind, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // What kind of component it is, which can't be changed, written where its editor would be.
 #define layout
 
 let kind = compositor.label({
     size: vec(220, 24),
     text_scale: 0.14,
-    align: "left"
+    align: "left",
 });

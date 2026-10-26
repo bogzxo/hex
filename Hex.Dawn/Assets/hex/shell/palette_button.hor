@@ -1,15 +1,17 @@
+// palette_button, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // One button of the palette, the editor makes one for every kind of component there is to add. Flat, its icon and its
 // name lit under the pointer, the way a sidebar lists things, a grid of boxes on the glass of the side was a wall. From
 // the left, so the icons of a column line up, centred each one sat wherever its name put it.
 #define layout
 
 let button = compositor.button({
-    label: "kind",
-    style: "button_flat",
-    align: "left",
     size: vec(138, 26),
-    lbl_scale: 0.14,
     hover: "nudge",
     hover_amount: 3,
-    hover_time: 0.08
+    hover_time: 0.08,
+    label: "kind",
+    align: "left",
+    lbl_scale: 0.14,
+    style: "button_flat",
 });

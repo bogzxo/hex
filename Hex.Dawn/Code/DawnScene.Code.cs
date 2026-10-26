@@ -53,6 +53,8 @@ internal sealed partial class DawnScene
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
         editor.WordWrap = settings.WrapCode;
+        editor.Minimap = settings.Minimap;
+        ApplyTextSettings(prepared);
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
@@ -61,6 +63,7 @@ internal sealed partial class DawnScene
         // charcoal of its own written in here, a third colour in the one card
         editor.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.14f, 0.2f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
+        editor.OnTab = () => extensions.Tab(prepared);
         editor.CompletionSource = codeEditing.Completions;
         editor.OnChecked = _ => CodeChecked(prepared);
         editor.HoverSource = codeEditing.HoverHint;
@@ -157,6 +160,13 @@ internal sealed partial class DawnScene
     /// <summary>After the code of a document was parsed, what it says about the texts of the game it names by key.</summary>
     private void CodeChecked(HexDocument checkedDocument)
     {
+        // A diff is looked at, not built, what it has of both versions together is never right as code
+        if (checkedDocument.DiffOf is not null)
+        {
+            ShowDiagnostics(checkedDocument);
+            return;
+        }
+
         localisationFound[checkedDocument] = HexSearch.LocalisationDiagnostics(checkedDocument.Editor.Text);
         ShowDiagnostics(checkedDocument);
 
@@ -182,6 +192,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ShowDiagnostics(HexDocument of)
     {
+        // A diff says nothing is wrong, with both versions in it its errors are of no file anybody has
+        if (of.DiffOf is not null)
+        {
+            of.Editor.Diagnostics = [];
+            problemsDirty = true;
+            return;
+        }
+
         var found = new List<UICodeDiagnostic>(localisationFound.GetValueOrDefault(of) ?? []);
 
         // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers.
@@ -230,7 +248,7 @@ internal sealed partial class DawnScene
 
         // Coloured by the grammar of whatever language the extension says (HIDL's own, VS Code's for the rest, plain
         // text when there is none), and only HIDL is parsed for its errors, until the rest come through a language server
-        opened.Editor.Highlighter = CodeLanguages.ForFile(path);
+        opened.Editor.Highlighter = CodeLanguages.ForFile(path, source.AsSpan().IndexOf('\n') is var end and >= 0 ? source[..end].TrimEnd('\r') : source);
         opened.Editor.CheckSyntax = ReferenceEquals(opened.Editor.Highlighter, CodeLanguages.Hidl);
         SetCode(opened, source, fresh: true);
         opened.SavedCode = opened.Editor.Text;
@@ -324,19 +342,30 @@ internal sealed partial class DawnScene
     {
         Func<bool> inCode = () => !LayoutTools;
 
+        // Tabs, indentation, line numbers and guides, Editor, Text at the top of the settings. A file is set again once
+        // its text is in, for how it's already indented and its .editorconfig
+        settingSources.Add((() => new TextSettingsSource(this), null, null, null, null));
+        documentOpened += ApplyTextSettings;
+
+        // The editor answers these keys itself (UIKeyboard), VS Code's own. Ctrl+/ comments in the language's way, # in
+        // Python and <!-- --> round the lines in HTML
         commands.Add("Edit/comment", Said("code.toggle_comment"), () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
+        commands.Add("Edit/comment", Said("code.toggle_block_comment"), () => code.Document.ToggleBlockComment(), "Shift+Alt+A", "comment").IsVisible = inCode;
 
         commands.ShowMenuWhen("Selection", inCode);
         commands.Add("Selection/select", Said("designer_selection.select_all"), () => code.Document.SelectAll(), "Ctrl+A");
-        commands.Add("Selection/select", Said("code.select_line"), SelectCaretLine);
+        commands.Add("Selection/select", Said("code.select_line"), () => code.Document.ExpandLineSelection(), "Ctrl+L");
         commands.Add("Selection/select", Said("code.select_word"), () => code.Document.SelectWordAt(code.Document.Caret));
+        commands.Add("Selection/lines", Said("code.copy_line_up"), () => code.Document.CopyLines(-1), "Shift+Alt+Up", "arrow-up");
+        commands.Add("Selection/lines", Said("code.copy_line_down"), () => code.Document.CopyLines(1), "Shift+Alt+Down", "arrow-down");
         commands.Add("Selection/lines", Said("code.move_line_up"), () => code.Document.MoveLines(-1), "Alt+Up", "arrow-up");
         commands.Add("Selection/lines", Said("code.move_line_down"), () => code.Document.MoveLines(1), "Alt+Down", "arrow-down");
         commands.Add("Selection/lines", Said("code.duplicate_line"), () => code.Document.Duplicate(), "Ctrl+Shift+D", "copy");
         commands.Add("Selection/carets", Said("code.add_next_occurrence"), () => code.Document.AddNextOccurrence(), "Ctrl+D", "selection");
+        commands.Add("Selection/carets", Said("code.select_all_occurrences"), () => code.Document.SelectAllOccurrences(), "Ctrl+Shift+L", "selection");
         commands.Add("Selection/carets", Said("code.add_cursor_above"), () => code.Document.AddCaretVertically(-1), "Ctrl+Alt+Up");
         commands.Add("Selection/carets", Said("code.add_cursor_below"), () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down");
-        commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Ctrl+Shift+L");
+        commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Shift+Alt+I");
         commands.Add("Selection/carets", Said("code.single_cursor"), () => code.Document.CollapseCarets(), "Esc").IsEnabled = () => code.Document.HasExtraCarets;
         Menu folding = commands.AddMenu("Selection/folding", Said("code.folding"), "fold");
         folding.Add(Said("code.fold"), () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");

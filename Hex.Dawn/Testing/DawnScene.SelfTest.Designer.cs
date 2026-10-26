@@ -35,6 +35,19 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("welcome: and gone once it isn't wanted", () => welcome is not { Visible: true });
 
+        // Every tab closed is the welcome again, not a blank layout to design
+        test.Run(() =>
+        {
+            welcomeWanted = true;
+            Show(NewDocument());
+            CloseAll();
+        });
+        test.Settle(0.2f);
+        test.Check("welcome: closing every tab brings it back", () => welcome is { Visible: true } && documents.Count == 1 && document == startedWith);
+        test.Run(() => welcomeWanted = false);
+        test.Wait();
+        test.Check("welcome: and it goes again once it isn't wanted", () => welcome is not { Visible: true });
+
         test.Check("bootstrap: the palette was filled from its template", () =>
             designer.paletteButtons.Count == HexDesigner.Palette.Length && designer.paletteButtons[0].Label == "stack" && designer.paletteButtons[0].Parent == layout.Get<GridPanel>("palette"));
     }

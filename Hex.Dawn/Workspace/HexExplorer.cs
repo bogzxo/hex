@@ -30,6 +30,15 @@ internal sealed partial class HexExplorer
     /// <summary>A folder is about to go in the trash, for whatever runs in it to stop first (IWorkspace.Deleting).</summary>
     public event Action<string>? Deleting;
 
+    /// <summary>Open in Terminal on a folder, a terminal tab started in it. The scene fills it in, the terminal is its.</summary>
+    internal Action<string>? OpenTerminalIn;
+
+    /// <summary>Find in Folder, the search view brought up looking only in a folder, by the folder and what its include box says.</summary>
+    internal Action<string, string>? FindInFolder;
+
+    // The extension of the file made last, what a new file in a folder with nothing to go by is guessed to want
+    private string? lastMadeExtension;
+
     public HexExplorer(DawnContext with)
     {
         context = with;

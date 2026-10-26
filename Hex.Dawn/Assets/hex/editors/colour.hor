@@ -5,7 +5,7 @@ let both = compositor.stack({ spacing: 4 });
 
 let picker = compositor.color_picker({
     parent: both,
-    size: vec(220, 112)
+    size: vec(220, 112),
 });
 
 let row = compositor.stack({ parent: both, direction: "horizontal", spacing: 4 });

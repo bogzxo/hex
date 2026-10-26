@@ -8,7 +8,8 @@ namespace Hex.Dawn;
 // through). Assets/hex/language_servers.hor says which server lints which files and how it is started, a file of one
 // of them is opened in its server as it is opened here, sent again a moment after it is typed into, and what the
 // server says about it goes under the code and into the Problems panel the way HIDL's own diagnostics do. A server
-// that isn't on the machine is no trouble, the file is coloured and nothing is said. HIDL will go the same way once it
+// that isn't on the machine is no trouble, the file is coloured and a card says once a session how the server is
+// installed (HexLanguages.Missing). HIDL will go the same way once it
 // has a server of its own, for now its diagnostics come out of the editor's parser and the run of the file.
 internal sealed partial class HexLanguages
 {
@@ -41,8 +42,9 @@ internal sealed partial class HexLanguages
     {
         context = with;
 
-        // C# in the colours Visual Studio shows it in, whatever the skin, the way it looks where most of it is written
-        CodeLanguages.SetColors("source.cs", UISyntaxColors.VisualStudioDark(), UISyntaxColors.VisualStudioLight());
+        // C# in ReSharper's colours whatever the skin (or Visual Studio's, or the skin's, as the settings say), the way it
+        // looks where most of it is written
+        ApplyCSharpColors();
 
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
@@ -84,7 +86,7 @@ internal sealed partial class HexLanguages
             return inWorkspace;
 
         string folder = Path.GetDirectoryName(full) ?? System.Environment.CurrentDirectory;
-        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(full), StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
+        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(CodeLanguages.WithoutBackupSuffix(full)), StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
         {
             for (string? above = folder; above is not null; above = Path.GetDirectoryName(above))
             {
@@ -187,7 +189,7 @@ internal sealed partial class HexLanguages
         foreach (HexDocument of in context.Documents.All.ToList())
         {
             if (of.Path is { } path && !linters.ContainsKey(of)
-                && entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase)))
+                && entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(ServerPathFor(of, path)), StringComparison.OrdinalIgnoreCase)))
                 StartLinting(of);
         }
     }
@@ -195,6 +197,10 @@ internal sealed partial class HexLanguages
     /// <summary>Opens a file of another language in its language server, when there is one for it on this machine.</summary>
     private void StartLinting(HexDocument of)
     {
+        // A diff is no file of the language, its server never hears of it
+        if (of.DiffOf is not null)
+            return;
+
         CheckSoon(of, 0.0f);
         if (of.Path is not { } path || of.Editor.Highlighter is null || ReferenceEquals(of.Editor.Highlighter, CodeLanguages.Hidl))
             return;
@@ -207,8 +213,12 @@ internal sealed partial class HexLanguages
             ReadLanguageServers();
 
         string root = ServerRootFor(path);
-        if (LanguageServers.For(path, root) is not { } server)
+        string serverPath = ServerPathFor(of, path);
+        if (LanguageServers.For(serverPath, root) is not { } server)
+        {
+            SayIfMissing(serverPath);
             return;
+        }
 
         server.Woken ??= WakeForLinting;
 
@@ -223,9 +233,45 @@ internal sealed partial class HexLanguages
     // The server's reading thread has something, the window's thread wakes for it
     private void WakeForLinting() => context.Wake();
 
+    /// <summary>
+    /// The path a file's server is picked by, a backup's suffix off (Foo.cs.orig goes to C#'s), and for a file set to a
+    /// language by hand or by an association, one with an extension that language's server is registered for. The file
+    /// itself is still opened in the server by its own path.
+    /// </summary>
+    private string ServerPathFor(HexDocument of, string path)
+    {
+        string bare = CodeLanguages.WithoutBackupSuffix(path);
+        if (of.Editor.Highlighter is null)
+            return bare;
+
+        if (!serversRead)
+            ReadLanguageServers();
+
+        string id = CodeLanguages.LanguageIdOf(of.Editor.Highlighter);
+        string extension = Path.GetExtension(bare);
+        if (serverEntries.Find(entry => entry.LanguageId.Equals(id, StringComparison.OrdinalIgnoreCase)) is { Extensions: [var first, ..] } wanted
+            && !wanted.Extensions.Any(known => known.Equals(extension, StringComparison.OrdinalIgnoreCase)))
+            return Path.ChangeExtension(bare, first);
+        return bare;
+    }
+
+    /// <summary>
+    /// A file's language was changed (Change Language Mode, an association), its old server forgets it and the new
+    /// language's hears of it with its own language id, when there is one.
+    /// </summary>
+    internal void LanguageChanged(HexDocument of)
+    {
+        StopLinting(of);
+        StartLinting(of);
+        ServersChanged++;
+    }
+
     /// <summary>A file of another language was typed into, its server hears a moment after the typing stops.</summary>
     private void LintChanged(HexDocument changed)
     {
+        if (changed.DiffOf is not null)
+            return;
+
         CheckSoon(changed);
         CheckOthersSoon(changed);
         if (linters.ContainsKey(changed))

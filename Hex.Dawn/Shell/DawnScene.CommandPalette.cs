@@ -22,12 +22,22 @@ internal sealed partial class DawnScene
     /// menus it is in and its keys, the way VS Code's does.
     /// </summary>
     private void CommandPalette() =>
-        ChooseFrom("Command palette", "Everything Hex can do right now, a few letters narrow it down", AllCommands(), recent: RecentCommands);
+        ChooseFrom(Said("palette.title"), Said("palette.message"), PaletteChoices(), recent: RecentCommands);
 
-    /// <summary>Every item of every menu that means something right now, and what the extensions added.</summary>
-    private List<(string Text, Action Picked)> AllCommands()
+    /// <summary>
+    /// The palette's commands each written as one line, <c>"File: Save   (Ctrl+S)"</c>, the way they were before rows had
+    /// parts, for whatever looks one up by what it says.
+    /// </summary>
+    private List<(string Text, Action Picked)> AllCommands() => [.. PaletteChoices().Select(choice => (choice.Id, choice.Picked))];
+
+    /// <summary>
+    /// Every item of every menu that means something right now, and what the extensions added. The menu goes quiet in
+    /// front, the keys as keycaps and the item's own icon in front of it all. Each is known by the text it was written as
+    /// before rows had parts (UIChoice.Id), so the commands picked last before still go over the rest.
+    /// </summary>
+    private List<UIChoice> PaletteChoices()
     {
-        var commands = new List<(string Text, Action Picked)>();
+        var commands = new List<UIChoice>();
         foreach (Menu bar in menu.Menus)
         {
             if (bar.IsVisible is { } shown && !shown())
@@ -36,25 +46,27 @@ internal sealed partial class DawnScene
             foreach (var (item, path) in bar.Everything())
             {
                 if ((item.IsVisible?.Invoke() ?? true) && (item.IsEnabled?.Invoke() ?? true))
-                    commands.Add(($"{path}: {item.Label}{(item.Shortcut.Length > 0 ? $"   ({item.Shortcut})" : string.Empty)}", item.OnPicked!));
+                    commands.Add(new UIChoice(item.Label, item.OnPicked!) { Quiet = path, Keys = item.Shortcut, Icon = item.Icon });
             }
         }
 
-        commands.AddRange(extensions.Commands());
+        commands.AddRange(UIChooser.Rows([.. extensions.Commands()]));
+        commands.AddRange(UIChooser.Rows(SettingsPaletteCommands()));
 
         // The terminal's commands, the same ones Dusk has, under a heading of their own, a title once (Dusk's palette has why)
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string terminal = Said("palette.terminal");
         foreach (TerminalCommand command in terminals.Commands.All)
         {
             if (!titles.Add(command.Title))
                 continue;
 
             string name = command.Name;
-            commands.Add(($"Terminal: {HexText.TitleCase(command.Title)}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () =>
+            commands.Add(new UIChoice(HexText.TitleCase(command.Title), () =>
             {
                 ShowPanel(CONSOLE_PAGE);
                 terminals.Run(name);
-            }));
+            }) { Quiet = terminal, Keys = command.Key, Icon = "terminal" });
         }
 
         return commands;
@@ -71,11 +83,18 @@ internal sealed partial class DawnScene
     /// </param>
     /// <param name="recent">The ones picked last, over the rest and remembered in it, the palette's commands, quick open's files.</param>
     private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, bool shortestFirst = false,
-        Func<char, List<(string Text, Action Picked)>?>? prefixed = null, UIRecentList? recent = null, string typed = "")
+        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "") =>
+        ChooseFrom(title, message, UIChooser.Rows(choices), shortestFirst, prefixed, recent, typed);
+
+    /// <summary>The same with rows in their parts, a symbol, a folder or an author dim after, each piece of a commit in its colour.</summary>
+    private void ChooseFrom(string title, string message, List<UIChoice> choices, bool shortestFirst = false,
+        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "")
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
         textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed);
     }
+
+    void IWindows.Choose(string title, string message, List<UIChoice> choices) => ChooseFrom(title, message, choices);
 }

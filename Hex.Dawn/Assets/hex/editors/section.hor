@@ -1,11 +1,13 @@
+// section, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // A section of the properties, what is in it folds away under its bar. The code names it and fills it.
 #define layout
 
 let section = compositor.collapsible({
-    title: "general",
     fill: "horizontal",
-    text_scale: 0.14,
-    header_height: 24,
+    padding: vec(0, 6, 0, 8),
     spacing: 5,
-    padding: vec(0, 6, 0, 8)
+    title: "general",
+    header_height: 24,
+    text_scale: 0.14,
 });

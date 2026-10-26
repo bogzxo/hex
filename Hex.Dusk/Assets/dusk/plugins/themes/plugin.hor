@@ -10,19 +10,15 @@ let plugin = {
 };
 
 for (let theme in dusk.themes()) {
-    dusk.command(`theme_{theme}`, `Theme: {theme}`, func(dusk) { dusk.theme(theme); }, "");
+    dusk.command(`theme_{theme}`, `Theme: {theme}`, dusk => dusk.theme(theme), "");
 }
 
-dusk.command("theme_next", "Next theme", func(dusk) { dusk.next_theme(); }, "Ctrl+Shift+F9");
+dusk.command("theme_next", "Next theme", dusk => dusk.next_theme(), "Ctrl+Shift+F9");
 
-dusk.command("animations", "Animations on and off", func(dusk) {
+dusk.command("animations", "Animations on and off", dusk => {
     let on = dusk.setting("animations") == false;
     dusk.set_setting("animations", on);
-    if (on) {
-        dusk.say("the animations are on");
-    } else {
-        dusk.say("the animations are off");
-    }
+    dusk.say(on ? "the animations are on" : "the animations are off");
 }, "");
 
 func on_theme(dusk, name) {

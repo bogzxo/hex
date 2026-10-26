@@ -8,8 +8,8 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The language servers' section of the settings (Editor, Language servers). Whether Hex looks for new versions, Check
-// now, and a row a server of language_servers.hor, where it is (empty for its command on the PATH), what it is and how
-// it is installed, and Choose, Install or update (a download for one there's no command line for) and What changed.
+// now, whether a server that isn't there gets a card at all (HexLanguages.Missing), and a row a server of
+// language_servers.hor, where it is (empty for its command on the PATH), what it is and how it is installed, and Choose, Install or update (a download for one there's no command line for) and What changed.
 // Under them every server with what was found of it, where, which version and whether there is a newer one, written
 // again as that changes, and the way to add one of your own (HexLanguages.Editor).
 internal sealed partial class HexLanguages
@@ -113,6 +113,7 @@ internal sealed partial class HexLanguages
                 new("server_updates", HexText.Get("language_settings.updates"), UIFormKind.Flag,
                     HexText.Get("language_settings.updates_help"),
                     SERVER_SECTION, Buttons: [HexText.Get("language_settings.check_now")]),
+                new(MISSING_CARDS, HexText.Get("code_server.missing_cards"), UIFormKind.Flag, HexText.Get("code_server.missing_cards_help"), SERVER_SECTION),
                 .. languages.ServerEntries.Select(entry => new UISetting(SERVER_KEY + entry.Name, entry.Command, UIFormKind.Text, HelpOf(entry), SERVER_SECTION,
                     Buttons: entry.Repo.Length > 0 ? [CHOOSE, INSTALL, CHANGES] : [CHOOSE, INSTALL],
                     Placeholder: HexText.Get("language_settings.on_the_path", ("command", entry.Command))))
@@ -136,10 +137,13 @@ internal sealed partial class HexLanguages
         {
             if (key == "server_updates")
                 return Values.Bool(languages.settings.ServerUpdates);
+            if (key == MISSING_CARDS)
+                return Values.Bool(languages.MissingCards);
             return EntryOf(key) is { } entry ? new StringValue(languages.settings.ServerPaths.GetValueOrDefault(entry.Name, string.Empty)) : null;
         }
 
         public bool IsModified(string key) => key == "server_updates" ? !languages.settings.ServerUpdates
+            : key == MISSING_CARDS ? !languages.MissingCards
             : EntryOf(key) is { } entry && languages.settings.ServerPaths.GetValueOrDefault(entry.Name, string.Empty).Length > 0;
 
         public void Set(string key, IRuntimeValue value)
@@ -148,6 +152,10 @@ internal sealed partial class HexLanguages
             {
                 case ("server_updates", BooleanValue on):
                     languages.settings.ServerUpdates = on.Value;
+                    languages.context.Settings.Save();
+                    return;
+                case (MISSING_CARDS, BooleanValue cards):
+                    languages.MissingCards = cards.Value;
                     languages.context.Settings.Save();
                     return;
                 case (_, StringValue path) when EntryOf(key) is { } entry:
@@ -167,7 +175,7 @@ internal sealed partial class HexLanguages
             }
         }
 
-        public void Reset(string key) => Set(key, key == "server_updates" ? Values.Bool(true) : new StringValue(string.Empty));
+        public void Reset(string key) => Set(key, key is "server_updates" or MISSING_CARDS ? Values.Bool(true) : new StringValue(string.Empty));
 
         public void Press(string key, int which)
         {

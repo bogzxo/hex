@@ -168,9 +168,16 @@ internal sealed partial class DawnScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        ReadBackdropAhead();
         DeclareMenus();
         codeEditing = new HexCodeEditing(Context);
         explorer = new HexExplorer(Context);
+        git = new HexGit(Context);
+
+        // Whether git is there at all is asked by running it once, a good 25 ms the first tick waited for as the editor
+        // came up. Asked on another thread now, it's known long before then
+        _ = Hex.Core.Git.GitProcess.InstalledNow;
+        BuildGit();
         explorer.FoldersChanged += codeEditing.ForgetVocabulary;
         running = new HexRunning(Context);
         designer = new HexDesigner(Context);
@@ -178,7 +185,7 @@ internal sealed partial class DawnScene : Scene
         extensions = new HexExtensions(Context, this);
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
-        languages = new HexLanguages(Context);
+        languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
         codeEditing.languages = languages;
         BuildStatusBar();
         BuildPanel();
@@ -202,11 +209,19 @@ internal sealed partial class DawnScene : Scene
         debugger = new HexDebugging(Context);
         BuildDebugBar();
         AddHelpCommands();
-        tasks = new HexTasks(Context);
+        tasks = new HexTasks(Context) { RestartInto = RestartInto };
+        BuildProperties();
         languages.StartChecks();
         BuildEffects();
         BuildModes();
         designer.AddDesignerCommands();
+        WireRefresh();
+        BuildImageView();
+        BuildDiffs();
+        BuildHistory();
+        BuildConflicts();
+        BuildPeek();
+        AddLanguageModeCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -239,26 +254,47 @@ internal sealed partial class DawnScene : Scene
         if (options.Folder is not null)
             explorer.OpenFolder(options.Folder);
 
-        if (options.Open is not null && options.Line > 0)
+        // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
+        // The self test is left where it starts, its checks expect the designer the way it always was
+        if (!options.SelfTest && (options.Fresh || options.Folder is not null))
+        {
+            browsing = true;
+            Side = HexSide.Explorer;
+        }
+
+        // A start on code rather than on layouts has the welcome without the designer round it, see DawnScene.Welcome
+        plainWelcome = WantsPlainWelcome();
+
+        if (options.Files is { Length: > 0 } named)
+            OpenLaunchFiles(named);
+        else if (options.Open is not null && options.Line > 0)
             OpenAt(options.Open, options.Line - 1, 0);
         else if (options.Open is not null)
             Open(options.Open);
-        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && explorer.workspace.OpenFiles.Count == 0)
+        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && !options.Fresh && explorer.workspace.OpenFiles.Count == 0
+            && (options.Folder is null || PlatformPaths.IsUnder(recent[0], options.Folder)))
             Open(recent[0]);
 
-        // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own
+        // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own. A fresh
+        // start leaves them all for the next one, a folder brings back only its own
         if (options.SelfTest)
             Backups.DropAll();
-        else
+        else if (!options.Fresh && options.Folder is not null)
+            RestoreBackupsUnder(options.Folder);
+        else if (!options.Fresh)
             RestoreBackups();
 
         // Last, an extension's on_start finds the editor up and a file open
         extensions.StartAll();
         extensions.WatchFolders();
+        extensions.StartCatalog();
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
             OpenOnExtensionView(document);
+
+        // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
+        BuildMcp();
 
         if (options.SelfTest)
             StartSelfTest();
@@ -360,6 +396,7 @@ internal sealed partial class DawnScene : Scene
         running.UpdateTable();
         UpdateTerminal(dt);
         UpdateRemote();
+        UpdateMcp(dt);
         running.UpdateConsole();
         running.RunAskedConsole();
         UpdatePanel(dt);
@@ -399,6 +436,9 @@ internal sealed partial class DawnScene : Scene
         designer.UpdateRecord(dt);
         UpdateKeys();
 
+        // After the keys, so Escape in the box over a text on the canvas puts the box away and doesn't deselect too
+        designer.UpdateTextEdit();
+
         // Whatever changed the code changed the layout. A file of code keeps its own history in its editor
         if (codeDirty && !document.IsText)
         {
@@ -437,6 +477,7 @@ internal sealed partial class DawnScene : Scene
         TakeFinishedWork();
         UpdateWelcome();
         UpdateDiskChanges();
+        UpdateSettingsFile();
         UpdateBackups(dt);
         codeEditing.UpdateFindBar();
         UpdatePlaces();
@@ -452,8 +493,11 @@ internal sealed partial class DawnScene : Scene
         }
 
         running.UpdateValues(dt);
+        properties.Update();
+        UpdatePeek(dt);
         UpdateFileChanges();
         languages.Update(dt);
+        git.Update(dt);
         running.UpdateValueBox();
     }
 
@@ -475,6 +519,27 @@ internal sealed partial class DawnScene : Scene
             document.Modified = modified;
             tabsDirty = true;
         }
+    }
+
+    /// <summary>
+    /// The backups of files inside the folder Hex was started on brought back (see RestoreBackups), the rest left where
+    /// they are for a start on their own folder. An untitled one is nobody's folder's, so it waits for that too.
+    /// </summary>
+    private void RestoreBackupsUnder(string folder)
+    {
+        var brought = new List<string>();
+        foreach (var backup in Backups.All())
+        {
+            if (backup.Path is not { } path || !PlatformPaths.IsUnder(path, folder))
+                continue;
+
+            if (BringBack(backup))
+                brought.Add(backup.Name);
+            Backups.Remove(backup);
+        }
+
+        if (brought.Count > 0)
+            Notify(Said("backups.restored", ("files", string.Join(", ", brought))));
     }
 
     private void Quit(int failures)

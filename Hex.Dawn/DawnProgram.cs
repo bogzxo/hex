@@ -24,6 +24,12 @@ public static class DawnProgram
     private const string ARGUMENT_LINE = "--line";
     private const string ARGUMENT_FOLDER = "--folder";
     private const string ARGUMENT_WINDOW = "--window";
+    private const string ARGUMENT_FRESH = "--fresh";
+    private const string ARGUMENT_MCP = "--mcp";
+
+    // The self test's folders in the temp folder, each run's ending in its process id
+    private const string SELF_TEST_FOLDER = "horizon-hex-selftest-";
+    private const string SELF_TEST_HOME = "horizon-hex-selftest-dusk-";
 
     // Where layouts go when nobody says otherwise, next to the editor
     private const string DEFAULT_WORKSPACE = "layouts";
@@ -45,11 +51,34 @@ public static class DawnProgram
     /// <item><c>--console "moves.jab" "len(keys(moves))"</c> runs lines in the HIDL console once the file's values are in.</item>
     /// <item><c>--line 42</c> opens the file of <c>--open</c> at that line, which is how Dusk opens a path out of a terminal.</item>
     /// <item><c>--folder C:\code</c> starts on a workspace of that folder, handed to the Dawn that's running when there is one.</item>
+    /// <item><c>a.cs src\b.cs:12:3 ..\tools</c>, paths on their own anywhere in the line, open those files (the last one
+    /// shown) at the line and column after them, and a folder among them is <c>--folder</c> when that isn't said.</item>
+    /// <item><c>--goto b.cs:12:3</c> (or <c>-g</c>) is one more file at a line and column, the way code -g has it.</item>
     /// <item><c>--window</c> is a window of its own whatever is running, a file or a folder isn't handed over (the terminal's dawn -window).</item>
+    /// <item><c>--fresh</c> starts clean, on the explorer, with no workspace, tabs, backups or last file of before. Settings and keys are read as ever.</item>
+    /// <item><c>--mcp</c> puts the MCP server up for agents whatever the settings say (Hex.exe started by a client with it is the bridge to it instead, see McpBridge).</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
     /// </list>
     /// </summary>
     public static void Run(string[] args)
+    {
+        try
+        {
+            Start(args);
+        }
+        finally
+        {
+            // The test's folders go with it, once the engine and its terminals have let go of them. One that won't go
+            // is a day old for the sweep of a later run
+            foreach (string folder in selfTestFolders)
+                TryClear(folder);
+        }
+    }
+
+    // The folders this run's self test works in, taken away as it ends
+    private static string[] selfTestFolders = [];
+
+    private static void Start(string[] args)
     {
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
 
@@ -57,39 +86,43 @@ public static class DawnProgram
         // rest (its skin, its fonts, the layouts folder nobody named) is next to it
         string workspace = ValueOf(args, ARGUMENT_WORKSPACE) is { } named ? Path.GetFullPath(named) : DEFAULT_WORKSPACE;
         string[] check = [.. ValuesOf(args, ARGUMENT_CHECK).Select(Path.GetFullPath)];
+
+        // The files and the folder named, on their own or with --open, --goto and --folder, are from there too
+        string started = Directory.GetCurrentDirectory();
+        var (files, folderNamed) = HexLaunch.Parse(args, started);
+        string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(Path.Combine(started, asked)) ? Path.GetFullPath(Path.Combine(started, asked)) : folderNamed;
         Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
         if (selfTest)
         {
-            // The test makes and saves layouts of its own, somewhere nobody's work is in the way of it
-            workspace = Path.Combine(Path.GetTempPath(), "horizon-hex-selftest");
-            if (Directory.Exists(workspace))
-                Directory.Delete(workspace, recursive: true);
+            // What runs before this one left behind, a crash or a kill never got to tidy up after itself
+            SweepSelfTestFolders();
+
+            // The test makes and saves layouts of its own, somewhere nobody's work is in the way of it. Always a folder
+            // of this run's own, two tests going at once took the one shared folder out from under each other
+            workspace = Path.Combine(Path.GetTempPath(), SELF_TEST_FOLDER + System.Environment.ProcessId);
+            TryClear(workspace);
 
             // And the terminal's files (Dusk's, %AppData%\Dusk) in a home of the test's own, so nobody's settings, keys
             // or plugins are read or written by it
-            string home = Path.Combine(Path.GetTempPath(), "horizon-hex-selftest-dusk");
-            if (Directory.Exists(home))
-                Directory.Delete(home, recursive: true);
+            string home = Path.Combine(Path.GetTempPath(), SELF_TEST_HOME + System.Environment.ProcessId);
+            TryClear(home);
             Directory.CreateDirectory(home);
             Environment.SetEnvironmentVariable("DUSK_HOME", home);
+            selfTestFolders = [workspace, home];
         }
 
         // A file or a folder to open and a Dawn running already, it goes to that one and this one leaves, unless this
         // one was asked to be a window of its own
         bool window = args.Contains(ARGUMENT_WINDOW);
-        if (!selfTest && !window && ValueOf(args, ARGUMENT_OPEN) is { } toOpen && Path.IsPathRooted(toOpen) && File.Exists(toOpen)
-            && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"open|{Path.GetFullPath(toOpen)}|{(int.TryParse(ValueOf(args, ARGUMENT_LINE), out int lineAsked) ? lineAsked : 0)}"))
-            return;
-
-        string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(asked) ? Path.GetFullPath(asked) : null;
-        if (!selfTest && !window && folder is not null && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"folder|{folder}"))
+        if (!selfTest && !window && HandOver(folder, files))
             return;
 
         Directory.CreateDirectory(workspace);
 
         var options = new HexOptions(
-            Open: ValueOf(args, ARGUMENT_OPEN),
+            Open: files.Count > 0 ? files[^1].Path : null,
+            Files: [.. files],
             Workspace: workspace,
             SelfTest: selfTest,
             Wheel: args.Contains(ARGUMENT_WHEEL),
@@ -100,8 +133,10 @@ public static class DawnProgram
             Watch: args.Contains(ARGUMENT_WATCH),
             View: ValueOf(args, ARGUMENT_VIEW),
             Console: ValuesOf(args, ARGUMENT_CONSOLE) is { Length: > 0 } lines ? lines : null,
-            Line: int.TryParse(ValueOf(args, ARGUMENT_LINE), out int line) ? line : 0,
+            Line: files.Count > 0 ? files[^1].Line : 0,
             Folder: folder,
+            Fresh: args.Contains(ARGUMENT_FRESH),
+            Mcp: args.Contains(ARGUMENT_MCP),
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);
@@ -120,6 +155,8 @@ public static class DawnProgram
                 WindowTitle = "Hex",
                 WindowIcon = HexIdentity.ICON,
                 CustomFrame = true,
+                // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
+                ScaleToDisplay = !selfTest,
                 AppId = "hex-dawn",
 
 
@@ -136,7 +173,9 @@ public static class DawnProgram
         // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("engine made");
         var scene = new DawnScene(options);
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
         // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
         // is the one mode and nothing else
@@ -182,6 +221,29 @@ public static class DawnProgram
             Folder: folder is not null && Directory.Exists(folder) ? Path.GetFullPath(folder) : null));
     }
 
+    /// <summary>
+    /// Helper method to hand the folder and the files named to the Dawn that's running, the folder first and then every
+    /// file at its line and column, false when there's none to take them and this one starts instead.
+    /// </summary>
+    private static bool HandOver(string? folder, List<HexLaunchFile> files)
+    {
+        if (folder is null && files.Count == 0)
+            return false;
+
+        bool told = folder is not null && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"folder|{folder}");
+        if (folder is not null && !told)
+            return false;
+
+        foreach (HexLaunchFile file in files)
+        {
+            if (!Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"open|{file.Path}|{file.Line}|{file.Column}"))
+                return told;
+            told = true;
+        }
+
+        return told;
+    }
+
     private static string? ValueOf(string[] args, string name)
     {
         int index = Array.IndexOf(args, name);
@@ -198,6 +260,53 @@ public static class DawnProgram
             return [];
 
         return [.. args.Skip(index + 1).TakeWhile(value => !value.StartsWith("--"))];
+    }
+
+    /// <summary>
+    /// Helper method to empty the self test's folder, false when something has it open. The git suite's repository has
+    /// git's read only objects in it, which Directory.Delete won't touch, so they're made writable first.
+    /// </summary>
+    private static bool TryClear(string folder)
+    {
+        if (!Directory.Exists(folder))
+            return true;
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(folder, recursive: true);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to take away the self test folders of runs that are long over, a day old or more. One still going
+    /// is younger than that, and one that won't go is left for the next time.
+    /// </summary>
+    private static void SweepSelfTestFolders()
+    {
+        try
+        {
+            DateTime before = DateTime.UtcNow.AddDays(-1);
+            foreach (string folder in Directory.EnumerateDirectories(Path.GetTempPath(), "horizon-hex-selftest-*"))
+            {
+                // Only the ones that end in a process id, the texts suite's game folder is of another kind
+                string name = Path.GetFileName(folder);
+                if (!int.TryParse(name[(name.LastIndexOf('-') + 1)..], out _))
+                    continue;
+
+                if (Directory.GetLastWriteTimeUtc(folder) < before)
+                    TryClear(folder);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static Vector2? ParseSize(string? text)

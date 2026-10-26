@@ -121,7 +121,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
-        ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs, settings", test =>
+        ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>
         {
             TestEditorItself(test);
             TestAdding(test);
@@ -146,9 +146,16 @@ internal sealed partial class DawnScene
             TestClosingWithChanges(test);
             TestDraggingEdges(test);
             TestSlidingSides(test);
-            TestSettings(test);
+            TestLayoutTexts(test);
         }),
-        ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>
+        ("settings", "the settings window, its search and sections, Color Theme, and the settings file kept in step with it both ways", test =>
+        {
+            OnLayoutForSettings(test);
+            TestSettings(test);
+            TestSettingsLooks(test);
+            TestSettingsFile(test);
+        }),
+        ("code", "files of code, values, the console, docs, the table, a layout as code, completion, VS Code's every day keys", test =>
         {
             TestCode(test);
             TestFindBar(test);
@@ -158,12 +165,19 @@ internal sealed partial class DawnScene
             TestDocs(test);
             TestArt(test);
             TestCodeFont(test);
+            TestZoomKeepsPlace(test);
+            TestMinimap(test);
+            TestTodos(test);
+            TestPeek(test);
+            TestInlays(test);
+            TestSemanticHidl(test);
             TestLanguages(test);
             TestTable(test);
             TestLayoutAsCode(test);
             TestCompletion(test);
+            TestParity(test);
         }),
-        ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
+        ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
             // The explorer is the side bar of a file of code, which the code's part leaves on screen
             OnCode(test, dataFile);
@@ -174,6 +188,7 @@ internal sealed partial class DawnScene
             TestKeys(test);
             TestDiskChanges(test);
             TestBackups(test);
+            TestExplorerOps(test);
         }),
         ("extensions", "editing files by their values, extensions, the move editor (on Fighter2D's own moves too), their settings tabs", test =>
         {
@@ -190,19 +205,40 @@ internal sealed partial class DawnScene
             TestTerminal(test);
             TestDuskFiles(test);
         }),
+        ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
             TestLanguages(test);
         }),
+        ("search", "the search view in the side bar, live results, every match a row, the toggles, include and exclude, dismissing, Replace in Files", TestSearchView),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
-        ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away", TestAnyFile),
+        ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away, pictures", test =>
+        {
+            TestPictures(test);
+            TestAnyFile(test);
+        }),
+        ("emmet", "Emmet, an abbreviation in an .html file written out on Tab, undone in one step, and a word that isn't one left to indent", TestEmmet),
+        ("tools", "the catalog's editing extensions on the real editor, Text tools sorting the selected lines, a snippet written out and gone through on Tab", TestTools),
+        ("catalog","the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
+        ("properties", "the Properties panel, a file of a C# project given Copy if newer and a Build Action, several files, a folder, a picture, a component", TestProperties),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
+        ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
+        ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
+        ("semantic", "semantic highlighting, HIDL's names by what they are, C# through csharp-ls in ReSharper's colours when it's on this machine", test =>
+        {
+            TestSemanticHidl(test);
+            TestSemanticCSharp(test);
+            TestSemanticD(test);
+        }),
+        ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
+        ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
+        ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

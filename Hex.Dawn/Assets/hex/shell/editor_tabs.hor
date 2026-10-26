@@ -1,12 +1,11 @@
-// editor_tabs, laid out with Horizon.Hex.
+// editor_tabs, laid out with Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
 #define layout
-
 
 let tabs_head = compositor.stack({
     anchor: "left",
     pivot: "left",
-    spacing: 0
+    spacing: 0,
 });
 
 let tab_row = compositor.stack({
@@ -15,7 +14,7 @@ let tab_row = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 0,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(500, 0) });
@@ -26,7 +25,7 @@ let toolbar = compositor.stack({
     pivot: "right",
     padding: vec(6, 2, 6, 2),
     spacing: 2,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let views = compositor.stack({
@@ -34,7 +33,7 @@ let views = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 2,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let design_view = compositor.button({
@@ -48,7 +47,7 @@ let design_view = compositor.button({
     icon: "layout",
     lbl_scale: 0.14,
     style: "button_flat",
-    animated: false
+    animated: false,
 });
 
 let code_view = compositor.button({
@@ -62,7 +61,7 @@ let code_view = compositor.button({
     icon: "code",
     lbl_scale: 0.14,
     style: "button_flat",
-    animated: false
+    animated: false,
 });
 
 let table_view = compositor.button({
@@ -76,13 +75,13 @@ let table_view = compositor.button({
     icon: "table",
     lbl_scale: 0.14,
     style: "button_flat",
-    animated: false
+    animated: false,
 });
 
 let tools_rule3 = compositor.divider({
     parent: toolbar,
     size: vec(1, 20),
-    direction: "vertical"
+    direction: "vertical",
 });
 
 let play_button = compositor.button({
@@ -96,7 +95,7 @@ let play_button = compositor.button({
     icon: "play",
     lbl_scale: 0.14,
     style: "button_flat",
-    animated: false
+    animated: false,
 });
 
 let name_box = compositor.textbox({
@@ -106,11 +105,11 @@ let name_box = compositor.textbox({
     padding: vec(8, 5, 8, 5),
     placeholder: "@toolbar.name_placeholder",
     text_scale: 0.14,
-    max_length: 40
+    max_length: 40,
 });
 
 let crumbs = compositor.breadcrumbs({
     parent: tabs_head,
     size: vec(840, 0),
-    padding: vec(6, 0, 6, 0)
+    padding: vec(6, 0, 6, 0),
 });

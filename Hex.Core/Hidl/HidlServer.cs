@@ -233,7 +233,7 @@ internal sealed partial class HidlServer : IDisposable
         string word = current[start..end];
 
         // In this file, then the other open ones, then the workspace
-        if (HidlAnalysis.FindDeclaration(file.Text, word) is { } declared)
+        if (HidlAnalysis.FindDeclaration(file.Text, word, line, column) is { } declared)
             return LocationOf(uri, declared, word.Length);
 
         foreach (var (other, opened) in open)

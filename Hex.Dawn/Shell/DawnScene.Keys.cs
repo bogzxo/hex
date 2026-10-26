@@ -4,16 +4,19 @@ using Key = Silk.NET.Input.Key;
 
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
+using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// Keys put where somebody wants them. Help, Keyboard Shortcuts, is every command with its key in a list, typed into to
+// Keys put where somebody wants them. File, Keyboard Shortcuts, is every command with its key in a list, typed into to
 // narrow it down, the arrows up and down it, enter (or a double click) waits for a new key for the one chosen and delete
-// takes its key off. keys.hor next to hex_settings.hor is what was changed, a command by what its menu calls it and the
-// key it's on now ({ "Find in Files": "Ctrl+Alt+F" }, "" for none), read as Hex starts and written at every change. The
-// old key of the command comes off, and whatever else was on the new one, so a key does one thing, and the menus and
+// takes its key off (the window is DawnScene.KeysWindow). keys.hor next to hex_settings.hor is what was changed, a
+// command by what its menu calls it and the key it's on now ({ "Find in Files": "Ctrl+Alt+F" }, "" for none), read as
+// Hex starts and written at every change. The
+// old key of the command comes off, and whatever else was on the new one once asked (Replace), so a key does one thing
+// unless Keep Both was picked, and the menus and
 // the palette say what it is now since they read it off the items. The editing keys the code editor handles itself
 // (Ctrl+D and its friends) go on working there as well, it doesn't ask the menus.
 internal sealed partial class DawnScene
@@ -37,21 +40,23 @@ internal sealed partial class DawnScene
     private MenuItem? keyFor;
     private UIDialog? keyDialog;
 
-    // The window, its list and its filter while it's up
-    private WindowPanel? keysWindow;
-    private TreeView? keysTree;
-    private TextBox? keysFilter;
-
     private void LoadKeys()
     {
+        // The first key of a chord says it's waiting for the second in the status bar, VS Code's words, and a second that
+        // makes no chord says so too
+        commands.Keys.OnChordPending = first => Say(Said("keys_chords.waiting", ("key", UIShortcutText.Shown(first))));
+        commands.Keys.OnChordMissed = keys => Say(Said("keys_chords.not_a_command", ("keys", UIShortcutText.Shown(keys))));
+
         bool kept = !options.SelfTest && options.Check.Length == 0;
         keysPath = kept ? HexFiles.Kept(KEYS_FILE, was: "keys.hor") : null;
         if (keysPath is null || !File.Exists(keysPath))
             return;
 
+        // The file says the whole of it, what came off a key is in it as "", so nothing's taken off of anything here. A key
+        // kept on two commands is still on both next time
         foreach (var (label, key) in ReadKeys(keysPath))
         {
-            if (!Rebind(label, key))
+            if (!Rebind(label, key, keepOthers: true))
                 Say(Said("keys_window.nothing_called", ("label", label), ("key", key)), error: true);
         }
     }
@@ -89,7 +94,7 @@ internal sealed partial class DawnScene
 
         string text = new HIDLDocument()
             .Comment("Keyboard shortcuts changed from the defaults, a command by its menu label and the key it is on, \"\" for none.\n" +
-                "Help, Keyboard Shortcuts writes this, and it can be edited by hand. Reset All deletes it.")
+                "File, Keyboard Shortcuts writes this, and it can be edited by hand. Reset All deletes it.")
             .Let("keys", keys)
             .Write();
         File.WriteAllText(path, text);
@@ -124,63 +129,140 @@ internal sealed partial class DawnScene
     private static string LabelOf(MenuItem item) => item.Label.TrimEnd('.');
 
     /// <summary>
-    /// Puts the command a menu calls so on a key ("" for none), its old key and anything else on the new one taken
-    /// off. False when there's no such command or no such key.
+    /// Puts the command a menu calls so on a key ("" for none), its old key and anything on the new one that would want
+    /// it at the same time taken off, or with keepOthers the others left on it too (Keep Both, and keys.hor read back).
+    /// What only has the key somewhere else keeps it either way. False when there's no such command or no such key.
     /// </summary>
-    private bool Rebind(string label, string written)
+    private bool Rebind(string label, string written, bool keepOthers = false)
     {
         string wanted = label.TrimEnd('.');
         if (Commands().FirstOrDefault(pair => LabelOf(pair.Item) == wanted).Item is not { } item)
             return false;
 
-        var to = written.Length > 0 ? UIKeys.Read(written) : null;
+        // One key or a chord of two, "Ctrl+K Ctrl+C"
+        var to = written.Length > 0 ? UIKeys.ReadChord(written) : null;
         if (written.Length > 0 && to is null)
             return false;
 
         originalKeys.TryAdd(wanted, UIKeys.Tidy(item.Shortcut) ?? string.Empty);
 
-        // It goes off while typing if its old key did, and never on a key that types something (a letter on its own)
+        // It goes off while typing if its old key did, and never on a key that types something (a letter on its own).
+        // An old key another command shares stays that one's, it isn't a key taken off of everything
         bool? typing = null;
-        if (UIKeys.Read(item.Shortcut) is { } old)
+        string? left = null;
+        if (UIKeys.ReadChord(item.Shortcut) is { } old)
         {
-            typing = commands.Keys.Remove(old.Key, old.Control, old.Shift, old.Alt);
-            keysTaken.Add(UIKeys.Write(old.Key, old.Control, old.Shift, old.Alt));
+            string was = UIKeys.WriteChord(old.First, old.Second);
+            typing = commands.Keys.Remove(old.First, old.Second);
+            if (OthersOn(was, wanted).Count > 0)
+                left = was;
+            else
+                keysTaken.Add(was);
         }
 
         string tidy = string.Empty;
+        bool shared = false;
+        bool? onNew = null;
         if (to is { } key)
         {
-            tidy = UIKeys.Write(key.Key, key.Control, key.Shift, key.Alt);
-            commands.Keys.Remove(key.Key, key.Control, key.Shift, key.Alt);
-            bool typesNothing = key.Control || key.Alt || key.Key is >= Key.F1 and <= Key.F25;
-            keysTaken.Add(tidy);
+            tidy = UIKeys.WriteChord(key.First, key.Second);
+            onNew = commands.Keys.Remove(key.First, key.Second);
+
+            // Only what would want the key at the same time loses it, a command of the designer keeps its key when one
+            // that's always there goes on it too (DawnScene.KeysWindow.When). One on a key a chord starts with clashes
+            // with the chord as well, Ctrl+K would never get to be pressed with Ctrl+K Z waiting for its second key
+            var others = OthersOn(tidy, wanted);
+            List<MenuItem> taken = keepOthers ? [] : OverlapsOn(tidy, wanted).Where(other => KeysClash(item, other)).ToList();
+            shared = others.Any(other => !taken.Contains(other));
 
             // Whatever else was on the key is written down as off it, so keys.hor says the whole of what changed
-            foreach (var (other, _) in Commands())
+            foreach (MenuItem other in taken)
             {
-                if (other == item || UIKeys.Tidy(other.Shortcut) != tidy)
-                    continue;
-
-                originalKeys.TryAdd(LabelOf(other), tidy);
+                string its = UIKeys.Tidy(other.Shortcut) ?? tidy;
+                originalKeys.TryAdd(LabelOf(other), its);
                 rebound.RemoveAll(pair => pair.Label == LabelOf(other));
                 rebound.Add((LabelOf(other), string.Empty));
+
+                // A key that only starts the same is another key, taken off on its own
+                if (its != tidy && UIKeys.ReadChord(its) is { } overlap)
+                    commands.Keys.Remove(overlap.First, overlap.Second);
             }
 
-            MenuItem picked = item;
-            commands.Bind(key.Key, () => PickRebound(picked), control: key.Control, whileTyping: (typing ?? true) && typesNothing, shift: key.Shift, alt: key.Alt);
+            if (shared)
+            {
+                keysTaken.Remove(tidy);
+            }
+            else
+            {
+                keysTaken.Add(tidy);
+
+                MenuItem picked = item;
+                commands.Bind(key.First.Key, () => PickRebound(picked), control: key.First.Control, whileTyping: (typing ?? true) && TypesNothing(key.First),
+                    shift: key.First.Shift, alt: key.First.Alt, then: key.Second);
+            }
         }
 
         rebound.RemoveAll(pair => pair.Label == wanted);
         rebound.Add((wanted, tidy));
+        foreach (var (same, _) in Commands())
+        {
+            if (LabelOf(same) == wanted)
+                same.Shortcut = tidy;
+        }
+
         MarkReboundKeys();
+
+        // A key on more than one command goes to the first of them that can be picked, this one first
+        if (shared)
+            BindShared(tidy, onNew ?? typing ?? true, item);
+        if (left is not null && left != tidy)
+            BindShared(left, typing ?? true, null);
         return true;
     }
 
-    // A command off its new key, if its menu would let it be picked right now
-    private static void PickRebound(MenuItem item)
+    /// <summary>
+    /// A key bound to every command on it, the first of them that can be picked right now has it. The designer's before
+    /// the ones that are always there and the ones that can only be picked some of the time before the rest, this one
+    /// first among its own (see <see cref="InKeyOrder"/>).
+    /// </summary>
+    private void BindShared(string tidy, bool whileTyping, MenuItem? first)
     {
-        if ((item.IsVisible?.Invoke() ?? true) && (item.IsEnabled?.Invoke() ?? true))
-            item.OnPicked?.Invoke();
+        if (UIKeys.ReadChord(tidy) is not { } key)
+            return;
+
+        commands.Keys.Remove(key.First, key.Second);
+        var on = new List<MenuItem>();
+        if (first is not null)
+            on.Add(first);
+        foreach (MenuItem other in OthersOn(tidy, first is null ? string.Empty : LabelOf(first)))
+            on.Add(other);
+        if (on.Count == 0)
+            return;
+
+        on = InKeyOrder(on);
+        commands.Bind(key.First.Key, () => PickFirst(on), control: key.First.Control, whileTyping: whileTyping && TypesNothing(key.First),
+            shift: key.First.Shift, alt: key.First.Alt, then: key.Second);
+    }
+
+    // Whether a key types nothing, held with control or alt or an F key, so it can go off in a text box. A chord goes by
+    // its first key, that's the one pressed while typing
+    private static bool TypesNothing(UIKeyStroke key) => key.Control || key.Alt || key.Key is >= Key.F1 and <= Key.F25;
+
+    // A command off its new key, if its menu would let it be picked right now
+    private void PickRebound(MenuItem item) => PickFirst([item]);
+
+    // The first of the commands on a key its menu would let be picked right now, the menu on the bar as well (the
+    // Layout menu's only there in the designer)
+    private void PickFirst(List<MenuItem> items)
+    {
+        foreach (MenuItem item in items)
+        {
+            if (commands.CanPick(item))
+            {
+                item.OnPicked?.Invoke();
+                return;
+            }
+        }
     }
 
     /// <summary>The keys the menus say, the rebound ones on their commands and nothing on what lost its key.</summary>
@@ -200,131 +282,15 @@ internal sealed partial class DawnScene
         }
     }
 
-    /* Help, Keyboard Shortcuts */
-
-    private void OpenKeysWindow()
-    {
-        if (keysWindow is { Visible: true } open)
-        {
-            open.BringToFront();
-            FillKeysTree();
-            return;
-        }
-
-        UILayout made = layout.Instantiate(KEYS_LAYOUT, chrome.Root);
-        var window = keysWindow = made.Get<WindowPanel>("window");
-        window.Title = Said("keys.title");
-        DressWindow(window);
-        window.OnClosed = () =>
-        {
-            window.Parent?.Remove(window);
-            keysWindow = null;
-            keysTree = null;
-            keysFilter = null;
-        };
-
-        keysTree = made.Get<TreeView>("keys_tree");
-        keysFilter = made.Get<TextBox>("keys_filter");
-        keysFilter.OnChanged = _ => FillKeysTree();
-
-        // The filter walks the list the way the palette's box does, up and down and the pages, and Enter sets a key for
-        // the row it's on. The arrows did nothing there and the list had to be tabbed to
-        keysFilter.OnKey = key =>
-        {
-            int by = key switch { UIKeyboard.UP => -1, UIKeyboard.DOWN => 1, UIKeyboard.PAGE_UP => -10, UIKeyboard.PAGE_DOWN => 10, _ => 0 };
-            if (by == 0 || keysTree is not { Items.Count: > 0 } list)
-                return;
-
-            int at = list.Selected is { } picked ? list.Items.IndexOf(picked) : -1;
-            list.Selected = list.Items[Math.Clamp(at + by, 0, list.Items.Count - 1)];
-        };
-        keysFilter.OnSubmitted = _ =>
-        {
-            if (keysTree?.Selected is { Tag: MenuItem item })
-                AskForKey(item);
-        };
-        keysTree.OnActivated = row =>
-        {
-            if (row.Tag is MenuItem item)
-                AskForKey(item);
-        };
-        made.Get<Button>("keys_reset").OnPressed = PutKeysBack;
-
-        FillKeysTree();
-        keysFilter.Focus();
-    }
-
-    /// <summary>The commands with their keys, the ones the filter leaves, and the keys that aren't a command's after.</summary>
-    private void FillKeysTree()
-    {
-        if (keysTree is not { } tree)
-            return;
-
-        string filter = keysFilter?.Text.Trim() ?? string.Empty;
-        bool Wanted(string text) => filter.Length == 0 || text.Contains(filter, StringComparison.OrdinalIgnoreCase);
-
-        var rows = new List<UITreeItem>();
-        foreach (var (item, path) in Commands())
-        {
-            string label = LabelOf(item);
-            if (!Wanted($"{path} {label} {item.Shortcut}"))
-                continue;
-
-            rows.Add(new UITreeItem(label, item.Icon.Length > 0 ? item.Icon : "symbol-event", item)
-            {
-                Detail = item.Shortcut.Length > 0 ? item.Shortcut : Said("keys.no_key"),
-                Tooltip = path
-            });
-        }
-
-        // The keys that aren't a command of a menu, said in the texts as lines of `key`  what it does
-        foreach (string line in Said("keys.fixed").Split('\n'))
-        {
-            int gap = line.IndexOf("  ", StringComparison.Ordinal);
-            if (!line.StartsWith("- ", StringComparison.Ordinal) || gap < 0)
-                continue;
-
-            string keys = line[2..gap].Replace("`", string.Empty), what = line[gap..].Trim();
-            if (Wanted($"{keys} {what}"))
-                rows.Add(new UITreeItem(what, "lock") { Detail = keys, Color = new Vector4(0.6f, 0.62f, 0.68f, 1.0f), Tooltip = Said("keys.fixed_tip") });
-        }
-
-        tree.Items = rows;
-        tree.Refresh();
-        if (rows.Count > 0 && tree.Selected is null)
-            tree.Selected = rows[0];
-    }
-
-    /// <summary>A dialog that waits for the key the command goes on, escape or its button to leave it as it was.</summary>
-    private void AskForKey(MenuItem item)
-    {
-        keyFor = item;
-        keyJustAsked = true;
-        keyDialog = UIDialog.Show(chrome, Said("keys.press_title", ("command", LabelOf(item))),
-            Said("keys.press_text", ("key", item.Shortcut.Length > 0 ? item.Shortcut : Said("keys.no_key"))),
-            new DialogChoice(Said("keys.leave_it")));
-        keyDialog.Closed = () => keyFor = null;
-    }
-
     /// <summary>
-    /// Every tick, the window's list sized to it and delete in the list taking a key off, and while a key is being
-    /// waited for, the first one pressed that isn't shift, control or alt. True while it waits, the key is for that
-    /// and nothing else.
+    /// Every tick, the window's own keys (see <see cref="UpdateKeysWindow"/>), and while a key is being waited for, the
+    /// first one pressed that isn't shift, control or alt. True while it waits, the key is for that and nothing else.
     /// </summary>
     private bool UpdateKeyCapture()
     {
         var keyboard = Engine.Input.Keyboard;
-        if (keysWindow is { Visible: true } window && keysTree is { } tree)
-        {
-            // The list takes what the window has left under the filter and over the buttons
-            UIRect room = window.Bounds.Shrink(window.Padding);
-            float taken = (keysFilter?.Size.Y ?? 28.0f) + 28.0f + 16.0f + 30.0f;
-            if (room.Width > 0 && room.Height > taken)
-                tree.Size = new Vector2(room.Width, room.Height - taken);
-
-            if (keyFor is null && compositor.Focus == tree && keyboard.WasPressed(Key.Delete) && tree.Selected is { Tag: MenuItem chosen })
-                RemoveKeyOf(chosen);
-        }
+        if (UpdateKeysWindow())
+            return true;
 
         if (keyFor is null)
             return false;
@@ -342,6 +308,14 @@ internal sealed partial class DawnScene
             return true;
         }
 
+        // A first key that waited long enough for a second is the key on its own
+        if (keyFirst is { } alone && SecondsNow() - keyFirstAt > CHORD_CAPTURE)
+        {
+            keyFirst = null;
+            KeyPressedFor(keyFor, alone.ToString());
+            return true;
+        }
+
         foreach (Key key in PressableKeys)
         {
             if (!keyboard.WasPressed(key))
@@ -352,7 +326,7 @@ internal sealed partial class DawnScene
             if (key == Key.Escape && !keyboard.Control && !keyboard.Shift && !keyboard.Alt)
                 return true;
 
-            KeyPressedFor(keyFor, key, keyboard.Control, keyboard.Shift, keyboard.Alt);
+            KeyStrokeFor(keyFor, key, keyboard.Control, keyboard.Shift, keyboard.Alt);
             break;
         }
 
@@ -364,50 +338,68 @@ internal sealed partial class DawnScene
 
     private static readonly Key[] PressableKeys = [.. Enum.GetValues<Key>().Distinct().Where(key => !UIKeys.IsHeld(key))];
 
-    /// <summary>The key pressed for a command, put on it and written down.</summary>
-    private void KeyPressedFor(MenuItem item, Key key, bool control, bool shift, bool alt)
+    // How long a second key is waited for after the first, for a chord, in seconds
+    private const double CHORD_CAPTURE = 1.5;
+
+    // The first key pressed for a command while a second one is waited for, when it was pressed, and the line in the
+    // dialog saying so
+    private UIKeyStroke? keyFirst;
+    private double keyFirstAt;
+    private Label? keyChordLine;
+
+    private static double SecondsNow() => System.Environment.TickCount64 / 1000.0;
+
+    /// <summary>
+    /// A key pressed while the dialog waits for one. The first waits a moment for a second, which makes a chord of the two
+    /// ("Ctrl+K Ctrl+C"), Enter keeps the first on its own and so does nothing more being pressed (see UpdateKeyCapture).
+    /// </summary>
+    private void KeyStrokeFor(MenuItem item, Key key, bool control, bool shift, bool alt)
     {
-        string written = UIKeys.Write(key, control, shift, alt);
-        string? had = Commands().FirstOrDefault(pair => pair.Item != item && UIKeys.Tidy(pair.Item.Shortcut) == written).Item?.Label.TrimEnd('.');
+        var stroke = new UIKeyStroke(key, control, shift, alt);
+        if (keyFirst is { } first)
+        {
+            keyFirst = null;
+            bool enter = key is Key.Enter or Key.KeypadEnter && !control && !shift && !alt;
+            KeyPressedFor(item, enter ? first.ToString() : UIKeys.WriteChord(first, stroke));
+            return;
+        }
+
+        keyFirst = stroke;
+        keyFirstAt = SecondsNow();
+        string said = Said("keys_chords.press_more", ("keys", UIShortcutText.Shown(stroke.ToString())));
+        if (keyChordLine is { Parent: not null } line)
+            line.Text = said;
+        else if (keyDialog is { IsOpen: true } dialog)
+            keyChordLine = dialog.Body.Add(new Label(said) { Anchor = Origin.Left, Align = Origin.Left });
+    }
+
+    /// <summary>
+    /// The key pressed for a command, put on it and written down. One that other commands would want at the same time
+    /// asks first, Replace, Keep Both or Cancel (DawnScene.KeysWindow.Conflicts), it was taken from them without a word.
+    /// One that's only somebody else's somewhere else (the designer's) is shared with it without asking.
+    /// </summary>
+    private void KeyPressedFor(MenuItem item, Key key, bool control, bool shift, bool alt) => KeyPressedFor(item, UIKeys.Write(key, control, shift, alt));
+
+    /// <summary>The same with the key written, one key or a chord of two ("Ctrl+K Ctrl+C").</summary>
+    private void KeyPressedFor(MenuItem item, string written)
+    {
+        written = UIKeys.Tidy(written) ?? written;
+        var had = OverlapsOn(written, LabelOf(item)).Where(other => KeysClash(item, other)).Select(LabelOf).ToList();
 
         keyFor = null;
         keyDialog?.Close();
+        if (had.Count > 0)
+        {
+            AskAboutClash(item, written, had);
+            return;
+        }
+
         if (!Rebind(item.Label, written))
             return;
 
         SaveKeys();
         FillKeysTree();
-        Say(had is null
-            ? Said("keys.now", ("command", LabelOf(item)), ("key", written))
-            : Said("keys.now_instead", ("command", LabelOf(item)), ("key", written), ("other", had)));
-    }
-
-    /// <summary>A command's key taken off, delete on its row.</summary>
-    private void RemoveKeyOf(MenuItem item)
-    {
-        if (item.Shortcut.Length == 0 || !Rebind(item.Label, string.Empty))
-            return;
-
-        SaveKeys();
-        FillKeysTree();
-        Say(Said("keys.removed", ("command", LabelOf(item))));
-    }
-
-    /// <summary>Reset All. Every key back where it was, and keys.hor gone.</summary>
-    private void PutKeysBack()
-    {
-        bool changed = rebound.Count > 0;
-        foreach (var (label, original) in originalKeys.ToList())
-            Rebind(label, original);
-
-        rebound.Clear();
-        keysTaken.Clear();
-        originalKeys.Clear();
-        if (keysPath is not null && File.Exists(keysPath))
-            File.Delete(keysPath);
-
-        FillKeysTree();
-        Say(Said(changed ? "keys.back" : "keys.back_already"));
+        Say(Said("keys.now", ("command", LabelOf(item)), ("key", written)));
     }
 
     /// <summary>Every tick, whatever keys were pressed set off (see <see cref="UICommands"/>).</summary>
@@ -420,7 +412,14 @@ internal sealed partial class DawnScene
         // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
         // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
         // from a terminal are terminal commands (DawnScene.Terminal) and go through it
-        if (!UpdateKeyCapture() && compositor.Focus is not TerminalView)
+        if (!UpdateKeyCapture() && compositor.Focus is not TerminalView && !SettingsFindPressed())
             commands.Keys.Update(Engine.Input.Keyboard, typing);
+    }
+
+    // Ctrl+F while the settings page has the keyboard is the page's own search, the code's find bar stays shut behind it
+    private bool SettingsFindPressed()
+    {
+        var keyboard = Engine.Input.Keyboard;
+        return keyboard.Control && keyboard.WasPressed(Key.F) && SettingsPage?.HasKeyboard() == true;
     }
 }

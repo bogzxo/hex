@@ -1,13 +1,12 @@
-// property_row, laid out with Horizon.Hex.
+// property_row, laid out with Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
 #define layout
-
 
 let row = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 6,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let caption = compositor.label({
@@ -17,11 +16,11 @@ let caption = compositor.label({
     text_scale: 0.14,
     color: vec(0.58, 0.6, 0.66, 1),
     wrap: true,
-    align: "left"
+    align: "left",
 });
 
 let editor = compositor.stack({
     parent: row,
     spacing: 4,
-    direction: "horizontal"
+    direction: "horizontal",
 });

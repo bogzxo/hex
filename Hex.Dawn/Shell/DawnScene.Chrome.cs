@@ -11,8 +11,9 @@ namespace Hex.Dawn;
 // How big the editor draws itself and how it shares the window out between its parts.
 internal sealed partial class DawnScene
 {
-    // Where the editor keeps how big it was last asked to draw itself, next to its executable.
-    private const string SCALE_FILE = "hex_ui_scale.txt";
+    // Where the editor keeps how big it was last asked to draw itself, next to its executable. On top of the scale of the
+    // screen it's on now, hex_ui_scale.txt was the whole of it from before Hex knew about that and would come out too big.
+    private const string SCALE_FILE = "hex_ui_scale_on_screen.txt";
 
     /* How big the editor draws itself */
 
@@ -42,8 +43,11 @@ internal sealed partial class DawnScene
         Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
-    /// <summary>The size a window is best read at when nobody has said. Bigger on a bigger screen.</summary>
-    private static float ScaleFor(Vector2 window) => window.Y switch
+    /// <summary>
+    /// The size a window is best read at when nobody has said. Bigger on a bigger screen, counted in the system's units
+    /// so a 4K screen at 150% is the size it looks and not the pixels it has, the scale of the screen comes on top.
+    /// </summary>
+    private float ScaleFor(Vector2 window) => (window / (Engine.WindowManager.ScalesToDisplay ? Engine.WindowManager.DisplayScale : 1.0f)).Y switch
     {
         >= 2000 => 2.0f,
         >= 1400 => 1.5f,
@@ -220,6 +224,7 @@ internal sealed partial class DawnScene
         rightHead.Size = new Vector2(rightWidth, 24.0f);
         if (running.ValuesTree.Visible)
             running.ValuesTree.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, running.ValuesTree)));
+        properties.Fit(rightWidth, properties.Page.Visible ? MathF.Max(MIN_FLEXIBLE, height - Spoken(right, properties.Page)) : properties.Page.Size.Y);
 
         FitRows(leftWidth, rightWidth);
 
@@ -260,6 +265,8 @@ internal sealed partial class DawnScene
             running.Table.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, running.Table) - panelLag));
         else if (extensionViews.Visible)
             extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews) - panelLag));
+        else if (imageView.Visible)
+            imageView.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, imageView) - panelLag));
         else if (!LayoutTools)
         {
             codeScroll.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, codeScroll) - panelLag));
@@ -272,13 +279,27 @@ internal sealed partial class DawnScene
     /// <summary>The right side, what the code of a file comes to, or the properties of what's selected in a layout.</summary>
     private void RebuildInspector()
     {
+        // One panel for whatever is selected, a component's rows, a file of HIDL's values or the properties of files
+        bool values = !LayoutTools && running.ShowsValues;
+        HexPropertiesShows shows = properties.Decide(document, LayoutTools, LayoutTools ? document.Selected : null, values);
+        properties.Rebuild(document, shows, canSwap: values);
+        if (shows == HexPropertiesShows.Files)
+        {
+            inspectorScroll.Visible = false;
+            running.ValuesTree.Visible = false;
+            layout.Get<Label>("inspector_title").Text = Said("properties.title");
+            return;
+        }
+
         // The code of a file (or of a layout) has no components, it has what is wrong with it and what running it came to
         if (!LayoutTools)
         {
+            layout.Get<Label>("inspector_title").Text = Said("properties.file");
             running.RebuildCodeInspector();
             return;
         }
 
+        layout.Get<Label>("inspector_title").Text = Said("properties.title");
         running.ValuesTree.Visible = false;
         designer.RebuildInspector();
     }
@@ -288,7 +309,7 @@ internal sealed partial class DawnScene
     {
         // A hidden canvas isn't laid out any more, so with the code up it kept the size it had, and dragging the panel up
         // had the dark show through the panel where the canvas used to be
-        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : running.Table.Visible ? running.Table : codeScroll;
+        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : imageView.Visible ? imageView : running.Table.Visible ? running.Table : codeScroll;
         if (!middle.Bounds.IsEmpty)
         {
             backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, middle.Bounds.Size);

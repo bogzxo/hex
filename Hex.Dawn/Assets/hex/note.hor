@@ -6,5 +6,5 @@ let note = compositor.label({
     text: "2 things selected",
     text_scale: 0.14,
     color: vec(0.38, 0.62, 1, 1),
-    align: "top_left"
+    align: "top_left",
 });

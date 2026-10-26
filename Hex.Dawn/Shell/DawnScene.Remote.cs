@@ -5,14 +5,14 @@ using System.Text;
 namespace Hex.Dawn;
 
 // Hex told to open a file by another program, Dusk's open_settings, a path clicked in Dusk's output, its hex plugin, the
-// terminal's dawn command. A pipe of Hex's own (horizon-hex-<user>) that takes a line at a time, "open|path|line" or
+// terminal's dawn command. A pipe of Hex's own (horizon-hex-<user>) that takes a line at a time, "open|path|line|column" or
 // "folder|path", on a thread of its own, the file or the folder opened on the editor's next tick. The first Hex to start has the pipe, one started after it opens what it was told
 // to on its own command line and leaves the pipe to the first.
 internal sealed partial class DawnScene
 {
     public static string RemotePipe => "horizon-hex-" + System.Environment.UserName.ToLowerInvariant();
 
-    private readonly ConcurrentQueue<(string Path, int Line)> remoteOpens = new();
+    private readonly ConcurrentQueue<(string Path, int Line, int Column)> remoteOpens = new();
     private readonly ConcurrentQueue<string> remoteFolders = new();
     private CancellationTokenSource? remoteStop;
 
@@ -65,7 +65,8 @@ internal sealed partial class DawnScene
         if (parts is ["open", var path, ..] && path.Length > 0)
         {
             int at = parts.Length > 2 && int.TryParse(parts[2], out int number) ? number : 0;
-            remoteOpens.Enqueue((path, at));
+            int column = parts.Length > 3 && int.TryParse(parts[3], out int across) ? across : 0;
+            remoteOpens.Enqueue((path, at, column));
             Engine.WindowManager.Wake();
         }
         else if (parts is ["folder", var folder, ..] && folder.Length > 0)
@@ -85,11 +86,12 @@ internal sealed partial class DawnScene
         {
             if (!File.Exists(asked.Path))
             {
-                Say(Said("remote.missing", ("path", asked.Path)), error: true);
+                // A card that goes by itself, not a red line in the status bar that stays
+                Notify(Said("remote.missing", ("path", asked.Path)));
                 continue;
             }
 
-            OpenAt(asked.Path, Math.Max(0, asked.Line - 1), 0);
+            OpenAt(asked.Path, Math.Max(0, asked.Line - 1), Math.Max(0, asked.Column - 1));
             Say(Said("remote.opened", ("name", Path.GetFileName(asked.Path))));
         }
     }

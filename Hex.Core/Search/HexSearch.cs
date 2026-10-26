@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using Horizon.Content;
 using Horizon.HIDL.Lexing;
 using Horizon.HIDL.Parsing;
@@ -17,12 +15,21 @@ internal readonly record struct HexResult(string Path, int Line, int Column, str
 /// something is on, and every file checked for what doesn't parse. Nothing of the editor is read, so all of it goes on
 /// in the background, and is tested on its own.
 /// </summary>
-internal static class HexSearch
+internal static partial class HexSearch
 {
-    /// <summary>The folders never looked in for files of a workspace, what gets built, git's own and old builds kept on purpose.</summary>
+    /// <summary>
+    /// The folders the look for repositories inside of the workspace never goes into (HexGit.Nested), what gets built,
+    /// git's own and old builds kept on purpose. The files of a workspace go by <see cref="Excluded"/> instead.
+    /// </summary>
     public static readonly HashSet<string> SkippedFolders = new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "Build History" };
 
-    /// <summary>The most lines finding something lists, a search for "e" in a big repository would go on for ever.</summary>
+    /// <summary>
+    /// What a walk of the files of a workspace leaves out, asked as each walk starts. Dawn has it go by its settings
+    /// (files_exclude, search_exclude and search_use_ignore_files), anything else by what they come as.
+    /// </summary>
+    public static Func<HexExcludes> Excluded { get; set; } = static () => HexExcludes.Usual;
+
+    /// <summary>The most matches finding something lists, a search for "e" in a big repository would go on for ever.</summary>
     public const int MOST_FOUND = 2000;
 
     /// <summary>Every .hor under some folders, once each.</summary>
@@ -34,13 +41,18 @@ internal static class HexSearch
     /// </summary>
     public static List<string> TextFilesUnder(IReadOnlyList<string> roots) => Under(roots, "*", UIFileKinds.IsText);
 
+    /// <summary>The files quick open lists, every one that reads as text and whatever else the editor opens (pictures).</summary>
+    public static List<string> OpenableFilesUnder(IReadOnlyList<string> roots, Func<string, bool> alsoOpens) =>
+        Under(roots, "*", path => UIFileKinds.IsText(path) || alsoOpens(path));
+
     private static List<string> Under(IReadOnlyList<string> roots, string pattern, Func<string, bool>? keep = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
+        HexExcludes excludes = Excluded();
         foreach (string root in roots)
         {
-            foreach (string file in FilesIn(root, pattern, keep))
+            foreach (string file in FilesIn(root, pattern, keep, excludes))
             {
                 if (seen.Add(file))
                     files.Add(file);
@@ -51,28 +63,45 @@ internal static class HexSearch
     }
 
     /// <summary>
-    /// Every .hor under a folder, leaving out what gets built, git's own, old builds and the checkouts of submodules
-    /// (which are the files of another repository, and there are copies of the engine in more than one).
+    /// Every .hor under a folder, leaving out what files_exclude and search_exclude say (what gets built, git's own, old
+    /// builds), what each .gitignore on the way down says while search_use_ignore_files is on, and the checkouts of
+    /// submodules (which are the files of another repository, and there are copies of the engine in more than one). A
+    /// dot folder that's none of those is looked in, .github/workflows has files people open.
     /// </summary>
-    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null)
+    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null, HexExcludes? excludes = null)
     {
+        HexExcludes leftOut = excludes ?? Excluded();
         var files = new List<string>();
-        var pending = new Stack<string>();
-        pending.Push(root);
+
+        // Each folder with where it is inside the root and the .gitignores from the root down to it, shared until a
+        // folder has one of its own
+        var pending = new Stack<(string Folder, string Relative, HexIgnoreFile[] Ignores)>();
+        pending.Push((root, string.Empty, []));
 
         while (pending.Count > 0)
         {
-            string folder = pending.Pop();
+            var (folder, relative, ignores) = pending.Pop();
             try
             {
-                files.AddRange(Directory.GetFiles(folder, pattern).Where(file => !Path.GetFileName(file).StartsWith("~syncthing~") && (keep is null || keep(file))));
+                if (leftOut.UseIgnoreFiles && HexIgnoreFile.In(folder, relative) is { } own)
+                    ignores = [.. ignores, own];
+
+                string Inside(string name) => relative.Length == 0 ? name : $"{relative}/{name}";
+                bool Out(string inside, bool isFolder) => leftOut.Skipped(inside, isFolder) || (ignores.Length > 0 && HexIgnoreFile.Ignored(ignores, inside, isFolder));
+
+                foreach (string file in Directory.GetFiles(folder, pattern))
+                {
+                    string name = Path.GetFileName(file);
+                    if (!name.StartsWith("~syncthing~") && !Out(Inside(name), false) && (keep is null || keep(file)))
+                        files.Add(file);
+                }
 
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
-                    string name = Path.GetFileName(inside);
-                    if (SkippedFolders.Contains(name) || name.StartsWith('.') || File.Exists(Path.Combine(inside, ".git")))
+                    string under = Inside(Path.GetFileName(inside));
+                    if (Out(under, true) || File.Exists(Path.Combine(inside, ".git")))
                         continue;
-                    pending.Push(inside);
+                    pending.Push((inside, under, ignores));
                 }
             }
             catch (Exception)
@@ -96,79 +125,6 @@ internal static class HexSearch
         string inside = Path.GetRelativePath(root, full).Replace('\\', '/');
         return roots.Count > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : inside;
     }
-
-    /// <summary>
-    /// Every line something is on in the files under some folders, the first place on each, the case, whole words and a
-    /// regex as the options say. A regex that doesn't build finds nothing.
-    /// </summary>
-    public static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, UIFindOptions options)
-    {
-        var found = new List<HexResult>();
-        Regex? pattern = null;
-        if (options.Regex)
-        {
-            try { pattern = new Regex(query, (options.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); }
-            catch (ArgumentException) { return found; }
-        }
-
-        foreach (string file in TextFilesUnder(roots))
-        {
-            string[] lines = ReadLines(file);
-            for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
-            {
-                if (FirstMatch(lines[line], query, options, pattern) is { } at)
-                {
-                    // How long what was found is, for the row to light it, the query's length or the regex's match
-                    int length = pattern is null ? query.Length : Math.Max(1, pattern.Match(lines[line], at).Length);
-                    int lead = lines[line].Length - lines[line].TrimStart().Length;
-                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}", length, at - lead));
-                }
-            }
-        }
-
-        return found;
-    }
-
-    /// <summary>Where something is first on a line as the options say (the pattern built from them for a regex), null for nowhere.</summary>
-    public static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
-    {
-        if (pattern is not null)
-        {
-            try
-            {
-                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
-                {
-                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
-                        return match.Index;
-                }
-            }
-            catch (RegexMatchTimeoutException)
-            {
-            }
-            return null;
-        }
-
-        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
-        {
-            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
-                return at;
-        }
-        return null;
-    }
-
-    /// <summary>The toggles of the find bar that are on, said after what's asked, empty for none.</summary>
-    public static string DescribeOptions(UIFindOptions options)
-    {
-        var on = new List<string>();
-        if (options.MatchCase) on.Add("the case matching");
-        if (options.WholeWord) on.Add("whole words");
-        if (options.Regex) on.Add("as a regex");
-        return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
-    }
-
-    private static bool IsWholeWord(string line, int at, int length) =>
-        (at == 0 || !UITextDocument.IsWordChar(line[at - 1])) && (at + length >= line.Length || !UITextDocument.IsWordChar(line[at + length]));
 
     /// <summary>Every .hor under some folders parsed, what doesn't parse, and what names a text the game hasn't got.</summary>
     public static (int Files, List<HexResult> Problems) CheckFiles(IReadOnlyList<string> roots)

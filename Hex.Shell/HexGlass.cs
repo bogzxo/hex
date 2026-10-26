@@ -18,14 +18,24 @@ public static class HexGlass
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
     /// <summary>
-    /// The glass of a window that stays up over everything (the settings), the popups' a share less clear and with less of
+    /// The glass of a window that stays up over everything (the settings), the popups' less clear and with less of
     /// a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks like a
     /// fishbowl. It was held to one clarity for every look, and Fluid's windows came out the same solid navy as Frosted's.
+    /// <para>
+    /// Blurred twice as far as a popup and never less than WINDOW_BLUR, and under half as clear. A window stays up over the
+    /// designer's canvas, and at the popups' blur and three quarters of their clarity a panel of the layout under it came
+    /// through as a ghost of a box behind the profiles' cards and the theme rows.
+    /// </para>
     /// </summary>
-    public static UIGlass Window(UIGlass popup) => popup with { Clarity = MathF.Min(popup.Clarity * WINDOW_CLARITY, 0.45f), Bend = MathF.Min(popup.Bend, 6.0f) };
+    public static UIGlass Window(UIGlass popup) => popup with
+    {
+        Blur = MathF.Min(MathF.Max(popup.Blur * 2.0f, WINDOW_BLUR), 64.0f),
+        Clarity = MathF.Min(popup.Clarity * WINDOW_CLARITY, 0.25f),
+        Bend = MathF.Min(popup.Bend, 6.0f)
+    };
 
-    // How much of the popups' clarity a window keeps
-    private const float WINDOW_CLARITY = 0.78f;
+    // How much of the popups' clarity a window keeps, and the least it's blurred
+    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 48.0f;
 
     /// <summary>
     /// The glass of the side panels, out of the same sliders. Liquid glass (a bend) keeps more of its rim there, a light

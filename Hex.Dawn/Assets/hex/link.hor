@@ -5,5 +5,5 @@ let link = compositor.button({
     anchor: "left",
     label: "line 1: something",
     style: "button_flat",
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
 });

@@ -3,7 +3,8 @@ namespace Hex.Dawn;
 // The right side for a file that has nothing to show on it. A file of HIDL has its values there and a layout its
 // properties, a C# file or a Markdown one has neither, and the side took a third of the window to say so. It folds away
 // for such a file and comes back for the next that has something, as the settings have it, without the settings being
-// changed (Ctrl+Alt+B still puts it up for a file that hasn't).
+// changed (Ctrl+Alt+B still puts it up for a file that hasn't). Once the Properties panel was asked for it has something
+// for every file, and stays up till it's put away.
 internal sealed partial class DawnScene
 {
     // whether the side was folded because of the file rather than by somebody
@@ -12,7 +13,7 @@ internal sealed partial class DawnScene
     private void FoldValuesFor(HexDocument shown)
     {
         bool nothing = shown.IsText && shown.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase);
-        if (nothing && right.Shown)
+        if (nothing && right.Shown && properties?.Pinned != true)
         {
             valuesFoldedForFile = true;
             right.Show(false);

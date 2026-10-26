@@ -5,8 +5,8 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, and its right click.</summary>
-internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null);
+/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, its right click and the keys it takes.</summary>
+internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null, Func<char, bool>? Key = null);
 
 internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
 
@@ -25,6 +25,10 @@ internal sealed partial class DawnScene
 
     private void BuildSideTree()
     {
+        // Every walk of the workspace's files goes by the settings' files_exclude, search_exclude and .gitignores, read
+        // as each one starts, so a settings file read again or a folder's own settings count straight away
+        HexSearch.Excluded = () => settings is { } kept ? HexExcludes.Of(kept) : HexExcludes.Usual;
+
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
         sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
@@ -32,12 +36,13 @@ internal sealed partial class DawnScene
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
         sideTree.OnExpanding = item => (item.Tag as SideTag)?.Expanding?.Invoke(item);
         sideTree.OnItemContextMenu = (item, point) => (item.Tag as SideTag)?.Menu?.Invoke(point);
+        sideTree.OnKey = (item, key) => (item.Tag as SideTag)?.Key?.Invoke(key) == true;
 
         // As wide as the components' list whichever of the two is showing, dragged by its edge the same way
         SideGrip(sideTree, UIResize.Right, left: true);
     }
 
-    /// <summary>Whether the side bar shows the tree, or the rows of the designer (and the search's empty page).</summary>
+    /// <summary>Whether the side bar shows the tree, or the rows of the designer.</summary>
     private void UseSideTree(bool tree)
     {
         sideTree.Visible = tree;
@@ -65,6 +70,7 @@ internal sealed partial class DawnScene
             items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
 
         sideTree.Items = items;
+        DecorateRows();
         ShowOpenInExplorer();
     }
 
@@ -96,6 +102,7 @@ internal sealed partial class DawnScene
 
         explorer.explorerRows.Add((entry.Path, true, item));
         explorerMade++;
+        DecorateRow(item, entry.Path, true, entry.IsRoot ? null : FolderColor);
 
         if (open)
             FillFolder(item);
@@ -112,12 +119,23 @@ internal sealed partial class DawnScene
         item.Children = [];
         var (inside, files) = folders.In(folder);
         int depth = 1;
-        for (UITreeItem? at = item.Parent; at is not null; at = at.Parent) depth++;
+        UITreeItem root = item;
+        for (UITreeItem? at = item.Parent; at is not null; at = at.Parent)
+        {
+            depth++;
+            root = at;
+        }
+
+        // Only what files.exclude says is gone from the explorer, .github, .env, bin and node_modules all show the way
+        // they do in VS Code. Search.exclude and the .gitignores are quick open's and Find in Files' business
+        HexExcludes excludes = HexExcludes.Of(settings);
+        string top = root.Tooltip ?? folder;
+        bool Hidden(string path, bool isFolder) => excludes.Hidden(HexExcludes.Relative(top, path), isFolder);
 
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
-            if (HexSearch.SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(directory, true))
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
@@ -126,7 +144,7 @@ internal sealed partial class DawnScene
         foreach (string file in files)
         {
             string name = Path.GetFileName(file);
-            if (name.StartsWith("~syncthing~") || name.StartsWith('.') || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(file, false))
                 continue;
 
             var entry = new ExplorerEntry(file, false, depth, false);
@@ -139,6 +157,7 @@ internal sealed partial class DawnScene
 
             explorer.explorerRows.Add((file, false, row));
             explorerMade++;
+            DecorateRow(row, file, false, null);
         }
     }
 
@@ -197,6 +216,7 @@ internal sealed partial class DawnScene
             items.Add(FileItem(file, false, Path.GetFileName(file)));
 
         sideTree.Items = items;
+        DecorateRows();
     }
 
     private UITreeItem FileItem(string path, bool isDirectory, string text, string? icon = null)
@@ -220,7 +240,7 @@ internal sealed partial class DawnScene
         treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
 
-        List<OutlineEntry> entries = OutlineHere();
+        List<OutlineEntry> entries = KeptOutline();
         var items = new List<UITreeItem>();
         var open = new List<(int Depth, UITreeItem Item, string Key)>();
 
@@ -277,64 +297,11 @@ internal sealed partial class DawnScene
         _ => HexRunning.SymbolField
     };
 
-    /* What was found, Ctrl+Shift+F and Shift+F12, by the file it is in */
-
-    private void RebuildResults()
-    {
-        // Nothing looked for yet, the way to look
-        if (results is null)
-        {
-            treeTitle.Text = Said("side.search");
-            UseSideTree(false);
-            layout.Populate(tree, 0);
-            layout.Instantiate(SEARCH_EMPTY_TEMPLATE, tree).Get<Button>("find").OnPressed = FindInFiles;
-            return;
-        }
-
-        treeTitle.Text = resultsTitle;
-        UseSideTree(true);
-
-        var items = new List<UITreeItem>();
-        var byFile = new Dictionary<string, UITreeItem>(PlatformPaths.Comparer);
-        foreach (HexResult result in results)
-        {
-            if (!byFile.TryGetValue(result.Path, out UITreeItem? file))
-            {
-                file = new UITreeItem(Path.GetFileName(result.Path), HexExplorer.FileIcon(result.Path))
-                {
-                    Tooltip = result.Path,
-                    Expanded = true,
-                    Children = []
-                };
-                byFile[result.Path] = file;
-                items.Add(file);
-            }
-
-            // Under its file a row is what's on the line, the line's number quiet after it. It was the file and the line
-            // again in front of that, "app.d:3  struct Point  3"
-            HexResult found = result;
-            string marker = $":{result.Line + 1}  ";
-            int cut = result.Text.IndexOf(marker, StringComparison.Ordinal);
-            string said = (cut >= 0 ? result.Text[(cut + marker.Length)..] : result.Text).Trim();
-
-            // What was found lit in the line, where it is once the line's indent is gone
-            file.Add(new UITreeItem(said, string.Empty)
-            {
-                Mark = result.Found > 0 && result.FoundAt >= 0 ? (result.FoundAt, result.Found) : default,
-                Detail = $"{result.Line + 1}",
-                Tooltip = $"{result.Path}:{result.Line + 1}",
-                Tag = new SideTag(Pressed: () => OpenAt(found.Path, found.Line, found.Column))
-            });
-        }
-
-        foreach (UITreeItem file in items)
-            file.Detail = file.Children!.Count.ToString();
-
-        if (items.Count == 0)
-            items.Add(NoteItem(Said("side_tree.results_empty"), DimColor));
-
-        sideTree.Items = items;
-    }
+    /// <summary>
+    /// What the files of the workspace leave out changed (files_exclude, search_exclude, the .gitignores). The explorer
+    /// is put together again with what's hidden now, quick open and Find in Files read it the next time they walk.
+    /// </summary>
+    private void ExcludesChanged() => treeDirty |= Side == HexSide.Explorer;
 
     /// <summary>The list in the side bar, whatever its view is.</summary>
     private void RebuildTree()
@@ -342,6 +309,7 @@ internal sealed partial class DawnScene
         designer.treeRows.Clear();
         fileRows.Clear();
         ApplySide();
+        PlaceSearchView(Side == HexSide.Search);
 
         switch (Side)
         {

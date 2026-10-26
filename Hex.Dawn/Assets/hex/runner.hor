@@ -1,7 +1,6 @@
-// runner, laid out with Horizon.Hex.
+// runner, laid out with Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
 #define layout
-
 
 let window = compositor.window({
     size: vec(560, 250),
@@ -11,7 +10,7 @@ let window = compositor.window({
     intro_time: 0.18,
     min_size: vec(420, 220),
     title: "@runner.title",
-    icon: "debug-alt"
+    icon: "debug-alt",
 });
 
 let rows = compositor.stack({ parent: window, spacing: 8 });
@@ -21,7 +20,7 @@ let function_row = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 10,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let function_name = compositor.label({
@@ -29,7 +28,7 @@ let function_name = compositor.label({
     size: vec(90, 28),
     text: "@runner.function",
     text_scale: 0.14,
-    align: "left"
+    align: "left",
 });
 
 let runner_function = compositor.dropdown({
@@ -38,7 +37,7 @@ let runner_function = compositor.dropdown({
     options: ["none"],
     value: "none",
     text_scale: 0.14,
-    max_rows: 12
+    max_rows: 12,
 });
 
 let view_row = compositor.stack({
@@ -46,7 +45,7 @@ let view_row = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 10,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let view_name = compositor.label({
@@ -55,7 +54,7 @@ let view_name = compositor.label({
     tooltip: "@runner.view_tip",
     text: "@runner.view",
     text_scale: 0.14,
-    align: "left"
+    align: "left",
 });
 
 let runner_view = compositor.textbox({
@@ -63,7 +62,7 @@ let runner_view = compositor.textbox({
     size: vec(400, 28),
     placeholder: "{ tick: 0 }",
     text_scale: 0.14,
-    max_length: 2000
+    max_length: 2000,
 });
 
 let ticks_row = compositor.stack({
@@ -71,7 +70,7 @@ let ticks_row = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 10,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let ticks_name = compositor.label({
@@ -79,13 +78,13 @@ let ticks_name = compositor.label({
     size: vec(90, 28),
     text: "@runner.ticks",
     text_scale: 0.14,
-    align: "left"
+    align: "left",
 });
 
 let runner_ticks = compositor.number_box({
     parent: ticks_row,
     size: vec(100, 28),
-    text_scale: 0.14
+    text_scale: 0.14,
 });
 
 let runner_at = compositor.label({
@@ -93,7 +92,7 @@ let runner_at = compositor.label({
     size: vec(290, 28),
     text_scale: 0.13,
     color: vec(0.6, 0.62, 0.68, 1),
-    align: "left"
+    align: "left",
 });
 
 let buttons = compositor.stack({
@@ -101,7 +100,7 @@ let buttons = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 6,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let runner_step = compositor.button({
@@ -110,7 +109,7 @@ let runner_step = compositor.button({
     tooltip: "@runner.step_tip",
     label: "@runner.step",
     icon: "debug-step-over",
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
 });
 
 let runner_run = compositor.button({
@@ -119,7 +118,7 @@ let runner_run = compositor.button({
     tooltip: "@runner.run_tip",
     label: "@runner.run",
     icon: "run-all",
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
 });
 
 let runner_reset = compositor.button({
@@ -128,5 +127,5 @@ let runner_reset = compositor.button({
     tooltip: "@runner.reset_tip",
     label: "@runner.reset",
     icon: "debug-restart",
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
 });

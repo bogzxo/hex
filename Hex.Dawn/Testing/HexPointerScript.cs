@@ -114,6 +114,23 @@ internal sealed class HexPointerScript
     private void Glide(Func<Vector2> target, bool held, float duration) =>
         steps.Enqueue(new Step(target, held, duration));
 
+    /// <summary>Whether it keeps what it finds to itself, for a script inside the test that the test checks the tally of.</summary>
+    public bool Quiet { get; init; }
+
+    private void Say(string line)
+    {
+        if (!Quiet)
+            Console.WriteLine($"[Hex self-test] {line}");
+    }
+
+    /// <summary>Helper method to count a step that threw as a failure and say so, the test going on after it.</summary>
+    private void Threw(string what, Exception e)
+    {
+        Failed++;
+        Say($"step threw: {e.GetType().Name}: {e.Message}");
+        Say($"FAIL: {what} threw");
+    }
+
     public void Update(float dt)
     {
         if (current is null)
@@ -121,7 +138,7 @@ internal sealed class HexPointerScript
             if (!steps.TryDequeue(out var next))
             {
                 if (!IsFinished)
-                    Console.WriteLine($"[Hex self-test] {Passed} of {Passed + Failed} checks passed.");
+                    Say($"{Passed} of {Passed + Failed} checks passed.");
 
                 IsFinished = true;
                 return;
@@ -136,7 +153,16 @@ internal sealed class HexPointerScript
 
         if (step.Action is not null)
         {
-            step.Action();
+            try
+            {
+                step.Action();
+            }
+            catch (Exception e)
+            {
+                // Something to do that blows up is a failure of its own, the editor stays up for the rest
+                Threw("a step", e);
+            }
+
             current = null;
             return;
         }
@@ -151,13 +177,13 @@ internal sealed class HexPointerScript
             catch (Exception e)
             {
                 // A check that blows up is a check that failed, and the rest still want their turn
-                Console.WriteLine($"[Hex self-test] {step.Name} threw: {e.Message}");
+                Say($"{step.Name} threw: {e.Message}");
                 ok = false;
             }
 
             if (ok) Passed++; else Failed++;
 
-            Console.WriteLine($"[Hex self-test] {(ok ? "pass" : "FAIL")}: {step.Name}");
+            Say($"{(ok ? "pass" : "FAIL")}: {step.Name}");
             current = null;
             return;
         }
@@ -167,15 +193,39 @@ internal sealed class HexPointerScript
 
         if (step.Target is null)
         {
-            // Just time passing, or waiting on something
-            if (elapsed >= step.Duration || step.Until?.Invoke() == true)
+            // Just time passing, or waiting on something. A wait whose question blows up is over, a failure counted once
+            bool done;
+            try
+            {
+                done = elapsed >= step.Duration || step.Until?.Invoke() == true;
+            }
+            catch (Exception e)
+            {
+                Threw("a wait", e);
+                done = true;
+            }
+
+            if (done)
                 current = null;
             return;
         }
 
         float progress = step.Duration <= 0.0f ? 1.0f : MathF.Min(1.0f, elapsed / step.Duration);
 
-        position = Vector2.Lerp(from, step.Target(), progress);
+        Vector2 target;
+        try
+        {
+            target = step.Target();
+        }
+        catch (Exception e)
+        {
+            // Somewhere to go that can't be worked out, the pointer stays put and the step is over
+            Threw("a move", e);
+            current = null;
+            return;
+        }
+
+        position = Vector2.Lerp(from, target, progress);
         down = step.Down;
         secondary = step.Secondary;
 

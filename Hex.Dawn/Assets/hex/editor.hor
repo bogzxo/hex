@@ -13,7 +13,7 @@
 
 let root = compositor.stack({
     fill: "both",
-    spacing: 0
+    spacing: 0,
 });
 
 // The window's own title bar, Hex draws it (the window has no frame of the system's), with the menus in it like VS Code
@@ -22,7 +22,7 @@ let top = compositor.title_bar({
     icon: "layout",
     title: "@window.title",
     height: 34,
-    spacing: 0
+    spacing: 0,
 });
 
 let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });
@@ -32,7 +32,7 @@ let body = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 0,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 // The activity bar, which of the side bar's views is showing
@@ -40,7 +40,7 @@ let activity_bar = compositor.include({
     parent: body,
     anchor: "top",
     pivot: "top",
-    file: "shell/activity_bar.hor"
+    file: "shell/activity_bar.hor",
 });
 
 // The side bar, the toolbox, tree and layers of a layout or the explorer, outline and search of code
@@ -48,7 +48,7 @@ let side_bar = compositor.include({
     parent: body,
     anchor: "top",
     pivot: "top",
-    file: "shell/side_bar.hor"
+    file: "shell/side_bar.hor",
 });
 
 // The middle is a card on the window like the sides, its padding the room round what's in it inside the card
@@ -57,7 +57,7 @@ let center = compositor.stack({
     anchor: "top",
     pivot: "top",
     padding: vec(10, 10, 10, 8),
-    spacing: 0
+    spacing: 0,
 });
 
 // The tabs of the open files with what the file can do at their right end, and the breadcrumbs under them
@@ -65,7 +65,7 @@ let editor_tabs = compositor.include({
     parent: center,
     anchor: "left",
     pivot: "left",
-    file: "shell/editor_tabs.hor"
+    file: "shell/editor_tabs.hor",
 });
 
 let canvas = compositor.panel({ layer: "canvas", parent: center, size: vec(840, 497) });
@@ -75,7 +75,7 @@ let code_scroll = compositor.panel({
     layer: "code",
     parent: center,
     size: vec(840, 250),
-    color: vec(0.055, 0.06, 0.08, 1)
+    color: vec(0.055, 0.06, 0.08, 1),
 });
 
 // A file of code as a table, an object of objects (moves, characters) or a file of texts with its languages side by side
@@ -83,7 +83,7 @@ let data_table = compositor.table({
     layer: "table",
     parent: center,
     size: vec(840, 250),
-    text_scale: 0.14
+    text_scale: 0.14,
 });
 
 // Where the views extensions make for a file go, in place of its code, see HexScene.ExtensionUI
@@ -91,7 +91,33 @@ let ext_view = compositor.panel({
     layer: "extension",
     parent: center,
     size: vec(840, 250),
-    clip: true
+    clip: true,
+});
+
+// A picture opened from the explorer, in place of code, see DawnScene.Images
+let image_view = compositor.panel({
+    layer: "image",
+    parent: center,
+    size: vec(840, 250),
+    clip: true,
+    color: vec(0.04, 0.045, 0.06, 1),
+});
+
+let image_picture = compositor.image({
+    parent: image_view,
+    anchor: "center",
+    pivot: "center",
+    size: vec(64, 64),
+});
+
+let image_info = compositor.label({
+    parent: image_view,
+    anchor: "bottom_left",
+    pivot: "bottom_left",
+    pos: vec(10, 8),
+    text: "",
+    text_scale: 0.13,
+    color: vec(0.46, 0.52, 0.64, 1),
 });
 
 // The panel under the editor, the problems, the output and the console
@@ -99,7 +125,7 @@ let panel = compositor.include({
     parent: center,
     anchor: "left",
     pivot: "left",
-    file: "shell/panel.hor"
+    file: "shell/panel.hor",
 });
 
 // The properties of what is selected, or the values of a file of code
@@ -107,7 +133,7 @@ let properties = compositor.include({
     parent: body,
     anchor: "top",
     pivot: "top",
-    file: "shell/properties.hor"
+    file: "shell/properties.hor",
 });
 
 let status_bar = compositor.status_bar({ parent: root, fill: "horizontal" });
@@ -118,7 +144,7 @@ let toasts = compositor.notifications({
     pivot: "bottom_right",
     pos: vec(-14, 36),
     width: 400,
-    text_scale: 0.14
+    text_scale: 0.14,
 });
 
-compositor.hidden_layers(["files", "code", "table", "extension", "values"]);
+compositor.hidden_layers(["files", "code", "table", "extension", "image", "values"]);

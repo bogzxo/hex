@@ -9,7 +9,7 @@ internal enum HexSide
     // The folders of the workspace, or the folder files are opened from without one
     Explorer,
 
-    // What finding in every file (or every use of a name) came to
+    // Finding in every file, its boxes over what it (or every use of a name) came to
     Search,
 
     // What a file of code declares, and the keys of its objects
@@ -19,7 +19,10 @@ internal enum HexSide
     Design,
 
     // Debugging, the stack where it stopped, the variables and the breakpoints
-    Debug
+    Debug,
+
+    // Git, what's changed in the repositories of the workspace, staged or not, and committing it
+    SourceControl
 }
 
 // The activity bar down the left and the side bar next to it, VS Code's. A file of code has the explorer, search and
@@ -74,6 +77,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").OnPressed = () => ShowSide(HexSide.Outline);
         layout.Get<Button>("act_design").OnPressed = () => ShowSide(HexSide.Design);
         layout.Get<Button>("act_debug").OnPressed = () => ShowSide(HexSide.Debug);
+        layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
         layout.Get<Button>("act_extensions").OnPressed = () =>
         {
@@ -95,6 +99,37 @@ internal sealed partial class DawnScene
 
         left.Show(true);
         Side = side;
+        FocusSideList();
+    }
+
+    /// <summary>
+    /// Helper method to give the keyboard to the list of a side that was just shown, the explorer, Source Control or
+    /// what a search found, so Up, Down and Enter go down it at once the way VS Code focuses the view. Ctrl+Shift+G left
+    /// the keyboard in the code and a change could only be opened with a click. The list is made there and then rather
+    /// than at the end of the update, it has to be on screen to be given the keyboard.
+    /// </summary>
+    private void FocusSideList()
+    {
+        if (Side is not (HexSide.Explorer or HexSide.SourceControl or HexSide.Search))
+            return;
+
+        RebuildTree();
+        treeDirty = false;
+        if (!sideTree.Visible)
+            return;
+
+        // Search gives its box the keys, the way VS Code's view does, Down from there isn't how a search starts
+        if (Side == HexSide.Search && searchView is { Visible: true })
+        {
+            FocusSearchBox();
+            return;
+        }
+
+        // With nothing picked yet the first open row with rows under it is, Changes, a workspace folder or a file found
+        // in, so the first Down lands on the first thing in it. Down from nothing picked was Source Control's Commit all,
+        // and Enter after it committed every change
+        sideTree.Selected ??= sideTree.Items.Find(item => item.HasChildren && item.Expanded);
+        sideTree.Focus();
     }
 
     private void ToggleSideBar()
@@ -126,8 +161,11 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").Selected = side == HexSide.Outline;
         layout.Get<Button>("act_design").Selected = side == HexSide.Design;
         layout.Get<Button>("act_debug").Selected = side == HexSide.Debug;
+        layout.Get<Button>("act_git").Selected = side == HexSide.SourceControl;
         layout.Get<Button>("act_outline").Visible = !tools;
         layout.Get<Button>("act_design").Visible = tools;
+        if (refreshButton is not null)
+            refreshButton.Visible = side == HexSide.Explorer;
         treeScroll.Offset = 0;
     }
 }

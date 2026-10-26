@@ -9,10 +9,13 @@
     <!-- AttachConsole for the help, LibraryImport writes unsafe code for it -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <OutputType>Exe</OutputType>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
 
     <!-- The exe's icon in Explorer, the windows get their own at run time (WindowIcon) -->
     <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>
+
+    <!-- The console a Debug Hex gets only from whoever started it, see app.manifest -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
 
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
@@ -31,6 +34,8 @@
     <PublishTrimmed>true</PublishTrimmed>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
+    <!-- The native compiler's own Hex.pdb, 100 MB of it, came along anyway when Visual Studio published -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
 
   <!--

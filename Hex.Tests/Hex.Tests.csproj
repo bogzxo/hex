@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- The default terminal's tests call Dusk's COM class through its table of functions, the way Windows would -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- Where the engine is, its submodule unless a workspace said otherwise -->
     <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
