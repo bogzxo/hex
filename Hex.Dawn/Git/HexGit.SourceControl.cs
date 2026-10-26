@@ -19,42 +19,27 @@ internal sealed partial class HexGit
         Changed += () => context.Panels.RefreshSide(HexSide.SourceControl);
 
         context.Commands.Add("View/sides", context.Strings.Said("git.side_command"), () => context.Panels.ShowSide(HexSide.SourceControl), "Ctrl+Shift+G", "source-control", UIKeyUse.BoundWhileTyping);
-        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(FirstRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
+        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(ActiveRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
         BuildCommits();
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.discard_file"), DiscardCurrent, icon: "discard");
-        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.stage_all"), () => StageEverything(FirstRepository(), true), icon: "add");
-        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.unstage_all"), () => StageEverything(FirstRepository(), false), icon: "remove");
-        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.discard_all_command"), () => DiscardEverything(FirstRepository()), icon: "discard");
-        context.Commands.Add("Git/menus/branches:switch", context.Strings.Said("git.branches_command"), () => ShowBranches(context.Documents.Current.Path), icon: "git-branch");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.stage_all"), () => StageEverything(ActiveRepository(), true), icon: "add");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.unstage_all"), () => StageEverything(ActiveRepository(), false), icon: "remove");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.discard_all_command"), () => DiscardEverything(ActiveRepository()), icon: "discard");
+        context.Commands.Add("Git/menus/branches:switch", context.Strings.Said("git.branches_command"), () => BranchesOf(ActiveRepository()), icon: "git-branch");
         BuildBranchOps();
     }
 
-    // The repository of the file on screen, or the workspace's first
-    private Repository? FirstRepository()
-    {
-        if (context.Documents.Current.Path is { } path && RepositoryOf(path) is { } here)
-            return here;
-
-        foreach (string root in context.Workspace.Roots)
-        {
-            if (RepositoryOf(root) is { } rooted)
-                return rooted;
-        }
-
-        return null;
-    }
-
-    /// <summary>The rows of the side, a repository's changes under its name when there's more than one.</summary>
+    /// <summary>The rows of the side, a repository's changes under its heading when there's more than one.</summary>
     private List<UITreeItem> SourceControlSide()
     {
         var items = new List<UITreeItem>();
         foreach (string root in context.Workspace.Roots)
             RepositoryOf(root);
-        List<Repository> shown = WorkspaceRepositories();
+        List<Repository> shown = [.. WorkspaceRepositories()];
 
-        if (context.Documents.Current.Path is { } open && RepositoryOf(open) is { } openRepository && !shown.Contains(openRepository))
+        if (OpenRepository() is { } openRepository && !shown.Contains(openRepository))
             shown.Add(openRepository);
 
         if (!Available)
@@ -62,35 +47,26 @@ internal sealed partial class HexGit
         else if (shown.Count == 0)
             items.Add(Note(context.Strings.Said("git.no_repository")));
 
+        Repository? active = shown.Count > 1 ? ActiveRepository() : null;
         foreach (Repository repository in shown)
         {
             if (shown.Count == 1)
-            {
                 AddRepositoryRows(items, repository);
-                continue;
-            }
-
-            var heading = new UITreeItem($"{Path.GetFileName(repository.Git.Root)}   {repository.Status?.Branch ?? string.Empty}", "repo")
-            {
-                Expandable = true,
-                Expanded = true,
-                Children = [],
-                Tooltip = repository.Git.Root
-            };
-            AddRepositoryRows(heading.Children, repository);
-            items.Add(heading);
+            else
+                items.Add(Heading(repository, repository == active));
         }
 
         return items;
     }
 
-    private void AddRepositoryRows(List<UITreeItem> items, Repository repository)
+    /// <summary>A repository's rows, Commit and its sections of files, and how many changes there are (-1 before git said).</summary>
+    private int AddRepositoryRows(List<UITreeItem> items, Repository repository)
     {
         GitStatus? status = repository.Status;
         if (status is null)
         {
             items.Add(Note(context.Strings.Said("git.reading")));
-            return;
+            return -1;
         }
 
         var conflicts = new List<(string Path, GitFileState State)>();
@@ -98,7 +74,7 @@ internal sealed partial class HexGit
         var changes = new List<(string Path, GitFileState State)>();
         foreach (var (path, state) in status.Files.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
         {
-            if (state.Change == GitChange.Ignored)
+            if (!Listed(path, state))
                 continue;
             if (state.Change == GitChange.Conflicted)
                 conflicts.Add((path, state));
@@ -145,7 +121,7 @@ internal sealed partial class HexGit
             UITreeItem none = Note(context.Strings.Said("git.no_changes"));
             none.Tooltip = context.Strings.Said("git_branch.nothing_to_commit");
             items.Add(none);
-            return;
+            return 0;
         }
 
         if (conflicts.Count > 0)
@@ -154,7 +130,13 @@ internal sealed partial class HexGit
             items.Add(Section(repository, context.Strings.Said("git.staged_changes"), staged, SectionKind.Staged));
         if (changes.Count > 0)
             items.Add(Section(repository, context.Strings.Said("git.changes"), changes, SectionKind.Changes));
+        return count;
     }
+
+    // Whether a file of a repository's status has a row, not when it's ignored, nor when it's a repository nobody added
+    // that's on the side under its own heading already
+    private bool Listed(string path, GitFileState state) =>
+        state.Change != GitChange.Ignored && !(state.Submodule == GitSubmodule.Nested && repositories.ContainsKey(path));
 
     // Which of the three a section is, what a merge left in conflict, what's staged and what isn't
     private enum SectionKind { Conflicts, Staged, Changes }
@@ -176,6 +158,12 @@ internal sealed partial class HexGit
 
         foreach (var (path, state) in files)
         {
+            if (state.IsRepository)
+            {
+                section.Children.Add(RepositoryRow(repository, path, state, kind));
+                continue;
+            }
+
             string folder = Path.GetRelativePath(repository.Git.Root, Path.GetDirectoryName(path) ?? repository.Git.Root);
 
             // A renamed file says what it was called, or nobody can tell it from a new one
@@ -290,6 +278,12 @@ internal sealed partial class HexGit
 
     private void DiscardAll(Repository repository, string[] paths)
     {
+        // A submodule or a repository nobody added isn't thrown away with the files, a whole clone in the trash for Discard
+        // All was never what anybody meant
+        paths = [.. paths.Where(path => repository.Status?.StateOf(path).IsRepository != true)];
+        if (paths.Length == 0)
+            return;
+
         string[] fresh = [.. paths.Where(path => repository.Status?.StateOf(path).Change == GitChange.Untracked)];
         AskDiscard(repository, paths, fresh);
     }

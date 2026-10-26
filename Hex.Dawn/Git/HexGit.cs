@@ -39,12 +39,17 @@ internal sealed partial class HexGit
         BuildSync();
         BuildStash();
         BuildMerge();
+        BuildActive();
         context.Workspace.FilesChanged += files =>
         {
-            foreach (var (path, _) in files)
+            foreach (var (path, change) in files)
             {
                 if (RepositoryOf(path) is { } repository)
                     repository.Dirty();
+
+                // Something made can be a clone or a folder git init is about to make a repository of, looked down for soon
+                if (change == LanguageServerFileChange.Created)
+                    LookDownSoon();
             }
         };
     }
@@ -81,6 +86,10 @@ internal sealed partial class HexGit
     {
         if (!Available)
             return;
+
+        // The file on screen in another repository makes that one the active one, a look only when the file changed
+        FollowOpenFile();
+        UpdateLookDown(dt);
 
         if ((lookIn -= dt) <= 0.0f)
         {
@@ -187,6 +196,7 @@ internal sealed partial class HexGit
             {
                 found = new Repository(this, git);
                 repositories[git.Root] = found;
+                listedDirty = true;
 
                 // Where git was as it's found, so a commit made before the first look still counts as a move
                 found.LookForMoves();
@@ -222,42 +232,72 @@ internal sealed partial class HexGit
         // Bumped every time git is asked about it, so what comes back from an older ask is let go of
         public int Generation { get; private set; }
 
+        /// <summary>The name of its folder, what its heading and the status bar call it.</summary>
+        public string Name { get; } = Path.GetFileName(git.Root);
+
+        /// <summary>Whether it was let go of, its .git gone from the disk.</summary>
+        public bool Gone { get; set; }
+
         private float settleIn = 0.01f;
         private bool asking;
-        private DateTime headTime, indexTime, refTime;
-        private string? dotPath, headPath, indexPath, refPath, refFor;
+
+        // The files a look stats and when each was last written. HEAD and the index are the worktree's own, the branch's
+        // ref, its upstream's, FETCH_HEAD and packed-refs are where every worktree shares them (the common folder)
+        private const int HEAD = 0, INDEX = 1, BRANCH = 2, UPSTREAM = 3, FETCHED = 4, PACKED = 5;
+        private readonly string?[] watched = new string?[6];
+        private readonly DateTime[] stamps = new DateTime[6];
+        private string? commonPath, branchFor, upstreamFor;
 
         /// <summary>Asked again soon, or straight away.</summary>
         public void Dirty(bool now = false) => settleIn = now ? 0.01f : Math.Max(settleIn, SETTLE);
 
-        /// <summary>HEAD, the index and the branch's own ref, which a commit, a switch, a stage or a pull outside of Hex all touch.</summary>
+        /// <summary>
+        /// HEAD, the index, the branch's own ref and the remote's, which a commit, a switch, a stage, a pull or a fetch in
+        /// the terminal all touch. A fetch writes FETCH_HEAD and a push the upstream's ref, and a gc packs them into packed-refs.
+        /// </summary>
         public void LookForMoves()
         {
-            // Where the files are is worked out once (and the branch's ref when the branch changes), every second it was a
-            // read of the .git file and a handful of paths put together, garbage for a look that finds nothing most times
-            if (headPath is null)
+            // Where the files are is worked out once (and the refs when the branch changes), every second it was a read of
+            // the .git file and a handful of paths put together, garbage for a look that finds nothing most times
+            if (commonPath is null)
             {
                 string dot = DotGit();
-                dotPath = dot;
-                headPath = Path.Combine(dot, "HEAD");
-                indexPath = Path.Combine(dot, "index");
+                string common = CommonDir(dot);
+                commonPath = common;
+                watched[HEAD] = Path.Combine(dot, "HEAD");
+                watched[INDEX] = Path.Combine(dot, "index");
+                watched[FETCHED] = Path.Combine(common, "FETCH_HEAD");
+                watched[PACKED] = Path.Combine(common, "packed-refs");
             }
 
             string? branch = Status?.Branch;
-            if (!ReferenceEquals(branch, refFor))
+            if (!ReferenceEquals(branch, branchFor))
             {
-                refFor = branch;
-                refPath = branch is null ? null : Path.Combine(dotPath!, "refs", "heads", branch);
+                branchFor = branch;
+                watched[BRANCH] = branch is null ? null : Path.Combine(commonPath, "refs", "heads", branch);
             }
 
-            DateTime head = Stamp(headPath);
-            DateTime index = Stamp(indexPath!);
-            DateTime branchRef = refPath is not null ? Stamp(refPath) : default;
-            if (head != headTime || index != indexTime || branchRef != refTime)
+            // origin/main is refs/remotes/origin/main
+            string? upstream = Status?.Upstream;
+            if (!ReferenceEquals(upstream, upstreamFor))
             {
-                (headTime, indexTime, refTime) = (head, index, branchRef);
-                Dirty(now: true);
+                upstreamFor = upstream;
+                watched[UPSTREAM] = upstream is null ? null : Path.Combine(commonPath, "refs", "remotes", upstream);
             }
+
+            bool moved = false;
+            for (int i = 0; i < watched.Length; i++)
+            {
+                DateTime stamp = watched[i] is { } file ? Stamp(file) : default;
+                if (stamp != stamps[i])
+                {
+                    stamps[i] = stamp;
+                    moved = true;
+                }
+            }
+
+            if (moved)
+                Dirty(now: true);
         }
 
         public void Update(float dt)
@@ -309,10 +349,26 @@ internal sealed partial class HexGit
             return dot;
         }
 
+        // Where the refs every worktree shares are, a linked worktree's folder says in its commondir file, anything else
+        // has them in its own folder
+        private static string CommonDir(string dot)
+        {
+            try
+            {
+                string file = Path.Combine(dot, "commondir");
+                if (File.Exists(file))
+                    return Path.GetFullPath(Path.Combine(dot, File.ReadAllText(file).Trim()));
+            }
+            catch (IOException) { }
+
+            return dot;
+        }
+
+        // One stat, a file that isn't there has the same far off time every look (1601), so it never counts as a move
         private static DateTime Stamp(string file)
         {
-            try { return File.Exists(file) ? File.GetLastWriteTimeUtc(file) : default; }
-            catch (IOException) { return default; }
+            try { return File.GetLastWriteTimeUtc(file); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return default; }
         }
     }
 }

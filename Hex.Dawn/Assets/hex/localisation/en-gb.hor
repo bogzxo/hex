@@ -2198,6 +2198,26 @@ let strings = {
         git_settings: "Git Settings"
     },
 
+    // More than one repository in the workspace, the active one the Git menu and the status bar work on, and submodules
+    git_repos: {
+        pick_command: "Pick Active Repository...",
+        pick_title: "Repositories",
+        pick_text: "The Git menu, Commit and the status bar work on the one picked",
+        pick_branch_text: "Pick a repository, then the branch to switch to",
+        branches_text: "{repository} is on {branch}, pick one to switch to",
+        active_tip: "The active repository, the Git menu and the status bar work on it",
+        unpublished: "not published",
+        commit_here: "Commit",
+        sync_here: "Sync",
+        branch_here: "Switch Branch...",
+        open_repository: "Open Repository",
+        not_added: "repository, not added",
+        submodule: "submodule",
+        new_commits: "new commits",
+        modified_content: "modified content",
+        untracked_content: "untracked content"
+    },
+
     // Branches merged, rebased, deleted and renamed, tags, and single commits picked over or taken back, from the Git menu
     git_branch: {
         merge_command: "Merge Branch...",

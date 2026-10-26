@@ -13,12 +13,41 @@ internal enum GitChange
     Conflicted
 }
 
+/// <summary>
+/// What a row that isn't a plain file is, a submodule (another repository whose commit this one keeps) and what moved in
+/// it, or a repository of its own inside this one that nobody added. None for a plain file.
+/// </summary>
+[Flags]
+internal enum GitSubmodule
+{
+    None = 0,
+
+    /// <summary>A submodule, its path is a folder and what changed is a commit of another repository.</summary>
+    Module = 1,
+
+    /// <summary>Its HEAD isn't on the commit this repository keeps for it, new commits in it or another one checked out.</summary>
+    Commits = 2,
+
+    /// <summary>Files git knows in it are changed.</summary>
+    Modified = 4,
+
+    /// <summary>It has files nobody added.</summary>
+    Untracked = 8,
+
+    /// <summary>A repository inside this one that nobody added, git lists it as one folder and looks no further.</summary>
+    Nested = 16
+}
+
 /// <summary>A file's change, and whether it's staged (in the index, what the next commit takes) or only in the working tree.</summary>
 /// <param name="Staged">Some of it is in the index.</param>
 /// <param name="Unstaged">Some of it is still only in the working tree.</param>
 /// <param name="From">Where a renamed file was, the full path, null for anything else.</param>
-internal readonly record struct GitFileState(GitChange Change, bool Staged, bool Unstaged, string? From = null)
+/// <param name="Submodule">What it is when it isn't a plain file, a submodule or a repository nobody added.</param>
+internal readonly record struct GitFileState(GitChange Change, bool Staged, bool Unstaged, string? From = null, GitSubmodule Submodule = GitSubmodule.None)
 {
+    /// <summary>Whether it's a submodule or a repository inside this one, a folder of another repository and not a file.</summary>
+    public bool IsRepository => Submodule != GitSubmodule.None;
+
     /// <summary>The letter VS Code puts next to a file, M, A, D, R, U, C (conflict) or I.</summary>
     public string Letter => Change switch
     {
@@ -125,7 +154,7 @@ internal sealed class GitStatus
                 // 1 XY sub mH mI mW hH hI path
                 case '1':
                     if (Field(record, 8) is { } changed)
-                        files[Full(root, changed)] = Tracked(record[2], record[3], null);
+                        files[Full(root, changed)] = Tracked(record[2], record[3], null) with { Submodule = Sub(record) };
                     break;
 
                 // 2 XY sub mH mI mW hH hI Xscore path, then the path it was renamed from as a record of its own
@@ -133,18 +162,23 @@ internal sealed class GitStatus
                     if (Field(record, 9) is { } renamed)
                     {
                         string? from = i + 1 < records.Length ? Full(root, records[++i]) : null;
-                        files[Full(root, renamed)] = Tracked(record[2], record[3], from);
+                        files[Full(root, renamed)] = Tracked(record[2], record[3], from) with { Submodule = Sub(record) };
                     }
                     break;
 
                 // u XY sub m1 m2 m3 mW h1 h2 h3 path, both sides changed it and the merge left it to the user
                 case 'u':
                     if (Field(record, 10) is { } conflicted)
-                        files[Full(root, conflicted)] = new GitFileState(GitChange.Conflicted, false, true);
+                        files[Full(root, conflicted)] = new GitFileState(GitChange.Conflicted, false, true, Submodule: Sub(record));
                     break;
 
+                // A folder here is a repository of its own that nobody added, the rest are listed file by file. Its path
+                // is kept without the slash on the end, which left its row on the side with no name
                 case '?':
-                    files[Full(root, record[2..])] = new GitFileState(GitChange.Untracked, false, true);
+                    if (record.EndsWith('/'))
+                        files[Path.TrimEndingDirectorySeparator(Full(root, record[2..]))] = new GitFileState(GitChange.Untracked, false, true, Submodule: GitSubmodule.Nested);
+                    else
+                        files[Full(root, record[2..])] = new GitFileState(GitChange.Untracked, false, true);
                     break;
 
                 case '!':
@@ -172,7 +206,8 @@ internal sealed class GitStatus
         return status;
     }
 
-    // Every folder from a changed file up to the root takes its change if it's stronger than what it has
+    // Every folder from a changed file up to the root takes its change if it's stronger than what it has. A submodule or a
+    // repository nobody added is a folder itself, so it takes the change too
     private void ColourFolders()
     {
         foreach (var (path, state) in Files)
@@ -180,7 +215,7 @@ internal sealed class GitStatus
             if (state.Change is GitChange.Ignored or GitChange.None)
                 continue;
 
-            string? folder = Path.GetDirectoryName(path);
+            string? folder = state.IsRepository ? path : Path.GetDirectoryName(path);
             while (folder is not null && folder.Length >= Root.Length)
             {
                 if (folders.TryGetValue(folder, out GitChange had) && had >= state.Change)
@@ -233,6 +268,20 @@ internal sealed class GitStatus
             change = GitChange.Added;
 
         return new GitFileState(change, index != '.', tree != '.', from);
+    }
+
+    // The sub field of a changed file's record, N... for a file, S then C, M and U (or dots) for a submodule, its commit
+    // moved, files in it changed and files in it nobody added
+    private static GitSubmodule Sub(string record)
+    {
+        if (record.Length < 9 || record[5] != 'S')
+            return GitSubmodule.None;
+
+        GitSubmodule sub = GitSubmodule.Module;
+        if (record[6] == 'C') sub |= GitSubmodule.Commits;
+        if (record[7] == 'M') sub |= GitSubmodule.Modified;
+        if (record[8] == 'U') sub |= GitSubmodule.Untracked;
+        return sub;
     }
 
     // What comes after the nth space, the path, which can have spaces of its own
