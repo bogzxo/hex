@@ -56,8 +56,13 @@ internal sealed partial class DawnScene
                 return;
         }
 
-        HexDocument of = document;
-        CodeEditor editor = code;
+        AskSemantics(document, code, version, refreshes);
+    }
+
+    // Helper method to have the names worked out or asked for, out of UpdateSemantics so the closures of the answer are
+    // only made when there's something to ask and not on every tick
+    private void AskSemantics(HexDocument of, CodeEditor editor, int version, int refreshes)
+    {
         Func<string, List<Horizon.UI.Scripting.SemanticSpan>>? own = OwnSemantics(code.Highlighter);
         semanticsRetryAt = 0;
 

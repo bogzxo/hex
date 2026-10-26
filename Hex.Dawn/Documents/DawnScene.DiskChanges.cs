@@ -12,7 +12,7 @@ internal sealed partial class DawnScene
     private readonly HexDiskWatch disk = new();
 
     // Where the disk's side of a file is put for comparing it with Hex's
-    private static string CompareFolder => Path.Combine(Path.GetTempPath(), "Hex", "on the disk");
+    private static string CompareFolder { get; } = Path.Combine(Path.GetTempPath(), "Hex", "on the disk");
 
     /// <summary>The open files with a file of their own watched, after a file is opened, closed or saved somewhere.</summary>
     private void WatchOpenFiles() => disk.Watch(documents.Where(open => open.Path is not null).Select(open => open.Path!));

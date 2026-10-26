@@ -193,9 +193,10 @@ internal sealed partial class DawnScene
 
             if (!mcpCurrent.Step())
             {
-                // Waiting on the next tick, which comes at once rather than an idle tick's while later
-                Engine.WindowManager.Wake();
-                Engine.WindowManager.RequestFrames();
+                // Waiting on the next tick, which comes a tick from now rather than an idle tick's while later. Woken for it
+                // instead, an idle loop made the next one at once and the one after that, two thousand ticks a second of a
+                // core spinning for as long as a call waited on something (hex_wait_for while Hex was busy)
+                Engine.WindowManager.NoteChange();
                 return;
             }
 

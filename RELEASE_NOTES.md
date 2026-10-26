@@ -1,8 +1,7 @@
-# Hex 1.5.0, a preview
+# Hex 2.0.0
 
-the biggest one yet, put out as a preview so the update check leaves 1.0.2 people alone until its had a proper go. git
-inside the editor, a settings window that finds things, code coloured by what each name is, an MCP server for agents,
-and hex building hex
+the biggest one yet, big enough for a new number. git inside the editor, a settings window that finds things, code
+coloured by what each name is, menus that fit on the screen, an MCP server for agents, and hex building hex
 
 ## git
 
@@ -40,6 +39,13 @@ and hex building hex
   SDK and written back into the .csproj without messing it up
 - hex can build itself, its locked files moved aside, and restart into the new build
 - Configure Tasks writes build, test and run for any solution
+
+## menus
+
+- reorganised the way a VS Code hand expects, File, Edit, Selection, View, Go, Run, Terminal, Git, Help, with the
+  designer's Layout menu in place of Selection when a layout is open
+- git is nine rows now instead of forty four, each job a submenu of its own
+- no menu leaves the window, a long one scrolls with the wheel or the arrows at its ends
 
 ## for agents
 

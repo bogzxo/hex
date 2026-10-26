@@ -44,7 +44,7 @@ internal sealed partial class HexCodeEditing
     /// <summary>A call's signature, the language's or one of the file's own funcs, the argument the caret is on picked out.</summary>
     internal static UISignature? SignatureOf(CodeEditor editor, string name, int argument)
     {
-        string[]? parameters = LibraryCalls.GetValueOrDefault(name) ?? FileFunction(editor.Text, name);
+        string[]? parameters = LibraryCalls.GetValueOrDefault(name) ?? FileFunction(editor, name);
         if (parameters is null)
             return null;
 
@@ -69,7 +69,21 @@ internal sealed partial class HexCodeEditing
     }
 
     // The parameters of a func declared in the code, or of a func or an arrow a let holds (let add = (a, b) => ...,
-    // let twice = x => ...), defaults as they're written, null for a name that isn't one
-    private static string[]? FileFunction(string code, string name) =>
-        name.Contains('.') || !code.Contains(name, StringComparison.Ordinal) ? null : HidlFunctions.Signature(code, name);
+    // let twice = x => ...), defaults as they're written, null for a name that isn't one. A name with a dot in it is a
+    // library's and one the file never says isn't the file's, both told without the whole text put together, which was a
+    // megabyte or two of garbage for every key typed inside a call in a big file
+    private static string[]? FileFunction(CodeEditor editor, string name) =>
+        name.Contains('.') || !Mentions(editor.Document, name) ? null : HidlFunctions.Signature(editor.Text, name);
+
+    // Whether any line of a text has a name in it
+    private static bool Mentions(UITextDocument document, string name)
+    {
+        for (int i = 0; i < document.LineCount; i++)
+        {
+            if (document.LineAt(i).Contains(name, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
 }

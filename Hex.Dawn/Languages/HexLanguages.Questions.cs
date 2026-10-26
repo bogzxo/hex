@@ -26,6 +26,12 @@ internal sealed partial class HexLanguages
         if (questionUp is { IsAnswered: false } || !questionsWaiting.TryDequeue(out LanguageServerQuestion? question))
             return;
 
+        Ask(question);
+    }
+
+    // Helper method to put a question up, out of AskNext so the closure its answers need isn't made on every tick
+    private void Ask(LanguageServerQuestion question)
+    {
         questionUp = question;
         var choices = question.Actions
             .Select(action => new DialogChoice(action.Trim(), () => question.Answer(action)))

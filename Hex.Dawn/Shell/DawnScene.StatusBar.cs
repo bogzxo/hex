@@ -41,6 +41,9 @@ internal sealed partial class DawnScene
     private (int Count, int Selected)? componentsShown;
     private float zoomShown = -1.0f;
 
+    // The screen the layout's made for when the screen item was written, a string made every tick before
+    private (System.Numerics.Vector2 Size, bool Any)? screenShown;
+
     private void BuildStatusBar()
     {
         statusBar = layout.Get<StatusBar>("status_bar");
@@ -119,9 +122,12 @@ internal sealed partial class DawnScene
         // 1600 x 900 whatever the layout was made for and whatever screen it was on
         if (LayoutTools)
         {
-            string screen = $"$(device-desktop) {designer.ScreenText()}";
-            if (screenItem.Text != screen)
-                screenItem.Text = screen;
+            var screen = (document.Design ?? HexDesigner.DesignSize, document.Design is null);
+            if (screenShown != screen)
+            {
+                screenShown = screen;
+                screenItem.Text = $"$(device-desktop) {designer.ScreenText()}";
+            }
         }
 
         if (problemsShown != (errorCount, warningCount))

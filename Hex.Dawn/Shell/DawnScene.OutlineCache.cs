@@ -43,6 +43,14 @@ internal sealed partial class DawnScene
         if (now - outlineChangedAt < OUTLINE_SETTLE_MS)
             return outlineKept;
 
+        WorkOutOutline(version);
+        return outlineKept;
+    }
+
+    // Helper method to work the outline out again in the background, out of KeptOutline so the closure it needs is made
+    // only then and not on every tick that asks for the outline
+    private void WorkOutOutline(int version)
+    {
         // The text is put together once, here, and the going through it is done in the background
         outlineWorking = true;
         HexDocument of = document;
@@ -61,7 +69,5 @@ internal sealed partial class DawnScene
             crumbsFor = default;
             treeDirty |= Side == HexSide.Outline;
         }, quiet: true);
-
-        return outlineKept;
     }
 }
