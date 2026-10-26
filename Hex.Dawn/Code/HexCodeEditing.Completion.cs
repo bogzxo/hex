@@ -177,7 +177,7 @@ internal sealed partial class HexCodeEditing
         string word = line[start..end];
 
         // In this file
-        if (FindDeclaration(code.Text, word) is { } here)
+        if (FindDeclaration(code.Text, word, caret) is { } here)
         {
             code.GoTo(here.Line, here.Column);
             context.Notices.Say(context.Strings.Said("code_completion.declared_on_line", ("word", word), ("line", (here.Line + 1).ToString())));
@@ -211,9 +211,12 @@ internal sealed partial class HexCodeEditing
             : context.Strings.Said("code_completion.not_declared_in_folders", ("word", word), ("count", roots.Count.ToString())), error: true);
     }
 
-    /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
-    internal static UITextPosition? FindDeclaration(string source, string name) =>
-        HidlAnalysis.FindDeclaration(source, name) is { } at ? new UITextPosition(at.Line, at.Column) : null;
+    /// <summary>
+    /// Where a name is declared in some code, by its tokens, null for nowhere. Given where it's used, the parameter or
+    /// loop name or let round that place it means comes first.
+    /// </summary>
+    internal static UITextPosition? FindDeclaration(string source, string name, UITextPosition? usedAt = null) =>
+        HidlAnalysis.FindDeclaration(source, name, usedAt?.Line ?? -1, usedAt?.Column ?? -1) is { } at ? new UITextPosition(at.Line, at.Column) : null;
 
     /// <summary>
     /// Opens the language file of the game at a key. Found where the file says it is when it runs (the text in Hex when

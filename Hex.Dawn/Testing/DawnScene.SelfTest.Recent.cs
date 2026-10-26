@@ -35,10 +35,43 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("recent: and it's over the rest the next time, a lead of one, not in the rest again", () =>
             Chooser() is { Lead: 1 } list && list.Items[0].Contains("Word Wrap") && list.Items.Count(item => item == list.Items[0]) == 1);
+        test.Check("recent: the palette's rows are in parts, the menu quiet in front and the keys apart from the label", () =>
+            Chooser() is { Choice: { } choice } list && list.Items.Select(choice).Any(row => row is { Quiet.Length: > 0, Keys.Length: > 0 } && !row.Text.Contains("   (", StringComparison.Ordinal)));
         test.Run(() =>
         {
             chrome.Dialog?.Close();
             if (settings.WrapCode != wraps) ToggleWrap();
+            ChooseFrom(Said("palette.title"), Said("palette.message"), PaletteChoices(), recent: RecentCommands, typed: "sav");
+        });
+        test.Wait();
+        test.Settle(0.3f);
+        test.Run(() => Shot("picker_palette"));
+        test.Settle(0.3f);
+        test.Check("recent: the letters typed in the palette light up on its first row", () =>
+            Chooser() is { Items.Length: > 0 } list && list.Query == "sav" && list.Matched(list.Items[0]).Count > 0);
+        test.Run(() => chrome.Dialog?.Close());
+
+        // Quick open's row for a file in a folder, its name bright and the folder dim after it, the letters typed lit up
+        string nested = string.Empty;
+        test.Run(() =>
+        {
+            nested = Path.Combine(WorkspaceRoots().FirstOrDefault() ?? testFolder, "picker_nest", "deep_pick.hor");
+            Directory.CreateDirectory(Path.GetDirectoryName(nested)!);
+            File.WriteAllText(nested, "let deep = 1;\n");
+            QuickOpenWith("deep_pi");
+        });
+        test.Wait();
+        test.Settle(0.3f);
+        test.Run(() => Shot("picker_quick_open"));
+        test.Settle(0.3f);
+        test.Check("recent: quick open's row for a nested file is its name with its folder as the detail, the letters typed lit up", () =>
+            Chooser() is { Choice: { } choice } list && Array.IndexOf(list.Items, Relative(nested)) is >= 0 and var at
+            && choice(list.Items[at]) is { Text: "deep_pick.hor", Icon.Length: > 0 } row && row.Detail == Path.GetDirectoryName(Relative(nested))!.Replace('\\', '/')
+            && list.Matched(list.Items[at]).Any(lit => lit.Part == 1));
+        test.Run(() =>
+        {
+            chrome.Dialog?.Close();
+            Directory.Delete(Path.GetDirectoryName(nested)!, recursive: true);
         });
 
         // Quick open, the file opened last over the rest (it lists the .hor files of the workspace)

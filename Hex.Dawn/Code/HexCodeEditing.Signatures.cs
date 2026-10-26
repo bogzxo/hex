@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 
 using Horizon.UI.Components;
 
@@ -16,6 +15,7 @@ internal sealed partial class HexCodeEditing
         ["include"] = ["file"],
         ["keys"] = ["object"],
         ["values"] = ["object"],
+        ["entries"] = ["object"],
         ["has"] = ["object or list", "key or item"],
         ["range"] = ["from", "to"],
         ["len"] = ["text, list or object"],
@@ -68,17 +68,8 @@ internal sealed partial class HexCodeEditing
         return new UISignature(text.Append(')').ToString(), start, length);
     }
 
-    // The parameters of a func declared in the code, null for a name that isn't one
-    private static string[]? FileFunction(string code, string name)
-    {
-        if (name.Contains('.'))
-            return null;
-
-        Match declared = Regex.Match(code, $@"\bfunc\s+{Regex.Escape(name)}\s*\(([^)]*)\)");
-        if (!declared.Success)
-            return null;
-
-        string inside = declared.Groups[1].Value.Trim();
-        return inside.Length == 0 ? [] : [.. inside.Split(',').Select(parameter => parameter.Trim())];
-    }
+    // The parameters of a func declared in the code, or of a func or an arrow a let holds (let add = (a, b) => ...,
+    // let twice = x => ...), defaults as they're written, null for a name that isn't one
+    private static string[]? FileFunction(string code, string name) =>
+        name.Contains('.') || !code.Contains(name, StringComparison.Ordinal) ? null : HidlFunctions.Signature(code, name);
 }

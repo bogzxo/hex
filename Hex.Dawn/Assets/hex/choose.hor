@@ -1,3 +1,5 @@
+// choose, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // What goes into a dialog that picks one of a list narrowed down by what is typed, Ctrl+P and the command palette.
 #define layout
 
@@ -9,12 +11,12 @@ let answer = compositor.textbox({
     padding: vec(8, 6, 8, 6),
     placeholder: "@choose.placeholder",
     text_scale: 0.14,
-    max_length: 400
+    max_length: 400,
 });
 
 let choices = compositor.list({
     parent: picking,
     size: vec(620, 0),
     rows: 14,
-    text_scale: 0.14
+    text_scale: 0.14,
 });

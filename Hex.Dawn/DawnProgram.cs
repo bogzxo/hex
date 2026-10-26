@@ -24,6 +24,11 @@ public static class DawnProgram
     private const string ARGUMENT_LINE = "--line";
     private const string ARGUMENT_FOLDER = "--folder";
     private const string ARGUMENT_WINDOW = "--window";
+    private const string ARGUMENT_FRESH = "--fresh";
+
+    // The self test's folders in the temp folder, each run's ending in its process id
+    private const string SELF_TEST_FOLDER = "horizon-hex-selftest-";
+    private const string SELF_TEST_HOME = "horizon-hex-selftest-dusk-";
 
     // Where layouts go when nobody says otherwise, next to the editor
     private const string DEFAULT_WORKSPACE = "layouts";
@@ -46,10 +51,29 @@ public static class DawnProgram
     /// <item><c>--line 42</c> opens the file of <c>--open</c> at that line, which is how Dusk opens a path out of a terminal.</item>
     /// <item><c>--folder C:\code</c> starts on a workspace of that folder, handed to the Dawn that's running when there is one.</item>
     /// <item><c>--window</c> is a window of its own whatever is running, a file or a folder isn't handed over (the terminal's dawn -window).</item>
+    /// <item><c>--fresh</c> starts clean, on the explorer, with no workspace, tabs, backups or last file of before. Settings and keys are read as ever.</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
     /// </list>
     /// </summary>
     public static void Run(string[] args)
+    {
+        try
+        {
+            Start(args);
+        }
+        finally
+        {
+            // The test's folders go with it, once the engine and its terminals have let go of them. One that won't go
+            // is a day old for the sweep of a later run
+            foreach (string folder in selfTestFolders)
+                TryClear(folder);
+        }
+    }
+
+    // The folders this run's self test works in, taken away as it ends
+    private static string[] selfTestFolders = [];
+
+    private static void Start(string[] args)
     {
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
 
@@ -61,22 +85,21 @@ public static class DawnProgram
 
         if (selfTest)
         {
-            // The test makes and saves layouts of its own, somewhere nobody's work is in the way of it
-            workspace = Path.Combine(Path.GetTempPath(), "horizon-hex-selftest");
-            if (!TryClear(workspace))
-            {
-                // Another Hex has it open (a second test going at the same time), so this one has a folder of its own
-                workspace += "-" + System.Environment.ProcessId;
-                TryClear(workspace);
-            }
+            // What runs before this one left behind, a crash or a kill never got to tidy up after itself
+            SweepSelfTestFolders();
+
+            // The test makes and saves layouts of its own, somewhere nobody's work is in the way of it. Always a folder
+            // of this run's own, two tests going at once took the one shared folder out from under each other
+            workspace = Path.Combine(Path.GetTempPath(), SELF_TEST_FOLDER + System.Environment.ProcessId);
+            TryClear(workspace);
 
             // And the terminal's files (Dusk's, %AppData%\Dusk) in a home of the test's own, so nobody's settings, keys
             // or plugins are read or written by it
-            string home = Path.Combine(Path.GetTempPath(), "horizon-hex-selftest-dusk");
-            if (Directory.Exists(home))
-                Directory.Delete(home, recursive: true);
+            string home = Path.Combine(Path.GetTempPath(), SELF_TEST_HOME + System.Environment.ProcessId);
+            TryClear(home);
             Directory.CreateDirectory(home);
             Environment.SetEnvironmentVariable("DUSK_HOME", home);
+            selfTestFolders = [workspace, home];
         }
 
         // A file or a folder to open and a Dawn running already, it goes to that one and this one leaves, unless this
@@ -106,6 +129,7 @@ public static class DawnProgram
             Console: ValuesOf(args, ARGUMENT_CONSOLE) is { Length: > 0 } lines ? lines : null,
             Line: int.TryParse(ValueOf(args, ARGUMENT_LINE), out int line) ? line : 0,
             Folder: folder,
+            Fresh: args.Contains(ARGUMENT_FRESH),
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);
@@ -227,6 +251,31 @@ public static class DawnProgram
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to take away the self test folders of runs that are long over, a day old or more. One still going
+    /// is younger than that, and one that won't go is left for the next time.
+    /// </summary>
+    private static void SweepSelfTestFolders()
+    {
+        try
+        {
+            DateTime before = DateTime.UtcNow.AddDays(-1);
+            foreach (string folder in Directory.EnumerateDirectories(Path.GetTempPath(), "horizon-hex-selftest-*"))
+            {
+                // Only the ones that end in a process id, the texts suite's game folder is of another kind
+                string name = Path.GetFileName(folder);
+                if (!int.TryParse(name[(name.LastIndexOf('-') + 1)..], out _))
+                    continue;
+
+                if (Directory.GetLastWriteTimeUtc(folder) < before)
+                    TryClear(folder);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

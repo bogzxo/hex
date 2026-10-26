@@ -171,6 +171,10 @@ internal sealed partial class HexDesigner
         context.Notices.Say(context.Strings.Said("designer_selection.grouped", ("count", group.Children.Count.ToString()), ("name", document.NameOf(group))));
     }
 
+    // Whether Ungroup has something to take apart, a group among what's selected that isn't inside something else
+    // selected, the ones UngroupSelected goes by
+    private bool CanUngroup() => document.TopSelection().OfType<Group>().Any();
+
     private void UngroupSelected()
     {
         var groups = document.TopSelection().OfType<Group>().ToList();
@@ -356,7 +360,7 @@ internal sealed partial class HexDesigner
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.open_included"), OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
         shown.Add(context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
-        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = () => document.Selection.Any(component => component is Group);
+        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = CanUngroup;
 
         // A container, a group above all, can be had as any other kind of container, what is in it and all
         if (document.Selected is { } container && HexDocument.IsContainer(container))
@@ -424,7 +428,9 @@ internal sealed partial class HexDesigner
         foreach (string kind in Palette)
             add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
         commands.Add("Layout/group", context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
-        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = () => document.Selection.Any(component => component is Group);
+        // Only there to be picked with a group selected, so its key is Source Control's the rest of the time rather than
+        // an Ungroup saying there's no group (UICommands passes a key on from a command that can't be picked)
+        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = CanUngroup;
         AddConvertMenu(commands.AddMenu("Layout/group", context.Strings.Said("designer_selection.convert_to"), "arrow-swap"));
         AddMoveMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.move"), "arrow-swap"), some);
         AddArrangeMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.arrange"), "layers"), some);

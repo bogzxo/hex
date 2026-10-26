@@ -1,12 +1,14 @@
+// value_editor, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // The box a value of the values on the right is edited in, laid over its row by the editor. What is typed is HIDL, the
 // value as it is written in the code, and goes back into the code in its place.
 #define layout
 
 let value_box = compositor.textbox({
+    size: vec(300, 24),
     anchor: "bottom_left",
     pivot: "bottom_left",
-    size: vec(300, 24),
     padding: vec(6, 4, 6, 4),
     text_scale: 0.14,
-    max_length: 400
+    max_length: 400,
 });

@@ -121,7 +121,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
-        ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs, settings", test =>
+        ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>
         {
             TestEditorItself(test);
             TestAdding(test);
@@ -146,10 +146,16 @@ internal sealed partial class DawnScene
             TestClosingWithChanges(test);
             TestDraggingEdges(test);
             TestSlidingSides(test);
-            TestSettings(test);
             TestLayoutTexts(test);
         }),
-        ("code", "files of code, values, the console, docs, the table, a layout as code, completion", test =>
+        ("settings", "the settings window, its search and sections, Color Theme, and the settings file kept in step with it both ways", test =>
+        {
+            OnLayoutForSettings(test);
+            TestSettings(test);
+            TestSettingsLooks(test);
+            TestSettingsFile(test);
+        }),
+        ("code", "files of code, values, the console, docs, the table, a layout as code, completion, VS Code's every day keys", test =>
         {
             TestCode(test);
             TestFindBar(test);
@@ -168,6 +174,7 @@ internal sealed partial class DawnScene
             TestTable(test);
             TestLayoutAsCode(test);
             TestCompletion(test);
+            TestParity(test);
         }),
         ("workspace", "folders, the explorer, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
@@ -196,6 +203,7 @@ internal sealed partial class DawnScene
             TestTerminal(test);
             TestDuskFiles(test);
         }),
+        ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
             TestLanguages(test);
@@ -216,8 +224,10 @@ internal sealed partial class DawnScene
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
+        ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
+        ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

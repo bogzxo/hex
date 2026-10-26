@@ -220,6 +220,7 @@ internal sealed partial class DawnScene : Scene
         BuildHistory();
         BuildConflicts();
         BuildPeek();
+        AddLanguageModeCommands();
         commands.Build(menu);
         LoadKeys();
         WireViews();
@@ -252,17 +253,29 @@ internal sealed partial class DawnScene : Scene
         if (options.Folder is not null)
             explorer.OpenFolder(options.Folder);
 
+        // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
+        // The self test is left where it starts, its checks expect the designer the way it always was
+        if (!options.SelfTest && (options.Fresh || options.Folder is not null))
+        {
+            browsing = true;
+            Side = HexSide.Explorer;
+        }
+
         if (options.Open is not null && options.Line > 0)
             OpenAt(options.Open, options.Line - 1, 0);
         else if (options.Open is not null)
             Open(options.Open);
-        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && explorer.workspace.OpenFiles.Count == 0)
+        else if (settings.ReopenLast && recent.Count > 0 && !options.Browse && !options.Fresh && explorer.workspace.OpenFiles.Count == 0
+            && (options.Folder is null || PlatformPaths.IsUnder(recent[0], options.Folder)))
             Open(recent[0]);
 
-        // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own
+        // What wasn't saved when Hex last stopped without asking, the self test starting with none of its own. A fresh
+        // start leaves them all for the next one, a folder brings back only its own
         if (options.SelfTest)
             Backups.DropAll();
-        else
+        else if (!options.Fresh && options.Folder is not null)
+            RestoreBackupsUnder(options.Folder);
+        else if (!options.Fresh)
             RestoreBackups();
 
         // Last, an extension's on_start finds the editor up and a file open
@@ -454,6 +467,7 @@ internal sealed partial class DawnScene : Scene
         TakeFinishedWork();
         UpdateWelcome();
         UpdateDiskChanges();
+        UpdateSettingsFile();
         UpdateBackups(dt);
         codeEditing.UpdateFindBar();
         UpdatePlaces();
@@ -494,6 +508,27 @@ internal sealed partial class DawnScene : Scene
             document.Modified = modified;
             tabsDirty = true;
         }
+    }
+
+    /// <summary>
+    /// The backups of files inside the folder Hex was started on brought back (see RestoreBackups), the rest left where
+    /// they are for a start on their own folder. An untitled one is nobody's folder's, so it waits for that too.
+    /// </summary>
+    private void RestoreBackupsUnder(string folder)
+    {
+        var brought = new List<string>();
+        foreach (var backup in Backups.All())
+        {
+            if (backup.Path is not { } path || !PlatformPaths.IsUnder(path, folder))
+                continue;
+
+            if (BringBack(backup))
+                brought.Add(backup.Name);
+            Backups.Remove(backup);
+        }
+
+        if (brought.Count > 0)
+            Notify(Said("backups.restored", ("files", string.Join(", ", brought))));
     }
 
     private void Quit(int failures)

@@ -60,6 +60,12 @@ internal static partial class HexOutline
                     entries.Add(new OutlineEntry(tokens[i + 1].Value, tokens[i + 1].Line - 1, tokens[i + 1].Col - 1, depth, KindAfter(tokens, i + 3, tokens[i + 1].Value, "symbol-variable")));
                     break;
 
+                // let { a, b } = thing, a name for each of them
+                case TokenType.Let or TokenType.Const:
+                    foreach (Token declared in HIDLDeclarations.Declared(tokens, i))
+                        entries.Add(new OutlineEntry(declared.Value, declared.Line - 1, declared.Col - 1, depth, "symbol-variable"));
+                    break;
+
                 case TokenType.Function when i + 1 < tokens.Length && tokens[i + 1].Type == TokenType.Identifier:
                     entries.Add(new OutlineEntry(tokens[i + 1].Value, tokens[i + 1].Line - 1, tokens[i + 1].Col - 1, depth, "symbol-method"));
                     break;
@@ -83,6 +89,11 @@ internal static partial class HexOutline
             return otherwise;
 
         Token value = tokens[at];
+
+        // An arrow, x => or (a, b) =>, is a function as much as func is
+        if (HIDLDeclarations.IsArrowParameter(tokens, at) || HIDLDeclarations.OpensArrowParameters(tokens, at))
+            return "symbol-method";
+
         return value.Type switch
         {
             // The lexer has the names the other way round, a { is an OpenBracket to it and a [ an OpenBrace

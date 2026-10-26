@@ -5,9 +5,10 @@ using Hex.Core.Git;
 namespace Hex.Dawn;
 
 // Merge conflicts, the blocks a merge leaves for somebody to decide. What's current (ours) is lit in one colour and
-// what's incoming (theirs) in another, the markers dimmed, and the first marker of each says what does what. Alt+1 keeps
-// the current side, Alt+2 the incoming, Alt+3 both, for the conflict the caret is in (or the next one after it), one step
-// to undo each, from the right click as well. Alt+F5 goes from one conflict to the next.
+// what's incoming (theirs) in another, the markers dimmed, and the first marker of each has VS Code's lenses after it to
+// click, Accept Current, Accept Incoming, Accept Both. Alt+1 keeps the current side, Alt+2 the incoming, Alt+3 both, for
+// the conflict the caret is in (or the next one after it), one step to undo each, from the right click as well. Alt+F5
+// goes from one conflict to the next. Once the last of a file is settled a card offers to stage it.
 internal sealed partial class DawnScene
 {
     // The conflicts of the file on screen, and the version of its text they were found in
@@ -19,11 +20,34 @@ internal sealed partial class DawnScene
     private int conflictsSeenVersion = -1;
     private long conflictsChangedAt;
 
+    // How many were said last and of which file, said again only when that changes and not on every relight
+    private (HexDocument? Of, int Count) conflictsSaid = (null, 0);
+
+    // The card offering to stage a file once its last conflict is settled, one at a time
+    private UINotification? settledCard;
+
+    // The three Accept commands of the Git menu, greyed out in a file with no conflicts
+    private readonly List<MenuItem> acceptCommands = [];
+
     private void BuildConflicts()
     {
-        commands.Add("Git/changes", Said("conflicts.accept_current"), () => SettleConflict(GitConflictPick.Current), "Alt+1", "arrow-up", UIKeyUse.BoundWhileTyping);
-        commands.Add("Git/changes", Said("conflicts.accept_incoming"), () => SettleConflict(GitConflictPick.Incoming), "Alt+2", "arrow-down", UIKeyUse.BoundWhileTyping);
-        commands.Add("Git/changes", Said("conflicts.accept_both"), () => SettleConflict(GitConflictPick.Both), "Alt+3", "arrow-both", UIKeyUse.BoundWhileTyping);
+        // Greyed out in a file with none, and the key does nothing there either (the menu's greying doesn't reach the keys)
+        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_current"), () => SettleIfAny(GitConflictPick.Current), "Alt+1", "arrow-up", UIKeyUse.BoundWhileTyping));
+        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_incoming"), () => SettleIfAny(GitConflictPick.Incoming), "Alt+2", "arrow-down", UIKeyUse.BoundWhileTyping));
+        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_both"), () => SettleIfAny(GitConflictPick.Both), "Alt+3", "arrow-both", UIKeyUse.BoundWhileTyping));
+        foreach (MenuItem accept in acceptCommands)
+            accept.IsEnabled = HasConflicts;
+    }
+
+    /// <summary>Whether the file on screen has conflicts to settle, as they were last looked for.</summary>
+    private bool HasConflicts() => conflicts.Count > 0 && conflictsFor.Of == document;
+
+    private void SettleIfAny(GitConflictPick pick)
+    {
+        // Looked at again first, a Ctrl+Z a moment ago has the conflict back before the typing pause would notice
+        UpdateConflicts(now: true);
+        if (HasConflicts())
+            SettleConflict(pick);
     }
 
     /// <summary>Every tick, the file on screen looked through for conflicts again when its text changed, and lit.</summary>
@@ -80,7 +104,8 @@ internal sealed partial class DawnScene
         Vector4 marker = DimColor with { W = 0.18f };
 
         var lit = new List<UICodeLineHighlight>();
-        var notes = new List<UICodeHint>();
+        var lenses = new List<UICodeLens>();
+        string[] actions = [Said("conflicts.lens_current"), Said("conflicts.lens_incoming"), Said("conflicts.lens_both")];
         foreach (GitConflict conflict in conflicts)
         {
             lit.Add(new UICodeLineHighlight(conflict.Start, 1, marker));
@@ -91,17 +116,76 @@ internal sealed partial class DawnScene
                 lit.Add(new UICodeLineHighlight(conflict.Middle, 1, marker));
             lit.Add(new UICodeLineHighlight(conflict.Middle + 1, conflict.End - conflict.Middle - 1, incoming));
             lit.Add(new UICodeLineHighlight(conflict.End, 1, marker));
-            notes.Add(new UICodeHint(conflict.Start, Said("conflicts.note")));
+            lenses.Add(new UICodeLens(conflict.Start, actions));
         }
 
         code.LineHighlights = lit;
 
-        // The note goes where the values of a run do, so a file of HIDL (which has those) goes without it
-        if (!ReferenceEquals(code.Highlighter, CodeLanguages.Hidl))
-            code.InlineHints = notes;
+        // The lenses say what does what on the first marker of each, in HIDL's files too. The note that said it before
+        // went where the values of a run go, so those went without
+        code.Lenses = lenses;
+        code.OnLensPressed = lenses.Count > 0 ? PressConflictLens : null;
 
-        if (conflicts.Count > 0)
+        if (conflicts.Count > 0 && conflictsSaid != (document, conflicts.Count))
             Say(Said("conflicts.found", ("count", HexText.Count("conflict", conflicts.Count))));
+        conflictsSaid = (document, conflicts.Count);
+    }
+
+    /// <summary>A lens of a conflict pressed, the caret put in its block and the block settled the way the lens says.</summary>
+    private void PressConflictLens(UICodeLens lens, int action)
+    {
+        code.Document.CollapseCarets();
+        code.Document.MoveTo(new UITextPosition(lens.Line, 0));
+        SettleConflict(action switch
+        {
+            0 => GitConflictPick.Current,
+            1 => GitConflictPick.Incoming,
+            _ => GitConflictPick.Both
+        });
+    }
+
+    /// <summary>
+    /// A file a merge left conflicts in, opened as itself with the caret on its first conflict, which is what clicking it
+    /// under Merge Changes does rather than show a diff of it.
+    /// </summary>
+    private void OpenConflicted(string path)
+    {
+        // Opened from the Source Control side it stays on that side, the way a diff opened from there does
+        HexSide was = Side;
+        bool opened = Open(path);
+        if (was == HexSide.SourceControl)
+            Side = was;
+        if (!opened || document.Path is not { } open || !PlatformPaths.Same(open, path))
+            return;
+
+        UpdateConflicts(now: true);
+        if (HasConflicts())
+            code.GoTo(conflicts[0].Start, 0);
+    }
+
+    /// <summary>The card's Stage, the file saved and staged, which is how git hears it's settled, and git asked to look again.</summary>
+    private void StageSettled(HexDocument settled)
+    {
+        settledCard?.Close();
+        settledCard = null;
+        if (settled.Path is not { } path || git.RepositoryFor(path) is not { } repository)
+            return;
+
+        if (documents.Contains(settled))
+        {
+            HexSide was = Side;
+            if (settled != document)
+                Show(settled);
+            Save();
+            Side = was;
+        }
+
+        InBackground("git add", () => repository.Stage([path]), failed =>
+        {
+            if (failed is not null)
+                Say(Said("conflicts.stage_failed", ("why", failed.Split('\n')[0].Trim())), error: true);
+            git.Refresh(path);
+        });
     }
 
     /// <summary>The conflict the caret is in, or the next one after it, settled with a side kept, one step to undo.</summary>
@@ -144,6 +228,14 @@ internal sealed partial class DawnScene
             GitConflictPick.Incoming => "conflicts.kept_incoming",
             _ => "conflicts.kept_both"
         }));
+
+        // The last of the file settled, a card offers to stage it, which is what tells git the file is settled
+        if (conflicts.Count == 0 && document.Path is { } path && git.RepositoryFor(path) is not null)
+        {
+            HexDocument done = document;
+            settledCard?.Close();
+            settledCard = Notify(Said("conflicts.all_settled", ("name", Path.GetFileName(path))), actions: (Said("conflicts.stage"), () => StageSettled(done)));
+        }
     }
 
     /// <summary>The right click's ways of settling the conflict the caret is in, when it's in one.</summary>

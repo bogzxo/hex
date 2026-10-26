@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 using Hex.Core.Git;
@@ -34,6 +35,18 @@ internal sealed partial class HexGit
         };
         context.Documents.Closed += closed => blamed.Remove(closed);
         context.Commands.Add("Git/history", context.Strings.Said("git.blame_command"), ShowLineCommit, icon: "git-commit");
+        context.Commands.Add("Git/history", context.Strings.Said("git.blame_toggle"), ToggleBlame, icon: "eye");
+    }
+
+    /// <summary>Inline blame on or off from the palette, the same as its row in the settings and kept the same way.</summary>
+    internal void ToggleBlame()
+    {
+        HexSettings settings = context.Settings.Values;
+        settings.GitBlame = !settings.GitBlame;
+        context.Settings.Save();
+        context.Settings.Refresh("git_blame");
+        context.Redraw();
+        context.Notices.Say(context.Strings.Said(settings.GitBlame ? "git.blame_on" : "git.blame_off"));
     }
 
     /// <summary>Every tick, the file on screen blamed when it's due, and its caret line's note kept up.</summary>
@@ -120,11 +133,37 @@ internal sealed partial class HexGit
             return;
         }
 
-        context.Work.InBackground("git show", () => GitProcess.Run(repository.Git.Root, ["show", "--stat", "--format=%H%n%an <%ae>%n%ad%n%n%B", blame.Commit!]), shown =>
+        context.Work.InBackground("git show", () => GitProcess.Run(repository.Git.Root, ["show", "--stat", "--patch", "--format=%H%n%an <%ae>%n%ad%n%n%B", blame.Commit!]), shown =>
         {
+            // The message and the files it changed as they are, then the patch coloured the way a diff is
+            string output = shown.Ok ? shown.Output.TrimEnd() : shown.Why;
+            int patch = shown.Ok ? output.IndexOf("\ndiff --git ", StringComparison.Ordinal) : -1;
+
             var markdown = new StringBuilder();
-            markdown.Append("```\n").Append(shown.Ok ? shown.Output.TrimEnd() : shown.Why).Append("\n```\n");
+            markdown.Append("```\n").Append(patch < 0 ? output : output[..patch].TrimEnd()).Append("\n```\n");
+            if (patch >= 0)
+                AppendPatch(markdown, output.AsSpan(patch + 1));
+
             context.Windows.ShowText(context.Strings.Said("git.blame_window", ("commit", blame.Short)), markdown.ToString());
         });
+    }
+
+    // The most lines of a patch the commit's window shows, a commit that rewrote half the repository is cut short
+    private const int PATCH_LINES = 1500;
+
+    /// <summary>Helper method to put a patch in a block of code marked as a diff, cut short past PATCH_LINES lines.</summary>
+    private void AppendPatch(StringBuilder markdown, ReadOnlySpan<char> patch)
+    {
+        int lines = 0, at = 0;
+        while (at < patch.Length && lines < PATCH_LINES)
+        {
+            int end = patch[at..].IndexOf('\n');
+            at = end < 0 ? patch.Length : at + end + 1;
+            lines++;
+        }
+
+        markdown.Append("```diff\n").Append(patch[..at].TrimEnd()).Append("\n```\n");
+        if (at < patch.Length)
+            markdown.Append('\n').Append(context.Strings.Said("rich_text.patch_cut", ("count", (patch[at..].Count('\n') + 1).ToString(CultureInfo.InvariantCulture)))).Append('\n');
     }
 }

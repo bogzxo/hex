@@ -6,21 +6,26 @@ namespace Hex.Dawn;
 // in the status bar, which says how far the branch is behind and ahead of what it follows, or offers to publish a branch
 // that follows nothing. What the remotes have is fetched in the background every few minutes too, so behind is behind
 // without anybody asking. All of it is git itself, with the user's credentials (Git Credential Manager asks in a window
-// of its own when it has to), and what goes wrong comes up on a card with all of git's words a button away.
+// of its own when it has to), and what goes wrong comes up on a card with all of git's words a button away. How often
+// it fetches, how a pull pulls and whether a sync asks first are the settings' Editor · Git.
 internal sealed partial class HexGit
 {
-    // How often the workspace's repositories are fetched in the background, while the setting says so
-    private const float AUTO_FETCH_EVERY = 180.0f;
-
-    private float fetchIn = AUTO_FETCH_EVERY;
+    private float fetchIn;
     private bool syncing;
+
+    // How often the workspace's repositories are fetched in the background, in seconds, while the setting says so
+    private float FetchEvery => context.Settings.Values.GitAutoFetchInterval * 60.0f;
 
     private void BuildSync()
     {
+        fetchIn = FetchEvery;
         context.Commands.Add("Git/sync", context.Strings.Said("git.fetch"), () => Remote(FirstRepository(), RemoteWork.Fetch), icon: "cloud-download");
         context.Commands.Add("Git/sync", context.Strings.Said("git.pull"), () => Remote(FirstRepository(), RemoteWork.Pull), icon: "arrow-down");
         context.Commands.Add("Git/sync", context.Strings.Said("git.push"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "arrow-up");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.sync"), () => Remote(FirstRepository(), RemoteWork.Sync), icon: "sync");
+        context.Commands.Add("Git/sync", context.Strings.Said("git.sync"), () => AskSync(FirstRepository()), icon: "sync");
+        context.Commands.Add("Git/sync", context.Strings.Said("git.publish"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
+            () => FirstRepository() is { HasRemote: true, Status: { Branch: not null, Upstream: null } };
+        context.Commands.Add("Git/sync", context.Strings.Said("git.settings_command"), () => context.Windows.OpenSettings(EditorSettingsCatalog.GIT), icon: "settings-gear");
     }
 
     private enum RemoteWork { Fetch, Pull, Push, Sync }
@@ -43,17 +48,64 @@ internal sealed partial class HexGit
     /// <summary>The status bar's sync item pressed, a sync, or a publish for a branch that follows nothing.</summary>
     public void SyncPressed(string? path)
     {
-        if (StatusAt(path) is { } status && RepositoryOf(status.Root) is { } repository)
-            Remote(repository, status.Upstream is null ? RemoteWork.Push : RemoteWork.Sync);
+        if (StatusAt(path) is not { } status || RepositoryOf(status.Root) is not { } repository)
+            return;
+
+        if (status.Upstream is null)
+            Remote(repository, RemoteWork.Push);
+        else
+            AskSync(repository);
+    }
+
+    /// <summary>
+    /// A sync, asked about first while the setting says so (VS Code's git.confirmSync), how many commits come and go and
+    /// with where. Always says yes and stops asking.
+    /// </summary>
+    private void AskSync(Repository? repository)
+    {
+        if (repository?.Status is not { } status || syncing)
+            return;
+
+        if (!context.Settings.Values.GitConfirmSync || !repository.HasRemote || status.Upstream is null)
+        {
+            Remote(repository, RemoteWork.Sync);
+            return;
+        }
+
+        string sync = context.Strings.Said("git.sync"), always = context.Strings.Said("git.sync_always");
+        context.Windows.Ask(context.Strings.Said("git.sync_title"),
+            context.Strings.Said("git.sync_text", ("behind", status.Behind.ToString()), ("ahead", status.Ahead.ToString()), ("upstream", status.Upstream)),
+            [sync, always, context.Strings.Said("git.sync_cancel")], answer =>
+            {
+                if (answer == always)
+                {
+                    context.Settings.Values.GitConfirmSync = false;
+                    context.Settings.Save();
+                    context.Settings.Refresh("git_confirm_sync");
+
+                    // Said where it went, so it can be found to have it ask again
+                    context.Notices.Notify(context.Strings.Said("git_merge.sync_always_set"), false,
+                        (context.Strings.Said("git_merge.git_settings"), () => context.Windows.OpenSettings(EditorSettingsCatalog.GIT)));
+                }
+                else if (answer != sync)
+                {
+                    return;
+                }
+
+                Remote(repository, RemoteWork.Sync);
+            });
     }
 
     /// <summary>Every tick, the workspace's repositories fetched in the background now and again.</summary>
     private void UpdateSync(float dt)
     {
+        // Brought in at once when the setting is turned down, rather than waiting out the longer time it was
+        float every = FetchEvery;
+        fetchIn = Math.Min(fetchIn, every);
         if ((fetchIn -= dt) > 0.0f)
             return;
 
-        fetchIn = AUTO_FETCH_EVERY;
+        fetchIn = every;
         if (!context.Settings.Values.GitAutoFetch || syncing || context.Options.SelfTest)
             return;
 
@@ -77,12 +129,14 @@ internal sealed partial class HexGit
 
         string branch = status.Branch ?? string.Empty;
         bool upstream = status.Upstream is not null;
+        string mode = context.Settings.Values.GitPullMode;
+        string pull = GitRepository.PullFlag(mode) is { } flag ? $"git pull {flag}" : "git pull";
         string doing = work switch
         {
             RemoteWork.Fetch => "git fetch",
-            RemoteWork.Pull => "git pull",
+            RemoteWork.Pull => pull,
             RemoteWork.Push => upstream ? "git push" : $"git push --set-upstream {branch}",
-            _ => "git pull, git push"
+            _ => $"{pull}, git push"
         };
 
         syncing = true;
@@ -91,9 +145,9 @@ internal sealed partial class HexGit
         context.Work.InBackground(doing, () => work switch
         {
             RemoteWork.Fetch => repository.Git.Fetch(),
-            RemoteWork.Pull => repository.Git.Pull(),
+            RemoteWork.Pull => repository.Git.Pull(mode),
             RemoteWork.Push => repository.Git.Push(branch, upstream),
-            _ => repository.Git.Pull() ?? repository.Git.Push(branch, upstream)
+            _ => repository.Git.Pull(mode) ?? repository.Git.Push(branch, upstream)
         }, failed =>
         {
             syncing = false;
@@ -106,8 +160,69 @@ internal sealed partial class HexGit
                 return;
             }
 
-            FailureCard(context.Strings.Said("git.failed", ("doing", doing), ("why", failed.Split('\n')[0].Trim())), error: true,
-                (context.Strings.Said("git.details"), () => context.Windows.ShowText(doing, $"```\n{failed}\n```\n")));
+            // A pull refused for changes in the way can stash them around it, a push the remote turned away needs a pull first
+            var actions = new List<(string Label, Action Pressed)>();
+            if (work is RemoteWork.Pull or RemoteWork.Sync && LocalChangesInTheWay(failed))
+                actions.Add((context.Strings.Said("git_stash.stash_and_pull"), () => StashAndPull(repository)));
+            if (work is RemoteWork.Push or RemoteWork.Sync && PushRejected(failed))
+                actions.Add((context.Strings.Said("git.pull"), () => Remote(repository, RemoteWork.Pull)));
+            RemoteFailed(doing, context.Strings.Said("git.failed", ("doing", doing), ("why", failed.Split('\n')[0].Trim())), failed, actions);
+        });
+    }
+
+    // Whether the remote turned a push away for having commits the branch hasn't
+    private static bool PushRejected(string said) =>
+        said.Contains("[rejected]", StringComparison.Ordinal) || said.Contains("non-fast-forward", StringComparison.Ordinal) || said.Contains("fetch first", StringComparison.Ordinal);
+
+    // The card of a remote's failure, its own buttons first and all of git's words a button away
+    private void RemoteFailed(string doing, string message, string failed, List<(string Label, Action Pressed)> actions)
+    {
+        actions.Add((context.Strings.Said("git.details"), () => context.Windows.ShowText(doing, $"```\n{failed}\n```\n")));
+        FailureCard(message, error: true, [.. actions]);
+    }
+
+    /// <summary>
+    /// What's changed stashed, the files nobody added among it, the branch pulled, and the stash popped back. Changes that
+    /// don't come back cleanly stay in the stash, and the card says so.
+    /// </summary>
+    private void StashAndPull(Repository repository)
+    {
+        if (repository.Status is null || syncing)
+            return;
+
+        ClearFailure();
+        string mode = context.Settings.Values.GitPullMode;
+        string doing = GitRepository.PullFlag(mode) is { } flag ? $"git stash, git pull {flag}, git stash pop" : "git stash, git pull, git stash pop";
+        string message = context.Strings.Said("git_stash.pull_message");
+
+        syncing = true;
+        Version++;
+        context.Redraw();
+        context.Work.InBackground(doing, (string? Failed, string? NotBack) () =>
+        {
+            if (repository.Git.PushStash(message, includeUntracked: true) is { } stashFailed)
+                return (stashFailed, null);
+
+            string? pulled = repository.Git.Pull(mode);
+            return (pulled, repository.Git.Pop(0));
+        }, result =>
+        {
+            syncing = false;
+            repository.Dirty(now: true);
+            Version++;
+            if (result is { Failed: null, NotBack: null })
+            {
+                ClearFailure();
+                context.Notices.Say(context.Strings.Said("git_stash.pulled_back"));
+                return;
+            }
+
+            string all = string.Join("\n\n", new[] { result.Failed, result.NotBack }.Where(said => said is not null));
+            string why = (result.Failed ?? result.NotBack)!.Split('\n')[0].Trim();
+            string card = result.NotBack is not null
+                ? context.Strings.Said("git_stash.not_back", ("doing", doing), ("stash", "stash@{0}"), ("why", why))
+                : context.Strings.Said("git.failed", ("doing", doing), ("why", why));
+            RemoteFailed(doing, card, all, []);
         });
     }
 }

@@ -5,8 +5,8 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, and its right click.</summary>
-internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null);
+/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, its right click and the keys it takes.</summary>
+internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null, Func<char, bool>? Key = null);
 
 internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
 
@@ -23,6 +23,10 @@ internal sealed partial class DawnScene
     // The outline's rows that were closed, by their name and line, so they stay closed while the file is typed into
     private readonly HashSet<string> outlineClosed = new(StringComparer.Ordinal);
 
+    // What the explorer leaves out past the folders search skips (.git, bin, node_modules), VS Code's files.exclude out of
+    // the box. Every other dot file and dot folder shows, .github, .gitignore and .editorconfig are files people edit
+    private static readonly HashSet<string> HiddenInExplorer = new(StringComparer.OrdinalIgnoreCase) { ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db" };
+
     private void BuildSideTree()
     {
         sideTree = layout.Get<TreeView>("side_tree");
@@ -32,6 +36,7 @@ internal sealed partial class DawnScene
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
         sideTree.OnExpanding = item => (item.Tag as SideTag)?.Expanding?.Invoke(item);
         sideTree.OnItemContextMenu = (item, point) => (item.Tag as SideTag)?.Menu?.Invoke(point);
+        sideTree.OnKey = (item, key) => (item.Tag as SideTag)?.Key?.Invoke(key) == true;
 
         // As wide as the components' list whichever of the two is showing, dragged by its edge the same way
         SideGrip(sideTree, UIResize.Right, left: true);
@@ -119,7 +124,7 @@ internal sealed partial class DawnScene
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
-            if (HexSearch.SkippedFolders.Contains(name) || name.StartsWith('.') || name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (HexSearch.SkippedFolders.Contains(name) || HiddenInExplorer.Contains(name) || name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
@@ -128,7 +133,7 @@ internal sealed partial class DawnScene
         foreach (string file in files)
         {
             string name = Path.GetFileName(file);
-            if (name.StartsWith("~syncthing~") || name.StartsWith('.') || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
+            if (name.StartsWith("~syncthing~") || HiddenInExplorer.Contains(name) || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS)
                 continue;
 
             var entry = new ExplorerEntry(file, false, depth, false);

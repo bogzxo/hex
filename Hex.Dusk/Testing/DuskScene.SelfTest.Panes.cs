@@ -85,12 +85,13 @@ internal sealed partial class DuskScene
         test.Settle(0.2f);
         test.Run(() => Shot("settings"));
         test.Check("the settings come up as a page, a row a setting, the terminal's and the editor's", () =>
-            SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + Hex.Shell.EditorSettingsCatalog.Settings.Length
+            SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + Hex.Shell.EditorSettingsCatalog.Settings.Length + Hex.Shell.EditorSettingsCatalog.Text.Length
                 + new Hex.Shell.WindowsSource().Settings.Count + new Hex.Shell.DefaultTerminalSource().Settings.Count
             && page.ValueOf!("theme") is StringValue && page.RowsShown == page.Settings.Count);
         test.Run(() => SettingsPage!.Find("scrollback"));
         test.Settle(0.1f);
-        test.Check("the search leaves the rows that have what was typed", () => SettingsPage!.RowsShown is > 0 and < 4);
+        // The section is called Scrollback too, so its four rows come with it
+        test.Check("the search leaves the rows that have what was typed", () => SettingsPage!.RowsShown is > 0 and < 5);
         test.Run(() => SettingsPage!.Find(string.Empty));
         test.Run(() => SettingsPage!.Enter("text_scale", new NumberValue(0.2f)));
         test.Check("a row changed is taken in and written", () =>

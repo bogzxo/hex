@@ -28,7 +28,8 @@ internal sealed partial class HexExplorer
 
     /// <summary>
     /// Helper method to bring back the workspace that was open the last time, its folders and the files that were open in
-    /// it, unless the editor is testing itself or was told what to open.
+    /// it, unless the editor is testing itself or was told what to open. Started on a folder only that folder's files
+    /// come back, started fresh nothing does.
     /// </summary>
     internal void RestoreWorkspace()
     {
@@ -38,19 +39,35 @@ internal sealed partial class HexExplorer
             return;
         }
 
+        // A fresh start leaves the workspace of last time where it is for the next start that isn't, so it never counts
+        // as brought back and nothing of this one is written over it
+        if (options.Fresh)
+            return;
+
+        var last = new HexWorkspace();
         try
         {
             if (settings.LastWorkspace.Length > 0 && File.Exists(settings.LastWorkspace))
-                workspace = HexWorkspace.Load(settings.LastWorkspace);
+                last = HexWorkspace.Load(settings.LastWorkspace);
             else if (UntitledWorkspacePath is { } untitled && File.Exists(untitled))
-                workspace.Read(File.ReadAllText(untitled), AppContext.BaseDirectory);
+                last.Read(File.ReadAllText(untitled), AppContext.BaseDirectory);
         }
         catch (Exception e)
         {
             context.Notices.Say(context.Strings.Said("explorer_workspace.last_workspace_failed", ("message", e.Message)), error: true);
-            workspace = new HexWorkspace();
+            last = new HexWorkspace();
         }
 
+        Restore(last, options.Folder);
+    }
+
+    /// <summary>
+    /// A workspace that was kept made the one that is open, and its files that were open opened again. With a folder
+    /// only the files inside it, the rest belong to a workspace that isn't going to be on screen.
+    /// </summary>
+    internal void Restore(HexWorkspace last, string? only)
+    {
+        workspace = last;
         workspaceRestored = true;
         if (workspace.IsEmpty)
             return;
@@ -58,13 +75,13 @@ internal sealed partial class HexExplorer
         browsing = true;
         treeDirty = true;
 
-        if (options.Open is null)
+        if (options.Open is not null)
+            return;
+
+        foreach (string file in workspace.OpenFiles.ToArray())
         {
-            foreach (string file in workspace.OpenFiles.ToArray())
-            {
-                if (File.Exists(file))
-                    context.Documents.Open(file);
-            }
+            if (File.Exists(file) && (only is null || PlatformPaths.IsUnder(file, only)))
+                context.Documents.Open(file);
         }
     }
 

@@ -15,7 +15,7 @@ let tasks = {
         // Another task of this file run first, this one only once that worked. The run task names the build one.
         depends_on: "",
         // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
-        terminal: "panel"
+        terminal: "panel",
     },
     test: {
         // The command line, run by the usual shell.
@@ -29,7 +29,7 @@ let tasks = {
         // Another task of this file run first, this one only once that worked. The run task names the build one.
         depends_on: "",
         // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
-        terminal: "panel"
+        terminal: "panel",
     },
     run: {
         // The command line, run by the usual shell.
@@ -43,6 +43,6 @@ let tasks = {
         // Another task of this file run first, this one only once that worked. The run task names the build one.
         depends_on: "",
         // Where it runs, "panel" for a terminal tab under the editor, "dusk" for a Dusk window of its own.
-        terminal: "panel"
-    }
+        terminal: "panel",
+    },
 };

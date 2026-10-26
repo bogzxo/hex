@@ -20,9 +20,15 @@ internal sealed partial class DawnScene
     private string runningShown = string.Empty;
     private float codeZoomShown = -1.0f;
 
+    // The indentation the status bar says, spaces or a tab and how wide, written again only when it changes
+    private (bool Tabs, int Size) indentShown;
+
     // What the skin and the kind of file were last written for. Every tick wrote them anew, garbage a tick for nothing
     private (UISkinChoice? Skin, string? Theme) skinShown;
     private HexDocument? languageFor;
+
+    // What the document was coloured with when the language item was written, a language picked changes it
+    private ICodeHighlighter? languageShownWith;
 
     // How many times the language servers had started or stopped when the language item was written, it says so as it happens
     private int languagesShown;
@@ -57,11 +63,11 @@ internal sealed partial class DawnScene
         caretItem.IsVisible = Code;
         selectionItem = statusBar.Add(string.Empty, right: true);
         selectionItem.IsVisible = Code;
-        indentItem = statusBar.Add(Said("status_bar.indent", ("count", "4")), right: true, tooltip: Said("status_bar.indent_tip"));
+        indentItem = statusBar.Add(Said("status_bar.indent", ("count", "4")), right: true, pressed: () => OpenSettings(Hex.Shell.EditorSettingsCatalog.TEXT), tooltip: Said("settings_text.status_tip"));
         indentItem.IsVisible = Code;
         endingsItem = statusBar.Add("CRLF", right: true, pressed: SwapLineEndings, tooltip: Said("status_bar.endings_tip"));
         endingsItem.IsVisible = Code;
-        languageItem = statusBar.Add("HIDL", right: true, tooltip: Said("status_bar.language_tip"));
+        languageItem = statusBar.Add("HIDL", right: true, pressed: ChangeLanguageMode, tooltip: Said("language_mode.status_tip"));
         languageItem.IsVisible = Code;
         codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: Said("status_bar.code_zoom_tip"));
         codeZoomItem.IsVisible = () => !LayoutTools && settings.CodeZoom != 1.0f;
@@ -96,6 +102,7 @@ internal sealed partial class DawnScene
     private void UpdateStatusBar()
     {
         UpdateBranchItem();
+        UpdateLanguageModes();
         UpdateImageView();
         UpdateConflicts();
         UpdateInlays();
@@ -126,9 +133,18 @@ internal sealed partial class DawnScene
 
             endingsItem.Text = document.CrLf ? "CRLF" : "LF";
 
-            if (languageFor != document || languagesShown != languages.ServersChanged)
+            // Spaces 2 or Tab Size 4, the file's own as the settings, its .editorconfig or how it was indented made it
+            (bool Tabs, int Size) indent = (code.Document.Indent.StartsWith('\t'), code.TabSize);
+            if (indentShown != indent)
+            {
+                indentShown = indent;
+                indentItem.Text = Said(indent.Tabs ? "settings_text.status_tabs" : "status_bar.indent", ("count", indent.Size.ToString()));
+            }
+
+            if (languageFor != document || languagesShown != languages.ServersChanged || !ReferenceEquals(languageShownWith, document.Editor.Highlighter))
             {
                 languageFor = document;
+                languageShownWith = document.Editor.Highlighter;
                 languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
                 languageItem.Text = $"$({icon}) {language}";
@@ -172,12 +188,13 @@ internal sealed partial class DawnScene
         if (!shown.IsText)
             return ("layout", Said("status_bar.kind_layout"));
 
+        // A backup is what it was a copy of, menu.hor.orig HIDL, and a file set to another language by hand is that
         string name = shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
-        string extension = Path.GetExtension(name);
+        string extension = Path.GetExtension(CodeLanguages.WithoutBackupSuffix(name));
 
         if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return ("folder-library", Said("status_bar.kind_workspace"));
-        if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase))
+        if (!extension.Equals(".hor", StringComparison.OrdinalIgnoreCase) || !ReferenceEquals(shown.Editor.Highlighter, CodeLanguages.Hidl))
             return shown.Editor.Highlighter is { } language ? ("file-code", languages.ServerShownOf(shown) is { } linter ? $"{language.Name}, {linter}" : language.Name) : ("file", Said("status_bar.kind_plain_text"));
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return ("paintcan", Said("status_bar.kind_skin"));

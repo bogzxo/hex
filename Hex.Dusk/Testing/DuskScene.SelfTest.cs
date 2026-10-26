@@ -64,7 +64,11 @@ internal sealed partial class DuskScene
         ("micro", "micro in the shell, every key, the mouse, a paste, its splits and colours, how a console TUI gets on in Dusk", TestMicro),
         ("tuikeys", "the arrows pressed for real into micro, the whole way a person's keys go", TestTuiKeys),
         ("claude", "Claude Code in the shell, a TUI drawn on the main screen, its list moved with the arrows", TestClaude),
-        ("backdrop", "the picture behind the terminals, switched on, moved and made fainter in the one window of settings", TestBackdrop)
+        ("backdrop", "the picture behind the terminals, switched on, moved and made fainter in the one window of settings, and Editor · Text in it as Dawn has", test =>
+        {
+            TestBackdrop(test);
+            TestSettingsText(test);
+        })
     ];
 
     /// <summary>A point inside a rectangle, as far along and up as the shares say, moved across by so much, where the pointer goes.</summary>

@@ -204,11 +204,13 @@ internal sealed partial class DawnScene
     {
         problemList.Clear();
 
+        // A diff on screen has nothing wrong with it, both versions in one are of no file anybody has
         string here = document.Path ?? document.Name;
-        foreach (UICodeDiagnostic error in code.SyntaxErrors)
+        bool quiet = document.DiffOf is not null;
+        foreach (UICodeDiagnostic error in quiet ? [] : code.SyntaxErrors)
             problemList.Add(new HexProblem(here, error.Line, error.Column, error.Message, false));
 
-        foreach (UICodeDiagnostic diagnostic in code.Diagnostics)
+        foreach (UICodeDiagnostic diagnostic in quiet ? [] : code.Diagnostics)
             problemList.Add(new HexProblem(here, diagnostic.Line, diagnostic.Column, diagnostic.Message, diagnostic.Warning, diagnostic.Hint));
 
         // The files that are open are said about as they are in their editors, nothing about them from elsewhere
@@ -247,6 +249,13 @@ internal sealed partial class DawnScene
 
         // An open file's are among its own diagnostics above, underlined in its code
         foreach (HexProblem problem in terminalProblems)
+        {
+            if (Elsewhere(problem.Path))
+                problemList.Add(problem);
+        }
+
+        // What's wrong with the settings files written by hand, an open one's underlined in it the same way
+        foreach (HexProblem problem in SettingsProblems())
         {
             if (Elsewhere(problem.Path))
                 problemList.Add(problem);

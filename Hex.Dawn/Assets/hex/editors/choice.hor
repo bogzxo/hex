@@ -3,5 +3,5 @@
 
 let choice = compositor.dropdown({
     size: vec(220, 28),
-    text_scale: 0.14
+    text_scale: 0.14,
 });

@@ -61,7 +61,7 @@ let welcome_greetings = ["Hello, Dolly!", "..."];
 // Called once Hex is up, with what an extension may do to it
 func on_start(hex) {
     hex.title_note(math.pick(welcome_greetings));
-    hex.command("Another greeting", func(hex) {
+    hex.command("Another greeting", hex => {
         hex.title_note(math.pick(welcome_greetings));
     });
 }
@@ -69,8 +69,8 @@ func on_start(hex) {
 
 What `hex` has for now. `hex.title_note(text)` puts a few words after Hex in the title bar, in brackets. `hex.say(text)`
 says something in the status bar, `hex.notify(text)` puts a card up in the corner (`hex.notify(text, true)` an error
-that stays). `hex.command(name, func(hex) { ... })` puts a command in the command palette under the extension's name,
-and `hex.command(name, func(hex) { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
+that stays). `hex.command(name, hex => { ... })` puts a command in the command palette under the extension's name,
+and `hex.command(name, hex => { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
 `hex.file()` is the path of the file on screen. `hex.version`, `hex.name` and `hex.folder` are Hex's version, the
 extension's name and its folder. Besides `on_start(hex)`, an extension hears about `on_open(hex, file)` and
 `on_save(hex, file)`, and `on_change(hex, file)` a moment after a file is typed into. What it prints goes in the output
@@ -79,16 +79,16 @@ read again by itself when a `.hor` of its folder changes, its views back on the 
 is save and look rather than starting Hex again.
 
 It can ask things. `hex.menu([{ label, icon, key, on_pressed, enabled }, "-", { label, items: [...] }])` puts a menu up at
-the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, func(hex,
-pressed) { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, func(hex, typed) {
-... })` a line of text.
+the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, (hex,
+pressed) => { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, (hex, typed) =>
+{ ... })` a line of text.
 
 It can have a UI too, a view of a file (`hex.view`, offered on the files that say its `#define` and opened on them by
 itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
 doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
 and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
 for a file or a folder with Hex's own dialog (`hex.pick_file({ title, folder, filter: ["Pictures", "*.png;*.jpg"] },
-func(path) { ... })`, `hex.pick_folder(func(path) { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
+path => { ... })`, `hex.pick_folder(path => { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
 error }`, for a file that may be half typed.
 
 It can change a file by the paths of its values, written where they are in the text with the file's comments and spacing

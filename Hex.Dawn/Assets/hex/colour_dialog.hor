@@ -1,3 +1,5 @@
+// colour_dialog, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // What goes into the dialog a swatch of a colour in the code opens.
 #define layout
 

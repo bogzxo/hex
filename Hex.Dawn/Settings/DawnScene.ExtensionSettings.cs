@@ -1,16 +1,13 @@
-using Horizon.HIDL.Library;
-using Horizon.HIDL.Runtime;
 using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// What an extension can be told, kept in the settings file, and its section of the settings window (SettingsPage makes
-// it, a row a setting out of the template here or the extension's own layout).
+// What an extension can be told, kept in the settings file, and its section of the settings window. The rows of the
+// settings it described are ExtensionSettingsSource's, the section has what it is over them and its own layout when it
+// has one.
 internal sealed partial class DawnScene
 {
-    private const string EXTENSION_SETTING = "extension_setting.hor";
-
     // What the extensions made of their own layouts of settings, let go of as the window goes
     private readonly List<UIScriptedLayout> settingsMade = [];
 
@@ -22,50 +19,36 @@ internal sealed partial class DawnScene
         settingsMade.Clear();
     }
 
-    /// <summary>A row for one thing an extension can be told, kept as it is changed and the extension told so (on_setting).</summary>
-    private void AddExtensionSetting(HexExtension extension, ExtensionSetting setting, StackPanel options)
+    /// <summary>
+    /// What the extensions are called on the row of the ones switched off, in the order they're listed. A name two of them
+    /// share has the folder it's in after it, or the row had two buttons nobody could tell apart.
+    /// </summary>
+    private List<string> ExtensionNames()
     {
-        var made = layout.Instantiate(EXTENSION_SETTING, options);
-        var title = made.Get<Label>("title");
-        var text = made.Get<TextBox>("text_value");
-        var number = made.Get<NumberBox>("number_value");
-        var flag = made.Get<ToggleButton>("flag_value");
-
-        title.Text = setting.Title;
-        title.Tooltip = setting.About;
-        text.Visible = setting.Kind is not ("number" or "flag");
-        number.Visible = setting.Kind == "number";
-        flag.Visible = setting.Kind == "flag";
-
-        IRuntimeValue now = extensions.SettingOf(extension, setting.Key);
-        if (text.Visible)
+        var all = extensions.All;
+        var named = new List<string>(all.Count);
+        foreach (HexExtension extension in all)
         {
-            text.Text = now is StringValue said ? said.Value : string.Empty;
-            text.Placeholder = setting.Kind == "path" ? Said("extensions.a_path") : string.Empty;
-            text.Tooltip = setting.About;
-            text.OnChanged = value => extensions.SetSetting(extension, setting.Key, new StringValue(value), tell: true);
-        }
-        else if (number.Visible)
-        {
-            number.Value = now is NumberValue amount ? amount.Value : 0;
-            number.Tooltip = setting.About;
-            number.OnValueChanged = value => extensions.SetSetting(extension, setting.Key, new NumberValue(value), tell: true);
-        }
-        else
-        {
-            flag.State = now is BooleanValue { Value: true };
-            flag.Tooltip = setting.About;
-            flag.OnPressed = () => extensions.SetSetting(extension, setting.Key, Values.Bool(flag.State), tell: true);
+            bool shared = all.Count(other => string.Equals(other.Name, extension.Name, StringComparison.OrdinalIgnoreCase)) > 1;
+            named.Add(shared ? $"{extension.Name} ({extension.Id})" : extension.Name);
         }
 
-        settingControls[$"extension_{extension.Id}_{setting.Key}"] = text.Visible ? text : number.Visible ? number : flag;
+        return named;
+    }
+
+    /// <summary>The folder of an extension by what the row calls it, what was said taken for the folder when no extension is called that.</summary>
+    private string ExtensionIdOf(string name)
+    {
+        List<string> named = ExtensionNames();
+        int at = named.FindIndex(shown => string.Equals(shown, name, StringComparison.OrdinalIgnoreCase));
+        return at >= 0 ? extensions.All[at].Id : name;
     }
 
     private string AboutExtension(HexExtension extension)
     {
         string by = extension.Author.Length > 0 ? Said("extensions.by", ("author", UIRichText.Literal(extension.Author))) : string.Empty;
         string where = extension.BuiltIn ? Said("extensions.built_in") : Said("extensions.own");
-        string text = $"**{UIRichText.Literal(extension.Name)}** {UIRichText.Literal(extension.Version)}  {by}\n{UIRichText.Literal(extension.Description)}\n[color:#7f8a9e]{where}[/color]";
-        return extension.Failed is { } why ? text + "\n[color:#ff7366]" + UIRichText.Literal(why) + "[/color]" : text;
+        string text = $"**{UIRichText.Literal(extension.Name)}** {UIRichText.Literal(extension.Version)}  {by}\n{UIRichText.Literal(extension.Description)}\n[color:dim]{where}[/color]";
+        return extension.Failed is { } why ? text + "\n[color:error]" + UIRichText.Literal(why) + "[/color]" : text;
     }
 }

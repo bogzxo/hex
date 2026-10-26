@@ -5,10 +5,12 @@ using Hex.Core.Git;
 namespace Hex.Dawn;
 
 // Source Control, VS Code's side of that name. The files of every repository of the workspace that aren't as committed,
-// what's staged for the next commit apart from what isn't, and what a merge left in conflict above both. A click on a
-// file shows what changed in it, the right click stages, unstages, throws away or opens it, and Commit at the top takes
-// what's staged with a message (everything, when nothing's staged and that's what's asked for). Every one of them is
-// git itself in the background, and the side is put together again from what git says after.
+// what's staged for the next commit apart from what isn't, and what a merge left in conflict above both. A file's row is
+// its name in the colour of its change, its folder dim after it and the letter of the change at the right end. The
+// pointer on a row brings up its buttons (open, discard, stage or unstage), Space stages or unstages the picked one and
+// Delete throws its changes away. A click shows what changed in it, the right click has the same and more, and Commit
+// at the top takes what's staged with a message (everything, when nothing's staged and that's what's asked for). Every
+// one of them is git itself in the background, and the side is put together again from what git says after.
 internal sealed partial class HexGit
 {
     private void BuildSourceControl()
@@ -18,6 +20,7 @@ internal sealed partial class HexGit
 
         context.Commands.Add("View/sides", context.Strings.Said("git.side_command"), () => context.Panels.ShowSide(HexSide.SourceControl), "Ctrl+Shift+G", "source-control", UIKeyUse.BoundWhileTyping);
         context.Commands.Add("Git/changes", context.Strings.Said("git.commit_command"), () => AskCommit(FirstRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
+        BuildCommits();
         context.Commands.Add("Git/changes", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
         context.Commands.Add("Git/changes", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
         context.Commands.Add("Git/branches", context.Strings.Said("git.branches_command"), () => ShowBranches(context.Documents.Current.Path), icon: "git-branch");
@@ -101,12 +104,29 @@ internal sealed partial class HexGit
             }
         }
 
-        int count = conflicts.Count + staged.Count + changes.Count;
-        items.Add(new UITreeItem(context.Strings.Said(staged.Count > 0 ? "git.commit_staged" : "git.commit_all", ("count", (staged.Count > 0 ? staged.Count : count).ToString())), "check")
+        // A merge going on says so above Commit, which finishes it once the conflicts are settled
+        if (MergeOf(repository) is not null)
         {
-            Color = count > 0 ? null : context.Panels.Dim,
+            items.Add(new UITreeItem(context.Strings.Said("git.merging"), "git-merge")
+            {
+                Color = context.Panels.Warning,
+                IconColor = context.Panels.Warning,
+                Tooltip = context.Strings.Said("git.merging_tip")
+            });
+        }
+
+        // With nothing staged and the setting saying never, Commit stages nothing for you and says so on its row
+        int count = conflicts.Count + staged.Count + changes.Count;
+        bool never = staged.Count == 0 && context.Settings.Values.GitSmartCommit == "never";
+        string commit = staged.Count > 0 ? context.Strings.Said("git.commit_staged", ("count", staged.Count.ToString()))
+            : never ? context.Strings.Said("git.commit_nothing_staged")
+            : context.Strings.Said("git.commit_all", ("count", count.ToString()));
+        items.Add(new UITreeItem(commit, "check")
+        {
+            Color = count > 0 && !never ? null : context.Panels.Dim,
             Tooltip = context.Strings.Said("git.commit_tip"),
-            Tag = new SideTag(Pressed: () => AskCommit(repository))
+            Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
+            Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
         });
 
         if (count == 0)
@@ -116,35 +136,48 @@ internal sealed partial class HexGit
         }
 
         if (conflicts.Count > 0)
-            items.Add(Section(repository, context.Strings.Said("git.merge_changes", ("count", conflicts.Count.ToString())), conflicts, stagedSide: false));
+            items.Add(Section(repository, context.Strings.Said("git.merge_changes"), conflicts, SectionKind.Conflicts));
         if (staged.Count > 0)
-            items.Add(Section(repository, context.Strings.Said("git.staged_changes", ("count", staged.Count.ToString())), staged, stagedSide: true));
+            items.Add(Section(repository, context.Strings.Said("git.staged_changes"), staged, SectionKind.Staged));
         if (changes.Count > 0)
-            items.Add(Section(repository, context.Strings.Said("git.changes", ("count", changes.Count.ToString())), changes, stagedSide: false));
+            items.Add(Section(repository, context.Strings.Said("git.changes"), changes, SectionKind.Changes));
     }
 
-    // A section of files, staged or not, its right click every file of it at once
-    private UITreeItem Section(Repository repository, string title, List<(string Path, GitFileState State)> files, bool stagedSide)
+    // Which of the three a section is, what a merge left in conflict, what's staged and what isn't
+    private enum SectionKind { Conflicts, Staged, Changes }
+
+    // A section of files, how many there are at its right end, its buttons and its right click every file of it at once
+    private UITreeItem Section(Repository repository, string title, List<(string Path, GitFileState State)> files, SectionKind kind)
     {
+        bool stagedSide = kind == SectionKind.Staged;
         string[] paths = [.. files.Select(file => file.Path)];
         var section = new UITreeItem(title, stagedSide ? "pass" : "diff")
         {
+            Badge = files.Count.ToString(),
             Expandable = true,
             Expanded = true,
             Children = [],
-            Tag = new SideTag(Menu: _ => SectionMenu(repository, paths, stagedSide))
+            Actions = SectionActions(repository, paths, kind),
+            Tag = new SideTag(Menu: _ => SectionMenu(repository, paths, stagedSide), Key: key => SectionKey(repository, paths, stagedSide, key))
         };
 
         foreach (var (path, state) in files)
         {
             string folder = Path.GetRelativePath(repository.Git.Root, Path.GetDirectoryName(path) ?? repository.Git.Root);
+
+            // A renamed file says what it was called, or nobody can tell it from a new one
+            string from = state.From is { } was ? $"from {Path.GetFileName(was)}" : string.Empty;
+            string where = folder == "." ? string.Empty : folder.Replace('\\', '/');
             section.Children.Add(new UITreeItem(Path.GetFileName(path), HexExplorer.FileIcon(path))
             {
-                // A renamed file says what it was called, or nobody can tell it from a new one
-                Detail = $"{(state.From is { } from ? $"from {Path.GetFileName(from)}  " : string.Empty)}{(folder == "." ? string.Empty : folder.Replace('\\', '/') + "  ")}{state.Letter}",
+                Detail = from.Length > 0 && where.Length > 0 ? $"{from}  {where}" : from + where,
                 Color = ColourOf?.Invoke(state.Change),
+                Badge = state.Letter,
+                BadgeColor = ColourOf?.Invoke(state.Change),
                 Tooltip = path,
-                Tag = new SideTag(Pressed: () => OpenChange(repository, path, stagedSide), Menu: _ => FileMenu(repository, path, state, stagedSide))
+                Actions = FileActions(repository, path, state, kind),
+                Tag = new SideTag(Pressed: () => OpenChange(repository, path, stagedSide), Menu: _ => FileMenu(repository, path, state, stagedSide),
+                    Key: key => FileKey(repository, path, state, stagedSide, key))
             });
         }
 
@@ -157,23 +190,106 @@ internal sealed partial class HexGit
     /// <summary>Shows a changed file, what changed in it when there's a way to (the diff), the file itself otherwise.</summary>
     public Action<GitRepository, string, bool>? ShowChange { get; set; }
 
+    // A deleted file has a diff too, all of it red, what was taken out
     private void OpenChange(Repository repository, string path, bool staged)
     {
-        if (ShowChange is { } show && File.Exists(path))
+        if (ShowChange is { } show)
             show(repository.Git, path, staged);
         else if (File.Exists(path))
             context.Documents.Open(path);
+    }
+
+    // The buttons of a file's row, left to right the way VS Code has them. Stage on a file in conflict marks it settled
+    private List<UITreeAction> FileActions(Repository repository, string path, GitFileState state, SectionKind kind)
+    {
+        var actions = new List<UITreeAction>();
+        if (File.Exists(path))
+            actions.Add(new UITreeAction("go-to-file", context.Strings.Said("git.open_file"), () => context.Documents.Open(path)));
+
+        switch (kind)
+        {
+            case SectionKind.Staged:
+                actions.Add(new UITreeAction("remove", context.Strings.Said("git.unstage_changes"), () => StageFiles(repository, [path], false)));
+                break;
+            case SectionKind.Conflicts:
+                actions.Add(new UITreeAction("add", context.Strings.Said("git.stage_resolved"), () => StageFiles(repository, [path], true)));
+                break;
+            default:
+                actions.Add(new UITreeAction("discard", context.Strings.Said("git.discard"), () => DiscardFile(repository, path, state)));
+                actions.Add(new UITreeAction("add", context.Strings.Said("git.stage_changes"), () => StageFiles(repository, [path], true)));
+                break;
+        }
+
+        return actions;
+    }
+
+    // The buttons of a section's heading, every file of it at once
+    private List<UITreeAction> SectionActions(Repository repository, string[] paths, SectionKind kind)
+    {
+        if (kind == SectionKind.Staged)
+            return [new UITreeAction("remove", context.Strings.Said("git.unstage_all"), () => StageFiles(repository, paths, false))];
+        if (kind == SectionKind.Conflicts)
+            return [new UITreeAction("add", context.Strings.Said("git.stage_all_resolved"), () => StageFiles(repository, paths, true))];
+
+        return
+        [
+            new UITreeAction("discard", context.Strings.Said("git.discard_all"), () => DiscardAll(repository, paths)),
+            new UITreeAction("add", context.Strings.Said("git.stage_all"), () => StageFiles(repository, paths, true))
+        ];
+    }
+
+    // Space stages or unstages the picked file, Delete throws its changes away (asking first)
+    private bool FileKey(Repository repository, string path, GitFileState state, bool stagedSide, char key)
+    {
+        switch (key)
+        {
+            case ' ':
+                StageFiles(repository, [path], !stagedSide);
+                return true;
+            case UIKeyboard.DELETE when !stagedSide && state.Change != GitChange.Conflicted:
+                DiscardFile(repository, path, state);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // The same on a section's heading, every file of it
+    private bool SectionKey(Repository repository, string[] paths, bool stagedSide, char key)
+    {
+        if (key != ' ')
+            return false;
+
+        StageFiles(repository, paths, !stagedSide);
+        return true;
+    }
+
+    private void StageFiles(Repository repository, string[] paths, bool stage)
+    {
+        if (stage)
+            Run(repository, "git add", () => repository.Git.Stage(paths));
+        else
+            Run(repository, "git restore --staged", () => repository.Git.Unstage(paths));
+    }
+
+    private void DiscardFile(Repository repository, string path, GitFileState state) =>
+        AskDiscard(repository, [path], state.Change == GitChange.Untracked ? [path] : []);
+
+    private void DiscardAll(Repository repository, string[] paths)
+    {
+        string[] fresh = [.. paths.Where(path => repository.Status?.StateOf(path).Change == GitChange.Untracked)];
+        AskDiscard(repository, paths, fresh);
     }
 
     private void FileMenu(Repository repository, string path, GitFileState state, bool stagedSide)
     {
         var menu = new Menu("git_file");
         if (stagedSide)
-            menu.Add(context.Strings.Said("git.unstage"), () => Run(repository, "git restore --staged", () => repository.Git.Unstage([path])), icon: "remove");
+            menu.Add(context.Strings.Said("git.unstage"), () => StageFiles(repository, [path], false), icon: "remove");
         else
-            menu.Add(context.Strings.Said("git.stage"), () => Run(repository, "git add", () => repository.Git.Stage([path])), icon: "add");
+            menu.Add(context.Strings.Said("git.stage"), () => StageFiles(repository, [path], true), icon: "add");
         if (!stagedSide && state.Change != GitChange.Conflicted)
-            menu.Add(context.Strings.Said("git.discard"), () => AskDiscard(repository, [path], state.Change == GitChange.Untracked ? [path] : []), icon: "discard");
+            menu.Add(context.Strings.Said("git.discard"), () => DiscardFile(repository, path, state), icon: "discard");
         menu.AddSeparator();
         if (File.Exists(path))
             menu.Add(context.Strings.Said("git.open_file"), () => context.Documents.Open(path), icon: "go-to-file");
@@ -184,12 +300,11 @@ internal sealed partial class HexGit
     {
         var menu = new Menu("git_section");
         if (stagedSide)
-            menu.Add(context.Strings.Said("git.unstage_all"), () => Run(repository, "git restore --staged", () => repository.Git.Unstage(paths)), icon: "remove");
+            menu.Add(context.Strings.Said("git.unstage_all"), () => StageFiles(repository, paths, false), icon: "remove");
         else
         {
-            menu.Add(context.Strings.Said("git.stage_all"), () => Run(repository, "git add", () => repository.Git.Stage(paths)), icon: "add");
-            string[] fresh = [.. paths.Where(path => repository.Status?.StateOf(path).Change == GitChange.Untracked)];
-            menu.Add(context.Strings.Said("git.discard_all"), () => AskDiscard(repository, paths, fresh), icon: "discard");
+            menu.Add(context.Strings.Said("git.stage_all"), () => StageFiles(repository, paths, true), icon: "add");
+            menu.Add(context.Strings.Said("git.discard_all"), () => DiscardAll(repository, paths), icon: "discard");
         }
         context.Windows.Menu(menu);
     }
@@ -200,10 +315,7 @@ internal sealed partial class HexGit
         if (context.Documents.Current.Path is not { } path || RepositoryOf(path) is not { } repository)
             return;
 
-        if (stage)
-            Run(repository, "git add", () => repository.Git.Stage([path]));
-        else
-            Run(repository, "git restore --staged", () => repository.Git.Unstage([path]));
+        StageFiles(repository, [path], stage);
     }
 
     /// <summary>
@@ -229,44 +341,6 @@ internal sealed partial class HexGit
         });
     }
 
-    /// <summary>Asks for a commit's message and commits, everything when nothing's staged and that's what's wanted.</summary>
-    private void AskCommit(Repository? repository)
-    {
-        if (repository?.Status is not { } status)
-            return;
-
-        int conflicts = status.Files.Values.Count(state => state.Change == GitChange.Conflicted);
-        if (conflicts > 0)
-        {
-            context.Notices.Say(context.Strings.Said("git.resolve_first", ("count", HexText.Count("file", conflicts))), error: true);
-            return;
-        }
-
-        bool anyStaged = status.Files.Values.Any(state => state.Staged);
-        string[] all = [.. status.Files.Where(pair => pair.Value.Change is not (GitChange.Ignored or GitChange.Conflicted)).Select(pair => pair.Key)];
-        if (all.Length == 0 && !anyStaged)
-        {
-            context.Notices.Say(context.Strings.Said("git.no_changes"));
-            return;
-        }
-
-        context.Windows.PromptLines(context.Strings.Said("git.commit_title", ("branch", status.Branch ?? "HEAD")),
-            anyStaged ? context.Strings.Said("git.commit_text_staged") : context.Strings.Said("git.commit_text_all", ("count", all.Length.ToString())),
-            string.Empty, context.Strings.Said("git.commit_button"), "COMMIT_EDITMSG.md", SummaryNote, typed =>
-            {
-                string message = typed.Trim();
-                if (message.Length == 0)
-                    return;
-
-                Run(repository, "git commit", () =>
-                {
-                    if (!anyStaged && repository.Git.Stage(all) is { } failed)
-                        return failed;
-                    return repository.Git.Commit(message);
-                }, context.Strings.Said("git.committed", ("message", message.Split('\n')[0])));
-            });
-    }
-
     // The card of the last thing of git's that went wrong, taken down by the next one that goes right or wrong, so cards
     // of the same failure don't stack up and one that's been put right doesn't stay
     private UINotification? failureCard;
@@ -283,23 +357,11 @@ internal sealed partial class HexGit
         failureCard = null;
     }
 
-    // Past this many characters a commit's summary is cut short by git log --oneline and GitHub, 50 is what's asked for
-    private const int SUMMARY_SHORT = 50, SUMMARY_LONG = 72;
-
-    /// <summary>What's said under the commit's box, how long its first line is, a warning once it's too long to show whole.</summary>
-    private (string Text, bool Warning) SummaryNote(string message)
-    {
-        string summary = message.Replace("\r\n", "\n").Split('\n')[0];
-        int length = summary.Trim().Length;
-        if (length == 0)
-            return (context.Strings.Said("git.commit_hint"), false);
-        if (length > SUMMARY_LONG)
-            return (context.Strings.Said("git.summary_too_long", ("length", length.ToString()), ("most", SUMMARY_LONG.ToString())), true);
-        return (context.Strings.Said("git.summary_length", ("length", length.ToString()), ("best", SUMMARY_SHORT.ToString())), length > SUMMARY_SHORT);
-    }
-
-    /// <summary>Runs something of git's in the background, then has git asked again, what went wrong on a card with all of it a button away.</summary>
-    private void Run(Repository repository, string doing, Func<string?> work, string? done = null)
+    /// <summary>
+    /// Runs something of git's in the background, then has git asked again, what went wrong on a card with all of it a
+    /// button away. What comes after it (a push after a commit) only once it went right.
+    /// </summary>
+    private void Run(Repository repository, string doing, Func<string?> work, string? done = null, Action? then = null)
     {
         context.Work.InBackground(doing, work, failed =>
         {
@@ -309,6 +371,7 @@ internal sealed partial class HexGit
                 ClearFailure();
                 if (done is not null)
                     context.Notices.Say(done);
+                then?.Invoke();
                 return;
             }
 

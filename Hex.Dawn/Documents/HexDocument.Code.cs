@@ -362,7 +362,7 @@ internal sealed partial class HexDocument
             if (!HIDLWriter.CanWrite(value))
                 continue;
 
-            string written = HIDLWriter.Write(value);
+            string written = Written(value);
             if (usual.TryGetValue(name, out string? untouched) && untouched == written)
                 continue;
 
@@ -384,11 +384,22 @@ internal sealed partial class HexDocument
         }
         else
         {
+            // A comma after every property, the last too, so a property set or put back to how it starts out is a
+            // line of its own in a diff
             code.AppendLine("{");
-            for (int i = 0; i < properties.Count; i++)
-                code.Append("    ").Append(properties[i]).AppendLine(i < properties.Count - 1 ? "," : string.Empty);
+            foreach (string property in properties)
+                code.Append("    ").Append(property).AppendLine(",");
             code.AppendLine("});");
         }
+    }
+
+    // A property's value as the layout writes it, inside the braces of the component, so a list over several lines
+    // is indented under its key and has a comma after its last item the way the properties do
+    private static string Written(IRuntimeValue value)
+    {
+        var text = new StringBuilder();
+        HIDLWriter.WriteInto(text, value, 1, trailingCommas: true);
+        return text.ToString();
     }
 
     // What a component of a kind nobody has touched writes every property as, by kind. It was a new component made and
@@ -404,7 +415,7 @@ internal sealed partial class HexDocument
         foreach (var (name, value) in ReadProperties(untouched))
         {
             if (HIDLWriter.CanWrite(value))
-                usual[name] = HIDLWriter.Write(value);
+                usual[name] = Written(value);
         }
 
         return usual;

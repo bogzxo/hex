@@ -13,7 +13,7 @@ let find_bar = compositor.panel({
     z: 20,
     radius: 14,
     color: vec(0.12, 0.17, 0.23, 1),
-    outline: vec(0.55, 0.82, 0.92, 0.14)
+    outline: vec(0.55, 0.82, 0.92, 0.14),
 });
 
 let find_rows = compositor.stack({ parent: find_bar, anchor: "top_left", pivot: "top_left", spacing: 4 });

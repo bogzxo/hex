@@ -99,6 +99,30 @@ internal sealed partial class DawnScene
 
         left.Show(true);
         Side = side;
+        FocusSideList();
+    }
+
+    /// <summary>
+    /// Helper method to give the keyboard to the list of a side that was just shown, the explorer, Source Control or
+    /// what a search found, so Up, Down and Enter go down it at once the way VS Code focuses the view. Ctrl+Shift+G left
+    /// the keyboard in the code and a change could only be opened with a click. The list is made there and then rather
+    /// than at the end of the update, it has to be on screen to be given the keyboard.
+    /// </summary>
+    private void FocusSideList()
+    {
+        if (Side is not (HexSide.Explorer or HexSide.SourceControl or HexSide.Search))
+            return;
+
+        RebuildTree();
+        treeDirty = false;
+        if (!sideTree.Visible)
+            return;
+
+        // With nothing picked yet the first open row with rows under it is, Changes, a workspace folder or a file found
+        // in, so the first Down lands on the first thing in it. Down from nothing picked was Source Control's Commit all,
+        // and Enter after it committed every change
+        sideTree.Selected ??= sideTree.Items.Find(item => item.HasChildren && item.Expanded);
+        sideTree.Focus();
     }
 
     private void ToggleSideBar()

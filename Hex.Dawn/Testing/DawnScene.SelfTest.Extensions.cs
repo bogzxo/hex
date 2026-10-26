@@ -23,17 +23,25 @@ internal sealed partial class DawnScene
             && runtime.UserScope.Lookup("welcome_greetings") is ListValue greetings && greetings.Items.Any(said => said is StringValue { Value: var text } && text == titleNote)
             && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexAbout.Version} ({titleNote})", StringComparison.Ordinal));
 
+        // The row of the ones switched off says what they're called, a toggle each, and gives the right one's folder to the settings
+        string Dolly() => extensions.All.First(extension => extension.Id == "hello_dolly").Name;
         test.Run(() => OpenSettings(EXTENSIONS));
         test.Settle(0.3f);
-        test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([new StringValue("hello_dolly")])));
+        test.Check("extensions: the row of the ones switched off says their names, not their folders", () =>
+            SettingsPage!.Settings.First(setting => setting.Key == "disabled_extensions").Choices is { } listed
+            && listed.Length == extensions.All.Count && listed.Contains(Dolly()) && (Dolly() == "hello_dolly" || !listed.Contains("hello_dolly")));
+        test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([new StringValue(Dolly())])));
         test.Wait();
         test.Check("extensions: switched off on its page of the settings, its greeting goes and it stays off", () =>
             titleNote.Length == 0 && !TitleNow().Contains('(') && settings.DisabledExtensions.Contains("hello_dolly")
-            && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: false });
+            && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: false }
+            && SettingsPage!.IsModified?.Invoke("disabled_extensions") == true);
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([])));
         test.Wait();
         test.Check("extensions: and on again", () => !settings.DisabledExtensions.Contains("hello_dolly") && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: true });
         test.Run(() => CloseSettings());
+
+        TestExtensionSettingRows(test);
 
         HexExtension? broken = null;
         test.Run(() =>
@@ -104,6 +112,138 @@ internal sealed partial class DawnScene
             extensions.Remove(listening!);
             CloseNow();
         });
+    }
+
+    private void TestExtensionSettingRows(HexPointerScript test)
+    {
+        /* The settings an extension describes are rows of the settings window like the rest, its help under the name, a
+           reset while it's changed, and found by the search. An extension of the test's own with one of each kind, which
+           writes down what it's told */
+
+        const string LOUDNESS = "extension_told_extension_loudness", GAME = "extension_told_extension_game";
+        HexExtension? told = null;
+        test.Run(() =>
+        {
+            string folder = Path.Combine(testFolder, "told_extension");
+            Directory.CreateDirectory(folder);
+            System.IO.File.WriteAllText(Path.Combine(folder, HexExtension.FILE), """
+                let extension = {
+                    name: "Told",
+                    settings: {
+                        loudness: { title: "Told loudness", about: "How loud the told extension shouts.", kind: "number", default: 3 },
+                        game: { title: "Told game", about: "The exe the told extension starts.", kind: "path", default: "" },
+                        shout: { title: "Told shout", about: "Whether it shouts at all.", kind: "flag", default: false },
+                        style: { title: "Told style", about: "The way it says things.", kind: "choice", choices: ["calm", "sharp"],
+                            labels: ["Calm", "Sharp as a tack"], help: ["Quiet and slow.", "Short and quick."], default: "calm" },
+                        volume: { title: "Told volume", about: "How far up it goes.", kind: "number", least: 0, most: 10, step: 1, slider: true, default: 5 }
+                    }
+                };
+                let heard = [];
+                func on_setting(hex, name, value) { heard.push(name); heard.push(value); }
+                """);
+            told = new HexExtension(folder, builtIn: false) { Enabled = true };
+            extensions.Add(told);
+            extensions.Start(told);
+            OpenSettings(EXTENSION_SECTION + "Told");
+        });
+        test.Settle(0.3f);
+
+        // Shown when it and everything it's in are, the search hides a row and a section that hasn't one left hides itself
+        bool Shown(UIComponent component)
+        {
+            for (UIComponent? at = component; at is not null && at != SettingsPage; at = at.Parent)
+            {
+                if (!at.Visible)
+                    return false;
+            }
+
+            return true;
+        }
+
+        // What a row says without the accent a search lights the words it found in
+        bool LabelShown(string text) => Descendants(SettingsPage!).OfType<Label>().Any(label => label.Text.Replace("[color:accent]", "").Replace("[/color]", "") == text && Shown(label));
+        bool Heard(string name, IRuntimeValue value) => told is { Failed: null, Runtime: { } runtime } && runtime.UserScope.Lookup("heard") is ListValue { Count: >= 2 } heard
+            && heard[^2] is StringValue { Value: var said } && said == name && SettingValues.Same(heard[^1], value);
+
+        test.Run(() => SettingsPage!.Find("told loudn"));
+        test.Wait();
+        test.Check("extensions: an extension's setting is a row of the settings like any other, found by the search", () =>
+            SettingsPage!.Settings.FirstOrDefault(setting => setting.Key == LOUDNESS) is { Kind: UIFormKind.Number, Group: EXTENSION_SECTION + "Told", Help: "How loud the told extension shouts." }
+            && SettingsPage.RowsShown == 1 && LabelShown("[b]Told loudness[/b]") && LabelShown("How loud the told extension shouts."));
+
+        test.Run(() =>
+        {
+            SettingsPage!.Find(string.Empty);
+            SettingsPage.Enter(LOUDNESS, new NumberValue(7));
+        });
+        test.Wait();
+        test.Check("extensions: changed on its row, it's kept, the extension is told and the row has its reset", () =>
+            extensions.SettingOf(told!, "loudness") is NumberValue { Value: 7 } && settings.ExtensionSettings["told_extension"].ContainsKey("loudness")
+            && Heard("loudness", new NumberValue(7)) && SettingsPage!.IsModified?.Invoke(LOUDNESS) == true);
+
+        test.Run(() => SettingsPage!.Reset(LOUDNESS));
+        test.Wait();
+        test.Check("extensions: its reset puts the extension's own default back and tells it", () =>
+            extensions.SettingOf(told!, "loudness") is NumberValue { Value: 3 } && Heard("loudness", new NumberValue(3))
+            && SettingsPage!.IsModified?.Invoke(LOUDNESS) == false);
+
+        // A choice is a dropdown of its own labels and lines of help, one that isn't among them is left out, and a number
+        // with ends is kept between them
+        const string STYLE = "extension_told_extension_style", VOLUME = "extension_told_extension_volume";
+        test.Run(() =>
+        {
+            var source = new ExtensionSettingsSource(this);
+            source.Set(STYLE, new StringValue("sharp"));
+            source.Set(STYLE, new StringValue("shouty"));
+            source.Set(VOLUME, new NumberValue(99));
+        });
+        test.Wait();
+        test.Check("extension settings: choice kind", () =>
+            SettingsPage!.Settings.FirstOrDefault(setting => setting.Key == STYLE) is { Kind: UIFormKind.Choice, Choices: ["calm", "sharp"], ChoiceLabels: ["Calm", "Sharp as a tack"] } style
+            && style.HelpOf("sharp") == "Short and quick." && extensions.SettingOf(told!, "style") is StringValue { Value: "sharp" }
+            && SettingsPage.Settings.FirstOrDefault(setting => setting.Key == VOLUME) is { Kind: UIFormKind.Number, Least: 0.0f, Most: 10.0f, Slider: true }
+            && extensions.SettingOf(told!, "volume") is NumberValue { Value: 10.0f });
+
+        // A path has Choose... beside its box, Windows' dialog in a run of Hex and a box to type it into while it tests itself
+        string picked = Path.GetFullPath(Path.Combine(testFolder, "told_extension", "told_game.exe"));
+        test.Run(() =>
+        {
+            // Searched for, its row is the only one with a Choose... showing, the picture behind the code has one too
+            System.IO.File.WriteAllText(picked, string.Empty);
+            SettingsPage!.Find("told game");
+            Descendants(SettingsPage).OfType<Button>().First(button => button.Label == Said("extension_settings.choose") && Shown(button)).OnPressed!();
+        });
+        test.Wait();
+        test.Check("extensions: a path's Choose... asks which file", () => textDialog is { IsOpen: true });
+        test.Run(() => (textDialog is { IsOpen: true } asked ? Descendants(asked.Body).OfType<TextBox>().FirstOrDefault() : null)?.OnSubmitted?.Invoke(picked));
+        test.Wait();
+        test.Check("extensions: and fills its row with it", () =>
+            extensions.SettingOf(told!, "game") is StringValue { Value: var game } && game == picked && Heard("game", new StringValue(picked))
+            && Descendants(SettingsPage!).OfType<TextBox>().Any(box => box.Text == picked) && SettingsPage!.IsModified?.Invoke(GAME) == true);
+
+        // Dawn's size, on the same page, has its reset while it isn't the one the window says
+        float sizeWas = 1.0f;
+        test.Run(() =>
+        {
+            sizeWas = compositor.Scale;
+            SettingsPage!.Find(string.Empty);
+            SettingsPage.Enter("size", new StringValue(DescribeScale(UsualScale == 2.0f ? 1.5f : 2.0f)));
+        });
+        test.Wait();
+        test.Check("settings: Dawn's size other than the window's has a reset", () => compositor.Scale != UsualScale && SettingsPage!.IsModified?.Invoke("size") == true);
+        test.Run(() => SettingsPage!.Reset("size"));
+        test.Wait();
+        test.Check("settings: which puts the window's back", () => compositor.Scale == UsualScale && SettingsPage!.IsModified?.Invoke("size") == false);
+
+        test.Run(() =>
+        {
+            SetScale(sizeWas, remember: false);
+            CloseSettings();
+            extensions.Remove(told!);
+            settings.ExtensionSettings.Remove("told_extension");
+            SaveSettings();
+        });
+        test.Wait();
     }
 
     private void TestExtensionTabs(HexPointerScript test)

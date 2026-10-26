@@ -79,7 +79,7 @@ internal sealed partial class DawnScene
         + "// Load it with UILayout.Load, every component is there under the name it has here.\n"
         + "// The menu of the test, with notes in it that a save has to keep.\n// Two lines of them.\n#define layout\n\n"
         + "// The screen it was made for\ncompositor.design({ size: vec(1600, 900), fit: \"contain\" });\n\n"
-        + "// The box everything sits in\nlet box = compositor.stack({\n    padding: vec(16, 16, 16, 16),\n    color: vec(0.1, 0.12, 0.17, 0.9)\n});\n\n"
+        + "// The box everything sits in\nlet box = compositor.stack({\n    padding: vec(16, 16, 16, 16),\n    spacing: 8,\n    color: vec(0.1, 0.12, 0.17, 0.9)\n});\n\n"
         + "let go = compositor.button({\n    parent: box,\n    // one inside a declaration, which goes\n    label: \"Go { not a brace }\"\n});\n";
 
     private void TestNotes(HexPointerScript test)
@@ -100,6 +100,12 @@ internal sealed partial class DawnScene
             && written.Contains("\n\nlet go = compositor.button(")
             && !written.Contains("one inside"));
         test.Check("notes: the two lines of the header are written once", () => written.Split("laid out with Hex.").Length == 2 && !written.Contains("laid out with Horizon.Hex") && written.Split("Load it with UILayout.Load").Length == 2);
+        test.Check("notes: every property over lines has a comma after it, the last one too", () =>
+        {
+            string[] lines = written.Split('\n');
+            int[] closing = [.. Enumerable.Range(1, lines.Length - 1).Where(i => lines[i] == "});")];
+            return closing.Length > 0 && closing.All(i => lines[i - 1].EndsWith(','));
+        });
 
         test.Run(() =>
         {

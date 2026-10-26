@@ -183,7 +183,41 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Check("help: the language's page comes out of Hex's texts, not its key", () =>
-            help is { Title: "HIDL Reference" } && page is { Text: var said } && said.StartsWith("# HIDL") && !said.Contains("@language"));
+            help is { Title: "HIDL Reference" } && page is { Text: var said } && said.StartsWith("# HIDL") && !said.Contains("@language")
+            && page.RichText.CodeBlockCount > 0 && page.RichText.CodeColours(0, compositor.Skin!.Palette) >= 3);
+
+        // The code on it in the colours the editor gives HIDL, every one of them a colour of the skin's for code
+        test.Check("help: the reference's code is in the editor's colours of HIDL", () =>
+        {
+            UIPalette palette = compositor.Skin!.Palette;
+            UISyntaxColors editor = CodeLanguages.ColorsFor(CodeLanguages.Hidl, palette);
+            var seen = new HashSet<Vector4>();
+            page!.RichText.CodeColours(0, palette, seen);
+            return seen.Count >= 3 && seen.All(colour => Enum.GetValues<SyntaxKind>().Any(kind => editor.Of(kind) with { W = colour.W } == colour));
+        });
+        test.Run(() => Shot("window-reference"));
+        test.Settle(0.2f);
+
+        // On the light theme the code takes the colours for a light field, the dark ones would wash out on it
+        string wasSkin = string.Empty, wasTheme = string.Empty;
+        test.Run(() =>
+        {
+            (wasSkin, wasTheme) = (settings.EditorSkin, settings.EditorTheme);
+            UseEditorSkin(TOOL_SKIN_NAME, "light", save: false);
+        });
+        test.WaitFor(() => compositor.Skin is { Theme: "light" }, 2.0f);
+        test.Settle(0.8f);
+        test.Run(() => Shot("window-reference-light"));
+        test.Settle(0.2f);
+        test.Check("help: on the light theme the reference's code is in the colours of code for a light field", () =>
+        {
+            UIPalette palette = compositor.Skin!.Palette;
+            var seen = new HashSet<Vector4>();
+            page!.RichText.CodeColours(0, palette, seen);
+            return palette.LightField && seen.Count >= 3 && seen.Contains(CodeLanguages.ColorsFor(CodeLanguages.Hidl, palette).Keyword);
+        });
+        test.Run(() => UseEditorSkin(wasSkin, wasTheme, save: false));
+        test.WaitFor(() => compositor.Skin is { } worn && worn.Theme == wasTheme, 2.0f);
 
         test.Run(() =>
         {

@@ -11,7 +11,7 @@ let debug_bar = compositor.panel({
     z: 20,
     radius: 14,
     color: vec(0.12, 0.17, 0.23, 1),
-    outline: vec(0.55, 0.82, 0.92, 0.14)
+    outline: vec(0.55, 0.82, 0.92, 0.14),
 });
 
 let debug_row = compositor.stack({ parent: debug_bar, anchor: "left", pivot: "left", spacing: 2, direction: "horizontal" });

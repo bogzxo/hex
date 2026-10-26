@@ -196,6 +196,12 @@ internal interface IWindows
     /// </summary>
     void Choose(string title, string message, List<(string Text, Action Picked)> choices);
 
+    /// <summary>
+    /// The same with rows in their parts, a symbol, the text bright and a folder, a remote or an author dim after it, or a
+    /// commit's hash, subject, author and date each in a colour of its own.
+    /// </summary>
+    void Choose(string title, string message, List<UIChoice> choices);
+
     /// <summary>A question with buttons, the label of the one pressed handed on.</summary>
     void Ask(string title, string text, string[] buttons, Action<string> answered);
 

@@ -11,7 +11,7 @@ let hint = compositor.label({
     text_scale: 0.14,
     color: vec(0.58, 0.6, 0.66, 1),
     align: "top_left",
-    wrap: true
+    wrap: true,
 });
 
 let find = compositor.button({
@@ -19,5 +19,5 @@ let find = compositor.button({
     anchor: "left",
     label: "@search.find",
     icon: "search",
-    lbl_scale: 0.14
+    lbl_scale: 0.14,
 });

@@ -112,12 +112,19 @@ internal sealed partial class DawnScene
                 return;
             }
 
-            var choices = new List<(string Text, Action Picked)>();
+            // Each commit its hash, subject, author and how long ago, every one a colour of its own the way VS Code's
+            // timeline has them, known by the line it used to be written as
+            var choices = new List<UIChoice>();
             for (int i = 0; i < log.Count; i++)
             {
                 GitCommitOfFile commit = log[i];
                 GitCommitOfFile? before = i + 1 < log.Count ? log[i + 1] : null;
-                choices.Add(($"{commit.Short} {commit.Author}, {HexGit.Ago(commit.When)}: {commit.Subject}", () => ShowCommitOfFile(repository, path, commit, before)));
+                string ago = HexGit.Ago(commit.When);
+                choices.Add(new UIChoice(commit.Subject, () => ShowCommitOfFile(repository, path, commit, before))
+                {
+                    Segments = [(commit.Short, UIChoiceTone.Hash), (commit.Subject, UIChoiceTone.Primary), (commit.Author, UIChoiceTone.Author), (ago, UIChoiceTone.Date)],
+                    Id = $"{commit.Short} {commit.Author}, {ago}: {commit.Subject}"
+                });
             }
 
             ChooseFrom(Said("history.git_title", ("name", Path.GetFileName(path))), Said("history.git_text"), choices);

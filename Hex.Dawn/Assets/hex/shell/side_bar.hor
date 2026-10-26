@@ -9,7 +9,7 @@ let left = compositor.stack({
     pivot: "top",
     padding: vec(10, 10, 10, 10),
     spacing: 6,
-    slide: "left"
+    slide: "left",
 });
 
 // The title of what the side bar is on, with a button at the far end that reads the files again from the disk
@@ -17,7 +17,7 @@ let tree_head = compositor.panel({
     parent: left,
     fill: "horizontal",
     size: vec(0, 22),
-    color: vec(0, 0, 0, 0)
+    color: vec(0, 0, 0, 0),
 });
 
 let tree_title = compositor.label({
@@ -27,7 +27,7 @@ let tree_title = compositor.label({
     text: "@side.explorer",
     text_scale: 0.14,
     bold: true,
-    color: vec(0.46, 0.52, 0.64, 1)
+    color: vec(0.46, 0.52, 0.64, 1),
 });
 
 let tree_refresh = compositor.button({
@@ -38,7 +38,7 @@ let tree_refresh = compositor.button({
     icon: "refresh",
     tooltip: "@side.refresh_tip",
     style: "button_flat",
-    animated: false
+    animated: false,
 });
 
 let toolbox = compositor.collapsible({
@@ -48,20 +48,20 @@ let toolbox = compositor.collapsible({
     pivot: "left",
     title: "@side.toolbox",
     text_scale: 0.13,
-    spacing: 4
+    spacing: 4,
 });
 
 // As tall as the side bar can spare, scrolled when there isn't room for all of it (the editor sizes it, see FitChrome)
 let palette_scroll = compositor.scroll({
     parent: toolbox,
-    size: vec(280, 200)
+    size: vec(280, 200),
 });
 
 let palette = compositor.grid({
     parent: palette_scroll,
     template: "palette_button.hor",
     preview_count: 19,
-    spacing: 4
+    spacing: 4,
 });
 
 let tree_tools = compositor.stack({
@@ -70,7 +70,7 @@ let tree_tools = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 2,
-    direction: "horizontal"
+    direction: "horizontal",
 });
 
 let move_up = compositor.button({
@@ -82,7 +82,7 @@ let move_up = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let move_down = compositor.button({
@@ -94,7 +94,7 @@ let move_down = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let move_out = compositor.button({
@@ -106,7 +106,7 @@ let move_out = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let move_in = compositor.button({
@@ -118,7 +118,7 @@ let move_in = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let duplicate = compositor.button({
@@ -130,7 +130,7 @@ let duplicate = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let remove = compositor.button({
@@ -142,7 +142,7 @@ let remove = compositor.button({
     animated: false,
     hover: "grow",
     hover_amount: 0.1,
-    hover_time: 0.08
+    hover_time: 0.08,
 });
 
 let tree_scroll = compositor.scroll({
@@ -151,14 +151,14 @@ let tree_scroll = compositor.scroll({
     size: vec(280, 380),
     padding: vec(4, 4, 4, 4),
     color: vec(0.1, 0.11, 0.145, 1),
-    radius: 6
+    radius: 6,
 });
 
 let tree = compositor.stack({
     parent: tree_scroll,
     template: "tree_row.hor",
     preview_count: 5,
-    spacing: 1
+    spacing: 1,
 });
 
 // The explorer, the outline and what was found, a tree the side bar paints itself, in place of the rows above for code
@@ -168,7 +168,7 @@ let side_tree = compositor.tree_view({
     size: vec(280, 380),
     text_scale: 0.14,
     color: vec(0.1, 0.11, 0.145, 1),
-    radius: 6
+    radius: 6,
 });
 
 let layers_section = compositor.collapsible({
@@ -178,7 +178,7 @@ let layers_section = compositor.collapsible({
     pivot: "left",
     title: "@side.layers",
     text_scale: 0.13,
-    spacing: 4
+    spacing: 4,
 });
 
 let layers_scroll = compositor.scroll({
@@ -186,12 +186,12 @@ let layers_scroll = compositor.scroll({
     size: vec(280, 96),
     padding: vec(4, 4, 4, 4),
     color: vec(0.1, 0.11, 0.145, 1),
-    radius: 6
+    radius: 6,
 });
 
 let layers = compositor.stack({
     parent: layers_scroll,
     template: "tree_row.hor",
     preview_count: 2,
-    spacing: 1
+    spacing: 1,
 });

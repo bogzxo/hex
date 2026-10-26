@@ -1,3 +1,5 @@
+// backdrop, laid out with Hex.
+// Load it with UILayout.Load, every component is there under the name it has here.
 // What is behind the layouts in the canvas, the first module of the stage, as big as the canvas (see PlaceCanvas).
 #define layout
 

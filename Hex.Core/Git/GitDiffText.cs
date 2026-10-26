@@ -13,6 +13,9 @@ internal readonly record struct GitDiffRun(int Line, int Count, bool Added);
 /// <param name="NewLines">Where each line of the new version is in the text, by the new version's line, to land on the same place.</param>
 internal sealed record GitDiffText(string Text, IReadOnlyList<GitDiffRun> Runs, IReadOnlyList<int> Changes, int[] NewLines)
 {
+    /// <summary>The words that changed inside the lines that changed, each line taken out against the one put in for it.</summary>
+    public IReadOnlyList<GitDiffWord> Words { get; init; } = [];
+
     /// <summary>The text of a diff of two versions, a file of nothing for either side for one that's new or gone.</summary>
     public static GitDiffText Of(string before, string after)
     {
@@ -62,6 +65,6 @@ internal sealed record GitDiffText(string Text, IReadOnlyList<GitDiffRun> Runs, 
         }
 
         Same(now.Length);
-        return new GitDiffText(string.Join(ending, lines), runs, changes, newLines);
+        return new GitDiffText(string.Join(ending, lines), runs, changes, newLines) { Words = GitWordDiff.Of(lines, runs) };
     }
 }

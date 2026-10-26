@@ -37,6 +37,8 @@ internal sealed partial class HexGit
         FollowForBlame();
         BuildSourceControl();
         BuildSync();
+        BuildStash();
+        BuildMerge();
         context.Workspace.FilesChanged += files =>
         {
             foreach (var (path, _) in files)
@@ -91,6 +93,9 @@ internal sealed partial class HexGit
             LookDown();
             foreach (Repository repository in repositories.Values)
                 repository.LookForMoves();
+
+            // The file on screen can be in another repository now, whose merge or rebase the menu follows
+            FollowOperation();
         }
 
         foreach (Repository repository in repositories.Values)
@@ -165,6 +170,12 @@ internal sealed partial class HexGit
         /// <summary>Whether it has a remote to fetch from and push to, as of the last look.</summary>
         public bool HasRemote { get; private set; }
 
+        /// <summary>What git is in the middle of, a merge or a rebase stopped on conflicts, as of the last look.</summary>
+        public GitOperation Operation { get; private set; }
+
+        /// <summary>Whether anything is changed, staged or not or new, as of the last look (the star after the branch).</summary>
+        public bool HasChanges { get; private set; }
+
         // Bumped every time git is asked about it, so what comes back from an older ask is let go of
         public int Generation { get; private set; }
 
@@ -196,15 +207,24 @@ internal sealed partial class HexGit
 
             settleIn = 0.0f;
             asking = true;
-            owner.context.Work.InBackground("git status", () => (Status: Git.Status(), Remote: Git.HasRemote()), found =>
+            // What git is in the middle of is read with the status, a merge stopping or being called off moves the index too
+            owner.context.Work.InBackground("git status", () =>
+            {
+                GitStatus? status = Git.Status();
+                bool changes = status?.Files.Values.Any(state => state.Change != GitChange.Ignored && (state.Staged || state.Unstaged)) == true;
+                return (Status: status, Changes: changes, Remote: Git.HasRemote(), Operation: Git.Operation());
+            }, found =>
             {
                 asking = false;
                 if (found.Status is not { } status)
                     return;
 
                 Status = status;
+                HasChanges = found.Changes;
                 HasRemote = found.Remote;
+                Operation = found.Operation;
                 Generation++;
+                owner.FollowOperation();
                 owner.Version++;
                 owner.Changed?.Invoke();
                 owner.context.Redraw();

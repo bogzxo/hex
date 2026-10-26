@@ -22,7 +22,7 @@ internal readonly record struct HidlDocumented(string Doc, string? Where);
 internal static class HidlAnalysis
 {
     /// <summary>The words the language keeps to itself, offered first when nothing more particular is.</summary>
-    public static readonly string[] Keywords = ["let", "const", "func", "if", "else", "while", "for", "in", "return", "break", "continue", "true", "false", "null", "vec", "include", "compositor"];
+    public static readonly string[] Keywords = ["let", "const", "func", "if", "else", "while", "do", "for", "in", "return", "break", "continue", "delete", "true", "false", "null", "vec", "include", "compositor"];
 
     /// <summary>
     /// The kinds of components made known to scripts, which a module does as it's made. A program with a window has made
@@ -204,14 +204,32 @@ internal static class HidlAnalysis
 
     /* Declarations */
 
-    /// <summary>Where a name is declared with let or const in some code, by its tokens, null for nowhere.</summary>
-    public static (int Line, int Column)? FindDeclaration(string source, string name)
+    /// <summary>
+    /// Where a name is declared in some code, by its tokens, null for nowhere. A let or a const (a name taken out of
+    /// something, <c>let { a, b } = thing</c>, counts) or a func name. Given where the name is used (zero based), a
+    /// parameter of the function round it or a name of the for round it comes first, the nearest one, since that's the
+    /// one it means.
+    /// </summary>
+    public static (int Line, int Column)? FindDeclaration(string source, string name, int line = -1, int column = -1)
     {
         Token[] tokens = Lexer.Tokenize(source, lenient: true);
+
+        if (line >= 0 && HidlLocals.Nearest(tokens, name, line + 1, column + 1) is { } local)
+            return (local.Line - 1, local.Col - 1);
+
         for (int i = 0; i + 1 < tokens.Length; i++)
         {
-            if (tokens[i].Type is TokenType.Let or TokenType.Const && tokens[i + 1] is { Type: TokenType.Identifier } declared && declared.Value == name)
-                return (declared.Line - 1, declared.Col - 1);
+            if (tokens[i].Type == TokenType.Function && tokens[i + 1] is { Type: TokenType.Identifier } function && function.Value == name)
+                return (function.Line - 1, function.Col - 1);
+
+            if (tokens[i].Type is not (TokenType.Let or TokenType.Const))
+                continue;
+
+            foreach (Token declared in HIDLDeclarations.Declared(tokens, i))
+            {
+                if (declared.Value == name)
+                    return (declared.Line - 1, declared.Col - 1);
+            }
         }
 
         return null;
@@ -274,7 +292,7 @@ internal static class HidlAnalysis
 
         // A name made in this file, with what it is documented as wherever that is
         HidlDocumented? doc = docOf?.Invoke(word) ?? TextDoc(text, word);
-        if (FindDeclaration(text, word) is { } declared)
+        if (FindDeclaration(text, word, line, column) is { } declared)
         {
             string declaration = LineOf(text, declared.Line).Trim();
             return $"$(symbol-variable) **{word}**, made on line {declared.Line + 1}\n\n```\n{HexEvaluation.Shorten(declaration, 120)}\n```{DocHint(doc)}";
@@ -329,12 +347,13 @@ internal static class HidlAnalysis
         "include" => "$(symbol-method) **include**(\"file.hor\")\n\nRuns another file, looked for next to this one, and comes to what that declares.",
         "keys" => "$(symbol-method) **keys**(object)\n\nThe keys of an object, as a list.",
         "values" => "$(symbol-method) **values**(object)\n\nThe values of an object, as a list.",
-        "has" => "$(symbol-method) **has**(object or list, key or value)\n\nWhether it has it.",
+        "entries" => "$(symbol-method) **entries**(object)\n\nThe keys of an object and what each holds, as a list of `[key, value]`. `for (key, value in object)` walks the same.",
+        "has" => "$(symbol-method) **has**(object or list, key or value)\n\nWhether it has it, the same as `key in object`.",
         "range" => "$(symbol-method) **range**(to) or **range**(from, to)\n\nThe numbers from, up to but not with to, as a list.",
         "len" => "$(symbol-method) **len**(text or list or object)\n\nHow long it is.",
         "text" => "$(symbol-method) **text**(value)\n\nThe value written as a text.",
         "number" => "$(symbol-method) **number**(text)\n\nThe number a text is.",
-        "format" => "$(symbol-method) **format**(\"{0} of {1}\", a, b)\n\nA text with the values put in where it says.",
+        "format" => "$(symbol-method) **format**(\"{0} of {1}\", a, b)\n\nA text with the values put in where it says, `{name}` a key of an object when that's the one value. `format(number, digits)` is the number with so many digits after the point.",
         "typeof" => "$(symbol-method) **typeof**(value)\n\nWhat kind of value it is, number, text, list, object.",
         "error" => "$(symbol-method) **error**(\"why\")\n\nStops the script and says why.",
         "defined" => "$(symbol-method) **defined**(\"name\")\n\nWhether a directive (`#define name`) or the program defined it.",
@@ -346,10 +365,13 @@ internal static class HidlAnalysis
 
     private static string KeywordHint(string word) => word switch
     {
-        "let" => "$(symbol-keyword) **let** name = value;\n\nMakes a name that can be set again.",
+        "let" => "$(symbol-keyword) **let** name = value;\n\nMakes a name that can be set again. `let { a, b } = thing;` makes a name for each key, `let [a, b] = list;` for each item.",
         "const" => "$(symbol-keyword) **const** name = value;\n\nMakes a name that can't be set again.",
-        "func" => "$(symbol-keyword) **func** name(a, b) { ... }\n\nMakes a function.",
-        "for" => "$(symbol-keyword) **for** (item in list) { ... }\n\nGoes through every item of a list.",
+        "func" => "$(symbol-keyword) **func** name(a, b = 2) { ... }\n\nMakes a function, `b` is 2 when it isn't handed over. `(a, b) => a + b` is one without a name.",
+        "for" => "$(symbol-keyword) **for** (item in list) { ... }\n\nGoes through every item of a list. `for (key, value in object)` and `for (index, item in list)` have the place too.",
+        "in" => "$(symbol-keyword) **in**\n\n`key in object`, `item in list`, `part in text`, whether it has it. And the in of a for.",
+        "delete" => "$(symbol-keyword) **delete** name;\n\nTakes a name away, or a key out of an object (`delete thing.key`) or an item out of a list (`delete list[2]`).",
+        "if" => "$(symbol-keyword) **if** (test) { ... } else { ... }\n\nOne statement needs no braces, `if (done) return;`.",
         _ => $"$(symbol-keyword) **{word}**, a word the language keeps to itself"
     };
 

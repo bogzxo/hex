@@ -3,7 +3,7 @@ using Horizon.HIDL.Runtime;
 namespace Hex.Dawn;
 
 // What an extension can be told, kept in the settings file. Its section of the settings window is the window's
-// (DawnScene.ExtensionSettings), a row a setting.
+// (ExtensionSettingsSource), a row a setting like any other.
 internal sealed partial class HexExtensions
 {
     /// <summary>A setting of an extension, what it was told or else what it says it is to begin with, null for one it hasn't got.</summary>

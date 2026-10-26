@@ -308,6 +308,37 @@ internal sealed partial class DawnScene
             SaveTo(Path.Combine(document.Path is { } copyOf ? Path.GetDirectoryName(Path.GetFullPath(copyOf))! : browseDirectory, document.Name + ".hor"));
     }
 
+    /// <summary>
+    /// Ctrl+S, the file on screen formatted by its server first when format on save is on and it has one that formats,
+    /// then saved, VS Code's editor.formatOnSave. A file with no such server is saved straight away. The rest of saving
+    /// (Save All, closing, quitting) has to be done there and then and saves as it is.
+    /// </summary>
+    private void SaveFormatted()
+    {
+        HexDocument saving = document;
+        if (!settings.FormatOnSave || !saving.IsText || saving.Path is null)
+        {
+            Save();
+            return;
+        }
+
+        bool asked = languages.FormatThen(saving, () =>
+        {
+            // The answer took a moment, by now another file may be on screen or this one closed
+            if (!documents.Contains(saving))
+                return;
+
+            HexDocument was = document;
+            if (was != saving)
+                Show(saving);
+            Save();
+            if (was != saving && documents.Contains(was))
+                Show(was);
+        });
+        if (!asked)
+            Save();
+    }
+
     private void SaveAs()
     {
         // A file of code keeps its own name and kind, a layout is a .hor. A D file was offered as app.hor and saved so
@@ -517,7 +548,7 @@ internal sealed partial class DawnScene
         recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
-        commands.Add("File/save", Said("documents.save"), Save, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/save", Said("documents.save"), SaveFormatted, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
         commands.Add("File/save", Said("documents.save_as"), SaveAs);
         commands.Add("File/save", Said("documents.save_all"), SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
         commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);

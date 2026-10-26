@@ -436,7 +436,8 @@ internal sealed partial class HexLanguages
         }
 
         int version = of.Editor.Document.Version;
-        When(server.Format(path, 4, insertSpaces: true), edits =>
+        // The file's own indentation, its tab size and spaces or tabs, as the settings and its .editorconfig made it
+        When(server.Format(path, of.Editor.TabSize, insertSpaces: !of.Editor.Document.Indent.StartsWith('\t')), edits =>
         {
             if (of.Editor.Document.Version != version)
                 return;

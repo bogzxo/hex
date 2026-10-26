@@ -6,7 +6,7 @@ namespace Hex.Dawn;
 
 // What git thinks of the files, shown where they are. The explorer's rows and the tabs take the colour of their change
 // (VS Code's, the skin's warning for changed, success for new, error for deleted or in conflict, dim for ignored) and a
-// file's row has the letter of it after its name.
+// file's row has the letter of it at its right end, in the same colour.
 internal sealed partial class DawnScene
 {
     /// <summary>Has the explorer and the tabs follow git, once the parts are made.</summary>
@@ -90,8 +90,11 @@ internal sealed partial class DawnScene
         GitFileState state = isFolder ? new GitFileState(git.FolderChange(path), false, false) : git.StateOf(path);
         row.Color = GitColor(state.Change) ?? usual;
 
-        // A file's letter after its name, a folder only takes the colour
-        row.Detail = !isFolder && state.Change is not (GitChange.None or GitChange.Ignored) ? state.Letter : string.Empty;
+        // A file's letter at the right end in the colour of its change, the same as Source Control has it, a folder only
+        // takes the colour
+        bool lettered = !isFolder && state.Change is not (GitChange.None or GitChange.Ignored);
+        row.Badge = lettered ? state.Letter : string.Empty;
+        row.BadgeColor = lettered ? GitColor(state.Change) : null;
     }
 
     /// <summary>The colour a tab's title takes from its file's change, null for the skin's.</summary>

@@ -82,7 +82,7 @@ internal sealed partial class DawnScene
         commands.Declare("View", "palette", "sides", "toggles", "zoom", "look");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
-        commands.Declare("Git", "changes", "branches", "sync", "history");
+        commands.Declare("Git", "changes", "branches", "stash", "sync", "history");
         commands.Declare("Layout", "add", "group", "move", "select", "screen");
         commands.Declare("Help", "help", "about");
     }
@@ -109,7 +109,9 @@ internal sealed partial class DawnScene
         commands.Add("View/toggles", Said("menus.side_bar"), ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
         commands.Add("View/toggles", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
         commands.Add("View/toggles", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
-        commands.Add("View/toggles", Said("menus.zen_mode"), ToggleQuiet, "F11", "screen-full").IsChecked = () => Quiet;
+        // VS Code's chord for Zen Mode, F11 was Step Into's too and the keys window had the two in conflict out of the box.
+        // F11 still goes quiet when nothing is being debugged, see BuildQuiet
+        commands.Add("View/toggles", Said("menus.zen_mode"), ToggleQuiet, "Ctrl+K Z", "screen-full", UIKeyUse.BoundWhileTyping).IsChecked = () => Quiet;
         commands.Add("View/toggles", Said("menus.word_wrap"), ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
         commands.Add("View/toggles", Said("menus.code_in_hack"), codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
         commands.Add("View/toggles", Said("menus.split_editor"), ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;

@@ -185,12 +185,25 @@ internal sealed class GitRepository
         return result.Ok ? null : Said(result);
     }
 
-    /// <summary>The branch brought up to date with what it follows, the way git pull is set up to (merge or rebase). What went wrong, null when it didn't.</summary>
-    public string? Pull()
+    /// <summary>
+    /// The branch brought up to date with what it follows. Mode is how, merge, rebase or ff_only, anything else (default)
+    /// the way git pull is set up to. What went wrong, null when it didn't.
+    /// </summary>
+    public string? Pull(string mode = "default")
     {
-        GitResult result = GitProcess.Run(Root, ["pull", "--quiet"], patience: Network);
+        string[] arguments = PullFlag(mode) is { } flag ? ["pull", "--quiet", flag] : ["pull", "--quiet"];
+        GitResult result = GitProcess.Run(Root, arguments, patience: Network);
         return result.Ok ? null : Said(result);
     }
+
+    /// <summary>What git pull is told for a mode, --no-rebase, --rebase or --ff-only, null for leaving it to git config.</summary>
+    public static string? PullFlag(string mode) => mode switch
+    {
+        "merge" => "--no-rebase",
+        "rebase" => "--rebase",
+        "ff_only" => "--ff-only",
+        _ => null
+    };
 
     /// <summary>
     /// The branch's commits sent to what it follows, or a branch that follows nothing yet published to the first remote

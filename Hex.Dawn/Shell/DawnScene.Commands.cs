@@ -65,12 +65,6 @@ internal sealed partial class DawnScene
         SaveSettings();
     }
 
-    private void SelectCaretLine()
-    {
-        int line = code.Document.Caret.Line;
-        code.Document.Select(new UITextPosition(line, 0), line + 1 < code.Document.LineCount ? new UITextPosition(line + 1, 0) : new UITextPosition(line, code.Document.LineAt(line).Length));
-    }
-
     /// <summary>Something the file declares, or a key of it, picked out of its outline by a few letters.</summary>
     private void GoToSymbol()
     {
@@ -176,13 +170,17 @@ internal sealed partial class DawnScene
     private void ShowLanguageHelp()
     {
         ReadStrings();
-        ShowText(Said("language.title"), Said("language.page"));
+        ShowText(Said("language.title"), Said("language.page"), out Label page);
+
+        // Every block of code on it is HIDL, coloured the way the editor colours it, a fence that says nothing too
+        page.CodeLanguage = "hidl";
     }
 
     /// <summary>The Help menu.</summary>
     private void AddHelpCommands()
     {
-        commands.Add("Help/help", Said("commands.shortcuts"), OpenKeysWindow, icon: "keyboard");
+        // Keyboard Shortcuts went to File, beside Settings, the way VS Code has them
+        AddKeysCommands();
         commands.Add("Help/help", Said("commands.reference"), ShowLanguageHelp, icon: "book");
         commands.Add("Help/help", Said("commands.release_notes"), ShowChangelog, icon: "history");
         commands.Add("Help/help", Said("commands.own_layout"), () => Open(EDITOR_LAYOUT), icon: "layout");

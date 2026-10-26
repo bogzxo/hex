@@ -12,6 +12,9 @@ internal sealed partial class DuskScene
 {
     private SettingsWindow? settingsView;
 
+    // The part of the settings that's the terminal's, what Dusk's window is for
+    private const string TERMINAL_PART = "Terminal";
+
     /// <summary>The page while it is up, for the self test.</summary>
     internal SettingsPage? SettingsPage => settingsView?.Window.Parent is not null ? settingsView.Page : null;
 
@@ -36,10 +39,21 @@ internal sealed partial class DuskScene
             ReadBackdrop();
         };
 
-        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))], CloseSettings, EditorSettingsCatalog.Parts,
-            sections: EditorSettingsCatalog.Sections);
+        // Editor · Text as well, the tab size and the rest Dawn puts in force on its files, written into the same section.
+        // Each source keeps the keys of the section it doesn't have, so the two write side by side
+        var text = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Text, EditorSettingsCatalog.Usual);
+
+        settingsView = new SettingsWindow([new TerminalSettingsSource(host, EditorSettingsCatalog.THEME), editor, text, new WindowsSource(), new DefaultTerminalSource(said => Notify(said, error: true))], CloseSettings, EditorSettingsCatalog.Parts,
+            sections: EditorSettingsCatalog.Sections, texts: SettingsPageTexts.Make());
+
+        // Dusk's window is the terminal's, the other parts fold away the first time it opens and a search puts the
+        // terminal's rows a little over the rest
+        settingsView.Page.HomePart = TERMINAL_PART;
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = effectGlass ? HexGlass.Window(popupGlass) : null;
+
+        // The file the window writes, opened Dusk's way, in the Hex that's running or the system's editor
+        settingsView.AddTitleAction("json", HexText.Get("settings_window.open_file"), () => Run("open_settings"));
         chrome.Root.Add(settingsView.Window);
 
         // The glass under its sliders, as they make it while they're dragged
@@ -47,6 +61,7 @@ internal sealed partial class DuskScene
 
         // The profiles of how Hex looks over all of it, see DuskScene.Looks
         AddLookPicker(settingsView);
+        settingsView.Page.GoToPart(TERMINAL_PART);
         settingsView.Page.Search.Focus();
     }
 

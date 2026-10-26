@@ -294,6 +294,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     {
         left.Show(true);
         Side = side;
+        FocusSideList();
     }
 
     bool IPanels.Showing(HexSide side) => Side == side;

@@ -5,9 +5,30 @@ namespace Hex.Dawn;
 
 /// <summary>
 /// Something an extension can be told on its page of the settings, kept by Hex from one run to the next. Its kind is
-/// text, path (a file or a folder, absolute or relative to whatever the extension says), number or flag.
+/// text, path (a file or a folder, absolute or relative to whatever the extension says), number, flag or choice. A choice
+/// is one of <paramref name="Choices"/>, each said in the dropdown as its label when it has one, with its line of help
+/// under it. A number can have ends, <paramref name="Least"/> and <paramref name="Most"/> (none while most isn't past
+/// least), the step it goes up and down in and a slider rather than a box.
 /// </summary>
-internal sealed record ExtensionSetting(string Key, string Title, string About, string Kind, IRuntimeValue Default);
+internal sealed record ExtensionSetting(string Key, string Title, string About, string Kind, IRuntimeValue Default,
+    string[]? Choices = null, string[]? Labels = null, string[]? Help = null, float Least = 0.0f, float Most = 0.0f, float Step = 0.0f, bool Slider = false)
+{
+    /// <summary>Whether a number has ends it's kept between.</summary>
+    public bool Ranged => Most > Least;
+
+    /// <summary>A value of its kind made to fit, a number brought between its ends, null for one that can't, a choice that isn't one.</summary>
+    public IRuntimeValue? Fitted(IRuntimeValue value) => (Kind, value) switch
+    {
+        ("number", NumberValue number) => Ranged ? new NumberValue(Math.Clamp(number.Value, Least, Most)) : number,
+        ("number", _) => null,
+        ("flag", BooleanValue) => value,
+        ("flag", _) => null,
+        ("choice", StringValue chosen) => Choices is { } choices && Array.IndexOf(choices, chosen.Value) >= 0 ? value : null,
+        ("choice", _) => null,
+        (_, StringValue) => value,
+        _ => null
+    };
+}
 
 /// <summary>
 /// An extension, a folder with an extension.hor in it. The file says what the extension is (<c>let extension = { name,
@@ -85,17 +106,8 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
             {
                 foreach (var (key, value) in settings.Properties)
                 {
-                    if (value is not ObjectValue setting)
-                        continue;
-
-                    string kind = Text(setting, "kind") ?? "text";
-                    IRuntimeValue fallback = setting.Properties.TryGetValue("default", out IRuntimeValue? given) ? given : kind switch
-                    {
-                        "number" => new NumberValue(0),
-                        "flag" => Values.Bool(false),
-                        _ => new StringValue(string.Empty)
-                    };
-                    Settings.Add(new ExtensionSetting(key, Text(setting, "title") ?? key, Text(setting, "about") ?? string.Empty, kind, fallback));
+                    if (value is ObjectValue setting)
+                        Settings.Add(SettingOf(key, setting));
                 }
             }
         }
@@ -171,4 +183,40 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
 
     private static string? Text(ObjectValue of, string key) =>
         of.Properties.TryGetValue(key, out IRuntimeValue? value) && value is StringValue text ? text.Value : null;
+
+    private static float? Number(ObjectValue of, string key) =>
+        of.Properties.TryGetValue(key, out IRuntimeValue? value) && value is NumberValue number ? number.Value : null;
+
+    // A list of texts, null when it isn't there, what isn't text in it said as it would be written
+    private static string[]? Texts(ObjectValue of, string key) =>
+        of.Properties.TryGetValue(key, out IRuntimeValue? value) && value is ListValue list ? [.. list.Items.Select(item => item is StringValue text ? text.Value : Values.Text(item))] : null;
+
+    /// <summary>
+    /// One setting out of the extension's settings object, <c>{ title, about, kind, default }</c>, a choice's choices,
+    /// labels and help, a number's least, most, step and slider. A choice without choices is a line of text, and one
+    /// whose default isn't one of them starts at the first.
+    /// </summary>
+    private static ExtensionSetting SettingOf(string key, ObjectValue setting)
+    {
+        string kind = Text(setting, "kind") ?? "text";
+        string[]? choices = kind == "choice" ? Texts(setting, "choices") : null;
+        if (kind == "choice" && choices is not { Length: > 0 })
+            kind = "text";
+
+        IRuntimeValue fallback = setting.Properties.TryGetValue("default", out IRuntimeValue? given) ? given : kind switch
+        {
+            "number" => new NumberValue(Number(setting, "least") ?? 0),
+            "flag" => Values.Bool(false),
+            "choice" => new StringValue(choices![0]),
+            _ => new StringValue(string.Empty)
+        };
+
+        var made = new ExtensionSetting(key, Text(setting, "title") ?? key, Text(setting, "about") ?? string.Empty, kind, fallback,
+            choices, kind == "choice" ? Texts(setting, "labels") : null, kind == "choice" ? Texts(setting, "help") : null,
+            Number(setting, "least") ?? 0.0f, Number(setting, "most") ?? 0.0f, Number(setting, "step") ?? 0.0f,
+            setting.Properties.TryGetValue("slider", out IRuntimeValue? slides) && slides is BooleanValue { Value: true });
+
+        // A default that doesn't fit is what it would be made to, the first choice or a number brought between its ends
+        return made.Fitted(fallback) is { } fits ? made with { Default = fits } : kind == "choice" ? made with { Default = new StringValue(choices![0]) } : made;
+    }
 }

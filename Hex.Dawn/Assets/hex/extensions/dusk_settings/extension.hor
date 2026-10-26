@@ -19,49 +19,35 @@ func on_start(hex) {
         icon: "settings-gear",
         layout: "settings_view.hor",
         when: "dusk_settings",
-        open: func(ui, file) { open_form(hex, ui, file); },
+        open: (ui, file) => { open_form(hex, ui, file); },
         right: false
     });
 }
 
 func open_form(hex, ui, file) {
     let form = ui.get("form");
-    let described = hex.terminal_settings(file);
-    form.fields = described.fields;
-    form.values = described.values;
+    let { fields, values } = hex.terminal_settings(file);
+    form.fields = fields;
+    form.values = values;
     views[file] = form;
 
-    form.on_changed = func(key, said) {
+    form.on_changed = (key, said) => {
         // Edited where it is written, the terminal's section of the file (or the top of one from before the sections),
         // put in at the end of the section when the file doesn't say it yet, a list's flags as a list
         let value = hex.terminal_setting_value(key, said);
         let why = hex.edit(file, ["settings", "terminal", key], value);
-        if (why != null) {
-            why = hex.edit(file, ["settings", key], value);
-        }
-        if (why != null) {
-            why = hex.insert(file, ["settings", "terminal"], key, value);
-        }
-        if (why != null) {
-            why = hex.insert(file, ["settings"], key, value);
-        }
-        if (why != null) {
-            hex.say(`{key} couldn't be written, {why}`);
-        }
+        if (why != null) why = hex.edit(file, ["settings", key], value);
+        if (why != null) why = hex.insert(file, ["settings", "terminal"], key, value);
+        if (why != null) why = hex.insert(file, ["settings"], key, value);
+        if (why != null) hex.say(`{key} couldn't be written, {why}`);
     };
 
-    form.on_cleared = func(key) {
-        if (hex.remove(file, ["settings", "terminal", key]) != null) {
-            hex.remove(file, ["settings", key]);
-        }
+    form.on_cleared = key => {
+        if (hex.remove(file, ["settings", "terminal", key]) != null) hex.remove(file, ["settings", key]);
     };
 }
 
 // The file typed into (or edited by the form), the form says what it says now
 func on_run(hex, file) {
-    for (let each in views) {
-        if (each == file) {
-            views[each].values = hex.terminal_settings(file).values;
-        }
-    }
+    if (file in views) views[file].values = hex.terminal_settings(file).values;
 }

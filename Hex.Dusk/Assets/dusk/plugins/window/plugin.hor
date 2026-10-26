@@ -8,7 +8,7 @@ let plugin = {
     author: "bogz"
 };
 
-dusk.command("quit", "Quit", func(dusk) { dusk.quit(); }, "Ctrl+Shift+F4");
-dusk.command("settings", "Settings", func(dusk) { dusk.settings(); }, "Ctrl+,");
-dusk.command("quake", "Drop down from the top of the screen, and back up", func(dusk) { dusk.quake(); }, "");
-dusk.command("dawn_mode", "Dawn, the editor, in this window", func(dusk) { dusk.dawn_mode(); }, "Ctrl+Alt+D");
+dusk.command("quit", "Quit", dusk => dusk.quit(), "Ctrl+Shift+F4");
+dusk.command("settings", "Settings", dusk => dusk.settings(), "Ctrl+,");
+dusk.command("quake", "Drop down from the top of the screen, and back up", dusk => dusk.quake(), "");
+dusk.command("dawn_mode", "Dawn, the editor, in this window", dusk => dusk.dawn_mode(), "Ctrl+Alt+D");

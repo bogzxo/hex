@@ -5,9 +5,10 @@ namespace Hex.Core;
 
 /// <summary>
 /// HIDL's inlay hints, the name of the parameter each argument of a call goes to, for the functions a file declares
-/// itself (func name(a, b), or let name = func(a, b)). An argument that's already a name the same as its parameter
-/// goes without, it'd only say the same thing twice. Worked out from the tokens, so a file halfway through being typed
-/// still gets what can be made out of it.
+/// itself (func name(a, b), let name = func(a, b), let name = (a, b) =&gt; or let name = a =&gt;). A parameter with a default
+/// (b = 2) still says its name. An argument that's already a name the same as its parameter goes without, it'd only say
+/// the same thing twice. Worked out from the tokens, so a file halfway through being typed still gets what can be made
+/// out of it.
 /// </summary>
 public static class HidlInlays
 {
@@ -22,7 +23,7 @@ public static class HidlInlays
                 tokens.Add(token);
         }
 
-        Dictionary<string, string[]> functions = Declared(tokens);
+        var functions = HidlFunctions.Declared([.. tokens]).ToDictionary(pair => pair.Key, pair => pair.Value.Select(parameter => parameter.Value).ToArray(), StringComparer.Ordinal);
         var found = new List<UICodeInlay>();
         if (functions.Count == 0)
             return found;
@@ -39,40 +40,6 @@ public static class HidlInlays
         }
 
         return found;
-    }
-
-    // The functions the tokens declare and the names of their parameters
-    private static Dictionary<string, string[]> Declared(List<Token> tokens)
-    {
-        var functions = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        for (int i = 0; i + 2 < tokens.Count; i++)
-        {
-            // func name(...) or let name = func(...)
-            int open;
-            string name;
-            if (tokens[i].Type == TokenType.Function && tokens[i + 1].Type == TokenType.Identifier && tokens[i + 2].Type == TokenType.OpenParenthesis)
-                (name, open) = (tokens[i + 1].Value, i + 2);
-            else if (tokens[i].Type is TokenType.Let or TokenType.Const && i + 4 < tokens.Count && tokens[i + 1].Type == TokenType.Identifier
-                && tokens[i + 2].Type == TokenType.Equals && tokens[i + 3].Type == TokenType.Function && tokens[i + 4].Type == TokenType.OpenParenthesis)
-                (name, open) = (tokens[i + 1].Value, i + 4);
-            else
-                continue;
-
-            var parameters = new List<string>();
-            int at = open + 1;
-            for (; at < tokens.Count && tokens[at].Type != TokenType.CloseParenthesis; at++)
-            {
-                if (tokens[at].Type == TokenType.Identifier)
-                    parameters.Add(tokens[at].Value);
-                else if (tokens[at].Type != TokenType.Comma)
-                    break;
-            }
-
-            if (at < tokens.Count && tokens[at].Type == TokenType.CloseParenthesis && parameters.Count > 0)
-                functions[name] = [.. parameters];
-        }
-
-        return functions;
     }
 
     // Each argument of a call from its open bracket, a hint before it with the parameter it goes to

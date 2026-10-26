@@ -48,22 +48,22 @@ internal sealed partial class DawnScene
         UITreeItem? Row(string path) => explorer.explorerRows.FirstOrDefault(row => PlatformPaths.Same(row.Path, path)).Row;
 
         test.Run(explorer.ShowExplorer);
-        test.WaitFor(() => Row(changed)?.Detail == "M", 5.0f);
-        test.Check("git: a file changed since the commit is the warning colour with an M after it", () =>
-            Row(changed) is { Detail: "M" } row && row.Color == compositor.Skin!.Palette.Warning);
+        test.WaitFor(() => Row(changed)?.Badge == "M", 5.0f);
+        test.Check("git: a file changed since the commit is the warning colour with an M at its end in the same colour", () =>
+            Row(changed) is { Badge: "M" } row && row.Color == compositor.Skin!.Palette.Warning && row.BadgeColor == row.Color && row.Detail == "");
         test.Check("git: one nobody added is new, success with a U, and so is its folder", () =>
-            Row(added) is { Detail: "U" } row && row.Color == compositor.Skin!.Palette.Success
+            Row(added) is { Badge: "U" } row && row.Color == compositor.Skin!.Palette.Success
             && Row(Path.Combine(repo, "src")) is { } folder && folder.Color == compositor.Skin!.Palette.Success);
-        test.Check("git: one as committed is as it always was", () => Row(same) is { Detail: "" } row && row.Color is null);
+        test.Check("git: one as committed is as it always was", () => Row(same) is { Badge: "" } row && row.Color is null);
         test.Check("git: an ignored folder is dim", () => Row(Path.Combine(repo, "built")) is { } row && row.Color == DimColor);
 
         // Refresh, the button at the end of the side bar's title, reads a file made outside of Hex straight away
         string outside = Path.Combine(repo, "made_outside.txt");
         test.Run(() => File.WriteAllText(outside, "hello\n"));
         test.Click(At(() => refreshButton));
-        test.WaitFor(() => Row(outside) is { Detail: "U" }, 3.0f);
+        test.WaitFor(() => Row(outside) is { Badge: "U" }, 3.0f);
         test.Check("refresh: the button is there on the explorer and a file made outside is read with its colour", () =>
-            refreshButton.Visible && Row(outside) is { Detail: "U" });
+            refreshButton.Visible && Row(outside) is { Badge: "U" });
 
         test.Run(() => Open(changed));
         test.Wait();
@@ -133,8 +133,9 @@ internal sealed partial class DawnScene
             Git(repo, "add", "changed.txt");
             Git(repo, "commit", "-q", "-m", "Second go");
         });
-        test.WaitFor(() => Row(changed)?.Detail == "", 5.0f);        test.Check("git: a commit made outside of Hex takes the colour off again", () =>
-            Row(changed) is { Detail: "" } row && row.Color is null && docTabs.Tabs.First(tab => tab.Tag == document).TitleColor is null);
+        test.WaitFor(() => Row(changed)?.Badge == "", 5.0f);
+        test.Check("git: a commit made outside of Hex takes the colour off again", () =>
+            Row(changed) is { Badge: "" } row && row.Color is null && docTabs.Tabs.First(tab => tab.Tag == document).TitleColor is null);
         test.WaitFor(() => code.LineChanges.Count == 0, 3.0f);
         test.Check("gutter: and the bars go with it", () => code.LineChanges.Count == 0);
 
@@ -145,8 +146,9 @@ internal sealed partial class DawnScene
 
         test.Run(() => ShowSide(HexSide.SourceControl));
         test.WaitFor(() => Under("Changes", added) is not null, 4.0f);
-        test.Check("source control: the side lists what's changed, a new file with its U", () =>
-            Side == HexSide.SourceControl && Under("Changes", added) is { Detail: { } detail } && detail.EndsWith("U", StringComparison.Ordinal));
+        test.Check("source control: the side lists what's changed, a new file with its folder dim and its U at the end in the success colour", () =>
+            Side == HexSide.SourceControl && Under("Changes", added) is { Detail: "src", Badge: "U" } row && row.BadgeColor == compositor.Skin!.Palette.Success
+            && row.Color == row.BadgeColor && row.Parent is { Text: "Changes", Badge: "2" });
         test.RightClick(TreeRow(() => Under("Changes", added)));
         test.Wait();
         PickFromMenu("Stage");
@@ -173,6 +175,12 @@ internal sealed partial class DawnScene
             GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Add the new one" && Under("Staged Changes", added) is null
             && GitProcess.Run(repo, ["log", "-1", "--format=%B"]).Output.Contains("# Why\nSo there's **something** in src", StringComparison.Ordinal));
         test.Run(() => chrome.Dialog?.Close());
+
+        // The buttons on a row, the keys of the tree, amending and undoing, and a deleted file's diff
+        TestSourceControlRows(test, repo, outside, added, same, Under, SideRows);
+
+        // Editor · Git's settings and what they change, with nothing staged now and one file nobody added
+        TestGitSettings(test, repo);
 
         // A diff of what's changed, and one change staged and another reverted from the gutter's menu
         HexDocument? edited = null;
@@ -375,11 +383,25 @@ internal sealed partial class DawnScene
             Git(other, "add", ".");
             Git(other, "commit", "-q", "-m", "Their commit");
             Git(other, "push", "-q");
+            Git(repo, "fetch", "-q");
+            git.Refresh(repo);
+            settings.GitPullMode = "rebase";
         });
+
+        // Sync asks first, how many come and go and with where, the way VS Code's git.confirmSync does
+        string syncButton = Said("git.sync");
+        test.WaitFor(() => syncItem.Text.Contains("1$(arrow-down)", StringComparison.Ordinal), 5.0f);
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(syncItem).Center));
-        test.WaitFor(() => File.Exists(Path.Combine(repo, "theirs.txt")), 10.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && textDialog.Buttons.Any(button => button.Label == syncButton), 3.0f);
+        test.Check("sync: Sync asks first, pulling 1 and pushing 0 with origin/main", () =>
+            textDialog is { IsOpen: true } dialog && dialog.Buttons.Any(button => button.Label == syncButton) && !File.Exists(Path.Combine(repo, "theirs.txt"))
+            && Descendants(dialog).OfType<Label>().Any(label => label.Text.Contains("Pull 1 and push 0 commits with origin/main", StringComparison.Ordinal)));
+        test.Run(() => textDialog?.Buttons.First(button => button.Label == syncButton).OnPressed?.Invoke());
+        test.WaitFor(() => said.Any(line => line.Text.Contains("git push done", StringComparison.Ordinal)), 10.0f);
         test.Check("sync: Sync pulls in what somebody else pushed", () =>
             File.Exists(Path.Combine(repo, "theirs.txt")) && GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Their commit");
+        test.Check("settings: pull mode rebase reaches git pull", () => said.Any(line => line.Text == "git pull --rebase, git push done"));
+        test.Run(() => settings.GitPullMode = "default");
 
         // A folder of repositories as the workspace, each of them on the Source Control side under its name
         string nest = Path.Combine(testFolder, "git_nest");
@@ -405,6 +427,9 @@ internal sealed partial class DawnScene
             explorer.RemoveFolder(nest);
             DeleteGitFolder(nest);
         });
+
+        // A merge with a conflict in a repository of its own, the box for the commit that finishes it filled in from git's
+        TestMergeMessage(test, SideRows);
 
         test.Run(() =>
         {

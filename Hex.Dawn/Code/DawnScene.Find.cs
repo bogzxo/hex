@@ -105,18 +105,15 @@ internal sealed partial class DawnScene
         // The folder by its name and not its whole path, a line along the bottom of the palette and not a paragraph
         var roots = WorkspaceRoots();
         string where = roots.Count == 1 ? Path.GetFileName(roots[0].TrimEnd('/', '\\')) : DescribeRoots();
-        List<(string Text, Action Picked)> choices = [.. names.Select(name => (name, (Action)(() => OpenAt(byName[name], 0, 0))))];
+        List<UIChoice> choices = [.. names.Select(name => FileChoice(name, byName[name]))];
 
         // Nothing in the workspace (there's none yet), the files worked on last and a folder to open, it said there was
         // nothing to pick from
         if (choices.Count == 0)
         {
             foreach (string file in recent.Where(File.Exists).Take(10))
-            {
-                string path = file;
-                choices.Add((path, () => OpenAt(path, 0, 0)));
-            }
-            choices.Add((Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)));
+                choices.Add(FileChoice(file, file));
+            choices.Add(new UIChoice(Said("find_menu.open_folder"), () => explorer.AskFolder(explorer.OpenFolder)) { Icon = "folder-opened" });
         }
 
         // Ctrl+G's says what it's going along, the file's lines, not quick open's way of finding a file
@@ -127,27 +124,48 @@ internal sealed partial class DawnScene
             choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
     }
 
+    /// <summary>
+    /// A file of quick open's, VS Code's way, its icon, its name bright and its folder dim after it. It's known (and ranked
+    /// and remembered) by the whole of where it is in the workspace, so a folder typed still finds it.
+    /// </summary>
+    private UIChoice FileChoice(string shown, string path)
+    {
+        string folder = Path.GetDirectoryName(shown)?.Replace('\\', '/') ?? string.Empty;
+        return new UIChoice(Path.GetFileName(shown), () => OpenAt(path, 0, 0))
+        {
+            Detail = folder,
+            Icon = HexExplorer.FileIcon(path),
+            IconColor = explorer.FileIconColor(path),
+            Id = shown
+        };
+    }
+
     /// <summary>What quick open lists for what is typed after a prefix, VS Code's, null for a character that isn't one.</summary>
-    private List<(string Text, Action Picked)>? QuickOpenPrefix(char prefix)
+    private List<UIChoice>? QuickOpenPrefix(char prefix)
     {
         switch (prefix)
         {
             case '>':
-                return AllCommands();
+                return PaletteChoices();
 
             case '@':
-                return [.. OutlineHere().Select(entry => (new string(' ', entry.Depth * 2) + entry.Name, (Action)(() => running.GoToCode(entry.Line, entry.Column))))];
+                return [.. OutlineHere().Select(entry => new UIChoice(entry.Name, () => running.GoToCode(entry.Line, entry.Column))
+                {
+                    Icon = entry.Icon,
+                    IconColor = OutlineColor(entry.Icon),
+                    Id = new string(' ', entry.Depth * 2) + entry.Name
+                })];
 
             case ':':
                 // Every line by its number with what's on it dim after, a few letters of the number find the one. Bare
                 // numbers said nothing of which line was which
-                var lines = new List<(string Text, Action Picked)>();
+                var lines = new List<UIChoice>();
                 int count = code.Document.LineCount;
                 for (int line = 1; line <= count; line++)
                 {
                     int at = line - 1;
                     string on = code.Document.LineAt(at).Trim();
-                    lines.Add((on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
+                    lines.Add(UIChoice.Of(on.Length > 0 ? $"{line}\t{HexEvaluation.Shorten(on, 90)}" : $"{line}", () =>
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
@@ -156,7 +174,12 @@ internal sealed partial class DawnScene
                 return lines;
 
             case '#':
-                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => ($"{key}   {HexEvaluation.Shorten(Localisation.Get(key), 60)}", (Action)(() => codeEditing.GoToKey(key))))];
+                // A text by its key, what it says dim after it
+                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key =>
+                {
+                    string says = HexEvaluation.Shorten(Localisation.Get(key), 60);
+                    return new UIChoice(key, () => codeEditing.GoToKey(key)) { Detail = says, Icon = "symbol-string", Id = $"{key}   {says}" };
+                })];
 
             default:
                 return null;

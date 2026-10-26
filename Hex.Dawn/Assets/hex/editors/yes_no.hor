@@ -2,5 +2,5 @@
 #define layout
 
 let toggle = compositor.toggle({
-    size: vec(220, 28)
+    size: vec(220, 28),
 });

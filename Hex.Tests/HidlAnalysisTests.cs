@@ -81,6 +81,57 @@ public sealed class HidlAnalysisTests
     }
 
     [Fact]
+    public void A_name_taken_out_of_something_is_declared_where_it_is_taken()
+    {
+        const string text = "let s = { from: 1, to: 2 };\nlet { from, to } = s;\nlet [first, second] = [1, 2];";
+        Assert.Equal((1, 6), HidlAnalysis.FindDeclaration(text, "from"));
+        Assert.Equal((1, 12), HidlAnalysis.FindDeclaration(text, "to"));
+        Assert.Equal((2, 12), HidlAnalysis.FindDeclaration(text, "second"));
+        Assert.Contains("made on line 2", HidlAnalysis.Hover(text + "\nprint(to);", 3, 7));
+    }
+
+    [Fact]
+    public void A_func_is_declared_where_its_name_is()
+    {
+        const string text = "func box(at, size = vec(16)) { return at; }\nbox(1);";
+        Assert.Equal((0, 5), HidlAnalysis.FindDeclaration(text, "box"));
+    }
+
+    [Fact]
+    public void A_name_used_inside_a_function_or_a_loop_means_the_nearest_one_round_it()
+    {
+        const string text = "let item = 0;\n"
+            + "let f = (item, size = 2) => item * size;\n"
+            + "func g(at, item) { return item; }\n"
+            + "for (key, item in things) print(item);\n"
+            + "let h = item => { let at = item; return at; };\n"
+            + "print(item);";
+
+        // The arrow's parameter, at line 1, over the outer let
+        Assert.Equal((1, 9), HidlAnalysis.FindDeclaration(text, "item", 1, 29));
+        Assert.Equal((1, 15), HidlAnalysis.FindDeclaration(text, "size", 1, 37));
+        Assert.Equal((2, 11), HidlAnalysis.FindDeclaration(text, "item", 2, 27));
+        Assert.Equal((3, 10), HidlAnalysis.FindDeclaration(text, "item", 3, 33));
+        Assert.Equal((4, 8), HidlAnalysis.FindDeclaration(text, "item", 4, 27));
+        Assert.Equal((4, 22), HidlAnalysis.FindDeclaration(text, "at", 4, 40));
+
+        // Out of all of them it's the let at the top again, and without a place it's the first let or func
+        Assert.Equal((0, 4), HidlAnalysis.FindDeclaration(text, "item", 5, 7));
+        Assert.Equal((0, 4), HidlAnalysis.FindDeclaration(text, "item"));
+        Assert.Null(HidlAnalysis.FindDeclaration(text, "key"));
+        Assert.Contains("made on line 4", HidlAnalysis.Hover(text, 3, 33));
+    }
+
+    [Fact]
+    public void The_new_ways_of_writing_parse_without_a_mistake()
+    {
+        Assert.Empty(HidlAnalysis.SyntaxErrors(
+            "let twice = x => x * 2;\nfunc f(a, b = 2) { if (a in [1, 2]) return b; for (k, v in { a: 1 }) print(k); }\n" +
+            "let o = { [\"k\"]: 1 };\ndelete o.k;\nlet { a } = { a: 1 };\nlet n = o?.[\"k\"];"));
+        Assert.Contains("**in**", HidlAnalysis.Hover("let a = 1 in [1];", 0, 11));
+    }
+
+    [Fact]
     public void A_hover_says_what_a_word_is()
     {
         const string text = "// @doc How fast it goes\nlet speed = 4;\nprint(speed);";

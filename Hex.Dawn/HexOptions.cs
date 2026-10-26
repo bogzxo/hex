@@ -17,4 +17,6 @@ namespace Hex.Dawn;
 /// <param name="Console">Lines to run in the HIDL console once the file's values are in, the console up with them.</param>
 /// <param name="Suites">Which parts of the self-test to run (layout, code, workspace, extensions, garbage), empty for all of them.</param>
 /// <param name="Line">The line the file of Open is opened at, 1 for the first, 0 for wherever it was.</param>
-internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null);
+/// <param name="Folder">The folder the workspace is, only its own tabs and backups brought back, null for the workspace of last time.</param>
+/// <param name="Fresh">Whether the editor starts clean, no workspace, tabs, backups or last file brought back, settings and keys still read.</param>
+internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null, bool Fresh = false);

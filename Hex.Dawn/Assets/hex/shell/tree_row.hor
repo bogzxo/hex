@@ -6,7 +6,7 @@ let row = compositor.button({
     anchor: "left",
     style: "button_flat",
     size: vec(262, 26),
-    animated: false
+    animated: false,
 });
 let caption = compositor.label({
     parent: row,
@@ -14,5 +14,5 @@ let caption = compositor.label({
     anchor: "left",
     text: "name (kind)",
     text_scale: 0.14,
-    align: "left"
+    align: "left",
 });

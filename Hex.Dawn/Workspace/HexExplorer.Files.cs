@@ -289,6 +289,8 @@ internal sealed partial class HexExplorer
     /// </summary>
     internal static string FileIcon(string path)
     {
+        // A backup has the icon of what it was a copy of, Foo.cs.orig a C# file's
+        path = CodeLanguages.WithoutBackupSuffix(path);
         string name = Path.GetFileName(path);
         string extension = Path.GetExtension(path).ToLowerInvariant();
 
@@ -311,6 +313,7 @@ internal sealed partial class HexExplorer
         if (compositor.Skin?.Syntax is not { } syntax)
             return null;
 
+        path = CodeLanguages.WithoutBackupSuffix(path);
         return Path.GetExtension(path).Equals(".hexspace", StringComparison.OrdinalIgnoreCase) ? syntax.Declaration : UIFileKinds.ColourOf(path, syntax);
     }
 

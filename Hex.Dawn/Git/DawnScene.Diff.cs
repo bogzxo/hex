@@ -40,6 +40,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ShowGitDiff(GitRepository repository, string path, bool staged, int line = -1)
     {
+        // A file a merge left conflicts in is settled in the file itself, the way VS Code opens it from Merge Changes,
+        // its blocks lit and their lenses there to click, rather than a diff of it nobody can settle anything in
+        if (!staged && git.StateOf(path).Change == GitChange.Conflicted && File.Exists(path))
+        {
+            OpenConflicted(path);
+            return;
+        }
+
         string? editorText = staged ? null : documents.Find(open => open.Path is { } openPath && open.Picture is null && PlatformPaths.Same(openPath, path))?.Editor.Text;
         InBackground("git diff", () =>
         {
@@ -85,6 +93,7 @@ internal sealed partial class DawnScene
 
         shown.Name = title;
         shown.Editor.ReadOnly = true;
+        shown.Editor.CheckSyntax = false;
         shown.Editor.Highlighter = CodeLanguages.ForFile(path);
         SetCode(shown, diff.Text, fresh: true);
         shown.SavedCode = shown.Editor.Text;
@@ -93,6 +102,10 @@ internal sealed partial class DawnScene
         Vector4 gone = ErrorColor with { W = 0.18f }, came = (compositor.Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.16f };
         shown.Editor.LineHighlights = [.. diff.Runs.Select(run => new UICodeLineHighlight(run.Line, run.Count, run.Added ? came : gone))];
         shown.Editor.LineChanges = [.. diff.Runs.Select(run => new UICodeLineChange(run.Line, run.Count, run.Added ? UILineChangeKind.Added : UILineChangeKind.Removed))];
+
+        // The words that changed stronger over the lines they changed in, a number changed is the number and not the line
+        Vector4 goneWord = gone with { W = 0.38f }, cameWord = came with { W = 0.34f };
+        shown.Editor.RangeHighlights = [.. diff.Words.Select(word => new UICodeRangeHighlight(word.Line, word.Column, word.Length, word.Added ? cameWord : goneWord))];
 
         // Opened from the Source Control side it stays on that side, going to a tab put the side back to the one of its kind
         HexSide was = Side;
