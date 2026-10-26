@@ -1,4 +1,4 @@
-# Hex
+# Modern Motherfucking Code Editor
 
 **This is an IDE. It opens, you write code, and it gets the fuck out of your way.**
 
