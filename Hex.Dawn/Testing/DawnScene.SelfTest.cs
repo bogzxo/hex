@@ -227,6 +227,8 @@ internal sealed partial class DawnScene
         ("tools", "the catalog's editing extensions on the real editor, Text tools sorting the selected lines, a snippet written out and gone through on Tab", TestTools),
         ("catalog","the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
+        ("automations", "the automations of a tasks.hor in the palette, HIDL run off the editor's thread and stopped, a command line in a tab, and the workspace's Push all against repositories made for it", TestAutomations),
+        ("run_target", "the arrow beside Run, a run task picked, kept with the workspace and run by F5, and the file on screen again", TestRunTarget),
         ("properties", "the Properties panel, a file of a C# project given Copy if newer and a Build Action, several files, a folder, a picture, a component", TestProperties),
         ("menus", "every menu twenty rows at most and no two rules in a row, every list a menu opens inside the window, a menu taller than the window scrolling", TestMenus),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),

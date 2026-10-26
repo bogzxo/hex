@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
         }
 
         commands.AddRange(UIChooser.Rows([.. extensions.Commands()]));
+        commands.AddRange(tasks.AutomationChoices());
         commands.AddRange(UIChooser.Rows(SettingsPaletteCommands()));
 
         // The terminal's commands, the same ones Dusk has, under a heading of their own, a title once (Dusk's palette has why)

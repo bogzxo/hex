@@ -98,6 +98,18 @@ let play_button = compositor.button({
     animated: false,
 });
 
+let run_target_button = compositor.button({
+    parent: toolbar,
+    size: vec(18, 28),
+    tooltip: "@run_target.tip",
+    hover: "lift",
+    hover_amount: 1.5,
+    hover_time: 0.08,
+    icon: "chevron-down",
+    style: "button_flat",
+    animated: false,
+});
+
 let name_box = compositor.textbox({
     parent: toolbar,
     size: vec(160, 24),

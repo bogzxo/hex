@@ -118,6 +118,12 @@ internal interface IWorkspace
     /// <summary>The folders things are looked for in, the workspace's, or the repository Hex runs from without one.</summary>
     IReadOnlyList<string> Roots { get; }
 
+    /// <summary>The .hex-workspace file the workspace is saved in, null for one that never was.</summary>
+    string? File { get; }
+
+    /// <summary>What F5 and the Run button run, null for the file on screen, kept with the workspace as it's set.</summary>
+    HexRunTarget? RunTarget { get; set; }
+
     /// <summary>A file by where it is in the folders things are looked for in, with the name of its folder in front when there is more than one.</summary>
     string Relative(string path);
 
@@ -262,9 +268,10 @@ internal interface ITerminals
     /// <summary>
     /// Runs a command line in a terminal tab of its own, known by a key: the tab of that key again while its shell is
     /// still there, a new one in a folder otherwise, named so. The page is brought up with it. Once it's done how it
-    /// ended and what it wrote are said to whoever asked.
+    /// ended and what it wrote are said to whoever asked. A shell named (the id of a profile, git_bash) has a new tab
+    /// started in it rather than the usual one.
     /// </summary>
-    void RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished = null);
+    void RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished = null, string? shell = null);
 
     /// <summary>How many errors the terminals have said there are (a build's), the ones in the Problems panel.</summary>
     int TerminalErrors { get; }

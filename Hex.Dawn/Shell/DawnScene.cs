@@ -209,7 +209,7 @@ internal sealed partial class DawnScene : Scene
         debugger = new HexDebugging(Context);
         BuildDebugBar();
         AddHelpCommands();
-        tasks = new HexTasks(Context) { RestartInto = RestartInto };
+        tasks = new HexTasks(Context) { RestartInto = RestartInto, Extensions = extensions };
         BuildProperties();
         languages.StartChecks();
         BuildEffects();
@@ -498,6 +498,7 @@ internal sealed partial class DawnScene : Scene
         UpdateFileChanges();
         languages.Update(dt);
         git.Update(dt);
+        tasks.Update(dt);
         running.UpdateValueBox();
     }
 

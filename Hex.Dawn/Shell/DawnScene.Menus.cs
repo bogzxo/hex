@@ -20,6 +20,7 @@ internal sealed partial class DawnScene
     private void WireToolbar()
     {
         layout.Get<Button>("play_button").OnPressed = RunOrPlay;
+        WireRunTarget();
         WireExplorerMenu();
     }
 
@@ -50,10 +51,14 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// F5, the file run, or the entrances of a layout played in its designer. A file that isn't HIDL runs the run task,
-    /// and with no run task Set Up F5 comes up for it. It was run as HIDL, which no D or Python ever was.
+    /// and with no run task Set Up F5 comes up for it. It was run as HIDL, which no D or Python ever was. Something picked
+    /// beside the Run button runs instead of the file (DawnScene.RunTarget), unless a layout is in its designer.
     /// </summary>
     private void RunOrPlay()
     {
+        if (!debugger.DebugStopped && !LayoutTools && RunChosen(debug: true))
+            return;
+
         // C# and D are debugged when there's a debugger to do it with (netcoredbg, lldb-dap), breakpoints or not, the way F5
         // is in VS Code, and Ctrl+F5 runs without it. While something is being debugged F5 goes on from where it stopped.
         // D was only debugged with a breakpoint and C# always, F5 meant two things. Without netcoredbg F5 builds and runs
@@ -78,7 +83,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void RunWithoutDebugging()
     {
-        if (LayoutTools)
+        if (LayoutTools || RunChosen(debug: false))
             return;
 
         if (document.IsText && document.Path is { } path && !IsHidl(path))

@@ -1394,6 +1394,34 @@ let strings = {
         }
     },
 
+    // Automations, the automations of a tasks.hor, somebody's own commands of the palette and the Terminal menu
+    automations: {
+        run_automation: "Run Automation...",
+        palette: "Automation",
+        none: "there are no automations, a tasks.hor declares them in an object called automations next to its tasks",
+        choose_title: "Run automation",
+        choose_prompt: "The automations of the workspace's tasks.hor files",
+        already_running: "{name} is running already, its card is up",
+        running: "running {name}",
+        work_title: "{name}",
+        ended: "{name} done",
+        stopped: "{name} was stopped",
+        failed: "{name} stopped, {why}",
+        no_shell: "{name} runs in {shell}, and there's no {shell} here",
+        no_run: "the automation {name} of {file} has no run function, a command or a script",
+        printed: "{name}: {text}"
+    },
+
+    // The arrow beside Run, what F5 and the Run button run
+    run_target: {
+        tip: "What F5 and Run run, a run task, a .NET program or the file on screen",
+        title: "Run",
+        current_file: "Current file",
+        current_file_detail: "the file on screen, the way F5 always went",
+        chosen: "F5 runs {name} now",
+        run_tip: "Run {name}, {detail} (F5, Ctrl+F5 without the debugger)"
+    },
+
     background: {
         went_wrong: "{doing} went wrong, {error}",
         work_tip: "What Hex is doing in the background, click to see it and stop any of it",

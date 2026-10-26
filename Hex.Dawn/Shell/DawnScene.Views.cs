@@ -58,11 +58,8 @@ internal sealed partial class DawnScene
         nameBox.Visible = !document.IsText;
         layout.Get<Label>("inspector_title").Text = Said(tools ? "properties.title" : "properties.file");
 
-        var play = layout.Get<Button>("play_button");
-        play.Label = Said(tools ? "toolbar.play" : "toolbar.run");
-        play.Tooltip = Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
-        play.Visible = Runnable(document);
-        layout.Get<UIComponent>("tools_rule3").Visible = play.Visible;
+        // Play or Run, or what was picked to run beside it (DawnScene.RunTarget)
+        ShowRunTarget();
 
         if (tools || table || extension || picture)
             code.Unfocus();

@@ -191,11 +191,27 @@ internal sealed partial class HexDebugging
     }
 
     /// <summary>
-    /// The projects F5 could mean. The one over the file on screen first and alone when there is one, the first .csproj
-    /// going up from its folder, otherwise every one in the workspace.
+    /// A project picked to run beside the Run button built and started under the debugger, or said to be going already.
+    /// F5 with a project picked debugs it whatever file is on screen.
+    /// </summary>
+    internal void DebugProject(string project)
+    {
+        if (Debugging)
+            context.Notices.Say(context.Strings.Said("debugging.already_running"));
+        else
+            StartDebugging(project);
+    }
+
+    /// <summary>
+    /// The projects F5 could mean. The project picked beside the Run button when it's a .csproj, the one over the file on
+    /// screen first and alone when there is one, the first .csproj going up from its folder, otherwise every one in the
+    /// workspace.
     /// </summary>
     private List<string> ProjectsToDebug()
     {
+        if (context.Workspace.RunTarget is { Kind: HexRunTarget.PROJECT, Path: var picked } && picked.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && File.Exists(picked))
+            return [picked];
+
         if (context.Documents.Current.Path is { } path)
         {
             for (string? folder = Path.GetDirectoryName(Path.GetFullPath(path)); folder is not null; folder = Path.GetDirectoryName(folder))
