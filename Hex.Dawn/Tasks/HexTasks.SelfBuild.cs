@@ -20,7 +20,7 @@ internal sealed partial class HexTasks
     /// <summary>The commands of building Hex itself, made with the rest of the tasks'.</summary>
     private void AddSelfBuildCommands()
     {
-        context.Commands.Add("Run/tasks", context.Strings.Said("tasks.restart_new_build"), RestartIntoNewBuild, icon: "debug-restart")
+        context.Commands.Add("Help/developer/developer", context.Strings.Said("tasks.restart_new_build"), RestartIntoNewBuild, icon: "debug-restart")
             .IsEnabled = () => NewBuildReady;
     }
 

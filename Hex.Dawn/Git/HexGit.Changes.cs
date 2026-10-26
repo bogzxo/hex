@@ -42,8 +42,12 @@ internal sealed partial class HexGit
     /// <summary>Every tick, git's copy read again for the files whose repository was looked at, and their lines measured once typing stops.</summary>
     private void UpdateChanges(float dt)
     {
-        foreach (HexDocument document in context.Documents.All)
+        // By index and with the work handed off to methods of their own, the closures they need are made only when
+        // there's something to ask git and not for every open file on every tick
+        IReadOnlyList<HexDocument> all = context.Documents.All;
+        for (int i = 0; i < all.Count; i++)
         {
+            HexDocument document = all[i];
             if (document.Path is not { } path || document.Picture is not null || RepositoryOf(path) is not { } repository)
                 continue;
 
@@ -55,34 +59,44 @@ internal sealed partial class HexGit
 
             // A new look at the repository (a save, a commit, a stage) has git's copy read again
             if (known.StagedGeneration != repository.Generation && !known.Fetching && repository.Status is not null)
-            {
-                known.Fetching = true;
-                int generation = repository.Generation;
-                bool fresh = repository.Status.StateOf(path).Change == GitChange.Untracked;
-                context.Work.InBackground("git show", () => fresh ? null : repository.Git.Staged(path), staged =>
-                {
-                    known.Fetching = false;
-                    known.StagedGeneration = generation;
-                    known.Staged = staged;
-                    known.DiffIn = 0.01f;
-                }, quiet: true);
-            }
+                ReadStaged(known, repository, path);
 
             if (known.DiffIn <= 0.0f || known.Diffing || known.StagedGeneration < 0 || (known.DiffIn -= dt) > 0.0f)
                 continue;
 
-            known.DiffIn = 0.0f;
-            known.Diffing = true;
-            string? before = known.Staged;
-            string after = document.Editor.Text;
-            context.Work.InBackground("git diff", () => before is null ? [] : GitLineDiff.Diff(GitLineDiff.Lines(before), GitLineDiff.Lines(after)), hunks =>
-            {
-                known.Diffing = false;
-                known.Hunks = hunks;
-                document.Editor.LineChanges = [.. hunks.SelectMany(LineChangesOf)];
-                context.Redraw();
-            }, quiet: true);
+            Diff(known, document);
         }
+    }
+
+    // Helper method to read git's copy of a file in the background
+    private void ReadStaged(Tracked known, Repository repository, string path)
+    {
+        known.Fetching = true;
+        int generation = repository.Generation;
+        bool fresh = repository.Status!.StateOf(path).Change == GitChange.Untracked;
+        context.Work.InBackground("git show", () => fresh ? null : repository.Git.Staged(path), staged =>
+        {
+            known.Fetching = false;
+            known.StagedGeneration = generation;
+            known.Staged = staged;
+            known.DiffIn = 0.01f;
+        }, quiet: true);
+    }
+
+    // Helper method to measure the lines of a file against git's copy in the background
+    private void Diff(Tracked known, HexDocument document)
+    {
+        known.DiffIn = 0.0f;
+        known.Diffing = true;
+        string? before = known.Staged;
+        string after = document.Editor.Text;
+        context.Work.InBackground("git diff", () => before is null ? [] : GitLineDiff.Diff(GitLineDiff.Lines(before), GitLineDiff.Lines(after)), hunks =>
+        {
+            known.Diffing = false;
+            known.Hunks = hunks;
+            document.Editor.LineChanges = [.. hunks.SelectMany(LineChangesOf)];
+            context.Redraw();
+        }, quiet: true);
     }
 
     // A hunk as the gutter draws it, lines taken out marked where they were in the new text. One line changed into three is

@@ -110,7 +110,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     private Action<IReadOnlyList<(string Path, LanguageServerFileChange Change)>>? filesChanged;
 
     IReadOnlyList<string> IWorkspace.Folders => explorer.workspace.Folders;
-    IReadOnlyList<string> IWorkspace.Roots => WorkspaceRoots();
+    IReadOnlyList<string> IWorkspace.Roots => KeptRoots();
     string IWorkspace.Relative(string path) => Relative(path);
     void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
     void IWorkspace.Rewatch() => WatchFolders();

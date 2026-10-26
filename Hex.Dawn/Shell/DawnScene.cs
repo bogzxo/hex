@@ -506,14 +506,25 @@ internal sealed partial class DawnScene : Scene
     /// </summary>
     private void ShowCode()
     {
-        string written = document.GenerateCode();
+        // A file of code is held up against what was saved line by line. Its whole text put together to compare was done
+        // on every key, near a megabyte of garbage a key in a big file
+        bool same;
+        if (document.IsText)
+        {
+            same = document.Editor.Document.TextEquals(document.SavedCode);
+        }
+        else
+        {
+            string written = document.GenerateCode();
 
-        // A layout's code is written again out of the layout, unless it was edited by hand and not put back yet
-        if (!document.IsText && !document.CodeEdited)
-            SetCode(document, written, fresh: false);
+            // A layout's code is written again out of the layout, unless it was edited by hand and not put back yet
+            if (!document.CodeEdited)
+                SetCode(document, written, fresh: false);
+            same = written == document.SavedCode;
+        }
 
         // The tab of a layout says so when there is something to save
-        bool modified = written != document.SavedCode || document.CodeEdited || document.CrLf != document.SavedCrLf;
+        bool modified = !same || document.CodeEdited || document.CrLf != document.SavedCrLf;
         if (modified != document.Modified)
         {
             document.Modified = modified;

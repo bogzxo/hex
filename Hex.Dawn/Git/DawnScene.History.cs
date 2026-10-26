@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
         documentSaved += KeepLocalHistory;
         documentEdited += KeepWhatItWas;
         commands.Add("File/path", Said("history.local_command"), ShowLocalHistory, icon: "history");
-        commands.Add("Git/history", Said("history.git_command"), ShowFileHistory, icon: "git-commit");
+        commands.Add("Git/menus/history", Said("history.git_command"), ShowFileHistory, icon: "git-commit");
     }
 
     /// <summary>A copy of a file as it was saved, in the background, the copy given the text as it was then.</summary>

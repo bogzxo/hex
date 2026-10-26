@@ -8,7 +8,9 @@ namespace Hex.Tests;
 /// </summary>
 public sealed class ProjectFileEditsTests
 {
-    private const string PLAIN = """
+    // Always \n, a raw string takes the line ends of the file it's in, and a Windows checkout made them \r\n and every
+    // test that looks for \n failed on CI
+    private static readonly string PLAIN = """
         <Project Sdk="Microsoft.NET.Sdk">
 
           <!-- what it is -->
@@ -18,7 +20,7 @@ public sealed class ProjectFileEditsTests
           </PropertyGroup>
 
         </Project>
-        """;
+        """.ReplaceLineEndings("\n");
 
     [Fact]
     public void CopyIfNewerIsAnUpdateItemInAnItemGroupOfItsOwn()
@@ -41,7 +43,7 @@ public sealed class ProjectFileEditsTests
               </ItemGroup>
 
             </Project>
-            """, after);
+            """.ReplaceLineEndings("\n"), after);
     }
 
     [Fact]

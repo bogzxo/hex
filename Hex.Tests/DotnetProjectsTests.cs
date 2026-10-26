@@ -33,7 +33,7 @@ public sealed class DotnetProjectsTests : IDisposable
         return project;
     }
 
-    [Fact]
+    [Fact(Timeout = 240_000)]
     public async Task CopyIfNewerLandsInBinAndDoNotCopyPutsTheProjectBack()
     {
         string project = Project();
@@ -64,7 +64,7 @@ public sealed class DotnetProjectsTests : IDisposable
         Assert.Equal(original, File.ReadAllText(project));
     }
 
-    [Fact]
+    [Fact(Timeout = 240_000)]
     public async Task BuildActionMovesAFileAndAFolderOfFilesGoesAtOnce()
     {
         string project = Project();
@@ -84,7 +84,7 @@ public sealed class DotnetProjectsTests : IDisposable
         Assert.DoesNotContain("Content", File.ReadAllText(project));
     }
 
-    [Fact]
+    [Fact(Timeout = 240_000)]
     public async Task ASettingOfAnImportIsSaidAndNeverWrittenOver()
     {
         string project = Project();
@@ -113,7 +113,7 @@ public sealed class DotnetProjectsTests : IDisposable
         Assert.Equal(imported, File.ReadAllText(props));
     }
 
-    [Fact]
+    [Fact(Timeout = 240_000)]
     public async Task WhatsKeptIsForgottenWhenTheFolderOrTheImportsChange()
     {
         string project = Project();

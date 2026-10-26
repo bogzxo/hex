@@ -42,8 +42,13 @@ internal sealed partial class DawnScene
         }
 
         inlaysFor = (document, version);
-        HexDocument of = document;
-        CodeEditor editor = code;
+        AskInlays(document, code, version);
+    }
+
+    // Helper method to have the hints worked out, out of UpdateInlays so the closure its answer needs is only made when
+    // it's asked and not on every tick that has nothing to ask
+    private void AskInlays(HexDocument of, CodeEditor editor, int version)
+    {
         void Take(IReadOnlyList<UICodeInlay> found)
         {
             inlaysWorking = false;

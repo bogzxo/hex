@@ -33,17 +33,20 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>The item of a menu that opens the menu (inside of it) an item is in, null when it is right there or nowhere.</summary>
-    private static string? SubmenuOf(Menu menu, string label)
+    /// <summary>
+    /// The items that open the menus (inside of each other) an item of a menu is in, outermost first. Empty when it is
+    /// right there, null when it is nowhere.
+    /// </summary>
+    private static List<string>? SubmenuPath(Menu menu, string label)
     {
         // Right there in the menu it is that one, before any of the same name in a menu inside of it
         if (menu.Items.Any(item => item.Label == label && item.Submenu is null))
-            return null;
+            return [];
 
         foreach (MenuItem item in menu.Items)
         {
-            if (item.Submenu is { } inside && (inside.Items.Any(each => each.Label == label) || SubmenuOf(inside, label) is not null))
-                return item.Label;
+            if (item.Submenu is { } inside && SubmenuPath(inside, label) is { } deeper)
+                return [item.Label, .. deeper];
         }
 
         return null;
@@ -225,6 +228,7 @@ internal sealed partial class DawnScene
         ("catalog","the catalog of extensions, a sync of a folder, Install, a newer version offered as Update and read again, a sync that fails", TestCatalog),
         ("tasks", "the tasks of a tasks.hor, run in a terminal tab of their own, their errors in the Problems panel", TestTasks),
         ("properties", "the Properties panel, a file of a C# project given Copy if newer and a Build Action, several files, a folder, a picture, a component", TestProperties),
+        ("menus", "every menu twenty rows at most and no two rules in a row, every list a menu opens inside the window, a menu taller than the window scrolling", TestMenus),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
@@ -324,16 +328,13 @@ internal sealed partial class DawnScene
         selfTest.Wait();
     }
 
-    // Something out of one of the menus. A click on its word on the bar, the pointer rested on the item of the menu
-    // inside it the item is in (when it is in one), and a click on the item
+    // Something out of one of the menus. A click on its word on the bar, the pointer rested on each item of the menus
+    // inside it the item is in (when it is in any), and a click on the item
     private void Pick(string title, Func<string> item)
     {
         HexPointerScript test = selfTest!;
         test.Click(() => chrome.ToWorld(menu.TitleBounds(title).Center));
-        test.Hover(() => menu.OpenMenu is { } open && SubmenuOf(open, item()) is { } inside ? chrome.ToWorld(menu.ItemBounds(inside).Center) : test.Pointer.Position);
-
-        // Resting on it long enough for its menu to take over from one the pointer opened on its way there
-        test.Settle(0.4f);
+        Through(test, () => menu.OpenMenu, label => menu.ItemBounds(label), item);
         test.Click(() => chrome.ToWorld(menu.ItemBounds(item()).Center));
     }
 
@@ -341,9 +342,23 @@ internal sealed partial class DawnScene
     private void PickFromMenu(string item)
     {
         HexPointerScript test = selfTest!;
-        test.Hover(() => contextMenu?.Showing is { } open && SubmenuOf(open, item) is { } inside ? chrome.ToWorld(contextMenu.ItemBounds(inside).Center) : test.Pointer.Position);
-        test.Settle(0.4f);
+        Through(test, () => contextMenu?.Showing, label => contextMenu!.ItemBounds(label), () => item);
         test.Click(() => chrome.ToWorld(contextMenu!.ItemBounds(item).Center));
+    }
+
+    // The pointer rested on the items that open the menus an item is in, one after the other, the first long enough for
+    // its menu to take over from one the pointer opened on its way there, and each menu waited for before the next
+    private void Through(HexPointerScript test, Func<Menu?> open, Func<string, UIRect> bounds, Func<string> item)
+    {
+        string? Step(int depth) => open() is { } shown && SubmenuPath(shown, item()) is { } path && path.Count > depth ? path[depth] : null;
+        for (int depth = 0; depth < 3; depth++)
+        {
+            int at = depth;
+            test.Hover(() => Step(at) is { } label ? chrome.ToWorld(bounds(label).Center) : test.Pointer.Position);
+            if (at == 0)
+                test.Settle(0.4f);
+            test.WaitFor(() => Step(at) is null || !bounds(Step(at + 1) ?? item()).IsEmpty, 1.0f);
+        }
     }
 
     private Func<Vector2> Part(string name, float x = 0.5f, float y = 0.5f) => At(() => layout.Get<UIComponent>(name), x, y);

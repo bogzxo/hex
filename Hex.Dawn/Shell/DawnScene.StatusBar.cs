@@ -41,6 +41,9 @@ internal sealed partial class DawnScene
     private (int Count, int Selected)? componentsShown;
     private float zoomShown = -1.0f;
 
+    // The screen the layout's made for when the screen item was written, a string made every tick before
+    private (System.Numerics.Vector2 Size, bool Any)? screenShown;
+
     private void BuildStatusBar()
     {
         statusBar = layout.Get<StatusBar>("status_bar");
@@ -119,9 +122,12 @@ internal sealed partial class DawnScene
         // 1600 x 900 whatever the layout was made for and whatever screen it was on
         if (LayoutTools)
         {
-            string screen = $"$(device-desktop) {designer.ScreenText()}";
-            if (screenItem.Text != screen)
-                screenItem.Text = screen;
+            var screen = (document.Design ?? HexDesigner.DesignSize, document.Design is null);
+            if (screenShown != screen)
+            {
+                screenShown = screen;
+                screenItem.Text = $"$(device-desktop) {designer.ScreenText()}";
+            }
         }
 
         if (problemsShown != (errorCount, warningCount))
@@ -233,7 +239,10 @@ internal sealed partial class DawnScene
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
-    /// <summary>Helper method to put every skin and every theme of each into a menu, the one shown ticked.</summary>
+    /// <summary>
+    /// Helper method to put every skin into a menu, the one shown ticked, a skin with themes a menu of its own of them
+    /// (all the themes of all the skins in one list ran off the bottom of the window).
+    /// </summary>
     private void AddSkins(Menu into)
     {
         foreach (UISkinChoice skin in UISkins.Available)
@@ -244,13 +253,12 @@ internal sealed partial class DawnScene
                 continue;
             }
 
+            Menu themes = into.AddMenu(skin.Title);
             foreach (string theme in skin.Themes)
             {
-                into.Add($"{skin.Title}, {theme}", () => UseSkin(skin, theme)).IsChecked =
+                themes.Add($"{skin.Title}, {theme}", () => UseSkin(skin, theme)).IsChecked =
                     () => UISkins.Current == skin && (UISkins.Theme ?? skin.UsualTheme) == theme;
             }
-
-            into.AddSeparator();
         }
     }
 

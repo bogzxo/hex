@@ -41,4 +41,13 @@ jobs:
         run: dotnet build Hex/Hex.csproj --configuration Release
 
       - name: Test
-        run: dotnet test Hex.Tests --configuration Release --verbosity normal
+        run: dotnet test Hex.Tests --configuration Release --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type none
+
+      # A run that hung or fell over keeps the blame's sequence file, the last test in it is the one that never ended
+      - name: Keep what the tests left
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: Hex.Tests/TestResults/
+          if-no-files-found: ignore

@@ -20,7 +20,7 @@ internal sealed partial class DawnScene
 
     private void AddLanguageModeCommands()
     {
-        commands.Add("View/look", Said("language_mode.change"), ChangeLanguageMode, "Ctrl+K M", "symbol-misc", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools && document.IsText;
+        commands.Add("View/editor", Said("language_mode.change"), ChangeLanguageMode, "Ctrl+K M", "symbol-misc", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools && document.IsText;
         UpdateLanguageModes();
     }
 

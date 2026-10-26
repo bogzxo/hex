@@ -8,7 +8,7 @@
     <OutputType>Library</OutputType>
 
     <!-- Hex's own version, what About says and the changelog (Help, What changed) goes up to -->
-    <Version>1.1.0</Version>
+    <Version>2.0.0</Version>
 
     <!-- The dialogs for opening and saving a layout are asked for from Windows directly, see HexDialogs.cs -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

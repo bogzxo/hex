@@ -367,7 +367,7 @@ internal sealed partial class DawnScene
         commands.Add("Selection/carets", Said("code.add_cursor_below"), () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down");
         commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Shift+Alt+I");
         commands.Add("Selection/carets", Said("code.single_cursor"), () => code.Document.CollapseCarets(), "Esc").IsEnabled = () => code.Document.HasExtraCarets;
-        Menu folding = commands.AddMenu("Selection/folding", Said("code.folding"), "fold");
+        Menu folding = commands.AddMenu("View/editor", Said("code.folding"), "fold");
         folding.Add(Said("code.fold"), () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");
         folding.Add(Said("code.unfold"), () => code.UnfoldAtCaret(), "Ctrl+Shift+]", "fold-down");
         folding.AddSeparator();
@@ -377,9 +377,9 @@ internal sealed partial class DawnScene
         folding.Add(Said("code.unfold_all"), () => code.UnfoldAll());
 
         // Their keys are bound with the designer's, which zooms the canvas with the same ones
-        commands.Add("View/zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
-        commands.Add("View/zoom", Said("designer_selection.zoom_out"), () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
-        commands.Add("View/zoom", Said("code.reset_zoom"), () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
+        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
+        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_out"), () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
+        commands.Add("View/appearance/look:zoom", Said("code.reset_zoom"), () => ZoomCode(0.0f), "Ctrl+0").IsVisible = inCode;
 
         commands.Add("Go/symbols", Said("code.go_to_definition"), codeEditing.GoToDefinition, "F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/symbols", Said("code.find_all_references"), codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;

@@ -1,240 +1,114 @@
 # Hex
 
-The full suite of editong tools of [Horizon](https://github.com/bogzxo/horizon), and the IDE of HIDL. VS Code's shape, a title bar of
-its own with the menus in it, an activity bar and a side bar (the explorer, search, the outline, the designer's toolbox,
-components and layers), tabs and breadcrumbs over the editor, the problems and the output under it, the properties on
-the right and a status bar, icons throughout (Codicons). Ctrl+Shift+P is every command there is. Its own UI is a layout like the ones it edits,
-drawn by the same code a game draws them with, so what is in the canvas is the real thing. Components out of a
-palette, a tree of the layout, properties in sections that fold, the code it writes as it goes, undo, layers,
-templates, the skin's art to pick from, and a self test that clicks through the lot.
+**This is an IDE. It opens, you write code, and it gets the fuck out of your way.**
 
-A layout is a file that says `#define layout` at the top (Hex writes it, Code, Make this file a layout puts it in an
-old one) and opens as its designer, the canvas the whole of the middle, the palette, its tree, its layers and its
-properties round it. F7, or the two buttons over the middle, turns it into its code instead, with the explorer and
-what is wrong with the file round it, and what was typed goes into the layout on the way back (code that doesn't
-build keeps it on the code).
-A save keeps the comments somebody wrote into the file, the ones over the header and over each declaration, and writes
-them back over the same declaration, renamed or moved (a comment inside the braces of one is lost). A drag lands on
-tenths of a pixel, so a position in the code reads 26.8 and not whatever the zoom made of the pointer.
+That's entire _fucking_ **POINT**.
+We've been using editors that ship a full chromium browser, a JS runtime, an account system, a
+telemetry pipeline and an upsell, and somewhere in the middle of all that, there's a text box...
 
-It edits every other .hor as well. A file that doesn't build a layout (data, a language, a skin, a move set) opens as
-code, coloured, numbered, checked as it is typed, with its outline on the left. Every tab has an x, and closing a
-tab or the window with something unsaved asks first. Ctrl+F finds, Ctrl+H replaces, Ctrl+G goes to a line, Ctrl+P opens any file of
-the repository by a few letters of its name, Ctrl+Shift+F finds in all of them, F8 checks all of them for what doesn't
-parse, F5 runs a file and lists what it declares. Ctrl+/ comments lines, Alt+Up and Down move them, Ctrl+D duplicates.
-What is typed is completed (Ctrl+Space, or as it is typed), a component's properties inside its braces, the game's
-text keys after an @, the names of the whole workspace anywhere else. F12 goes to where something is declared,
-Shift+F12 finds everywhere it is used. Every key is in Help, Keyboard Shortcuts, a list typed into to narrow it
-down, enter on a command to press a new key for it and delete to take its key off, kept in `keys.hor` next to
-`hex_settings.hor`, and the command palette and every chooser go up and down with the arrows.
+Hex is the text box, and then everything a working developer actually needs round it, and nothing else.
 
-HIDL is a language of values first, so the right side of a file of code is what it comes to (Values), run a moment after
-it was last typed into on a thread of its own, the way the game that reads it would see it, as a tree. A click on a
-value goes to where it was written, in whichever file that was, the comment over a key is its tooltip, and what went
-wrong running it is underlined where it went wrong. Under the editor, next to the problems and the output, is the HIDL
-console, a line typed in runs in what the file came to (`moves.jab.phases`, `len(keys(strings))`, a behaviour called
-with a made up view), what it declares kept for the next lines, Up and Down for what was typed before.
+No Electron. No Chromium wearing a code editor cloak. No accounts, no sign in to sync, no telemetry, no AI sidebar
+that you didn't ask for, no "try our new assistant _we promise we won't spy_", no marketplace of first party "experiences" waving at you from
+the activity bar. It's a native program that draws its own UI on your GPU and does what you fucking tell it to.
 
-The workspace is any number of folders (File, Open folder, Add folder), a tree in the explorer on the left
-(Ctrl+Shift+E, Ctrl+Shift+O for the outline) with new, rename and delete on the right click, saved as a
-.hex-workspace and opened again with File, Open workspace. The one that was open comes back when Hex starts.
+## Fast as fuck, _boy_
+Measured on Hex 2.0.0, the release build, on a Ryzen 5 5600X with an RTX 3060, opening this repository.
 
-## Extensions
+- process start to `main` **14 ms**
+- window on screen **~0.4 s**
+- editor up, repository open, first real frame **0.5 s** (461 to 594 ms, 515 ms median)
+- the very first launch, filling the shader cache **2.9 s**, once, ever
+- memory, sat there idle **~128 MB** working set, 20 MB managed heap
+- CPU, sat there idle **~0.5%** of one core
+- garbage made per idle tick **0 bytes**
+- download -> **~35 MB** zip, nothing to install, .NET is packaged
 
-An extension is HIDL that drives Hex, a folder with an `extension.hor` in it. The two that come with Hex (the layout
-designer and Dusk's settings) are in `Assets/hex/extensions`, your own go in an `extensions` folder next to Hex. They are
-switched on and off on their page of the settings (the puzzle piece on the activity bar), and one that goes wrong is
-switched off for the rest of the run and puts a card up saying why. Hello Dolly, the greeting in the title bar, is the
-first of them.
+Half a second from double click to typing. Go time your current editor, I'll wait.... Actually I won't, I've already
+opened the file.
 
-The rest are installed from [hex-extensions](https://github.com/bogzxo/hex-extensions), the catalog, on Extensions,
-Available in the settings. Hex syncs it once a day as it starts (and on Check now), lists every extension in it with
-Install on the ones that aren't here and Update on the ones that are behind, and puts a card up when one you installed
-has a newer version. An install goes in the `extensions` folder next to Hex and starts straight away. The catalog can be
-another repository (owner/name) or a folder on your machine laid out the same, for writing one. Hex's tests have it as
-a submodule, `git submodule update --init` after a clone.
+It gets there by not doing stupid shit. It's C#, compiled ahead of time to a teeny tiny native binary, so there's no runtime to
+spin up and no JIT warming up while you watch. It draws with Vulkan through the ultra fast Horizon game engine, on a
+render thread of its own. When nothing's happening it does nothing, and when you're typing, a tick costs a few
+milliseconds. Every number here comes out of Hex itself, `HORIZON_LOG_STARTUP=memory` gets you the same on your system.
 
-```
-let extension = { name: "Hello Dolly", description: "...", version: "1.0.0", author: "bogz" };
-let welcome_greetings = ["Hello, Dolly!", "..."];
+## Fully featured, not "lightweight"
+"Lightweight" usually means "does fuck all". Hex is light and it does the job.
 
-// Called once Hex is up, with what an extension may do to it
-func on_start(hex) {
-    hex.title_note(math.pick(welcome_greetings));
-    hex.command("Another greeting", hex => {
-        hex.title_note(math.pick(welcome_greetings));
-    });
-}
-```
+- **Code.** Any language with a language server, 15 known out of the box and installed with a click (C#, C and C++, Rust,
+  Go, Python, TypeScript, D, Bash, YAML, TOML, JSON, Markdown and the rest). Completion, hovers, go to definition,
+  peek, find references, inlay hints, a minimap, format on save, editorconfig. Semantic highlighting that colours a name
+  by what it actually is, in ReSharper's colours for C#. TODO and FIXME lit up in everything.
+- **Git, inside.** Changes in the gutter with stage and revert on a click, blame on the line you're on, staging, commits,
+  amend, branches, merge, rebase, cherry-pick, stash, tags, word level diffs, merge conflicts you settle with a button,
+  file history and a local history of every save.
+- **A real terminal.** Dusk, both built in, and standalone, ConPTY on Windows and a pty everywhere else, tabs, splits and a
+  drop down. It can be your system's default terminal if you want it to be.
+- **Debugging.** Currently it's just breakpoints, stepping and the Debug side for .NET, through netcoredbg, thanks uncle sammy.
+- **For .NET people.** A properties panel that reads Build Action and Copy to Output Directory from the SDK itself and
+  writes them back into the .csproj without wrecking it, tasks for any solution, and Hex builds and restarts itself.
+- **The usual furniture.** Command palette, quick open, search and replace across files, a settings window that
+  actually finds things, workspace settings, a key bindings table with conflicts and chords, and an importer for your
+  VS Code settings so you can leave without rebuilding your config by hand.
+- **A layout designer and a language.** Hex is the editor of the [Horizon](https://github.com/bogzxo/horizon) engine and
+  of HIDL, its language. A layout opens as a designer with a live canvas, and HIDL files show what they evaluate to as
+  you type.
+- **Everywhere.** Windows, Linux (Wayland or X11) and macOS, all the same program.
 
-What `hex` has for now. `hex.title_note(text)` puts a few words after Hex in the title bar, in brackets. `hex.say(text)`
-says something in the status bar, `hex.notify(text)` puts a card up in the corner (`hex.notify(text, true)` an error
-that stays). `hex.command(name, hex => { ... })` puts a command in the command palette under the extension's name,
-and `hex.command(name, hex => { ... }, "Ctrl+Alt+J")` puts it on that key as well, the palette saying which.
-`hex.file()` is the path of the file on screen. `hex.version`, `hex.name` and `hex.folder` are Hex's version, the
-extension's name and its folder. Besides `on_start(hex)`, an extension hears about `on_open(hex, file)` and
-`on_save(hex, file)`, and `on_change(hex, file)` a moment after a file is typed into. What it prints goes in the output
-with its name in front. An extension runs in a runtime of its own, a second at the most for anything it does, and it is
-read again by itself when a `.hor` of its folder changes, its views back on the files that had them up, so writing one
-is save and look rather than starting Hex again.
+## What it doesn't do
 
-It can ask things. `hex.menu([{ label, icon, key, on_pressed, enabled }, "-", { label, items: [...] }])` puts a menu up at
-the pointer, a `"-"` a rule and `items` a menu inside it, `hex.ask({ title, text, buttons: ["Yes", "No"] }, (hex,
-pressed) => { ... })` a question with buttons, and `hex.prompt({ title, text, value, placeholder, button }, (hex, typed) =>
-{ ... })` a line of text.
+**It doesn't FUCKING track you.** No telemetry, no analytics, no crash reports phoning home, no account, no identifiers. Here is
+every single time Hex goes online, to GitHub unless it says otherwise.
 
-It can have a UI too, a view of a file (`hex.view`, offered on the files that say its `#define` and opened on them by
-itself, `left: false` or `right: false` in it putting Hex's sides away while it's up, `hex.show_side("right", false)`
-doing it for good), a page of the panel (`hex.panel`) or a little window (`hex.window`), each a layout of its folder, and it can read
-and write files (`hex.read`, `hex.write`, `hex.load`, `hex.find_up`), draw sprites into a `drawing` (`hex.sprite`), ask
-for a file or a folder with Hex's own dialog (`hex.pick_file({ title, folder, filter: ["Pictures", "*.png;*.jpg"] },
-path => { ... })`, `hex.pick_folder(path => { ... })`) and start a program (`hex.start(path, [arguments])`). `hex.try_load(path)` is `hex.load` that can't go wrong, `{ values,
-error }`, for a file that may be half typed.
+- Once a day, new versions of the language servers you've got. Off with one switch in the settings.
+- Once a day, new versions of extensions you installed yourself out of the catalog. Off with another one.
+- The changelog, when you open it.
+- An extension, a language server or a debug adapter, when you click install (a server comes through its own
+  installer, npm or dotnet or whatever it says).
 
-It can change a file by the paths of its values, written where they are in the text with the file's comments and spacing
-kept, one step of the file's undo a call (null when it went, why it didn't as a text). `hex.edit(file, ["moves", "jab",
-"damage"], 8)`, `hex.insert(file, path, key, value, after)`, `hex.remove(file, path)`, `hex.rename(file, path, key)`,
-`hex.reorder(file, path, keys)`, `hex.edits(file, [{ edit: path, value }, { insert: path, key, value }, ...])` for several
-as one step, and `hex.undo_file(file)` and `hex.redo_file(file)`. A file that isn't open is opened behind the one on screen.
-It can write where somebody is typing as well. `hex.caret()` is the caret of the file on screen, `{ line, column, text,
-selected }` (lines and columns from 1, `text` the line it's on), null when the file is a layout, and `hex.replace_text({
-line, column }, { line, column }, text, caret)` puts text over that much of the file as one step to undo, the caret left
-`caret` characters into what was written (at its end without one). `hex.selection()` is `{ from, to, caret, text }`,
-from before to whichever way it was dragged, `hex.select(from, to)` selects (the caret at `to`) or with one place puts
-the caret there, scrolled to, and `hex.lines(first, last)` is the lines as they're written, every one of them without
-the two (HIDL's `split` trims and drops empty ones, no use for code). An extension with an `on_tab(hex, file)` is asked
-first when Tab is pressed in code with nothing selected, and true back means it took the key and nothing is indented.
-Emmet (`extensions/emmet`) is that, `ul>li.item$*3` written out as the HTML it stands for on Tab in the files it's on for
-and on Ctrl+E in any of them.
-`hex.problems(file, [{ path or line, message, warning }])` puts what it finds wrong in Hex's problems, `hex.watch(path)`
-has it told `on_file_changed(hex, path)`, `hex.open(file, path)` opens a file at a value, `hex.copy(text)` puts text on
-the clipboard. See `docs/extensions.md`, the move editor (Fighter2D's moves, `extensions/move_editor`) is all of it at
-once.
+That's it. Switch both off and Hex never says a word to anybody unless you ask it to.
 
-What an extension can be told goes in its extension object, `settings: { game: { title, about, kind, default } }`, the
-kind being text, path, number or flag. It gets a tab of its own in the settings (made from the template the settings'
-pages name in `settings.hor`, `extension_tab.hor`), a row for each of them there, or its own layout for the tab if it says
-`settings_layout: "file.hor"`, which Hex hands to `on_settings(hex, ui)` once it's made. `hex.setting(name)` is what it
-was told (or its default), `hex.set_setting(name, value)` changes it, and Hex keeps the lot in `hex_settings.hor` under
-`extension_settings`. A change made on its tab is told to the extension, `on_setting(hex, name, value)`.
+**It doesn't push shit at you.** There's no "recommended extensions" nagging, no first party plugins installed behind your
+back, no service to sign up for, no "Hex Pro" or "Hex AI+". The extensions catalog is there if you go looking, and that's where it
+stays. Extensions are HIDL [(Horizon Integrated Development Language)](https://github.com/bogzxo/hidl) you can read in a text editor,
+which is handy, because you're holding one around the tips of your fingers :)
 
-## HIDL's language server
+**It doesn't need installing.** Unzip it anywhere and run it. Settings live in a folder next to it, so carry it around
+on a fucking stick if you want.
 
-`Hex --lsp` is a language server for HIDL on stdin and stdout, for any editor that speaks the protocol. It knows a file the
-way Dawn does, because it's the same code (`Hex.Core/Hidl`): what the parser didn't like, where running the file went
-wrong and the lints of what it came to, completion (the language's words, the file's and the workspace's names, a kind
-of component after `compositor.` and its properties inside its braces, the words a property like `anchor` takes),
-hovers, where a name is declared (the file, the other open files, then the workspace) and the outline. Dawn doesn't
-start it for its own files, it has all of that inside already.
+## Bring your own agent
 
-## Agents (MCP)
-
-Hex can be driven by an AI agent over the Model Context Protocol, Claude Code or anything else that speaks it, and the
-agent uses it the way you do. It looks at the window, clicks, types, presses keys and runs commands, and it reads the
-code, the problems and the terminal without needing a screenshot for any of it. It's off as it comes. Switch on Agents
-(MCP server) in the settings, under Editor, Run and debug, or start Hex with `--mcp` for the one run. Hex then puts its
-server up on a pipe that only you can open, only from this machine, and only with the token it writes into
-`settings/mcp` next to Hex.exe. A folder's own `.hex/settings.hor` can't switch it on, a repository you cloned doesn't
-get to open that door. While an agent is connected the status bar says Agent on the right, and a click on it takes you
-to the setting.
-
-Claude Code is connected like this.
+Hex doesn't ship an AI and it isn't selling you one. What it has is an [MCP](https://modelcontextprotocol.io) server,
+so the agent *you* chose can drive Hex the way you do. Screenshots, the UI tree, clicks, typing, commands, problems,
+definitions, the terminal and the tasks, 27 tools in total.
 
 ```
 claude mcp add hex -- C:\path\to\Hex.exe --mcp
 ```
 
-Started by a client like that, `Hex.exe --mcp` has no window. It finds the Hex that has the folder the client was started
-in open (`--folder` says another), starts one on that folder with the server on when none has and waits for it to come
-up, and then passes the client's stdin and stdout through to it. Every other client that starts its servers over stdio
-is set up the same, the command is Hex.exe and the argument `--mcp`. A project can carry it for Claude Code in its
-`.mcp.json` as well.
+It's off until you switch it on. When it's on it listens on a pipe only you can open, only from your machine, only with
+a token Hex writes next to itself, and a repository you cloned can't switch it on for you. While an agent's connected
+the status bar says so. Claude Code, or anything else that speaks MCP over stdio, is set up the same way.
+[docs/agents.md](docs/agents.md) has the details and every tool.
 
-```json
-{ "mcpServers": { "hex": { "command": "C:/path/to/Hex.exe", "args": ["--mcp"] } } }
-```
+## Get it
 
-`Hex --mcp` typed at a prompt rather than started by a client is plain Hex with the server on.
+Grab the zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it, run `Hex`.
 
-The tools, all named `hex_` something. `screenshot` (a PNG of the window or a part of it, scaled down if you like),
-`ui_tree` (what's on screen with ids, the rows of trees, tabs, the status bar's items and the menus too), `click` (by
-id, by the text on it or at a point, left, right or double), `type`, `key` (Ctrl+Shift+P and the like, chords one after
-another), `scroll` and `hover`. `commands` and `run_command` for the command palette. `open`, `documents`, `editor`
-(the current file's text, caret and selection) and `set_selection`. `problems`, `outline` and `find_in_files`.
-`definition`, `symbol_info` and `references`, through HIDL or the file's language server. `terminal_read` and
-`terminal_send` for the panel's terminal, `run_task` and `task_output` for the tasks. `settings_get` and
-`settings_set`. `wait_for` (Hex idle, a file open, a dialog up or gone, text on screen or gone, a message, a file's
-problems). And `selftest`, which runs suites of the self test in a Hex of its own and says what passed, never in the one
-you're working in.
+- **Windows** 10 1809 or later.
+- **Linux** with the Vulkan loader and a driver (`libvulkan1` and `mesa-vulkan-drivers` on Debian and Ubuntu).
+  `scripts/install-desktop.sh` gets its name and icon in your dock.
+- **macOS** 11 or later. It isn't signed, so run `xattr -dr com.apple.quarantine Hex` on the unpacked folder first.
 
-Every call runs on Hex's own thread a tick at a time, so a click is a move, a press and a let go like a hand's, and an
-idle Hex wakes for it at once. Points are window pixels, the same in a screenshot as in a click. Moving the real mouse
-takes the pointer back from the agent. The server is `Hex.Core/Mcp` (the protocol, the pipe, the bridge) and
-`Hex.Dawn/Agents` (the tools), `Hex --selftest mcp` tests it in the editor and `McpTests` without one.
-
-## Finding your way round the code
-
-Hex is one scene, `DawnScene`, a partial class in parts by what they're about, and a few classes of its own next to them.
-`Shell/DawnScene.cs` is where it starts (the constructor finds the parts of `Assets/hex/editor.hor` by name, and
-`editor.hor` is the skeleton that includes the parts in `Assets/hex/shell/`, the activity bar, the side bar, the tabs,
-the panel and the properties, each a layout of its own that opens on its own in Hex) and its
-`UpdateState` is a tick of the whole editor in a handful of steps, read that first. Every part of the class says what it is in
-a comment at its top.
-
-- `Shell/` the frame round everything, the size of things (Chrome), the menus and keys, the command palette, the side
-  bar and its trees, the tabs and breadcrumbs, the panel under the editor, the status bar, which view is on screen
-  (Views), the welcome, Hex's own texts, and `HexProfiler`.
-- `Designer/` a layout's designer, the canvas and the pointer on it, the handles, selecting, editing and arranging, the
-  palette of components and what's in it (Catalog), the inspector, the tree and layers (Lists).
-- `Documents/` an open file (`HexDocument`, a layout with its history and code, or text), opening, saving and closing,
-  the recent files.
-- `Code/` a file as code, its values, the console, completion, hints, finding, the outline, the lints and the table.
-- `Editing/` changing a .hor file's text by what's in it (a key set, renamed, taken out) and keeping the rest as written,
-  which the extensions' `hex.edit` and friends are.
-- `Extensions/` loading extensions and everything `hex` is to them, their views, panels and windows.
-- `Workspace/` the folders open, the explorer, the trash, and the work done on other threads over all of the files.
-- `Settings/` `hex_settings.hor`, the settings window and the skin Hex is drawn in.
-- `Platform/` and `Dialogs/` (in `Hex.Shell`) opening, saving and picking a folder, Hex's own dialog on every system.
-- `Testing/` the self test, a file per part of Hex, and `--check`.
-
-`HEX_PROFILE=20` (or any number of milliseconds) has Hex write out every tick that took longer than that with the steps
-that took it, and when it's closed what every step cost altogether. See `docs/performance.md`.
-
-## Building
+Or build it.
 
 ```
 git clone --recursive https://github.com/bogzxo/hex
 dotnet build Hex/Hex.csproj
-Hex/bin/Debug/net11.0/Hex --selftest --exit --size 1600x900
 ```
 
-Hex runs on Windows, Linux and macOS, with the .NET 11 SDK on each.
+## More
 
-- **Windows** 10 1809 or later (the terminal is ConPTY). Nothing else.
-- **Linux**, Wayland or X11. It draws with Vulkan, so it wants the Vulkan loader and a driver (`libvulkan1` and
-  `mesa-vulkan-drivers` on Debian and Ubuntu, `vulkan-icd-loader` and your GPU's driver on Arch). Its window is SDL's,
-  which comes with it. A desktop that shows apps by their `.desktop` file (GNOME, KDE) wants
-  `scripts/install-desktop.sh` run once, for Hex's name and icon in its dock.
-- **macOS** 11 or later, Apple silicon or Intel. Vulkan is MoltenVK, which comes with it. Shortcuts are on command
-  where they're on control elsewhere, the files say Ctrl either way.
-
-Settings are in `%AppData%\Hex` (or a `settings` folder next to Hex.exe), `~/Library/Application Support/Hex` and
-`~/.config/hex`. A Dusk drop down key is Windows' own there, on Linux and macOS it's the desktop's: bind
-`hex --dusk --toggle` to it in the keyboard settings.
-
-Dusk can be the system's terminal, Terminal, System, Dusk as the default terminal, in either mode's settings. On Windows
-a console program started from anywhere but a terminal (cmd from the Run box, a script double clicked) then opens in
-Dusk, a tab of the Dusk that's open or a Dusk of its own. Windows passes a console on through Windows Terminal's
-console host (it's the only one that hands consoles to a terminal), so Windows Terminal has to be installed, it comes
-with Windows 11, but the program shows up in Dusk. It's `HKCU\Console\%%Startup` and Dusk registered as a COM server
-under `HKCU\Software\Classes`, nothing needing admin, and switching it off puts back the terminal that was the default
-before. On Linux it's Dusk first in `xdg-terminals.list` and GNOME's own terminal setting, and Dusk takes `-e command`
-the way a desktop's terminal is asked to run something. Published ahead of time (`dotnet publish Hex/Hex.csproj -c Release
--r linux-x64`, `osx-arm64`, `win-x64`) it wants clang on Linux and the Xcode command line tools on a Mac.
-
-The self test is a hundred seconds all of it, so it comes in parts, `--selftest code` (seven seconds) or any of `layout`
-(the designer, the minute and more of it), `code`, `workspace`, `extensions` and `garbage`, as many as you like. A part
-that wants a file an earlier part makes is given a stand-in for it.
-
-The engine is a submodule at `horizon/` (on its `development`), with the language inside it. Work on
-`development`, `master` is what's released.
+- [Layouts, HIDL and the workspace](docs/layouts-and-hidl.md), the designer, HIDL's values and console, and its language server
+- [Agents](docs/agents.md), the MCP server and its tools
+- [Hacking on Hex](docs/hacking.md), finding your way round the code, building on every system, the self test

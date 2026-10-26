@@ -416,17 +416,22 @@ internal sealed partial class HexDesigner
         commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", use: UIKeyUse.Bound).IsVisible = design;
         commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash", UIKeyUse.Bound).IsVisible = design;
 
-        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_in"), () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
-        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_out"), () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
-        commands.Add("View/zoom", context.Strings.Said("designer_selection.zoom_to_fit"), ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
-        commands.Add("View/zoom", context.Strings.Said("designer_selection.actual_size"), ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_in"), () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
+        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_out"), () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
+        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_to_fit"), ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
+        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.actual_size"), ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
 
         commands.Add("Run/run", context.Strings.Said("designer_selection.play_entrances"), PlayIntros, "F5", "play").IsVisible = design;
 
         commands.ShowMenuWhen("Layout", design);
         Menu add = commands.AddMenu("Layout/add", context.Strings.Said("designer_selection.add"), "add");
-        foreach (string kind in Palette)
-            add.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
+        foreach (var (key, kinds) in PaletteGroups)
+        {
+            Menu group = add.AddMenu(context.Strings.Said(key));
+            foreach (string kind in kinds)
+                group.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
+        }
+
         commands.Add("Layout/group", context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
         // Only there to be picked with a group selected, so its key is Source Control's the rest of the time rather than
         // an Ungroup saying there's no group (UICommands passes a key on from a command that can't be picked)

@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
         ["git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_confirm_sync", "git_smart_commit", "git_subject_length", "git_line_length"];
 
     // A command of the Git menu by its label, as the palette and the menu run it
-    private MenuItem? GitCommand(string label) => menu.Menus.FirstOrDefault(bar => bar.Title == "Git")?.Items.FirstOrDefault(item => item.Label == label);
+    private MenuItem? GitCommand(string label) => menu.Menus.FirstOrDefault(bar => bar.Title == "Git")?.Everything().Select(pair => pair.Item).FirstOrDefault(item => item.Label == label);
 
     private void TestGitSettings(HexPointerScript test, string repo)
     {

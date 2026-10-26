@@ -7,7 +7,7 @@ using Horizon.HIDL.Runtime;
 namespace Hex.Dawn;
 
 // What an extension is handed, hex. Everything it can do to Hex is on it and nowhere else, in groups below by what
-// it is for, the README of Hex says what every one does. One is made for an extension and kept, it was made anew for
+// it is for, docs/extensions.md says what every one does. One is made for an extension and kept, it was made anew for
 // every event an extension heard about, sixty closures a time and every run of a file as it's typed is one.
 internal sealed partial class HexExtensions
 {

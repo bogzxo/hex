@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
         textDialog is { IsOpen: true } dialog ? Descendants(dialog.Body).OfType<CodeEditor>().FirstOrDefault() : null;
 
     private MenuItem? GitMenuItem(string label) =>
-        menu.Menus.FirstOrDefault(bar => bar.Title == "Git")?.Items.FirstOrDefault(item => item.Label == label);
+        menu.Menus.FirstOrDefault(bar => bar.Title == "Git")?.Everything().Select(pair => pair.Item).FirstOrDefault(item => item.Label == label);
 
     // The middle of one of a row's buttons, found by what it says over it, the row scrolled to first
     private Func<Vector2> TreeAction(Func<UITreeItem?> find, string tooltip) => () =>

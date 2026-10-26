@@ -74,6 +74,53 @@ internal sealed partial class DawnScene
     /// <summary>The folders whose files are looked through, the workspace's, or the repository of the open file without one.</summary>
     private List<string> WorkspaceRoots() => explorer.workspace.IsEmpty ? [RepositoryRoot()] : [.. explorer.workspace.Folders];
 
+    // The roots as the parts of the editor asking every second see them (git), kept rather than made anew. Without a
+    // workspace finding them is a walk up the disk for a .git, so that's done again at most every five seconds
+    private string[] rootsKept = [];
+    private (string? Path, string Browse, bool Empty) rootsKeptFor;
+    private long rootsKeptAt;
+    private const long ROOTS_KEPT_MS = 5000;
+
+    /// <summary>What <see cref="WorkspaceRoots"/> says, kept, for whatever asks often. Not to be changed, it's shared.</summary>
+    private string[] KeptRoots()
+    {
+        List<string> folders = explorer.workspace.Folders;
+        if (folders.Count > 0)
+        {
+            if (!rootsKeptFor.Empty && SameFolders(rootsKept, folders))
+                return rootsKept;
+
+            rootsKeptFor = default;
+            return rootsKept = [.. folders];
+        }
+
+        long now = System.Environment.TickCount64;
+        var key = (document.Path, browseDirectory, true);
+        if (rootsKeptFor == key && now - rootsKeptAt < ROOTS_KEPT_MS)
+            return rootsKept;
+
+        string root = RepositoryRoot();
+        if (rootsKeptFor != key || rootsKept.Length != 1 || rootsKept[0] != root)
+            rootsKept = [root];
+        rootsKeptFor = key;
+        rootsKeptAt = now;
+        return rootsKept;
+    }
+
+    private static bool SameFolders(string[] kept, List<string> folders)
+    {
+        if (kept.Length != folders.Count)
+            return false;
+
+        for (int i = 0; i < kept.Length; i++)
+        {
+            if (!ReferenceEquals(kept[i], folders[i]) && kept[i] != folders[i])
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// What is looked through, said the way a person would, a folder by its name. Its whole path wrapped in the middle of
     /// a word in the dialog that asks.

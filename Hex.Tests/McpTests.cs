@@ -57,8 +57,9 @@ public sealed class McpTests : IDisposable
 
     public void Dispose()
     {
-        session.Dispose();
+        // The client hangs up first, the way one does
         toServer.Dispose();
+        session.Dispose();
         toClient.Dispose();
     }
 

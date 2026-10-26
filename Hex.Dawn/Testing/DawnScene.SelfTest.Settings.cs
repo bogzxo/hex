@@ -249,7 +249,7 @@ internal sealed partial class DawnScene
             if (!document.Walk().Any())
             {
                 Menu layoutMenu = menu.Menus.First(each => each.Title == "Layout");
-                layoutMenu.Items.First(item => item.Submenu is not null && item.Label == Said("designer_selection.add")).Submenu!.Items.First(item => item.Label == "stack").OnPicked!();
+                layoutMenu.Items.First(item => item.Submenu is not null && item.Label == Said("designer_selection.add")).Submenu!.Everything().Select(pair => pair.Item).First(item => item.Label == "stack").OnPicked!();
             }
 
             designer.Select(document.Walk().Select(pair => pair.Component).FirstOrDefault());
@@ -390,7 +390,7 @@ internal sealed partial class DawnScene
             string?[] themes = skin.Themes.Count > 0 ? [.. new[] { skin.Themes[0], skin.Themes[^1] }.Distinct()] : [null];
             foreach (string? theme in themes)
             {
-                Pick("View", () => theme is null ? skin.Title : $"{skin.Title}, {theme}");
+                Pick("Layout", () => theme is null ? skin.Title : $"{skin.Title}, {theme}");
                 test.WaitFor(() => stage.Skin is { } worn && worn.Theme == (theme ?? worn.Theme) && UISkins.Current == skin && !worn.HasPendingArt, 2.0f);
                 test.Wait();
                 test.Check($"skins: {skin.Name}{(theme is null ? string.Empty : " in " + theme)} comes up, with art for a button and a panel, or a colour for them", () =>
@@ -437,7 +437,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             Menu layoutMenu = menu.Menus.First(each => each.Title == "Layout");
-            layoutMenu.Items.First(item => item.Submenu is not null && item.Label == Said("designer_selection.add")).Submenu!.Items.First(item => item.Label == "stack").OnPicked!();
+            layoutMenu.Items.First(item => item.Submenu is not null && item.Label == Said("designer_selection.add")).Submenu!.Everything().Select(pair => pair.Item).First(item => item.Label == "stack").OnPicked!();
             designer.ConvertSelected("group", false);
             group = document.Selected;
         });

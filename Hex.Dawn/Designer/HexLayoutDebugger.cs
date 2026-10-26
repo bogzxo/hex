@@ -30,7 +30,7 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
     /// picked while it is on.
     /// </summary>
     /// <param name="toggled">Called after the debugger was switched on or off from the menu, for whoever has something to say about it.</param>
-    public void AddTo(UICommands commands, string where, Action? toggled = null)
+    public void AddTo(UICommands commands, string where, string optionsWhere, Action? toggled = null)
     {
         commands.Add(where, "Layout Debugger", () =>
         {
@@ -38,12 +38,12 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
             toggled?.Invoke();
         }).IsChecked = () => IsOn;
 
-        Option(commands, where, "    Edges", () => Options.ShowBounds, on => Options.ShowBounds = on);
-        Option(commands, where, "    Padding", () => Options.ShowPadding, on => Options.ShowPadding = on);
-        Option(commands, where, "    Gaps", () => Options.ShowSpacing, on => Options.ShowSpacing = on);
-        Option(commands, where, "    Sizes", () => Options.ShowLabels, on => Options.ShowLabels = on);
-        Option(commands, where, "    Only under the pointer", () => Options.HoveredOnly, on => Options.HoveredOnly = on);
-        Option(commands, where, "    Hidden components too", () => Options.ShowHidden, on => Options.ShowHidden = on);
+        Option(commands, optionsWhere, "    Edges", () => Options.ShowBounds, on => Options.ShowBounds = on);
+        Option(commands, optionsWhere, "    Padding", () => Options.ShowPadding, on => Options.ShowPadding = on);
+        Option(commands, optionsWhere, "    Gaps", () => Options.ShowSpacing, on => Options.ShowSpacing = on);
+        Option(commands, optionsWhere, "    Sizes", () => Options.ShowLabels, on => Options.ShowLabels = on);
+        Option(commands, optionsWhere, "    Only under the pointer", () => Options.HoveredOnly, on => Options.HoveredOnly = on);
+        Option(commands, optionsWhere, "    Hidden components too", () => Options.ShowHidden, on => Options.ShowHidden = on);
     }
 
     private void Option(UICommands commands, string where, string label, Func<bool> read, Action<bool> write)

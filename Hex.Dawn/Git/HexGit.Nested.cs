@@ -9,7 +9,7 @@ internal sealed partial class HexGit
     // How far down a workspace folder a repository is looked for
     private const int NESTED_DEPTH = 3;
 
-    private string nestedFor = string.Empty;
+    private string[] nestedFor = [];
     private bool lookingDown;
 
     /// <summary>Every repository of the workspace, the ones its folders are in and the ones inside them, in order of where they are.</summary>
@@ -32,13 +32,19 @@ internal sealed partial class HexGit
     /// <summary>Every so often, the workspace's folders looked down for repositories when they changed since the last look.</summary>
     private void LookDown(bool again = false)
     {
-        string roots = string.Join('|', context.Workspace.Roots);
-        if (lookingDown || (!again && roots == nestedFor))
+        // The folders compared one by one with the last look's, joining them into one string to compare was garbage every second
+        IReadOnlyList<string> roots = context.Workspace.Roots;
+        if (lookingDown || (!again && SameRoots(roots)))
             return;
 
-        nestedFor = roots;
         lookingDown = true;
-        string[] folders = [.. context.Workspace.Roots];
+        nestedFor = [.. roots];
+        FindDownInBackground(nestedFor);
+    }
+
+    // Helper method to look down the folders off the editor's thread, a method of its own so its closure is made only then
+    private void FindDownInBackground(string[] folders)
+    {
         context.Work.InBackground("git repositories", () => FindDown(folders), found =>
         {
             lookingDown = false;
@@ -46,6 +52,21 @@ internal sealed partial class HexGit
                 RepositoryOf(folder);
             context.Panels.RefreshSide(HexSide.SourceControl);
         }, quiet: true);
+    }
+
+    // Whether the workspace's folders are the ones looked down last time
+    private bool SameRoots(IReadOnlyList<string> roots)
+    {
+        if (roots.Count != nestedFor.Length)
+            return false;
+
+        for (int i = 0; i < roots.Count; i++)
+        {
+            if (roots[i] != nestedFor[i])
+                return false;
+        }
+
+        return true;
     }
 
     // The folders under some folders with a .git in them, built and git's own folders left out

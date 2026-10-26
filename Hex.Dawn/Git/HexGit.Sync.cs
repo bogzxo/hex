@@ -19,14 +19,14 @@ internal sealed partial class HexGit
     private void BuildSync()
     {
         fetchIn = FetchEvery;
-        context.Commands.Add("Git/sync", context.Strings.Said("git.fetch"), () => Remote(FirstRepository(), RemoteWork.Fetch), icon: "cloud-download");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.pull"), () => Remote(FirstRepository(), RemoteWork.Pull), icon: "arrow-down");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.pull_rebase"), () => Remote(FirstRepository(), RemoteWork.Pull, pullMode: "rebase"), icon: "arrow-down");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.push"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "arrow-up");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.sync"), () => AskSync(FirstRepository()), icon: "sync");
-        context.Commands.Add("Git/sync", context.Strings.Said("git.publish"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.fetch"), () => Remote(FirstRepository(), RemoteWork.Fetch), icon: "cloud-download");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull"), () => Remote(FirstRepository(), RemoteWork.Pull), icon: "arrow-down");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull_rebase"), () => Remote(FirstRepository(), RemoteWork.Pull, pullMode: "rebase"), icon: "arrow-down");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.push"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "arrow-up");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.sync"), () => AskSync(FirstRepository()), icon: "sync");
+        context.Commands.Add("Git/menus/remote:publish", context.Strings.Said("git.publish"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
             () => FirstRepository() is { HasRemote: true, Status: { Branch: not null, Upstream: null } };
-        context.Commands.Add("Git/sync", context.Strings.Said("git.settings_command"), () => context.Windows.OpenSettings(EditorSettingsCatalog.GIT), icon: "settings-gear");
+        context.Commands.Add("Git/settings", context.Strings.Said("git.settings_command"), () => context.Windows.OpenSettings(EditorSettingsCatalog.GIT), icon: "settings-gear");
     }
 
     private enum RemoteWork { Fetch, Pull, Push, Sync }

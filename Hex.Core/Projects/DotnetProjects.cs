@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 
 namespace Hex.Core.Projects;
 
@@ -186,10 +187,15 @@ internal sealed partial class DotnetProjects : IDisposable
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
             };
-            void Moved(string path)
+            // When the watch began, macOS says a file was made a while after it was, a project written just before it was
+            // evaluated threw away the evaluation straight away
+            DateTime since = DateTime.UtcNow;
+            void Moved(string path, bool made)
             {
                 string inside = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 if (inside.StartsWith("bin/", StringComparison.OrdinalIgnoreCase) || inside.StartsWith("obj/", StringComparison.OrdinalIgnoreCase) || inside is "bin" or "obj")
+                    return;
+                if (made && File.Exists(path) && File.GetLastWriteTimeUtc(path) < since)
                     return;
 
                 lock (entry)
@@ -197,9 +203,9 @@ internal sealed partial class DotnetProjects : IDisposable
                 Changed?.Invoke(project);
             }
 
-            watcher.Created += (_, e) => Moved(e.FullPath);
-            watcher.Deleted += (_, e) => Moved(e.FullPath);
-            watcher.Renamed += (_, e) => Moved(e.FullPath);
+            watcher.Created += (_, e) => Moved(e.FullPath, made: true);
+            watcher.Deleted += (_, e) => Moved(e.FullPath, made: false);
+            watcher.Renamed += (_, e) => Moved(e.FullPath, made: false);
             watcher.EnableRaisingEvents = true;
             entry.Watcher = watcher;
         }
@@ -240,9 +246,17 @@ internal static class DotnetCli
         start.Environment["DOTNET_NOLOGO"] = "1";
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
 
+        // Nothing left running behind it. MSBuild's reused nodes, its server and the compiler's server outlive dotnet with
+        // its output pipe still open, so reading the output to its end never ended, Hex.Tests hung on Linux and macOS
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        start.Environment["UseSharedCompilation"] = "false";
+        start.Environment["DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE"] = "1";
+
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("dotnet didn't start");
-        Task<string> output = process.StandardOutput.ReadToEndAsync(cancel);
-        Task<string> errors = process.StandardError.ReadToEndAsync(cancel);
+        var output = new StringBuilder();
+        var errors = new StringBuilder();
+        Task reading = Task.WhenAll(Drain(process.StandardOutput, output), Drain(process.StandardError, errors));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         timeout.CancelAfter(patience);
         try
@@ -262,6 +276,29 @@ internal static class DotnetCli
             throw;
         }
 
-        return (process.ExitCode, await output + await errors);
+        // Whatever it left behind can hold the pipes open past its end, what it wrote is in by then and the rest isn't waited on
+        try
+        {
+            await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+        }
+        catch (TimeoutException)
+        {
+        }
+
+        lock (output)
+        lock (errors)
+            return (process.ExitCode, output.ToString() + errors);
+    }
+
+    // A stream read as it comes, so what was written is kept even when the end never comes
+    private static async Task Drain(StreamReader reader, StringBuilder into)
+    {
+        char[] buffer = new char[4096];
+        int read;
+        while ((read = await reader.ReadAsync(buffer)) > 0)
+        {
+            lock (into)
+                into.Append(buffer, 0, read);
+        }
     }
 }

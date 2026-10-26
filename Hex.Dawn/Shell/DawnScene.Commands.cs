@@ -185,7 +185,7 @@ internal sealed partial class DawnScene
         AddKeysCommands();
         commands.Add("Help/help", Said("commands.reference"), ShowLanguageHelp, icon: "book");
         commands.Add("Help/help", Said("commands.release_notes"), ShowChangelog, icon: "history");
-        commands.Add("Help/help", Said("commands.own_layout"), () => Open(EDITOR_LAYOUT), icon: "layout");
+        commands.Add("Help/developer/developer", Said("commands.own_layout"), () => Open(EDITOR_LAYOUT), icon: "layout");
         commands.Add("Help/about", Said("commands.about"), ShowAbout, icon: "info");
     }
 }

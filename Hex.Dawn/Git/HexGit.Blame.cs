@@ -34,8 +34,8 @@ internal sealed partial class HexGit
                 known.AskIn = BLAME_AFTER;
         };
         context.Documents.Closed += closed => blamed.Remove(closed);
-        context.Commands.Add("Git/history", context.Strings.Said("git.blame_command"), ShowLineCommit, icon: "git-commit");
-        context.Commands.Add("Git/history", context.Strings.Said("git.blame_toggle"), ToggleBlame, icon: "eye");
+        context.Commands.Add("Git/menus/history", context.Strings.Said("git.blame_command"), ShowLineCommit, icon: "git-commit");
+        context.Commands.Add("Git/menus/history", context.Strings.Said("git.blame_toggle"), ToggleBlame, icon: "eye");
     }
 
     /// <summary>Inline blame on or off from the palette, the same as its row in the settings and kept the same way.</summary>
@@ -71,22 +71,7 @@ internal sealed partial class HexGit
             known.AskIn = 0.01f;
 
         if (known.AskIn > 0.0f && !known.Asking && (known.AskIn -= dt) <= 0.0f)
-        {
-            known.AskIn = 0.0f;
-            known.Asking = true;
-            int generation = repository.Generation;
-            string text = document.Editor.Text;
-            int version = document.Editor.Document.Version;
-            bool fresh = repository.Status?.StateOf(path).Change == GitChange.Untracked;
-            context.Work.InBackground("git blame", () => fresh ? [] : repository.Git.Blame(path, text), lines =>
-            {
-                known.Asking = false;
-                known.Lines = lines;
-                known.Generation = generation;
-                known.Version = version;
-                known.Shown = (-1, -1);
-            }, quiet: true);
-        }
+            AskBlame(known, repository, document, path);
 
         // Typed into since it was blamed, the lines have moved under the blame and a line would say somebody else did
         // what was just typed, so there's no note until it's blamed again a second after the typing stops
@@ -98,6 +83,26 @@ internal sealed partial class HexGit
         known.Shown = (line, lines);
         document.Editor.LineNote = line < lines ? new UICodeHint(line, NoteOf(known.Lines[line])) : null;
         context.Redraw();
+    }
+
+    // Helper method to ask git who changed the lines, out of UpdateBlame so its closure is made only when it's asked and
+    // not on every tick
+    private void AskBlame(Blamed known, Repository repository, HexDocument document, string path)
+    {
+        known.AskIn = 0.0f;
+        known.Asking = true;
+        int generation = repository.Generation;
+        string text = document.Editor.Text;
+        int version = document.Editor.Document.Version;
+        bool fresh = repository.Status?.StateOf(path).Change == GitChange.Untracked;
+        context.Work.InBackground("git blame", () => fresh ? [] : repository.Git.Blame(path, text), lines =>
+        {
+            known.Asking = false;
+            known.Lines = lines;
+            known.Generation = generation;
+            known.Version = version;
+            known.Shown = (-1, -1);
+        }, quiet: true);
     }
 
     // What the note says, the author, how long ago and the commit's first line

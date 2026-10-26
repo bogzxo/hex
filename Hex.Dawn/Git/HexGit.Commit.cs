@@ -23,28 +23,39 @@ internal sealed partial class HexGit
     private readonly Dictionary<string, (int Generation, string? Message)> merging = new(PlatformPaths.Comparer);
     private readonly HashSet<string> readingMerge = new(PlatformPaths.Comparer);
 
+    // The other ways of committing, the Git menu's Commit menu and the Commit row's right click and ... button both, in
+    // their groups (fix is amending and taking back, flags the hooks skipped or signed off)
+    private (string Group, string Key, string Icon, Action<Repository?> Do)[] CommitChoices() =>
+    [
+        ("commit", "git.commit_push", "arrow-up", repository => AskCommit(repository, CommitThen.Push)),
+        ("commit", "git.commit_sync", "sync", repository => AskCommit(repository, CommitThen.Sync)),
+        ("fix", "git.amend_command", "edit", AskAmend),
+        ("fix", "git.undo_command", "discard", UndoLastCommit),
+        ("flags", "git.commit_no_verify", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify)),
+        ("flags", "git.commit_signoff", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff))
+    ];
+
     private void BuildCommits()
     {
-        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_push"), () => AskCommit(FirstRepository(), CommitThen.Push), icon: "arrow-up");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_sync"), () => AskCommit(FirstRepository(), CommitThen.Sync), icon: "sync");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_no_verify"), () => AskCommit(FirstRepository(), CommitThen.Nothing, CommitFlags.NoVerify), icon: "check");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_signoff"), () => AskCommit(FirstRepository(), CommitThen.Nothing, CommitFlags.SignOff), icon: "check");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.amend_command"), () => AskAmend(FirstRepository()), icon: "edit");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.undo_command"), () => UndoLastCommit(FirstRepository()), icon: "discard");
+        foreach (var (group, key, icon, act) in CommitChoices())
+            context.Commands.Add($"Git/menus/commit:{group}", context.Strings.Said(key), () => act(FirstRepository()), icon: icon);
     }
 
-    // The Commit row's right click and its ... button, the same few things
+    // The Commit row's right click and its ... button, Commit itself and the same things as the menu's
     private void CommitMenu(Repository repository)
     {
         var menu = new Menu("git_commit");
         menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
-        menu.Add(context.Strings.Said("git.commit_push"), () => AskCommit(repository, CommitThen.Push), icon: "arrow-up");
-        menu.Add(context.Strings.Said("git.commit_sync"), () => AskCommit(repository, CommitThen.Sync), icon: "sync");
-        menu.Add(context.Strings.Said("git.commit_no_verify"), () => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify), icon: "check");
-        menu.Add(context.Strings.Said("git.commit_signoff"), () => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff), icon: "check");
-        menu.AddSeparator();
-        menu.Add(context.Strings.Said("git.amend_command"), () => AskAmend(repository), icon: "edit");
-        menu.Add(context.Strings.Said("git.undo_command"), () => UndoLastCommit(repository), icon: "discard");
+        string? last = null;
+        foreach (var (group, key, icon, act) in CommitChoices())
+        {
+            if (last is not null && group != last)
+                menu.AddSeparator();
+
+            last = group;
+            menu.Add(context.Strings.Said(key), () => act(repository), icon: icon);
+        }
+
         context.Windows.Menu(menu);
     }
 

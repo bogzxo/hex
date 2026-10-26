@@ -87,9 +87,10 @@ internal sealed partial class HexGit
             lookIn = LOOK_EVERY;
 
             // A folder with no repository is looked at again, a git init after it was opened made one
-            ForgetNone();
-            foreach (string root in context.Workspace.Roots)
-                RepositoryOf(root);
+            ForgetNone(all: false);
+            IReadOnlyList<string> roots = context.Workspace.Roots;
+            for (int i = 0; i < roots.Count; i++)
+                RepositoryOf(roots[i]);
             LookDown();
             foreach (Repository repository in repositories.Values)
                 repository.LookForMoves();
@@ -109,20 +110,57 @@ internal sealed partial class HexGit
     // What's taken out of the caches of where a repository is, kept so a second with nothing to take makes no garbage
     private readonly List<string> forgetting = [];
 
-    /// <summary>Helper method to forget every folder and path that had no repository, for it to be looked for again.</summary>
-    private void ForgetNone()
+    // Where a .git would be for every folder found to have no repository, its own and every folder's above it, so the
+    // look every second for one having been made is a stat of each and not the walk up the disk with its paths again
+    private readonly Dictionary<string, string[]> wouldBe = new(PlatformPaths.Comparer);
+
+    /// <summary>
+    /// Helper method to forget every folder and path that had no repository, for it to be looked for again. Every
+    /// second only the ones where a .git turned up are, which is all of them as far as anybody can tell, and none
+    /// makes any garbage while nothing turns up.
+    /// </summary>
+    private void ForgetNone(bool all = true)
     {
         foreach (var (key, value) in foundFor)
-            if (value is null) forgetting.Add(key);
+            if (value is null && (all || GitTurnedUp(key))) forgetting.Add(key);
         foreach (string key in forgetting)
             foundFor.Remove(key);
+
+        // Nothing turned up anywhere, the paths that had none still have none
+        bool any = forgetting.Count > 0;
         forgetting.Clear();
+        if (!all && !any)
+            return;
 
         foreach (var (key, value) in foundForPath)
             if (value is null) forgetting.Add(key);
         foreach (string key in forgetting)
             foundForPath.Remove(key);
         forgetting.Clear();
+    }
+
+    // Whether a .git is there now where there was none, in a folder that had no repository or one above it
+    private bool GitTurnedUp(string folder)
+    {
+        if (!wouldBe.TryGetValue(folder, out string[]? places))
+            return true;
+
+        foreach (string place in places)
+        {
+            if (Path.Exists(place))
+                return true;
+        }
+
+        return false;
+    }
+
+    // Helper method to note where a .git would be for a folder that has no repository, the same places Find looked
+    private void NoteNone(string folder)
+    {
+        var places = new List<string>();
+        for (string? at = folder; at is not null; at = Path.GetDirectoryName(at))
+            places.Add(Path.Combine(at, ".git"));
+        wouldBe[folder] = [.. places];
     }
 
     // The repository of a path, looked for once per folder
@@ -155,6 +193,11 @@ internal sealed partial class HexGit
             }
         }
 
+        if (found is null)
+            NoteNone(folder);
+        else
+            wouldBe.Remove(folder);
+
         foundFor[folder] = found;
         foundForPath[path] = found;
         return found;
@@ -182,6 +225,7 @@ internal sealed partial class HexGit
         private float settleIn = 0.01f;
         private bool asking;
         private DateTime headTime, indexTime, refTime;
+        private string? dotPath, headPath, indexPath, refPath, refFor;
 
         /// <summary>Asked again soon, or straight away.</summary>
         public void Dirty(bool now = false) => settleIn = now ? 0.01f : Math.Max(settleIn, SETTLE);
@@ -189,10 +233,26 @@ internal sealed partial class HexGit
         /// <summary>HEAD, the index and the branch's own ref, which a commit, a switch, a stage or a pull outside of Hex all touch.</summary>
         public void LookForMoves()
         {
-            string dot = DotGit();
-            DateTime head = Stamp(Path.Combine(dot, "HEAD"));
-            DateTime index = Stamp(Path.Combine(dot, "index"));
-            DateTime branchRef = Status?.Branch is { } branch ? Stamp(Path.Combine(dot, "refs", "heads", branch)) : default;
+            // Where the files are is worked out once (and the branch's ref when the branch changes), every second it was a
+            // read of the .git file and a handful of paths put together, garbage for a look that finds nothing most times
+            if (headPath is null)
+            {
+                string dot = DotGit();
+                dotPath = dot;
+                headPath = Path.Combine(dot, "HEAD");
+                indexPath = Path.Combine(dot, "index");
+            }
+
+            string? branch = Status?.Branch;
+            if (!ReferenceEquals(branch, refFor))
+            {
+                refFor = branch;
+                refPath = branch is null ? null : Path.Combine(dotPath!, "refs", "heads", branch);
+            }
+
+            DateTime head = Stamp(headPath);
+            DateTime index = Stamp(indexPath!);
+            DateTime branchRef = refPath is not null ? Stamp(refPath) : default;
             if (head != headTime || index != indexTime || branchRef != refTime)
             {
                 (headTime, indexTime, refTime) = (head, index, branchRef);
