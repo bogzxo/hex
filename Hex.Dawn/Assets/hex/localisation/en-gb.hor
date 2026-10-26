@@ -2466,6 +2466,7 @@ let strings = {
         stopped: "stopped",
         server_restarted_after: "{server} stopped, started it again",
         server_stopped: "{server} stopped again, {why}",
+        server_needs: "{server} has no project here to load, it starts once there is one",
         start_again: "Start it again"
     },
 

@@ -22,6 +22,10 @@ namespace Hex.Core;
 /// for a server that reads its projects once as it starts and never again. Empty for none.
 /// </param>
 /// <param name="Settings">What the server is told to be, by its sections, null for nothing (see LanguageServer.Settings).</param>
+/// <param name="Needs">
+/// The files a server won't run without somewhere in its folder ("*.csproj", "*.sln"), by name or *.extension. Where
+/// there's none it isn't started, csharp-ls stops the moment it starts on a lone file. Empty for a server that runs anywhere.
+/// </param>
 internal sealed record HexServerEntry(
     string Name,
     string Command,
@@ -34,12 +38,19 @@ internal sealed record HexServerEntry(
     string Repo,
     string[]? VersionArguments,
     string[]? Reload = null,
-    System.Text.Json.Nodes.JsonObject? Settings = null)
+    System.Text.Json.Nodes.JsonObject? Settings = null,
+    string[]? Needs = null)
 {
     /// <summary>Whether a file is one whose change has the server started again, by its name ("*.csproj" or a whole name).</summary>
-    public bool ReloadsFor(string path)
+    public bool ReloadsFor(string path) => Matches(Reload, path);
+
+    /// <summary>Whether a file is one of those the server won't run without, see <see cref="Needs"/>.</summary>
+    public bool NeedsFor(string path) => Matches(Needs, path);
+
+    // Whether a file's name is one of some patterns, "*.csproj" or a whole name
+    private static bool Matches(string[]? patterns, string path)
     {
-        if (Reload is not { Length: > 0 } patterns)
+        if (patterns is not { Length: > 0 })
             return false;
 
         string name = System.IO.Path.GetFileName(path);
@@ -87,7 +98,8 @@ internal static partial class HexServerCatalog
                 Text(server, "repo"),
                 Texts(server, "version"),
                 Texts(server, "reload"),
-                server.Properties.GetValueOrDefault("settings") is ObjectValue settings ? Json(settings) as System.Text.Json.Nodes.JsonObject : null));
+                server.Properties.GetValueOrDefault("settings") is ObjectValue settings ? Json(settings) as System.Text.Json.Nodes.JsonObject : null,
+                Texts(server, "needs")));
         }
 
         return entries;
