@@ -186,10 +186,15 @@ internal sealed partial class DotnetProjects : IDisposable
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
             };
-            void Moved(string path)
+            // When the watch began, macOS says a file was made a while after it was, a project written just before it was
+            // evaluated threw away the evaluation straight away
+            DateTime since = DateTime.UtcNow;
+            void Moved(string path, bool made)
             {
                 string inside = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 if (inside.StartsWith("bin/", StringComparison.OrdinalIgnoreCase) || inside.StartsWith("obj/", StringComparison.OrdinalIgnoreCase) || inside is "bin" or "obj")
+                    return;
+                if (made && File.Exists(path) && File.GetLastWriteTimeUtc(path) < since)
                     return;
 
                 lock (entry)
@@ -197,9 +202,9 @@ internal sealed partial class DotnetProjects : IDisposable
                 Changed?.Invoke(project);
             }
 
-            watcher.Created += (_, e) => Moved(e.FullPath);
-            watcher.Deleted += (_, e) => Moved(e.FullPath);
-            watcher.Renamed += (_, e) => Moved(e.FullPath);
+            watcher.Created += (_, e) => Moved(e.FullPath, made: true);
+            watcher.Deleted += (_, e) => Moved(e.FullPath, made: false);
+            watcher.Renamed += (_, e) => Moved(e.FullPath, made: false);
             watcher.EnableRaisingEvents = true;
             entry.Watcher = watcher;
         }
@@ -239,6 +244,12 @@ internal static class DotnetCli
             start.Environment.Remove(name);
         start.Environment["DOTNET_NOLOGO"] = "1";
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+
+        // Nothing left running behind it. MSBuild's reused nodes, its server and the compiler's server outlive dotnet with
+        // its output pipe still open, so reading the output to its end never ended, Hex.Tests hung on Linux and macOS
+        start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        start.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        start.Environment["UseSharedCompilation"] = "false";
 
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("dotnet didn't start");
         Task<string> output = process.StandardOutput.ReadToEndAsync(cancel);

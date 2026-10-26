@@ -130,13 +130,13 @@ public sealed class HexSelfBuildTests : IDisposable
     {
         string project = Path.Combine(folder, "App.csproj");
         File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
-        Assert.Empty(DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "App.dll"), "C:\\hex\\Hex.exe"));
-        Assert.Equal(["--window"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "Hex.dll"), "C:\\hex\\Hex.exe"));
+        Assert.Empty(DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "App.dll"), Path.Combine(folder, "Hex.exe")));
+        Assert.Equal(["--window"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "Hex.dll"), Path.Combine(folder, "Hex.exe")));
 
         Directory.CreateDirectory(Path.Combine(folder, "Properties"));
         File.WriteAllText(Path.Combine(folder, "Properties", "launchSettings.json"), "{\n  \"profiles\": {\n    \"web\": { \"commandName\": \"IIS\" },\n    \"App\": { \"commandName\": \"Project\", \"commandLineArgs\": \"--level 3 \\\"a b\\\"\" }\n  }\n}\n");
-        Assert.Equal(["--level", "3", "a b"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "App.dll"), "C:\\hex\\Hex.exe"));
-        Assert.Equal(["--window", "--level", "3", "a b"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "Hex.exe"), "C:\\hex\\Hex.exe"));
+        Assert.Equal(["--level", "3", "a b"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "App.dll"), Path.Combine(folder, "Hex.exe")));
+        Assert.Equal(["--window", "--level", "3", "a b"], DotnetLaunch.ArgumentsFor(project, Path.Combine(folder, "bin", "Hex.exe"), Path.Combine(folder, "Hex.exe")));
     }
 
     public void Dispose()
