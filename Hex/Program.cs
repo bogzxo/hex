@@ -77,6 +77,11 @@ internal static partial class Program
     private static string[] Dropped(string[] args, HexMode mode, out List<string> more)
     {
         more = [];
+
+        // Dawn reads its own paths, anywhere in the line and with a line and column after them, see HexLaunch
+        if (mode == HexMode.Dawn)
+            return args;
+
         int first = Array.FindIndex(args, arg => arg.StartsWith('-'));
         if (first < 0)
             first = args.Length;

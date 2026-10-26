@@ -1,7 +1,8 @@
 namespace Hex.Dawn;
 
 // The self test, how Hex starts. The test's own folder of this run, a step that blows up counted and not the end of
-// Hex, and a start on a folder bringing back only the tabs of that folder.
+// Hex, a start on a folder bringing back only the tabs of that folder, the files a command line names (see
+// DawnScene.SelfTest.LaunchFiles) and the welcome of a start on code.
 internal sealed partial class DawnScene
 {
     private void TestLaunch(HexPointerScript test)
@@ -66,5 +67,8 @@ internal sealed partial class DawnScene
             treeDirty = true;
         });
         test.Wait();
+
+        TestLaunchFiles(test);
+        TestPlainWelcome(test);
     }
 }

@@ -1,0 +1,41 @@
+// The search view of the side bar, VS Code's, over the tree of what it found. What to look for with the find bar's
+// three toggles in the end of its box, the chevron opening a row to replace them all with, the dots opening the files
+// to include and to exclude, and a line under them that says how many were found, what's wrong with a regex, or what
+// to do before anything was looked for. See DawnScene.SearchView, which puts it in the side bar over the tree.
+#define layout
+
+let search_view = compositor.stack({ fill: "horizontal", spacing: 4 });
+
+// The rows leave room on their left for the chevron, which hangs out into it
+let search_find_row = compositor.panel({ parent: search_view, fill: "horizontal", size: vec(0, 26), padding: vec(22, 0, 0, 0), color: vec(0, 0, 0, 0) });
+let search_expand = compositor.button({ parent: search_find_row, anchor: "left", pivot: "left", pos: vec(-22, 0), size: vec(20, 26), icon: "chevron-right", style: "button_flat", tooltip: "@search.expand" });
+let search_query = compositor.textbox({ parent: search_find_row, fill: "horizontal", size: vec(0, 26), padding: vec(8, 4, 82, 4), text_scale: 0.13, placeholder: "@search.query", max_length: 400 });
+let search_case = compositor.button({ parent: search_find_row, anchor: "right", pivot: "right", pos: vec(-54, 0), size: vec(26, 24), icon: "case-sensitive", style: "button_flat", tooltip: "@find_bar.case" });
+let search_word = compositor.button({ parent: search_find_row, anchor: "right", pivot: "right", pos: vec(-28, 0), size: vec(26, 24), icon: "whole-word", style: "button_flat", tooltip: "@find_bar.word" });
+let search_regex = compositor.button({ parent: search_find_row, anchor: "right", pivot: "right", pos: vec(-2, 0), size: vec(26, 24), icon: "regex", style: "button_flat", tooltip: "@find_bar.regex" });
+
+let search_replace_row = compositor.panel({ parent: search_view, fill: "horizontal", size: vec(0, 26), padding: vec(22, 0, 0, 0), color: vec(0, 0, 0, 0), visible: false });
+let search_replace = compositor.textbox({ parent: search_replace_row, fill: "horizontal", size: vec(0, 26), padding: vec(8, 4, 32, 4), text_scale: 0.13, placeholder: "@search.replace", max_length: 400 });
+let search_replace_all = compositor.button({ parent: search_replace_row, anchor: "right", pivot: "right", pos: vec(-2, 0), size: vec(26, 24), icon: "replace-all", style: "button_flat", tooltip: "@search.replace_all" });
+
+// The dots under the boxes at their right, the files to include and to exclude
+let search_more_row = compositor.panel({ parent: search_view, fill: "horizontal", size: vec(0, 18), color: vec(0, 0, 0, 0) });
+let search_more = compositor.button({ parent: search_more_row, anchor: "right", pivot: "right", size: vec(26, 18), icon: "ellipsis", style: "button_flat", tooltip: "@search.more" });
+
+let search_scope = compositor.stack({ parent: search_view, fill: "horizontal", spacing: 4, visible: false });
+let search_include_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.include", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1) });
+let search_include = compositor.textbox({ parent: search_scope, fill: "horizontal", size: vec(0, 26), text_scale: 0.13, placeholder: "@search.include_hint", max_length: 400 });
+let search_exclude_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.exclude", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1) });
+let search_exclude = compositor.textbox({ parent: search_scope, fill: "horizontal", size: vec(0, 26), text_scale: 0.13, placeholder: "@search.exclude_hint", max_length: 400 });
+
+// How many were found in how many files, a regex's error in red, or the hint before anything was looked for
+let search_message = compositor.label({
+    parent: search_view,
+    anchor: "left",
+    size: vec(250, 0),
+    text: "@search.hint",
+    text_scale: 0.13,
+    color: vec(0.58, 0.6, 0.66, 1),
+    align: "top_left",
+    wrap: true,
+});

@@ -160,10 +160,34 @@ let strings = {
         changed: "Changed to {text}. Ctrl+Z reverts"
     },
 
-    // The search view before anything was looked for
+    // The search view of the side bar, its boxes, what it says under them and its rows
     search: {
-        hint: "Find in Files (Ctrl+Shift+F) searches every file of the workspace. Find All References (Shift+F12) finds every use of a name",
-        find: "Find in Files..."
+        hint: "Type to search every file of the workspace. Find All References (Shift+F12) lists every use of a name here too",
+        find: "Find in Files...",
+        query: "Search",
+        replace: "Replace",
+        expand: "replace as well (Ctrl+Shift+H)",
+        replace_all: "replace every match listed, one step to undo in each open file",
+        more: "files to include and to exclude",
+        include: "files to include",
+        exclude: "files to exclude",
+        include_hint: "e.g. src/**, *.cs",
+        exclude_hint: "e.g. *.md, test/**",
+        summary: "{results} in {files}",
+        none: "No results found. Check the toggles, the files to include and exclude, and search_exclude",
+        bad_regex: "Invalid regular expression, {error}",
+        looking: "looking for '{query}' in {where}...",
+        dismiss: "Dismiss",
+        dismiss_file: "Dismiss the file",
+        match_one: "1 match",
+        match_many: "{count} matches",
+        replace_title: "Replace in Files",
+        replace_ask: "Replace {matches} in {files} with '{with}'?",
+        replace_go: "Replace",
+        replaced: "replaced {matches} in {files}",
+        replaced_open: ", {count} open in the editor and not saved yet",
+        replace_failed: "{file} couldn't be written, {error}",
+        nothing_to_replace: "nothing listed to replace, search for something first"
     },
 
     // The dialogs that pick one of a list as it is typed into (Ctrl+P, the command palette)
@@ -635,7 +659,12 @@ let strings = {
         change_name: "Change {from} to {to}",
         decompiled: "{word}, from {file} as the server decompiles it, to read",
         source_not_written: "the source couldn't be written to be read, {why}",
-        no_hover: "nothing's known of {word}"
+        no_hover: "nothing's known of {word}",
+        missing: "language server {command} not found. Install: {install}",
+        missing_no_install: "language server {command} not found. It's downloaded by hand, the settings say where from and where it is once it's there",
+        copy_install: "Copy Install Command",
+        open_settings: "Open Settings",
+        install_copied: "copied {install}"
     },
 
     code_hints: {
@@ -1075,6 +1104,7 @@ let strings = {
         all_parse: "nothing wrong in the {files} of {where}",
         problems_found: "{count} in {files}, listed under the editor",
         find_in_files: "Find in Files...",
+        replace_in_files: "Replace in Files...",
         go_to_file: "Go to File...",
         go_to_line: "Go to Line...",
         go_to_symbol: "Go to Symbol..."
@@ -2219,6 +2249,11 @@ let strings = {
     remote: {
         missing:"asked to open {path}, which isn't there",
         opened: "opened {name}, asked for by another program"
+    },
+
+    // The files Hex was started on
+    launch: {
+        missing: "not there, so not opened: {files}"
     },
 
     side_tree: {

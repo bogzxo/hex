@@ -9,7 +9,7 @@ internal enum HexSide
     // The folders of the workspace, or the folder files are opened from without one
     Explorer,
 
-    // What finding in every file (or every use of a name) came to
+    // Finding in every file, its boxes over what it (or every use of a name) came to
     Search,
 
     // What a file of code declares, and the keys of its objects
@@ -117,6 +117,13 @@ internal sealed partial class DawnScene
         treeDirty = false;
         if (!sideTree.Visible)
             return;
+
+        // Search gives its box the keys, the way VS Code's view does, Down from there isn't how a search starts
+        if (Side == HexSide.Search && searchView is { Visible: true })
+        {
+            FocusSearchBox();
+            return;
+        }
 
         // With nothing picked yet the first open row with rows under it is, Changes, a workspace folder or a file found
         // in, so the first Down lands on the first thing in it. Down from nothing picked was Source Control's Commit all,

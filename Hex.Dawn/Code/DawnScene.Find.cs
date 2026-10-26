@@ -16,7 +16,7 @@ using Key = Silk.NET.Input.Key;
 namespace Hex.Dawn;
 
 // Finding things. In the file (Ctrl+F, F3, Ctrl+H, Ctrl+G), and in every file of the workspace, opening one by a few
-// letters of its name (Ctrl+P), every line something is on (Ctrl+Shift+F) and every file checked for what is wrong (F8).
+// letters of its name (Ctrl+P), every match in the search view (Ctrl+Shift+F) and every file checked for what is wrong (F8).
 internal sealed partial class DawnScene
 {
     /* Finding and going places */
@@ -186,32 +186,7 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>Ctrl+Shift+F, every line of every file of the workspace something is in, listed on the left, as the find bar's toggles say.</summary>
-    private void FindInFiles()
-    {
-        string how = HexSearch.DescribeOptions(codeEditing.findOptions);
-        AskText(Said("find_menu.find_in_files_title"), Said("find_menu.find_in_files_prompt", ("where", DescribeRoots()), ("how", how)), codeEditing.lastFind, Said("find_menu.find"), query =>
-        {
-            if (query.Length == 0)
-                return;
-
-            codeEditing.lastFind = query;
-            List<string> roots = WorkspaceRoots();
-            string where = DescribeRoots();
-            UIFindOptions options = codeEditing.findOptions;
-
-            // Every file read off the editor's thread, the results come in when they are all there
-            InBackground(Said("find_menu.looking_for", ("query", query), ("where", where)), () => HexSearch.FindIn(roots, query, options), found =>
-            {
-                ShowResults(Said("find_menu.found_title", ("query", query), ("count", found.Count.ToString())), found);
-                Say(found.Count > 0
-                    ? Said("find_menu.found_in_files", ("query", query), ("files", HexText.Count("file", found.Select(result => result.Path).Distinct().Count())), ("lines", HexText.Count("line", found.Count)))
-                    : Said("find_menu.not_found", ("query", query), ("where", where)), error: found.Count == 0);
-            });
-        });
-    }
-
-    /// <summary>Every line of every file of the workspace something is on, as a word of its own if it says so.</summary>
+    /// <summary>Every place in every file of the workspace something is, as a word of its own if it says so.</summary>
     private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
     /// <summary>
@@ -248,13 +223,26 @@ internal sealed partial class DawnScene
         });
     }
 
-    private const string SEARCH_EMPTY_TEMPLATE = "search_empty.hor", ASK_TEMPLATE = "ask.hor";
+    private const string ASK_TEMPLATE = "ask.hor";
 
-    /// <summary>Lists the places something was found in the side bar's search view, and shows it.</summary>
+    /// <summary>
+    /// Lists the places something was found in the side bar's search view, and shows it. What the references of a name
+    /// came to (Shift+F12) is listed with the boxes empty, they didn't find it.
+    /// </summary>
     private void ShowResults(string title, List<HexResult> found)
     {
         results = found;
         resultsTitle = title;
+        resultsFound = null;
+        searchError = null;
+
+        // A search still going, or waiting to go, isn't wanted any more
+        searchAsked++;
+        searchWait = -1.0f;
+        if (searchView is not null)
+            searchQuery.Text = string.Empty;
+        ShowSearchMessage();
+
         left.Show(true);
         Side = HexSide.Search;
         treeScroll.Offset = 0;
@@ -263,6 +251,9 @@ internal sealed partial class DawnScene
     private void CloseResults()
     {
         results = null;
+        resultsFound = null;
+        searchError = null;
+        ShowSearchMessage();
         if (Side == HexSide.Search)
             Side = HomeSide;
         treeDirty = true;
@@ -272,6 +263,7 @@ internal sealed partial class DawnScene
     private void AddFindCommands()
     {
         commands.Add("Edit/files", Said("find_menu.find_in_files"), FindInFiles, "Ctrl+Shift+F", "search", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/files", Said("find_menu.replace_in_files"), ReplaceInFiles, "Ctrl+Shift+H", "replace-all", UIKeyUse.BoundWhileTyping);
 
         commands.Add("Go/open", Said("find_menu.go_to_file"), QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;

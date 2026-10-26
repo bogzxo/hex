@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using Horizon.Content;
 using Horizon.HIDL.Lexing;
 using Horizon.HIDL.Parsing;
@@ -17,7 +15,7 @@ internal readonly record struct HexResult(string Path, int Line, int Column, str
 /// something is on, and every file checked for what doesn't parse. Nothing of the editor is read, so all of it goes on
 /// in the background, and is tested on its own.
 /// </summary>
-internal static class HexSearch
+internal static partial class HexSearch
 {
     /// <summary>
     /// The folders the look for repositories inside of the workspace never goes into (HexGit.Nested), what gets built,
@@ -31,7 +29,7 @@ internal static class HexSearch
     /// </summary>
     public static Func<HexExcludes> Excluded { get; set; } = static () => HexExcludes.Usual;
 
-    /// <summary>The most lines finding something lists, a search for "e" in a big repository would go on for ever.</summary>
+    /// <summary>The most matches finding something lists, a search for "e" in a big repository would go on for ever.</summary>
     public const int MOST_FOUND = 2000;
 
     /// <summary>Every .hor under some folders, once each.</summary>
@@ -127,79 +125,6 @@ internal static class HexSearch
         string inside = Path.GetRelativePath(root, full).Replace('\\', '/');
         return roots.Count > 1 ? $"{Path.GetFileName(root.TrimEnd('\\', '/'))}/{inside}" : inside;
     }
-
-    /// <summary>
-    /// Every line something is on in the files under some folders, the first place on each, the case, whole words and a
-    /// regex as the options say. A regex that doesn't build finds nothing.
-    /// </summary>
-    public static List<HexResult> FindIn(IReadOnlyList<string> roots, string query, UIFindOptions options)
-    {
-        var found = new List<HexResult>();
-        Regex? pattern = null;
-        if (options.Regex)
-        {
-            try { pattern = new Regex(query, (options.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)); }
-            catch (ArgumentException) { return found; }
-        }
-
-        foreach (string file in TextFilesUnder(roots))
-        {
-            string[] lines = ReadLines(file);
-            for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
-            {
-                if (FirstMatch(lines[line], query, options, pattern) is { } at)
-                {
-                    // How long what was found is, for the row to light it, the query's length or the regex's match
-                    int length = pattern is null ? query.Length : Math.Max(1, pattern.Match(lines[line], at).Length);
-                    int lead = lines[line].Length - lines[line].TrimStart().Length;
-                    found.Add(new HexResult(file, line, at, $"{RelativeTo(roots, file)}:{line + 1}  {lines[line].Trim()}", length, at - lead));
-                }
-            }
-        }
-
-        return found;
-    }
-
-    /// <summary>Where something is first on a line as the options say (the pattern built from them for a regex), null for nowhere.</summary>
-    public static int? FirstMatch(string line, string query, UIFindOptions options, Regex? pattern)
-    {
-        if (pattern is not null)
-        {
-            try
-            {
-                for (Match match = pattern.Match(line); match.Success; match = match.NextMatch())
-                {
-                    if (match.Length > 0 && (!options.WholeWord || IsWholeWord(line, match.Index, match.Length)))
-                        return match.Index;
-                }
-            }
-            catch (RegexMatchTimeoutException)
-            {
-            }
-            return null;
-        }
-
-        StringComparison comparison = options.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        for (int at = line.IndexOf(query, comparison); at >= 0; at = line.IndexOf(query, at + query.Length, comparison))
-        {
-            if (!options.WholeWord || IsWholeWord(line, at, query.Length))
-                return at;
-        }
-        return null;
-    }
-
-    /// <summary>The toggles of the find bar that are on, said after what's asked, empty for none.</summary>
-    public static string DescribeOptions(UIFindOptions options)
-    {
-        var on = new List<string>();
-        if (options.MatchCase) on.Add("the case matching");
-        if (options.WholeWord) on.Add("whole words");
-        if (options.Regex) on.Add("as a regex");
-        return on.Count == 0 ? string.Empty : $", {string.Join(", ", on)} (the find bar's toggles)";
-    }
-
-    private static bool IsWholeWord(string line, int at, int length) =>
-        (at == 0 || !UITextDocument.IsWordChar(line[at - 1])) && (at + length >= line.Length || !UITextDocument.IsWordChar(line[at + length]));
 
     /// <summary>Every .hor under some folders parsed, what doesn't parse, and what names a text the game hasn't got.</summary>
     public static (int Files, List<HexResult> Problems) CheckFiles(IReadOnlyList<string> roots)

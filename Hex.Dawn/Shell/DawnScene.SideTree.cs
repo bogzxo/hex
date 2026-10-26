@@ -42,7 +42,7 @@ internal sealed partial class DawnScene
         SideGrip(sideTree, UIResize.Right, left: true);
     }
 
-    /// <summary>Whether the side bar shows the tree, or the rows of the designer (and the search's empty page).</summary>
+    /// <summary>Whether the side bar shows the tree, or the rows of the designer.</summary>
     private void UseSideTree(bool tree)
     {
         sideTree.Visible = tree;
@@ -297,72 +297,6 @@ internal sealed partial class DawnScene
         _ => HexRunning.SymbolField
     };
 
-    /* What was found, Ctrl+Shift+F and Shift+F12, by the file it is in */
-
-    private void RebuildResults()
-    {
-        // Nothing looked for yet, the way to look
-        if (results is null)
-        {
-            treeTitle.Text = Said("side.search");
-            UseSideTree(false);
-            layout.Populate(tree, 0);
-            layout.Instantiate(SEARCH_EMPTY_TEMPLATE, tree).Get<Button>("find").OnPressed = FindInFiles;
-            return;
-        }
-
-        treeTitle.Text = resultsTitle;
-        UseSideTree(true);
-
-        var items = new List<UITreeItem>();
-        var byFile = new Dictionary<string, UITreeItem>(PlatformPaths.Comparer);
-        foreach (HexResult result in results)
-        {
-            if (!byFile.TryGetValue(result.Path, out UITreeItem? file))
-            {
-                file = new UITreeItem(Path.GetFileName(result.Path), HexExplorer.FileIcon(result.Path))
-                {
-                    Tooltip = result.Path,
-                    Expanded = true,
-                    Children = []
-                };
-                byFile[result.Path] = file;
-                items.Add(file);
-            }
-
-            // Under its file a row is what's on the line, the line's number quiet after it. It was the file and the line
-            // again in front of that, "app.d:3  struct Point  3"
-            HexResult found = result;
-            string marker = $":{result.Line + 1}  ";
-            int cut = result.Text.IndexOf(marker, StringComparison.Ordinal);
-            string said = (cut >= 0 ? result.Text[(cut + marker.Length)..] : result.Text).Trim();
-
-            // What was found lit in the line, where it is once the line's indent is gone
-            file.Add(new UITreeItem(said, string.Empty)
-            {
-                Mark = result.Found > 0 && result.FoundAt >= 0 ? (result.FoundAt, result.Found) : default,
-                Detail = $"{result.Line + 1}",
-                Tooltip = $"{result.Path}:{result.Line + 1}",
-                Tag = new SideTag(Pressed: () => OpenAt(found.Path, found.Line, found.Column))
-            });
-        }
-
-        foreach (UITreeItem file in items)
-            file.Detail = file.Children!.Count.ToString();
-
-        if (items.Count == 0)
-            items.Add(NoteItem(Said("side_tree.results_empty"), DimColor));
-
-        // Finding stops at its most, said over them so nobody takes the list for all there is
-        if (results.Count >= HexSearch.MOST_FOUND)
-            items.Insert(0, NoteItem(ResultsMostText, DimColor));
-
-        sideTree.Items = items;
-    }
-
-    /// <summary>The line over the results when finding stopped at its most.</summary>
-    private string ResultsMostText => Said("side_tree.results_most", ("count", HexSearch.MOST_FOUND.ToString()));
-
     /// <summary>
     /// What the files of the workspace leave out changed (files_exclude, search_exclude, the .gitignores). The explorer
     /// is put together again with what's hidden now, quick open and Find in Files read it the next time they walk.
@@ -375,6 +309,7 @@ internal sealed partial class DawnScene
         designer.treeRows.Clear();
         fileRows.Clear();
         ApplySide();
+        PlaceSearchView(Side == HexSide.Search);
 
         switch (Side)
         {

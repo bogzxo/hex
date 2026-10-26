@@ -185,7 +185,7 @@ internal sealed partial class DawnScene : Scene
         extensions = new HexExtensions(Context, this);
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
-        languages = new HexLanguages(Context);
+        languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
         codeEditing.languages = languages;
         BuildStatusBar();
         BuildPanel();
@@ -261,7 +261,12 @@ internal sealed partial class DawnScene : Scene
             Side = HexSide.Explorer;
         }
 
-        if (options.Open is not null && options.Line > 0)
+        // A start on code rather than on layouts has the welcome without the designer round it, see DawnScene.Welcome
+        plainWelcome = WantsPlainWelcome();
+
+        if (options.Files is { Length: > 0 } named)
+            OpenLaunchFiles(named);
+        else if (options.Open is not null && options.Line > 0)
             OpenAt(options.Open, options.Line - 1, 0);
         else if (options.Open is not null)
             Open(options.Open);

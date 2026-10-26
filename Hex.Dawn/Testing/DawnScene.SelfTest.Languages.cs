@@ -176,11 +176,11 @@ internal sealed partial class DawnScene
         string NameOf(string id) => CodeLanguages.Languages().First(language => language.Id == id).Name;
         test.Check("language servers: one added for a language with none, a bar between its files, is a server of its own and in the list", () =>
         {
-            languages.FillServerForm(NameOf("rust"), "rs| .rlib ", "rust-analyzer-selftest");
+            languages.FillServerForm(NameOf("lua"), "lua| .luau ", "lua-ls-selftest");
             languages.PressAddServer();
-            return languages.ServerEntry("rust") is { Command: "rust-analyzer-selftest", Extensions: [".rs", ".rlib"] } rust && languages.IsAdded(rust)
-                && LanguageServers.RegistrationFor("main.rs") is { Name: "rust" } && settings.AddedServers.Any(server => server.Language == "rust")
-                && languages.serverStatus.ContainsKey("rust");
+            return languages.ServerEntry("lua") is { Command: "lua-ls-selftest", Extensions: [".lua", ".luau"] } lua && languages.IsAdded(lua)
+                && LanguageServers.RegistrationFor("main.lua") is { Name: "lua" } && settings.AddedServers.Any(server => server.Language == "lua")
+                && languages.serverStatus.ContainsKey("lua");
         });
         test.Run(() => languages.FocusServerForm());
         test.Settle(0.5f);
@@ -192,10 +192,10 @@ internal sealed partial class DawnScene
             languages.PressAddServer();
             bool instead = languages.ServerEntry("python") is { Command: "pylsp-selftest" } && LanguageServers.RegistrationFor("x.py") is { Command: "pylsp-selftest" };
             languages.RemoveServer("python");
-            languages.RemoveServer("rust");
-            return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("rust") is null
-                && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.rs") is null
-                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("rust");
+            languages.RemoveServer("lua");
+            return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("lua") is null
+                && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.lua") is null
+                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("lua");
         });
         test.Check("language servers: the files typed are read with a bar between two and a dot on each", () =>
             HexLanguages.ParseExtensions(" d | .di|*.dd||. ") is [".d", ".di", ".dd"]);
@@ -232,6 +232,7 @@ internal sealed partial class DawnScene
         test.Run(CloseSettings);
 
         TestLanguageModes(test, folder);
+        TestLanguageReach(test, folder);
 
         test.Run(() =>
         {

@@ -1,8 +1,8 @@
 // The language servers Hex lints and completes other languages with, the protocol VS Code gets its squiggles through.
 // One entry a server, the command it is started with (on the PATH, or a full path), its arguments, the language id the
-// protocol knows the files by and the files it is for. A server that isn't on the machine is left alone, the file is
-// coloured and nothing is said about it. HIDL isn't in here, Hex is its server: the editor knows a file of it inside,
-// and `Hex --lsp` is the same knowledge for any other editor.
+// protocol knows the files by and the files it is for. A server that isn't on the machine is said once a session, with
+// how it is installed, and the file is coloured all the same. HIDL isn't in here, Hex is its server, the editor knows a
+// file of it inside, and `Hex --lsp` is the same knowledge for any other editor.
 //
 // What the settings (Editor, Language servers) make of the rest of an entry, all of it optional:
 //   about    a sentence on what it is, said under its name with how it is installed
@@ -59,7 +59,7 @@ let servers = {
         repo: "clangd/clangd", version: ["--version"]
     },
     typescript: {
-        command: "typescript-language-server", args: ["--stdio"], language: "typescript", extensions: [".ts", ".tsx", ".js", ".jsx"],
+        command: "typescript-language-server", args: ["--stdio"], language: "typescript", extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
         about: "TypeScript and JavaScript, over the TypeScript compiler, which is installed with it.",
         install: "npm install -g typescript-language-server typescript", update: "npm install -g typescript-language-server@latest typescript@latest",
         repo: "typescript-language-server/typescript-language-server", version: ["--version"]
@@ -86,5 +86,42 @@ let servers = {
         command: "yaml-language-server", args: ["--stdio"], language: "yaml", extensions: [".yaml", ".yml"],
         about: "YAML, Red Hat's, with schemas by the file's name. It has no releases on GitHub, npm is where its versions are.",
         install: "npm install -g yaml-language-server", update: "npm install -g yaml-language-server@latest"
+    },
+    go: {
+        command: "gopls", args: [], language: "go", extensions: [".go"],
+        about: "Go, the Go team's own. Installed with the go tool, into the bin folder of GOPATH (put that on the PATH or set where it is here).",
+        install: "go install golang.org/x/tools/gopls@latest",
+        version: ["version"],
+        reload: ["go.mod", "go.work"]
+    },
+    rust: {
+        command: "rust-analyzer", args: [], language: "rust", extensions: [".rs"],
+        about: "Rust, rust-analyzer, with cargo for the project. Comes with rustup as a component of the toolchain.",
+        install: "rustup component add rust-analyzer", update: "rustup update",
+        version: ["--version"],
+        reload: ["Cargo.toml"]
+    },
+    bash: {
+        command: "bash-language-server", args: ["start"], language: "shellscript", extensions: [".sh", ".bash"],
+        about: "Bash and other shell scripts, with ShellCheck's findings when shellcheck is on the PATH as well.",
+        install: "npm install -g bash-language-server", update: "npm install -g bash-language-server@latest",
+        repo: "bash-lsp/bash-language-server", version: ["--version"]
+    },
+    toml: {
+        command: "taplo", args: ["lsp", "stdio"], language: "toml", extensions: [".toml"],
+        about: "TOML, Cargo.toml and pyproject.toml among them, with schemas by the file's name. Taplo's command line built with its server.",
+        install: "cargo install taplo-cli --locked --features lsp", update: "cargo install taplo-cli --locked --features lsp --force",
+        repo: "tamasfe/taplo", version: ["--version"]
+    },
+    docker: {
+        command: "docker-langserver", args: ["--stdio"], language: "dockerfile", extensions: [".dockerfile", ".containerfile"],
+        about: "Dockerfiles and Containerfiles, whatever they're called, by their colouring. Comes from npm.",
+        install: "npm install -g dockerfile-language-server-nodejs", update: "npm install -g dockerfile-language-server-nodejs@latest",
+        repo: "rcjsuen/dockerfile-language-server-nodejs"
+    },
+    svelte: {
+        command: "svelteserver", args: ["--stdio"], language: "svelte", extensions: [".svelte"],
+        about: "Svelte components, the script, the styles and the markup. Comes from npm as svelte-language-server.",
+        install: "npm install -g svelte-language-server", update: "npm install -g svelte-language-server@latest"
     }
 };

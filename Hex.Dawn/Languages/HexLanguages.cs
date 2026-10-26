@@ -8,7 +8,8 @@ namespace Hex.Dawn;
 // through). Assets/hex/language_servers.hor says which server lints which files and how it is started, a file of one
 // of them is opened in its server as it is opened here, sent again a moment after it is typed into, and what the
 // server says about it goes under the code and into the Problems panel the way HIDL's own diagnostics do. A server
-// that isn't on the machine is no trouble, the file is coloured and nothing is said. HIDL will go the same way once it
+// that isn't on the machine is no trouble, the file is coloured and a card says once a session how the server is
+// installed (HexLanguages.Missing). HIDL will go the same way once it
 // has a server of its own, for now its diagnostics come out of the editor's parser and the run of the file.
 internal sealed partial class HexLanguages
 {
@@ -211,8 +212,12 @@ internal sealed partial class HexLanguages
             ReadLanguageServers();
 
         string root = ServerRootFor(path);
-        if (LanguageServers.For(ServerPathFor(of, path), root) is not { } server)
+        string serverPath = ServerPathFor(of, path);
+        if (LanguageServers.For(serverPath, root) is not { } server)
+        {
+            SayIfMissing(serverPath);
             return;
+        }
 
         server.Woken ??= WakeForLinting;
 

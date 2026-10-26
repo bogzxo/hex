@@ -5,7 +5,10 @@ namespace Hex.Dawn;
 
 // What Hex opens on when nothing is open. Hex always has a document, it starts with an empty layout, so the welcome is a
 // page over that layout's canvas, there while the empty layout is all there is and gone the moment a component goes into
-// it or a file is opened. New, open, a folder, the commands, the help, and the files worked on last.
+// it or a file is opened. New, open, a folder, the commands, the help, and the files worked on last. Started on a folder
+// of code (no layouts near its top) or on nothing, the welcome comes up in that layout's code view instead, with no
+// designer round it, no Design, Code and Play over it and no Properties beside it. Somebody who writes Go never sees
+// a layout designer they didn't ask for. A folder of layouts and every self test start on the designer as ever.
 internal sealed partial class DawnScene
 {
     private const string WELCOME_LAYOUT = "welcome.hor";
@@ -25,52 +28,82 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, the welcome put up or taken down for what is open.</summary>
     private void UpdateWelcome()
     {
-        bool wanted = Welcoming && LayoutTools;
-        if (wanted == welcome is { Visible: true })
-            return;
+        bool welcoming = Welcoming;
 
-        if (wanted)
-            ShowWelcome();
-        else if (welcome is not null)
-            welcome.Visible = false;
-    }
-
-    private void ShowWelcome()
-    {
-        if (welcome is null)
+        // Started on code, the empty layout goes to its code view once and the welcome goes over its code. Only once for
+        // each, F7 still takes it to the designer
+        if (plainWelcome && welcoming && plainFor != document)
         {
-            UILayout made = layout.Instantiate(WELCOME_LAYOUT, canvas);
-            welcome = made.Get<Panel>("welcome");
-
-            // The card's own colour, the middle of the window it sits in. Its own near black was a slab in the navy
-            if (compositor.Skin is { } skin)
-                welcome.Color = skin.PanelColor with { W = 1.0f };
-
-            made.Get<Button>("new_layout").OnPressed = () => Show(NewDocument());
-            made.Get<Button>("open_file").OnPressed = OpenPressed;
-            made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
-            made.Get<Button>("commands").OnPressed = CommandPalette;
-            made.Get<Button>("keys").OnPressed = OpenKeysWindow;
-            made.Get<Button>("language").OnPressed = ShowLanguageHelp;
-            made.Get<Button>("changes").OnPressed = ShowChangelog;
-            made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Version));
-
-            var list = made.Get<StackPanel>("recent");
-            var rows = layout.Populate(list, Math.Min(recent.Count, 10));
-            for (int i = 0; i < rows.Count; i++)
+            plainFor = document;
+            if (document.View == HexView.Design)
             {
-                string path = recent[i];
-                var link = rows[i].Get<Button>("link");
-                link.Label = $"{Path.GetFileName(path)}    {Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty)}";
-                link.Icon = HexExplorer.FileIcon(path);
-                link.Tooltip = path;
-                link.OnPressed = () => Open(path);
+                document.View = HexView.Code;
+                ApplyView();
             }
-
-            if (recent.Count == 0)
-                Hint(list, Said("welcome.no_recent"));
         }
 
-        welcome.Visible = true;
+        bool plain = plainWelcome && welcoming && document == plainFor && document.View == HexView.Code;
+        ShowPlainChrome(plain);
+
+        bool wanted = welcoming && LayoutTools;
+        if (wanted != welcome is { Visible: true })
+        {
+            if (wanted)
+                (welcome ??= MakeWelcome(canvas)).Visible = true;
+            else if (welcome is not null)
+                welcome.Visible = false;
+        }
+
+        if (plain != plainPage is { Visible: true })
+        {
+            if (plain)
+                (plainPage ??= MakeWelcome(codeScroll)).Visible = true;
+            else if (plainPage is not null)
+                plainPage.Visible = false;
+        }
+
+        // Over the code, which goes back into the panel after it whenever the editors are placed again
+        if (plain && plainPage is not null && codeScroll.Children[^1] != plainPage)
+        {
+            codeScroll.Remove(plainPage);
+            codeScroll.Add(plainPage);
+        }
+    }
+
+    /// <summary>The welcome made in a panel, the canvas of the empty layout or the code panel for the plain one.</summary>
+    private Panel MakeWelcome(UIComponent into)
+    {
+        UILayout made = layout.Instantiate(WELCOME_LAYOUT, into);
+        Panel page = made.Get<Panel>("welcome");
+
+        // The card's own colour, the middle of the window it sits in. Its own near black was a slab in the navy
+        if (compositor.Skin is { } skin)
+            page.Color = skin.PanelColor with { W = 1.0f };
+
+        made.Get<Button>("new_layout").OnPressed = () => Show(NewDocument());
+        made.Get<Button>("open_file").OnPressed = OpenPressed;
+        made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
+        made.Get<Button>("commands").OnPressed = CommandPalette;
+        made.Get<Button>("keys").OnPressed = OpenKeysWindow;
+        made.Get<Button>("language").OnPressed = ShowLanguageHelp;
+        made.Get<Button>("changes").OnPressed = ShowChangelog;
+        made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Version));
+
+        var list = made.Get<StackPanel>("recent");
+        var rows = layout.Populate(list, Math.Min(recent.Count, 10));
+        for (int i = 0; i < rows.Count; i++)
+        {
+            string path = recent[i];
+            var link = rows[i].Get<Button>("link");
+            link.Label = $"{Path.GetFileName(path)}    {Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty)}";
+            link.Icon = HexExplorer.FileIcon(path);
+            link.Tooltip = path;
+            link.OnPressed = () => Open(path);
+        }
+
+        if (recent.Count == 0)
+            Hint(list, Said("welcome.no_recent"));
+
+        return page;
     }
 }

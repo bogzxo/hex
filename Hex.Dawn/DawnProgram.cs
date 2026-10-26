@@ -50,6 +50,9 @@ public static class DawnProgram
     /// <item><c>--console "moves.jab" "len(keys(moves))"</c> runs lines in the HIDL console once the file's values are in.</item>
     /// <item><c>--line 42</c> opens the file of <c>--open</c> at that line, which is how Dusk opens a path out of a terminal.</item>
     /// <item><c>--folder C:\code</c> starts on a workspace of that folder, handed to the Dawn that's running when there is one.</item>
+    /// <item><c>a.cs src\b.cs:12:3 ..\tools</c>, paths on their own anywhere in the line, open those files (the last one
+    /// shown) at the line and column after them, and a folder among them is <c>--folder</c> when that isn't said.</item>
+    /// <item><c>--goto b.cs:12:3</c> (or <c>-g</c>) is one more file at a line and column, the way code -g has it.</item>
     /// <item><c>--window</c> is a window of its own whatever is running, a file or a folder isn't handed over (the terminal's dawn -window).</item>
     /// <item><c>--fresh</c> starts clean, on the explorer, with no workspace, tabs, backups or last file of before. Settings and keys are read as ever.</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
@@ -81,6 +84,11 @@ public static class DawnProgram
         // rest (its skin, its fonts, the layouts folder nobody named) is next to it
         string workspace = ValueOf(args, ARGUMENT_WORKSPACE) is { } named ? Path.GetFullPath(named) : DEFAULT_WORKSPACE;
         string[] check = [.. ValuesOf(args, ARGUMENT_CHECK).Select(Path.GetFullPath)];
+
+        // The files and the folder named, on their own or with --open, --goto and --folder, are from there too
+        string started = Directory.GetCurrentDirectory();
+        var (files, folderNamed) = HexLaunch.Parse(args, started);
+        string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(Path.Combine(started, asked)) ? Path.GetFullPath(Path.Combine(started, asked)) : folderNamed;
         Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
         if (selfTest)
@@ -105,18 +113,14 @@ public static class DawnProgram
         // A file or a folder to open and a Dawn running already, it goes to that one and this one leaves, unless this
         // one was asked to be a window of its own
         bool window = args.Contains(ARGUMENT_WINDOW);
-        if (!selfTest && !window && ValueOf(args, ARGUMENT_OPEN) is { } toOpen && Path.IsPathRooted(toOpen) && File.Exists(toOpen)
-            && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"open|{Path.GetFullPath(toOpen)}|{(int.TryParse(ValueOf(args, ARGUMENT_LINE), out int lineAsked) ? lineAsked : 0)}"))
-            return;
-
-        string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(asked) ? Path.GetFullPath(asked) : null;
-        if (!selfTest && !window && folder is not null && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"folder|{folder}"))
+        if (!selfTest && !window && HandOver(folder, files))
             return;
 
         Directory.CreateDirectory(workspace);
 
         var options = new HexOptions(
-            Open: ValueOf(args, ARGUMENT_OPEN),
+            Open: files.Count > 0 ? files[^1].Path : null,
+            Files: [.. files],
             Workspace: workspace,
             SelfTest: selfTest,
             Wheel: args.Contains(ARGUMENT_WHEEL),
@@ -127,7 +131,7 @@ public static class DawnProgram
             Watch: args.Contains(ARGUMENT_WATCH),
             View: ValueOf(args, ARGUMENT_VIEW),
             Console: ValuesOf(args, ARGUMENT_CONSOLE) is { Length: > 0 } lines ? lines : null,
-            Line: int.TryParse(ValueOf(args, ARGUMENT_LINE), out int line) ? line : 0,
+            Line: files.Count > 0 ? files[^1].Line : 0,
             Folder: folder,
             Fresh: args.Contains(ARGUMENT_FRESH),
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
@@ -212,6 +216,29 @@ public static class DawnProgram
             Check: [],
             Exit: false,
             Folder: folder is not null && Directory.Exists(folder) ? Path.GetFullPath(folder) : null));
+    }
+
+    /// <summary>
+    /// Helper method to hand the folder and the files named to the Dawn that's running, the folder first and then every
+    /// file at its line and column, false when there's none to take them and this one starts instead.
+    /// </summary>
+    private static bool HandOver(string? folder, List<HexLaunchFile> files)
+    {
+        if (folder is null && files.Count == 0)
+            return false;
+
+        bool told = folder is not null && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"folder|{folder}");
+        if (folder is not null && !told)
+            return false;
+
+        foreach (HexLaunchFile file in files)
+        {
+            if (!Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, $"open|{file.Path}|{file.Line}|{file.Column}"))
+                return told;
+            told = true;
+        }
+
+        return told;
     }
 
     private static string? ValueOf(string[] args, string name)

@@ -208,6 +208,7 @@ internal sealed partial class DawnScene
         {
             TestLanguages(test);
         }),
+        ("search", "the search view in the side bar, live results, every match a row, the toggles, include and exclude, dismissing, Replace in Files", TestSearchView),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
