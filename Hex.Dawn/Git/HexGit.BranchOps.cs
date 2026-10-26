@@ -11,14 +11,14 @@ internal sealed partial class HexGit
 {
     private void BuildBranchOps()
     {
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.merge_command"), () => PickBranch(FirstRepository(), "git_branch.merge_title", remotes: true, MergeBranch), icon: "git-merge");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.rebase_command"), () => PickBranch(FirstRepository(), "git_branch.rebase_title", remotes: true, RebaseOnto), icon: "git-pull-request");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.delete_command"), () => PickBranch(FirstRepository(), "git_branch.delete_title", remotes: false, DeleteBranch), icon: "trash");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.rename_command"), () => AskRename(FirstRepository()), icon: "edit");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.tag_command"), () => AskTag(FirstRepository()), icon: "tag");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.delete_tag_command"), () => PickTag(FirstRepository()), icon: "trash");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.cherry_pick_command"), () => PickBranch(FirstRepository(), "git_branch.cherry_pick_title", remotes: true, PickToCherryPick), icon: "git-commit");
-        context.Commands.Add("Git/branches", context.Strings.Said("git_branch.revert_command"), () => PickCommit(FirstRepository(), "HEAD", "git_branch.revert_title", Revert), icon: "discard");
+        context.Commands.Add("Git/menus/branches:change", context.Strings.Said("git_branch.merge_command"), () => PickBranch(FirstRepository(), "git_branch.merge_title", remotes: true, MergeBranch), icon: "git-merge");
+        context.Commands.Add("Git/menus/branches:change", context.Strings.Said("git_branch.rebase_command"), () => PickBranch(FirstRepository(), "git_branch.rebase_title", remotes: true, RebaseOnto), icon: "git-pull-request");
+        context.Commands.Add("Git/menus/branches:switch", context.Strings.Said("git_branch.rename_command"), () => AskRename(FirstRepository()), icon: "edit");
+        context.Commands.Add("Git/menus/branches:switch", context.Strings.Said("git_branch.delete_command"), () => PickBranch(FirstRepository(), "git_branch.delete_title", remotes: false, DeleteBranch), icon: "trash");
+        context.Commands.Add("Git/menus/tags", context.Strings.Said("git_branch.tag_command"), () => AskTag(FirstRepository()), icon: "tag");
+        context.Commands.Add("Git/menus/tags", context.Strings.Said("git_branch.delete_tag_command"), () => PickTag(FirstRepository()), icon: "trash");
+        context.Commands.Add("Git/menus/branches:commits", context.Strings.Said("git_branch.cherry_pick_command"), () => PickBranch(FirstRepository(), "git_branch.cherry_pick_title", remotes: true, PickToCherryPick), icon: "git-commit");
+        context.Commands.Add("Git/menus/branches:commits", context.Strings.Said("git_branch.revert_command"), () => PickCommit(FirstRepository(), "HEAD", "git_branch.revert_title", Revert), icon: "discard");
     }
 
     /// <summary>

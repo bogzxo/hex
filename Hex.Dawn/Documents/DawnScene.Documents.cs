@@ -560,8 +560,17 @@ internal sealed partial class DawnScene
 
         // VS Code's, the file closed last back and the path of the one on screen copied
         commands.Add("File/close", Said("documents.reopen_closed"), ReopenClosed, "Ctrl+Shift+T", "history", UIKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;
-        commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.Path is not null;
-        commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true)).IsEnabled = () => document.Path is not null;
+        // The palette's and the keys', the tab's right click has them too
+        MenuItem[] copies =
+        [
+            commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping),
+            commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true))
+        ];
+        foreach (MenuItem copy in copies)
+        {
+            copy.IsEnabled = () => document.Path is not null;
+            copy.PaletteOnly = true;
+        }
 
         commands.Add("Edit/history", Said("documents.undo"), Undo, "Ctrl+Z", "discard", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanUndo || designer.recordPending || designer.CanUndoText;
         commands.Add("Edit/history", Said("documents.redo"), Redo, "Ctrl+Y", "redo", UIKeyUse.BoundWhileTyping).IsEnabled = () => !LayoutTools || document.CanRedo || designer.CanRedoText;

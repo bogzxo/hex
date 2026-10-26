@@ -197,10 +197,10 @@ internal sealed partial class DawnScene
         test.Check("scale: the menu draws the editor and the layouts at the next size", () =>
             compositor.Scale == scaleAfter && compositor.UIScale == scaleAfter && stage.UIScale == scaleAfter);
         test.Check("scale: and the columns make do with the room that leaves", Fits);
-        Pick("View", () => "Layout Debugger");
+        Pick("Layout", () => "Layout Debugger");
         test.Wait();
         test.Check("scale: buttons are still where they are drawn", () => layoutDebugger.IsOn);
-        Pick("View", () => "Layout Debugger");
+        Pick("Layout", () => "Layout Debugger");
         Pick("View", () => DescribeScale(scaleBefore));
         test.Settle(0.4f);
         test.Check("scale: and back", () => compositor.UIScale == scaleBefore && Fits());
@@ -210,7 +210,7 @@ internal sealed partial class DawnScene
     {
         /* The layout debugger */
 
-        Pick("View", () => "Layout Debugger");
+        Pick("Layout", () => "Layout Debugger");
         test.Wait();
         test.Check("debugger: the menu switches the layout debugger on", () => layoutDebugger.IsOn && stage.LayoutOverlay == layoutDebugger.Options);
 
@@ -223,7 +223,7 @@ internal sealed partial class DawnScene
             && Near(cut.Height * document.Module.Scale.Y, canvas.Bounds.Height, 1.0f) && document.Module.Frame.Width * document.Module.Scale.X > canvas.Bounds.Width);
         test.Run(designer.ZoomToFit);
         test.Wait();
-        Pick("View", () => "Layout Debugger");
+        Pick("Layout", () => "Layout Debugger");
         test.Wait();
         test.Check("debugger: and off again", () => !layoutDebugger.IsOn && stage.LayoutOverlay is null);
     }

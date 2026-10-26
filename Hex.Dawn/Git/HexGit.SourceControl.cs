@@ -19,11 +19,15 @@ internal sealed partial class HexGit
         Changed += () => context.Panels.RefreshSide(HexSide.SourceControl);
 
         context.Commands.Add("View/sides", context.Strings.Said("git.side_command"), () => context.Panels.ShowSide(HexSide.SourceControl), "Ctrl+Shift+G", "source-control", UIKeyUse.BoundWhileTyping);
-        context.Commands.Add("Git/changes", context.Strings.Said("git.commit_command"), () => AskCommit(FirstRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
+        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(FirstRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
         BuildCommits();
-        context.Commands.Add("Git/changes", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
-        context.Commands.Add("Git/changes", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
-        context.Commands.Add("Git/branches", context.Strings.Said("git.branches_command"), () => ShowBranches(context.Documents.Current.Path), icon: "git-branch");
+        context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
+        context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
+        context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.discard_file"), DiscardCurrent, icon: "discard");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.stage_all"), () => StageEverything(FirstRepository(), true), icon: "add");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.unstage_all"), () => StageEverything(FirstRepository(), false), icon: "remove");
+        context.Commands.Add("Git/menus/changes:all", context.Strings.Said("git.discard_all_command"), () => DiscardEverything(FirstRepository()), icon: "discard");
+        context.Commands.Add("Git/menus/branches:switch", context.Strings.Said("git.branches_command"), () => ShowBranches(context.Documents.Current.Path), icon: "git-branch");
         BuildBranchOps();
     }
 
@@ -325,6 +329,39 @@ internal sealed partial class HexGit
             return;
 
         StageFiles(repository, [path], stage);
+    }
+
+    /// <summary>The changes to the file on screen thrown away, asking first, from the Git menu.</summary>
+    private void DiscardCurrent()
+    {
+        if (context.Documents.Current.Path is not { } path || RepositoryOf(path) is not { Status: { } status } repository)
+            return;
+
+        GitFileState state = status.StateOf(path);
+        if (state.Unstaged && state.Change != GitChange.Conflicted)
+            DiscardFile(repository, path, state);
+    }
+
+    /// <summary>Every change of a repository staged, or everything staged taken out of the stage, the Changes sections' buttons from the Git menu.</summary>
+    private void StageEverything(Repository? repository, bool stage)
+    {
+        if (repository?.Status is not { } status)
+            return;
+
+        string[] paths = [.. status.Files.Where(pair => pair.Value.Change != GitChange.Ignored && (stage ? pair.Value.Unstaged || pair.Value.Change == GitChange.Conflicted : pair.Value.Staged)).Select(pair => pair.Key)];
+        if (paths.Length > 0)
+            StageFiles(repository, paths, stage);
+    }
+
+    /// <summary>Every change not staged thrown away, asking first, the Changes section's button from the Git menu.</summary>
+    private void DiscardEverything(Repository? repository)
+    {
+        if (repository?.Status is not { } status)
+            return;
+
+        string[] paths = [.. status.Files.Where(pair => pair.Value.Unstaged && pair.Value.Change is not GitChange.Ignored and not GitChange.Conflicted).Select(pair => pair.Key)];
+        if (paths.Length > 0)
+            DiscardAll(repository, paths);
     }
 
     /// <summary>

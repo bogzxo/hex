@@ -60,10 +60,11 @@ internal sealed partial class DawnScene
     private void AddSettingsCommands()
     {
         // From the code too, Ctrl+, types nothing, and with the editor having the keyboard it did nothing at all
-        commands.Add("File/settings", Said("settings_window.open"), OpenSettings, "Ctrl+,", "settings-gear", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/settings", Said("settings_looks.color_theme"), ChooseColorTheme, icon: "symbol-color");
-        commands.Add("File/settings", Said("settings_looks.open_file"), OpenSettingsFile, icon: "file-code");
-        commands.Add("File/settings", Said("settings_scope.open_workspace_file"), OpenWorkspaceSettingsFile, icon: "file-code");
+        commands.Add("File/settings/prefs:main", Said("settings_window.open"), OpenSettings, "Ctrl+,", "settings-gear", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/settings/prefs:main", Said("settings_looks.color_theme"), ChooseColorTheme, icon: "symbol-color");
+        AddLooks(commands.AddMenu("File/settings/prefs:main", Said("looks.menu"), "color-mode"));
+        commands.Add("File/settings/prefs:files", Said("settings_looks.open_file"), OpenSettingsFile, icon: "file-code");
+        commands.Add("File/settings/prefs:files", Said("settings_scope.open_workspace_file"), OpenWorkspaceSettingsFile, icon: "file-code");
     }
 
     /* The folder's own settings */

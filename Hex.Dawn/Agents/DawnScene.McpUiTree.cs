@@ -203,11 +203,15 @@ internal sealed partial class DawnScene
             }
 
             if (menu.OpenMenu is { } open)
-                McpMenuItems(open, module, label => menu.ItemBounds(label), 'i', into);
+                McpMenuItems(open, module, label => menu.ItemBounds(label, reveal: false), 'i', into);
+
+            // And the menu open off one of its items, the one the pointer went into last
+            if (menu.OpenSubmenu is { } inside)
+                McpMenuItems(inside, module, label => menu.ItemBounds(label, reveal: false), 'j', into);
         }
 
         if (contextMenu?.Showing is { } shown && contextMenu.Module is { } menuModule)
-            McpMenuItems(shown, menuModule, label => contextMenu.ItemBounds(label), 'x', into);
+            McpMenuItems(shown, menuModule, label => contextMenu.ItemBounds(label, reveal: false), 'x', into);
     }
 
     private void McpMenuItems(Menu open, UIModule module, Func<string, UIRect> boundsOf, char prefix, List<HexScreenNode> into)
@@ -215,7 +219,7 @@ internal sealed partial class DawnScene
         for (int i = 0; i < open.Items.Count; i++)
         {
             MenuItem item = open.Items[i];
-            if (item.IsSeparator || item.IsVisible?.Invoke() == false)
+            if (item.IsSeparator || !item.Listed)
                 continue;
 
             UIRect bounds = boundsOf(item.Label);

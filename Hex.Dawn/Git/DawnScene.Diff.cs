@@ -15,7 +15,7 @@ internal sealed partial class DawnScene
     {
         git.ShowChange = (repository, path, staged) => ShowGitDiff(repository, path, staged);
         git.ShowChangeAt = (repository, path, line) => ShowGitDiff(repository, path, staged: false, line);
-        commands.Add("Git/changes", Said("diff.open_changes"), OpenChangesHere, icon: "diff");
+        commands.Add("Git/menus/changes:open", Said("diff.open_changes"), OpenChangesHere, icon: "diff");
         commands.Add("File/path", Said("diff.compare_saved"), CompareWithSaved, icon: "diff");
         commands.Add("Go/places", Said("diff.next_change"), () => GoToChange(1), "Alt+F5", "arrow-down", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/places", Said("diff.previous_change"), () => GoToChange(-1), "Shift+Alt+F5", "arrow-up", UIKeyUse.BoundWhileTyping);

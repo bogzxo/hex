@@ -100,9 +100,9 @@ internal sealed partial class DawnScene
             keysFilter.OnChanged!(keysFilter.Text);
         }
 
-        test.Check("keys: Keyboard Shortcuts is in File beside Settings", () =>
+        test.Check("keys: Keyboard Shortcuts is in File, Preferences, beside Settings", () =>
         {
-            var items = menu.Menus.First(bar => bar.Title == "File").Items.ToList();
+            var items = menu.Menus.First(bar => bar.Title == "File").Items.First(item => item.Label == Said("menus.preferences")).Submenu!.Items.ToList();
             int settingsAt = items.FindIndex(item => item.Label == "Settings..."), keysAt = items.FindIndex(item => item.Label == Said("commands.shortcuts"));
             return settingsAt >= 0 && keysAt > settingsAt && !items.Skip(settingsAt).Take(keysAt - settingsAt).Any(item => item.IsSeparator)
                 && !menu.Menus.First(bar => bar.Title == "Help").Items.Any(item => item.Label == Said("commands.shortcuts"));

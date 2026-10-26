@@ -12,6 +12,14 @@ internal sealed partial class HexDesigner
         "readout", "meter", "graph", "segments", "include"
     ];
 
+    // The same in the Layout menu's Add, a menu of each kind of them, all twenty five in one ran off a small window
+    internal static readonly (string Key, string[] Kinds)[] PaletteGroups =
+    [
+        ("designer_selection.add_containers", ["stack", "collapsible", "grid", "panel", "scroll", "tabs", "include"]),
+        ("designer_selection.add_controls", ["button", "toggle", "textbox", "number_box", "selector", "dropdown", "list", "slider", "color_picker"]),
+        ("designer_selection.add_display", ["label", "image", "progress_bar", "readout", "meter", "graph", "segments", "divider", "spacer"])
+    ];
+
     // The properties that are one of a few words, and the words, see HidlComponents
     internal static Dictionary<string, string[]> Choices => HidlComponents.Choices;
 

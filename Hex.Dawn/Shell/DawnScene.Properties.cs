@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
                 properties.Follow([item.Tooltip]);
         };
 
-        commands.Add("View/toggles", Said("file_properties.command"), () => ShowPropertiesOf(PropertiesSubject()), "Alt+Enter", "info", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/path", Said("file_properties.command"), () => ShowPropertiesOf(PropertiesSubject()), "Alt+Enter", "info", UIKeyUse.BoundWhileTyping).PaletteOnly = true;
     }
 
     // The rows selected in the explorer when one of them is right clicked, or that one alone

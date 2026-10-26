@@ -173,7 +173,7 @@ internal sealed partial class DawnScene
 
         test.Run(() => CloseSettings());
         test.Check("settings scope: File has one Settings..., no second way to the same window, and Open Workspace Settings File", () =>
-            menu.Menus.First(bar => bar.Title == "File").Items.ToList() is var items
+            menu.Menus.First(bar => bar.Title == "File").Everything().Select(pair => pair.Item).ToList() is var items
             && items.Count(item => item.Label == Said("settings_window.open")) == 1 && Said("settings_window.open") == "Settings..."
             && !items.Any(item => item.Label == Said("settings_window.open_ui"))
             && items.Any(item => item.Label == Said("settings_scope.open_workspace_file")));

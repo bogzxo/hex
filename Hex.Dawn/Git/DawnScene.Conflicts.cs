@@ -32,11 +32,11 @@ internal sealed partial class DawnScene
     private void BuildConflicts()
     {
         // Greyed out in a file with none, and the key does nothing there either (the menu's greying doesn't reach the keys)
-        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_current"), () => SettleIfAny(GitConflictPick.Current), "Alt+1", "arrow-up", UIKeyUse.BoundWhileTyping));
-        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_incoming"), () => SettleIfAny(GitConflictPick.Incoming), "Alt+2", "arrow-down", UIKeyUse.BoundWhileTyping));
-        acceptCommands.Add(commands.Add("Git/changes", Said("conflicts.accept_both"), () => SettleIfAny(GitConflictPick.Both), "Alt+3", "arrow-both", UIKeyUse.BoundWhileTyping));
+        acceptCommands.Add(commands.Add("Git/conflicts", Said("conflicts.accept_current"), () => SettleIfAny(GitConflictPick.Current), "Alt+1", "arrow-up", UIKeyUse.BoundWhileTyping));
+        acceptCommands.Add(commands.Add("Git/conflicts", Said("conflicts.accept_incoming"), () => SettleIfAny(GitConflictPick.Incoming), "Alt+2", "arrow-down", UIKeyUse.BoundWhileTyping));
+        acceptCommands.Add(commands.Add("Git/conflicts", Said("conflicts.accept_both"), () => SettleIfAny(GitConflictPick.Both), "Alt+3", "arrow-both", UIKeyUse.BoundWhileTyping));
         foreach (MenuItem accept in acceptCommands)
-            accept.IsEnabled = HasConflicts;
+            accept.IsEnabled = accept.IsVisible = HasConflicts;
     }
 
     /// <summary>Whether the file on screen has conflicts to settle, as they were last looked for.</summary>

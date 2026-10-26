@@ -13,10 +13,12 @@ internal sealed partial class HexGit
 
     private void BuildMerge()
     {
-        abortItem = context.Commands.Add("Git/changes", context.Strings.Said("git_merge.abort_merge"), () => AskAbort(FirstRepository()), icon: "discard");
-        abortItem.IsEnabled = () => FirstRepository() is { Operation: not GitOperation.None };
-        continueItem = context.Commands.Add("Git/changes", context.Strings.Said("git_merge.continue_merge"), () => ContinueOperation(FirstRepository()), icon: "debug-continue");
+        // Only there while git is in the middle of something, Continue first the way VS Code has them
+        continueItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.continue_merge"), () => ContinueOperation(FirstRepository()), icon: "debug-continue");
         continueItem.IsEnabled = () => FirstRepository() is { Operation: not GitOperation.None };
+        abortItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.abort_merge"), () => AskAbort(FirstRepository()), icon: "discard");
+        abortItem.IsEnabled = () => FirstRepository() is { Operation: not GitOperation.None };
+        continueItem.IsVisible = abortItem.IsVisible = continueItem.IsEnabled;
     }
 
     /// <summary>What git is in the middle of in the repository a path is in, None for nothing or no repository.</summary>

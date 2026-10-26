@@ -233,7 +233,10 @@ internal sealed partial class DawnScene
         ContextMenu.ShowAt(chrome, compositor.Pointer.Position, shown);
     }
 
-    /// <summary>Helper method to put every skin and every theme of each into a menu, the one shown ticked.</summary>
+    /// <summary>
+    /// Helper method to put every skin into a menu, the one shown ticked, a skin with themes a menu of its own of them
+    /// (all the themes of all the skins in one list ran off the bottom of the window).
+    /// </summary>
     private void AddSkins(Menu into)
     {
         foreach (UISkinChoice skin in UISkins.Available)
@@ -244,13 +247,12 @@ internal sealed partial class DawnScene
                 continue;
             }
 
+            Menu themes = into.AddMenu(skin.Title);
             foreach (string theme in skin.Themes)
             {
-                into.Add($"{skin.Title}, {theme}", () => UseSkin(skin, theme)).IsChecked =
+                themes.Add($"{skin.Title}, {theme}", () => UseSkin(skin, theme)).IsChecked =
                     () => UISkins.Current == skin && (UISkins.Theme ?? skin.UsualTheme) == theme;
             }
-
-            into.AddSeparator();
         }
     }
 

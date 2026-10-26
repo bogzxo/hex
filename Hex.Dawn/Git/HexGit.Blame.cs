@@ -34,8 +34,8 @@ internal sealed partial class HexGit
                 known.AskIn = BLAME_AFTER;
         };
         context.Documents.Closed += closed => blamed.Remove(closed);
-        context.Commands.Add("Git/history", context.Strings.Said("git.blame_command"), ShowLineCommit, icon: "git-commit");
-        context.Commands.Add("Git/history", context.Strings.Said("git.blame_toggle"), ToggleBlame, icon: "eye");
+        context.Commands.Add("Git/menus/history", context.Strings.Said("git.blame_command"), ShowLineCommit, icon: "git-commit");
+        context.Commands.Add("Git/menus/history", context.Strings.Said("git.blame_toggle"), ToggleBlame, icon: "eye");
     }
 
     /// <summary>Inline blame on or off from the palette, the same as its row in the settings and kept the same way.</summary>

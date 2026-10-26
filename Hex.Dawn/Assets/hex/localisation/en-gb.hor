@@ -1009,6 +1009,9 @@ let strings = {
         actual_size: "Actual Size",
         play_entrances: "Play Entrances",
         add: "Add",
+        add_containers: "Containers",
+        add_controls: "Controls",
+        add_display: "Display",
         convert_to: "Convert To",
         select_all: "Select All",
         deselect_all: "Deselect All",
@@ -1287,7 +1290,33 @@ let strings = {
         layout_debugger_off: "layout debugger off",
         editor_scale: "Editor Scale",
         layout_skin: "Layout Skin",
-        exit: "Exit"
+        exit: "Exit",
+        terminal: "Terminal",
+
+        // The menus inside the bar's
+        workspace: "Workspace",
+        preferences: "Preferences",
+        appearance: "Appearance",
+        layout_debugger: "Layout Debugger",
+        git_changes: "Changes",
+        git_commit: "Commit",
+        git_branches: "Branches",
+        git_remote: "Remote",
+        git_stash: "Stash",
+        git_history: "History",
+        git_tags: "Tags",
+        developer: "Developer"
+    },
+
+    // The Terminal menu of the bar, the panel's terminals
+    terminal_menu: {
+        new_terminal: "New Terminal",
+        new_with_profile: "New Terminal with Profile...",
+        split: "Split Terminal",
+        clear: "Clear Terminal",
+        rename: "Rename Terminal...",
+        kill: "Kill Terminal",
+        settings: "Terminal Settings"
     },
 
     tabs: {
@@ -2031,6 +2060,8 @@ let strings = {
         unstage_all: "Unstage All",
         discard: "Discard Changes",
         discard_all: "Discard All Changes",
+        discard_all_command: "Discard All Changes...",
+        discard_file: "Discard Changes in This File...",
         open_file: "Open File",
         discard_title: "Discard changes",
         discard_text: "Throw away the changes to {what}? Files git doesn't know go to the trash, the rest go back to what was last staged or committed.",

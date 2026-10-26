@@ -12,7 +12,8 @@ internal sealed partial class DawnScene
     {
         refreshButton = layout.Get<Button>("tree_refresh");
         refreshButton.OnPressed = RefreshFromDisk;
-        commands.Add("File/workspace", Said("side.refresh"), RefreshFromDisk, icon: "refresh");
+        // On the explorer's own button, and the palette
+        commands.Add("File/workspace/workspace", Said("side.refresh"), RefreshFromDisk, icon: "refresh").PaletteOnly = true;
     }
 
     /// <summary>The explorer's files, git and the open files read again from the disk.</summary>

@@ -37,8 +37,8 @@ internal sealed partial class DawnScene
     /// <summary>Keyboard Shortcuts in the File menu, under Settings, VS Code has it there too.</summary>
     private void AddKeysCommands()
     {
-        commands.Add("File/settings", Said("commands.shortcuts"), OpenKeysWindow, "Ctrl+K Ctrl+S", "keyboard", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/settings", Said("commands.shortcuts_file"), OpenKeysFile, icon: "file-code");
+        commands.Add("File/settings/prefs:main", Said("commands.shortcuts"), OpenKeysWindow, "Ctrl+K Ctrl+S", "keyboard", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/settings/prefs:files", Said("commands.shortcuts_file"), OpenKeysFile, icon: "file-code");
     }
 
     /// <summary>
