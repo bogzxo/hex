@@ -38,7 +38,7 @@ internal sealed partial class HexGit
     private void BuildCommits()
     {
         foreach (var (group, key, icon, act) in CommitChoices())
-            context.Commands.Add($"Git/menus/commit:{group}", context.Strings.Said(key), () => act(FirstRepository()), icon: icon);
+            context.Commands.Add($"Git/menus/commit:{group}", context.Strings.Said(key), () => act(ActiveRepository()), icon: icon);
     }
 
     // The Commit row's right click and its ... button, Commit itself and the same things as the menu's

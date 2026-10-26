@@ -1,62 +1,50 @@
-# Hex 2.0.0
+# Hex 2.1.0
 
-the biggest one yet, big enough for a new number. git inside the editor, a settings window that finds things, code
-coloured by what each name is, menus that fit on the screen, an MCP server for agents, and hex building hex
+a big round of the things that got in the way. automations, a run button that knows what it runs, git that copes with a
+folder full of repositories, a terminal you can scroll properly, and a caret that keeps up
+
+## automations
+
+- a tasks.hor can have `automations` next to its tasks, each one a command in the palette (and on a key if it says
+  one). a command line run in a terminal tab, bash if it asks for it, or HIDL driving hex with the same `hex` an
+  extension gets plus `hex.run` for programs, `print`, `progress` and an `ask` that waits for the answer. HIDL ones run
+  off the editor's thread with no time limit and stop from the work list
+- push-all.ps1 lives in the workspace's tasks.hor now as Push all and Push all (dry run)
+- Set Up F5 only rewrites the file's tasks, the automations and comments round them stay put
+
+## running things
+
+- an arrow next to Run picks what F5 runs, the current file, any run task in the workspace or a .NET program in it. it's
+  kept with the workspace and the button says its name
 
 ## git
 
-- the gutter shows what changed, a bar clicked shows the change with stage and revert, and the caret's line says who
-  last touched it
-- source control (Ctrl+Shift+G) with coloured status letters, hover actions, a commit box that takes lines and colours
-  markdown, amend, undo last commit, commit and push, signed off or without hooks
-- branches in the status bar with ahead and behind, switch, make, rename, delete, merge, rebase, tags, cherry-pick,
-  revert, stash, pull with rebase, publish
-- diffs with word level highlights, merge conflicts lit with Alt+1/2/3 and accept buttons over them, abort and continue
-- file history, local history of every save to compare with or put back
+- an active repository, the last one you touched in Source Control or the open file's, and commit, sync, branches and
+  stash go to it rather than whichever one the open file happened to be in
+- each repository's heading has its branch, what it's ahead and behind, how many changes and its own commit, sync and
+  branch buttons
+- the status bar names the repository and a click picks one then its branch. it's never blank when the folder only holds
+  repositories
+- new repositories, clones and git inits turn up by themselves in a few seconds, and a fetch or commit in the terminal
+  is noticed
+- submodules say what's changed in them and take you to their own heading, nested repos have names
+- a GitHub account setting for machines with more than one, so Git Credential Manager stops asking which every time.
+  the background fetch never puts anything up at all
 
-## the editor
+## the editor and the window
 
-- semantic highlighting, names coloured by what they are (class, struct, interface, method, field, local, parameter
-  and the rest) from the language server, in resharpers colours for C#, from hex itself for HIDL and D. obsolete things
-  struck through, reassigned locals underlined
-- a minimap, inlay hints, peek definition (Alt+F12), TODO and FIXME lit in every language
-- Change Language Mode (Ctrl+K M), file associations, and a file.cs.orig coloured as C#
-- search as a side view with replace in files, a command palette, quick open and history in colour with the matched
-  letters lit
-- rulers, visible whitespace, editorconfig, format on save, Go, Rust, Svelte and TOML picked up
-- hex draws at the scale of the screen its on, a 4K one included
+- the caret glide gets where it's going and stops, it used to creep up on the caret over its last few pixels
+- window edges you can actually grab, thicker, corners that reach along both edges, and the resize arrows on Windows
+- the mouse's side buttons go back and forward in the file dialog
+- the wheel goes where the pointer is, a window keeps it over itself, and settings scrolls instead of the code behind it
+- scroll bars you can get hold of, wider to grab, growing under the pointer, track clicks that jump
+- csharp-ls in a folder with no project doesn't get restarted over and over with a red card stuck in the corner
 
-## settings
+## the terminal
 
-- search with filters and a count, sections that follow you, full width rows, reset all, list rows for exclude patterns
-- workspace settings over your own, the raw settings file a click away and kept in sync, mistakes in it in Problems
-- import VS Code settings, and VS Codes setting ids understood
-- keyboard shortcuts as a proper table with conflicts, chords and a key to record
-
-## for .NET people
-
-- a properties panel (Alt+Enter) for whatever's picked, with Build Action and Copy to Output Directory read from the
-  SDK and written back into the .csproj without messing it up
-- hex can build itself, its locked files moved aside, and restart into the new build
-- Configure Tasks writes build, test and run for any solution
-
-## menus
-
-- reorganised the way a VS Code hand expects, File, Edit, Selection, View, Go, Run, Terminal, Git, Help, with the
-  designer's Layout menu in place of Selection when a layout is open
-- git is nine rows now instead of forty four, each job a submenu of its own
-- no menu leaves the window, a long one scrolls with the wheel or the arrows at its ends
-
-## for agents
-
-- `Hex.exe --mcp` is an MCP server, so Claude Code and anything else that speaks it can drive hex like a person, 27
-  tools from screenshots and the UI tree to typing, commands, problems and the terminal. off unless you switch it on,
-  `claude mcp add hex -- Hex.exe --mcp` and youre away
-
-## HIDL
-
-- arrows, one statement ifs, `in`, two name for loops, computed keys, default parameters, destructuring, a pile of new
-  text and list helpers, and errors that say what you most likely meant. docs/reference.md in the HIDL repo has all of it
+- a scroll bar, thin until you're on it, drag it or page with the track
+- a minimap of the scrollback, coloured like the text, the prompts marked down its edge by how they ended
+- scrolled up it stays on the same text while output carries on underneath
 
 ## running it
 

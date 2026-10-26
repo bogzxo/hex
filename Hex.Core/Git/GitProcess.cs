@@ -29,6 +29,15 @@ internal static class GitProcess
     /// <summary>Whether there's a git to run at all, asked once. Waits for the answer, so not for the editor's thread, see <see cref="InstalledNow"/>.</summary>
     public static bool Installed => installed.Value.GetAwaiter().GetResult();
 
+    /// <summary>The GitHub account every git is run as (the git_account setting), empty for whatever git works out itself.</summary>
+    public static string Account
+    {
+        get => account;
+        set => account = value?.Trim() ?? string.Empty;
+    }
+
+    private static volatile string account = string.Empty;
+
     /// <summary>Whether there's a git, null while that's still being asked (which this starts). Never waits.</summary>
     public static bool? InstalledNow => installed.Value.IsCompletedSuccessfully ? installed.Value.Result : null;
 
@@ -36,7 +45,7 @@ internal static class GitProcess
     /// Runs git with some arguments in a folder, what's handed in going to its input, and waits for it. Never throws, a
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
-    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null)
+    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -53,6 +62,25 @@ internal static class GitProcess
         // Paths as they are rather than octal escapes, and English, so what's said can be read the same everywhere
         start.ArgumentList.Add("-c");
         start.ArgumentList.Add("core.quotepath=false");
+
+        // The GitHub account to sign in as, so a credential helper holding more than one (Git Credential Manager with a
+        // work and a personal account) uses it rather than asking which every time. A username in the remote's URL or a
+        // repository's own credential.username is more particular and still wins
+        if (Account is { Length: > 0 } account)
+        {
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add($"credential.https://github.com.username={account}");
+        }
+
+        // Nobody asked for this one (a fetch in the background), so nothing pops up to ask who to sign in as. A helper
+        // that can't sign in on its own gives up and the fetch fails quietly until somebody fetches by hand
+        if (unattended)
+        {
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add("credential.interactive=false");
+            start.Environment["GCM_INTERACTIVE"] = "never";
+        }
+
         foreach (string argument in arguments)
             start.ArgumentList.Add(argument);
 

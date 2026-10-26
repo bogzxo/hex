@@ -89,6 +89,14 @@ internal sealed partial class DawnScene
             tasks.PressSetup(run: true);
         });
         test.Wait();
+
+        // Where it went, the workspace folder's tasks.hor when another part of the test left one there and next to the
+        // file when not, a lone file's F5 is set up beside it
+        test.Run(() =>
+        {
+            root = tasks.TasksFolderFor(program) ?? root;
+            file = Path.Combine(root, HexTasks.TASKS_FILE);
+        });
         test.Check("tasks: saved, the folder's tasks.hor has a build and a run that depends on it, to run in Dusk", () =>
             tasks.SetupWindow is null && tasks.TasksOf(file, root) is var written
             && written.Find(task => task.Name == "build") is { Command: "echo built", Group: "build", Default: true }

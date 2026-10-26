@@ -173,6 +173,12 @@ internal sealed partial class HexSettings
     /// </summary>
     public string GitPullMode = "default";
 
+    /// <summary>
+    /// The GitHub account git signs in as, for a machine with more than one where the credential helper would otherwise ask
+    /// which every time it is used. Empty leaves it to git.
+    /// </summary>
+    public string GitAccount = string.Empty;
+
     /// <summary>Whether a sync asks before it pulls and pushes, VS Code's git.confirmSync.</summary>
     public bool GitConfirmSync = true;
 
@@ -399,6 +405,7 @@ internal sealed partial class HexSettings
         AutoSaveDelay = Math.Clamp(Number(values, "auto_save_delay", AutoSaveDelay), 0.25f, 60.0f);
         RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
         if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
+        if (values.TryGetValue("git_account", out var account) && account is StringValue accountNamed) GitAccount = accountNamed.Value.Trim();
         Names(values, "language_server_paths", ServerPaths);
         if (values.ContainsKey("files_associations"))
         {
@@ -615,6 +622,7 @@ internal sealed partial class HexSettings
             .Add("git_autofetch", GitAutoFetch)
             .Add("git_autofetch_interval", GitAutoFetchInterval)
             .Add("git_pull_mode", GitPullMode)
+            .Add("git_account", GitAccount)
             .Add("git_confirm_sync", GitConfirmSync)
             .Add("git_smart_commit", GitSmartCommit)
             .Add("git_subject_length", GitSubjectLength)

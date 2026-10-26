@@ -43,6 +43,11 @@ internal sealed partial class HexLanguages
             return;
 
         string shown = Path.GetFileNameWithoutExtension(CommandOf(entry));
+
+        // Stopped for want of a project where there's none, it's started again once one is made (HexLanguages.Needs)
+        if (StoppedForWant(server, entry, shown))
+            return;
+
         if (restartedOnce.Add(server.Name))
         {
             context.Notices.Say(context.Strings.Said("languages.server_restarted_after", ("server", shown)));

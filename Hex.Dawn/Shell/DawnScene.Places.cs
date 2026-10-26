@@ -25,9 +25,10 @@ internal sealed partial class DawnScene
     private void UpdatePlaces()
     {
         var mouse = Engine.Input.Mouse;
-        bool back = mouse.IsDown(MouseButton.Button4), forward = mouse.IsDown(MouseButton.Button5);
-        if (back && !mouseBackWas) GoPlace(back: true);
-        if (forward && !mouseForwardWas) GoPlace(back: false);
+        // A file dialog that's up has the buttons to itself, for its own folders
+        bool back = mouse.IsDown(MouseButton.Button4), forward = mouse.IsDown(MouseButton.Button5), dialog = UIFileBrowser.AnyOpen;
+        if (back && !mouseBackWas && !dialog) GoPlace(back: true);
+        if (forward && !mouseForwardWas && !dialog) GoPlace(back: false);
         mouseBackWas = back;
         mouseForwardWas = forward;
 

@@ -10,13 +10,13 @@ internal sealed partial class HexGit
 {
     private void BuildStash()
     {
-        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.stash"), () => AskStash(FirstRepository(), includeUntracked: false), icon: "git-stash");
-        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.stash_untracked"), () => AskStash(FirstRepository(), includeUntracked: true), icon: "git-stash");
-        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.pop_latest"), () => PopLatest(FirstRepository()), icon: "git-stash-pop");
-        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.apply"), () => PickStash(FirstRepository(), "git_stash.apply_title", ApplyStash), icon: "git-stash-apply");
-        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.pop"), () => PickStash(FirstRepository(), "git_stash.pop_title", (repository, entry) => PopStash(repository, entry.Index, entry.Name)), icon: "git-stash-pop");
-        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.drop"), () => PickStash(FirstRepository(), "git_stash.drop_title", AskDrop), icon: "trash");
-        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.show"), () => PickStash(FirstRepository(), "git_stash.show_title", ShowStash), icon: "eye");
+        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.stash"), () => AskStash(ActiveRepository(), includeUntracked: false), icon: "git-stash");
+        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.stash_untracked"), () => AskStash(ActiveRepository(), includeUntracked: true), icon: "git-stash");
+        context.Commands.Add("Git/menus/stash:stash", context.Strings.Said("git_stash.pop_latest"), () => PopLatest(ActiveRepository()), icon: "git-stash-pop");
+        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.apply"), () => PickStash(ActiveRepository(), "git_stash.apply_title", ApplyStash), icon: "git-stash-apply");
+        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.pop"), () => PickStash(ActiveRepository(), "git_stash.pop_title", (repository, entry) => PopStash(repository, entry.Index, entry.Name)), icon: "git-stash-pop");
+        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.drop"), () => PickStash(ActiveRepository(), "git_stash.drop_title", AskDrop), icon: "trash");
+        context.Commands.Add("Git/menus/stash:pick", context.Strings.Said("git_stash.show"), () => PickStash(ActiveRepository(), "git_stash.show_title", ShowStash), icon: "eye");
     }
 
     /// <summary>Asks for the stash's message, which can be left empty for git's own, then stashes.</summary>

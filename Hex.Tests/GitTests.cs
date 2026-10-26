@@ -84,6 +84,46 @@ public sealed class GitTests : IDisposable
         Assert.Empty(status.Files);
     }
 
+    [Fact]
+    public void A_submodule_is_told_from_a_file_with_what_moved_in_it()
+    {
+        string porcelain = string.Join('\0',
+            "# branch.head main",
+            "1 .M SC.. 160000 160000 160000 aaa aaa engine",
+            "1 .M S.MU 160000 160000 160000 bbb bbb tools/hidl",
+            "1 M. SC.. 160000 160000 160000 ccc ddd staged module",
+            "1 .M N... 100644 100644 100644 eee eee src/plain.cs",
+            string.Empty);
+
+        GitStatus status = GitStatus.Parse(root, porcelain);
+
+        Assert.Equal(GitSubmodule.Module | GitSubmodule.Commits, status.StateOf(At("engine")).Submodule);
+        Assert.Equal(GitSubmodule.Module | GitSubmodule.Modified | GitSubmodule.Untracked, status.StateOf(At("tools/hidl")).Submodule);
+        Assert.True(status.StateOf(At("staged module")).Staged);
+        Assert.True(status.StateOf(At("staged module")).IsRepository);
+        Assert.Equal(GitSubmodule.None, status.StateOf(At("src/plain.cs")).Submodule);
+        Assert.False(status.StateOf(At("src/plain.cs")).IsRepository);
+
+        // A submodule is a folder, so it takes its own change as well as giving it to the folders above
+        Assert.Equal(GitChange.Modified, status.FolderChange(At("tools/hidl")));
+        Assert.Equal(GitChange.Modified, status.FolderChange(At("tools")));
+    }
+
+    [Fact]
+    public void A_repository_nobody_added_is_one_folder_with_a_name()
+    {
+        string porcelain = string.Join('\0', "# branch.head main", "? game/", "? notes.md", string.Empty);
+
+        GitStatus status = GitStatus.Parse(root, porcelain);
+
+        // Kept without the slash on the end, so its name is the folder's and not empty
+        Assert.True(status.Files.ContainsKey(At("game")));
+        Assert.Equal("game", Path.GetFileName(status.Files.Keys.First(path => status.Files[path].IsRepository)));
+        Assert.Equal(new GitFileState(GitChange.Untracked, false, true, Submodule: GitSubmodule.Nested), status.StateOf(At("game")));
+        Assert.Equal(GitChange.Untracked, status.FolderChange(At("game")));
+        Assert.Equal(GitSubmodule.None, status.StateOf(At("notes.md")).Submodule);
+    }
+
     /* The lines that changed */
 
     [Theory]

@@ -396,6 +396,14 @@ internal sealed partial class HexTasks
 
         try
         {
+            // A file there already has only its tasks written again, what else it has (its automations, the functions
+            // they call, its comments) is left as it was
+            if (File.Exists(file))
+            {
+                File.WriteAllText(file, TasksFileText.Replace(File.ReadAllText(file), "tasks", new HIDLDocument().Let("tasks", tasks).Write()));
+                return file;
+            }
+
             File.WriteAllText(file, new HIDLDocument()
                 .Comment("The tasks of this folder, each a command line Dawn runs in a terminal of its own. Run Task in the Run menu")
                 .Comment("picks one, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task, after the one it")

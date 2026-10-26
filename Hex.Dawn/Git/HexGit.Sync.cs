@@ -19,25 +19,25 @@ internal sealed partial class HexGit
     private void BuildSync()
     {
         fetchIn = FetchEvery;
-        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.fetch"), () => Remote(FirstRepository(), RemoteWork.Fetch), icon: "cloud-download");
-        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull"), () => Remote(FirstRepository(), RemoteWork.Pull), icon: "arrow-down");
-        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull_rebase"), () => Remote(FirstRepository(), RemoteWork.Pull, pullMode: "rebase"), icon: "arrow-down");
-        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.push"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "arrow-up");
-        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.sync"), () => AskSync(FirstRepository()), icon: "sync");
-        context.Commands.Add("Git/menus/remote:publish", context.Strings.Said("git.publish"), () => Remote(FirstRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
-            () => FirstRepository() is { HasRemote: true, Status: { Branch: not null, Upstream: null } };
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.fetch"), () => Remote(ActiveRepository(), RemoteWork.Fetch), icon: "cloud-download");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull"), () => Remote(ActiveRepository(), RemoteWork.Pull), icon: "arrow-down");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.pull_rebase"), () => Remote(ActiveRepository(), RemoteWork.Pull, pullMode: "rebase"), icon: "arrow-down");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.push"), () => Remote(ActiveRepository(), RemoteWork.Push), icon: "arrow-up");
+        context.Commands.Add("Git/menus/remote:sync", context.Strings.Said("git.sync"), () => AskSync(ActiveRepository()), icon: "sync");
+        context.Commands.Add("Git/menus/remote:publish", context.Strings.Said("git.publish"), () => Remote(ActiveRepository(), RemoteWork.Push), icon: "cloud-upload").IsEnabled =
+            () => ActiveRepository() is { HasRemote: true, Status: { Branch: not null, Upstream: null } };
         context.Commands.Add("Git/settings", context.Strings.Said("git.settings_command"), () => context.Windows.OpenSettings(EditorSettingsCatalog.GIT), icon: "settings-gear");
     }
 
     private enum RemoteWork { Fetch, Pull, Push, Sync }
 
     /// <summary>
-    /// What the status bar's item next to the branch says, behind and ahead for a branch that follows one, publish for one
-    /// that doesn't, empty with no remote (or no repository).
+    /// What the status bar's item next to the branch says for the active repository, behind and ahead for a branch that
+    /// follows one, publish for one that doesn't, empty with no remote (or no repository).
     /// </summary>
-    public string SyncText(string? path)
+    public string SyncText()
     {
-        if (StatusAt(path) is not { Branch: not null } status || RepositoryOf(status.Root) is not { HasRemote: true })
+        if (ActiveRepository() is not { HasRemote: true, Status: { Branch: not null } status })
             return string.Empty;
         if (syncing)
             return "$(sync) " + context.Strings.Said("git.syncing");
@@ -46,10 +46,13 @@ internal sealed partial class HexGit
         return status.Ahead > 0 || status.Behind > 0 ? $"$(sync) {status.Behind}$(arrow-down) {status.Ahead}$(arrow-up)" : "$(sync)";
     }
 
-    /// <summary>The status bar's sync item pressed, a sync, or a publish for a branch that follows nothing.</summary>
-    public void SyncPressed(string? path)
+    /// <summary>The status bar's sync item pressed, a sync of the active repository, or a publish for a branch that follows nothing.</summary>
+    public void SyncPressed() => SyncRepository(ActiveRepository());
+
+    // A sync, or a publish for a branch that follows nothing, the status bar's sync item and a heading's button
+    private void SyncRepository(Repository? repository)
     {
-        if (StatusAt(path) is not { } status || RepositoryOf(status.Root) is not { } repository)
+        if (repository?.Status is not { } status)
             return;
 
         if (status.Upstream is null)
@@ -113,7 +116,7 @@ internal sealed partial class HexGit
         foreach (Repository repository in WorkspaceRepositories())
         {
             if (repository.HasRemote)
-                context.Work.InBackground("git fetch", repository.Git.Fetch, _ => repository.Dirty(now: true), quiet: true);
+                context.Work.InBackground("git fetch", repository.Git.FetchUnattended, _ => repository.Dirty(now: true), quiet: true);
         }
     }
 

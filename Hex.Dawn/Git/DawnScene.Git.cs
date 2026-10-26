@@ -13,6 +13,7 @@ internal sealed partial class DawnScene
     private void BuildGit()
     {
         git.ColourOf = GitColor;
+        git.AccentOf = () => compositor.Skin?.Palette.Accent;
         git.Changed += () =>
         {
             DecorateRows();
@@ -24,12 +25,15 @@ internal sealed partial class DawnScene
     private string branchShown = string.Empty;
     private (HexDocument? Document, int Version) branchFor = (null, -1);
 
-    /// <summary>The branch at the left end of the status bar, a click on it the list of branches. Made first so it's first.</summary>
+    /// <summary>
+    /// The active repository's branch at the left end of the status bar, a click on it the list of branches (with more than one
+    /// repository the repository picked first). Made first so it's first.
+    /// </summary>
     private void BuildBranchItem()
     {
-        branchItem = statusBar.Add(string.Empty, pressed: () => git.ShowBranches(document.Path), tooltip: Said("git.branch_tip"));
+        branchItem = statusBar.Add(string.Empty, pressed: () => git.BranchPressed(), tooltip: Said("git.branch_tip"));
         branchItem.IsVisible = () => branchItem.Text.Length > 0;
-        syncItem = statusBar.Add(string.Empty, pressed: () => git.SyncPressed(document.Path), tooltip: Said("git.sync_tip"));
+        syncItem = statusBar.Add(string.Empty, pressed: () => git.SyncPressed(), tooltip: Said("git.sync_tip"));
         syncItem.IsVisible = () => syncItem.Text.Length > 0;
     }
 
@@ -40,10 +44,10 @@ internal sealed partial class DawnScene
             return;
 
         branchFor = (document, git.Version);
-        string text = git.BranchText(document.Path);
+        string text = git.BranchText();
         if (text != branchShown)
             branchItem.Text = branchShown = text;
-        string sync = git.SyncText(document.Path);
+        string sync = git.SyncText();
         if (sync != syncItem.Text)
             syncItem.Text = sync;
     }

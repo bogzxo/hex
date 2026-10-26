@@ -111,6 +111,18 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     IReadOnlyList<string> IWorkspace.Folders => explorer.workspace.Folders;
     IReadOnlyList<string> IWorkspace.Roots => KeptRoots();
+    string? IWorkspace.File => explorer.workspace.FilePath;
+
+    HexRunTarget? IWorkspace.RunTarget
+    {
+        get => explorer.workspace.RunTarget;
+        set
+        {
+            explorer.workspace.RunTarget = value;
+            explorer.KeepWorkspace();
+        }
+    }
+
     string IWorkspace.Relative(string path) => Relative(path);
     void IWorkspace.WatchToo(Func<IEnumerable<string>> folders) => watchedToo.Add(folders);
     void IWorkspace.Rewatch() => WatchFolders();
@@ -236,14 +248,14 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             Say(Said("tasks.no_dusk"), error: true);
     }
 
-    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
+    void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished, string? shell)
     {
         // The code keeps the keyboard, the way a task's terminal doesn't take it in VS Code. The build took it and what was
         // typed next (Ctrl+G and a line) went to the shell
         UIComponent? had = compositor.Focus;
         try
         {
-            StartInTab(key, title, folder, commandLine, finished);
+            StartInTab(key, title, folder, commandLine, finished, shell);
         }
         finally
         {
@@ -252,7 +264,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         }
     }
 
-    private void StartInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished)
+    private void StartInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished, string? shell)
     {
         ShowPanel(CONSOLE_PAGE);
         string line = commandLine + "\r";
@@ -269,7 +281,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
         if (tab is not null)
             terminalPanel.CloseTab(tab);
-        tab = terminalPanel.NewTab(terminals.UsualProfile, folder);
+        tab = terminalPanel.NewTab((shell is { Length: > 0 } ? terminals.ProfileCalled(shell) : null) ?? terminals.UsualProfile, folder);
         tab.Tag = key;
         tab.Renamed = title;
         if (tab.Views.FirstOrDefault() is { } made)

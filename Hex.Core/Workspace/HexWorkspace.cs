@@ -40,6 +40,9 @@ internal sealed class HexWorkspace
     /// <summary>The tabs of the terminal page as they were, the object TerminalSessions writes, null for none kept.</summary>
     public ObjectValue? Terminal { get; set; }
 
+    /// <summary>What F5 and the Run button run, picked beside the button, null for the file on screen.</summary>
+    public HexRunTarget? RunTarget { get; set; }
+
     /// <summary>Adds a folder, unless it is in already. False for one that is.</summary>
     public bool Add(string folder)
     {
@@ -102,6 +105,7 @@ internal sealed class HexWorkspace
 
         OpenFiles.AddRange(Paths(values, "open", relativeTo));
         Terminal = values.TryGetValue("terminal", out var terminal) && terminal is ObjectValue session ? session : null;
+        RunTarget = HexRunTarget.From(values.GetValueOrDefault("run_target"), relativeTo);
     }
 
     private static IEnumerable<string> Paths(Dictionary<string, IRuntimeValue> values, string key, string relativeTo)
@@ -131,6 +135,8 @@ internal sealed class HexWorkspace
             .Add("folders", Paths(Folders, relativeTo))
             .Add("expanded", Paths([.. Expanded.Order(StringComparer.OrdinalIgnoreCase)], relativeTo))
             .Add("open", Paths(OpenFiles, relativeTo));
+        if (RunTarget is { } target)
+            workspace.Add("run_target", target.Said(relativeTo));
         if (Terminal is { } session)
             workspace.Add("terminal", session);
 

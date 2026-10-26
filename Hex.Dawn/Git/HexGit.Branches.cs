@@ -8,43 +8,43 @@ namespace Hex.Dawn;
 internal sealed partial class HexGit
 {
     /// <summary>
-    /// What the status bar says for the repository a path is in, the branch (or the commit HEAD is on) and how many commits
-    /// it's ahead and behind, empty for no repository. A star after it while anything's changed (VS Code's), and what git is
-    /// in the middle of after that, (Merging) or (Rebasing).
+    /// What the status bar says for the active repository, the branch (or the commit HEAD is on), a star after it while
+    /// anything's changed (VS Code's), and what git is in the middle of after that, (Merging) or (Rebasing). With more than
+    /// one repository in the workspace its name is in front, so which one it is goes without saying. Empty for none.
     /// </summary>
-    public string BranchText(string? path)
+    public string BranchText()
     {
-        if (StatusAt(path) is not { } status)
+        if (ActiveRepository() is not { Status: { } status } repository)
             return string.Empty;
 
-        string name = status.Branch ?? (status.Commit is { } commit ? commit[..Math.Min(8, commit.Length)] : "?");
-        Repository? repository = RepositoryOf(status.Root);
-        string star = repository is { HasChanges: true } ? "*" : string.Empty;
-        string doing = repository is { Operation: not GitOperation.None and var operation } ? $" ({OperationWord(operation)})" : string.Empty;
+        string star = repository.HasChanges ? "*" : string.Empty;
+        string doing = repository.Operation is not GitOperation.None and var operation ? $" ({OperationWord(operation)})" : string.Empty;
+        string which = Several ? $"$(repo) {repository.Name}  " : string.Empty;
 
         // How far it is from what it follows is the sync item's to say, next to it
-        return $"$(git-branch) {name}{star}{doing}";
+        return $"{which}$(git-branch) {BranchName(status)}{star}{doing}";
     }
 
-    // The repository of a path, or of the workspace's first folder that has one when there's no path
+    // What git said of the repository a path is in, or of the active one when there's no path or it's in none
     private GitStatus? StatusAt(string? path)
     {
         if (path is not null && StatusFor(path) is { } status)
             return status;
 
-        foreach (string root in context.Workspace.Roots)
-        {
-            if (StatusFor(root) is { } rooted)
-                return rooted;
-        }
-
-        return null;
+        return ActiveRepository()?.Status;
     }
 
-    /// <summary>The branches of the repository a path is in to pick one from, a new one to make at the top.</summary>
+    /// <summary>The branches of the repository a path is in to pick one from (the active one's for no path), a new one to make at the top.</summary>
     public void ShowBranches(string? path)
     {
-        if (StatusAt(path) is not { } status || RepositoryOf(status.Root) is not { } repository)
+        if (StatusAt(path) is { } status && RepositoryOf(status.Root) is { } repository)
+            BranchesOf(repository);
+    }
+
+    /// <summary>The branches of a repository to pick one from, a new one to make at the top.</summary>
+    private void BranchesOf(Repository? repository)
+    {
+        if (repository?.Status is not { } status)
             return;
 
         context.Work.InBackground("git branches", repository.Git.Branches, branches =>
@@ -74,7 +74,10 @@ internal sealed partial class HexGit
                 });
             }
 
-            context.Windows.Choose(context.Strings.Said("git.branches_title"), context.Strings.Said("git.branches_text", ("branch", status.Branch ?? "?")), choices);
+            string text = Several
+                ? context.Strings.Said("git_repos.branches_text", ("repository", repository.Name), ("branch", status.Branch ?? "?"))
+                : context.Strings.Said("git.branches_text", ("branch", status.Branch ?? "?"));
+            context.Windows.Choose(context.Strings.Said("git.branches_title"), text, choices);
         }, quiet: true);
     }
 

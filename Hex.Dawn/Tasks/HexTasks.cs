@@ -17,7 +17,7 @@ internal sealed partial class HexTasks
     private readonly DawnContext context;
 
     // what the files said, kept until one of them is written again
-    private readonly Dictionary<string, (DateTime Written, List<HexTask> Tasks)> tasksRead = [];
+    private readonly Dictionary<string, (DateTime Written, List<HexTask> Tasks, List<HexAutomation> Automations)> tasksRead = [];
 
     /// <summary>How each task's last run ended, by its tab (TabOf), gone while it runs again. For an agent asking how a build went.</summary>
     internal readonly Dictionary<string, int> Exits = new(StringComparer.Ordinal);
@@ -32,6 +32,7 @@ internal sealed partial class HexTasks
         commands.Add("Terminal/tasks", context.Strings.Said("tasks.configure_tasks"), ConfigureTasks, icon: "gear");
         commands.Add("Run/tasks", context.Strings.Said("tasks.set_up_run"), () => SetUpRun(), icon: "debug-alt");
         AddSelfBuildCommands();
+        AddAutomationCommands();
     }
 
     /// <summary>The tasks.hor of a workspace's folder, the one in the folder before the one in .hex, null for none.</summary>
@@ -48,47 +49,80 @@ internal sealed partial class HexTasks
     internal List<HexTask> Tasks()
     {
         var all = new List<HexTask>();
-        var read = new HashSet<string>(PlatformPaths.Comparer);
-        foreach (string? root in (string?[])[TasksFolderFor(context.Documents.Current.Path), .. context.Workspace.Roots])
-        {
-            if (root is not null && read.Add(Path.GetFullPath(root)) && TasksFileIn(root) is { } file)
-                all.AddRange(TasksOf(file, root));
-        }
+        foreach (var (file, root) in TasksFiles())
+            all.AddRange(TasksOf(file, root));
 
         return all;
     }
 
+    /// <summary>
+    /// The tasks.hor files there are with the folder of each, the file on screen's nearest first, then every folder of
+    /// the workspace's, then the folder its .hex-workspace is saved in. A workspace of several repositories has the
+    /// tasks over all of them there, next to the file that opens them all.
+    /// </summary>
+    internal List<(string File, string Root)> TasksFiles()
+    {
+        var files = new List<(string, string)>();
+        var read = new HashSet<string>(PlatformPaths.Comparer);
+        string? saved = context.Workspace.File is { } workspaceFile ? Path.GetDirectoryName(Path.GetFullPath(workspaceFile)) : null;
+        foreach (string? root in (string?[])[TasksFolderFor(context.Documents.Current.Path), .. context.Workspace.Roots, saved])
+        {
+            if (root is not null && read.Add(Path.GetFullPath(root)) && TasksFileIn(root) is { } file)
+                files.Add((file, root));
+        }
+
+        return files;
+    }
+
+    /// <summary>The tasks of a tasks.hor, read again once it was written to.</summary>
+    internal List<HexTask> TasksOf(string file, string root) => Read(file, root).Tasks;
+
+    /// <summary>The automations of a tasks.hor, read again once it was written to.</summary>
+    internal List<HexAutomation> AutomationsOf(string file, string root) => Read(file, root).Automations;
+
+    /// <summary>
+    /// A tasks.hor run and its tasks and automations read out of it, kept until it's written again. It has to declare one
+    /// or the other, a file of only automations is as good as one of only tasks.
+    /// </summary>
     // HIDLSerializer reads and writes a task by its members, the trimmer of a published Hex has to be told to keep them
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(HexTask))]
-    internal List<HexTask> TasksOf(string file, string root)
+    private (List<HexTask> Tasks, List<HexAutomation> Automations) Read(string file, string root)
     {
         DateTime written = File.GetLastWriteTimeUtc(file);
         if (tasksRead.TryGetValue(file, out var read) && read.Written == written)
-            return read.Tasks;
+            return (read.Tasks, read.Automations);
 
         var tasks = new List<HexTask>();
+        var automations = new List<HexAutomation>();
         try
         {
             HIDLRuntime runtime = new() { Output = null };
             var (success, message) = runtime.Evaluate(File.ReadAllText(file));
-            if (!success || runtime.UserScope.Lookup("tasks") is not ObjectValue said)
-                throw new Exception(success ? "it has to declare an object called 'tasks'" : message);
+            IRuntimeValue? saidTasks = runtime.UserScope.Lookup("tasks"), saidAutomations = runtime.UserScope.Lookup("automations");
+            if (!success || (saidTasks is not ObjectValue && saidAutomations is not ObjectValue))
+                throw new Exception(success ? "it has to declare an object called 'tasks' or one called 'automations'" : message);
 
-            foreach (var (name, value) in said.Properties)
+            if (saidTasks is ObjectValue taskObject)
             {
-                var task = new HexTask { Name = name, Root = root };
-                HIDLSerializer.Populate(task, value);
-                if (task.Command.Length > 0)
-                    tasks.Add(task);
+                foreach (var (name, value) in taskObject.Properties)
+                {
+                    var task = new HexTask { Name = name, Root = root };
+                    HIDLSerializer.Populate(task, value);
+                    if (task.Command.Length > 0)
+                        tasks.Add(task);
+                }
             }
+
+            if (saidAutomations is ObjectValue automationObject)
+                automations.AddRange(HexAutomation.Read(automationObject, root, file));
         }
         catch (Exception e)
         {
             context.Notices.Say(context.Strings.Said("tasks.file_not_read", ("file", Path.GetFileName(file)), ("reason", e.Message)), error: true);
         }
 
-        tasksRead[file] = (written, tasks);
-        return tasks;
+        tasksRead[file] = (written, tasks, automations);
+        return (tasks, automations);
     }
 
     /// <summary>The task of a group run without asking, the one that says it's the default or else the first, null for none.</summary>

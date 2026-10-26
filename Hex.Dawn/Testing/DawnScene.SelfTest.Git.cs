@@ -403,30 +403,8 @@ internal sealed partial class DawnScene
         test.Check("settings: pull mode rebase reaches git pull", () => said.Any(line => line.Text == "git pull --rebase, git push done"));
         test.Run(() => settings.GitPullMode = "default");
 
-        // A folder of repositories as the workspace, each of them on the Source Control side under its name
-        string nest = Path.Combine(testFolder, "git_nest");
-        test.Run(() =>
-        {
-            chrome.Dialog?.Close();
-            DeleteGitFolder(nest);
-            foreach (string name in new[] { "first", "second" })
-            {
-                string inner = Path.Combine(nest, name);
-                Directory.CreateDirectory(inner);
-                File.WriteAllText(Path.Combine(inner, "readme.md"), "hi\n");
-                Git(inner, "init", "-q", "-b", "main");
-            }
-            explorer.AddFolder(nest);
-            ShowSide(HexSide.SourceControl);
-        });
-        test.WaitFor(() => SideRows(sideTree.Items).Count(row => row.Text.StartsWith("first", StringComparison.Ordinal) || row.Text.StartsWith("second", StringComparison.Ordinal)) == 2, 5.0f);
-        test.Check("source control: a folder of repositories has every one of them, each under its name", () =>
-            SideRows(sideTree.Items).Count(row => row.Text.StartsWith("first", StringComparison.Ordinal) || row.Text.StartsWith("second", StringComparison.Ordinal)) == 2);
-        test.Run(() =>
-        {
-            explorer.RemoveFolder(nest);
-            DeleteGitFolder(nest);
-        });
+        // A folder of repositories as the workspace, each under its own heading, the active one followed, and submodules
+        TestGitRepositories(test, SideRows);
 
         // Branch work from the Git menu in a repository of its own, merged, renamed, tagged, reverted and deleted
         TestGitBranches(test);

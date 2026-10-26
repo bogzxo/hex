@@ -1394,6 +1394,34 @@ let strings = {
         }
     },
 
+    // Automations, the automations of a tasks.hor, somebody's own commands of the palette and the Terminal menu
+    automations: {
+        run_automation: "Run Automation...",
+        palette: "Automation",
+        none: "there are no automations, a tasks.hor declares them in an object called automations next to its tasks",
+        choose_title: "Run automation",
+        choose_prompt: "The automations of the workspace's tasks.hor files",
+        already_running: "{name} is running already, its card is up",
+        running: "running {name}",
+        work_title: "{name}",
+        ended: "{name} done",
+        stopped: "{name} was stopped",
+        failed: "{name} stopped, {why}",
+        no_shell: "{name} runs in {shell}, and there's no {shell} here",
+        no_run: "the automation {name} of {file} has no run function, a command or a script",
+        printed: "{name}: {text}"
+    },
+
+    // The arrow beside Run, what F5 and the Run button run
+    run_target: {
+        tip: "What F5 and Run run, a run task, a .NET program or the file on screen",
+        title: "Run",
+        current_file: "Current file",
+        current_file_detail: "the file on screen, the way F5 always went",
+        chosen: "F5 runs {name} now",
+        run_tip: "Run {name}, {detail} (F5, Ctrl+F5 without the debugger)"
+    },
+
     background: {
         went_wrong: "{doing} went wrong, {error}",
         work_tip: "What Hex is doing in the background, click to see it and stop any of it",
@@ -1688,6 +1716,9 @@ let strings = {
         git_autofetch_help: "Whether the workspace's git repositories are fetched from their remotes every few minutes, so how far behind a branch is shows without asking.",
         git_autofetch_interval_title: "Background fetch interval",
         git_autofetch_interval_help: "How many minutes go between those fetches in the background.",
+        git_account_title: "GitHub account",
+        git_account_help: "The GitHub username git signs in as. With more than one account in Git Credential Manager it asks which every time git talks to GitHub, this tells it. A username in a repository's remote or its own credential.username still wins, and a fetch in the background never asks at all.",
+        git_account_placeholder: "your-github-username",
         git_pull_mode_title: "Pull with",
         git_pull_mode_help: "How Pull and Sync bring the branch up to date. default leaves it to git config, merge makes a merge commit, rebase puts your commits on top of what came, ff_only only pulls when the branch can just move along.",
         git_confirm_sync_title: "Ask before syncing",
@@ -2198,6 +2229,26 @@ let strings = {
         git_settings: "Git Settings"
     },
 
+    // More than one repository in the workspace, the active one the Git menu and the status bar work on, and submodules
+    git_repos: {
+        pick_command: "Pick Active Repository...",
+        pick_title: "Repositories",
+        pick_text: "The Git menu, Commit and the status bar work on the one picked",
+        pick_branch_text: "Pick a repository, then the branch to switch to",
+        branches_text: "{repository} is on {branch}, pick one to switch to",
+        active_tip: "The active repository, the Git menu and the status bar work on it",
+        unpublished: "not published",
+        commit_here: "Commit",
+        sync_here: "Sync",
+        branch_here: "Switch Branch...",
+        open_repository: "Open Repository",
+        not_added: "repository, not added",
+        submodule: "submodule",
+        new_commits: "new commits",
+        modified_content: "modified content",
+        untracked_content: "untracked content"
+    },
+
     // Branches merged, rebased, deleted and renamed, tags, and single commits picked over or taken back, from the Git menu
     git_branch: {
         merge_command: "Merge Branch...",
@@ -2415,6 +2466,7 @@ let strings = {
         stopped: "stopped",
         server_restarted_after: "{server} stopped, started it again",
         server_stopped: "{server} stopped again, {why}",
+        server_needs: "{server} has no project here to load, it starts once there is one",
         start_again: "Start it again"
     },
 

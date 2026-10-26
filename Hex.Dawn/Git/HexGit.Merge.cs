@@ -14,10 +14,10 @@ internal sealed partial class HexGit
     private void BuildMerge()
     {
         // Only there while git is in the middle of something, Continue first the way VS Code has them
-        continueItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.continue_merge"), () => ContinueOperation(FirstRepository()), icon: "debug-continue");
-        continueItem.IsEnabled = () => FirstRepository() is { Operation: not GitOperation.None };
-        abortItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.abort_merge"), () => AskAbort(FirstRepository()), icon: "discard");
-        abortItem.IsEnabled = () => FirstRepository() is { Operation: not GitOperation.None };
+        continueItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.continue_merge"), () => ContinueOperation(ActiveRepository()), icon: "debug-continue");
+        continueItem.IsEnabled = () => ActiveRepository() is { Operation: not GitOperation.None };
+        abortItem = context.Commands.Add("Git/operation", context.Strings.Said("git_merge.abort_merge"), () => AskAbort(ActiveRepository()), icon: "discard");
+        abortItem.IsEnabled = () => ActiveRepository() is { Operation: not GitOperation.None };
         continueItem.IsVisible = abortItem.IsVisible = continueItem.IsEnabled;
     }
 
@@ -42,7 +42,7 @@ internal sealed partial class HexGit
         if (following == GitOperation.None && !AnyOperation())
             return;
 
-        GitOperation operation = FirstRepository()?.Operation ?? GitOperation.None;
+        GitOperation operation = ActiveRepository()?.Operation ?? GitOperation.None;
         if (operation == following || abortItem is null)
             return;
 

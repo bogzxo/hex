@@ -15,6 +15,8 @@
 //   reload   the files that have it started again when they're made, changed or taken away in the workspace, for a
 //            server that reads its projects once as it starts and never again (csharp-ls doesn't load a project that
 //            comes after it), by name or *.extension
+//   needs    the files it won't run without somewhere in the folder it runs in, by name or *.extension. Where there's
+//            none it isn't started and the file is only coloured, csharp-ls stops the moment it starts on a lone .cs
 //   settings what it's told to be, by its sections the way VS Code's settings have them, said as it starts and
 //            whenever it asks (serve-d only says what's wrong with a file outside a dub project as it's opened when
 //            told d.lintOnFileOpen is "always"). {root} in a text is the folder the server runs in, serve-d completes
@@ -32,7 +34,8 @@ let servers = {
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
         repo: "razzmatazz/csharp-language-server", version: ["--version"],
-        reload: ["*.csproj", "*.sln", "*.slnx", "Directory.Build.props", "Directory.Packages.props", "global.json"]
+        reload: ["*.csproj", "*.sln", "*.slnx", "Directory.Build.props", "Directory.Packages.props", "global.json"],
+        needs: ["*.csproj", "*.fsproj", "*.sln", "*.slnx"]
     },
     python: {
         command: "pyright-langserver", args: ["--stdio"], language: "python", extensions: [".py"],

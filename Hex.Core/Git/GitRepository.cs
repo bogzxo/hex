@@ -179,9 +179,14 @@ internal sealed partial class GitRepository
     public bool HasRemote() => GitProcess.Run(Root, ["remote"]).Output.Trim().Length > 0;
 
     /// <summary>What the remotes have that this hasn't, fetched without touching a branch. What git said when it went wrong, null when it didn't.</summary>
-    public string? Fetch()
+    public string? Fetch() => Fetch(unattended: false);
+
+    /// <summary>The same fetched in the background, never stopping to ask anybody anything to sign in.</summary>
+    public string? FetchUnattended() => Fetch(unattended: true);
+
+    private string? Fetch(bool unattended)
     {
-        GitResult result = GitProcess.Run(Root, ["fetch", "--all", "--prune", "--quiet"], patience: Network);
+        GitResult result = GitProcess.Run(Root, ["fetch", "--all", "--prune", "--quiet"], patience: Network, unattended: unattended);
         return result.Ok ? null : Said(result);
     }
 

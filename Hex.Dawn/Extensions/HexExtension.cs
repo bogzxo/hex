@@ -68,10 +68,11 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
     /// <summary>The runtime it lives in, null until it is loaded.</summary>
     public HIDLRuntime? Runtime { get; private set; }
 
-    public HexExtension(string folder, bool builtIn)
+    /// <param name="name">What it's called before its file says, its folder's name when nothing does (an automation's its title).</param>
+    public HexExtension(string folder, bool builtIn, string? name = null)
     {
         Folder = folder;
-        Name = Path.GetFileName(folder);
+        Name = name ?? Path.GetFileName(folder);
         BuiltIn = builtIn;
     }
 
