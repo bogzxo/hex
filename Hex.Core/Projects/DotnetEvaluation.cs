@@ -38,7 +38,11 @@ internal sealed class DotnetEvaluation
     public string Folder => Path.GetDirectoryName(Project) ?? string.Empty;
 
     /// <summary>The folder a build puts the program in, made whole, empty when the project doesn't say (several frameworks).</summary>
-    public string OutputFolder => Properties.TryGetValue("OutDir", out string? outDir) && outDir.Length > 0 ? Path.GetFullPath(Path.Combine(Folder, outDir)) : string.Empty;
+    // MSBuild keeps the SDK's own backslashes in OutDir on Linux and macOS (bin\Debug/net11.0/), the path made of the
+    // system's separators
+    public string OutputFolder => Properties.TryGetValue("OutDir", out string? outDir) && outDir.Length > 0
+        ? Path.GetFullPath(Path.Combine(Folder, outDir.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)))
+        : string.Empty;
 
     public string TargetPath => Properties.GetValueOrDefault("TargetPath") ?? string.Empty;
 
