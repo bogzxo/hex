@@ -25,7 +25,12 @@ internal sealed partial class DawnScene
         {
             if (!IsNotebookFile(path))
                 path += ".ipynb";
-            File.WriteAllText(path, NotebookFile.Write(Notebook.Empty()));
+            // The kernel it'll run with said in it from the start, as Jupyter's new notebooks have. Saved before a cell
+            // ran, it said nothing about what it was for
+            Notebook made = Notebook.Empty();
+            if (KernelSpecs.For(KernelSpecs.Find(), null, "python") is { } spec)
+                made.UseKernel(spec, []);
+            File.WriteAllText(path, NotebookFile.Write(made));
             Open(path);
         });
     }
@@ -55,8 +60,8 @@ internal sealed partial class DawnScene
         Add("Notebook/run", "notebook.run_above", notebook => RunCells(notebook, notebook.Model.Cells.Take(notebook.Selected)), icon: "run-above", can: Picked);
         Add("Notebook/run", "notebook.run_below", notebook => RunCells(notebook, notebook.Model.Cells.Skip(notebook.Selected)), icon: "run-below", can: Picked);
 
-        Add("Notebook/cells", "notebook.add_code", notebook => AddCell(notebook, CellKind.Code, below: true), "B", "add");
-        Add("Notebook/cells", "notebook.add_code_above", notebook => AddCell(notebook, CellKind.Code, below: false), "A", "add");
+        Add("Notebook/cells", "notebook.add_code", notebook => AddCell(notebook, CellKind.Code, below: true, edit: false), "B", "add");
+        Add("Notebook/cells", "notebook.add_code_above", notebook => AddCell(notebook, CellKind.Code, below: false, edit: false), "A", "add");
         Add("Notebook/cells", "notebook.add_markdown", notebook => AddCell(notebook, CellKind.Markdown, below: true), icon: "markdown");
         Add("Notebook/cells", "notebook.delete_cell", DeleteCell, "D D", "trash", can: Picked);
         Add("Notebook/cells", "notebook.move_up", notebook => MoveCell(notebook, -1), "Ctrl+Shift+Up", "arrow-up", UIKeyUse.BoundWhileTyping, notebook => notebook.Selected > 0);
@@ -80,6 +85,13 @@ internal sealed partial class DawnScene
         commands.Bind(Key.Down, () => StepCell(1));
         commands.Bind(Key.K, () => StepCell(-1));
         commands.Bind(Key.J, () => StepCell(1));
+
+        // Z out of a cell undoes, a cell taken out with D D put back, Jupyter's undo of a cell's deletion
+        commands.Bind(Key.Z, () =>
+        {
+            if (HasNotebook && !notebookShown!.Editing)
+                Undo();
+        });
     }
 
     // An arrow out of a cell, the one above or below picked
@@ -113,13 +125,16 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>A new cell above or below the one picked, picked and typed into.</summary>
-    private void AddCell(HexNotebook notebook, CellKind kind, bool below)
+    /// <summary>
+    /// A new cell above or below the one picked, picked, and typed into unless it came from A or B out of a cell, which
+    /// stay picking cells as Jupyter's do.
+    /// </summary>
+    private void AddCell(HexNotebook notebook, CellKind kind, bool below, bool edit = true)
     {
         int at = notebook.Model.Cells.Count == 0 ? 0 : Math.Clamp(notebook.Selected + (below ? 1 : 0), 0, notebook.Model.Cells.Count);
         notebook.Model.Cells.Insert(at, new NotebookCell { Kind = kind });
         notebook.Selected = at;
-        notebook.Editing = true;
+        notebook.Editing = edit;
         notebook.Remake = true;
         NotebookChanged(notebook, now: true);
     }

@@ -68,8 +68,11 @@ internal sealed partial class DawnScene
         test.Run(() => PickCell(notebookShown!, 1, edit: false));
         test.Wait();
         PressKeys(test, "B");
-        test.Check("notebook: B puts a new code cell under the one picked and types into it", () =>
-            notebookShown!.Model.Cells.Count == 5 && notebookShown.Selected == 2 && notebookShown.Model.Cells[2] is { Kind: CellKind.Code, Source: "" } && notebookShown.Editing);
+        test.Check("notebook: B puts a new code cell under the one picked, picked, and types nothing into it", () =>
+            notebookShown!.Model.Cells.Count == 5 && notebookShown.Selected == 2 && notebookShown.Model.Cells[2] is { Kind: CellKind.Code, Source: "" } && !notebookShown.Editing);
+        PressKeys(test, "Enter");
+        test.Check("notebook: Enter types into it, and the Enter itself types nothing", () =>
+            notebookShown!.Editing && compositor.Focus is NotebookCellEditor && notebookShown.Model.Cells[2].Source == "" && cellViews[2].Editor.Text == "");
         PressKeys(test, "Escape");
         test.Check("notebook: Escape goes out of the cell back to picking cells", () => !notebookShown!.Editing && compositor.Focus is not NotebookCellEditor);
         test.Wait();

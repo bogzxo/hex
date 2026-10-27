@@ -202,6 +202,49 @@ public class NotebookTests
         Assert.Null(NotebookTables.FromHtml("<b>no table</b>", out _));
     }
 
+    [Fact]
+    public void A_multi_index_frame_keeps_its_numbers_under_their_columns()
+    {
+        const string html = """
+            <table border="1" class="dataframe">
+              <thead>
+                <tr><th></th><th></th><th colspan="2" halign="left">X</th><th colspan="2" halign="left">Y</th></tr>
+                <tr><th></th><th></th><th>p</th><th>q</th><th>p</th><th>q</th></tr>
+                <tr><th>L</th><th>n</th><th></th><th></th><th></th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr><th rowspan="2" valign="top">a</th><th>1</th><td>0</td><td>1</td><td>2</td><td>3</td></tr>
+                <tr><th>2</th><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+              </tbody>
+            </table>
+            """;
+
+        NotebookTable table = NotebookTables.FromHtml(html, out _)!;
+        Assert.Equal(["L", "n", "X p", "X q", "Y p", "Y q"], table.Header);
+        Assert.Equal(["a", "2", "4", "5", "6", "7"], table.Rows[1]);
+    }
+
+    [Fact]
+    public void Colours_by_number_past_sixteen_are_the_nearest_of_the_sixteen()
+    {
+        // IPython's keywords in a traceback, 256 colour green and bold, then plain code after them
+        var (text, colours) = AnsiText.Read("\x1b[38;5;28;01mraise\x1b[39;00m ValueError(\x1b[38;2;250;10;10mx\x1b[0m)");
+
+        Assert.Equal("raise ValueError(x)", text);
+        Assert.Equal(new Horizon.UI.Scripting.SemanticSpan(0, 0, 5, Horizon.UI.Scripting.SyntaxKind.Ansi10), colours[0]);
+        Assert.Equal(new Horizon.UI.Scripting.SemanticSpan(0, 17, 1, Horizon.UI.Scripting.SyntaxKind.Ansi9), colours[1]);
+    }
+
+    [Fact]
+    public void Html_with_no_table_is_written_as_markdown()
+    {
+        string markdown = NotebookHtml.ToMarkdown("<style>b{}</style><h2>Done</h2><p><b>bold</b> and <i>it</i>, <code>x</code> <a href=\"https://a.b\">here</a></p><ul><li>one</li><li>two &amp; three</li></ul>");
+
+        Assert.Equal("## Done\n\n**bold** and *it*, `x` [here](https://a.b)\n\n- one\n- two & three", markdown);
+        Assert.True(NotebookHtml.IsBareRepr("<IPython.core.display.HTML object>"));
+        Assert.False(NotebookHtml.IsBareRepr("   a  b\n0  1  2"));
+    }
+
     // A kernel to talk to, null when this machine has no Python with ipykernel
     private static KernelSpec? Python() => KernelSpecs.Find().FirstOrDefault(spec => spec.Language == "python");
 

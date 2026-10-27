@@ -62,7 +62,7 @@ internal sealed partial class DawnScene
         int shown = Math.Min(table.Rows.Count, TABLE_ROWS);
         var view = new NotebookTableView
         {
-            Columns = [.. table.Header.Select(title => new UITableColumn(title))],
+            Columns = [.. table.Header.Select((title, i) => new UITableColumn(title) { Align = table.Align[i] switch { 'r' => 1.0f, 'c' => 0.5f, _ => 0.0f } })],
             Rows = [.. table.Rows.Select(row => row.Select(text => new UITableCell(text)).ToArray())],
             RowHeight = TABLE_ROW,
             TextScale = TABLE_TEXT,

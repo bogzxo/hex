@@ -258,10 +258,10 @@ internal sealed partial class DawnScene
 
         foreach (HexKeyStroke stroke in strokes)
         {
-            // The program's shortcuts hear it on the next tick, then whatever has the keyboard gets what it types after
-            // them, the order a real press goes in
+            // The key and what it types land together, both before the next tick, the way a real press does. The
+            // program's shortcuts hear it first, and one that moves the keyboard (B in a notebook giving a new cell
+            // its editor) throws away what it typed. Typed a tick later, the b went into the new cell
             Engine.Input.Keyboard.Tap(stroke.Keys);
-            yield return null;
             UIKeyboard.Press(stroke.Key, stroke.Control, stroke.Shift, stroke.Alt, stroke.Super);
             yield return null;
             yield return null;

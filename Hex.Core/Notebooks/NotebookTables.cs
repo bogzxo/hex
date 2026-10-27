@@ -145,8 +145,8 @@ internal static partial class NotebookTables
         string head = bodyAt >= 0 ? table[..bodyAt] : string.Empty;
         string body = bodyAt >= 0 ? table[bodyAt..] : table;
 
-        var headRows = Rows(head);
-        var rows = Rows(body);
+        var headRows = Rows(head, header: true);
+        var rows = Rows(body, header: false);
         if (headRows.Count == 0 && rows.Count > 0 && table.IndexOf("<th", StringComparison.OrdinalIgnoreCase) is var th and >= 0 && th < table.IndexOf("<td", StringComparison.OrdinalIgnoreCase))
         {
             headRows.Add(rows[0]);
@@ -157,15 +157,16 @@ internal static partial class NotebookTables
         if (columns == 0)
             return null;
 
-        // Each column's header is the last thing its header rows say, pandas puts the columns' names on one and the
-        // index's name on a row of its own under it
-        List<string> header = [.. Enumerable.Range(0, columns).Select(column =>
-            headRows.Select(row => column < row.Count ? row[column] : string.Empty).LastOrDefault(said => said.Length > 0) ?? string.Empty)];
+        // Each column's header is what its header rows say, one after the other. pandas puts the levels of a MultiIndex's
+        // columns on a row each ("X" over "p" is "X p") and the index's names on a row of their own under them
+        List<string> header = [.. Enumerable.Range(0, columns).Select(column => Joined(headRows.Select(row => column < row.Count ? row[column] : string.Empty)))];
         foreach (var row in rows)
             while (row.Count < columns) row.Add(string.Empty);
 
-        string after = html[(end + "</table>".Length)..];
-        string said = Text(after).Trim();
+        // What's said about it, a caption of its own and what comes after it (pandas' "5 rows × 4 columns")
+        string said = Text(html[(end + "</table>".Length)..]).Trim();
+        if (CaptionPattern().Match(table) is { Success: true } named && Text(named.Groups[1].Value).Trim() is { Length: > 0 } title)
+            said = said.Length > 0 ? $"{title}, {said}" : title;
         if (said.Length > 0)
             caption = said;
 
@@ -173,27 +174,69 @@ internal static partial class NotebookTables
         return new NotebookTable(header, rows, align);
     }
 
-    // The rows of some table HTML, each its cells' text, th and td alike
-    private static List<List<string>> Rows(string html)
+    // The rows of some table HTML laid out on a grid, each its cells' text, th and td alike. A cell over several rows
+    // (pandas' index label, said once for the rows it's over) is in each of them, the rows under it were a cell short and
+    // their numbers sat under the wrong columns. A cell over several columns is in each of them in a header (pandas' level
+    // over the columns of a MultiIndex, joined with the level under it into one name) and in the first of them elsewhere
+    private static List<List<string>> Rows(string html, bool header)
     {
         var rows = new List<List<string>>();
+        var down = new Dictionary<int, (int Left, string Text)>();
         foreach (Match row in RowPattern().Matches(html))
         {
             var cells = new List<string>();
-            foreach (Match cell in CellPattern().Matches(row.Groups[1].Value))
+            void Carried()
             {
-                cells.Add(Text(cell.Groups[2].Value).Trim());
-
-                // A cell over several columns takes them all, empty after the first
-                if (SpanPattern().Match(cell.Groups[1].Value) is { Success: true } span && int.TryParse(span.Groups[1].Value, out int spanned))
-                    cells.AddRange(Enumerable.Repeat(string.Empty, Math.Clamp(spanned, 1, 64) - 1));
+                while (down.TryGetValue(cells.Count, out var over))
+                {
+                    cells.Add(over.Text);
+                    if (over.Left <= 1)
+                        down.Remove(cells.Count - 1);
+                    else
+                        down[cells.Count - 1] = (over.Left - 1, over.Text);
+                }
             }
 
+            foreach (Match cell in CellPattern().Matches(row.Groups[1].Value))
+            {
+                Carried();
+                string text = Text(cell.Groups[2].Value).Trim();
+                string said = cell.Groups[1].Value;
+                int across = Spanned(ColumnSpanPattern().Match(said)), tall = Spanned(RowSpanPattern().Match(said));
+                for (int i = 0; i < across; i++)
+                {
+                    if (tall > 1)
+                        down[cells.Count] = (tall - 1, header || i == 0 ? text : string.Empty);
+                    cells.Add(header || i == 0 ? text : string.Empty);
+                }
+            }
+
+            Carried();
             rows.Add(cells);
         }
 
         return rows;
     }
+
+    // Helper method for the levels of a column's header as its name, each once, a cell over two header rows said once
+    private static string Joined(IEnumerable<string> levels)
+    {
+        var name = new StringBuilder();
+        string last = string.Empty;
+        foreach (string level in levels)
+        {
+            if (level.Length == 0 || level == last)
+                continue;
+            if (name.Length > 0)
+                name.Append(' ');
+            name.Append(level);
+            last = level;
+        }
+
+        return name.ToString();
+    }
+
+    private static int Spanned(Match span) => span.Success && int.TryParse(span.Groups[1].Value, out int spanned) ? Math.Clamp(spanned, 1, 64) : 1;
 
     // HTML as its text, tags off and entities written out
     private static string Text(string html) => WebUtility.HtmlDecode(TagPattern().Replace(html, string.Empty)).Replace(' ', ' ');
@@ -204,8 +247,14 @@ internal static partial class NotebookTables
     [GeneratedRegex(@"<t[hd]([^>]*)>(.*?)</t[hd]>", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex CellPattern();
 
-    [GeneratedRegex(@"colspan\s*=\s*""?(\d+)", RegexOptions.IgnoreCase)]
-    private static partial Regex SpanPattern();
+    [GeneratedRegex(@"colspan\s*=\s*[""']?(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ColumnSpanPattern();
+
+    [GeneratedRegex(@"rowspan\s*=\s*[""']?(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex RowSpanPattern();
+
+    [GeneratedRegex(@"<caption[^>]*>(.*?)</caption>", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex CaptionPattern();
 
     [GeneratedRegex(@"<[^>]+>", RegexOptions.Singleline)]
     private static partial Regex TagPattern();

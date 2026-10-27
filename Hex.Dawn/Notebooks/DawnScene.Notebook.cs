@@ -47,6 +47,7 @@ internal sealed partial class DawnScene
     {
         notebookView = layout.Get<Panel>("notebook_view");
         notebookView.Visible = false;
+        Engine.WindowManager.Exclusive += _ => MakeOutputPictures();
         notebookView.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.09f, 0.12f, 1.0f);
 
         notebookBar = notebookView.Add(new StackPanel

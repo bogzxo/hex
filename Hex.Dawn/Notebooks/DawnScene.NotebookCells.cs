@@ -274,6 +274,9 @@ internal sealed partial class DawnScene
             bool selected = i == notebook.Selected;
             view.Card.Color = !selected ? plain : notebook.Editing ? typing : picked;
 
+            // The word under the caret lit down a cell only while it's typed into, every cell's caret sits at its start
+            view.Editor.LightOccurrences = view.Editor.IsFocused;
+
             bool code = cell.Kind == CellKind.Code;
             view.RunButton.Visible = code;
             view.Count.Visible = code;

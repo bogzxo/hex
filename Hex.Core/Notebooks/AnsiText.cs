@@ -7,8 +7,9 @@ namespace Hex.Core.Notebooks;
 /// <summary>
 /// Text written with ANSI escapes (a Python traceback, what a program printed in colour) as the text alone and where its
 /// colours are, as spans of the sixteen Ansi kinds an editor draws in the terminal's colours. Bold makes the eight plain
-/// colours the bright ones, the way most terminals have it. Colours by number past sixteen, backgrounds and the rest of
-/// what escapes say are dropped with the escapes, the text stays.
+/// colours the bright ones, the way most terminals have it. Colours by number past sixteen and by red, green and blue are
+/// drawn as the nearest of the sixteen. Backgrounds and the rest of what escapes say are dropped with the escapes, the
+/// text stays.
 /// </summary>
 internal static class AnsiText
 {
@@ -67,6 +68,46 @@ internal static class AnsiText
         return (text.ToString(), colours);
     }
 
+    // The sixteen as xterm has them, to find the one a colour by number or by its red, green and blue is nearest
+    private static readonly (int R, int G, int B)[] Sixteen =
+    [
+        (0, 0, 0), (205, 0, 0), (0, 205, 0), (205, 205, 0), (0, 0, 238), (205, 0, 205), (0, 205, 205), (229, 229, 229),
+        (127, 127, 127), (255, 0, 0), (0, 255, 0), (255, 255, 0), (92, 92, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255)
+    ];
+
+    // Helper method for one of the 256 past the first sixteen, a 6 by 6 by 6 cube of colours then 24 greys
+    private static (int R, int G, int B) Of256(int number)
+    {
+        if (number >= 232)
+        {
+            int grey = 8 + (number - 232) * 10;
+            return (grey, grey, grey);
+        }
+
+        int cube = number - 16;
+        static int Level(int step) => step == 0 ? 0 : 55 + step * 40;
+        return (Level(cube / 36), Level(cube / 6 % 6), Level(cube % 6));
+    }
+
+    // Helper method for which of the sixteen a colour is closest to. IPython colours a traceback's code by number past
+    // sixteen (its keywords are 28, a green), dropped they were the plain colour and the code read as all one
+    private static int Nearest((int R, int G, int B) colour)
+    {
+        int best = 7, least = int.MaxValue;
+        for (int i = 0; i < Sixteen.Length; i++)
+        {
+            int r = colour.R - Sixteen[i].R, g = colour.G - Sixteen[i].G, b = colour.B - Sixteen[i].B;
+            int distance = r * r + g * g + b * b;
+            if (distance < least)
+            {
+                least = distance;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
     // Helper method for what one SGR escape says, its numbers one after the other
     private static void Apply(string said, ref int colour, ref bool bold)
     {
@@ -98,11 +139,15 @@ internal static class AnsiText
                     colour = -1;
                     break;
                 case 38 when i + 2 < parts.Length && parts[i + 1] == "5":
-                    if (int.TryParse(parts[i + 2], out int numbered) && numbered < 16)
-                        colour = numbered;
+                    if (int.TryParse(parts[i + 2], out int numbered) && numbered is >= 0 and < 256)
+                        colour = numbered < 16 ? numbered : Nearest(Of256(numbered));
                     i += 2;
                     break;
                 case 38 when i + 4 < parts.Length && parts[i + 1] == "2":
+                    if (int.TryParse(parts[i + 2], out int r) && int.TryParse(parts[i + 3], out int g) && int.TryParse(parts[i + 4], out int b))
+                        colour = Nearest((r, g, b));
+                    i += 4;
+                    break;
                 case 48 when i + 4 < parts.Length && parts[i + 1] == "2":
                     i += 4;
                     break;
