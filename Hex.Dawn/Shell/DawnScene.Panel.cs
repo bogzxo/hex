@@ -66,6 +66,19 @@ internal sealed partial class DawnScene
 
     private readonly List<HexProblem> problemList = [];
 
+    // What the problems the panel shows came to the last time, see ProblemsSignature
+    private int problemsListed = int.MinValue;
+
+    // The problems as one number, the same while the list is, without making anything
+    private int ProblemsSignature()
+    {
+        var hash = new HashCode();
+        hash.Add(problemList.Count);
+        foreach (HexProblem problem in problemList)
+            hash.Add(problem);
+        return hash.ToHashCode();
+    }
+
     private void BuildPanel()
     {
         bottom = layout.Get<TabPanel>("bottom");
@@ -165,8 +178,16 @@ internal sealed partial class DawnScene
         {
             problemsDirty = false;
             GatherProblems();
+
+            // The rows only when what's wrong is something else now. Checks that come round again and find the same things had the
+            // rows of the panel made anew every second, twenty kilobytes of garbage each time for nothing on the screen
             bottom.Tabs = PanelTabs(problemList.Count > 0 ? Said("panel.problems_count", ("count", problemList.Count.ToString())) : Said("panel.problems"));
-            problemRowsStale = true;
+            int now = ProblemsSignature();
+            if (now != problemsListed)
+            {
+                problemsListed = now;
+                problemRowsStale = true;
+            }
         }
 
         // Folded by hand, or by itself with nothing wrong on the page showing unless it was opened by hand since
