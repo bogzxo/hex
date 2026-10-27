@@ -125,7 +125,19 @@ internal sealed partial class DawnScene
         {
             file.Asking = true;
             string text = editor.Text, path = of.Path ?? string.Empty;
-            InBackground("lenses", () => HidlLensesOf(text, path), made => Take(made, false), quiet: true);
+            InBackground("lenses", () => HidlLensesOf(text, path), made =>
+            {
+                if (made is not null)
+                {
+                    Take(made, false);
+                    return;
+                }
+
+                // Text that doesn't parse keeps the counts it had, moved along with their lines, until it does again
+                file.Asking = false;
+                if (file.Generation == generation)
+                    file.Version = version;
+            }, quiet: true);
         }
         else if (languages.DoesLenses(of))
         {
@@ -141,17 +153,18 @@ internal sealed partial class DawnScene
             file.RetryAt = System.Environment.TickCount64 + LENS_RETRY_MS;
     }
 
-    // HIDL's counts worked out off the editor's thread, nothing at all for text it chokes on, so the answer always comes
-    // back and the file isn't left waiting on it for good
-    private static List<LensDeclaration> HidlLensesOf(string text, string path)
+    // HIDL's counts worked out off the editor's thread, null for text that doesn't parse, so the answer always comes back
+    // and the file isn't left waiting on it for good. Half typed, a declaration isn't one (sdflet speed), its count went
+    // and its row with it, and every line under it jumped up a line and back down again once it was put right
+    private static List<LensDeclaration>? HidlLensesOf(string text, string path)
     {
         try
         {
-            return HidlLenses(HidlSemantics.References(text), path);
+            return HidlAnalysis.SyntaxErrors(text).Count > 0 ? null : HidlLenses(HidlSemantics.References(text), path);
         }
         catch (Exception)
         {
-            return [];
+            return null;
         }
     }
 

@@ -372,6 +372,9 @@ internal interface IEditorWindow
     /// <summary>The document on screen shown as its code, its designer, its table or a view of an extension.</summary>
     void SwitchView(HexView view);
 
+    /// <summary>The buttons over the editor for the ways the file can be shown put up or away for the document on screen.</summary>
+    void ShowViewButtons();
+
     /// <summary>The right side made again (the properties of a layout, the values of a file of code).</summary>
     void RefreshRight();
 
