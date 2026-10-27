@@ -411,8 +411,9 @@ internal sealed partial class DawnScene
 
         // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
         // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
-        // from a terminal are terminal commands (DawnScene.Terminal) and go through it
-        if (!UpdateKeyCapture() && compositor.Focus is not TerminalView && !SettingsFindPressed())
+        // from a terminal are terminal commands (DawnScene.Terminal) and go through it. While the picture behind the code is
+        // laid out by hand the keys are the overlay's, Enter and Escape and the arrows
+        if (!UpdateKeyCapture() && compositor.Focus is not (TerminalView or ArrangeOverlay) && !SettingsFindPressed())
             commands.Keys.Update(Engine.Input.Keyboard, typing);
     }
 

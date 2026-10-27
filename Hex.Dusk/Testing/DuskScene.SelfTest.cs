@@ -65,9 +65,10 @@ internal sealed partial class DuskScene
         ("micro", "micro in the shell, every key, the mouse, a paste, its splits and colours, how a console TUI gets on in Dusk", TestMicro),
         ("tuikeys", "the arrows pressed for real into micro, the whole way a person's keys go", TestTuiKeys),
         ("claude", "Claude Code in the shell, a TUI drawn on the main screen, its list moved with the arrows", TestClaude),
-        ("backdrop", "the picture behind the terminals, switched on, moved and made fainter in the one window of settings, and Editor · Text in it as Dawn has", test =>
+        ("backdrop", "the picture behind the terminals, switched on, moved and made fainter in the one window of settings, laid out by hand with the mouse, and Editor · Text in it as Dawn has", test =>
         {
             TestBackdrop(test);
+            TestBackdropArrange(test);
             TestSettingsText(test);
         })
     ];

@@ -134,6 +134,7 @@ internal sealed partial class DawnScene
         ["terminal_backdrop_scale"] = (0.05f, 1.5f),
         ["terminal_backdrop_across"] = (-0.5f, 1.0f),
         ["terminal_backdrop_up"] = (-0.5f, 1.0f),
+        ["terminal_backdrop_stretch"] = (HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH),
         ["backdrop_wrap_margin"] = (0.0f, 80.0f),
         ["wrap_flow"] = (0.0f, 60.0f),
         ["git_autofetch_interval"] = (1.0f, 60.0f),
@@ -152,6 +153,7 @@ internal sealed partial class DawnScene
         ["backdrop_scale"] = (0.05f, 1.5f),
         ["backdrop_across"] = (-0.5f, 1.0f),
         ["backdrop_up"] = (-0.5f, 1.0f),
+        ["backdrop_stretch"] = (HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH),
         ["backdrop_opacity"] = (0.0f, 1.0f)
     };
 

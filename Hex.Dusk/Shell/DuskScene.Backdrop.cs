@@ -13,7 +13,8 @@ namespace Hex.Dusk;
 // Dawn's picture behind the code behind the terminals as well, the same picture and faintness (the editor's section of
 // the settings), switched on for the terminals on their own (backdrop_terminal, off as it comes) and with a size and a
 // place of their own (terminal_backdrop_scale, _across and _up), the terminals aren't the shape of the code. One picture behind the panes of a tab however it's split (TerminalPanel.Backdrop), left off while a
-// program has a screen of its own up. The picture's Choose and The usual one buttons work here as they do in Dawn.
+// program has a screen of its own up. The picture's Choose and The usual one buttons work here as they do in Dawn, and so
+// does laying it out by hand (DuskScene.BackdropArrange).
 internal sealed partial class DuskScene
 {
     // The picture that comes with Hex, the one Dawn shows unless told otherwise
@@ -29,18 +30,30 @@ internal sealed partial class DuskScene
     /// <summary>The picture as the settings file has it now, put behind the terminals. Once there is a device to load it with.</summary>
     private void ReadBackdrop()
     {
-        if (!started)
+        // Not while it's being laid out by hand, what's in the file would pull it back from under the pointer
+        if (!started || backdropArrange is not null)
             return;
 
         // Read as Dawn reads them, the backdrop is the editor's section's for both modes
         HexSettings settings = new(host.Settings.Path);
-        string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
-
-        if (!settings.BackdropTerminal || !File.Exists(path))
-        {
-            panel.Backdrop = null;
+        panel.Backdrop = settings.BackdropTerminal ? BackdropPicture(settings) : null;
+        if (panel.Backdrop is null)
             return;
-        }
+
+        panel.BackdropOpacity = settings.BackdropOpacity;
+        panel.BackdropScale = settings.TerminalBackdropScale;
+        // Shares of the window, as Dawn keeps them (and clamps them, a file from before that had pixels pulled back in)
+        panel.BackdropOffset = new Vector2(settings.TerminalBackdropAcross, settings.TerminalBackdropUp);
+        panel.BackdropStretch = settings.TerminalBackdropStretch;
+        Engine.WindowManager.RequestFrames();
+    }
+
+    /// <summary>The picture the settings say, loaded once a file, null for one that isn't there.</summary>
+    private Texture? BackdropPicture(HexSettings settings)
+    {
+        string path = settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        if (!File.Exists(path))
+            return null;
 
         if (backdropLoaded != path)
         {
@@ -48,17 +61,18 @@ internal sealed partial class DuskScene
             backdropLoaded = path;
         }
 
-        panel.Backdrop = backdropPicture;
-        panel.BackdropOpacity = settings.BackdropOpacity;
-        panel.BackdropScale = settings.TerminalBackdropScale;
-        // Shares of the window, as Dawn keeps them (and clamps them, a file from before that had pixels pulled back in)
-        panel.BackdropOffset = new Vector2(settings.TerminalBackdropAcross, settings.TerminalBackdropUp);
-        Engine.WindowManager.RequestFrames();
+        return backdropPicture;
     }
 
     /// <summary>A button of the settings pressed, the picture chosen with Hex's own dialog or the usual one back.</summary>
     private void SettingPressed(FileSectionSource editor, string key, int which)
     {
+        if (key == EditorSettingsCatalog.ARRANGE_BACKDROP)
+        {
+            ArrangeBackdrop();
+            return;
+        }
+
         if (key != "backdrop_image")
             return;
 

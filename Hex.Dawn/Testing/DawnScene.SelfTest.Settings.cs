@@ -296,8 +296,8 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("settings: a section for the picture behind the code, the one Hex comes with in every editor, set with sliders", () =>
             settings.BackdropOn && settings.BackdropImage.Length == 0 && code.Backdrop is not null && code.BackdropShape is { Rows: > 0 }
-            && SettingsPage!.Settings.Count(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.BACKDROP && setting.Slider) == 9
-            && Descendants(SettingsPage).OfType<Slider>().Count() >= 9);
+            && SettingsPage!.Settings.Count(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.BACKDROP && setting.Slider) == 11
+            && Descendants(SettingsPage).OfType<Slider>().Count() >= 11);
         Enter("backdrop_scale", new NumberValue(0.8f));
         Enter("backdrop_across", new NumberValue(0.25f));
         Enter("backdrop_opacity", new NumberValue(0.5f));

@@ -65,6 +65,12 @@ internal sealed partial class HexSettings
     /// <summary>Where the picture is behind Dusk's terminals and how big, its own place and size and not the code's.</summary>
     public float TerminalBackdropScale = 0.5f, TerminalBackdropAcross, TerminalBackdropUp;
 
+    /// <summary>How wide the picture is behind the code and behind the terminals against its own shape, 1 for the shape it has.</summary>
+    public float BackdropStretch = 1.0f, TerminalBackdropStretch = 1.0f;
+
+    /// <summary>How narrow and how wide the picture can be stretched against its own shape.</summary>
+    public const float LEAST_STRETCH = 0.25f, MOST_STRETCH = 4.0f;
+
     /// <summary>How far the wrapped code keeps off what is drawn in the picture, in the editor's pixels, round every edge.</summary>
     public float BackdropWrapMargin = 8.0f;
 
@@ -352,6 +358,7 @@ internal sealed partial class HexSettings
         TerminalBackdropScale = Math.Clamp(Number(values, "terminal_backdrop_scale", TerminalBackdropScale), 0.05f, 1.5f);
         TerminalBackdropAcross = Math.Clamp(Number(values, "terminal_backdrop_across", TerminalBackdropAcross), -0.5f, 1.0f);
         TerminalBackdropUp = Math.Clamp(Number(values, "terminal_backdrop_up", TerminalBackdropUp), -0.5f, 1.0f);
+        TerminalBackdropStretch = Math.Clamp(Number(values, "terminal_backdrop_stretch", TerminalBackdropStretch), LEAST_STRETCH, MOST_STRETCH);
         BackdropWrapMargin = Math.Clamp(Number(values, "backdrop_wrap_margin", BackdropWrapMargin), 0.0f, 80.0f);
         WrapFlow = Math.Clamp(Number(values, "wrap_flow", WrapFlow), 0.0f, 60.0f);
         WrapCode = Flag(values, "wrap_code", WrapCode);
@@ -431,6 +438,7 @@ internal sealed partial class HexSettings
         BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 1.5f);
         BackdropAcross = Math.Clamp(Number(values, "backdrop_across", BackdropAcross), -0.5f, 1.0f);
         BackdropUp = Math.Clamp(Number(values, "backdrop_up", BackdropUp), -0.5f, 1.0f);
+        BackdropStretch = Math.Clamp(Number(values, "backdrop_stretch", BackdropStretch), LEAST_STRETCH, MOST_STRETCH);
         BackdropOpacity = Math.Clamp(Number(values, "backdrop_opacity", BackdropOpacity), 0.0f, 1.0f);
         if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
         if (values.TryGetValue("disabled_extensions", out var disabled) && disabled is ListValue off)
@@ -615,6 +623,7 @@ internal sealed partial class HexSettings
             .Add("terminal_backdrop_scale", TerminalBackdropScale)
             .Add("terminal_backdrop_across", TerminalBackdropAcross)
             .Add("terminal_backdrop_up", TerminalBackdropUp)
+            .Add("terminal_backdrop_stretch", TerminalBackdropStretch)
             .Add("backdrop_wrap_margin", BackdropWrapMargin)
             .Add("wrap_flow", WrapFlow)
             .Add("wrap_code", WrapCode)
@@ -683,6 +692,7 @@ internal sealed partial class HexSettings
             .Add("backdrop_scale", BackdropScale)
             .Add("backdrop_across", BackdropAcross)
             .Add("backdrop_up", BackdropUp)
+            .Add("backdrop_stretch", BackdropStretch)
             .Add("backdrop_opacity", BackdropOpacity)
             .Add("last_workspace", LastWorkspace.Replace('\\', '/'))
             .Add("disabled_extensions", Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))

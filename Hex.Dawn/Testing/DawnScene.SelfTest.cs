@@ -159,6 +159,7 @@ internal sealed partial class DawnScene
             TestSettingsLooks(test);
             TestSettingsFile(test);
             TestSettingsWheel(test);
+            TestBackdropArrange(test);
         }),
         ("code", "files of code, values, the console, docs, the table, a layout as code, completion, VS Code's every day keys", test =>
         {

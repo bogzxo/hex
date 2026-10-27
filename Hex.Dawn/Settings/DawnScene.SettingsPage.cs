@@ -340,9 +340,11 @@ internal sealed partial class DawnScene
             "backdrop_scale" => new NumberValue(hex.settings.BackdropScale),
             "backdrop_across" => new NumberValue(hex.settings.BackdropAcross),
             "backdrop_up" => new NumberValue(hex.settings.BackdropUp),
+            "backdrop_stretch" => new NumberValue(hex.settings.BackdropStretch),
             "terminal_backdrop_scale" => new NumberValue(hex.settings.TerminalBackdropScale),
             "terminal_backdrop_across" => new NumberValue(hex.settings.TerminalBackdropAcross),
             "terminal_backdrop_up" => new NumberValue(hex.settings.TerminalBackdropUp),
+            "terminal_backdrop_stretch" => new NumberValue(hex.settings.TerminalBackdropStretch),
             "backdrop_wrap" => Values.Bool(hex.settings.BackdropWrap),
             "backdrop_wrap_margin" => new NumberValue(hex.settings.BackdropWrapMargin),
             "wrap_flow" => new NumberValue(hex.settings.WrapFlow),
@@ -378,7 +380,7 @@ internal sealed partial class DawnScene
             // Only a size somebody picked and that's kept for next time, a window that's another size than the last run's
             // isn't a change of anybody's
             "size" => hex.scalePicked || (!hex.options.SelfTest && File.Exists(ScalePath)),
-            "panels" or "layout_skin" => false,
+            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP => false,
             "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
         };
@@ -506,6 +508,10 @@ internal sealed partial class DawnScene
                     settings.BackdropUp = Math.Clamp(up.Value, -0.5f, 1.0f);
                     hex.ShowBackdropEverywhere();
                     break;
+                case ("backdrop_stretch", NumberValue stretch):
+                    settings.BackdropStretch = Math.Clamp(stretch.Value, HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH);
+                    hex.ShowBackdropEverywhere();
+                    break;
                 case ("terminal_backdrop_scale", NumberValue terminalScale):
                     settings.TerminalBackdropScale = Math.Clamp(terminalScale.Value, 0.05f, 1.5f);
                     break;
@@ -514,6 +520,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("terminal_backdrop_up", NumberValue terminalUp):
                     settings.TerminalBackdropUp = Math.Clamp(terminalUp.Value, -0.5f, 1.0f);
+                    break;
+                case ("terminal_backdrop_stretch", NumberValue terminalStretch):
+                    settings.TerminalBackdropStretch = Math.Clamp(terminalStretch.Value, HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH);
                     break;
                 case ("backdrop_wrap", BooleanValue wrapsRound):
                     settings.BackdropWrap = wrapsRound.Value;
@@ -668,6 +677,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("backdrop_image", EditorSettingsCatalog.CHOOSE_PICTURE):
                     hex.ChooseBackdrop();
+                    break;
+                case (EditorSettingsCatalog.ARRANGE_BACKDROP, _):
+                    hex.ArrangeBackdrop();
                     break;
                 case ("backdrop_image", EditorSettingsCatalog.USUAL_PICTURE):
                     Set(key, new StringValue(string.Empty));

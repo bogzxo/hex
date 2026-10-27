@@ -1681,6 +1681,9 @@ let strings = {
         backdrop_image_button_0: "Choose...",
         backdrop_image_button_1: "The usual one",
         backdrop_image_placeholder: "Empty for the usual one, or C:/Pictures/backdrop.png",
+        backdrop_arrange_title: "Move and resize by hand",
+        backdrop_arrange_help: "Lays the picture out with the mouse, behind the code in Dawn and behind the terminals in Dusk. Drag it to move it, its corners and edges size it, the wheel scales it. Its shape is kept unless Alt is held. Enter keeps it, Escape puts it back.",
+        backdrop_arrange_button: "Move and resize the backdrop...",
         backdrop_opacity_title: "Picture opacity",
         backdrop_opacity_help: "How much of the picture shows through what is written over it.",
         backdrop_scale_title: "Picture size behind the code",
@@ -1689,12 +1692,16 @@ let strings = {
         backdrop_across_help: "How far the picture behind the code is in from the editor's right edge, as a share of the window's width.",
         backdrop_up_title: "Up from the bottom behind the code",
         backdrop_up_help: "How far the picture behind the code is up from the editor's bottom edge, as a share of the window's height.",
+        backdrop_stretch_title: "Picture width behind the code",
+        backdrop_stretch_help: "How wide the picture behind the code is against its own shape, 1× for the shape it has.",
         terminal_backdrop_scale_title: "Picture size behind the terminals",
         terminal_backdrop_scale_help: "How tall the picture is drawn behind Dusk's terminals, as a share of the window's height, its own size and not the code's.",
         terminal_backdrop_across_title: "In from the right behind the terminals",
         terminal_backdrop_across_help: "How far the picture behind the terminals is in from their right edge, as a share of the window's width.",
         terminal_backdrop_up_title: "Up from the bottom behind the terminals",
         terminal_backdrop_up_help: "How far the picture behind the terminals is up from their bottom edge, as a share of the window's height.",
+        terminal_backdrop_stretch_title: "Picture width behind the terminals",
+        terminal_backdrop_stretch_help: "How wide the picture behind the terminals is against its own shape, 1× for the shape it has.",
         backdrop_wrap_title: "Code round the picture",
         backdrop_wrap_help: "Whether wrapped code runs round the shape of what is drawn in the picture rather than over it.",
         backdrop_wrap_margin_title: "Margin round the picture",
@@ -1841,6 +1848,7 @@ let strings = {
         backdrop: "wallpaper background image",
         backdrop_terminal: "wallpaper background image",
         backdrop_image: "wallpaper background image",
+        backdrop_arrange: "wallpaper background image move resize drag position place",
         mcp_server: "mcp agent claude ai model context protocol automation"
     },
 
@@ -1936,7 +1944,19 @@ let strings = {
         toggle: "Preferences: Toggle {title}",
         now_on: "{title} is on now",
         now_off: "{title} is off now",
-        back_to_window: "Ctrl+, in the file goes back to the settings window at the setting the caret is on"
+        back_to_window: "Ctrl+, in the file goes back to the settings window at the setting the caret is on",
+        arrange_backdrop: "Preferences: Move and Resize the Backdrop..."
+    },
+
+    // Moving and sizing the picture behind the code or the terminals by hand, the bar over it while that's going on
+    backdrop_arrange: {
+        hint: "Drag to move, the handles size it, the wheel scales it. Alt frees its shape.",
+        done: "Done",
+        reset: "Reset",
+        cancel: "Cancel",
+        no_room: "Open a file of code first, the picture is laid out behind its code",
+        kept: "The backdrop stays where it is now",
+        put_back: "The backdrop is back where it was"
     },
 
     // VS Code's settings brought over, and VS Code's names in Hex's settings file

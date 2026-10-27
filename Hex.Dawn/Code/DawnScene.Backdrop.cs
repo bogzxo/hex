@@ -45,6 +45,7 @@ internal sealed partial class DawnScene
         editor.FlowRate = settings.WrapFlow;
         editor.BackdropScale = settings.BackdropScale;
         editor.BackdropOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
+        editor.BackdropStretch = settings.BackdropStretch;
         editor.BackdropOpacity = settings.BackdropOpacity;
     }
 
@@ -67,9 +68,11 @@ internal sealed partial class DawnScene
         });
     }
 
-    /// <summary>The first tick, the picture read now there's somewhere to put it.</summary>
+    /// <summary>The first tick, the picture read now there's somewhere to put it. Every tick after, the frame of a picture being laid out by hand.</summary>
     private void UpdateBackdrop()
     {
+        UpdateBackdropArrange();
+
         if (backdropRead)
             return;
 

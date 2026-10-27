@@ -16,6 +16,7 @@ internal sealed partial class DawnScene
             (Said("settings_palette.open_user_file"), OpenSettingsFile),
             (Said("settings_palette.open_workspace_file"), OpenWorkspaceSettingsFile),
             (Said("settings_palette.show_modified"), ShowModifiedSettings),
+            (Said("settings_palette.arrange_backdrop"), ArrangeBackdrop),
             (Said("settings_import.palette_user"), ImportVsCodeSettings),
             (Said("settings_import.palette_workspace"), ImportVsCodeWorkspaceSettings)
         };

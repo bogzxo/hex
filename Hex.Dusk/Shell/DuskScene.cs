@@ -249,6 +249,7 @@ internal sealed partial class DuskScene : Scene
         UpdateClosing();
         Hex.Shell.HexModes.Update();
         UpdateLater();
+        UpdateBackdropArrange();
         UpdateEffects();
         UpdateTheme();
         UpdateKeys();

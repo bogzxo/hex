@@ -24,7 +24,7 @@ internal sealed partial class DuskScene
     private void UpdateKeys()
     {
         var keyboard = Engine.Input.Keyboard;
-        bool typing = compositor.Focus is TerminalView or TextBox;
+        bool typing = compositor.Focus is TerminalView or TextBox or ArrangeOverlay;
         bool control = keyboard.Control, shift = keyboard.Shift, alt = keyboard.Alt;
 
         var all = host.Commands.All;
@@ -38,7 +38,7 @@ internal sealed partial class DuskScene
             bool pressed = down && !keysDown.Contains(command);
             if (down) keysDown.Add(command); else keysDown.Remove(command);
 
-            // A terminal gets its keys through the panel, a text box keeps them to itself
+            // A terminal gets its keys through the panel, a text box keeps them to itself and so does the picture being laid out
             if (pressed && !typing && chrome.Dialog is null)
                 Run(command.Name);
         }
