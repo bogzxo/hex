@@ -45,11 +45,11 @@ internal sealed partial class HexGit
         if (!Available)
             items.Add(Note(context.Strings.Said("git.not_installed")));
         else if (shown.Count == 0)
-            items.Add(Note(context.Strings.Said("git.no_repository")));
+            AddNoRepository(items);
 
         if (shown.Count == 1)
         {
-            AddRepositoryRows(items, shown[0]);
+            AddRepositoryRows(items, shown[0], commitRow: false);
             return items;
         }
 
@@ -84,8 +84,11 @@ internal sealed partial class HexGit
         return nearest;
     }
 
-    /// <summary>A repository's rows, Commit and its sections of files, and how many changes there are (-1 before git said).</summary>
-    private int AddRepositoryRows(List<UITreeItem> items, Repository repository)
+    /// <summary>
+    /// A repository's rows, its sections of files and how many changes there are (-1 before git said). Under a heading
+    /// Commit is a row of its own drawn as a button, with one repository it's the button under the box over the side.
+    /// </summary>
+    private int AddRepositoryRows(List<UITreeItem> items, Repository repository, bool commitRow)
     {
         GitStatus? status = repository.Status;
         if (status is null)
@@ -122,23 +125,19 @@ internal sealed partial class HexGit
             });
         }
 
-        // With nothing staged and the setting saying never, Commit stages nothing for you and says so on its row. A merge's
-        // Commit finishes it whatever is staged, so it says no more than that, and with nothing changed there's no count
-        // of nothing to give, only a dim Commit
         int count = conflicts.Count + staged.Count + changes.Count;
-        bool never = staged.Count == 0 && context.Settings.Values.GitSmartCommit == "never";
-        string commit = merge ? context.Strings.Said("git.commit_merge")
-            : count == 0 ? context.Strings.Said("git.commit_plain")
-            : staged.Count > 0 ? context.Strings.Said("git.commit_staged", ("count", staged.Count.ToString()))
-            : never ? context.Strings.Said("git.commit_nothing_staged")
-            : context.Strings.Said("git.commit_all", ("count", count.ToString()));
-        items.Add(new UITreeItem(commit, "check")
+        if (commitRow)
         {
-            Color = merge || count > 0 && !never ? null : context.Panels.Dim,
-            Tooltip = context.Strings.Said("git.commit_tip"),
-            Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
-            Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
-        });
+            var (commit, ready) = CommitLabel(repository, status);
+            items.Add(new UITreeItem(commit, "check")
+            {
+                Button = true,
+                Color = ready ? null : context.Panels.Dim,
+                Tooltip = context.Strings.Said("git.commit_tip"),
+                Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
+                Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
+            });
+        }
 
         if (count == 0)
         {
@@ -446,5 +445,5 @@ internal sealed partial class HexGit
         }, quiet: true);
     }
 
-    private UITreeItem Note(string text) => new(text, "info") { Color = context.Panels.Dim };
+    private UITreeItem Note(string text) => HexNotes.Note(text, context.Panels.Dim);
 }

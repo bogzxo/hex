@@ -14,7 +14,7 @@ let caption = compositor.label({
     size: vec(128, 0),
     text: "property",
     text_scale: 0.14,
-    color: vec(0.58, 0.6, 0.66, 1),
+    dim: true,
     wrap: true,
     align: "left",
 });

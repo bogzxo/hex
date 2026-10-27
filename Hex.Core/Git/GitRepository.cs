@@ -170,6 +170,34 @@ internal sealed partial class GitRepository
         return result.Ok ? result.Output : null;
     }
 
+    /* Repositories made, of a folder or cloned */
+
+    /// <summary>A folder made a repository, git init in it. What went wrong, null when it didn't.</summary>
+    public static string? Init(string folder)
+    {
+        GitResult result = GitProcess.Run(folder, ["init"]);
+        return result.Ok ? null : Said(result);
+    }
+
+    /// <summary>A repository cloned into a folder that isn't there yet. What went wrong, null when it didn't.</summary>
+    public static string? Clone(string url, string into)
+    {
+        string parent = Path.GetDirectoryName(Path.GetFullPath(into)) ?? into;
+        GitResult result = GitProcess.Run(parent, ["clone", "--", url, into], patience: Network);
+        return result.Ok ? null : Said(result);
+    }
+
+    /// <summary>The name of the folder a clone of an address goes in, the last part of it without .git, the way git names it.</summary>
+    public static string CloneName(string url)
+    {
+        string last = url.Trim().TrimEnd('/', '\\');
+        int cut = Math.Max(last.LastIndexOf('/'), Math.Max(last.LastIndexOf('\\'), last.LastIndexOf(':')));
+        last = last[(cut + 1)..];
+        if (last.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            last = last[..^4];
+        return last.Length > 0 ? last : "repository";
+    }
+
     /* The remotes, fetched, pulled and pushed */
 
     // Going over the network takes as long as it takes, a big fetch on a slow line well past the usual patience

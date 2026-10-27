@@ -99,6 +99,8 @@ internal sealed partial class DawnScene
         bottom.OnResized = size => settings.PanelHeight = panelWanted = size.Y;
         bottom.OnResizeEnded = _ => SaveSettings();
         bottom.OnFold = CollapsePanel;
+        bottom.FoldTip = Said("panel.fold_tip");
+        bottom.UnfoldTip = Said("panel.unfold_tip");
     }
 
     /// <summary>

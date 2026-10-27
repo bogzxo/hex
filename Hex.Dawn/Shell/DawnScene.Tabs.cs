@@ -81,14 +81,27 @@ internal sealed partial class DawnScene
     /// <summary>The title bar and the window's title said for what is open.</summary>
     private void RetitleWindow()
     {
-        // The window says what is open, with a dot while it has changes, VS Code's way
-        string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
-        bool changed = document.Modified || document.CodeEdited;
+        // The window says what is open, with a dot while it has changes, VS Code's way. The plain welcome is over the empty
+        // layout nobody opened, so it's the welcome of the workspace there and not "layout"
+        string name = plainShown ? WelcomeTitle()
+            : document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
+        bool changed = !plainShown && (document.Modified || document.CodeEdited);
         string version = HexAbout.Version.ToString();
         ((TitleBar)top).Title = titleNote.Length > 0
             ? Said(changed ? "tabs.title_changed_note" : "tabs.title_note", ("name", name), ("version", version), ("note", titleNote))
             : Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name), ("version", version));
         Engine.WindowManager.Title = Said("tabs.window_title", ("name", name), ("version", version));
+    }
+
+    /// <summary>What the title says while the welcome is up, Welcome and the workspace's name, or the folder's without one.</summary>
+    private string WelcomeTitle()
+    {
+        if (!explorer.workspace.IsEmpty)
+            return Said("tabs.welcome_of", ("workspace", explorer.workspace.Name));
+
+        return Path.GetFileName(Path.TrimEndingDirectorySeparator(browseDirectory)) is { Length: > 0 } folder
+            ? Said("tabs.welcome_of", ("workspace", folder))
+            : Said("tabs.welcome");
     }
 
     private void ShowTabMenu(HexDocument tab)

@@ -17,7 +17,7 @@ let tab_row = compositor.stack({
     direction: "horizontal",
 });
 
-let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(500, 0) });
+let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(500, 0), max_tab_width: 240 });
 
 let toolbar = compositor.stack({
     parent: tab_row,

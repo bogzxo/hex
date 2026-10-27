@@ -16,13 +16,14 @@ let root = compositor.stack({
     spacing: 0,
 });
 
-// The window's own title bar, Hex draws it (the window has no frame of the system's), with the menus in it like VS Code
+// The window's own title bar, Hex draws it (the window has no frame of the system's), with the menus in it like VS Code. A
+// little room between what's in it, Help's pill under the pointer touched the Dusk button
 let top = compositor.title_bar({
     parent: root,
     icon: "layout",
     title: "@window.title",
     height: 34,
-    spacing: 0,
+    spacing: 6,
 });
 
 let menu = compositor.menu_bar({ parent: top, text_scale: 0.14 });

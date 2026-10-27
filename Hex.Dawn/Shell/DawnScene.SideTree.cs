@@ -49,7 +49,7 @@ internal sealed partial class DawnScene
         treeScroll.Visible = !tree;
     }
 
-    private static UITreeItem NoteItem(string text, Vector4 color) => new(text) { Color = color };
+    private static UITreeItem NoteItem(string text, Vector4 color) => HexNotes.Note(text, color);
 
     /* The explorer */
 
@@ -159,6 +159,10 @@ internal sealed partial class DawnScene
             explorerMade++;
             DecorateRow(row, file, false, null);
         }
+
+        // A folder of the workspace with nothing in it says so, with the two ways of putting something in it
+        if (item.Children.Count == 0 && explorer.workspace.Folders.Contains(folder, PlatformPaths.Comparer))
+            AddEmptyFolderNote(item, folder);
     }
 
     /// <summary>The file that is open selected in the explorer, if the explorer has it.</summary>
@@ -237,8 +241,17 @@ internal sealed partial class DawnScene
 
     private void RebuildOutline()
     {
-        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
+
+        // Under the plain welcome there's no file, the empty layout it's over is nobody's and has nothing to outline
+        if (plainShown)
+        {
+            treeTitle.Text = Said("side.outline");
+            sideTree.Items = [NoteItem(Said("side_tree.outline_no_file"), DimColor)];
+            return;
+        }
+
+        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
 
         List<OutlineEntry> entries = KeptOutline();
         var items = new List<UITreeItem>();
@@ -309,7 +322,9 @@ internal sealed partial class DawnScene
         designer.treeRows.Clear();
         fileRows.Clear();
         ApplySide();
+        ShowExplorerHead(Side);
         PlaceSearchView(Side == HexSide.Search);
+        PlaceCommitBox(Side == HexSide.SourceControl);
 
         switch (Side)
         {

@@ -106,6 +106,7 @@ internal sealed partial class DawnScene
     private void UpdateStatusBar()
     {
         UpdateBranchItem();
+        FollowExtensions();
         UpdateLanguageModes();
         UpdateImageView();
         UpdateConflicts();

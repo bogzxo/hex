@@ -38,7 +38,7 @@ internal sealed partial class HexGit
             })
         };
 
-        int count = AddRepositoryRows(heading.Children, repository);
+        int count = AddRepositoryRows(heading.Children, repository, commitRow: true);
         heading.Badge = count > 0 ? count.ToString() : string.Empty;
         Follow(heading.Children, repository);
         return heading;

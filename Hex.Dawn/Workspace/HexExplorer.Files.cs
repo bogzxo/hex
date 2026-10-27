@@ -214,7 +214,7 @@ internal sealed partial class HexExplorer
         context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
     }
 
-    private void NewFolderIn(string folder)
+    internal void NewFolderIn(string folder)
     {
         context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", folder)), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {

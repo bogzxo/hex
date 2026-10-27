@@ -27,7 +27,44 @@ let tree_title = compositor.label({
     text: "@side.explorer",
     text_scale: 0.14,
     bold: true,
-    color: vec(0.46, 0.52, 0.64, 1),
+    dim: true,
+});
+
+// The explorer's buttons, VS Code's, a new file and a new folder where the selection is, every folder closed, and the files read again
+let tree_new_file = compositor.button({
+    parent: tree_head,
+    anchor: "right",
+    pivot: "right",
+    pos: vec(-72, 0),
+    size: vec(22, 22),
+    icon: "new-file",
+    tooltip: "@side.new_file_tip",
+    style: "button_flat",
+    animated: false,
+});
+
+let tree_new_folder = compositor.button({
+    parent: tree_head,
+    anchor: "right",
+    pivot: "right",
+    pos: vec(-48, 0),
+    size: vec(22, 22),
+    icon: "new-folder",
+    tooltip: "@side.new_folder_tip",
+    style: "button_flat",
+    animated: false,
+});
+
+let tree_collapse = compositor.button({
+    parent: tree_head,
+    anchor: "right",
+    pivot: "right",
+    pos: vec(-24, 0),
+    size: vec(22, 22),
+    icon: "collapse-all",
+    tooltip: "@side.collapse_tip",
+    style: "button_flat",
+    animated: false,
 });
 
 let tree_refresh = compositor.button({
@@ -150,7 +187,6 @@ let tree_scroll = compositor.scroll({
     parent: left,
     size: vec(280, 380),
     padding: vec(4, 4, 4, 4),
-    color: vec(0.1, 0.11, 0.145, 1),
     radius: 6,
 });
 
@@ -167,7 +203,6 @@ let side_tree = compositor.tree_view({
     parent: left,
     size: vec(280, 380),
     text_scale: 0.14,
-    color: vec(0.1, 0.11, 0.145, 1),
     radius: 6,
 });
 
@@ -185,7 +220,6 @@ let layers_scroll = compositor.scroll({
     parent: layers_section,
     size: vec(280, 96),
     padding: vec(4, 4, 4, 4),
-    color: vec(0.1, 0.11, 0.145, 1),
     radius: 6,
 });
 

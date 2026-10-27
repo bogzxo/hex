@@ -26,7 +26,7 @@ let inspector_title = compositor.label({
     text: "@properties.title",
     text_scale: 0.14,
     bold: true,
-    color: vec(0.46, 0.52, 0.64, 1),
+    dim: true,
 });
 
 let hide_right = compositor.button({
@@ -49,7 +49,6 @@ let inspector_scroll = compositor.scroll({
     parent: right,
     size: vec(400, 789.7115),
     padding: vec(8, 8, 8, 8),
-    color: vec(0.1, 0.11, 0.145, 1),
     radius: 6,
 });
 
@@ -66,6 +65,5 @@ let values_tree = compositor.tree_view({
     parent: right,
     size: vec(400, 600),
     text_scale: 0.14,
-    color: vec(0.1, 0.11, 0.145, 1),
     radius: 6,
 });

@@ -79,10 +79,33 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_debug").OnPressed = () => ShowSide(HexSide.Debug);
         layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
-        layout.Get<Button>("act_extensions").OnPressed = () =>
-        {
-            OpenSettings(EXTENSIONS);
-        };
+        layout.Get<Button>("act_extensions").OnPressed = ShowExtensions;
+
+        // VS Code's keys for its Extensions view, which is the settings' Extensions here
+        commands.Add("View/sides", Said("activity.extensions_command"), ShowExtensions, "Ctrl+Shift+X", "extensions", UIKeyUse.BoundWhileTyping);
+    }
+
+    // Whether the settings are up on Extensions because the activity bar's button asked for them, which is lit while they are
+    private bool extensionsUp;
+
+    /// <summary>The extensions, the settings window on its Extensions, the button lit for as long as that's up.</summary>
+    private void ShowExtensions()
+    {
+        OpenSettings(EXTENSIONS);
+        extensionsUp = SettingsWindow is not null;
+        sideShown = null;
+        ApplySide();
+    }
+
+    /// <summary>Every tick, the Extensions button let go of once the window it lit for has closed.</summary>
+    private void FollowExtensions()
+    {
+        if (!extensionsUp || SettingsWindow is not null)
+            return;
+
+        extensionsUp = false;
+        sideShown = null;
+        ApplySide();
     }
 
     /// <summary>Shows a view of the side bar, bringing the side bar back if it was put away. The view that is showing again puts it away, the way VS Code does.</summary>
@@ -91,7 +114,17 @@ internal sealed partial class DawnScene
         if (side == HexSide.Outline && LayoutTools) side = HexSide.Design;
         if (side == HexSide.Design && !LayoutTools) side = HexSide.Outline;
 
-        if (Side == side && left.Shown && !options.SelfTest)
+        // A view of the side asked for takes the light back from Extensions, whose window can stay up, and the view that
+        // was under it is lit again rather than put away
+        bool fromExtensions = extensionsUp;
+        if (fromExtensions)
+        {
+            extensionsUp = false;
+            sideShown = null;
+            treeDirty = true;
+        }
+
+        if (Side == side && left.Shown && !options.SelfTest && !fromExtensions)
         {
             ToggleSideBar();
             return;
@@ -156,12 +189,15 @@ internal sealed partial class DawnScene
         foreach (string part in LayoutOnlyParts)
             layout.Get<UIComponent>(part).Visible = design;
 
-        layout.Get<Button>("act_explorer").Selected = side == HexSide.Explorer;
-        layout.Get<Button>("act_search").Selected = side == HexSide.Search;
-        layout.Get<Button>("act_outline").Selected = side == HexSide.Outline;
-        layout.Get<Button>("act_design").Selected = side == HexSide.Design;
-        layout.Get<Button>("act_debug").Selected = side == HexSide.Debug;
-        layout.Get<Button>("act_git").Selected = side == HexSide.SourceControl;
+        // One button lit at a time, Extensions while its window is up from it and the side's own otherwise
+        bool sides = !extensionsUp;
+        layout.Get<Button>("act_explorer").Selected = sides && side == HexSide.Explorer;
+        layout.Get<Button>("act_search").Selected = sides && side == HexSide.Search;
+        layout.Get<Button>("act_outline").Selected = sides && side == HexSide.Outline;
+        layout.Get<Button>("act_design").Selected = sides && side == HexSide.Design;
+        layout.Get<Button>("act_debug").Selected = sides && side == HexSide.Debug;
+        layout.Get<Button>("act_git").Selected = sides && side == HexSide.SourceControl;
+        layout.Get<Button>("act_extensions").Selected = extensionsUp;
         layout.Get<Button>("act_outline").Visible = !tools;
         layout.Get<Button>("act_design").Visible = tools;
         if (refreshButton is not null)

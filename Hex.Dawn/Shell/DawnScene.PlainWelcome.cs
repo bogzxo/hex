@@ -107,8 +107,10 @@ internal sealed partial class DawnScene
 
         plainShown = plain;
 
-        // The empty layout's tab goes while the welcome is over it, and comes back with the designer
+        // The empty layout's tab goes while the welcome is over it, and comes back with the designer. The outline says
+        // there's no file under it
         tabsDirty = true;
+        treeDirty |= Side == HexSide.Outline;
         if (plain)
         {
             // Nothing typed goes into the layout's code under the welcome

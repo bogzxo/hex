@@ -14,6 +14,9 @@ internal sealed partial class DawnScene
     {
         git.ColourOf = GitColor;
         git.AccentOf = () => compositor.Skin?.Palette.Accent;
+        git.BoxMessage = CommitBoxMessage;
+        git.Committed += CommitBoxCommitted;
+        git.OpenFolder = explorer.OpenFolder;
         git.Changed += () =>
         {
             DecorateRows();
