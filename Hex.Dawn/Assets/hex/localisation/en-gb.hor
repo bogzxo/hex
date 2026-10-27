@@ -779,9 +779,9 @@ let strings = {
     },
 
     code_hints: {
-        go_to_declared: "Go to where it is declared",
-        find_everywhere: "Find everywhere it is",
-        rename_it: "Rename it...",
+        go_to_declared: "Find Declarations",
+        find_everywhere: "Find Everywhere",
+        rename_it: "Rename it",
         cut: "Cut",
         copy: "Copy",
         select_all: "Select all",
@@ -1616,6 +1616,10 @@ let strings = {
         render_whitespace_all_help: "Every space and tab there is.",
         cursor_style_title: "Cursor style",
         cursor_style_help: "How the caret is drawn in the code.",
+        caret_fast_after_title: "Faster arrows after",
+        caret_fast_after_help: "How long an arrow key is held before the caret goes quicker, in seconds, the way it does in Visual Studio. 0 keeps it at the usual speed.",
+        caret_fast_rate_title: "Faster arrow speed",
+        caret_fast_rate_help: "How many times a second the caret moves once an arrow has been held that long.",
         cursor_style_line: "Line",
         cursor_style_line_help: "A thin line before the character, the way it always was.",
         cursor_style_block: "Block",

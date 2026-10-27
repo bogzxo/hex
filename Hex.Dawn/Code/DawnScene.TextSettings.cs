@@ -52,6 +52,8 @@ internal sealed partial class DawnScene
         editor.Rulers = kept.Rulers;
         editor.RenderWhitespace = WhitespaceOf(kept.RenderWhitespace);
         editor.CaretStyle = CaretStyleOf(kept.CursorStyle);
+        UIKeyboard.FastAfter = kept.CaretFastAfter;
+        UIKeyboard.FastRate = kept.CaretFastRate;
         editor.StickyScroll = kept.StickyScroll;
     }
 
@@ -155,6 +157,8 @@ internal sealed partial class DawnScene
             "rulers" => new StringValue(HexSettings.RulersText(hex.settings.Rulers)),
             "render_whitespace" => new StringValue(hex.settings.RenderWhitespace),
             "cursor_style" => new StringValue(hex.settings.CursorStyle),
+            "caret_fast_after" => new NumberValue(hex.settings.CaretFastAfter),
+            "caret_fast_rate" => new NumberValue(hex.settings.CaretFastRate),
             "sticky_scroll" => Values.Bool(hex.settings.StickyScroll),
             "format_on_save" => Values.Bool(hex.settings.FormatOnSave),
             "files_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.FilesExclude),
@@ -203,6 +207,12 @@ internal sealed partial class DawnScene
                     break;
                 case ("cursor_style", StringValue { Value: "line" or "block" or "underline" } cursor):
                     settings.CursorStyle = cursor.Value;
+                    break;
+                case ("caret_fast_after", NumberValue after):
+                    settings.CaretFastAfter = Math.Clamp(after.Value, 0.0f, 3.0f);
+                    break;
+                case ("caret_fast_rate", NumberValue rate):
+                    settings.CaretFastRate = Math.Clamp(rate.Value, 30.0f, 200.0f);
                     break;
                 case ("sticky_scroll", BooleanValue sticky):
                     settings.StickyScroll = sticky.Value;

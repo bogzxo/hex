@@ -125,6 +125,9 @@ internal sealed partial class HexSettings
     /// <summary>How the caret is drawn, line, block or underline.</summary>
     public string CursorStyle = "line";
 
+    /// <summary>How long an arrow key is held before the caret goes quicker, in seconds, 0 for never, and how many times a second it moves then.</summary>
+    public float CaretFastAfter = 1.0f, CaretFastRate = 80.0f;
+
     /// <summary>Whether the lines the top of the code is inside of stay held at the top as it scrolls.</summary>
     public bool StickyScroll = true;
 
@@ -397,6 +400,8 @@ internal sealed partial class HexSettings
         if (values.TryGetValue("rulers", out var rulers) && rulers is StringValue rulersSaid) Rulers = ParseRulers(rulersSaid.Value);
         if (values.TryGetValue("render_whitespace", out var whitespace) && whitespace is StringValue { Value: "none" or "selection" or "boundary" or "all" } whitespaced) RenderWhitespace = whitespaced.Value;
         if (values.TryGetValue("cursor_style", out var cursor) && cursor is StringValue { Value: "line" or "block" or "underline" } cursored) CursorStyle = cursored.Value;
+        CaretFastAfter = Math.Clamp(Number(values, "caret_fast_after", CaretFastAfter), 0.0f, 3.0f);
+        CaretFastRate = Math.Clamp(Number(values, "caret_fast_rate", CaretFastRate), 30.0f, 200.0f);
         StickyScroll = Flag(values, "sticky_scroll", StickyScroll);
         FormatOnSave = Flag(values, "format_on_save", FormatOnSave);
         TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
@@ -652,6 +657,8 @@ internal sealed partial class HexSettings
             .Add("rulers", RulersText(Rulers))
             .Add("render_whitespace", RenderWhitespace)
             .Add("cursor_style", CursorStyle)
+            .Add("caret_fast_after", CaretFastAfter)
+            .Add("caret_fast_rate", CaretFastRate)
             .Add("sticky_scroll", StickyScroll)
             .Add("format_on_save", FormatOnSave)
             .Add("trim_whitespace", TrimWhitespace)
