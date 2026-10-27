@@ -1,50 +1,45 @@
-# Hex 2.1.0
+# Hex 2.2.0
 
-a big round of the things that got in the way. automations, a run button that knows what it runs, git that copes with a
-folder full of repositories, a terminal you can scroll properly, and a caret that keeps up
+glass you can see through again, a Visual Studio look, reference counts over everything you declare, and a long walk
+over every corner of the UI to make it all behave the same
 
-## automations
+## looks
 
-- a tasks.hor can have `automations` next to its tasks, each one a command in the palette (and on a key if it says
-  one). a command line run in a terminal tab, bash if it asks for it, or HIDL driving hex with the same `hex` an
-  extension gets plus `hex.run` for programs, `print`, `progress` and an `ask` that waits for the answer. HIDL ones run
-  off the editor's thread with no time limit and stop from the work list
-- push-all.ps1 lives in the workspace's tasks.hor now as Push all and Push all (dry run)
-- Set Up F5 only rewrites the file's tasks, the automations and comments round them stay put
+- the glass is liquid again, a light blur with most of what's behind it coming through, a bright rim and a proper lens.
+  it had drifted into a frosted slab, and on a 4K screen the blur turned into the picture behind repeated over and
+  over. if you'd tuned the sliders before, pick Fluid Glass again in View > Look to get the new ones
+- the settings window is glass too, a bit more blurred than a popup so a page of settings still reads
+- a Visual Studio look, its dark theme on the editor and the terminal, flat panes and no effects, for anyone who'd
+  rather hex looked like what they had open yesterday
+- the window's corners are round everywhere, the close button's hover included, and the settings window has a title
+  bar big enough to grab
 
-## running things
+## the editor
 
-- an arrow next to Run picks what F5 runs, the current file, any run task in the workspace or a .NET program in it. it's
-  kept with the workspace and the button says its name
+- N references over every declaration, Visual Studio's code lens. C# from csharp-ls, other languages from their
+  servers, HIDL from hex itself. press one for every place it's used, pick one to go there. `code_lens_references`
+  turns it off
+- held arrow keys speed up after a moment, how long and how fast are in Editor, Text
+- the line's git blame waits half a second before it fades in, so it isn't flickering past as you move
+- squiggles are waves under the whole of what's wrong, sticky scroll shows the line a lone brace belongs to
+- typing into a big file with the mouse resting on the code doesn't stutter anymore, a .hor of five thousand lines was
+  getting parsed again on every key
+- a string never closed is wrong to the end of its line, not just at its quote
+
+## the window
+
+- the backdrop can be dragged and resized by hand, in Dawn and Dusk
+- the menu bar works on Alt and a letter, trees go by arrows and Enter, focus goes back where it was when a window
+  closes, and focus rings only show once you're using the keyboard
+- dialogs all look and behave the same, the dangerous choice red and never what Escape picks
+- one scroll bar everywhere, menus come in frosted, tabs stop growing and cut long names in the middle
+- moving over the title bar on Linux doesn't maximise and unmaximise the window anymore
 
 ## git
 
-- an active repository, the last one you touched in Source Control or the open file's, and commit, sync, branches and
-  stash go to it rather than whichever one the open file happened to be in
-- each repository's heading has its branch, what it's ahead and behind, how many changes and its own commit, sync and
-  branch buttons
-- the status bar names the repository and a click picks one then its branch. it's never blank when the folder only holds
-  repositories
-- new repositories, clones and git inits turn up by themselves in a few seconds, and a fetch or commit in the terminal
-  is noticed
-- submodules say what's changed in them and take you to their own heading, nested repos have names
-- a GitHub account setting for machines with more than one, so Git Credential Manager stops asking which every time.
-  the background fetch never puts anything up at all
-
-## the editor and the window
-
-- the caret glide gets where it's going and stops, it used to creep up on the caret over its last few pixels
-- window edges you can actually grab, thicker, corners that reach along both edges, and the resize arrows on Windows
-- the mouse's side buttons go back and forward in the file dialog
-- the wheel goes where the pointer is, a window keeps it over itself, and settings scrolls instead of the code behind it
-- scroll bars you can get hold of, wider to grab, growing under the pointer, track clicks that jump
-- csharp-ls in a folder with no project doesn't get restarted over and over with a red card stuck in the corner
-
-## the terminal
-
-- a scroll bar, thin until you're on it, drag it or page with the track
-- a minimap of the scrollback, coloured like the text, the prompts marked down its edge by how they ended
-- scrolled up it stays on the same text while output carries on underneath
+- submodules and nested repositories sit under the repository they're in, not side by side with nothing to tell them
+  apart, and ahead and behind are arrows rather than question marks
+- Source Control has a box for the commit message, and Initialize Repository and Clone when there's nothing there
 
 ## running it
 
