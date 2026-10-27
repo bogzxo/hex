@@ -1,7 +1,7 @@
 // hint, laid out with Hex.
 // Load it with UILayout.Load, every component is there under the name it has here.
-// A line of what there is to know where a list has nothing in it yet, "nothing yet, add something". In the middle of
-// the panel's width, the way an empty sidebar says so on a Mac, it sat squeezed into the left like a stray label.
+// A line of what there is to know where a list has nothing in it yet, "nothing yet, add something". At the left where
+// the rows' text starts and in the dim the side bar's notes are in, the one way every empty list of the side says so.
 #define layout
 
 let hint = compositor.label({
@@ -10,7 +10,7 @@ let hint = compositor.label({
     fill: "horizontal",
     text: "nothing yet",
     text_scale: 0.14,
-    color: vec(0.58, 0.6, 0.66, 1),
+    dim: true,
     wrap: true,
-    align: "top",
+    align: "top_left",
 });

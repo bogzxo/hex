@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
         documentSaved += KeepLocalHistory;
         documentEdited += KeepWhatItWas;
         commands.Add("File/path", Said("history.local_command"), ShowLocalHistory, icon: "history");
-        commands.Add("Git/menus/history", Said("history.git_command"), ShowFileHistory, icon: "git-commit");
+        commands.Add("Git/menus/history", Said("history.git_command"), ShowFileHistory, icon: "versions");
     }
 
     /// <summary>A copy of a file as it was saved, in the background, the copy given the text as it was then.</summary>
@@ -66,9 +66,9 @@ internal sealed partial class DawnScene
         HexDocument of = document;
         // To the millisecond, two saves in the same second read the same otherwise (a number counted from the oldest moved
         // along as the oldest went)
-        var choices = kept.Select(version => (
+        var choices = kept.Select(version => UIChoice.Of(
             $"{HexGit.Ago(version.When)}: {version.When:yyyy-MM-dd HH:mm:ss.fff}   {Math.Max(1, version.Bytes / 1024)} KB",
-            (Action)(() => PickedVersion(of, path, version)))).ToList();
+            () => PickedVersion(of, path, version)) with { Icon = "history" }).ToList();
         ChooseFrom(Said("history.local_title", ("name", Path.GetFileName(path))), Said("history.local_text"), choices);
     }
 
@@ -122,6 +122,7 @@ internal sealed partial class DawnScene
                 string ago = HexGit.Ago(commit.When);
                 choices.Add(new UIChoice(commit.Subject, () => ShowCommitOfFile(repository, path, commit, before))
                 {
+                    Icon = "git-commit",
                     Segments = [(commit.Short, UIChoiceTone.Hash), (commit.Subject, UIChoiceTone.Primary), (commit.Author, UIChoiceTone.Author), (ago, UIChoiceTone.Date)],
                     Id = $"{commit.Short} {commit.Author}, {ago}: {commit.Subject}"
                 });

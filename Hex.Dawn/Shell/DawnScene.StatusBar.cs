@@ -106,10 +106,12 @@ internal sealed partial class DawnScene
     private void UpdateStatusBar()
     {
         UpdateBranchItem();
+        FollowExtensions();
         UpdateLanguageModes();
         UpdateImageView();
         UpdateConflicts();
         UpdateInlays();
+        UpdateReferenceLenses();
         UpdateSemantics();
 
         if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)

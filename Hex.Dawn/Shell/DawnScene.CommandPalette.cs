@@ -50,9 +50,9 @@ internal sealed partial class DawnScene
             }
         }
 
-        commands.AddRange(UIChooser.Rows([.. extensions.Commands()]));
+        commands.AddRange(UIChooser.Rows([.. extensions.Commands()]).Select(choice => choice with { Icon = "extensions" }));
         commands.AddRange(tasks.AutomationChoices());
-        commands.AddRange(UIChooser.Rows(SettingsPaletteCommands()));
+        commands.AddRange(UIChooser.Rows(SettingsPaletteCommands()).Select(choice => choice with { Icon = "settings-gear" }));
 
         // The terminal's commands, the same ones Dusk has, under a heading of their own, a title once (Dusk's palette has why)
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -22,7 +22,7 @@ internal sealed partial class DawnScene
         test.Run(() => code.FoldAll(2));
         test.Wait();
         test.Check("editing: the keys of the top object folded, their insides gone from the rows", () =>
-            code.FoldedLines.Count == 2 && code.FoldedLines.Contains(1) && code.FoldedLines.Contains(4) && code.RowCount == code.Document.LineCount - 4);
+            code.FoldedLines.Count == 2 && code.FoldedLines.Contains(1) && code.FoldedLines.Contains(4) && code.RowCount - code.LensRowCount == code.Document.LineCount - 4);
 
         test.Run(() => code.GoTo(5, 8));
         test.Wait();
@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
         test.Run(ToggleWrap);
         test.Wait();
         test.Check("editing: Alt+Z wraps the long line over more than one row, kept in the settings", () =>
-            settings.WrapCode && code.WordWrap && code.RowCount > code.Document.LineCount);
+            settings.WrapCode && code.WordWrap && code.RowCount - code.LensRowCount > code.Document.LineCount);
 
         // A shape over the right of the code, the long line runs round it in more rows, and back when it goes. The
         // picture's own shape is out of the way for it, whatever picture the settings have might be in the way already
@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
         test.Run(() => code.BackdropShape = pictureShape);
         test.Run(ToggleWrap);
         test.Wait();
-        test.Check("editing: and again doesn't", () => !code.WordWrap && code.RowCount == code.Document.LineCount);
+        test.Check("editing: and again doesn't", () => !code.WordWrap && code.RowCount - code.LensRowCount == code.Document.LineCount);
 
         // Ctrl+D on a word and twice more, then typed over at every one of them
         test.Run(() =>

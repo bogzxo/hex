@@ -92,6 +92,7 @@ internal sealed partial class HexTasks
         var window = setupWindow = new WindowPanel(Said("setup_title"))
         {
             Icon = "debug-alt",
+            Modal = true,
             Size = new Vector2(SETUP_WIDTH + 40.0f, 0.0f),
             ResizeGrip = false,
             Padding = new UIEdges(20.0f, 14.0f, 20.0f, 18.0f),

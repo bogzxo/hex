@@ -216,6 +216,7 @@ internal sealed partial class DawnScene : Scene
         BuildModes();
         designer.AddDesignerCommands();
         WireRefresh();
+        WireExplorerHead();
         BuildImageView();
         BuildDiffs();
         BuildHistory();

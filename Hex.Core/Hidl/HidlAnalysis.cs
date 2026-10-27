@@ -100,7 +100,7 @@ internal static class HidlAnalysis
             if (inside.StartsWith('@'))
             {
                 var keys = Localisation.Keys.Order(StringComparer.Ordinal)
-                    .Select(key => new UICompletion(key, HexEvaluation.Shorten(Localisation.Get(key), 40)))
+                    .Select(key => new UICompletion(key, HexEvaluation.Shorten(Localisation.Get(key), 40), Kind: "string"))
                     .ToList();
                 return new UICompletionRequest(quote + 2, keys);
             }
@@ -111,7 +111,7 @@ internal static class HidlAnalysis
             {
                 string property = TrailingWord(head[..^1].TrimEnd());
                 if (HidlComponents.Choices.TryGetValue(property, out string[]? words))
-                    return new UICompletionRequest(quote + 1, [.. words.Select(word => new UICompletion(word, property))]);
+                    return new UICompletionRequest(quote + 1, [.. words.Select(word => new UICompletion(word, property, Kind: "value"))]);
             }
 
             return null;
@@ -123,7 +123,7 @@ internal static class HidlAnalysis
 
         // A kind of component, after compositor.
         if (ahead.EndsWith("compositor.", StringComparison.Ordinal))
-            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(HidlComponents.Describe(kind), 40), kind + "({ "))]);
+            return new UICompletionRequest(start, [.. UIModule.Kinds.Order(StringComparer.Ordinal).Select(kind => new UICompletion(kind, HexEvaluation.Shorten(HidlComponents.Describe(kind), 40), kind + "({ ", Kind: "class"))]);
 
         // A property of the component being made, where a key goes inside its braces
         if (ComponentBeingMade(text, OffsetOf(text, line, start)) is { } kind && UIModule.CreateDetached(kind) is { } made)
@@ -134,7 +134,7 @@ internal static class HidlAnalysis
                 var properties = made.Object.Properties.Keys
                     .Where(name => name != "parent")
                     .Prepend("parent")
-                    .Select(name => new UICompletion(name, HexEvaluation.Shorten(UIPropertyHelp.Describe(kind, name), 48), name + ": "))
+                    .Select(name => new UICompletion(name, HexEvaluation.Shorten(UIPropertyHelp.Describe(kind, name), 48), name + ": ", Kind: "property"))
                     .ToList();
                 return new UICompletionRequest(start, properties);
             }
@@ -144,13 +144,13 @@ internal static class HidlAnalysis
         var seen = new HashSet<string>();
         foreach (string keyword in Keywords)
         {
-            if (seen.Add(keyword)) items.Add(new UICompletion(keyword, "keyword"));
+            if (seen.Add(keyword)) items.Add(new UICompletion(keyword, "keyword", Kind: "keyword"));
         }
 
         foreach (Token token in Lexer.Tokenize(text, lenient: true))
         {
             if (token.Type == TokenType.Identifier && token.Value.Length > 1 && seen.Add(token.Value))
-                items.Add(new UICompletion(token.Value, "in this file"));
+                items.Add(new UICompletion(token.Value, "in this file", Kind: "variable"));
         }
 
         if (workspace is not null)
@@ -158,7 +158,7 @@ internal static class HidlAnalysis
             foreach (string known in workspace.Order(StringComparer.Ordinal))
             {
                 if (seen.Add(known))
-                    items.Add(new UICompletion(known, "in the workspace"));
+                    items.Add(new UICompletion(known, "in the workspace", Kind: "variable"));
             }
         }
 
@@ -396,7 +396,7 @@ internal static class HidlAnalysis
         }
 
         foreach (ParseException e in errors)
-            found.Add(new UICodeDiagnostic(Math.Max(0, e.Line - 1), Math.Max(0, e.Col - 1), Math.Max(1, e.Length), e.Message));
+            found.Add(new UICodeDiagnostic(Math.Max(0, e.Line - 1), Math.Max(0, e.Col - 1), Math.Max(0, e.Length), e.Message));
 
         return found;
     }
@@ -422,7 +422,7 @@ internal static class HidlAnalysis
             return HexLints.Lint(ran, file, said);
 
         if (ran.ErrorAt.Span.IsKnown && (ran.ErrorAt.File is null || (file is not null && string.Equals(Path.GetFullPath(ran.ErrorAt.File), file, PlatformPaths.Comparison))))
-            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), ran.Error + HexFixes.LikelyFix(ran.Error, text)));
+            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(0, ran.ErrorAt.Span.Length), ran.Error + HexFixes.LikelyFix(ran.Error, text)));
         else
             found.Add(new UICodeDiagnostic(0, 0, 1, ran.Error + HexFixes.LikelyFix(ran.Error, text)));
 

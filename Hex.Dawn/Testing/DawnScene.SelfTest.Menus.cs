@@ -25,6 +25,7 @@ internal sealed partial class DawnScene
 
         TestMenuThroughPointer(test);
         TestTallMenu(test);
+        TestMenuKeys(test);
     }
 
     // Every menu of the bar there is right now, and every menu inside one, held to the rows and rules a menu may have

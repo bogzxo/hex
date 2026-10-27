@@ -182,7 +182,7 @@ internal sealed partial class DawnScene
         test.Check("design: the layout menu says what it's made for, in the code before anything else", () =>
             document.Design == new Vector2(1600, 900) && Code().Contains("compositor.design({ size: vec(1600, 900), fit: \"contain\" });")
             && Code().IndexOf("compositor.design") < Code().IndexOf("let "));
-        Pick("Layout", () => "Preview on 21:9, an ultrawide");
+        Pick("Layout", () => Said("designer_canvas.preview_on_21_9"));
         test.Wait();
         test.Check("design: on an ultrawide it keeps its shape, in the middle", () =>
             document.Module.Viewport is { } seen && Near(seen.Width / seen.Height, 21.0f / 9.0f, 0.01f)
@@ -191,7 +191,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("design: stretched it takes the lot", () =>
             document.Fit == UIFit.Stretch && Near(document.Module.Frame.Width, document.Module.Viewport!.Value.Width) && Code().Contains("fit: \"stretch\""));
-        Pick("Layout", () => "Preview on its own shape");
+        Pick("Layout", () => Said("designer_canvas.preview_on_its_own_shape"));
         Pick("Layout", () => "Any Screen");
         test.Wait();
         test.Check("design: made for any screen there's nothing about it in the code", () => document.Design is null && !Code().Contains("compositor.design"));

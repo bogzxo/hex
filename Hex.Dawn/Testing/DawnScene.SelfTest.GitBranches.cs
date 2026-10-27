@@ -33,7 +33,6 @@ internal sealed partial class DawnScene
 
         // The rows of this repository on the side, under its name when the workspace has another
         IEnumerable<UITreeItem> Rows() => sideTree.Items.FirstOrDefault(row => row.Text.StartsWith("git_branches", StringComparison.Ordinal))?.Children ?? sideTree.Items;
-        UITreeItem? CommitRow() => Rows().FirstOrDefault(row => row.Icon == "check" && row.Text.StartsWith("Commit", StringComparison.Ordinal));
 
         string[] commands =
         [
@@ -68,9 +67,9 @@ internal sealed partial class DawnScene
         });
 
         // A clean repository's Commit row is a dim Commit, no 0 in it, and the note under it short with the rest on the pointer
-        test.WaitFor(() => CommitRow() is not null && git.StatusFor(file)?.Branch == "main", 5.0f);
+        test.WaitFor(() => CommitSaid(Rows()) is not null && git.StatusFor(file)?.Branch == "main", 5.0f);
         test.Check("branch ops: with nothing changed the Commit row is a dim Commit with no count, the note short and the whole of it its tooltip", () =>
-            CommitRow() is { } row && row.Text == Said("git.commit_plain") && row.Color == DimColor && !row.Text.Contains('0')
+            CommitSaid(Rows()) is { } said && said.Text == Said("git.commit_plain") && said.Dim && !said.Text.Contains('0')
             && Rows().Any(note => note.Text == Said("git.no_changes") && note.Tooltip == Said("git_branch.nothing_to_commit")));
 
         // Merge Branch... lists b with the branch rows' look, and merging it is a fast forward, HEAD moved to b's commit
@@ -166,12 +165,12 @@ internal sealed partial class DawnScene
         test.Run(() => Command("git_branch.merge_command"));
         test.WaitFor(() => Lists(": x   "), 3.0f);
         test.Run(() => Pick(": x   "));
-        test.WaitFor(() => git.OperationAt(file) == GitOperation.Merging && Rows().Any(row => row.Text == Said("git.merging")) && CommitRow()?.Text == Said("git.commit_merge"), 6.0f);
+        test.WaitFor(() => git.OperationAt(file) == GitOperation.Merging && Rows().Any(row => row.Text == Said("git.merging")) && CommitSaid(Rows())?.Text == Said("git.commit_merge"), 6.0f);
         test.Check("branch ops: a merge that conflicts leaves git merging, the Merging row and the file a C under Merge Changes", () =>
             git.OperationAt(file) == GitOperation.Merging && Rows().Any(row => row.Text == Said("git.merging"))
             && Rows().FirstOrDefault(row => row.Text == Said("git.merge_changes"))?.Children?.Any(row => row.Badge == "C") == true);
         test.Check("branch ops: mid merge the Commit row says Commit, no count, and the card says 1 conflict to settle", () =>
-            CommitRow() is { } row && row.Text == Said("git.commit_merge") && row.Color is null
+            CommitSaid(Rows()) is { } said && said.Text == Said("git.commit_merge") && !said.Dim
             && toasts.Cards.Any(card => !card.Closed && card.Text.Contains(HexText.Count("conflict", 1), StringComparison.Ordinal)));
 
         test.Run(() =>

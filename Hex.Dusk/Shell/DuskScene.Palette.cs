@@ -42,6 +42,9 @@ internal sealed partial class DuskScene
             choices.Add((HexText.Get("looks.command", ("name", look.Name)), () => PickLook(picked)));
         }
 
+        // The picture behind the terminals laid out with the mouse, see DuskScene.BackdropArrange
+        choices.Add((HexText.Get("settings_palette.arrange_backdrop"), ArrangeBackdrop));
+
         ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
     }
 

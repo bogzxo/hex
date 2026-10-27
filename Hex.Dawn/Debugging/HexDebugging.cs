@@ -802,7 +802,7 @@ internal sealed partial class HexDebugging
     }
 
     // A row that only says something
-    private UITreeItem NoteItem(string text) => new(text) { Color = context.Panels.Dim };
+    private UITreeItem NoteItem(string text) => HexNotes.Note(text, context.Panels.Dim);
 
     /// <summary>
     /// Whether a frame is in a file of the program's own that's there to show, in the workspace or open. druntime's

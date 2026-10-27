@@ -24,14 +24,27 @@ internal sealed partial class DawnScene
     private long semanticsChangedAt, semanticsRetryAt;
     private bool semanticsWorking;
 
+    // When the server was last asked, and how long it has to answer before it's asked again
+    private long semanticsAskedAt;
+    private const long SEMANTICS_ANSWER_MS = 10_000;
+
     /// <summary>Every tick, the names of the file on screen worked out again when its text changed and the typing stopped.</summary>
     private void UpdateSemantics()
     {
+        long now = System.Environment.TickCount64;
+
+        // An ask nobody answered is given up on after a while. A server started again while it was asking never answers
+        // the one before, and the file kept its plain colours for good
+        if (semanticsWorking && now - semanticsAskedAt > SEMANTICS_ANSWER_MS)
+        {
+            semanticsWorking = false;
+            semanticsFor = default;
+        }
+
         if (!settings.SemanticHighlighting || semanticsWorking || !document.IsText || document.DiffOf is not null || document.Picture is not null || code.Highlighter is null)
             return;
 
         int version = code.Document.Version, refreshes = languages.SemanticRefreshesOf(document);
-        long now = System.Environment.TickCount64;
         bool sameText = semanticsFor.Of == document && semanticsFor.Version == version;
         bool retry = semanticsRetryAt != 0 && now >= semanticsRetryAt;
         if (sameText && semanticsFor.Refreshes == refreshes && !retry)
@@ -111,6 +124,7 @@ internal sealed partial class DawnScene
             case SemanticAsk.Asked:
                 semanticsFor = (document, version, refreshes);
                 semanticsWorking = true;
+                semanticsAskedAt = System.Environment.TickCount64;
                 break;
 
             // The server's still starting, asked again on a later tick, and what can be worked out here meanwhile

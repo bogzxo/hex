@@ -65,6 +65,12 @@ internal sealed partial class HexSettings
     /// <summary>Where the picture is behind Dusk's terminals and how big, its own place and size and not the code's.</summary>
     public float TerminalBackdropScale = 0.5f, TerminalBackdropAcross, TerminalBackdropUp;
 
+    /// <summary>How wide the picture is behind the code and behind the terminals against its own shape, 1 for the shape it has.</summary>
+    public float BackdropStretch = 1.0f, TerminalBackdropStretch = 1.0f;
+
+    /// <summary>How narrow and how wide the picture can be stretched against its own shape.</summary>
+    public const float LEAST_STRETCH = 0.25f, MOST_STRETCH = 4.0f;
+
     /// <summary>How far the wrapped code keeps off what is drawn in the picture, in the editor's pixels, round every edge.</summary>
     public float BackdropWrapMargin = 8.0f;
 
@@ -125,6 +131,9 @@ internal sealed partial class HexSettings
     /// <summary>How the caret is drawn, line, block or underline.</summary>
     public string CursorStyle = "line";
 
+    /// <summary>How long an arrow key is held before the caret goes quicker, in seconds, 0 for never, and how many times a second it moves then.</summary>
+    public float CaretFastAfter = 1.0f, CaretFastRate = 80.0f;
+
     /// <summary>Whether the lines the top of the code is inside of stay held at the top as it scrolls.</summary>
     public bool StickyScroll = true;
 
@@ -149,6 +158,9 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether the names of parameters and the like are written faintly in among the code, inlay hints.</summary>
     public bool InlayHints = true;
+
+    /// <summary>Whether a declaration has how many places use it written small over it, Visual Studio's code lens.</summary>
+    public bool CodeLensReferences = true;
 
     /// <summary>Whether names are coloured by what they are (a class, a field, a parameter), from the language servers and from HIDL itself.</summary>
     public bool SemanticHighlighting = true;
@@ -349,12 +361,14 @@ internal sealed partial class HexSettings
         TerminalBackdropScale = Math.Clamp(Number(values, "terminal_backdrop_scale", TerminalBackdropScale), 0.05f, 1.5f);
         TerminalBackdropAcross = Math.Clamp(Number(values, "terminal_backdrop_across", TerminalBackdropAcross), -0.5f, 1.0f);
         TerminalBackdropUp = Math.Clamp(Number(values, "terminal_backdrop_up", TerminalBackdropUp), -0.5f, 1.0f);
+        TerminalBackdropStretch = Math.Clamp(Number(values, "terminal_backdrop_stretch", TerminalBackdropStretch), LEAST_STRETCH, MOST_STRETCH);
         BackdropWrapMargin = Math.Clamp(Number(values, "backdrop_wrap_margin", BackdropWrapMargin), 0.0f, 80.0f);
         WrapFlow = Math.Clamp(Number(values, "wrap_flow", WrapFlow), 0.0f, 60.0f);
         WrapCode = Flag(values, "wrap_code", WrapCode);
         GitBlame = Flag(values, "git_blame", GitBlame);
         Minimap = Flag(values, "minimap", Minimap);
         InlayHints = Flag(values, "inlay_hints", InlayHints);
+        CodeLensReferences = Flag(values, "code_lens_references", CodeLensReferences);
         SemanticHighlighting = Flag(values, "semantic_highlighting", SemanticHighlighting);
         if (values.TryGetValue("csharp_colors", out var csharp) && csharp is StringValue { Value: "resharper" or "visual_studio" or "skin" } colored) CSharpColors = colored.Value;
         McpServer = Flag(values, "mcp_server", McpServer);
@@ -397,6 +411,8 @@ internal sealed partial class HexSettings
         if (values.TryGetValue("rulers", out var rulers) && rulers is StringValue rulersSaid) Rulers = ParseRulers(rulersSaid.Value);
         if (values.TryGetValue("render_whitespace", out var whitespace) && whitespace is StringValue { Value: "none" or "selection" or "boundary" or "all" } whitespaced) RenderWhitespace = whitespaced.Value;
         if (values.TryGetValue("cursor_style", out var cursor) && cursor is StringValue { Value: "line" or "block" or "underline" } cursored) CursorStyle = cursored.Value;
+        CaretFastAfter = Math.Clamp(Number(values, "caret_fast_after", CaretFastAfter), 0.0f, 3.0f);
+        CaretFastRate = Math.Clamp(Number(values, "caret_fast_rate", CaretFastRate), 30.0f, 200.0f);
         StickyScroll = Flag(values, "sticky_scroll", StickyScroll);
         FormatOnSave = Flag(values, "format_on_save", FormatOnSave);
         TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
@@ -426,6 +442,7 @@ internal sealed partial class HexSettings
         BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 1.5f);
         BackdropAcross = Math.Clamp(Number(values, "backdrop_across", BackdropAcross), -0.5f, 1.0f);
         BackdropUp = Math.Clamp(Number(values, "backdrop_up", BackdropUp), -0.5f, 1.0f);
+        BackdropStretch = Math.Clamp(Number(values, "backdrop_stretch", BackdropStretch), LEAST_STRETCH, MOST_STRETCH);
         BackdropOpacity = Math.Clamp(Number(values, "backdrop_opacity", BackdropOpacity), 0.0f, 1.0f);
         if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
         if (values.TryGetValue("disabled_extensions", out var disabled) && disabled is ListValue off)
@@ -610,12 +627,14 @@ internal sealed partial class HexSettings
             .Add("terminal_backdrop_scale", TerminalBackdropScale)
             .Add("terminal_backdrop_across", TerminalBackdropAcross)
             .Add("terminal_backdrop_up", TerminalBackdropUp)
+            .Add("terminal_backdrop_stretch", TerminalBackdropStretch)
             .Add("backdrop_wrap_margin", BackdropWrapMargin)
             .Add("wrap_flow", WrapFlow)
             .Add("wrap_code", WrapCode)
             .Add("git_blame", GitBlame)
             .Add("minimap", Minimap)
             .Add("inlay_hints", InlayHints)
+            .Add("code_lens_references", CodeLensReferences)
             .Add("semantic_highlighting", SemanticHighlighting)
             .Add("csharp_colors", CSharpColors)
             .Add("mcp_server", McpServer)
@@ -652,6 +671,8 @@ internal sealed partial class HexSettings
             .Add("rulers", RulersText(Rulers))
             .Add("render_whitespace", RenderWhitespace)
             .Add("cursor_style", CursorStyle)
+            .Add("caret_fast_after", CaretFastAfter)
+            .Add("caret_fast_rate", CaretFastRate)
             .Add("sticky_scroll", StickyScroll)
             .Add("format_on_save", FormatOnSave)
             .Add("trim_whitespace", TrimWhitespace)
@@ -676,6 +697,7 @@ internal sealed partial class HexSettings
             .Add("backdrop_scale", BackdropScale)
             .Add("backdrop_across", BackdropAcross)
             .Add("backdrop_up", BackdropUp)
+            .Add("backdrop_stretch", BackdropStretch)
             .Add("backdrop_opacity", BackdropOpacity)
             .Add("last_workspace", LastWorkspace.Replace('\\', '/'))
             .Add("disabled_extensions", Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))

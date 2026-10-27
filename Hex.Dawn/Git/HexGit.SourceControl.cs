@@ -19,7 +19,7 @@ internal sealed partial class HexGit
         Changed += () => context.Panels.RefreshSide(HexSide.SourceControl);
 
         context.Commands.Add("View/sides", context.Strings.Said("git.side_command"), () => context.Panels.ShowSide(HexSide.SourceControl), "Ctrl+Shift+G", "source-control", UIKeyUse.BoundWhileTyping);
-        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(ActiveRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
+        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(ActiveRepository()), "Ctrl+Alt+Enter", "git-commit", UIKeyUse.BoundWhileTyping);
         BuildCommits();
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
@@ -45,22 +45,50 @@ internal sealed partial class HexGit
         if (!Available)
             items.Add(Note(context.Strings.Said("git.not_installed")));
         else if (shown.Count == 0)
-            items.Add(Note(context.Strings.Said("git.no_repository")));
+            AddNoRepository(items);
 
-        Repository? active = shown.Count > 1 ? ActiveRepository() : null;
+        if (shown.Count == 1)
+        {
+            AddRepositoryRows(items, shown[0], commitRow: false);
+            return items;
+        }
+
+        // A submodule or a repository cloned inside another goes under that one's heading, after its changes, rather than
+        // beside it. A folder of three projects each with the engine in it was three horizons and three HIDLs in a row
+        Repository? active = ActiveRepository();
+        var headings = new Dictionary<Repository, UITreeItem>();
+        foreach (Repository repository in shown)
+            headings[repository] = Heading(repository, repository == active);
         foreach (Repository repository in shown)
         {
-            if (shown.Count == 1)
-                AddRepositoryRows(items, repository);
+            if (Inside(repository, shown) is { } outer)
+                headings[outer].Children!.Add(headings[repository]);
             else
-                items.Add(Heading(repository, repository == active));
+                items.Add(headings[repository]);
         }
 
         return items;
     }
 
-    /// <summary>A repository's rows, Commit and its sections of files, and how many changes there are (-1 before git said).</summary>
-    private int AddRepositoryRows(List<UITreeItem> items, Repository repository)
+    // The nearest of the repositories a repository is inside of, null for one inside none of them
+    private static Repository? Inside(Repository repository, List<Repository> shown)
+    {
+        Repository? nearest = null;
+        foreach (Repository other in shown)
+        {
+            if (other != repository && PlatformPaths.IsUnder(repository.Git.Root, other.Git.Root)
+                && (nearest is null || other.Git.Root.Length > nearest.Git.Root.Length))
+                nearest = other;
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// A repository's rows, its sections of files and how many changes there are (-1 before git said). Under a heading
+    /// Commit is a row of its own drawn as a button, with one repository it's the button under the box over the side.
+    /// </summary>
+    private int AddRepositoryRows(List<UITreeItem> items, Repository repository, bool commitRow)
     {
         GitStatus? status = repository.Status;
         if (status is null)
@@ -97,23 +125,19 @@ internal sealed partial class HexGit
             });
         }
 
-        // With nothing staged and the setting saying never, Commit stages nothing for you and says so on its row. A merge's
-        // Commit finishes it whatever is staged, so it says no more than that, and with nothing changed there's no count
-        // of nothing to give, only a dim Commit
         int count = conflicts.Count + staged.Count + changes.Count;
-        bool never = staged.Count == 0 && context.Settings.Values.GitSmartCommit == "never";
-        string commit = merge ? context.Strings.Said("git.commit_merge")
-            : count == 0 ? context.Strings.Said("git.commit_plain")
-            : staged.Count > 0 ? context.Strings.Said("git.commit_staged", ("count", staged.Count.ToString()))
-            : never ? context.Strings.Said("git.commit_nothing_staged")
-            : context.Strings.Said("git.commit_all", ("count", count.ToString()));
-        items.Add(new UITreeItem(commit, "check")
+        if (commitRow)
         {
-            Color = merge || count > 0 && !never ? null : context.Panels.Dim,
-            Tooltip = context.Strings.Said("git.commit_tip"),
-            Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
-            Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
-        });
+            var (commit, ready) = CommitLabel(repository, status);
+            items.Add(new UITreeItem(commit, "git-commit")
+            {
+                Button = true,
+                Color = ready ? null : context.Panels.Dim,
+                Tooltip = context.Strings.Said("git.commit_tip"),
+                Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
+                Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
+            });
+        }
 
         if (count == 0)
         {
@@ -366,7 +390,7 @@ internal sealed partial class HexGit
     {
         string what = paths.Length == 1 ? Path.GetFileName(paths[0]) : HexText.Count("file", paths.Length);
         string yes = context.Strings.Said("git.discard_yes");
-        context.Windows.Ask(context.Strings.Said("git.discard_title"), context.Strings.Said("git.discard_text", ("what", what)), [context.Strings.Said("git.discard_no"), yes], answer =>
+        context.Windows.Ask(context.Strings.Said("git.discard_title"), context.Strings.Said("git.discard_text", ("what", what)), [context.Strings.Said("git.discard_no"), yes], risky: yes, answered: answer =>
         {
             if (answer != yes)
                 return;
@@ -421,5 +445,5 @@ internal sealed partial class HexGit
         }, quiet: true);
     }
 
-    private UITreeItem Note(string text) => new(text, "info") { Color = context.Panels.Dim };
+    private UITreeItem Note(string text) => HexNotes.Note(text, context.Panels.Dim);
 }

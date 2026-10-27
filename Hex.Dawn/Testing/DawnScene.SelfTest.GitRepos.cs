@@ -47,14 +47,17 @@ internal sealed partial class DawnScene
             ShowSide(HexSide.SourceControl);
         });
 
-        UITreeItem? Heading(string name) => sideTree.Items.FirstOrDefault(row => row.Text == name && row.Icon == "repo" && row.HasChildren);
-        UITreeItem? Under(string heading, string name) => sideRows(Heading(heading)?.Children ?? []).FirstOrDefault(row => row.Text == name);
+        UITreeItem? Heading(string name) => sideRows(sideTree.Items).FirstOrDefault(row => row.Text == name && row.Icon == "repo" && row.HasChildren);
+        UITreeItem? Under(string heading, string name) => sideRows(Heading(heading)?.Children ?? []).FirstOrDefault(row => row.Text == name && row.Icon != "repo");
 
         test.WaitFor(() => new[] { "first", "second", "clone", "mod", "inner" }.All(name => Heading(name) is not null) && Heading("first")?.Detail.StartsWith("main", StringComparison.Ordinal) == true, 10.0f);
         test.Check("repositories: a folder of repositories has every one of them, a submodule and one nobody added too, each under its name", () =>
             new[] { "first", "second", "clone", "mod", "inner" }.All(name => Heading(name) is not null));
         test.Check("repositories: a heading says its branch after its name and how many changes at its end", () =>
             Heading("first") is { Detail: var detail, Badge: var badge } && detail.StartsWith("main*", StringComparison.Ordinal) && badge == "1");
+        test.Check("repositories: a submodule and a repository inside another are under its heading, not beside it", () =>
+            !sideTree.Items.Any(row => row.Text is "mod" or "inner") && Heading("first")?.Children is { } inFirst
+            && inFirst.Any(row => row is { Text: "mod", Icon: "repo" }) && inFirst.Any(row => row is { Text: "inner", Icon: "repo" }));
 
         test.WaitFor(() => Under("first", "mod") is not null, 5.0f);
         test.Check("submodules: a submodule is a row of its own kind, saying it has new commits", () =>
@@ -96,7 +99,7 @@ internal sealed partial class DawnScene
             list.Choose(at);
             list.OnActivated!(list.Items[at]);
         });
-        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains("Create a new branch", StringComparison.Ordinal)), 4.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains(Said("git.new_branch"), StringComparison.Ordinal)), 4.0f);
         test.Check("active repository: and picking one makes it active and lists its branches", () =>
             branchItem.Text.Contains("$(repo) clone", StringComparison.Ordinal) && textDialog is { IsOpen: true });
         test.Run(() => chrome.Dialog?.Close());
@@ -113,9 +116,9 @@ internal sealed partial class DawnScene
             Git(second, "commit", "-q", "-m", "Changed in second");
             Git(clone, "fetch", "-q");
         });
-        test.WaitFor(() => Heading("clone")?.Detail.Contains("1↓", StringComparison.Ordinal) == true, 5.0f);
+        test.WaitFor(() => Heading("clone")?.Detail.Contains("1$(arrow-down)", StringComparison.Ordinal) == true, 5.0f);
         test.Check("repositories: a fetch in the terminal is seen, the clone's heading says it's one behind", () =>
-            Heading("clone")?.Detail.Contains("1↓ 0↑", StringComparison.Ordinal) == true);
+            Heading("clone")?.Detail.Contains("1$(arrow-down) 0$(arrow-up)", StringComparison.Ordinal) == true);
 
         // A repository made after the workspace was opened turns up by itself, no refresh
         test.Run(() =>

@@ -25,6 +25,13 @@ internal sealed partial class DawnScene : IHexLookOwner
                 UseEditorSkin(settings.EditorSkin, settings.EditorTheme, save: false);
             if (HexLooks.TerminalTheme(picked) is { } theme && theme != terminals.Settings.Theme)
                 new TerminalSettingsSource(terminals).Set("theme", new StringValue(theme));
+
+            // Visual Studio's has the code in its font and C# in its colours as well
+            if (HexLooks.HasCodeLook(picked))
+            {
+                codeEditing.ApplyCodeFont();
+                languages.ApplyCSharpColors();
+            }
         }
 
         ApplyEffects();

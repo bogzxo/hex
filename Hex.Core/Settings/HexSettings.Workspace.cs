@@ -19,7 +19,7 @@ internal sealed partial class HexSettings
     {
         "tab_size", "insert_spaces", "detect_indentation", "line_numbers", "indent_guides", "editorconfig",
         "rulers", "render_whitespace", "cursor_style", "sticky_scroll", "format_on_save",
-        "wrap_code", "minimap", "inlay_hints", "semantic_highlighting", "code_font", "code_zoom",
+        "wrap_code", "minimap", "inlay_hints", "code_lens_references", "semantic_highlighting", "code_font", "code_zoom",
         "trim_whitespace", "final_newline", "auto_save", "auto_save_delay",
         "files_exclude", "search_exclude", "search_use_ignore_files",
         "git_blame", "git_autofetch", "git_autofetch_interval", "git_pull_mode", "git_account", "git_confirm_sync", "git_smart_commit",

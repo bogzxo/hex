@@ -103,7 +103,8 @@ internal sealed partial class DawnScene
             commands.Keys.Pending == "Ctrl+K" && Quiet == wasQuiet && messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
         test.Run(() => Press(Key.Z));
         test.Wait();
-        test.Check("keys: chord works", () => Quiet != wasQuiet && commands.Keys.Pending is null);
+        test.Check("keys: chord works, and the status bar stops saying it waits", () => Quiet != wasQuiet && commands.Keys.Pending is null
+            && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
         test.Run(() =>
         {
             if (Quiet != wasQuiet)
@@ -112,8 +113,8 @@ internal sealed partial class DawnScene
         });
         test.Run(() => Press(Key.Escape));
         test.Wait();
-        test.Check("keys: chord works: Ctrl+K alone then Escape does nothing, the waiting still said", () =>
-            Quiet == wasQuiet && commands.Keys.Pending is null && messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
+        test.Check("keys: chord works: Ctrl+K alone then Escape does nothing, and the waiting is taken off", () =>
+            Quiet == wasQuiet && commands.Keys.Pending is null && !messageItem.Text.Contains(Said("keys_chords.waiting", ("key", "Ctrl+K"))));
         test.Run(() => Press(Key.K, control: true));
         test.Run(() => Press(Key.Q));
         test.Wait();

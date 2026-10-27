@@ -470,7 +470,7 @@ internal sealed partial class DawnScene
                     // Saved on the spot it can go. Waiting on a dialog of Windows it stays until that is answered
                     if (document == closing && !document.Modified && document.GenerateCode() == document.SavedCode) CloseNow();
                 }),
-                new DialogChoice(Said("documents.dont_save"), () => { if (document == closing) CloseNow(); }),
+                new DialogChoice(Said("documents.dont_save"), () => { if (document == closing) CloseNow(); }, Risky: true),
                 new DialogChoice(Said("keys.leave_it")));
             return;
         }
@@ -539,23 +539,23 @@ internal sealed partial class DawnScene
     private void AddDocumentCommands()
     {
         // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu
-        commands.Add("File/new", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "new-file", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "note", UIKeyUse.BoundWhileTyping);
         commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
         commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
         commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
 
         // A folder right under a file, the way they're opened one after the other, not down with the workspaces
-        commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "folder-opened", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "root-folder-opened", UIKeyUse.BoundWhileTyping);
         recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
         commands.Add("File/save", Said("documents.save"), SaveFormatted, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/save", Said("documents.save_as"), SaveAs);
+        commands.Add("File/save", Said("documents.save_as"), SaveAs, icon: "save-as");
         commands.Add("File/save", Said("documents.save_all"), SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
         commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 
         commands.Add("File/close", Said("documents.close"), Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "close-all").IsEnabled = () => documents.Count > 1;
+        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "clear-all").IsEnabled = () => documents.Count > 1;
         commands.Add("File/close", Said("documents.close_all"), () => CloseAll(), icon: "close-all");
 
         // VS Code's, the file closed last back and the path of the one on screen copied
@@ -563,8 +563,8 @@ internal sealed partial class DawnScene
         // The palette's and the keys', the tab's right click has them too
         MenuItem[] copies =
         [
-            commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "copy", UIKeyUse.BoundWhileTyping),
-            commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true))
+            commands.Add("File/path", Said("values.copy_path"), () => CopyPath(relative: false), "Shift+Alt+C", "link", UIKeyUse.BoundWhileTyping),
+            commands.Add("File/path", Said("documents.copy_relative_path"), () => CopyPath(relative: true), icon: "file-symlink-file")
         ];
         foreach (MenuItem copy in copies)
         {

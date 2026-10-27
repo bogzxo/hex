@@ -208,6 +208,7 @@ internal sealed partial class DawnScene
                 // numbers said nothing of which line was which
                 var lines = new List<UIChoice>();
                 int count = code.Document.LineCount;
+                int digits = count.ToString(System.Globalization.CultureInfo.InvariantCulture).Length;
                 for (int line = 1; line <= count; line++)
                 {
                     int at = line - 1;
@@ -216,7 +217,7 @@ internal sealed partial class DawnScene
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
-                    }));
+                    }) with { TextDigits = digits });
                 }
                 return lines;
 
@@ -313,7 +314,7 @@ internal sealed partial class DawnScene
         commands.Add("Edit/files", Said("find_menu.replace_in_files"), ReplaceInFiles, "Ctrl+Shift+H", "replace-all", UIKeyUse.BoundWhileTyping);
 
         commands.Add("Go/open", Said("find_menu.go_to_file"), QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
-        commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G").IsVisible = () => !LayoutTools;
+        commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G", "list-ordered").IsVisible = () => !LayoutTools;
         commands.Add("Go/open", Said("find_menu.go_to_symbol"), GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
 
         // Ctrl+G groups what is selected in a layout, it only goes to a line where there is code to go about in

@@ -30,7 +30,7 @@ internal sealed partial class HexTasks
         commands.Add("Terminal/tasks", context.Strings.Said("tasks.run_task"), ChooseTask, icon: "tasklist");
         commands.Add("Terminal/tasks", context.Strings.Said("tasks.run_build_task"), RunBuildTask, "Ctrl+Shift+B", "tools", UIKeyUse.BoundWhileTyping);
         commands.Add("Terminal/tasks", context.Strings.Said("tasks.configure_tasks"), ConfigureTasks, icon: "gear");
-        commands.Add("Run/tasks", context.Strings.Said("tasks.set_up_run"), () => SetUpRun(), icon: "debug-alt");
+        commands.Add("Run/tasks", context.Strings.Said("tasks.set_up_run"), () => SetUpRun(), icon: "settings");
         AddSelfBuildCommands();
         AddAutomationCommands();
     }

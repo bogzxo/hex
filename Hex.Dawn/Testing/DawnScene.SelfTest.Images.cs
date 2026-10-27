@@ -42,6 +42,7 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => shown is { IsValid: false }, 3.0f);
         test.Check("pictures: and closing it goes back to code and lets go of the picture", () => document.Picture is null && shown is { IsValid: false });
-        test.Check("pictures: quick open lists pictures as well as text", () => AllWorkspaceFiles().Any(file => PlatformPaths.Same(file, picture)));
+        // Quick open of the folder the picture is in, what the workspace is by now is up to the parts before this one
+        test.Check("pictures: quick open lists pictures as well as text", () => HexSearch.OpenableFilesUnder([testFolder], IsPicture).Any(file => PlatformPaths.Same(file, picture)));
     }
 }

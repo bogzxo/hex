@@ -114,7 +114,9 @@ internal sealed partial class DawnScene
             settings.EffectMotion = wasMotion;
             settings.EffectGlass = wasGlass;
             ApplyEffects();
-            CloseDocument(document);
+
+            // Closed without asking, it was typed into and a question about saving it sat over every part after this one
+            CloseNow();
         });
         test.Settle(0.2f);
         test.Check("effects: and put back nothing is left flying", () => was != "none" || sparks.Count == 0);

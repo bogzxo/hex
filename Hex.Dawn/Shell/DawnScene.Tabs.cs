@@ -68,7 +68,7 @@ internal sealed partial class DawnScene
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
+            tab.Tooltip = shown.Path is { } where ? HexText.MiddleOf(Relative(where)) : Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
@@ -81,9 +81,11 @@ internal sealed partial class DawnScene
     /// <summary>The title bar and the window's title said for what is open.</summary>
     private void RetitleWindow()
     {
-        // The window says what is open, with a dot while it has changes, VS Code's way
-        string name = document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
-        bool changed = document.Modified || document.CodeEdited;
+        // The window says what is open, with a dot while it has changes, VS Code's way. The plain welcome is over the empty
+        // layout nobody opened, so it's the welcome of the workspace there and not "layout"
+        string name = plainShown ? WelcomeTitle()
+            : document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
+        bool changed = !plainShown && (document.Modified || document.CodeEdited);
         string version = HexAbout.Version.ToString();
         ((TitleBar)top).Title = titleNote.Length > 0
             ? Said(changed ? "tabs.title_changed_note" : "tabs.title_note", ("name", name), ("version", version), ("note", titleNote))
@@ -91,18 +93,29 @@ internal sealed partial class DawnScene
         Engine.WindowManager.Title = Said("tabs.window_title", ("name", name), ("version", version));
     }
 
+    /// <summary>What the title says while the welcome is up, Welcome and the workspace's name, or the folder's without one.</summary>
+    private string WelcomeTitle()
+    {
+        if (!explorer.workspace.IsEmpty)
+            return Said("tabs.welcome_of", ("workspace", explorer.workspace.Name));
+
+        return Path.GetFileName(Path.TrimEndingDirectorySeparator(browseDirectory)) is { Length: > 0 } folder
+            ? Said("tabs.welcome_of", ("workspace", folder))
+            : Said("tabs.welcome");
+    }
+
     private void ShowTabMenu(HexDocument tab)
     {
         var shown = new Menu("tab");
         shown.Add(Said("tabs.close"), () => CloseDocument(tab), "Ctrl+W", icon: "close");
-        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "close-all");
-        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true));
+        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "clear-all");
+        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true), icon: "chrome-close");
         shown.Add(Said("tabs.close_all"), () => CloseAll(), icon: "close-all");
         shown.AddSeparator();
         shown.Add(Said("tabs.open_to_side"), () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
         shown.AddSeparator();
-        shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
-        shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "link").IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name), icon: "file-symlink-file").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
         shown.AddSeparator();
         shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");

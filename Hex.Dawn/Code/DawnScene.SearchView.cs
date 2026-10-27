@@ -239,8 +239,8 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// The line under the boxes, a regex's error in red, how many results in how many files, that there are none, or
-    /// the hint before anything was looked for.
+    /// The line under the boxes, a regex's error in red, how many results in how many files or that there are none. The
+    /// hint before anything was looked for is the tree's note, the way every view of the side says what it's for.
     /// </summary>
     private void ShowSearchMessage()
     {
@@ -250,9 +250,10 @@ internal sealed partial class DawnScene
         bool error = searchError is not null;
         searchMessage.Color = error ? ErrorColor : DimColor;
         searchMessage.Text = searchError is { } bad ? Said("search.bad_regex", ("error", bad))
-            : results is null ? Said("search.hint")
+            : results is null ? string.Empty
             : results.Count == 0 ? Said("search.none")
             : Said("search.summary", ("results", HexText.Count("result", results.Count)), ("files", HexText.Count("file", ResultFiles(results))));
+        searchMessage.Visible = searchMessage.Text.Length > 0;
     }
 
     private static int ResultFiles(List<HexResult> found) => found.Select(result => result.Path).Distinct(PlatformPaths.Comparer).Count();

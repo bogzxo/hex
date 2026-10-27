@@ -28,10 +28,10 @@ internal sealed partial class DawnScene
             resultsListed = results;
         }
 
-        // Nothing looked for yet, the boxes over the tree and the hint under them say what to do
+        // Nothing looked for yet, the boxes over the tree and the note in it say what to do
         if (results is null)
         {
-            sideTree.Items = [];
+            sideTree.Items = searchView is null ? [] : [NoteItem(Said("search.hint"), DimColor)];
             return;
         }
 

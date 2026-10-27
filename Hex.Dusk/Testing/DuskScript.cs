@@ -63,6 +63,9 @@ internal sealed class DuskScript
         Glide(end, false, PRESS_UPDATES * Pace);
     }
 
+    /// <summary>Moves the pointer somewhere without pressing, out of the way of a shot say.</summary>
+    public void Move(Func<Vector2> target) => Glide(target, false, MOVE_UPDATES * Pace);
+
     /// <summary>Lets a few updates pass with the pointer where it is, for the UI to catch up with what was done to it.</summary>
     public void Wait() => steps.Enqueue(new Step(Duration: WAIT_UPDATES * Pace));
 

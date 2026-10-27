@@ -127,13 +127,12 @@ internal sealed partial class DawnScene
             Git(repo, "checkout", "--", "same.txt");
             ShowSide(HexSide.SourceControl);
         });
-        test.WaitFor(() => under("Changes", same) is null && sideRows(sideTree.Items).Any(row => row.Text.StartsWith("Commit", StringComparison.Ordinal)), 5.0f);
+        test.WaitFor(() => under("Changes", same) is null && CommitSaid(sideRows(sideTree.Items)) is not null, 5.0f);
 
-        // The Commit row's ... button, the menu of what else a commit can be
-        Func<UITreeItem?> commitRow = () => sideRows(sideTree.Items).FirstOrDefault(row => row.Text.StartsWith("Commit", StringComparison.Ordinal));
-        test.Click(TreeAction(commitRow, Said("git.commit_more")));
+        // The chevron at the end of the box's Commit, the menu of what else a commit can be
+        test.Click(At(() => commitMore));
         test.Wait();
-        test.Check("commit: the Commit row's ... has Commit and Push, Commit and Sync, Amend and Undo", () =>
+        test.Check("commit: the chevron by the box's Commit has Commit and Push, Commit and Sync, Amend and Undo", () =>
             contextMenu?.Showing is { } open && new[] { "git.commit_push", "git.commit_sync", "git.amend_command", "git.undo_command" }.All(key => open.Items.Any(item => item.Label == Said(key))));
         test.Run(() => contextMenu?.Close());
         test.Wait();
@@ -161,8 +160,8 @@ internal sealed partial class DawnScene
         test.Check("undo: Undo Last Commit takes it back with its changes left staged, and says what it took back", () =>
             LastSubject(repo) == "Second go" && GitProcess.Run(repo, ["diff", "--cached", "--name-only"]).Output.Contains("src/added.txt", StringComparison.Ordinal)
             && under("Staged Changes", added) is not null && said.Any(line => line.Text.Contains("Add the new one, amended", StringComparison.Ordinal)));
-        test.WaitFor(() => commitRow()?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f);
-        test.Click(TreeRow(commitRow));
+        test.WaitFor(() => CommitSaid(sideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f);
+        test.Click(At(() => commitButton));
         test.WaitFor(() => CommitBox() is not null, 3.0f);
         test.Check("undo: and the next commit's box starts with the message taken back", () => CommitBox()?.Text == "Add the new one, amended");
         test.Run(() => CommitBox()?.OnControlEnter!());

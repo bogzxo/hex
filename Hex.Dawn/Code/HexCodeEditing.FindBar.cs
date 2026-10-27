@@ -56,10 +56,11 @@ internal sealed partial class HexCodeEditing
         made.Get<Button>("find_close").OnPressed = CloseFindBar;
         made.Get<Button>("replace_one").OnPressed = ReplaceOne;
         made.Get<Button>("replace_all").OnPressed = ReplaceEvery;
+        OrderFindTabs(made.Get<Button>("find_close"), made.Get<Button>("replace_one"));
 
         commands.Add("Edit/find", context.Strings.Said("code_findbar.find"), FindInFile, "Ctrl+F", "search", UIKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_next"), () => FindAgain(forward: true), "F3", use: UIKeyUse.BoundWhileTyping);
-        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_previous"), () => FindAgain(forward: false), "Shift+F3", use: UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_next"), () => FindAgain(forward: true), "F3", "chevron-down", UIKeyUse.BoundWhileTyping);
+        commands.Add("Edit/find", context.Strings.Said("code_findbar.find_previous"), () => FindAgain(forward: false), "Shift+F3", "chevron-up", UIKeyUse.BoundWhileTyping);
         commands.Add("Edit/find", context.Strings.Said("code_findbar.replace"), ReplaceInFile, "Ctrl+H", "replace", UIKeyUse.BoundWhileTyping).IsVisible = () => !LayoutTools;
 
         // While the bar is open, from the boxes and from the code
@@ -68,6 +69,20 @@ internal sealed partial class HexCodeEditing
         commands.Bind(Key.R, () => { if (FindBarOpen) ToggleFindOption(findOptions with { Regex = !findOptions.Regex }); }, whileTyping: true, alt: true);
         commands.Bind(Key.Enter, () => { if (FindBarOpen) ReplaceEvery(); }, control: true, alt: true, whileTyping: true);
         commands.Bind(Key.Escape, EscapeFindBar, whileTyping: true);
+    }
+
+    /// <summary>
+    /// Helper method for where Tab goes in the bar, VS Code's order. The find box, the replace box under it when that's
+    /// open, then the toggles and the buttons along the find row, then the replace row's. It went by the layout, through
+    /// the three toggles and the arrows before it ever got to the replace box.
+    /// </summary>
+    private void OrderFindTabs(Button close, Button replaceOne)
+    {
+        findBox.TabTo = by => by > 0 && replaceRow.Visible ? replaceBox : null;
+        replaceBox.TabTo = by => by > 0 ? findCase : findBox;
+        findCase.TabTo = by => by < 0 ? (replaceRow.Visible ? replaceBox : findBox) : null;
+        close.TabTo = by => by > 0 && replaceRow.Visible ? replaceOne : null;
+        replaceOne.TabTo = by => by < 0 ? close : null;
     }
 
     /// <summary>Ctrl+F, the bar opened over the code with what's selected (a word, a line of it) to look for, its text picked out.</summary>
@@ -90,6 +105,7 @@ internal sealed partial class HexCodeEditing
 
         findStart = text.SelectionStart;
         findBar.Visible = true;
+        PlaceFindBar();
         findEditor = code;
         ShowReplace(replacing);
         findBox.Text = lastFind;
@@ -222,7 +238,24 @@ internal sealed partial class HexCodeEditing
             ApplyFind(grow: false);
         }
 
+        PlaceFindBar();
         UpdateFindCount();
+    }
+
+    // How far the bar keeps from the minimap, or the scroll bar without one
+    private const float FIND_BAR_GAP = 12.0f;
+
+    /// <summary>
+    /// Helper method to keep the bar left of the editor's minimap and scroll bar, VS Code keeps its find widget clear of
+    /// the scroll bar. It was laid over the top of both, the matches ticked down the bar under it.
+    /// </summary>
+    private void PlaceFindBar()
+    {
+        float right = code.CodeBounds.Max.X - FIND_BAR_GAP;
+        float most = codeScroll.Bounds.Width - findBar.Bounds.Width - FIND_BAR_GAP;
+        float x = -Math.Clamp(codeScroll.Bounds.Max.X - right, FIND_BAR_GAP, MathF.Max(FIND_BAR_GAP, most));
+        if (MathF.Abs(findBar.Position.X - x) > 0.5f)
+            findBar.Position = findBar.Position with { X = x };
     }
 
     private void UpdateFindCount()

@@ -342,10 +342,10 @@ internal sealed partial class HexDesigner
         var shown = new Menu("component");
         Func<bool> any = () => document.Selection.Count > 0;
 
-        shown.Add(context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X", "diff-removed").IsEnabled = any;
         shown.Add(context.Strings.Said("designer_selection.copy"), CopySelected, "Ctrl+C", "copy").IsEnabled = any;
-        shown.Add(context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V").IsEnabled = () => clipboard.Length > 0;
-        shown.Add(context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", "copy").IsEnabled = any;
+        shown.Add(context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V", "clippy").IsEnabled = () => clipboard.Length > 0;
+        shown.Add(context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", "clone").IsEnabled = any;
         shown.Add(context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash").IsEnabled = any;
         shown.AddSeparator();
 
@@ -354,20 +354,20 @@ internal sealed partial class HexDesigner
         foreach (string kind in Palette)
             inside.Add(kind.Replace('_', ' '), () => AddComponentOf(kind), icon: KindIcon(kind));
 
-        AddMoveMenu(shown.AddMenu(context.Strings.Said("designer_selection.move"), "arrow-swap"), any);
+        AddMoveMenu(shown.AddMenu(context.Strings.Said("designer_selection.move"), "move"), any);
         AddArrangeMenu(shown.AddMenu(context.Strings.Said("designer_selection.arrange"), "layers"), any);
         AddAlignMenu(shown.AddMenu(context.Strings.Said("designer_selection.align"), "symbol-ruler"), any);
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.open_included"), OpenIncluded, icon: "go-to-file").IsVisible = () => document.Selected is Include;
         shown.Add(context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type").IsEnabled = any;
-        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G").IsEnabled = CanUngroup;
+        shown.Add(context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", "ungroup-by-ref-type").IsEnabled = CanUngroup;
 
         // A container, a group above all, can be had as any other kind of container, what is in it and all
         if (document.Selected is { } container && HexDocument.IsContainer(container))
             AddConvertMenu(shown.AddMenu(context.Strings.Said("designer_selection.change_into"), "arrow-swap"));
         shown.AddSeparator();
         shown.Add(context.Strings.Said("designer_selection.select_parent"), SelectParent, icon: "arrow-up").IsEnabled = () => document.Selected?.Parent is { } parent && parent != document.Module.Root;
-        shown.Add(context.Strings.Said("designer_selection.select_all_short"), SelectAll, "Ctrl+A");
+        shown.Add(context.Strings.Said("designer_selection.select_all_short"), SelectAll, "Ctrl+A", "selection");
         shown.Add(context.Strings.Said("designer_selection.its_code"), ShowSelectedCode, "F12", "code").IsEnabled = any;
 
         // What it says, edited over it on the canvas, and the key of the language that says it when it's one
@@ -410,16 +410,16 @@ internal sealed partial class HexDesigner
         Func<bool> some = () => LayoutTools && document.Selected is not null;
 
         // The clipboard, which a text box keeps for itself while it is being typed into
-        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.cut"), CutSelected, "Ctrl+X", "diff-removed", UIKeyUse.Bound).IsVisible = design;
         commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.copy"), CopySelected, "Ctrl+C", "copy", UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V", use: UIKeyUse.Bound).IsVisible = design;
-        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V", "clippy", UIKeyUse.Bound).IsVisible = design;
+        commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", "clone", UIKeyUse.Bound).IsVisible = design;
         commands.Add("Edit/clipboard", context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash", UIKeyUse.Bound).IsVisible = design;
 
         commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_in"), () => ZoomCanvas(ZOOM_STEP * ZOOM_STEP, canvas.Bounds.Center), "Ctrl+=", "zoom-in").IsVisible = design;
         commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_out"), () => ZoomCanvas(1.0f / (ZOOM_STEP * ZOOM_STEP), canvas.Bounds.Center), "Ctrl+-", "zoom-out").IsVisible = design;
         commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.zoom_to_fit"), ZoomToFit, "Ctrl+0", "screen-full").IsVisible = design;
-        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.actual_size"), ZoomToActualSize, "Ctrl+1", use: UIKeyUse.Bound).IsVisible = design;
+        commands.Add("View/appearance/look:zoom", context.Strings.Said("designer_selection.actual_size"), ZoomToActualSize, "Ctrl+1", "screen-normal", UIKeyUse.Bound).IsVisible = design;
 
         commands.Add("Run/run", context.Strings.Said("designer_selection.play_entrances"), PlayIntros, "F5", "play").IsVisible = design;
 
@@ -435,13 +435,13 @@ internal sealed partial class HexDesigner
         commands.Add("Layout/group", context.Strings.Said("designer_selection.group"), GroupSelected, "Ctrl+G", "group-by-ref-type", UIKeyUse.Bound).IsEnabled = some;
         // Only there to be picked with a group selected, so its key is Source Control's the rest of the time rather than
         // an Ungroup saying there's no group (UICommands passes a key on from a command that can't be picked)
-        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", use: UIKeyUse.Bound).IsEnabled = CanUngroup;
+        commands.Add("Layout/group", context.Strings.Said("designer_selection.ungroup"), UngroupSelected, "Ctrl+Shift+G", "ungroup-by-ref-type", UIKeyUse.Bound).IsEnabled = CanUngroup;
         AddConvertMenu(commands.AddMenu("Layout/group", context.Strings.Said("designer_selection.convert_to"), "arrow-swap"));
-        AddMoveMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.move"), "arrow-swap"), some);
+        AddMoveMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.move"), "move"), some);
         AddArrangeMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.arrange"), "layers"), some);
         AddAlignMenu(commands.AddMenu("Layout/move", context.Strings.Said("designer_selection.align"), "symbol-ruler"), some);
-        commands.Add("Layout/select", context.Strings.Said("designer_selection.select_all"), SelectAll, "Ctrl+A", use: UIKeyUse.Bound);
-        commands.Add("Layout/select", context.Strings.Said("designer_selection.deselect_all"), () => Select(null), "Esc").IsEnabled = some;
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.select_all"), SelectAll, "Ctrl+A", "selection", UIKeyUse.Bound);
+        commands.Add("Layout/select", context.Strings.Said("designer_selection.deselect_all"), () => Select(null), "Esc", "circle-slash").IsEnabled = some;
         commands.Add("Layout/select", context.Strings.Said("designer_selection.show_all_layers"), ShowAllLayers, icon: "eye").IsEnabled = () => document.Module.HiddenLayers.Count > 0;
         // F12 goes to where what's selected is declared, the way it goes from a name in the code, and Ctrl+F12 to the key
         // of the language its text names. Enter edits that text on the canvas, as a double click does

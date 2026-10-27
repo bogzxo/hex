@@ -54,6 +54,13 @@ internal sealed partial class DuskScene
             Directory.Delete(Path.GetDirectoryName(plugin)!, recursive: true);
         });
         test.Check("and off again", () => View().OutputHighlighter is null);
+
+        // The plugin going is said in the status bar, and that goes once it's old, it sat in every shot after this one
+        test.WaitFor(() => messageItem.Text.Contains("Rules is gone"), 3.0f);
+        test.Check("the plugin taken away is said in the status bar", () => messageItem.Text.Contains("Rules is gone"));
+        test.Run(() => saidAt = System.Environment.TickCount64 - SAID_FOR - 1);
+        test.Wait();
+        test.Check("and an old message goes from the status bar", () => messageItem.Text.Length == 0);
     }
 
     // The row of the whole a text is on, the last one it is on that isn't the line typed, -1 for none

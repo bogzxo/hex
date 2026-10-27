@@ -91,10 +91,10 @@ internal sealed partial class DawnScene
             ShowSide(HexSide.SourceControl);
             GitCommand(Said("git.commit_command"))?.OnPicked?.Invoke();
         });
-        test.WaitFor(() => SideRows(sideTree.Items).Any(row => row.Text == Said("git.commit_nothing_staged")), 3.0f);
+        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text == Said("git.commit_nothing_staged"), 3.0f);
         test.Check("settings: smart commit never refuses with a notice, and the Commit row says nothing is staged", () =>
             messageItem.Text.Contains(Said("git.nothing_staged"), StringComparison.Ordinal) && textDialog is not { IsOpen: true }
-            && SideRows(sideTree.Items).Any(row => row.Text == Said("git.commit_nothing_staged")));
+            && CommitSaid(SideRows(sideTree.Items))?.Text == Said("git.commit_nothing_staged"));
         test.Run(() => new EditorSource(this).Set("git_smart_commit", new StringValue("ask")));
 
         // The summary's warning goes by the length set, 40 characters fine at 50 and too long at 30

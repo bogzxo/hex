@@ -381,6 +381,8 @@ internal sealed partial class DawnScene
             ApplyPanelSizes();
         if (now.CodeFont != was.CodeFont)
             codeEditing.ApplyCodeFont();
+        if (now.CodeLensReferences != was.CodeLensReferences)
+            ForgetReferenceLenses();
         if (now.InlayHints != was.InlayHints)
             ForgetInlays();
         if (now.SemanticHighlighting != was.SemanticHighlighting)

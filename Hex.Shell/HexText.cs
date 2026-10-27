@@ -95,4 +95,19 @@ public static class HexText
 
         return titled.ToString();
     }
+
+    /// <summary>
+    /// A path cut down to so many letters with an ellipsis in the middle, its start and its file kept, the way VS Code
+    /// shortens one ("src/.../Program.cs"). The whole of it when it's short enough. A long one wrapped in a tooltip broke
+    /// inside a word ("RE/ADME.md").
+    /// </summary>
+    public static string MiddleOf(string path, int most = 60)
+    {
+        if (path.Length <= most || most < 8)
+            return path;
+
+        // More of the end than of the start, the end is the file
+        int end = most * 3 / 5, start = most - end - 1;
+        return string.Concat(path.AsSpan(0, start), "…", path.AsSpan(path.Length - end));
+    }
 }

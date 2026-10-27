@@ -137,6 +137,25 @@ internal sealed partial class DawnScene
             designer.paletteButtons[i].Size = designer.paletteButtons[i].Size with { X = button };
     }
 
+    /// <summary>
+    /// Helper method to keep the side bar the one width it was dragged to whatever view is up. What fills its width is
+    /// given that width, so nothing in it asks for more. The search view's box asked for a text box's width and its
+    /// padding, the side bar came out half as wide again and the editor ran off the right of the window.
+    /// </summary>
+    private void HoldSideWidth(float width)
+    {
+        var children = left.Children;
+        for (int i = 0; i < children.Count; i++)
+        {
+            UIComponent child = children[i];
+            if ((child.Fill & UIFill.Horizontal) != 0 && child.Size.X != width)
+                child.Size = child.Size with { X = width };
+        }
+
+        if (searchView is not null && searchMessage.Size.X != width)
+            searchMessage.Size = searchMessage.Size with { X = width };
+    }
+
     private static void Widen(IReadOnlyList<UIComponent> rows, float width)
     {
         for (int i = 0; i < rows.Count; i++)
@@ -220,6 +239,7 @@ internal sealed partial class DawnScene
             treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         if (sideTree.Visible)
             sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
+        HoldSideWidth(leftWidth);
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
         rightHead.Size = new Vector2(rightWidth, 24.0f);
         if (running.ValuesTree.Visible)

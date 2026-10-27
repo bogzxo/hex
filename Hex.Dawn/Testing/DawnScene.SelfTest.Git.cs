@@ -156,10 +156,11 @@ internal sealed partial class DawnScene
         test.Check("source control: Stage from its right click moves it to the staged changes", () =>
             Under("Staged Changes", added) is not null && Under("Changes", added) is null);
 
-        // The side is put together again as git answers, so the Commit row is waited for before it's clicked
-        test.WaitFor(() => SideRows(sideTree.Items).Any(row => row.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal)), 4.0f);
+        // The side is put together again as git answers, so the box's Commit is waited for before it's clicked, nothing typed
+        // in the box so it asks for the message
+        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f);
         test.Wait();
-        test.Click(TreeRow(() => SideRows(sideTree.Items).FirstOrDefault(row => row.Text.StartsWith("Commit", StringComparison.Ordinal))));
+        test.Click(At(() => commitButton));
         test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
         test.Check("source control: the commit's box takes lines and colours Markdown, with the summary's length under it", () =>
             Descendants(textDialog!.Body).OfType<CodeEditor>().FirstOrDefault() is { WordWrap: true } box && box.Highlighter is not null
@@ -309,7 +310,7 @@ internal sealed partial class DawnScene
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(branchItem).Center));
         test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
         test.Check("branch: a click on it lists the branches, a new one to make first", () =>
-            textDialog is { IsOpen: true } && Chooser().Items is { Length: >= 3 } items && items[0].Contains("Create a new branch", StringComparison.Ordinal)
+            textDialog is { IsOpen: true } && Chooser().Items is { Length: >= 3 } items && items[0].Contains(Said("git.new_branch"), StringComparison.Ordinal)
             && items.Any(item => item.Contains(": main", StringComparison.Ordinal)));
         test.Run(() =>
         {
@@ -411,6 +412,9 @@ internal sealed partial class DawnScene
 
         // A merge with a conflict in a repository of its own, the box for the commit that finishes it filled in from git's
         TestMergeMessage(test, SideRows);
+
+        // The box over Source Control, a message typed in and committed with no dialog
+        TestCommitBox(test);
 
         test.Run(() =>
         {

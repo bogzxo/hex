@@ -23,9 +23,9 @@ let search_more_row = compositor.panel({ parent: search_view, fill: "horizontal"
 let search_more = compositor.button({ parent: search_more_row, anchor: "right", pivot: "right", size: vec(26, 18), icon: "ellipsis", style: "button_flat", tooltip: "@search.more" });
 
 let search_scope = compositor.stack({ parent: search_view, fill: "horizontal", spacing: 4, visible: false });
-let search_include_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.include", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1) });
+let search_include_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.include", text_scale: 0.12, dim: true });
 let search_include = compositor.textbox({ parent: search_scope, fill: "horizontal", size: vec(0, 26), text_scale: 0.13, placeholder: "@search.include_hint", max_length: 400 });
-let search_exclude_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.exclude", text_scale: 0.12, color: vec(0.58, 0.6, 0.66, 1) });
+let search_exclude_label = compositor.label({ parent: search_scope, anchor: "left", text: "@search.exclude", text_scale: 0.12, dim: true });
 let search_exclude = compositor.textbox({ parent: search_scope, fill: "horizontal", size: vec(0, 26), text_scale: 0.13, placeholder: "@search.exclude_hint", max_length: 400 });
 
 // How many were found in how many files, a regex's error in red, or the hint before anything was looked for
@@ -33,9 +33,9 @@ let search_message = compositor.label({
     parent: search_view,
     anchor: "left",
     size: vec(250, 0),
-    text: "@search.hint",
+    text: "",
     text_scale: 0.13,
-    color: vec(0.58, 0.6, 0.66, 1),
+    dim: true,
     align: "top_left",
     wrap: true,
 });

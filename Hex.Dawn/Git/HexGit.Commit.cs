@@ -27,12 +27,12 @@ internal sealed partial class HexGit
     // their groups (fix is amending and taking back, flags the hooks skipped or signed off)
     private (string Group, string Key, string Icon, Action<Repository?> Do)[] CommitChoices() =>
     [
-        ("commit", "git.commit_push", "arrow-up", repository => AskCommit(repository, CommitThen.Push)),
-        ("commit", "git.commit_sync", "sync", repository => AskCommit(repository, CommitThen.Sync)),
+        ("commit", "git.commit_push", "repo-push", repository => AskCommit(repository, CommitThen.Push)),
+        ("commit", "git.commit_sync", "repo-sync", repository => AskCommit(repository, CommitThen.Sync)),
         ("fix", "git.amend_command", "edit", AskAmend),
         ("fix", "git.undo_command", "discard", UndoLastCommit),
-        ("flags", "git.commit_no_verify", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify)),
-        ("flags", "git.commit_signoff", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff))
+        ("flags", "git.commit_no_verify", "unverified", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify)),
+        ("flags", "git.commit_signoff", "verified", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff))
     ];
 
     private void BuildCommits()
@@ -45,7 +45,7 @@ internal sealed partial class HexGit
     private void CommitMenu(Repository repository)
     {
         var menu = new Menu("git_commit");
-        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
+        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "git-commit");
         string? last = null;
         foreach (var (group, key, icon, act) in CommitChoices())
         {
@@ -89,10 +89,13 @@ internal sealed partial class HexGit
     /// </summary>
     private void AskCommit(Repository? repository) => AskCommit(repository, CommitThen.Nothing);
 
-    private void AskCommit(Repository? repository, CommitThen then, CommitFlags flags = CommitFlags.None)
+    private void AskCommit(Repository? repository, CommitThen then, CommitFlags flags = CommitFlags.None, string? message = null)
     {
         if (repository?.Status is not { } status)
             return;
+
+        // What's typed in the box over the side is the message, whichever way the commit was asked for
+        message ??= BoxMessage?.Invoke(repository.Git.Root);
 
         int conflicts = status.Files.Values.Count(state => state.Change == GitChange.Conflicted);
         if (conflicts > 0)
@@ -112,7 +115,7 @@ internal sealed partial class HexGit
         string branch = status.Branch ?? "HEAD";
         if (anyStaged || context.Settings.Values.GitSmartCommit == "always")
         {
-            PromptCommit(repository, branch, all, anyStaged, then, flags);
+            PromptCommit(repository, branch, all, anyStaged, then, flags, message);
             return;
         }
 
@@ -143,41 +146,56 @@ internal sealed partial class HexGit
                     return;
                 }
 
-                PromptCommit(repository, branch, all, anyStaged: false, then, flags);
+                PromptCommit(repository, branch, all, anyStaged: false, then, flags, message);
             });
     }
 
     // The box for the commit's message, and the commit once it's typed, everything staged first when nothing was. It starts
-    // with the message of a commit just taken back, or what git wrote for a merge going on
-    private void PromptCommit(Repository repository, string branch, string[] all, bool anyStaged, CommitThen then, CommitFlags flags)
+    // with the message of a commit just taken back, or what git wrote for a merge going on. A message typed in the box
+    // over the side already is committed with as it is, nothing asked
+    private void PromptCommit(Repository repository, string branch, string[] all, bool anyStaged, CommitThen then, CommitFlags flags, string? typed)
     {
-        string root = repository.Git.Root;
-        string start = undone.GetValueOrDefault(root) ?? MergeOf(repository) ?? string.Empty;
+        if (typed is { } given && given.Trim().Length > 0)
+        {
+            CommitNow(repository, given.Trim(), all, anyStaged, then, flags);
+            return;
+        }
+
+        string start = WaitingMessage(repository) ?? string.Empty;
         context.Windows.PromptLines(context.Strings.Said("git.commit_title", ("branch", branch)),
             anyStaged ? context.Strings.Said("git.commit_text_staged") : context.Strings.Said("git.commit_text_all", ("count", all.Length.ToString())),
             start, context.Strings.Said("git.commit_button"), "COMMIT_EDITMSG.md", SummaryNote, typed =>
             {
                 string message = typed.Trim();
-                if (message.Length == 0)
-                    return;
-
-                // Said the way the terminal would have it, so a card of a hook that said no names what was run
-                bool noVerify = flags.HasFlag(CommitFlags.NoVerify), signOff = flags.HasFlag(CommitFlags.SignOff);
-                string doing = "git commit" + (noVerify ? " --no-verify" : string.Empty) + (signOff ? " --signoff" : string.Empty);
-                Run(repository, doing, () =>
-                {
-                    if (!anyStaged && repository.Git.Stage(all) is { } failed)
-                        return failed;
-                    return flags == CommitFlags.None ? repository.Git.Commit(message) : repository.Git.Commit(message, noVerify, signOff);
-                }, context.Strings.Said("git.committed", ("message", message.Split('\n')[0])), () =>
-                {
-                    undone.Remove(root);
-                    if (then == CommitThen.Push)
-                        Remote(repository, RemoteWork.Push);
-                    else if (then == CommitThen.Sync)
-                        AskSync(repository);
-                });
+                if (message.Length > 0)
+                    CommitNow(repository, message, all, anyStaged, then, flags);
             });
+    }
+
+    /// <summary>The message a repository's next commit starts with, a commit's that was taken back or a merge's, null for none.</summary>
+    private string? WaitingMessage(Repository repository) => undone.GetValueOrDefault(repository.Git.Root) ?? MergeOf(repository);
+
+    // The commit itself in the background, everything staged first when nothing was, and what's after it once it went in
+    private void CommitNow(Repository repository, string message, string[] all, bool anyStaged, CommitThen then, CommitFlags flags)
+    {
+        // Said the way the terminal would have it, so a card of a hook that said no names what was run
+        string root = repository.Git.Root;
+        bool noVerify = flags.HasFlag(CommitFlags.NoVerify), signOff = flags.HasFlag(CommitFlags.SignOff);
+        string doing = "git commit" + (noVerify ? " --no-verify" : string.Empty) + (signOff ? " --signoff" : string.Empty);
+        Run(repository, doing, () =>
+        {
+            if (!anyStaged && repository.Git.Stage(all) is { } failed)
+                return failed;
+            return flags == CommitFlags.None ? repository.Git.Commit(message) : repository.Git.Commit(message, noVerify, signOff);
+        }, context.Strings.Said("git.committed", ("message", message.Split('\n')[0])), () =>
+        {
+            undone.Remove(root);
+            Committed?.Invoke(repository.Git.Root);
+            if (then == CommitThen.Push)
+                Remote(repository, RemoteWork.Push);
+            else if (then == CommitThen.Sync)
+                AskSync(repository);
+        });
     }
 
     /// <summary>

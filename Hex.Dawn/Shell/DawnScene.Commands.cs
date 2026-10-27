@@ -54,7 +54,7 @@ internal sealed partial class DawnScene
                 CloseNow();
                 Open(path);
                 Say(Said("commands.reverted", ("file", Path.GetFileName(path))));
-            }),
+            }, Risky: true),
             new DialogChoice(Said("keys.leave_it")));
     }
 
@@ -70,9 +70,12 @@ internal sealed partial class DawnScene
     /// <summary>Something the file declares, or a key of it, picked out of its outline by a few letters.</summary>
     private void GoToSymbol()
     {
-        var choices = new List<(string Text, Action Picked)>();
+        var choices = new List<UIChoice>();
         foreach (OutlineEntry entry in OutlineHere())
-            choices.Add((new string(' ', entry.Depth * 4) + Said("commands.symbol_entry", ("name", entry.Name), ("line", (entry.Line + 1).ToString())), () => code.GoTo(entry.Line, entry.Column)));
+        {
+            string text = new string(' ', entry.Depth * 4) + Said("commands.symbol_entry", ("name", entry.Name), ("line", (entry.Line + 1).ToString()));
+            choices.Add(UIChoice.Of(text, () => code.GoTo(entry.Line, entry.Column)) with { Icon = entry.Icon, IconColor = OutlineColor(entry.Icon) });
+        }
 
         ChooseFrom(Said("commands.symbol_title"), Said("commands.symbol_text", ("file", document.Name)), choices);
     }

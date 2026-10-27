@@ -64,7 +64,7 @@ internal sealed partial class DawnScene
         commands.Add("File/settings/prefs:main", Said("settings_looks.color_theme"), ChooseColorTheme, icon: "symbol-color");
         AddLooks(commands.AddMenu("File/settings/prefs:main", Said("looks.menu"), "color-mode"));
         commands.Add("File/settings/prefs:files", Said("settings_looks.open_file"), OpenSettingsFile, icon: "file-code");
-        commands.Add("File/settings/prefs:files", Said("settings_scope.open_workspace_file"), OpenWorkspaceSettingsFile, icon: "file-code");
+        commands.Add("File/settings/prefs:files", Said("settings_scope.open_workspace_file"), OpenWorkspaceSettingsFile, icon: "root-folder");
     }
 
     /* The folder's own settings */

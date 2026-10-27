@@ -196,6 +196,16 @@ public sealed class GitTests : IDisposable
     }
 
     [Fact]
+    public void A_diff_is_numbered_by_the_old_file_and_the_new_one_side_by_side()
+    {
+        // one, two (taken out), 2 (put in), three, four, five (put in)
+        var (olds, news) = GitDiffText.Of("one\ntwo\nthree\nfour\n", "one\n2\nthree\nfour\nfive\n").Numbers();
+
+        Assert.Equal([1, 2, 0, 3, 4, 0], olds);
+        Assert.Equal([1, 0, 2, 3, 4, 5], news);
+    }
+
+    [Fact]
     public void A_new_file_is_all_added_and_a_gone_one_all_taken_out()
     {
         Assert.Equal([new GitDiffRun(0, 2, true)], GitDiffText.Of(string.Empty, "a\nb\n").Runs);

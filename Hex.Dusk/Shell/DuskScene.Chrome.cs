@@ -47,6 +47,8 @@ internal sealed partial class DuskScene
     private void BuildPanel()
     {
         panel.WorkingDirectory = options.StartIn;
+        // Every pane says what it is along its top, one on its own too, the text started lower the moment a tab was split
+        panel.PaneTitlesAlways = true;
         panel.OnChanged += PanelChanged;
         panel.OnTabMenu = ShowTabMenu;
     }

@@ -373,6 +373,11 @@ internal sealed record HexKeyStroke(Key Key, bool Control, bool Shift, bool Alt,
             "pgdn" or "pgdown" => Key.PageDown,
             "backtick" => Key.GraveAccent,
             "plus" => Key.Equal,
+
+            // One held alone, Alt tapped by itself lights the menu bar
+            "alt" or "option" => Key.AltLeft,
+            "shift" => Key.ShiftLeft,
+            "ctrl" or "control" => Key.ControlLeft,
             _ => Enum.TryParse(name, ignoreCase: true, out Key key) && key != Key.Unknown ? key : null
         };
     }

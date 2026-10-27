@@ -14,6 +14,8 @@ internal sealed partial class DawnScene
         string settingsFile = Path.Combine(home, TerminalSettings.FILE);
         string keysFile = Path.Combine(home, TerminalFiles.KEYS);
         string pluginFile = Path.Combine(home, TerminalFiles.PLUGINS, "selftest", TerminalPlugin.FILE);
+        float textScaleWas = 0.16f;
+        test.Run(() => textScaleWas = terminals.Settings.TextScale);
 
         test.Check("dusk files: api.hor is written, with Hex's own on the object", () =>
             File.Exists(Path.Combine(home, TerminalApiDescription.FILE))
@@ -74,6 +76,17 @@ internal sealed partial class DawnScene
         test.Run(() => SaveAll());
         test.WaitFor(() => Math.Abs(terminals.Settings.TextScale - 0.25f) < 0.001f, 3.0f);
         test.Check("dusk files: saved, the terminal takes it in", () => Math.Abs(terminals.Settings.TextScale - 0.25f) < 0.001f);
+
+        // Put back, the terminal's text was half as big again as the code's for every suite after this one
+        test.Run(() =>
+        {
+            terminals.Settings.TextScale = textScaleWas;
+            terminals.ApplySettings();
+            terminals.SaveSettings();
+        });
+        test.Wait();
+        test.Check("dusk files: and the text scale goes back to what it was", () =>
+            Math.Abs(terminals.Settings.TextScale - textScaleWas) < 0.001f && terminalPanel.Tabs.All(tab => tab.Views.All(view => Math.Abs(view.TextScale - textScaleWas) < 0.001f)));
 
         // keys.hor
         test.Run(() =>

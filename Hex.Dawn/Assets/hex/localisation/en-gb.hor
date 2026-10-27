@@ -26,6 +26,9 @@ let strings = {
         play_tip: "Play the layout's entrance animations from the start (F5)",
         run: "Run",
         run_tip: "Run the file and list what it declares in the Output panel (F5)",
+        debug_tip: "Debug {name} (F5, Ctrl+F5 runs it without the debugger)",
+        run_task_tip: "Run {name} with its run task in the terminal (F5)",
+        set_up_tip: "Set up how F5 runs {name}",
         table: "Table",
         table_tip: "Table view, an object of objects as rows, or a strings file with its languages side by side (F7)",
         find: "Find in Files (Ctrl+Shift+F)",
@@ -41,7 +44,8 @@ let strings = {
         outline: "Outline (Ctrl+Shift+O)",
         design: "Toolbox, components and layers (Ctrl+Shift+O)",
         debug: "Debug, the stack, the variables and the breakpoints (F5 starts)",
-        extensions: "Extensions",
+        extensions: "Extensions, what extends Hex, installed and from the catalog (Ctrl+Shift+X)",
+        extensions_command: "Extensions",
         settings: "Settings (Ctrl+,)"
     },
 
@@ -52,12 +56,17 @@ let strings = {
         open_a_layout: "No folder open",
         files_of: "Files · {folder}",
         search: "Search",
+        outline: "Outline",
         outline_of: "Outline · {file}",
         designer: "Designer",
         toolbox: "Toolbox",
         layers: "Layers",
-        refresh: "Refresh the explorer",
+        refresh: "Refresh Explorer",
         refresh_tip: "Read the files again from the disk, for what changed outside of Hex",
+        new_file_tip: "New File, in the folder that's selected",
+        new_folder_tip: "New Folder, in the folder that's selected",
+        collapse_tip: "Collapse Folders in the Explorer",
+        collapse: "Collapse Folders",
         refreshed: "read the files and git again"
     },
 
@@ -67,6 +76,8 @@ let strings = {
         problems_count: "$(error) Problems  {count}",
         output: "$(output) Output",
         console: "$(terminal) Terminal",
+        fold_tip: "Fold the panel down to its tabs",
+        unfold_tip: "Open the panel up again",
         console_placeholder: "Evaluate HIDL in the current file, e.g. moves.jab or len(keys(strings))",
         console_tip: "Runs in the scope of the current file's last run. Enter evaluates, Up and Down recall history"
     },
@@ -779,15 +790,15 @@ let strings = {
     },
 
     code_hints: {
-        go_to_declared: "Go to where it is declared",
-        find_everywhere: "Find everywhere it is",
-        rename_it: "Rename it...",
+        go_to_declared: "Go to Definition",
+        find_everywhere: "Find All References",
+        rename_it: "Rename Symbol...",
         cut: "Cut",
         copy: "Copy",
-        select_all: "Select all",
-        toggle_comment: "Comment lines in and out",
-        duplicate_line: "Duplicate the line",
-        next_occurrence: "The next one as well",
+        select_all: "Select All",
+        toggle_comment: "Toggle Line Comment",
+        duplicate_line: "Copy Line Down",
+        next_occurrence: "Add Next Occurrence",
         caret_not_on_name: "the caret isn't on a name",
         rename: "Rename",
         rename_prompt: "Every {name} in {document} as a word of its own becomes",
@@ -812,9 +823,9 @@ let strings = {
         pick: "Pick",
         no_file: "there is no file {path}",
         url_failed: "{url} couldn't be opened, {reason}",
-        run_file: "Run the file",
-        apply_code: "Put the code into the layout",
-        command_palette: "Command palette..."
+        run_file: "Run File",
+        apply_code: "Apply Code to Layout",
+        command_palette: "Command Palette..."
     },
 
     debugging: {
@@ -901,17 +912,17 @@ let strings = {
     },
 
     designer_canvas: {
-        preview_on_its_own_shape: "Preview on its own shape",
+        preview_on_its_own_shape: "Preview on Its Own Shape",
         previewing_on_its_own_shape: "previewing on its own shape",
         preview_on_16_9: "Preview on 16:9",
         previewing_on_16_9: "previewing on 16:9",
-        preview_on_21_9: "Preview on 21:9, an ultrawide",
+        preview_on_21_9: "Preview on 21:9, an Ultrawide",
         previewing_on_21_9: "previewing on 21:9, an ultrawide",
-        preview_on_32_9: "Preview on 32:9, a silly ultrawide",
+        preview_on_32_9: "Preview on 32:9, a Silly Ultrawide",
         previewing_on_32_9: "previewing on 32:9, a silly ultrawide",
         preview_on_4_3: "Preview on 4:3",
         previewing_on_4_3: "previewing on 4:3",
-        preview_on_9_16: "Preview on 9:16, a phone",
+        preview_on_9_16: "Preview on 9:16, a Phone",
         previewing_on_9_16: "previewing on 9:16, a phone",
         zoomed_to: "zoomed to {percent}%",
         zoomed_to_fit: "zoomed to fit",
@@ -998,11 +1009,11 @@ let strings = {
         align: "Align",
         open_included: "Open Included File",
         ungroup: "Ungroup",
-        change_into: "Change into",
-        select_parent: "Select parent",
-        select_all_short: "Select all",
-        its_code: "Go to its declaration",
-        add_page: "Add a page",
+        change_into: "Convert To",
+        select_parent: "Select Parent",
+        select_all_short: "Select All",
+        its_code: "Go to Declaration",
+        add_page: "Add Page",
         zoom_in: "Zoom In",
         zoom_out: "Zoom Out",
         zoom_to_fit: "Zoom to Fit",
@@ -1040,9 +1051,9 @@ let strings = {
     // language a text names (Ctrl+F12)
     designer_texts: {
         edit_text: "Edit Text",
-        edit_text_short: "Edit text",
+        edit_text_short: "Edit Text",
         go_to_text: "Go to Text in Language File",
-        its_text: "Go to its text",
+        its_text: "Go to Text in Language File",
         editing: "editing its {property}, Enter keeps it, Escape leaves it",
         editing_key: "editing {key} in {file}, Enter keeps it, Escape leaves it",
         left: "left the text as it was",
@@ -1123,18 +1134,18 @@ let strings = {
 
     explorer_files: {
         open: "Open",
-        new_file: "New file...",
-        new_folder: "New folder...",
+        new_file: "New File...",
+        new_folder: "New Folder...",
         rename_menu: "Rename...",
         reveal: "Reveal in File Explorer",
         delete_menu: "Delete...",
-        copy_path: "Copy the path",
+        copy_path: "Copy Path",
         path_copied: "{path} is on the clipboard",
-        take_out: "Take out of the workspace",
+        take_out: "Remove Folder from Workspace",
         not_shown: "{name} couldn't be shown, {why}",
         new_file_title: "New file",
         new_file_text: "A file in {folder}, {extension} unless it says otherwise",
-        make: "Make",
+        make: "Create",
         bad_file_name: "'{name}' can't be the name of a file",
         already_there: "there is a {name} there already",
         not_made: "couldn't make {path}, {why}",
@@ -1159,7 +1170,7 @@ let strings = {
         copy: "Copy",
         paste: "Paste",
         duplicate: "Duplicate",
-        copy_relative_path: "Copy the relative path",
+        copy_relative_path: "Copy Relative Path",
         outside_workspace: "{name} would be outside the workspace",
         into_itself: "{name} can't go inside itself",
         cut_said: "cut {name}, paste it into a folder to move it",
@@ -1326,14 +1337,16 @@ let strings = {
         title_note: "{name}  -  Hex {version} ({note})",
         title_changed_note: "{name} *  -  Hex {version} ({note})",
         window_title: "{name} - Hex {version}",
+        welcome: "Welcome",
+        welcome_of: "Welcome  -  {workspace}",
         close: "Close",
-        close_others: "Close the others",
-        close_saved: "Close the saved ones",
-        close_all: "Close all",
-        open_to_side: "Open to the side",
-        copy_path: "Copy the path",
-        copy_relative_path: "Copy the path in the workspace",
-        reveal_in_explorer: "Reveal in the explorer"
+        close_others: "Close Others",
+        close_saved: "Close Saved",
+        close_all: "Close All",
+        open_to_side: "Open to the Side",
+        copy_path: "Copy Path",
+        copy_relative_path: "Copy Relative Path",
+        reveal_in_explorer: "Reveal in Explorer View"
     },
 
     tasks: {
@@ -1573,8 +1586,8 @@ let strings = {
     panel_tabs: {
         nothing_wrong_here: "nothing wrong with this file, F8 checks every file of the workspace",
         nothing_wrong_anywhere: "nothing wrong anywhere",
-        go_there: "Go there",
-        copy_it: "Copy it"
+        go_there: "Go to Problem",
+        copy_it: "Copy"
     },
 
     runner_window: {
@@ -1616,6 +1629,10 @@ let strings = {
         render_whitespace_all_help: "Every space and tab there is.",
         cursor_style_title: "Cursor style",
         cursor_style_help: "How the caret is drawn in the code.",
+        caret_fast_after_title: "Faster arrows after",
+        caret_fast_after_help: "How long an arrow key is held before the caret goes quicker, in seconds, the way it does in Visual Studio. 0 keeps it at the usual speed.",
+        caret_fast_rate_title: "Faster arrow speed",
+        caret_fast_rate_help: "How many times a second the caret moves once an arrow has been held that long.",
         cursor_style_line: "Line",
         cursor_style_line_help: "A thin line before the character, the way it always was.",
         cursor_style_block: "Block",
@@ -1677,6 +1694,9 @@ let strings = {
         backdrop_image_button_0: "Choose...",
         backdrop_image_button_1: "The usual one",
         backdrop_image_placeholder: "Empty for the usual one, or C:/Pictures/backdrop.png",
+        backdrop_arrange_title: "Move and resize by hand",
+        backdrop_arrange_help: "Lays the picture out with the mouse, behind the code in Dawn and behind the terminals in Dusk. Drag it to move it, its corners and edges size it, the wheel scales it. Its shape is kept unless Alt is held. Enter keeps it, Escape puts it back.",
+        backdrop_arrange_button: "Move and resize the backdrop...",
         backdrop_opacity_title: "Picture opacity",
         backdrop_opacity_help: "How much of the picture shows through what is written over it.",
         backdrop_scale_title: "Picture size behind the code",
@@ -1685,12 +1705,16 @@ let strings = {
         backdrop_across_help: "How far the picture behind the code is in from the editor's right edge, as a share of the window's width.",
         backdrop_up_title: "Up from the bottom behind the code",
         backdrop_up_help: "How far the picture behind the code is up from the editor's bottom edge, as a share of the window's height.",
+        backdrop_stretch_title: "Picture width behind the code",
+        backdrop_stretch_help: "How wide the picture behind the code is against its own shape, 1× for the shape it has.",
         terminal_backdrop_scale_title: "Picture size behind the terminals",
         terminal_backdrop_scale_help: "How tall the picture is drawn behind Dusk's terminals, as a share of the window's height, its own size and not the code's.",
         terminal_backdrop_across_title: "In from the right behind the terminals",
         terminal_backdrop_across_help: "How far the picture behind the terminals is in from their right edge, as a share of the window's width.",
         terminal_backdrop_up_title: "Up from the bottom behind the terminals",
         terminal_backdrop_up_help: "How far the picture behind the terminals is up from their bottom edge, as a share of the window's height.",
+        terminal_backdrop_stretch_title: "Picture width behind the terminals",
+        terminal_backdrop_stretch_help: "How wide the picture behind the terminals is against its own shape, 1× for the shape it has.",
         backdrop_wrap_title: "Code round the picture",
         backdrop_wrap_help: "Whether wrapped code runs round the shape of what is drawn in the picture rather than over it.",
         backdrop_wrap_margin_title: "Margin round the picture",
@@ -1709,6 +1733,8 @@ let strings = {
         minimap_help: "Whether the whole of the code is drawn small down the right of the editor, a slider over what you can see to drag.",
         inlay_hints_title: "Inlay hints",
         inlay_hints_help: "Whether the names of the parameters a call passes to are written faintly in among the code, from HIDL and from the language servers that say them.",
+        code_lens_references_title: "Reference counts",
+        code_lens_references_help: "Whether every declaration has how many places use it written small over it, Visual Studio's CodeLens. A press on a count lists them. Worked out by Hex itself for HIDL, and asked of the language servers that can say.",
         semantic_highlighting_title: "Semantic highlighting",
         semantic_highlighting_help: "Whether names are coloured by what they are, a class, a method, a field, a parameter, ReSharper's way. Asked of the language servers that say it, and worked out by Hex itself for HIDL, and for D while its server doesn't say. A line being typed on goes back to the plain colours until the typing stops.",
         csharp_colors_title: "C# colours",
@@ -1812,6 +1838,7 @@ let strings = {
         final_newline: "eol end of file newline files.insertFinalNewline",
         minimap: "minimap overview editor.minimap.enabled",
         inlay_hints: "parameter hints editor.inlayHints.enabled",
+        code_lens_references: "codelens code lens references usages count editor.codeLens",
         semantic_highlighting: "semantic tokens colour identifiers resharper editor.semanticHighlighting.enabled",
         csharp_colors: "colour scheme colors csharp c# resharper rider visual studio theme",
         line_numbers: "gutter editor.lineNumbers",
@@ -1837,6 +1864,7 @@ let strings = {
         backdrop: "wallpaper background image",
         backdrop_terminal: "wallpaper background image",
         backdrop_image: "wallpaper background image",
+        backdrop_arrange: "wallpaper background image move resize drag position place",
         mcp_server: "mcp agent claude ai model context protocol automation"
     },
 
@@ -1932,7 +1960,19 @@ let strings = {
         toggle: "Preferences: Toggle {title}",
         now_on: "{title} is on now",
         now_off: "{title} is off now",
-        back_to_window: "Ctrl+, in the file goes back to the settings window at the setting the caret is on"
+        back_to_window: "Ctrl+, in the file goes back to the settings window at the setting the caret is on",
+        arrange_backdrop: "Preferences: Move and Resize the Backdrop..."
+    },
+
+    // Moving and sizing the picture behind the code or the terminals by hand, the bar over it while that's going on
+    backdrop_arrange: {
+        hint: "Drag to move, the handles size it, the wheel scales it. Alt frees its shape.",
+        done: "Done",
+        reset: "Reset",
+        cancel: "Cancel",
+        no_room: "Open a file of code first, the picture is laid out behind its code",
+        kept: "The backdrop stays where it is now",
+        put_back: "The backdrop is back where it was"
     },
 
     // VS Code's settings brought over, and VS Code's names in Hex's settings file
@@ -1981,11 +2021,22 @@ let strings = {
         first_change: "that's the first change"
     },
 
+    // The reference counts over declarations, Visual Studio's CodeLens, and the menu a press on one opens
+    code_lens: {
+        reference: "1 reference",
+        references: "{count} references",
+        references_many: "{count}+ references",
+        file: "{file} ({count})",
+        all: "All {count} references...",
+        unused: "nothing uses {name}",
+        no_server: "the language server can't say where it's used"
+    },
+
     // Peek, a declaration shown over the code
     peek: {
         command: "Peek Definition",
         nothing: "nothing to peek at there",
-        text: "Where it's declared, Open goes there",
+        text: "This is where it's declared. Open takes you there.",
         open: "Open",
         close: "Close"
     },
@@ -2055,7 +2106,7 @@ let strings = {
         branch_tip: "The branch checked out and how far it is from what it follows, click to switch to another",
         branches_title: "Branches",
         branches_text: "On {branch}, pick one to switch to",
-        new_branch: "+ Create a new branch...",
+        new_branch: "Create New Branch...",
         checked_out: "checked out",
         remote: "remote",
         new_branch_title: "A new branch",
@@ -2076,7 +2127,19 @@ let strings = {
         unstage_file: "Unstage This File",
         branches_command: "Switch Branch...",
         not_installed: "git isn't on this machine (or not on the PATH), install it and start Hex again",
-        no_repository: "No git repository in the workspace",
+        no_repository: "No git repository in the workspace. Make one of the folder that's open, or clone one",
+        init_button: "Initialize Repository",
+        clone_button: "Clone Repository...",
+        initialised: "{folder} is a git repository now",
+        clone_title: "Clone Repository",
+        clone_text: "The address of the repository, the folder to put it in is asked next",
+        clone_go: "Clone",
+        clone_placeholder: "https://github.com/owner/name.git",
+        cloning: "Cloning {url}",
+        cloned: "Cloned into {folder}",
+        clone_open: "Open",
+        box_placeholder: "Message (Ctrl+Enter to commit on {branch})",
+        box_placeholder_in: "Message (Ctrl+Enter to commit to {repository} on {branch})",
         reading: "Asking git...",
         no_changes: "No changes",
         commit_staged: "Commit {count} staged",
@@ -2328,7 +2391,7 @@ let strings = {
     },
 
     terminal_page: {
-        split_right: "Split right",
+        split_right: "Split Terminal",
         console_profile: "HIDL in this file",
         command_panel: "hide the panel",
         command_terminal: "the terminal page and back",
@@ -2391,7 +2454,7 @@ let strings = {
         all: "Profiles...",
         picked: "Hex is in {name} now",
         command: "Look: {name}",
-        about: "How Hex looks in one go, its glass, its lights and how it moves. Fluid Glass and Frosted Glass are what it's made for, Flat takes the glass away. Change anything under this and save it as a profile of your own, the themes go in it too.",
+        about: "How Hex looks in one go, its glass, its lights and how it moves. Fluid Glass and Frosted Glass are what it's made for, Flat takes the glass away, Visual Studio is that editor's dark theme, square and flat, its code and its terminal in its colours too. Change anything under this and save it as a profile of your own, the themes go in it too.",
         save_as: "Save as profile...",
         update: "Update {name}",
         delete: "Delete {name}",
@@ -2408,6 +2471,7 @@ let strings = {
         fluid_about: "clear glass, light at the rim",
         frosted_about: "soft glass, quieter",
         flat_about: "solid panels, no glass",
+        visual_studio_about: "its dark theme, square",
         yours: "your own"
     },
 
@@ -2556,6 +2620,10 @@ let strings = {
         open_folder: "Open Folder...",
         outline_line: "line {line}",
         outline_empty: "Nothing declared in here yet",
+        outline_no_file: "No file is open. Open one and what it declares is listed here",
+        empty_folder: "This folder is empty",
+        new_file: "New File...",
+        new_folder: "New Folder...",
         results_most: "showing the first {count}, narrow the search",
         results_empty: "nothing"
     },

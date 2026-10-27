@@ -208,8 +208,11 @@ internal interface IWindows
     /// </summary>
     void Choose(string title, string message, List<UIChoice> choices);
 
-    /// <summary>A question with buttons, the label of the one pressed handed on.</summary>
-    void Ask(string title, string text, string[] buttons, Action<string> answered);
+    /// <summary>
+    /// A question with buttons, the label of the one pressed handed on. The one named risky (Discard, Drop) can't be taken
+    /// back, it goes at the right end in red, and the keyboard and Escape are on the other end of the row.
+    /// </summary>
+    void Ask(string title, string text, string[] buttons, Action<string> answered, string? risky = null);
 
     /// <summary>A line of text asked for, what was typed handed on, enter or the button.</summary>
     void Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed);

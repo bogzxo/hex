@@ -40,12 +40,12 @@ internal sealed partial class DawnScene
             SettingsPage?.Refresh("editor_skin");
         }
 
-        var choices = all.Select(choice => (choice.Text, (Action)(() =>
+        var choices = all.Select(choice => UIChoice.Of(choice.Text, () =>
         {
             kept = true;
             UseEditorSkin(choice.Skin.Name, choice.Theme, save: true);
             SettingsPage?.Refresh("editor_skin");
-        }))).ToList();
+        }) with { Icon = "symbol-color" }).ToList();
 
         ChooseFrom(Said("settings_looks.color_theme_title"), Said("settings_looks.color_theme_hint"), choices);
         if (textDialog is not { } dialog)

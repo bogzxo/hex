@@ -97,14 +97,20 @@ internal sealed partial class DawnScene
             }),
             new DialogChoice(Said("peek.close")));
 
+        // Over the code it's about, nothing dimmed, it's read next to what was being written
+        dialog.Dims = false;
+
+        // Tab goes on round the dialog's buttons and out of the code again, it went in and stayed there for good
         var box = dialog.Body.Add(new CodeEditor
         {
             Size = PeekSize,
             ReadOnly = true,
+            TabMovesFocus = true,
             WordWrap = false,
             Minimap = false,
             StickyScroll = false,
             TextScale = CODE_TEXT,
+            Font = codeEditing.codeFont,
             Highlighter = highlighter,
             FirstLineNumber = from + 1
         });

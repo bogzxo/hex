@@ -150,8 +150,9 @@ internal sealed partial class HexGit
         if (!repositories.TryGetValue(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), out Repository? repository))
             return;
 
+        // Its heading opened, and the headings of the repositories it's inside of, it's under theirs
         listedDirty = true;
-        closedHeadings.Remove(repository.Git.Root);
+        closedHeadings.RemoveWhere(root => PlatformPaths.Same(root, repository.Git.Root) || PlatformPaths.IsUnder(repository.Git.Root, root));
         if (chosen == repository)
             context.Panels.RefreshSide(HexSide.SourceControl);
         MakeActive(repository);

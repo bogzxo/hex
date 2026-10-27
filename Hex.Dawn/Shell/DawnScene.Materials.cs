@@ -11,7 +11,8 @@ namespace Hex.Dawn;
 // side. With the glass on (the Fluid and Frosted looks) the window is a field of soft light in the theme's own colours
 // under a veil, and the sides are glass over it, the middle solid so what's read there reads. With it off (Flat) the
 // window is a plain dark and the cards are solid. Every look has the same shapes. Strips of three different darks with
-// square corners against round ones was what made it look put together out of parts.
+// square corners against round ones was what made it look put together out of parts. A square theme (Visual Studio's) is
+// the one other shape, every card flush and square on a window of the cards' own tone.
 internal sealed partial class DawnScene
 {
     // The module under the editor's that the field of light is in, and the field
@@ -26,6 +27,13 @@ internal sealed partial class DawnScene
 
     // How far the shadow under something popped up over the editor reaches
     private const float POPUP_LIFT = 18.0f;
+
+    /// <summary>
+    /// Whether a skin is square, a theme with no round to its corners (Visual Studio's). Its frame is drawn the way that
+    /// editor's is, the cards flush against each other with no gaps and no round, and the window their own tone, the
+    /// hairlines round them all that tells them apart.
+    /// </summary>
+    internal static bool Square(Horizon.UI.Skinning.UISkin skin) => skin.CornerRadius <= 0.0f;
 
     /// <summary>The field of light, a module of the editor's compositor under the editor's own, with a hole where the canvas is.</summary>
     private void BuildGlow()
@@ -60,7 +68,9 @@ internal sealed partial class DawnScene
 
         bool glassy = Glassy;
         Vector4 card = skin.PanelColor with { W = 1.0f };
-        Vector4 window = new(card.X * 0.5f, card.Y * 0.5f, card.Z * 0.5f, 1.0f);
+        bool square = Square(skin);
+        float inset = square ? 0.0f : CARD_INSET, radius = square ? 0.0f : CARD_RADIUS;
+        Vector4 window = square ? card : new(card.X * 0.5f, card.Y * 0.5f, card.Z * 0.5f, 1.0f);
         Vector4 none = card with { W = 0.0f };
 
         // The window, the field of light under a veil of its tone on glass, the tone alone without
@@ -79,15 +89,15 @@ internal sealed partial class DawnScene
         // through it. A hairline of the skin's edge round each, the way glass has an edge
         foreach (Panel side in (ReadOnlySpan<Panel>)[left, right])
         {
-            side.Inset = CARD_INSET;
-            side.Radius = CARD_RADIUS;
+            side.Inset = inset;
+            side.Radius = radius;
             side.Color = card;
             side.Glass = glassy ? SideGlass : null;
             side.Outline = skin.BorderColor;
         }
 
-        center.Inset = CARD_INSET;
-        center.Radius = CARD_RADIUS;
+        center.Inset = inset;
+        center.Radius = radius;
         center.Color = card;
         center.Hole = () => CanvasHole(chrome);
         center.Outline = skin.BorderColor;
@@ -105,7 +115,7 @@ internal sealed partial class DawnScene
 
         // The terminals of the panel under the editor round cornered like Dusk's, inside the card
         if (terminalPanel is not null)
-            terminalPanel.PaneRadius = TERMINAL_RADIUS;
+            terminalPanel.PaneRadius = square ? 0.0f : TERMINAL_RADIUS;
 
         // What shows round the canvas's well where its corners are round is the card, and the well is the skin's field, the
         // same hue a shade under it
@@ -113,7 +123,7 @@ internal sealed partial class DawnScene
         if (backdrop.Root.Children.FirstOrDefault() is Panel well)
         {
             well.Color = skin.FieldColor with { W = 1.0f };
-            well.Radius = WELL_RADIUS;
+            well.Radius = square ? 0.0f : WELL_RADIUS;
         }
 
         // The find bar and the debug bar are popups over the code like the palette and the menus, the same stuff and the

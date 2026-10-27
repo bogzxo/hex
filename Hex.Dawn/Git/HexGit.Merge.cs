@@ -80,7 +80,7 @@ internal sealed partial class HexGit
         }
 
         string yes = abortItem.Label;
-        context.Windows.Ask(yes, context.Strings.Said("git_merge.abort_text"), [context.Strings.Said("git_merge.abort_no"), yes], answer =>
+        context.Windows.Ask(yes, context.Strings.Said("git_merge.abort_text"), [context.Strings.Said("git_merge.abort_no"), yes], risky: yes, answered: answer =>
         {
             if (answer != yes)
                 return;

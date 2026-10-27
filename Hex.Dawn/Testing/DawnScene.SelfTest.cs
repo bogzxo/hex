@@ -114,6 +114,7 @@ internal sealed partial class DawnScene
             test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
             MakeTestFiles();
             run(test);
+            test.Run(TidyAfterSuite);
             test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
         }
     }
@@ -151,13 +152,15 @@ internal sealed partial class DawnScene
             TestSlidingSides(test);
             TestLayoutTexts(test);
         }),
-        ("settings", "the settings window, its search and sections, Color Theme, and the settings file kept in step with it both ways", test =>
+        ("settings", "the settings window, its search and sections, Color Theme, the Visual Studio look, and the settings file kept in step with it both ways", test =>
         {
             OnLayoutForSettings(test);
             TestSettings(test);
             TestSettingsLooks(test);
+            TestVisualStudioLook(test);
             TestSettingsFile(test);
             TestSettingsWheel(test);
+            TestBackdropArrange(test);
         }),
         ("code", "files of code, values, the console, docs, the table, a layout as code, completion, VS Code's every day keys", test =>
         {
@@ -171,9 +174,11 @@ internal sealed partial class DawnScene
             TestCodeFont(test);
             TestZoomKeepsPlace(test);
             TestMinimap(test);
+            TestSurface(test);
             TestTodos(test);
             TestPeek(test);
             TestInlays(test);
+            TestCodeLens(test);
             TestSemanticHidl(test);
             TestLanguages(test);
             TestTable(test);
@@ -190,6 +195,7 @@ internal sealed partial class DawnScene
             TestHelpWindows(test);
             TestConveniences(test);
             TestKeys(test);
+            TestFocus(test);
             TestDiskChanges(test);
             TestBackups(test);
             TestExplorerOps(test);
@@ -210,12 +216,19 @@ internal sealed partial class DawnScene
             TestTerminalScroll(test);
             TestDuskFiles(test);
         }),
+        ("lens", "reference counts over the declarations of a HIDL file and of C# through csharp-ls when it's on this machine, a press listing where each is used and a pick going there", test =>
+        {
+            TestCodeLens(test);
+            TestCodeLensCSharp(test);
+        }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
+        ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
             TestLanguages(test);
         }),
         ("search", "the search view in the side bar, live results, every match a row, the toggles, include and exclude, dismissing, Replace in Files", TestSearchView),
+        ("shell", "the shell round the editor, the side bar one width whatever is in it, empty notes, the title over the welcome, long tabs, Extensions lit, the explorer's buttons", TestShellLayout),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
@@ -242,6 +255,7 @@ internal sealed partial class DawnScene
         {
             TestSemanticHidl(test);
             TestSemanticCSharp(test);
+            TestCodeLensCSharp(test);
             TestSemanticD(test);
         }),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),

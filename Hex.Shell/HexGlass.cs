@@ -30,12 +30,31 @@ public static class HexGlass
     public static UIGlass Window(UIGlass popup) => popup with
     {
         Blur = MathF.Min(MathF.Max(popup.Blur * 2.0f, WINDOW_BLUR), 64.0f),
-        Clarity = MathF.Min(popup.Clarity * WINDOW_CLARITY, 0.25f),
+        Clarity = WindowClarity(popup.Clarity),
         Bend = MathF.Min(popup.Bend, 6.0f)
     };
 
     // How much of the popups' clarity a window keeps, and the least it's blurred
-    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 48.0f;
+    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 20.0f;
+
+    // The clarity the sliders come as, and the most a window gets with the slider all the way up
+    private const float CLEAREST_WINDOW = 0.95f;
+    private static readonly float USUAL_CLARITY = UIGlass.Clear.Clarity;
+
+    /// <summary>
+    /// A window's clarity out of the slider's. Up to the usual it's under half the popups', the way the looks were made,
+    /// and past that it goes on up to nearly clear glass with the slider. It was held to a quarter whatever the slider
+    /// said, and glass turned right up still had a solid window over it.
+    /// </summary>
+    public static float WindowClarity(float clarity)
+    {
+        float usual = USUAL_CLARITY * WINDOW_CLARITY;
+        if (clarity <= USUAL_CLARITY)
+            return clarity * WINDOW_CLARITY;
+
+        float past = Math.Clamp((clarity - USUAL_CLARITY) / (1.0f - USUAL_CLARITY), 0.0f, 1.0f);
+        return usual + (CLEAREST_WINDOW - usual) * past;
+    }
 
     /// <summary>
     /// The glass of the side panels, out of the same sliders. Liquid glass (a bend) keeps more of its rim there, a light
@@ -55,7 +74,8 @@ public static class HexGlass
     /// more of the light through, so there's something under the sides for it to show, frosted keeps the window dimmer.
     /// One veil for every look had the main window the same in all three, the glass only showing on what popped up.
     /// </summary>
-    public static float Veil(float clarity) => Math.Clamp(0.95f - clarity * 0.85f, 0.4f, 0.7f);
+    // It stopped at 0.4 however clear the glass was, and the clearest glass still had most of a solid window under it
+    public static float Veil(float clarity) => Math.Clamp(0.95f - clarity * 0.85f, 0.1f, 0.7f);
 
     /// <summary>The popups' glass as the editor's section of the settings has it, for Dusk, which reads the file.</summary>
     public static UIGlass Popup(IReadOnlyDictionary<string, IRuntimeValue> editor) =>

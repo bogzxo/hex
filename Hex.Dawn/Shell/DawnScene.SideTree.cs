@@ -31,8 +31,23 @@ internal sealed partial class DawnScene
 
         sideTree = layout.Get<TreeView>("side_tree");
         sideTree.Visible = false;
-        sideTree.OnPressed = item => (item.Tag as SideTag)?.Pressed?.Invoke();
+        // The arrows only go along the rows, VS Code's way. They pressed every row they went past, the first Down opened a
+        // file and took the keyboard off to the code, a folder opened and shut as they went by and the row that opens a
+        // folder asked for one. Space presses the row with the keyboard staying here (a file shown, the tree still going
+        // with the arrows), Enter presses it for real and a file opened has the keyboard
+        sideTree.ArrowsPress = false;
+        sideTree.OnPressed = item =>
+        {
+            bool byKey = sideTree.PressedByKey;
+            (item.Tag as SideTag)?.Pressed?.Invoke();
+            if (byKey && sideTree.Visible)
+                sideTree.Focus();
+        };
         sideTree.OnActivated = item => (item.Tag as SideTag)?.Pressed?.Invoke();
+
+        // Tab from the side goes on to the code, Shift+Tab back to the activity bar's button of the view, rather than to
+        // the Run button over the code and the dropdown beside it
+        sideTree.TabTo = by => by > 0 ? (codeScroll.Visible ? code : null) : ActivityButton(Side);
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
         sideTree.OnExpanding = item => (item.Tag as SideTag)?.Expanding?.Invoke(item);
         sideTree.OnItemContextMenu = (item, point) => (item.Tag as SideTag)?.Menu?.Invoke(point);
@@ -49,7 +64,7 @@ internal sealed partial class DawnScene
         treeScroll.Visible = !tree;
     }
 
-    private static UITreeItem NoteItem(string text, Vector4 color) => new(text) { Color = color };
+    private static UITreeItem NoteItem(string text, Vector4 color) => HexNotes.Note(text, color);
 
     /* The explorer */
 
@@ -159,6 +174,10 @@ internal sealed partial class DawnScene
             explorerMade++;
             DecorateRow(row, file, false, null);
         }
+
+        // A folder of the workspace with nothing in it says so, with the two ways of putting something in it
+        if (item.Children.Count == 0 && explorer.workspace.Folders.Contains(folder, PlatformPaths.Comparer))
+            AddEmptyFolderNote(item, folder);
     }
 
     /// <summary>The file that is open selected in the explorer, if the explorer has it.</summary>
@@ -237,8 +256,17 @@ internal sealed partial class DawnScene
 
     private void RebuildOutline()
     {
-        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
         UseSideTree(true);
+
+        // Under the plain welcome there's no file, the empty layout it's over is nobody's and has nothing to outline
+        if (plainShown)
+        {
+            treeTitle.Text = Said("side.outline");
+            sideTree.Items = [NoteItem(Said("side_tree.outline_no_file"), DimColor)];
+            return;
+        }
+
+        treeTitle.Text = Said("side.outline_of", ("file", document.Name));
 
         List<OutlineEntry> entries = KeptOutline();
         var items = new List<UITreeItem>();
@@ -309,7 +337,9 @@ internal sealed partial class DawnScene
         designer.treeRows.Clear();
         fileRows.Clear();
         ApplySide();
+        ShowExplorerHead(Side);
         PlaceSearchView(Side == HexSide.Search);
+        PlaceCommitBox(Side == HexSide.SourceControl);
 
         switch (Side)
         {

@@ -23,6 +23,7 @@ internal sealed partial class HexGit
         var heading = new UITreeItem(repository.Name, "repo")
         {
             Detail = HeadingDetail(repository),
+            DetailMarkup = true,
             Expandable = true,
             Expanded = !closedHeadings.Contains(root),
             Children = [],
@@ -37,7 +38,7 @@ internal sealed partial class HexGit
             })
         };
 
-        int count = AddRepositoryRows(heading.Children, repository);
+        int count = AddRepositoryRows(heading.Children, repository, commitRow: true);
         heading.Badge = count > 0 ? count.ToString() : string.Empty;
         Follow(heading.Children, repository);
         return heading;
@@ -50,11 +51,13 @@ internal sealed partial class HexGit
         if (repository.Status is not { } status)
             return string.Empty;
 
-        string detail = BranchName(status) + (repository.HasChanges ? "*" : string.Empty);
+        // A checkout of no branch (a submodule, mostly) is the commit it's on, said with git's commit icon so it isn't taken
+        // for a branch called that. Behind and ahead in the arrows of the icons, the font has none of its own
+        string detail = (status.Branch is null ? "$(git-commit) " : string.Empty) + BranchName(status) + (repository.HasChanges ? "*" : string.Empty);
         if (repository.Operation is not GitOperation.None and var operation)
             detail += $" ({OperationWord(operation)})";
         if (status.Behind > 0 || status.Ahead > 0)
-            detail += $"  {status.Behind}↓ {status.Ahead}↑";
+            detail += $"  {status.Behind}$(arrow-down) {status.Ahead}$(arrow-up)";
         else if (repository.HasRemote && status.Branch is not null && status.Upstream is null)
             detail += "  " + context.Strings.Said("git_repos.unpublished");
         return detail;
@@ -81,7 +84,7 @@ internal sealed partial class HexGit
     {
         var actions = new List<UITreeAction>
         {
-            new("check", context.Strings.Said("git_repos.commit_here"), () => Active(repository, AskCommit))
+            new("git-commit", context.Strings.Said("git_repos.commit_here"), () => Active(repository, AskCommit))
         };
         if (repository.HasRemote)
             actions.Add(new UITreeAction("sync", context.Strings.Said("git_repos.sync_here"), () => Active(repository, SyncRepository)));
@@ -94,7 +97,7 @@ internal sealed partial class HexGit
     {
         MakeActive(repository);
         var menu = new Menu("git_repository");
-        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
+        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "git-commit");
         menu.AddSeparator();
         menu.Add(context.Strings.Said("git.fetch"), () => Remote(repository, RemoteWork.Fetch), icon: "cloud-download");
         menu.Add(context.Strings.Said("git.pull"), () => Remote(repository, RemoteWork.Pull), icon: "arrow-down");

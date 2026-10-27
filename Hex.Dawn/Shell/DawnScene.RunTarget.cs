@@ -22,8 +22,10 @@ internal sealed partial class DawnScene
             item.IsChecked = () => picked.Target is { } target ? target.Same(Context.Workspace.RunTarget) : Context.Workspace.RunTarget is null;
         }
 
+        // Hung from the bottom left of the arrow, in the world MenuAt takes. It was given the module's units and the top
+        // of the arrow, and came up a long way under it and off to the left
         UIComponent arrow = layout.Get<Button>("run_target_button");
-        Context.Windows.MenuAt(targets, new Vector2(arrow.Bounds.Min.X, arrow.Bounds.Max.Y));
+        Context.Windows.MenuAt(targets, chrome.ToWorld(new Vector2(arrow.Bounds.Min.X, arrow.Bounds.Min.Y)));
     }
 
     /// <summary>Something picked to run, kept with the workspace and said on the button.</summary>
@@ -47,10 +49,26 @@ internal sealed partial class DawnScene
         play.Label = chosen?.Label ?? Said(tools ? "toolbar.play" : "toolbar.run");
         play.Tooltip = chosen is not null
             ? Said("run_target.run_tip", ("name", chosen.Label), ("detail", chosen.Detail))
-            : Said(tools ? "toolbar.play_tip" : "toolbar.run_tip");
+            : tools ? Said("toolbar.play_tip") : FileRunTip();
         play.Visible = chosen is not null || Runnable(document);
         layout.Get<Button>("run_target_button").Visible = !tools;
         layout.Get<UIComponent>("tools_rule3").Visible = play.Visible || !tools;
+    }
+
+    /// <summary>
+    /// What the Run button and F5 do with the file on screen, the way RunOrPlay goes. C# and D debugged, a file with a run
+    /// task run in the terminal, one without asking how, a HIDL file run with what it declares listed. It said the HIDL
+    /// line for every file, C# too.
+    /// </summary>
+    private string FileRunTip()
+    {
+        if (!document.IsText || document.Path is not { } path || IsHidl(path))
+            return Said("toolbar.run_tip");
+
+        string name = Path.GetFileName(path);
+        if (debugger.CanDebug(path))
+            return Said("toolbar.debug_tip", ("name", name));
+        return tasks.RunTaskFor(path) is not null ? Said("toolbar.run_task_tip", ("name", name)) : Said("toolbar.set_up_tip", ("name", name));
     }
 
     /// <summary>

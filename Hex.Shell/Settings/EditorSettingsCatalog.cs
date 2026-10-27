@@ -54,6 +54,8 @@ public static class EditorSettingsCatalog
         new("rulers", HexText.Get("settings_text.rulers_title"), UIFormKind.Text, HexText.Get("settings_text.rulers_help"), TEXT, Placeholder: HexText.Get("settings_text.rulers_placeholder")),
         TextChoice("render_whitespace", ["none", "selection", "boundary", "all"]),
         TextChoice("cursor_style", ["line", "block", "underline"]),
+        new("caret_fast_after", HexText.Get("settings_text.caret_fast_after_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_after_help"), TEXT, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "s"),
+        new("caret_fast_rate", HexText.Get("settings_text.caret_fast_rate_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_rate_help"), TEXT, Least: 30.0f, Most: 200.0f, Step: 5.0f, Slider: true, Unit: "/s"),
         new("sticky_scroll", HexText.Get("settings_text.sticky_scroll_title"), UIFormKind.Flag, HexText.Get("settings_text.sticky_scroll_help"), TEXT),
         new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES),
         Patterns("files_exclude"),
@@ -72,6 +74,12 @@ public static class EditorSettingsCatalog
 
     /// <summary>The buttons of the picture's row, which one is which.</summary>
     public const int CHOOSE_PICTURE = 0, USUAL_PICTURE = 1;
+
+    /// <summary>
+    /// The row with the button that lays the picture out by hand, in Dawn behind the code and in Dusk behind the terminals,
+    /// whichever window the settings are in (an ArrangeOverlay over the editor or the terminals). It keeps nothing of its own.
+    /// </summary>
+    public const string ARRANGE_BACKDROP = "backdrop_arrange";
 
     /// <summary>How long the caret takes to glide about two thirds of the way to where it went, as it comes.</summary>
     public const float CARET_GLIDE = 0.045f;
@@ -98,13 +106,16 @@ public static class EditorSettingsCatalog
         new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
         new("backdrop_terminal", HexText.Get("settings_catalog.backdrop_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_terminal_help"), BACKDROP),
         new("backdrop_image", HexText.Get("settings_catalog.backdrop_image_title"), UIFormKind.Text, HexText.Get("settings_catalog.backdrop_image_help"), BACKDROP, Buttons: [HexText.Get("settings_catalog.backdrop_image_button_0"), HexText.Get("settings_catalog.backdrop_image_button_1")], Placeholder: HexText.Get("settings_catalog.backdrop_image_placeholder")),
+        new(ARRANGE_BACKDROP, HexText.Get("settings_catalog.backdrop_arrange_title"), UIFormKind.Text, HexText.Get("settings_catalog.backdrop_arrange_help"), BACKDROP, Buttons: [HexText.Get("settings_catalog.backdrop_arrange_button")], ButtonsOnly: true),
         new("backdrop_opacity", HexText.Get("settings_catalog.backdrop_opacity_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_opacity_help"), BACKDROP, Least: 0.05f, Most: 1.0f, Step: 0.01f, Slider: true),
         new("backdrop_scale", HexText.Get("settings_catalog.backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
         new("backdrop_across", HexText.Get("settings_catalog.backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
         new("backdrop_up", HexText.Get("settings_catalog.backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("backdrop_stretch", HexText.Get("settings_catalog.backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_stretch_help"), BACKDROP, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
         new("terminal_backdrop_scale", HexText.Get("settings_catalog.terminal_backdrop_scale_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_scale_help"), BACKDROP, Least: 0.05f, Most: 1.5f, Step: 0.01f, Slider: true),
         new("terminal_backdrop_across", HexText.Get("settings_catalog.terminal_backdrop_across_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_across_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
         new("terminal_backdrop_up", HexText.Get("settings_catalog.terminal_backdrop_up_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_up_help"), BACKDROP, Least: -0.5f, Most: 1.0f, Step: 0.01f, Slider: true),
+        new("terminal_backdrop_stretch", HexText.Get("settings_catalog.terminal_backdrop_stretch_title"), UIFormKind.Number, HexText.Get("settings_catalog.terminal_backdrop_stretch_help"), BACKDROP, Least: Hex.Core.HexSettings.LEAST_STRETCH, Most: Hex.Core.HexSettings.MOST_STRETCH, Step: 0.01f, Slider: true, Unit: "×"),
         new("backdrop_wrap", HexText.Get("settings_catalog.backdrop_wrap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_wrap_help"), BACKDROP),
         new("backdrop_wrap_margin", HexText.Get("settings_catalog.backdrop_wrap_margin_title"), UIFormKind.Number, HexText.Get("settings_catalog.backdrop_wrap_margin_help"), BACKDROP, Least: 0.0f, Most: 60.0f, Slider: true, Unit: "px"),
         new("wrap_flow", HexText.Get("settings_catalog.wrap_flow_title"), UIFormKind.Number, HexText.Get("settings_catalog.wrap_flow_help"), BACKDROP, Least: 0.0f, Most: 40.0f, Slider: true, Unit: "px"),
@@ -114,6 +125,7 @@ public static class EditorSettingsCatalog
         new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
         new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), CODE),
         new("inlay_hints", HexText.Get("settings_catalog.inlay_hints_title"), UIFormKind.Flag, HexText.Get("settings_catalog.inlay_hints_help"), CODE),
+        new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
         Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
 
@@ -162,7 +174,7 @@ public static class EditorSettingsCatalog
         "auto_save_delay" => "auto_save",
         "git_autofetch_interval" => "git_autofetch",
         "backdrop_wrap_margin" or "wrap_flow" => "backdrop_wrap",
-        "backdrop_opacity" or "backdrop_scale" or "backdrop_across" or "backdrop_up" or "backdrop_wrap" => "backdrop",
+        "backdrop_opacity" or "backdrop_scale" or "backdrop_across" or "backdrop_up" or "backdrop_stretch" or "backdrop_wrap" => "backdrop",
         _ when key.StartsWith("terminal_backdrop_", StringComparison.Ordinal) => "backdrop_terminal",
         _ when key.StartsWith("glass_", StringComparison.Ordinal) => "effect_glass",
         _ => string.Empty
@@ -202,6 +214,9 @@ public static class EditorSettingsCatalog
             .OrderBy(name => name == "hack" ? 0 : 1).ThenBy(name => name, StringComparer.OrdinalIgnoreCase)];
     }
 
+    /// <summary>The number a setting comes as, 0 for one that isn't a number.</summary>
+    public static float UsualNumber(string key) => Usual.GetValueOrDefault(key) is NumberValue number ? number.Value : 0.0f;
+
     /// <summary>What every one of them comes as, the glass, the effects and the motion as the Fluid Glass look has them.</summary>
     public static readonly IReadOnlyDictionary<string, IRuntimeValue> Usual = new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
     {
@@ -226,9 +241,11 @@ public static class EditorSettingsCatalog
         ["backdrop_scale"] = new NumberValue(0.5f),
         ["backdrop_across"] = new NumberValue(0.0f),
         ["backdrop_up"] = new NumberValue(0.0f),
+        ["backdrop_stretch"] = new NumberValue(1.0f),
         ["terminal_backdrop_scale"] = new NumberValue(0.5f),
         ["terminal_backdrop_across"] = new NumberValue(0.0f),
         ["terminal_backdrop_up"] = new NumberValue(0.0f),
+        ["terminal_backdrop_stretch"] = new NumberValue(1.0f),
         ["backdrop_wrap"] = Values.Bool(true),
         ["backdrop_wrap_margin"] = new NumberValue(8.0f),
         ["wrap_flow"] = new NumberValue(16.0f),
@@ -241,6 +258,8 @@ public static class EditorSettingsCatalog
         ["rulers"] = new StringValue(string.Empty),
         ["render_whitespace"] = new StringValue("selection"),
         ["cursor_style"] = new StringValue("line"),
+        ["caret_fast_after"] = new NumberValue(1.0f),
+        ["caret_fast_rate"] = new NumberValue(80.0f),
         ["sticky_scroll"] = Values.Bool(true),
         ["format_on_save"] = Values.Bool(false),
         ["code_zoom"] = new NumberValue(1.0f),
@@ -249,6 +268,7 @@ public static class EditorSettingsCatalog
         ["git_blame"] = Values.Bool(true),
         ["minimap"] = Values.Bool(true),
         ["inlay_hints"] = Values.Bool(true),
+        ["code_lens_references"] = Values.Bool(true),
         ["semantic_highlighting"] = Values.Bool(true),
         ["csharp_colors"] = new StringValue("resharper"),
         ["git_autofetch"] = Values.Bool(true),
