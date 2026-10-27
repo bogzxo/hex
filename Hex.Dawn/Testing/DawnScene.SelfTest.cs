@@ -114,6 +114,7 @@ internal sealed partial class DawnScene
             test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
             MakeTestFiles();
             run(test);
+            test.Run(TidyAfterSuite);
             test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
         }
     }
