@@ -24,6 +24,8 @@ over every corner of the UI to make it all behave the same
 - squiggles are waves under the whole of what's wrong, sticky scroll shows the line a lone brace belongs to
 - typing into a big file with the mouse resting on the code doesn't stutter anymore, a .hor of five thousand lines was
   getting parsed again on every key
+- the whitespace dots and indent guides stay where they are while you scroll or select, they used to smear across the
+  blank lines for a frame, and a line scrolling in no longer lands on top of the one next to it
 - a string never closed is wrong to the end of its line, not just at its quote
 
 ## the window
