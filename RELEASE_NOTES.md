@@ -1,22 +1,34 @@
-# Hex 2.2.1
+# Hex 2.3.0
 
-a fix for the code jumping about while you type, most of all when a line goes red and you put it right again
+jupyter notebooks, natively. open a `.ipynb` and its cells come up the way they do in JupyterLab, run in a real
+kernel that hex talks to itself, no jupyter server and no browser in between
 
-- a mistake typed into a file with a table (the localisation file) took the Code and Table buttons away and putting it
-  right brought them back, shoving the whole editor sideways and back. they stay put now, Table greyed out meanwhile
-- the panel under the editor doesn't open itself for a mistake and fold again once it's fixed, it only decides that
-  when a file comes up, so the code doesn't get pushed up and down as you type
-- the "N references" rows don't vanish while a declaration is half typed, so the lines under it don't jump up and
-  back down, and a new one doesn't push the line you're typing on down
-- a line you type on keeps its inlay hints, the code after them doesn't slide left and back
-- the line numbers keep room for four digits, so line 100 doesn't push the code over
-- a folded block stays folded while its brackets are out for a moment
-- taking a selection out doesn't stretch it across the whole line for a frame anymore, it used to fly into the
-  highlight of the caret's line
-- Ln and Col in the status bar stay where they are when you select something, the count of what's selected used to
-  shove them a hundred pixels left and back again
-- the boxes on a pair of brackets don't swap ends of the line as the caret moves between them
-- squiggles coming and going don't smear the other squiggles across the file
+## notebooks
+
+- File > New Jupyter Notebook, or open any `.ipynb`. every cell is a card, code in its language's colours with
+  completions and hover from the kernel, markdown written out until you go into it
+- Run All, run above, run below, Ctrl+Enter, Shift+Enter and Alt+Enter as Jupyter has them, `[*]` while a cell's
+  waiting, its count once it's run, and the kernel's state on the notebook's bar
+- Jupyter's keys out of a cell, A and B for a new one above or below, D D takes it out and Z puts it back, M, Y and R
+  for markdown, code and raw, Enter to go into it, Escape back out, the arrows or J and K to move about
+- kernels are found where Jupyter looks for them, pick one off the bar. interrupt (I I), restart (0 0), restart and
+  run all, shut it down. a kernel that dies says so and the next run starts a fresh one
+- what a cell prints comes in as it runs, `\r` progress bars drawn over themselves, tracebacks in the colours IPython
+  gives them, long lines wrapped and long output scrolled past thirty rows
+- plots and pictures are drawn as they came, DataFrames and markdown tables are real tables with their numbers lined
+  up right, a MultiIndex's levels and all. markdown, HTML and JSON outputs are written out, `display` with an id
+  updates in place and `clear_output` clears
+- `input()` and `getpass` ask in a box under the cell, a password starred out as you type it
+- notebooks are saved the way Jupyter writes them, keys sorted, one space indents, so a diff of one shows what you
+  changed and nothing else. the Code view is the notebook's JSON if you want it, undo, backups and reload as any file
+- agents get the notebook over MCP too, to read it, edit cells, run them and drive the kernel
+
+## everything else
+
+- Greek, Cyrillic, maths, arrows, box drawing and the rest of the symbols people actually type are drawn, everywhere.
+  they were question marks, Δt and Ω included
+- a table that's all in sight lets the wheel through to whatever it's in
+- code that grew to fit its box doesn't scatter its letters for a frame while it scrolls past
 
 ## running it
 
