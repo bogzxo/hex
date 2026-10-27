@@ -1720,6 +1720,8 @@ let strings = {
         minimap_help: "Whether the whole of the code is drawn small down the right of the editor, a slider over what you can see to drag.",
         inlay_hints_title: "Inlay hints",
         inlay_hints_help: "Whether the names of the parameters a call passes to are written faintly in among the code, from HIDL and from the language servers that say them.",
+        code_lens_references_title: "Reference counts",
+        code_lens_references_help: "Whether every declaration has how many places use it written small over it, Visual Studio's CodeLens. A press on a count lists them. Worked out by Hex itself for HIDL, and asked of the language servers that can say.",
         semantic_highlighting_title: "Semantic highlighting",
         semantic_highlighting_help: "Whether names are coloured by what they are, a class, a method, a field, a parameter, ReSharper's way. Asked of the language servers that say it, and worked out by Hex itself for HIDL, and for D while its server doesn't say. A line being typed on goes back to the plain colours until the typing stops.",
         csharp_colors_title: "C# colours",
@@ -1823,6 +1825,7 @@ let strings = {
         final_newline: "eol end of file newline files.insertFinalNewline",
         minimap: "minimap overview editor.minimap.enabled",
         inlay_hints: "parameter hints editor.inlayHints.enabled",
+        code_lens_references: "codelens code lens references usages count editor.codeLens",
         semantic_highlighting: "semantic tokens colour identifiers resharper editor.semanticHighlighting.enabled",
         csharp_colors: "colour scheme colors csharp c# resharper rider visual studio theme",
         line_numbers: "gutter editor.lineNumbers",
@@ -2003,6 +2006,17 @@ let strings = {
         shown: "{name}, {count}",
         last_change: "that's the last change",
         first_change: "that's the first change"
+    },
+
+    // The reference counts over declarations, Visual Studio's CodeLens, and the menu a press on one opens
+    code_lens: {
+        reference: "1 reference",
+        references: "{count} references",
+        references_many: "{count}+ references",
+        file: "{file} ({count})",
+        all: "All {count} references...",
+        unused: "nothing uses {name}",
+        no_server: "the language server can't say where it's used"
     },
 
     // Peek, a declaration shown over the code

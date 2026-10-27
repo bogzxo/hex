@@ -159,6 +159,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether the names of parameters and the like are written faintly in among the code, inlay hints.</summary>
     public bool InlayHints = true;
 
+    /// <summary>Whether a declaration has how many places use it written small over it, Visual Studio's code lens.</summary>
+    public bool CodeLensReferences = true;
+
     /// <summary>Whether names are coloured by what they are (a class, a field, a parameter), from the language servers and from HIDL itself.</summary>
     public bool SemanticHighlighting = true;
 
@@ -365,6 +368,7 @@ internal sealed partial class HexSettings
         GitBlame = Flag(values, "git_blame", GitBlame);
         Minimap = Flag(values, "minimap", Minimap);
         InlayHints = Flag(values, "inlay_hints", InlayHints);
+        CodeLensReferences = Flag(values, "code_lens_references", CodeLensReferences);
         SemanticHighlighting = Flag(values, "semantic_highlighting", SemanticHighlighting);
         if (values.TryGetValue("csharp_colors", out var csharp) && csharp is StringValue { Value: "resharper" or "visual_studio" or "skin" } colored) CSharpColors = colored.Value;
         McpServer = Flag(values, "mcp_server", McpServer);
@@ -630,6 +634,7 @@ internal sealed partial class HexSettings
             .Add("git_blame", GitBlame)
             .Add("minimap", Minimap)
             .Add("inlay_hints", InlayHints)
+            .Add("code_lens_references", CodeLensReferences)
             .Add("semantic_highlighting", SemanticHighlighting)
             .Add("csharp_colors", CSharpColors)
             .Add("mcp_server", McpServer)

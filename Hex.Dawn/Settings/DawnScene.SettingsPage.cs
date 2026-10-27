@@ -320,6 +320,7 @@ internal sealed partial class DawnScene
             "git_blame" => Values.Bool(hex.settings.GitBlame),
             "minimap" => Values.Bool(hex.settings.Minimap),
             "inlay_hints" => Values.Bool(hex.settings.InlayHints),
+            "code_lens_references" => Values.Bool(hex.settings.CodeLensReferences),
             "semantic_highlighting" => Values.Bool(hex.settings.SemanticHighlighting),
             "csharp_colors" => new StringValue(hex.settings.CSharpColors),
             "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
@@ -465,6 +466,10 @@ internal sealed partial class DawnScene
                 case ("inlay_hints", BooleanValue inlays):
                     settings.InlayHints = inlays.Value;
                     hex.ForgetInlays();
+                    break;
+                case ("code_lens_references", BooleanValue lenses):
+                    settings.CodeLensReferences = lenses.Value;
+                    hex.ForgetReferenceLenses();
                     break;
                 case ("semantic_highlighting", BooleanValue semantic):
                     settings.SemanticHighlighting = semantic.Value;

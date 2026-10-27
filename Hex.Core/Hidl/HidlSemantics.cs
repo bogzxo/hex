@@ -13,7 +13,7 @@ namespace Hex.Core;
 /// as a small one. A local or a parameter given a new value somewhere is mutable, underlined. Worked out from the tokens,
 /// so a file halfway through being typed still gets what can be made out of it.
 /// </summary>
-public static class HidlSemantics
+public static partial class HidlSemantics
 {
     // A name made somewhere, what it is, and the tokens it's in scope over
     private readonly record struct Made(int Name, SyntaxKind Kind, SyntaxModifiers Modifiers, int From, int To);

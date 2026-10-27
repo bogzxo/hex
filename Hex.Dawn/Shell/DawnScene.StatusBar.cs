@@ -110,6 +110,7 @@ internal sealed partial class DawnScene
         UpdateImageView();
         UpdateConflicts();
         UpdateInlays();
+        UpdateReferenceLenses();
         UpdateSemantics();
 
         if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)

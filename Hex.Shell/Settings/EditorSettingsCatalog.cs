@@ -125,6 +125,7 @@ public static class EditorSettingsCatalog
         new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
         new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), CODE),
         new("inlay_hints", HexText.Get("settings_catalog.inlay_hints_title"), UIFormKind.Flag, HexText.Get("settings_catalog.inlay_hints_help"), CODE),
+        new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
         Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
 
@@ -267,6 +268,7 @@ public static class EditorSettingsCatalog
         ["git_blame"] = Values.Bool(true),
         ["minimap"] = Values.Bool(true),
         ["inlay_hints"] = Values.Bool(true),
+        ["code_lens_references"] = Values.Bool(true),
         ["semantic_highlighting"] = Values.Bool(true),
         ["csharp_colors"] = new StringValue("resharper"),
         ["git_autofetch"] = Values.Bool(true),

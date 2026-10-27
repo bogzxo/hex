@@ -68,6 +68,7 @@ internal sealed partial class DawnScene
         editor.OnChecked = _ => CodeChecked(prepared);
         editor.HoverSource = codeEditing.HoverHint;
         editor.OnSwatchPressed = codeEditing.PickSwatch;
+        editor.OnLensAbovePressed = (lens, box) => PressReferenceLens(prepared, lens, box);
         editor.ArtPath = name => ArtFileOf(prepared, name);
         editor.ArtSkin = () => stage.Skin;
         editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point);

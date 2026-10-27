@@ -176,6 +176,7 @@ internal sealed partial class DawnScene
             TestTodos(test);
             TestPeek(test);
             TestInlays(test);
+            TestCodeLens(test);
             TestSemanticHidl(test);
             TestLanguages(test);
             TestTable(test);
@@ -212,6 +213,11 @@ internal sealed partial class DawnScene
             TestTerminalScroll(test);
             TestDuskFiles(test);
         }),
+        ("lens", "reference counts over the declarations of a HIDL file and of C# through csharp-ls when it's on this machine, a press listing where each is used and a pick going there", test =>
+        {
+            TestCodeLens(test);
+            TestCodeLensCSharp(test);
+        }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
@@ -244,6 +250,7 @@ internal sealed partial class DawnScene
         {
             TestSemanticHidl(test);
             TestSemanticCSharp(test);
+            TestCodeLensCSharp(test);
             TestSemanticD(test);
         }),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),

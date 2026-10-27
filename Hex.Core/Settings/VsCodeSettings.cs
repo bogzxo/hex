@@ -35,6 +35,7 @@ internal static class VsCodeSettings
         ("editor.formatOnSave", "format_on_save", Flag),
         ("editor.minimap.enabled", "minimap", Flag),
         ("editor.inlayHints.enabled", "inlay_hints", Words(("on", true), ("onUnlessPressed", true), ("off", false), ("offUnlessPressed", false))),
+        ("editor.codeLens", "code_lens_references", Flag),
         ("editor.lineNumbers", "line_numbers", Words(("on", true), ("relative", true), ("interval", true), ("off", false))),
         ("editor.guides.indentation", "indent_guides", Flag),
         ("editor.renderWhitespace", "render_whitespace", Choice(("none", "none"), ("boundary", "boundary"), ("selection", "selection"), ("all", "all"))),
