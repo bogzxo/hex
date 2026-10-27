@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    Hex's version, the one place it's said. Every Hex project gets it (the exe, Dawn, Dusk, the core and the shell),
+    so the About box, Dusk's banner, the HIDL server and the update check all say the same thing. It was in three
+    project files and the other two came out as 1.0.0. The engine in the submodule finds this file too walking up,
+    and keeps its own version, hence going by the project's name.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
+    <Version>2.2.0</Version>
+  </PropertyGroup>
+
+  <!--
+    MSBuild stops at the first Directory.Build.props it finds, so the workspace's one above (the shared engine
+    checkout) is brought in by hand when there is one. A clone on its own has none and goes by its submodules.
+  -->
+  <PropertyGroup>
+    <WorkspaceProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))</WorkspaceProps>
+  </PropertyGroup>
+  <Import Project="$(WorkspaceProps)" Condition="'$(WorkspaceProps)' != '' and Exists('$(WorkspaceProps)')" />
+</Project>
