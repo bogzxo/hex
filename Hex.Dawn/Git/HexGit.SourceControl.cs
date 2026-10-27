@@ -47,16 +47,41 @@ internal sealed partial class HexGit
         else if (shown.Count == 0)
             items.Add(Note(context.Strings.Said("git.no_repository")));
 
-        Repository? active = shown.Count > 1 ? ActiveRepository() : null;
+        if (shown.Count == 1)
+        {
+            AddRepositoryRows(items, shown[0]);
+            return items;
+        }
+
+        // A submodule or a repository cloned inside another goes under that one's heading, after its changes, rather than
+        // beside it. A folder of three projects each with the engine in it was three horizons and three HIDLs in a row
+        Repository? active = ActiveRepository();
+        var headings = new Dictionary<Repository, UITreeItem>();
+        foreach (Repository repository in shown)
+            headings[repository] = Heading(repository, repository == active);
         foreach (Repository repository in shown)
         {
-            if (shown.Count == 1)
-                AddRepositoryRows(items, repository);
+            if (Inside(repository, shown) is { } outer)
+                headings[outer].Children!.Add(headings[repository]);
             else
-                items.Add(Heading(repository, repository == active));
+                items.Add(headings[repository]);
         }
 
         return items;
+    }
+
+    // The nearest of the repositories a repository is inside of, null for one inside none of them
+    private static Repository? Inside(Repository repository, List<Repository> shown)
+    {
+        Repository? nearest = null;
+        foreach (Repository other in shown)
+        {
+            if (other != repository && PlatformPaths.IsUnder(repository.Git.Root, other.Git.Root)
+                && (nearest is null || other.Git.Root.Length > nearest.Git.Root.Length))
+                nearest = other;
+        }
+
+        return nearest;
     }
 
     /// <summary>A repository's rows, Commit and its sections of files, and how many changes there are (-1 before git said).</summary>
