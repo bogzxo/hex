@@ -35,10 +35,11 @@ public static class HexGlass
     };
 
     // How much of the popups' clarity a window keeps, and the least it's blurred
-    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 48.0f;
+    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 20.0f;
 
     // The clarity the sliders come as, and the most a window gets with the slider all the way up
-    private const float USUAL_CLARITY = 0.55f, CLEAREST_WINDOW = 0.95f;
+    private const float CLEAREST_WINDOW = 0.95f;
+    private static readonly float USUAL_CLARITY = UIGlass.Clear.Clarity;
 
     /// <summary>
     /// A window's clarity out of the slider's. Up to the usual it's under half the popups', the way the looks were made,

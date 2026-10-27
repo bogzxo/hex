@@ -31,9 +31,10 @@ internal sealed partial class DawnScene
             Group("debugger_path") == EditorSettingsCatalog.RUN && Group("run_to_terminal") == EditorSettingsCatalog.RUN
             && SettingsPage!.Settings.First(setting => setting.Key == "code_zoom") is { Slider: true, Unit: "×", Group: EditorSettingsCatalog.CODE });
 
-        // The canvas under the window is a blur of colour through its glass, a panel of the layout came through as a box
-        test.Check("settings looks: the window's glass is blurred and frosted enough that the canvas under it isn't a box behind the rows", () =>
-            !Glassy || SettingsWindow?.Glass is { Blur: >= 48.0f, Clarity: <= 0.25f });
+        // Liquid glass, what's under the window comes through, blurred enough that it's colour behind the rows and not words,
+        // and less clear than a popup's so a page of sentences on it still reads
+        test.Check("settings looks: the window's glass lets what's under it through, blurred and a little less clear than a popup's", () =>
+            !Glassy || SettingsWindow?.Glass is { Blur: >= 20.0f } glass && glass.Clarity < settings.GlassClarity && glass.Clarity > 0.25f);
         test.Run(CloseSettings);
         test.Wait();
 
