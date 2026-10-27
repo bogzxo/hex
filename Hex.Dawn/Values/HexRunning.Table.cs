@@ -47,6 +47,25 @@ internal sealed partial class HexRunning
     /// <summary>Whether the document on screen has a table to show, which is when its view buttons have one.</summary>
     internal bool HasTable => document.IsText && values is { } shown && valuesOf == document && TableOf(shown) is not null;
 
+    /// <summary>
+    /// Whether the Code and Table buttons are up, which is once the file on screen has had a table, and stay up while a
+    /// mistake in it has it come to nothing for a moment, Table greyed out meanwhile. They came and went with the table,
+    /// and the tabs beside them were laid out a tick behind, so the code jumped sideways as a line went red and back.
+    /// </summary>
+    internal bool ShowsTableButtons => document.IsText && (HasTable || tableSeen == document);
+
+    // The file that last had a table, its buttons stay up while it doesn't for a moment
+    private HexDocument? tableSeen;
+
+    // Helper method to put the Code and Table buttons up or away, and Table greyed out while there's no table to show
+    internal void ShowTableButtons(int extensionButtons)
+    {
+        if (HasTable)
+            tableSeen = document;
+        layout.Get<UIComponent>("views").Visible = !document.IsText || ShowsTableButtons || extensionButtons > 0;
+        layout.Get<Button>("table_view").Enabled = !document.IsText || HasTable;
+    }
+
     private void BuildTable()
     {
         dataTable = layout.Get<Table>("data_table");

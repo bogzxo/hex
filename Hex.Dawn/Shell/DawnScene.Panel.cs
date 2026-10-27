@@ -57,6 +57,13 @@ internal sealed partial class DawnScene
     // Whether it was opened by hand while there's nothing wrong, it stays open then rather than folding itself again
     private bool panelOpenedByHand;
 
+    // Whether there was nothing wrong as the file on screen came up, which file that was and until when it's still looked
+    // at (see UpdatePanel)
+    private bool panelNothingWrong = true;
+    private HexDocument? panelJudgedFor;
+    private long panelJudgedUntil;
+    private const long PANEL_JUDGED_MS = 1500;
+
     // How much of the middle the panel took the last time the editor was fitted round it, see FitChrome
     private float panelTaken;
 
@@ -192,8 +199,21 @@ internal sealed partial class DawnScene
             }
         }
 
+        // Whether there's nothing wrong, as a file comes up and for a moment after (what's wrong with it takes a moment to
+        // be found), and then left be. Followed as it went, a mistake typed opened the panel and the code jumped up out of
+        // the way, and putting it right folded it and the code jumped back down
+        long judgedAt = System.Environment.TickCount64;
+        if (panelJudgedFor != document)
+        {
+            panelJudgedFor = document;
+            panelJudgedUntil = judgedAt + PANEL_JUDGED_MS;
+        }
+
+        if (judgedAt < panelJudgedUntil)
+            panelNothingWrong = problemList.Count == 0;
+
         // Folded by hand, or by itself with nothing wrong on the page showing unless it was opened by hand since
-        bool fold = settings.PanelCollapsed || (bottom.Selected == PROBLEMS_PAGE && problemList.Count == 0 && !panelOpenedByHand);
+        bool fold = settings.PanelCollapsed || (bottom.Selected == PROBLEMS_PAGE && panelNothingWrong && !panelOpenedByHand);
         if (fold != panelFolded || !panelFoldSettled)
             FoldPanel(fold);
 

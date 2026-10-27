@@ -156,6 +156,29 @@ internal sealed partial class DawnScene
             searchMessage.Size = searchMessage.Size with { X = width };
     }
 
+    /// <summary>
+    /// Helper method for how wide a row is with what's showing in it now, each part as wide as it was last laid out. The
+    /// tabs took what the toolbar left as it was last laid out, a tick behind, so a button put up beside them (Code and
+    /// Table as a mistake was put right) had the row too wide for a tick and the code jumped sideways and back.
+    /// </summary>
+    private float WidthShowing(UIComponent part)
+    {
+        if (part is not StackPanel { Direction: UIDirection.Horizontal } row)
+            return part.Bounds.Width > 0.0f ? part.Bounds.Width : part.DesiredSize.X;
+
+        float width = row.Padding.Total.X, gap = row.Spacing >= 0.0f ? row.Spacing : compositor.Skin?.Spacing ?? 0.0f;
+        int shown = 0;
+        foreach (UIComponent child in row.Children)
+        {
+            if (!child.Visible)
+                continue;
+            width += WidthShowing(child);
+            shown++;
+        }
+
+        return width + gap * Math.Max(0, shown - 1);
+    }
+
     private static void Widen(IReadOnlyList<UIComponent> rows, float width)
     {
         for (int i = 0; i < rows.Count; i++)
@@ -271,7 +294,7 @@ internal sealed partial class DawnScene
         float panelLag = panelTaken - panelBefore;
 
         // The tabs, the breadcrumbs and the panel are the width of the middle, the panel as tall as it was dragged
-        docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, centerWidth - toolbar.Bounds.Width) };
+        docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, centerWidth - WidthShowing(toolbar)) };
         crumbs.Size = crumbs.Size with { X = centerWidth };
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);

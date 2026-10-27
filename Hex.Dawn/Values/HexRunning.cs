@@ -134,13 +134,13 @@ internal sealed partial class HexRunning
                     valuesOpen.Add(name);
             }
 
-            // The table button comes and goes with whether what the file comes to is a table
+            // The table button greyed out or not with whether what the file comes to is a table
             bool hadTable = HasTable;
 
             values = done;
             valuesOf = valuesAsked.Document;
             if (HasTable != hadTable)
-                layout.Get<UIComponent>("views").Visible = !document.IsText || HasTable;
+                window.ShowViewButtons();
 
             // What went wrong running it is underlined where it went wrong, with what doesn't parse and the rest
             if (valuesOf is { } ran)

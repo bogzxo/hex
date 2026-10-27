@@ -49,7 +49,7 @@ internal sealed partial class DawnScene
         running.RefreshTable();
 
         // A layout is its designer or its code, a file of code its code or its table when it has one
-        layout.Get<UIComponent>("views").Visible = !document.IsText || running.HasTable || viewButtons.Count > 0;
+        ShowViewButtons();
         layout.Get<Button>("design_view").Visible = !document.IsText;
         layout.Get<Button>("table_view").Visible = document.IsText;
         layout.Get<Button>("design_view").Selected = tools;
@@ -73,6 +73,9 @@ internal sealed partial class DawnScene
 
     // The files F5 has something for without a task, the kinds Set Up F5 has a preset for (HexTasks.Presets)
     private static readonly string[] runnableExtensions = [".d", ".di", ".cs", ".rs", ".go", ".c", ".cpp", ".cc", ".cxx", ".py", ".js", ".mjs"];
+
+    /// <summary>The buttons over the editor for the ways the file can be shown, its designer, its code, its table and an extension's.</summary>
+    public void ShowViewButtons() => running.ShowTableButtons(viewButtons.Count);
 
     /// <summary>
     /// Whether Run means anything for a document, what RunOrPlay would do with it. A layout plays, HIDL runs, a file with
