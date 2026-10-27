@@ -72,8 +72,12 @@ internal sealed partial class DawnScene
     {
         string named = theme.Replace('_', ' ');
         named = named.Length > 0 ? char.ToUpperInvariant(named[0]) + named[1..] : named;
-        return skin.Name == TOOL_SKIN_NAME ? named : $"{named}, {skin.Title}";
+        return skin.Name == TOOL_SKIN_NAME ? Titled(theme) : $"{named}, {skin.Title}";
     }
+
+    // A theme of the editor's own skin by every word of its name, Visual Studio and not Visual studio
+    private static string Titled(string theme) =>
+        string.Join(' ', theme.Split('_', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
 
     /// <summary>
     /// Helper method to take the colours the editor's layout has written into it (the boxes of its lists, what is

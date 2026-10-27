@@ -2454,7 +2454,7 @@ let strings = {
         all: "Profiles...",
         picked: "Hex is in {name} now",
         command: "Look: {name}",
-        about: "How Hex looks in one go, its glass, its lights and how it moves. Fluid Glass and Frosted Glass are what it's made for, Flat takes the glass away. Change anything under this and save it as a profile of your own, the themes go in it too.",
+        about: "How Hex looks in one go, its glass, its lights and how it moves. Fluid Glass and Frosted Glass are what it's made for, Flat takes the glass away, Visual Studio is that editor's dark theme, square and flat, its code and its terminal in its colours too. Change anything under this and save it as a profile of your own, the themes go in it too.",
         save_as: "Save as profile...",
         update: "Update {name}",
         delete: "Delete {name}",
@@ -2471,6 +2471,7 @@ let strings = {
         fluid_about: "clear glass, light at the rim",
         frosted_about: "soft glass, quieter",
         flat_about: "solid panels, no glass",
+        visual_studio_about: "its dark theme, square",
         yours: "your own"
     },
 

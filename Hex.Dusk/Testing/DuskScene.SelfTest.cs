@@ -353,6 +353,16 @@ internal sealed partial class DuskScene
         test.Wait();
         test.Check("theme_next changes the theme", () => settings.Theme != themeBefore && compositor.Skin?.Theme == settings.Theme);
         test.Check("the terminals take their colours from it", () => panel.Palette.Background == (compositor.Skin!.PanelColor with { W = 1.0f }) && panel.FocusedView?.Palette == panel.Palette);
+
+        // Visual Studio's, the panes flush and square and the terminals in Campbell, its magenta not the keywords' blue
+        test.Run(() => UseTheme(Hex.Shell.HexLooks.VISUAL_STUDIO_THEME));
+        test.Wait();
+        test.Wait();
+        test.Settle(0.5f);
+        test.Run(() => Shot("visual_studio"));
+        test.Check("Visual Studio's theme has the panes square and the terminals in Campbell", () =>
+            compositor.Skin is { CornerRadius: 0.0f } && panel.PaneRadius == 0.0f
+            && System.Numerics.Vector4.Distance(panel.Palette.Ansi[5], new System.Numerics.Vector4(0x88 / 255.0f, 0x17 / 255.0f, 0x98 / 255.0f, 1.0f)) < 0.01f);
         test.Run(() => UseTheme(themeBefore));
         test.Wait();
         test.Wait();

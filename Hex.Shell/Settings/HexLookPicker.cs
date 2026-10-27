@@ -246,6 +246,12 @@ internal sealed class HexLookPicker : StackPanel
                 list.RoundRect(pane, 8.0f, Vector4.Lerp(panel, Vector4.One, 0.14f) with { W = 0.72f });
                 list.SilverLining(pane, 8.0f, frosted.Rim);
             }
+            else if (look?.Name == HexLooks.VISUAL_STUDIO)
+            {
+                // Visual Studio's square and solid, its hairline round it
+                list.Rect(pane, panel);
+                list.Outline(pane, 1.0f, palette.Border);
+            }
             else
             {
                 list.RoundRect(pane, 8.0f, panel);
@@ -278,6 +284,7 @@ internal sealed class HexLookPicker : StackPanel
             { Name: HexLooks.FLUID } => HexText.Get("looks.fluid_about"),
             { Name: HexLooks.FROSTED } => HexText.Get("looks.frosted_about"),
             { Name: HexLooks.FLAT } => HexText.Get("looks.flat_about"),
+            { Name: HexLooks.VISUAL_STUDIO } => HexText.Get("looks.visual_studio_about"),
             _ => HexText.Get("looks.yours")
         };
     }

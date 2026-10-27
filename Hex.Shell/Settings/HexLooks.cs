@@ -8,25 +8,27 @@ namespace Hex.Shell;
 /// <summary>
 /// A look of Hex's, a name and the visual settings it sets by their keys in the editor's section of settings.hor (the
 /// glass, the effects and the motion), and the themes as well for one the user saved. Picking one sets every value it
-/// has and leaves the rest alone, so one of the three Hex comes with never touches the colours somebody chose.
+/// has and leaves the rest alone, so the glass ones Hex comes with never touch the colours somebody chose. Visual Studio
+/// does, it's the whole of that editor's look in one go, its theme, its font and its colours of C# as well.
 /// </summary>
 internal sealed record HexLook(string Name, IReadOnlyDictionary<string, IRuntimeValue> Values, bool BuiltIn = false);
 
 /// <summary>
-/// Hex's looks, the profiles of how it's drawn. Three come with it, Fluid Glass (clear glass that bends what is behind
-/// it at its rim, the one it starts in), Frosted Glass (thicker, blurrier, quieter behind a lot of text) and Flat (solid
-/// panels, nothing glows or glides), and the user saves their own from whatever the settings are at. The user's are kept
-/// in the editor's section as looks and the one picked last as look (HexSettings reads and writes both), so Dawn and Dusk
-/// pick from the same list and a look saved in either is there in the other.
+/// Hex's looks, the profiles of how it's drawn. Four come with it, Fluid Glass (clear glass that bends what is behind
+/// it at its rim, the one it starts in), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (solid
+/// panels, nothing glows or glides) and Visual Studio (that editor's dark theme, square and flat, see
+/// HexLooks.VisualStudio), and the user saves their own from whatever the settings are at. The user's are kept in the
+/// editor's section as looks and the one picked last as look (HexSettings reads and writes both), so Dawn and Dusk pick
+/// from the same list and a look saved in either is there in the other.
 /// <para>
 /// A look is matched against the settings as they are, so picking one and then dragging a slider leaves no look picked,
 /// the settings say Custom, until it's saved as one of the user's or another is picked.
 /// </para>
 /// </summary>
-internal static class HexLooks
+internal static partial class HexLooks
 {
-    /// <summary>The three that come with Hex, by the names they're shown and kept under.</summary>
-    public const string FLUID = "Fluid Glass", FROSTED = "Frosted Glass", FLAT = "Flat";
+    /// <summary>The ones that come with Hex, by the names they're shown and kept under.</summary>
+    public const string FLUID = "Fluid Glass", FROSTED = "Frosted Glass", FLAT = "Flat", VISUAL_STUDIO = "Visual Studio";
 
     /// <summary>Every key of the editor's section a look sets, the glass, the effects and the motion.</summary>
     public static readonly string[] Keys =
@@ -36,7 +38,7 @@ internal static class HexLooks
         "effect_motion", "ui_animation", "caret_glide"
     ];
 
-    /// <summary>The themes, which a look the user saves takes along and the three of Hex's leave be. Dusk's is the terminal section's theme.</summary>
+    /// <summary>The themes, which a look the user saves takes along and the glass ones of Hex's leave be. Dusk's is the terminal section's theme.</summary>
     public const string EDITOR_SKIN = "editor_skin", EDITOR_THEME = "editor_theme", TERMINAL_THEME = "terminal_theme";
 
     // How near two numbers have to be to be the same setting, a slider lands on whatever the pointer made of it
@@ -98,10 +100,13 @@ internal static class HexLooks
         ["ui_animation"] = new NumberValue(1.0f)
     }, BuiltIn: true);
 
-    /// <summary>The three that come with Hex, in the order they're shown.</summary>
-    public static readonly HexLook[] BuiltIn = [Fluid, Frosted, Flat];
+    /// <summary>Visual Studio dark, see HexLooks.VisualStudio.</summary>
+    public static readonly HexLook VisualStudio = MakeVisualStudio();
 
-    /// <summary>Hex's three and then the user's, in the order they were saved.</summary>
+    /// <summary>The ones that come with Hex, in the order they're shown.</summary>
+    public static readonly HexLook[] BuiltIn = [Fluid, Frosted, Flat, VisualStudio];
+
+    /// <summary>Hex's own and then the user's, in the order they were saved.</summary>
     public static List<HexLook> All(HexSettings settings) =>
         [.. BuiltIn, .. settings.Looks.Select(saved => new HexLook(saved.Name, saved.Values))];
 
@@ -171,7 +176,7 @@ internal static class HexLooks
 
     /// <summary>
     /// Keeps the settings as a look of the user's by a name, over the one of theirs by that name if there is one, and picks
-    /// it. False for a name that's empty or one of Hex's three, which aren't the user's to change.
+    /// it. False for a name that's empty or one of Hex's own, which aren't the user's to change.
     /// </summary>
     public static bool Save(HexSettings settings, string name, string terminalTheme)
     {
@@ -190,7 +195,7 @@ internal static class HexLooks
         return true;
     }
 
-    /// <summary>Forgets a look of the user's. False for one of Hex's three or one there isn't.</summary>
+    /// <summary>Forgets a look of the user's. False for one of Hex's own or one there isn't.</summary>
     public static bool Delete(HexSettings settings, string name)
     {
         int at = settings.Looks.FindIndex(saved => saved.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -243,6 +248,8 @@ internal static class HexLooks
         "effect_motion" => Values.Bool(settings.EffectMotion),
         "ui_animation" => new NumberValue(settings.UiAnimation),
         "caret_glide" => new NumberValue(settings.CaretGlide),
+        CODE_FONT => new StringValue(settings.CodeFont),
+        CSHARP_COLORS => new StringValue(settings.CSharpColors),
         EDITOR_SKIN => new StringValue(settings.EditorSkin),
         EDITOR_THEME => new StringValue(settings.EditorTheme),
         TERMINAL_THEME => new StringValue(terminalTheme),
@@ -268,6 +275,8 @@ internal static class HexLooks
             case ("effect_motion", BooleanValue on): settings.EffectMotion = on.Value; break;
             case ("ui_animation", NumberValue speed): settings.UiAnimation = Math.Clamp(speed.Value, 0.0f, 3.0f); break;
             case ("caret_glide", NumberValue glide): settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f); break;
+            case (CODE_FONT, StringValue font): settings.CodeFont = font.Value; break;
+            case (CSHARP_COLORS, StringValue { Value: "resharper" or "visual_studio" or "skin" } colors): settings.CSharpColors = colors.Value; break;
             case (EDITOR_SKIN, StringValue { Value.Length: > 0 } skin): settings.EditorSkin = skin.Value; break;
             case (EDITOR_THEME, StringValue theme): settings.EditorTheme = theme.Value; break;
         }

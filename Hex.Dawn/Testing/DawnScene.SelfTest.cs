@@ -152,11 +152,12 @@ internal sealed partial class DawnScene
             TestSlidingSides(test);
             TestLayoutTexts(test);
         }),
-        ("settings", "the settings window, its search and sections, Color Theme, and the settings file kept in step with it both ways", test =>
+        ("settings", "the settings window, its search and sections, Color Theme, the Visual Studio look, and the settings file kept in step with it both ways", test =>
         {
             OnLayoutForSettings(test);
             TestSettings(test);
             TestSettingsLooks(test);
+            TestVisualStudioLook(test);
             TestSettingsFile(test);
             TestSettingsWheel(test);
             TestBackdropArrange(test);
