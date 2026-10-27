@@ -188,14 +188,15 @@ internal sealed partial class DotnetProjects : IDisposable
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
             };
             // When the watch began, macOS says a file was made a while after it was, a project written just before it was
-            // evaluated threw away the evaluation straight away
+            // evaluated threw away the evaluation straight away. A folder too, it only looked at files and a folder made
+            // with the project still threw it away on the build machine's Mac now and then
             DateTime since = DateTime.UtcNow;
             void Moved(string path, bool made)
             {
                 string inside = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 if (inside.StartsWith("bin/", StringComparison.OrdinalIgnoreCase) || inside.StartsWith("obj/", StringComparison.OrdinalIgnoreCase) || inside is "bin" or "obj")
                     return;
-                if (made && File.Exists(path) && File.GetLastWriteTimeUtc(path) < since)
+                if (made && (File.Exists(path) || Directory.Exists(path)) && File.GetLastWriteTimeUtc(path) < since)
                     return;
 
                 lock (entry)
