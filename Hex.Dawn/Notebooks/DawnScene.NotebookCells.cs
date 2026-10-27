@@ -19,7 +19,7 @@ internal sealed class NotebookCellView
     public required Label Count { get; init; }
     public required Button RunButton { get; init; }
     public required NotebookCellEditor Editor { get; init; }
-    public Label? Written { get; set; }
+    public StackPanel? Written { get; set; }
 
     /// <summary>The source the editor and the written out markdown were last given, another string once it changes.</summary>
     public string? Shown { get; set; }
@@ -150,7 +150,7 @@ internal sealed partial class DawnScene
 
         if (cell.Kind == CellKind.Markdown)
         {
-            view.Written = body.Add(new Label { Markdown = true, Wrap = true, Align = Origin.TopLeft, Anchor = Origin.TopLeft, TextScale = 0.16f, CodeLanguage = notebook.Model.Language });
+            view.Written = body.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f });
             body.MoveChild(view.Written, 0);
         }
 
@@ -298,7 +298,7 @@ internal sealed partial class DawnScene
                     view.Editor.Text = cell.Source;
                 view.Shown = cell.Source;
                 if (view.Written is { } markdown)
-                    markdown.Text = cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown");
+                    WriteMarkdown(markdown, cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown"), notebook.Model.Language);
             }
 
             // A markdown cell is written out unless it's being typed into, or empty
@@ -324,7 +324,7 @@ internal sealed partial class DawnScene
             view.Body.Size = view.Body.Size with { X = body };
             view.Editor.Size = view.Editor.Size with { X = body };
             if (view.Written is { } written)
-                written.Size = written.Size with { X = body - 8.0f };
+                FitWritten(written, body);
             FitOutputs(view, body);
         }
     }

@@ -33,7 +33,8 @@ internal sealed class PlainHighlighter : ICodeHighlighter
 // What running a code cell came to, under it. Text (what it printed, a result's text, an error's traceback) in an editor
 // of the code's font that can be selected and copied, in the colours its ANSI escapes say drawn in the terminal's own
 // sixteen, as tall as it is up to a screenful and scrolled past that. A picture (PNG, JPEG) drawn as it came, markdown
-// written out. Of the forms a result comes in the one Hex shows best is shown, HTML and widgets fall back to the rest
+// written out, a DataFrame's table a table. Of the forms a result comes in the one Hex shows best is shown, other HTML
+// and widgets fall back to the rest
 internal sealed partial class DawnScene
 {
     // How many rows of text an output shows before it scrolls, and the most of its text that's put in an editor at all
@@ -126,7 +127,7 @@ internal sealed partial class DawnScene
         return null;
     }
 
-    // Helper method for the best of the forms a result came in, a picture, markdown, then text
+    // Helper method for the best of the forms a result came in, a picture, a table, markdown, then text
     private UIComponent? OutputData(HexNotebook notebook, JsonObject data, JsonObject? metadata, List<Texture> pictures)
     {
         foreach (string mime in (string[])["image/png", "image/jpeg", "image/gif", "image/bmp"])
@@ -135,8 +136,16 @@ internal sealed partial class DawnScene
                 return picture;
         }
 
+        // A DataFrame's HTML is the one HTML Hex draws, as a table rather than its text/plain's columns of spaces
+        if (data["text/html"] is { } html && OutputHtmlTable(NotebookFile.Text(html)) is { } table)
+            return table;
+
         if (data["text/markdown"] is { } markdown)
-            return OutputMarkdown(NotebookFile.Text(markdown), notebook.Model.Language);
+        {
+            var written = new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f };
+            WriteMarkdown(written, NotebookFile.Text(markdown), notebook.Model.Language);
+            return written;
+        }
 
         if (data["text/plain"] is { } plain)
             return OutputText(NotebookFile.Text(plain), error: false);
@@ -164,6 +173,7 @@ internal sealed partial class DawnScene
             StickyScroll = false,
             CheckSyntax = false,
             FitRows = OUTPUT_ROWS,
+            IndentGuides = false,
             Anchor = Origin.TopLeft,
             Pivot = Origin.TopLeft,
             TextScale = CODE_TEXT * settings.CodeZoom,
@@ -177,18 +187,6 @@ internal sealed partial class DawnScene
         editor.SemanticSpans = colours;
         return editor;
     }
-
-    private Label OutputMarkdown(string markdown, string language) => new()
-    {
-        Text = markdown,
-        Markdown = true,
-        Wrap = true,
-        Align = Origin.TopLeft,
-        Anchor = Origin.TopLeft,
-        Pivot = Origin.TopLeft,
-        TextScale = 0.16f,
-        CodeLanguage = language
-    };
 
     // Helper method for a picture out of its base64, decoded once for as long as it's the same data
     private Image? OutputPicture(JsonNode data, string encoded, JsonObject? size, List<Texture> pictures)
@@ -230,6 +228,9 @@ internal sealed partial class DawnScene
                     break;
                 case Label label:
                     label.Size = label.Size with { X = width - 8.0f };
+                    break;
+                case StackPanel written:
+                    FitWritten(written, width);
                     break;
                 default:
                     output.Size = output.Size with { X = width };

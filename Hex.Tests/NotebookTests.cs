@@ -153,6 +153,55 @@ public class NotebookTests
         Assert.Equal(new Horizon.UI.Scripting.SemanticSpan(1, 0, 6, Horizon.UI.Scripting.SyntaxKind.Ansi10), colours[1]);
     }
 
+    [Fact]
+    public void A_markdown_table_is_split_out_of_the_text_round_it()
+    {
+        var pieces = NotebookTables.Split("# Steps\nsome text\n\n| step | what | done |\n|:---|:---:|---:|\n| 1 | **load** | yes |\n| 2 | `look` |\n\nafter it");
+
+        Assert.Equal(3, pieces.Count);
+        Assert.Equal("# Steps\nsome text", pieces[0].Text);
+        NotebookTable table = pieces[1].Table!;
+        Assert.Equal(["step", "what", "done"], table.Header);
+        Assert.Equal(['l', 'c', 'r'], table.Align);
+        Assert.Equal(["1", "load", "yes"], table.Rows[0]);
+        Assert.Equal(["2", "look", ""], table.Rows[1]);
+        Assert.Equal("\nafter it", pieces[2].Text);
+    }
+
+    [Fact]
+    public void Pipes_in_a_code_fence_or_without_dashes_under_them_are_no_table()
+    {
+        Assert.False(NotebookTables.HasTable("```\n| a | b |\n|---|---|\n```"));
+        Assert.False(NotebookTables.HasTable("a | b\nc | d"));
+    }
+
+    [Fact]
+    public void A_dataframe_s_html_is_a_table_with_its_index_name_and_shape()
+    {
+        const string html = """
+            <div><style scoped>.dataframe thead th { text-align: right; }</style>
+            <table border="1" class="dataframe">
+              <thead>
+                <tr style="text-align: right;"><th></th><th>sensor</th><th>temp_c</th></tr>
+                <tr><th>id</th><th></th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr><th>0</th><td>north</td><td>21.50</td></tr>
+                <tr><th>1</th><td>south &amp; west</td><td>19.25</td></tr>
+              </tbody>
+            </table>
+            <p>2 rows × 2 columns</p>
+            </div>
+            """;
+
+        NotebookTable table = NotebookTables.FromHtml(html, out string? caption)!;
+        Assert.Equal(["id", "sensor", "temp_c"], table.Header);
+        Assert.Equal(["1", "south & west", "19.25"], table.Rows[1]);
+        Assert.Equal('r', table.Align[2]);
+        Assert.Equal("2 rows × 2 columns", caption);
+        Assert.Null(NotebookTables.FromHtml("<b>no table</b>", out _));
+    }
+
     // A kernel to talk to, null when this machine has no Python with ipykernel
     private static KernelSpec? Python() => KernelSpecs.Find().FirstOrDefault(spec => spec.Language == "python");
 
