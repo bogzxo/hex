@@ -10,5 +10,8 @@ internal enum HexView
     Table,
 
     // A view an extension made for the file, which one in HexDocument.ExtensionView, see DawnScene.UIScriptedLayout
-    Extension
+    Extension,
+
+    // A Jupyter notebook as its cells and what running them came to, see DawnScene.Notebook
+    Notebook
 }

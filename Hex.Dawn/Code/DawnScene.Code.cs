@@ -247,6 +247,10 @@ internal sealed partial class DawnScene
         opened.Module.Interactive = false;
         PrepareEditor(opened);
 
+        // A Jupyter notebook comes up as its cells, its JSON is the Code view
+        if (IsNotebookFile(path))
+            opened.View = HexView.Notebook;
+
         // Coloured by the grammar of whatever language the extension says (HIDL's own, VS Code's for the rest, plain
         // text when there is none), and only HIDL is parsed for its errors, until the rest come through a language server
         opened.Editor.Highlighter = CodeLanguages.ForFile(path, source.AsSpan().IndexOf('\n') is var end and >= 0 ? source[..end].TrimEnd('\r') : source);

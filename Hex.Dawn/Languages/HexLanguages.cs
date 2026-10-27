@@ -209,6 +209,11 @@ internal sealed partial class HexLanguages
         if (PlatformPaths.IsUnder(path, DecompiledFolder))
             return;
 
+        // A notebook's JSON is nobody's to write by hand (it's shown as its cells, and mostly pictures in base64), the JSON
+        // server only ever came up to say it wasn't installed
+        if (path.EndsWith(".ipynb", StringComparison.OrdinalIgnoreCase))
+            return;
+
         if (!serversRead)
             ReadLanguageServers();
 

@@ -36,6 +36,21 @@ let views = compositor.stack({
     direction: "horizontal",
 });
 
+// A Jupyter notebook as its cells, the first of its views (DawnScene.Notebook)
+let notebook_button = compositor.button({
+    parent: views,
+    size: vec(0, 28),
+    tooltip: "@notebook.view_tip",
+    hover: "lift",
+    hover_amount: 1.5,
+    hover_time: 0.08,
+    label: "@notebook.view",
+    icon: "notebook",
+    lbl_scale: 0.14,
+    style: "button_flat",
+    animated: false,
+});
+
 let design_view = compositor.button({
     parent: views,
     size: vec(0, 28),
