@@ -310,7 +310,7 @@ internal sealed partial class DawnScene
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(branchItem).Center));
         test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
         test.Check("branch: a click on it lists the branches, a new one to make first", () =>
-            textDialog is { IsOpen: true } && Chooser().Items is { Length: >= 3 } items && items[0].Contains("Create a new branch", StringComparison.Ordinal)
+            textDialog is { IsOpen: true } && Chooser().Items is { Length: >= 3 } items && items[0].Contains(Said("git.new_branch"), StringComparison.Ordinal)
             && items.Any(item => item.Contains(": main", StringComparison.Ordinal)));
         test.Run(() =>
         {

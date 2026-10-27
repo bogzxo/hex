@@ -84,7 +84,7 @@ internal sealed partial class HexGit
     {
         var actions = new List<UITreeAction>
         {
-            new("check", context.Strings.Said("git_repos.commit_here"), () => Active(repository, AskCommit))
+            new("git-commit", context.Strings.Said("git_repos.commit_here"), () => Active(repository, AskCommit))
         };
         if (repository.HasRemote)
             actions.Add(new UITreeAction("sync", context.Strings.Said("git_repos.sync_here"), () => Active(repository, SyncRepository)));
@@ -97,7 +97,7 @@ internal sealed partial class HexGit
     {
         MakeActive(repository);
         var menu = new Menu("git_repository");
-        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
+        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "git-commit");
         menu.AddSeparator();
         menu.Add(context.Strings.Said("git.fetch"), () => Remote(repository, RemoteWork.Fetch), icon: "cloud-download");
         menu.Add(context.Strings.Said("git.pull"), () => Remote(repository, RemoteWork.Pull), icon: "arrow-down");

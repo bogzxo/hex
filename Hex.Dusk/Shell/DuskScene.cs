@@ -47,10 +47,10 @@ internal sealed partial class DuskScene : Scene
     private readonly StatusBar statusBar;
     private readonly Notifications toasts;
 
-    // What the status bar says and when
+    // What the status bar says and when, for ten seconds the way Dawn's status bar says it
     private StatusItem messageItem = null!, profileItem = null!, sizeItem = null!, themeItem = null!;
     private long saidAt;
-    private const long SAID_FOR = 8_000;
+    private const long SAID_FOR = 10_000;
 
     private volatile bool closeConfirmed;
 

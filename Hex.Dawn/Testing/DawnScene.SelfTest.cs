@@ -173,6 +173,7 @@ internal sealed partial class DawnScene
             TestCodeFont(test);
             TestZoomKeepsPlace(test);
             TestMinimap(test);
+            TestSurface(test);
             TestTodos(test);
             TestPeek(test);
             TestInlays(test);
@@ -193,6 +194,7 @@ internal sealed partial class DawnScene
             TestHelpWindows(test);
             TestConveniences(test);
             TestKeys(test);
+            TestFocus(test);
             TestDiskChanges(test);
             TestBackups(test);
             TestExplorerOps(test);
@@ -219,6 +221,7 @@ internal sealed partial class DawnScene
             TestCodeLensCSharp(test);
         }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
+        ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
             TestLanguages(test);

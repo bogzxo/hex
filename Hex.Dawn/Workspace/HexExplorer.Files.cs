@@ -38,39 +38,39 @@ internal sealed partial class HexExplorer
         string folder = entry.IsFolder ? entry.Path : Path.GetDirectoryName(entry.Path)!;
 
         if (!entry.IsFolder)
-            shown.Add(context.Strings.Said("explorer_files.open"), () => context.Documents.Open(entry.Path));
+            shown.Add(context.Strings.Said("explorer_files.open"), () => context.Documents.Open(entry.Path), icon: "go-to-file");
 
-        shown.Add(context.Strings.Said("explorer_files.new_file"), () => NewFileIn(folder));
-        shown.Add(context.Strings.Said("explorer_files.new_folder"), () => NewFolderIn(folder));
+        shown.Add(context.Strings.Said("explorer_files.new_file"), () => NewFileIn(folder), icon: "new-file");
+        shown.Add(context.Strings.Said("explorer_files.new_folder"), () => NewFolderIn(folder), icon: "new-folder");
         shown.AddSeparator();
         shown.Add(context.Strings.Said("explorer_files.open_in_terminal"), () => OpenTerminalIn?.Invoke(folder), icon: "terminal");
         shown.Add(context.Strings.Said("explorer_files.find_in_folder"), () => FindInFolder?.Invoke(folder, ScopeOf(folder)), icon: "search");
         shown.AddSeparator();
-        shown.Add(context.Strings.Said("explorer_files.cut"), () => CutPaths([entry.Path])).IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.cut"), () => CutPaths([entry.Path]), icon: "diff-removed").IsEnabled = () => !entry.IsRoot;
         shown.Add(context.Strings.Said("explorer_files.copy"), () => CopyPaths([entry.Path]), icon: "copy").IsEnabled = () => !entry.IsRoot;
-        shown.Add(context.Strings.Said("explorer_files.paste"), () => PasteInto(folder)).IsEnabled = () => CanPaste;
-        shown.Add(context.Strings.Said("explorer_files.duplicate"), () => Duplicate(entry.Path)).IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.paste"), () => PasteInto(folder), icon: "clippy").IsEnabled = () => CanPaste;
+        shown.Add(context.Strings.Said("explorer_files.duplicate"), () => Duplicate(entry.Path), icon: "clone").IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
-        shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
-        shown.Add(context.Strings.Said("explorer_files.reveal"), () => RevealInExplorer(entry.Path));
-        shown.Add(context.Strings.Said("explorer_files.delete_menu"), () => DeletePath(entry.Path)).IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path), icon: "edit").IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.reveal"), () => RevealInExplorer(entry.Path), icon: "link-external");
+        shown.Add(context.Strings.Said("explorer_files.delete_menu"), () => DeletePath(entry.Path), icon: "trash").IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
         shown.Add(context.Strings.Said("explorer_files.copy_path"), () =>
         {
             UIClipboard.Copy(entry.Path);
             context.Notices.Say(context.Strings.Said("explorer_files.path_copied", ("path", entry.Path)));
-        });
+        }, icon: "link");
         shown.Add(context.Strings.Said("explorer_files.copy_relative_path"), () =>
         {
             string relative = RelativeOf(entry.Path);
             UIClipboard.Copy(relative);
             context.Notices.Say(context.Strings.Said("explorer_files.path_copied", ("path", relative)));
-        });
+        }, icon: "file-symlink-file");
 
         if (entry.IsRoot)
         {
             shown.AddSeparator();
-            shown.Add(context.Strings.Said("explorer_files.take_out"), () => RemoveFolder(entry.Path));
+            shown.Add(context.Strings.Said("explorer_files.take_out"), () => RemoveFolder(entry.Path), icon: "remove");
         }
 
         // Last, where Windows and Visual Studio have it
@@ -142,7 +142,7 @@ internal sealed partial class HexExplorer
     internal void NewFileIn(string folder)
     {
         string extension = GuessExtension(folder);
-        context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", folder), ("extension", extension)), "new" + extension, context.Strings.Said("explorer_files.make"), string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", ShownFolder(folder)), ("extension", extension)), "new" + extension, context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {
             name = name.Trim();
             if (!IsPlainName(name))
@@ -216,7 +216,7 @@ internal sealed partial class HexExplorer
 
     internal void NewFolderIn(string folder)
     {
-        context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", folder)), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", ShownFolder(folder))), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {
             name = name.Trim();
             string path = Path.Combine(folder, name);
@@ -352,6 +352,18 @@ internal sealed partial class HexExplorer
         }
 
         return full;
+    }
+
+    // A folder as a question about making something in it says it, inside the workspace from its folder's name, cut in
+    // the middle when it's long. The whole path wrapped in the dialog broke inside a word
+    private string ShownFolder(string folder)
+    {
+        string full = Path.GetFullPath(folder);
+        string? root = workspace.Folders.FirstOrDefault(each => PlatformPaths.IsUnder(full, each) || PlatformPaths.Same(full, each));
+        string shown = root is null ? full.Replace('\\', '/') : PlatformPaths.Same(full, root)
+            ? Path.GetFileName(full.TrimEnd('/', '\\'))
+            : $"{Path.GetFileName(Path.GetFullPath(root).TrimEnd('/', '\\'))}/{RelativeOf(full)}";
+        return HexText.MiddleOf(shown, 48);
     }
 
     /// <summary>

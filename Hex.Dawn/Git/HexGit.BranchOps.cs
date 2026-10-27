@@ -104,7 +104,7 @@ internal sealed partial class HexGit
 
             string force = context.Strings.Said("git_branch.force_delete");
             context.Windows.Ask(context.Strings.Said("git_branch.unmerged_title", ("branch", name)), context.Strings.Said("git_branch.unmerged_text", ("branch", name)),
-                [context.Strings.Said("git_branch.cancel"), force], answer =>
+                [context.Strings.Said("git_branch.cancel"), force], risky: force, answered: answer =>
                 {
                     if (answer == force)
                         BranchWork(repository, $"git branch -D {name}", () => repository.Git.DeleteBranch(name, force: true), context.Strings.Said("git_branch.deleted", ("branch", name)));

@@ -90,7 +90,7 @@ internal sealed partial class DawnScene
 
         // Commit as wide as the side less the chevron at its end, the way VS Code's button and its dropdown sit
         var row = commitBox.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0.0f, BOX_BUTTON), Padding = new UIEdges(0.0f, 0.0f, BOX_MORE + 2.0f, 0.0f) });
-        commitButton = row.Add(new Button { Fill = UIFill.Horizontal, Size = new Vector2(0.0f, BOX_BUTTON), Icon = "check", LabelScale = 0.13f, Tooltip = Said("git.commit_tip") });
+        commitButton = row.Add(new Button { Fill = UIFill.Horizontal, Size = new Vector2(0.0f, BOX_BUTTON), Icon = "git-commit", LabelScale = 0.13f, Tooltip = Said("git.commit_tip") });
         commitMore = row.Add(new Button
         {
             Anchor = Origin.Right,

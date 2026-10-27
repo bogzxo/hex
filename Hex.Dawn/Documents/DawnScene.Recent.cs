@@ -89,10 +89,10 @@ internal sealed partial class DawnScene
         {
             // Numbered, two of them can well have the same name in different folders
             string path = recent[i];
-            recentMenu.Add($"{i + 1}  {Path.GetFileName(path)}", () => Open(path));
+            recentMenu.Add($"{i + 1}  {Path.GetFileName(path)}", () => Open(path), icon: HexExplorer.FileIcon(path));
         }
 
         recentMenu.AddSeparator();
-        recentMenu.Add(Said("recent.clear"), ForgetRecent).IsEnabled = () => recent.Count > 0;
+        recentMenu.Add(Said("recent.clear"), ForgetRecent, icon: "clear-all").IsEnabled = () => recent.Count > 0;
     }
 }

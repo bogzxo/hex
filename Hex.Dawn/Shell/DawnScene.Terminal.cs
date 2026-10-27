@@ -53,8 +53,8 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminalPanel.OnTabMenu = (tab, point) =>
         {
             var shown = new Menu("terminal tab");
-            shown.Add(Said("tabs.close"), () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "close");
-            shown.Add(Said("explorer_files.rename"), () => terminals.AskRename(tab), icon: "edit");
+            shown.Add(Said("terminal_menu.kill"), () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "trash");
+            shown.Add(Said("terminal_menu.rename"), () => terminals.AskRename(tab), icon: "edit");
             shown.Add(Said("terminal_page.split_right"), () => terminals.Run("split_right"), terminals.Commands.KeyOf("split_right"), icon: "split-horizontal");
             ContextMenu.Show(chrome, point, shown);
         };

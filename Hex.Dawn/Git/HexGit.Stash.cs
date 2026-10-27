@@ -80,6 +80,7 @@ internal sealed partial class HexGit
                 string ago = Ago(entry.When);
                 choices.Add(new UIChoice(entry.Short, () => picked(repository, entry))
                 {
+                    Icon = "git-stash",
                     Segments = [(entry.Name, UIChoiceTone.Hash), (entry.Short, UIChoiceTone.Primary), (ago, UIChoiceTone.Date)],
                     Id = $"{entry.Name}  {entry.Short}  {ago}"
                 });
@@ -101,7 +102,7 @@ internal sealed partial class HexGit
         string yes = context.Strings.Said("git_stash.drop_yes");
         context.Windows.Ask(context.Strings.Said("git_stash.drop_confirm_title", ("name", entry.Name)),
             context.Strings.Said("git_stash.drop_confirm_text", ("message", entry.Short)),
-            [context.Strings.Said("git_stash.drop_no"), yes], answer =>
+            [context.Strings.Said("git_stash.drop_no"), yes], risky: yes, answered: answer =>
             {
                 if (answer == yes)
                     Stashing(repository, $"git stash drop {entry.Name}", () => repository.Git.Drop(entry.Index), context.Strings.Said("git_stash.dropped", ("name", entry.Name)));

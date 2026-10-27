@@ -40,12 +40,31 @@ internal sealed partial class DawnScene
     private MenuItem? keyFor;
     private UIDialog? keyDialog;
 
+    // What the status bar was told while a chord waits for its second key, taken off again once it's done waiting
+    private string? chordWaiting;
+
     private void LoadKeys()
     {
         // The first key of a chord says it's waiting for the second in the status bar, VS Code's words, and a second that
         // makes no chord says so too
-        commands.Keys.OnChordPending = first => Say(Said("keys_chords.waiting", ("key", UIShortcutText.Shown(first))));
+        commands.Keys.OnChordPending = first =>
+        {
+            chordWaiting = Said("keys_chords.waiting", ("key", UIShortcutText.Shown(first)));
+            Say(chordWaiting);
+        };
         commands.Keys.OnChordMissed = keys => Say(Said("keys_chords.not_a_command", ("keys", UIShortcutText.Shown(keys))));
+
+        // Done waiting, the chord went off or was let go of, the status bar stops saying it's waiting unless something
+        // else was said since. It said so for as long as a message stays, over whatever the chord did
+        commands.Keys.OnChordEnded = () =>
+        {
+            if (chordWaiting is { } waiting && messageItem.Text == UIRichText.Plain(waiting))
+                messageItem.Text = string.Empty;
+            chordWaiting = null;
+        };
+
+        // Alt and a letter opens the menu with that letter, unless a command has the key
+        menu.AltKeyTaken = (key, shift) => commands.Keys.Has(key, false, shift, true);
 
         bool kept = !options.SelfTest && options.Check.Length == 0;
         keysPath = kept ? HexFiles.Kept(KEYS_FILE, was: "keys.hor") : null;
@@ -407,13 +426,15 @@ internal sealed partial class DawnScene
     {
         // A text box of the editor, or one of the layout that is being tried out in the canvas
         // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
-        bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
+        // A window that has the keyboard itself (its title bar was clicked) isn't typing either
+        bool typing = compositor.Focus is not (null or TreeView or WindowPanel) || stage.Focus is not null;
 
         // While Change a key waits for one, the key is for that and nothing else. While a terminal has the keyboard its
         // keys are the shell's, Ctrl+W is a word rubbed out and not a file closed, the keys of Hex's that have to work
         // from a terminal are terminal commands (DawnScene.Terminal) and go through it. While the picture behind the code is
-        // laid out by hand the keys are the overlay's, Enter and Escape and the arrows
-        if (!UpdateKeyCapture() && compositor.Focus is not (TerminalView or ArrangeOverlay) && !SettingsFindPressed())
+        // laid out by hand the keys are the overlay's, Enter and Escape and the arrows, and a menu that's open has the keys
+        // to itself, Escape shuts it and nothing else
+        if (!UpdateKeyCapture() && compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed())
             commands.Keys.Update(Engine.Input.Keyboard, typing);
     }
 

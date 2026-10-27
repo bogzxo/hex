@@ -19,7 +19,7 @@ internal sealed partial class HexGit
         Changed += () => context.Panels.RefreshSide(HexSide.SourceControl);
 
         context.Commands.Add("View/sides", context.Strings.Said("git.side_command"), () => context.Panels.ShowSide(HexSide.SourceControl), "Ctrl+Shift+G", "source-control", UIKeyUse.BoundWhileTyping);
-        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(ActiveRepository()), "Ctrl+Alt+Enter", "check", UIKeyUse.BoundWhileTyping);
+        context.Commands.Add("Git/commit", context.Strings.Said("git.commit_command"), () => AskCommit(ActiveRepository()), "Ctrl+Alt+Enter", "git-commit", UIKeyUse.BoundWhileTyping);
         BuildCommits();
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.stage_file"), () => StageCurrent(true), icon: "add");
         context.Commands.Add("Git/menus/changes:file", context.Strings.Said("git.unstage_file"), () => StageCurrent(false), icon: "remove");
@@ -129,7 +129,7 @@ internal sealed partial class HexGit
         if (commitRow)
         {
             var (commit, ready) = CommitLabel(repository, status);
-            items.Add(new UITreeItem(commit, "check")
+            items.Add(new UITreeItem(commit, "git-commit")
             {
                 Button = true,
                 Color = ready ? null : context.Panels.Dim,
@@ -390,7 +390,7 @@ internal sealed partial class HexGit
     {
         string what = paths.Length == 1 ? Path.GetFileName(paths[0]) : HexText.Count("file", paths.Length);
         string yes = context.Strings.Said("git.discard_yes");
-        context.Windows.Ask(context.Strings.Said("git.discard_title"), context.Strings.Said("git.discard_text", ("what", what)), [context.Strings.Said("git.discard_no"), yes], answer =>
+        context.Windows.Ask(context.Strings.Said("git.discard_title"), context.Strings.Said("git.discard_text", ("what", what)), [context.Strings.Said("git.discard_no"), yes], risky: yes, answered: answer =>
         {
             if (answer != yes)
                 return;

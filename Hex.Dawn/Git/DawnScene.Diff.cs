@@ -17,8 +17,8 @@ internal sealed partial class DawnScene
         git.ShowChangeAt = (repository, path, line) => ShowGitDiff(repository, path, staged: false, line);
         commands.Add("Git/menus/changes:open", Said("diff.open_changes"), OpenChangesHere, icon: "diff");
         commands.Add("File/path", Said("diff.compare_saved"), CompareWithSaved, icon: "diff");
-        commands.Add("Go/places", Said("diff.next_change"), () => GoToChange(1), "Alt+F5", "arrow-down", UIKeyUse.BoundWhileTyping);
-        commands.Add("Go/places", Said("diff.previous_change"), () => GoToChange(-1), "Shift+Alt+F5", "arrow-up", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", Said("diff.next_change"), () => GoToChange(1), "Alt+F5", "triangle-down", UIKeyUse.BoundWhileTyping);
+        commands.Add("Go/places", Said("diff.previous_change"), () => GoToChange(-1), "Shift+Alt+F5", "triangle-up", UIKeyUse.BoundWhileTyping);
     }
 
     /// <summary>The changes of the file on screen that aren't staged, in a diff.</summary>
@@ -98,6 +98,9 @@ internal sealed partial class DawnScene
         SetCode(shown, diff.Text, fresh: true);
         shown.SavedCode = shown.Editor.Text;
         shown.DiffChanges = diff.Changes;
+
+        // Two columns of numbers, the old version's and the new one's, a line taken out numbered only in the first
+        shown.Editor.DiffLineNumbers = diff.Numbers();
 
         Vector4 gone = ErrorColor with { W = 0.18f }, came = (compositor.Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.16f };
         shown.Editor.LineHighlights = [.. diff.Runs.Select(run => new UICodeLineHighlight(run.Line, run.Count, run.Added ? came : gone))];

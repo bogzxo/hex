@@ -306,7 +306,7 @@ internal sealed partial class DawnScene
             header.Get<Label>("caption").Text = FileCaption(first.Path, group.Count());
             header.Get<Label>("caption").Color = null;
             var headerRow = header.Get<Button>("row");
-            headerRow.Tooltip = first.Path;
+            headerRow.Tooltip = HexText.MiddleOf(Relative(first.Path));
             headerRow.OnPressed = () => OpenAt(first.Path, first.Line, first.Column);
             headerRow.OnContextMenu = null;
 
@@ -316,7 +316,7 @@ internal sealed partial class DawnScene
                 var caption = items[at++].Get<Label>("caption");
                 caption.Text = ProblemCaption(problem);
                 caption.Color = null;
-                row.Tooltip = $"{problem.Text}\n{problem.Path}:{problem.Line + 1}:{problem.Column + 1}";
+                row.Tooltip = $"{problem.Text}\n{HexText.MiddleOf(Relative(problem.Path))}:{problem.Line + 1}:{problem.Column + 1}";
                 row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
                 row.OnContextMenu = _ => ShowProblemMenu(problem);
             }

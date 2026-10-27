@@ -215,6 +215,7 @@ internal sealed partial class DawnScene
             yield return new UITreeItem(text, others.Count > 0 ? "warning" : "extensions", key)
             {
                 Detail = key.Key,
+                DetailKeys = key.Key.Length > 0,
                 DetailColor = others.Count > 0 ? WarningColor : null,
                 IconColor = others.Count > 0 ? WarningColor : null,
                 Badge = said,

@@ -42,8 +42,8 @@ internal sealed class HexLayoutDebugger(UICompositor stage)
         Option(commands, optionsWhere, "    Padding", () => Options.ShowPadding, on => Options.ShowPadding = on);
         Option(commands, optionsWhere, "    Gaps", () => Options.ShowSpacing, on => Options.ShowSpacing = on);
         Option(commands, optionsWhere, "    Sizes", () => Options.ShowLabels, on => Options.ShowLabels = on);
-        Option(commands, optionsWhere, "    Only under the pointer", () => Options.HoveredOnly, on => Options.HoveredOnly = on);
-        Option(commands, optionsWhere, "    Hidden components too", () => Options.ShowHidden, on => Options.ShowHidden = on);
+        Option(commands, optionsWhere, "    Only Under the Pointer", () => Options.HoveredOnly, on => Options.HoveredOnly = on);
+        Option(commands, optionsWhere, "    Hidden Components Too", () => Options.ShowHidden, on => Options.ShowHidden = on);
     }
 
     private void Option(UICommands commands, string where, string label, Func<bool> read, Action<bool> write)

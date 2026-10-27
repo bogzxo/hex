@@ -48,18 +48,18 @@ internal sealed partial class HexCodeEditing
 
         bool hasSelection = editor.Document.HasSelection;
         var shown = new Menu("code");
-        shown.Add(context.Strings.Said("code_hints.go_to_declared"), GoToDefinition, "F12", "references");
+        shown.Add(context.Strings.Said("code_hints.go_to_declared"), GoToDefinition, "F12", "target");
         shown.Add(context.Strings.Said("code_hints.find_everywhere"), FindReferences, "Shift+F12", "references");
         shown.Add(context.Strings.Said("code_hints.rename_it"), RenameSymbol, "F2", "edit");
         shown.AddSeparator();
-        shown.Add(context.Strings.Said("code_hints.cut"), () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X").IsEnabled = () => hasSelection && !editor.ReadOnly;
+        shown.Add(context.Strings.Said("code_hints.cut"), () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X", "diff-removed").IsEnabled = () => hasSelection && !editor.ReadOnly;
         shown.Add(context.Strings.Said("code_hints.copy"), () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
-        shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A");
+        shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A", "selection");
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.toggle_comment"), () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
-        shown.Add(context.Strings.Said("code.toggle_block_comment"), () => editor.Document.ToggleBlockComment(), "Shift+Alt+A", "comment");
-        shown.Add(context.Strings.Said("code_hints.duplicate_line"), () => editor.Document.CopyLines(1), "Shift+Alt+Down", "copy");
-        shown.Add(context.Strings.Said("code_hints.next_occurrence"), () => editor.Document.AddNextOccurrence(), "Ctrl+D", "selection");
+        shown.Add(context.Strings.Said("code.toggle_block_comment"), () => editor.Document.ToggleBlockComment(), "Shift+Alt+A", "comment-discussion");
+        shown.Add(context.Strings.Said("code_hints.duplicate_line"), () => editor.Document.CopyLines(1), "Shift+Alt+Down", "arrow-circle-down");
+        shown.Add(context.Strings.Said("code_hints.next_occurrence"), () => editor.Document.AddNextOccurrence(), "Ctrl+D", "add");
         shown.AddSeparator();
         window.AddCodeMenu(shown);
 

@@ -16,11 +16,14 @@ internal sealed partial class DawnScene
     // The row that says nothing matched, when that's all the list has
     private UITreeItem? keysNothingRow;
 
-    /// <summary>The menu a command is in, the top of where it is, "Git" of "Git > Stash".</summary>
-    private static string CategoryOf(string path)
+    /// <summary>
+    /// The menu a command is in, the top of where it is, "Git" of "Git > Stash". File's Preferences is a category of its
+    /// own, Color Theme is a Preferences command in VS Code and in the palette's settings rows too.
+    /// </summary>
+    private string CategoryOf(string path)
     {
-        int cut = path.IndexOf(" > ", StringComparison.Ordinal);
-        return cut < 0 ? path : path[..cut];
+        string[] menus = path.Split(" > ");
+        return menus.Length > 1 && menus[1] == Said("menus.preferences") ? menus[1] : menus[0];
     }
 
     /// <summary>Whether every word is somewhere in one of the texts, in whatever order they came.</summary>
@@ -113,11 +116,14 @@ internal sealed partial class DawnScene
             tooltip = $"{tooltip}\n{AlsoTip(elsewhere)}";
         tooltip = $"{tooltip}\n{Said("keys_conflicts.source_tip", ("source", SourceSaid(source)))}";
 
+        // A row has its command's own icon, the one its menu shows, and a blank one keeps it in line with the rest. The
+        // lightning that stood in for none looked like an icon of Cut and Paste
         string text = prefix + label;
-        return new UITreeItem(text, clash ? "warning" : item.Icon.Length > 0 ? item.Icon : "symbol-event", item)
+        return new UITreeItem(text, clash ? "warning" : item.Icon.Length > 0 ? item.Icon : "blank", item)
         {
             Note = WhenSaid(WhenOf(item)),
             Detail = item.Shortcut.Length > 0 ? item.Shortcut : Said("keys.no_key"),
+            DetailKeys = item.Shortcut.Length > 0,
             DetailColor = clash ? WarningColor : changed ? accent : item.Shortcut.Length > 0 ? keyColor : DimColor,
             IconColor = clash ? WarningColor : changed ? accent : null,
             Edge = changed ? accent : null,

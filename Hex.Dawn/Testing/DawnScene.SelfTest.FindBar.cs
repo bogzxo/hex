@@ -65,6 +65,15 @@ internal sealed partial class DawnScene
         test.Check("find bar: and one undo puts them back", () =>
             code.Text.Contains("damage: 5 }", StringComparison.Ordinal) && code.Text.Contains("damage: 1212", StringComparison.Ordinal));
 
+        // Tab goes from the find box to the replace box, then to the toggles, VS Code's order, and back the same way
+        test.Run(() => codeEditing.findBox.Focus());
+        PressKeys(test, "Tab");
+        test.Check("find bar: Tab from the find box is the replace box", () => compositor.Focus == codeEditing.replaceBox);
+        PressKeys(test, "Tab");
+        test.Check("find bar: and from there the case toggle", () => compositor.Focus == codeEditing.findCase);
+        PressKeys(test, "Shift+Tab Shift+Tab");
+        test.Check("find bar: Shift+Tab goes back through the replace box to the find box", () => compositor.Focus == codeEditing.findBox);
+
         test.Run(() => TypeInto(codeEditing.findBox, "("));
         test.Wait();
         test.Check("find bar: a regex that doesn't work says so", () => code.FoundCount == 0 && codeEditing.findCount.Text == Said("find.bad_regex"));

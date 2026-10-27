@@ -250,7 +250,7 @@ internal sealed partial class DawnScene
         closeQuestion = UIDialog.Show(chrome, Said("documents.unsaved_title"),
             unsaved.Count == 1 ? Said("views.unsaved_one", ("names", names)) : Said("views.unsaved_many", ("count", unsaved.Count.ToString()), ("names", names)),
             new DialogChoice(Said("views.save_all"), () => SaveAllAndQuit(unsaved)),
-            new DialogChoice(Said("documents.dont_save"), QuitNow),
+            new DialogChoice(Said("documents.dont_save"), QuitNow, Risky: true),
             new DialogChoice(Said("keys.leave_it"), () => restartInto = null));
     }
 

@@ -178,11 +178,15 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IWindows.ChooseFolder(Action<string> picked) => explorer.AskFolder(picked);
 
-    void IWindows.Ask(string title, string text, string[] buttons, Action<string> answered)
+    void IWindows.Ask(string title, string text, string[] buttons, Action<string> answered, string? risky)
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
-        textDialog = UIDialog.Show(chrome, title, text, [.. buttons.Select(label => new DialogChoice(label, () => answered(label)))]);
+
+        // A risky one first is a dialog with it in red at the right end and the keyboard and Escape on the last, the safe
+        // one. Given last it was what Escape picked (Keep them, Discard), and Escape threw the changes away
+        IEnumerable<string> order = risky is not null && buttons.Contains(risky) ? [risky, .. buttons.Where(label => label != risky)] : buttons;
+        textDialog = UIDialog.Show(chrome, title, text, [.. order.Select(label => new DialogChoice(label, () => answered(label), Risky: label == risky))]);
     }
 
     void IWindows.Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed) =>
@@ -306,7 +310,10 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     {
         left.Show(true);
         Side = side;
-        FocusSideList();
+
+        // Debugging shows its side as it stops at a breakpoint, the keyboard stays in the code for that
+        if (side != HexSide.Debug)
+            FocusSideList();
     }
 
     bool IPanels.Showing(HexSide side) => Side == side;
@@ -413,7 +420,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     {
         AddConflictMenu(menu);
         menu.Add(Said("context.run_file"), running.RunCode, "F5", "play").IsVisible = () => document.IsText;
-        menu.Add(Said("context.apply_code"), ApplyCode, "Ctrl+Enter").IsVisible = () => !document.IsText;
+        menu.Add(Said("context.apply_code"), ApplyCode, "Ctrl+Enter", "export").IsVisible = () => !document.IsText;
         menu.Add(Said("context.command_palette"), CommandPalette, "Ctrl+Shift+P", "symbol-misc");
     }
 

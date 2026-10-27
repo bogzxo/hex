@@ -27,12 +27,12 @@ internal sealed partial class HexGit
     // their groups (fix is amending and taking back, flags the hooks skipped or signed off)
     private (string Group, string Key, string Icon, Action<Repository?> Do)[] CommitChoices() =>
     [
-        ("commit", "git.commit_push", "arrow-up", repository => AskCommit(repository, CommitThen.Push)),
-        ("commit", "git.commit_sync", "sync", repository => AskCommit(repository, CommitThen.Sync)),
+        ("commit", "git.commit_push", "repo-push", repository => AskCommit(repository, CommitThen.Push)),
+        ("commit", "git.commit_sync", "repo-sync", repository => AskCommit(repository, CommitThen.Sync)),
         ("fix", "git.amend_command", "edit", AskAmend),
         ("fix", "git.undo_command", "discard", UndoLastCommit),
-        ("flags", "git.commit_no_verify", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify)),
-        ("flags", "git.commit_signoff", "check", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff))
+        ("flags", "git.commit_no_verify", "unverified", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.NoVerify)),
+        ("flags", "git.commit_signoff", "verified", repository => AskCommit(repository, CommitThen.Nothing, CommitFlags.SignOff))
     ];
 
     private void BuildCommits()
@@ -45,7 +45,7 @@ internal sealed partial class HexGit
     private void CommitMenu(Repository repository)
     {
         var menu = new Menu("git_commit");
-        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "check");
+        menu.Add(context.Strings.Said("git.commit_button"), () => AskCommit(repository), icon: "git-commit");
         string? last = null;
         foreach (var (group, key, icon, act) in CommitChoices())
         {

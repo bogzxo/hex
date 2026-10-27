@@ -99,7 +99,7 @@ internal sealed partial class DawnScene
             list.Choose(at);
             list.OnActivated!(list.Items[at]);
         });
-        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains("Create a new branch", StringComparison.Ordinal)), 4.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains(Said("git.new_branch"), StringComparison.Ordinal)), 4.0f);
         test.Check("active repository: and picking one makes it active and lists its branches", () =>
             branchItem.Text.Contains("$(repo) clone", StringComparison.Ordinal) && textDialog is { IsOpen: true });
         test.Run(() => chrome.Dialog?.Close());

@@ -83,6 +83,10 @@ internal sealed partial class DawnScene
 
         // VS Code's keys for its Extensions view, which is the settings' Extensions here
         commands.Add("View/sides", Said("activity.extensions_command"), ShowExtensions, "Ctrl+Shift+X", "extensions", UIKeyUse.BoundWhileTyping);
+
+        // Tab from a button of the activity bar goes on to the side it shows, the next stop after the bar, VS Code's order
+        foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_git", "act_settings", "act_extensions"])
+            layout.Get<Button>(act).TabTo = by => by > 0 && left.Shown && sideTree.Visible ? sideTree : null;
     }
 
     // Whether the settings are up on Extensions because the activity bar's button asked for them, which is lit while they are
@@ -143,7 +147,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private void FocusSideList()
     {
-        if (Side is not (HexSide.Explorer or HexSide.SourceControl or HexSide.Search))
+        // The designer's own rows aren't the tree, the keyboard stays where it was for them. The outline and Debug are the
+        // tree as well, a click on their icon left the keyboard on nothing
+        if (Side == HexSide.Design)
             return;
 
         RebuildTree();
@@ -164,6 +170,17 @@ internal sealed partial class DawnScene
         sideTree.Selected ??= sideTree.Items.Find(item => item.HasChildren && item.Expanded);
         sideTree.Focus();
     }
+
+    /// <summary>The activity bar's button of a view of the side bar, where Shift+Tab from the side goes back to.</summary>
+    private Button? ActivityButton(HexSide side) => layout.Get<Button>(side switch
+    {
+        HexSide.Explorer => "act_explorer",
+        HexSide.Search => "act_search",
+        HexSide.Design => "act_design",
+        HexSide.Debug => "act_debug",
+        HexSide.SourceControl => "act_git",
+        _ => "act_outline"
+    }) is { Visible: true } button ? button : null;
 
     private void ToggleSideBar()
     {

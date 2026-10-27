@@ -38,7 +38,7 @@ internal sealed partial class DawnScene
     private void AddKeysCommands()
     {
         commands.Add("File/settings/prefs:main", Said("commands.shortcuts"), OpenKeysWindow, "Ctrl+K Ctrl+S", "keyboard", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/settings/prefs:files", Said("commands.shortcuts_file"), OpenKeysFile, icon: "file-code");
+        commands.Add("File/settings/prefs:files", Said("commands.shortcuts_file"), OpenKeysFile, icon: "key");
     }
 
     /// <summary>
@@ -199,6 +199,11 @@ internal sealed partial class DawnScene
         keysFilter.Focus();
     }
 
+    // Whether a built-in row's keys are keys alone, drawn as keycaps, and not words about them ("Arrow keys", "Tab, Shift+Tab",
+    // "Ctrl+Mouse wheel"), which stay words
+    private static bool KeysOnly(string keys) =>
+        keys.Length > 0 && !keys.Contains(',') && keys.Split([' ', '+'], StringSplitOptions.RemoveEmptyEntries).All(part => !char.IsLower(part[0]));
+
     // The size the keys window opens at, the settings window's for the room there is
     private Vector2 KeysWindowSize(WindowPanel window) =>
         Horizon.UI.Components.SettingsWindow.SizeFor(chrome.Root.Bounds.Size, window.MinSize, Horizon.UI.Components.SettingsWindow.ScaleIn(chrome));
@@ -262,7 +267,7 @@ internal sealed partial class DawnScene
                 string keys = line[2..gap].Replace("`", string.Empty), what = line[gap..].Trim();
                 string text = $"{builtIn}: {what}";
                 if (Wanted(keys, builtIn, what))
-                    rows.Add(new UITreeItem(text, "lock") { Detail = keys, Color = DimColor, Tooltip = Said("keys.fixed_tip"), Badge = defaults, Lit = KeysLit(words, text) });
+                    rows.Add(new UITreeItem(text, "lock") { Detail = keys, DetailKeys = KeysOnly(keys), Color = DimColor, Tooltip = Said("keys.fixed_tip"), Badge = defaults, Lit = KeysLit(words, text) });
             }
         }
 

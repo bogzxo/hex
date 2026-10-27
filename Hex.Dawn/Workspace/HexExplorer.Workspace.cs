@@ -300,8 +300,8 @@ internal sealed partial class HexExplorer
     {
         commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.add_folder"), () => AskFolder(AddFolder), icon: "new-folder");
         commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.open_workspace"), OpenWorkspacePressed, icon: "folder-library");
-        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.save_workspace"), () => SaveWorkspacePressed(asNew: false)).IsEnabled = () => !workspace.IsEmpty;
-        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.save_workspace_as"), () => SaveWorkspacePressed(asNew: true)).IsEnabled = () => !workspace.IsEmpty;
-        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.close_workspace"), CloseWorkspace).IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.save_workspace"), () => SaveWorkspacePressed(asNew: false), icon: "save").IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.save_workspace_as"), () => SaveWorkspacePressed(asNew: true), icon: "save-as").IsEnabled = () => !workspace.IsEmpty;
+        commands.Add("File/workspace/workspace", context.Strings.Said("explorer_workspace.close_workspace"), CloseWorkspace, icon: "close").IsEnabled = () => !workspace.IsEmpty;
     }
 }

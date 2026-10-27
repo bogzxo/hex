@@ -210,6 +210,33 @@ internal sealed partial class DuskScene
         test.Settle(settle);
         test.Check("tab_3 picks the third", () => panel.CurrentIndex == 2);
         test.Check("the selected tab's terminal has the keyboard", () => compositor.Focus == panel.FocusedView);
+
+        // More than fit, named long enough that three don't even across a 4K screen, and a chevron lists them all
+        test.Check("tabs that fit have no chevron", () => !panel.TabsOverflow);
+        test.Run(() =>
+        {
+            foreach (TerminalTab tab in panel.Tabs)
+                panel.Rename(tab, string.Concat(Enumerable.Repeat("a tab with a name long enough that three run off the strip ", 10)) + panel.IndexOf(tab));
+        });
+        test.Wait();
+        test.Check("tabs that don't fit bring up a chevron before the plus", () => panel.TabsOverflow && panel.TabsListBounds.Width > 0.0f);
+        test.Run(() => Shot("tabs-overflow"));
+        test.Click(At(() => panel.TabsListBounds));
+        test.Wait();
+        test.Check("which lists every tab, the open one ticked", () =>
+            chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Showing is { } shown && shown.Items.Count == panel.Tabs.Count
+            && shown.Items[panel.CurrentIndex].IsChecked?.Invoke() == true);
+        test.Click(At(() => chrome.Root.Children.OfType<ContextMenu>().First().ItemBounds(0)));
+        test.Wait();
+        test.Settle(settle);
+        test.Check("and a pick opens that one", () => panel.CurrentIndex == 0);
+        test.Run(() =>
+        {
+            foreach (TerminalTab tab in panel.Tabs)
+                panel.Rename(tab, null);
+        });
+        test.Wait();
+        test.Check("named short again, the chevron goes", () => !panel.TabsOverflow);
     }
 
     private void TestSplits(DuskScript test)
@@ -226,7 +253,15 @@ internal sealed partial class DuskScene
         test.Check("the panes have edges to drag between them", () => panel.FocusedView?.Resizable == (UIResize.Left | UIResize.Top));
         test.Check("the new panes are on screen", () => panel.Current!.Views.All(view => view.Visible));
         test.WaitFor(() => panel.FocusedView?.Screen.Text().Trim().Length > 0, 8.0f);
+
+        // The test's pointer starts in the middle of the window, which is right on the edge between the panes, and lit it
+        // up in every shot. Put over the status bar it's on no edge, and none of them shows its handle
+        test.Move(At(() => statusBar.Bounds, 0.5f, 0.5f));
+        test.Wait();
+        test.Check("the edges between the panes show nothing while the pointer isn't on them", () =>
+            panel.Current!.Views.All(view => view.ActiveGrip == UIResize.None));
         test.Run(() => Shot("splits"));
+        test.Check("every pane has its title along its top, split or not", () => panel.Current!.Views.All(view => view.ShowPaneTitle && view.PaneBadge.Height > 0.0f));
 
         test.Run(() => Run("focus_left"));
         test.Check("focus_left goes to the pane on the left", () => Shape() == "[F|[o/o]]");
@@ -291,10 +326,11 @@ internal sealed partial class DuskScene
         test.Run(() => Run("palette"));
         test.Wait();
         test.Run(() => Shot("palette"));
-        // A title once, Close pane is on two keys and the palette lists it the one time. Not Tab 1 to Tab 9, their keys are enough
+        // A title once, Close pane is on two keys and the palette lists it the one time. Not Tab 1 to Tab 9, their keys are enough.
+        // Every look, and laying the backdrop out by hand
         test.Check("the command palette comes up with every command, and every look", () => chrome.Dialog is { IsOpen: true }
             && Descendants(chrome.Dialog).OfType<ListBox>().First().Items.Length == host.Commands.All.Where(command => !IsTabNumber(command.Name)).Select(command => command.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count()
-                + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count);
+                + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count + 1);
         test.Check("a few letters narrow it down", () =>
         {
             var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();

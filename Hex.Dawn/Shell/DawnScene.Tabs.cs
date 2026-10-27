@@ -68,7 +68,7 @@ internal sealed partial class DawnScene
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path ?? Said("tabs.never_saved", ("name", shown.Name));
+            tab.Tooltip = shown.Path is { } where ? HexText.MiddleOf(Relative(where)) : Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
@@ -108,14 +108,14 @@ internal sealed partial class DawnScene
     {
         var shown = new Menu("tab");
         shown.Add(Said("tabs.close"), () => CloseDocument(tab), "Ctrl+W", icon: "close");
-        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "close-all");
-        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true));
+        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "clear-all");
+        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true), icon: "chrome-close");
         shown.Add(Said("tabs.close_all"), () => CloseAll(), icon: "close-all");
         shown.AddSeparator();
         shown.Add(Said("tabs.open_to_side"), () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
         shown.AddSeparator();
-        shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "copy").IsEnabled = () => tab.Path is not null;
-        shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name)).IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "link").IsEnabled = () => tab.Path is not null;
+        shown.Add(Said("tabs.copy_relative_path"), () => UIClipboard.Copy(tab.Path is { } path ? Relative(path) : tab.Name), icon: "file-symlink-file").IsEnabled = () => tab.Path is not null;
         shown.Add(Said("tabs.reveal_in_explorer"), () => RevealInExplorer(tab), icon: "files").IsEnabled = () => tab.Path is not null;
         shown.AddSeparator();
         shown.Add(Said("file_properties.menu"), () => ShowPropertiesOf(tab.Path is { } path ? [path] : null), "Alt+Enter", "info");

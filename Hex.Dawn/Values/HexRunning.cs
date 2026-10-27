@@ -81,7 +81,7 @@ internal sealed partial class HexRunning
         if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran
             && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), PlatformPaths.Comparison))))
         {
-            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(1, ran.ErrorAt.Span.Length), error));
+            found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(0, ran.ErrorAt.Span.Length), error));
         }
 
         return found;

@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
         commands.DeclareSubmenu("View/appearance", "look", Said("menus.appearance"), "layout", "screen", "parts", "zoom");
         commands.DeclareSubmenu("Layout/skin", "debugger", Said("menus.layout_debugger"), "debug", "switch", "options");
         commands.DeclareSubmenu("Git/menus", "changes", Said("menus.git_changes"), "diff", "open", "file", "all");
-        commands.DeclareSubmenu("Git/menus", "commit", Said("menus.git_commit"), "check", "commit", "fix", "flags");
+        commands.DeclareSubmenu("Git/menus", "commit", Said("menus.git_commit"), "git-commit", "commit", "fix", "flags");
         commands.DeclareSubmenu("Git/menus", "branches", Said("menus.git_branches"), "git-branch", "switch", "change", "commits");
         commands.DeclareSubmenu("Git/menus", "remote", Said("menus.git_remote"), "cloud", "sync", "publish");
         commands.DeclareSubmenu("Git/menus", "stash", Said("menus.git_stash"), "git-stash", "stash", "pick");

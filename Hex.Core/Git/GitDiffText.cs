@@ -67,4 +67,40 @@ internal sealed record GitDiffText(string Text, IReadOnlyList<GitDiffRun> Runs, 
         Same(now.Length);
         return new GitDiffText(string.Join(ending, lines), runs, changes, newLines) { Words = GitWordDiff.Of(lines, runs) };
     }
+
+    /// <summary>
+    /// Every line's number in the old version and in the new one, counted from 1, 0 where it isn't in that one (a line
+    /// taken out has no new number, one put in no old one). The two columns of numbers down a diff, VS Code's.
+    /// </summary>
+    public (int[] Old, int[] New) Numbers()
+    {
+        int count = NewLines.Length;
+        foreach (GitDiffRun run in Runs)
+        {
+            if (!run.Added)
+                count += run.Count;
+        }
+
+        var olds = new int[count];
+        var news = new int[count];
+        var gone = new bool[count];
+        var came = new bool[count];
+        foreach (GitDiffRun run in Runs)
+        {
+            for (int line = run.Line; line < run.Line + run.Count && line < count; line++)
+            {
+                if (run.Added) came[line] = true;
+                else gone[line] = true;
+            }
+        }
+
+        int oldAt = 0, newAt = 0;
+        for (int line = 0; line < count; line++)
+        {
+            olds[line] = came[line] ? 0 : ++oldAt;
+            news[line] = gone[line] ? 0 : ++newAt;
+        }
+
+        return (olds, news);
+    }
 }
