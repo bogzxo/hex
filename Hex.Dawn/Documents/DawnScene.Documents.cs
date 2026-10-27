@@ -419,7 +419,9 @@ internal sealed partial class DawnScene
                 ApplyCode();
 
             // A file of code tidied first, one step to undo, the auto save leaves it be (see DawnScene.Conveniences)
-            if (document.IsText && !savingQuietly && Tidied(document.Editor.Text) is { } tidy)
+            // A notebook's cells written into its JSON first, and the JSON left as Jupyter would write it
+            FlushNotebook(document);
+            if (document.IsText && !savingQuietly && !IsNotebook(document) && Tidied(document.Editor.Text) is { } tidy)
                 document.Editor.Document.Replace(tidy);
 
             string written = document.GenerateCode();

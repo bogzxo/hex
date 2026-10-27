@@ -113,6 +113,7 @@ internal sealed partial class DawnScene
         commands.Declare("Edit", "history", "clipboard", "find", "files", "comment");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
+        commands.Declare("Notebook", "run", "cells", "clear", "kernel");
         commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");

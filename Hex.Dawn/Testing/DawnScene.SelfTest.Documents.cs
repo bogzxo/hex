@@ -134,9 +134,9 @@ internal sealed partial class DawnScene
             document.PreviewCount >= 5 && document.Find("side_bar") is Include side && Descendants(side).OfType<GridPanel>().Any(grid => grid.Children.Count == 19));
 
         // The parts that take turns are on layers, all but the designer's hidden as it opens, and running Hex shows them all
-        string[] startHidden = ["files", "code", "table", "extension", "image", "values"];
+        string[] startHidden = ["files", "code", "table", "extension", "notebook", "image", "values"];
         test.Check("layers: the editor's views are on layers, the ones that take turns with the designer's hidden", () =>
-            document.Module.Layers.Count == 9 && document.Module.HiddenLayers.Count == startHidden.Length
+            document.Module.Layers.Count == 10 && document.Module.HiddenLayers.Count == startHidden.Length
             && startHidden.All(document.Module.IsLayerHidden) && chrome.HiddenLayers.Count == 0);
 
         // The list of layers is short, the row scrolled to first the way somebody would
@@ -145,7 +145,7 @@ internal sealed partial class DawnScene
         test.Click(At(() => designer.layerRows.GetValueOrDefault("code")));
         test.Wait();
         test.Check("layers: a click on one shows it to work on, and the code says the layout starts with the rest hidden", () =>
-            !document.Module.IsLayerHidden("code") && Code().Contains("compositor.hidden_layers([\"files\", \"table\", \"extension\", \"image\", \"values\"]);"));
+            !document.Module.IsLayerHidden("code") && Code().Contains("compositor.hidden_layers([\"files\", \"table\", \"extension\", \"notebook\", \"image\", \"values\"]);"));
 
         test.Run(() => layersScroll.ScrollIntoView(designer.layerRows["code"]));
         test.Wait();

@@ -276,7 +276,7 @@ internal sealed partial class DawnScene
         // Not on a tick the code or the canvas hasn't been laid out yet (F7 just swapped them), what it takes isn't known
         // then and the panel was cut to its least for good, a line of terminal in the code of a layout
         float panelBefore = panelTaken;
-        UIComponent shown = LayoutTools ? canvas : codeScroll;
+        UIComponent shown = LayoutTools ? canvas : notebookView.Visible ? notebookView : codeScroll;
         if (bottom.Visible && shown.Visible && shown.Bounds.Height > 0.0f)
         {
             float others = Spoken(center, shown) - panelBefore;
@@ -308,6 +308,8 @@ internal sealed partial class DawnScene
             running.Table.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, running.Table) - panelLag));
         else if (extensionViews.Visible)
             extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews) - panelLag));
+        else if (notebookView.Visible)
+            notebookView.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, notebookView) - panelLag));
         else if (imageView.Visible)
             imageView.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, imageView) - panelLag));
         else if (!LayoutTools)
@@ -352,7 +354,7 @@ internal sealed partial class DawnScene
     {
         // A hidden canvas isn't laid out any more, so with the code up it kept the size it had, and dragging the panel up
         // had the dark show through the panel where the canvas used to be
-        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : imageView.Visible ? imageView : running.Table.Visible ? running.Table : codeScroll;
+        UIComponent middle = canvas.Visible ? canvas : extensionViews.Visible ? extensionViews : notebookView.Visible ? notebookView : imageView.Visible ? imageView : running.Table.Visible ? running.Table : codeScroll;
         if (!middle.Bounds.IsEmpty)
         {
             backdrop.Viewport = UIRect.FromCenter(Vector2.Zero, middle.Bounds.Size);

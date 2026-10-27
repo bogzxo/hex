@@ -95,6 +95,14 @@ let ext_view = compositor.panel({
     clip: true,
 });
 
+// A Jupyter notebook as its cells, in place of its JSON, see DawnScene.Notebook. What's in it is made from the notebook
+let notebook_view = compositor.panel({
+    layer: "notebook",
+    parent: center,
+    size: vec(840, 250),
+    clip: true,
+});
+
 // A picture opened from the explorer, in place of code, see DawnScene.Images
 let image_view = compositor.panel({
     layer: "image",
@@ -148,4 +156,4 @@ let toasts = compositor.notifications({
     text_scale: 0.14,
 });
 
-compositor.hidden_layers(["files", "code", "table", "extension", "image", "values"]);
+compositor.hidden_layers(["files", "code", "table", "extension", "notebook", "image", "values"]);

@@ -38,9 +38,11 @@ internal sealed partial class DawnScene
         ApplyExtensionViews();
         bool extension = document.View == HexView.Extension;
         bool picture = document.Picture is not null;
+        bool notebook = document.View == HexView.Notebook && IsNotebook(document);
+        ApplyNotebookView(notebook);
 
         canvas.Visible = tools;
-        codeScroll.Visible = !tools && !table && !extension && !picture;
+        codeScroll.Visible = !tools && !table && !extension && !picture && !notebook;
         imageView.Visible = picture;
 
         // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
@@ -51,9 +53,9 @@ internal sealed partial class DawnScene
         // A layout is its designer or its code, a file of code its code or its table when it has one
         ShowViewButtons();
         layout.Get<Button>("design_view").Visible = !document.IsText;
-        layout.Get<Button>("table_view").Visible = document.IsText;
+        layout.Get<Button>("table_view").Visible = document.IsText && !IsNotebook(document);
         layout.Get<Button>("design_view").Selected = tools;
-        layout.Get<Button>("code_view").Selected = !tools && !table && !extension;
+        layout.Get<Button>("code_view").Selected = !tools && !table && !extension && !notebook;
         layout.Get<Button>("table_view").Selected = table;
         nameBox.Visible = !document.IsText;
         layout.Get<Label>("inspector_title").Text = Said(tools ? "properties.title" : "properties.file");
@@ -61,7 +63,7 @@ internal sealed partial class DawnScene
         // Play or Run, or what was picked to run beside it (DawnScene.RunTarget)
         ShowRunTarget();
 
-        if (tools || table || extension || picture)
+        if (tools || table || extension || picture || notebook)
             code.Unfocus();
         else
             code.Focus();
@@ -75,7 +77,7 @@ internal sealed partial class DawnScene
     private static readonly string[] runnableExtensions = [".d", ".di", ".cs", ".rs", ".go", ".c", ".cpp", ".cc", ".cxx", ".py", ".js", ".mjs"];
 
     /// <summary>The buttons over the editor for the ways the file can be shown, its designer, its code, its table and an extension's.</summary>
-    public void ShowViewButtons() => running.ShowTableButtons(viewButtons.Count);
+    public void ShowViewButtons() => running.ShowTableButtons(viewButtons.Count + (IsNotebook(document) ? 1 : 0));
 
     /// <summary>
     /// Whether Run means anything for a document, what RunOrPlay would do with it. A layout plays, HIDL runs, a file with
@@ -96,14 +98,15 @@ internal sealed partial class DawnScene
     private void SwitchView(HexView view)
     {
         // A file of code has no designer, a layout no table
-        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table))
+        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table) || (view == HexView.Notebook && !IsNotebook(document)))
             return;
 
         if (document.IsText)
         {
             document.View = view;
             ApplyView();
-            Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : Said("views.code_of", ("name", document.Name)));
+            if (view != HexView.Notebook)
+                Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : Said("views.code_of", ("name", document.Name)));
             return;
         }
 
@@ -127,6 +130,7 @@ internal sealed partial class DawnScene
         {
             // Round the views a file of code has, its code, its table if it has one, the views of extensions for it
             var round = new List<(HexView View, string? Id)> { (HexView.Code, null) };
+            if (IsNotebook(document)) round.Insert(0, (HexView.Notebook, null));
             if (running.HasTable) round.Add((HexView.Table, null));
             round.AddRange(ViewsFor(document).Select(kind => (HexView.Extension, (string?)kind.Id)));
             if (round.Count < 2)
