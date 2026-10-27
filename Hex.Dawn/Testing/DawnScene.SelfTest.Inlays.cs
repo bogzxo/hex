@@ -37,16 +37,17 @@ internal sealed partial class DawnScene
             return after.X - before.X > digit * 4.0f && code.PositionAt(after - new Vector2(digit * 0.7f, 0.0f)) == new UITextPosition(1, two);
         });
 
-        // Typing on the line holds its hints back until they're worked out again, and they come back
+        // Typing on the line keeps the hints that aren't where the typing is, the code after them stays where it was rather
+        // than jumping left and back as they went and came again
         test.Run(() =>
         {
             code.GoTo(1, CALL.Length);
             code.Document.Insert(" ");
         });
-        test.Check("inlays: the line being typed on goes without its hints until they're worked out again", () =>
-            code.PlaceOf(new UITextPosition(1, two + 1)).X - code.PlaceOf(new UITextPosition(1, two)).X < code.PlaceOf(new UITextPosition(1, 2)).X - code.PlaceOf(new UITextPosition(1, 0)).X);
+        test.Check("inlays: the line being typed on keeps the hints away from the typing, nothing after them moves", () =>
+            code.PlaceOf(new UITextPosition(1, two + 1)).X - code.PlaceOf(new UITextPosition(1, two)).X > code.PlaceOf(new UITextPosition(1, 4)).X - code.PlaceOf(new UITextPosition(1, 0)).X);
         test.Settle(1.0f);
-        test.Check("inlays: and they come back once the typing stops", () =>
+        test.Check("inlays: and they're still there once the typing stops and they're worked out again", () =>
             code.InlayHints.Any(inlay => inlay.Line == 1 && inlay.Column == two)
             && code.PlaceOf(new UITextPosition(1, two + 1)).X - code.PlaceOf(new UITextPosition(1, two)).X > code.PlaceOf(new UITextPosition(1, 4)).X - code.PlaceOf(new UITextPosition(1, 0)).X);
 
