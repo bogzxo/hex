@@ -3,7 +3,7 @@
 2.5.0 fell over building for Intel macs before it got out, so this is the first of it, with the PATH found on linux
 and macOS again and Setup happy to install under a folder that's a link.
 
-hex has an installer now, and updates itself. [Hex Setup](https://github.com/bogzxo/hex-installer/releases/latest)
+hex has an installer now, and updates itself. Hex Setup, the `Hex-Setup` zips on this release,
 puts it on your machine properly, with shortcuts, a place in the app menu and an uninstaller, and Help > Check for
 Updates brings a newer one down from inside hex. on top of that a pass over the whole UI, notebooks that draw
 everything Jupyter does, and Markdown previewed natively
@@ -47,8 +47,8 @@ everything Jupyter does, and Markdown previewed natively
 
 ## running it
 
-**[Hex Setup](https://github.com/bogzxo/hex-installer/releases/latest)** is the easy way, unpack the `Hex-Setup` zip
-for your system and run it. it's on this release too.
+**Hex Setup** is the easy way, unpack the `Hex-Setup` zip
+for your system from this release and run it.
 
 or grab the portable zip for your system from this release, unpack it anywhere and run `Hex` (`Hex.exe` on windows).
 its compiled ahead of time so you dont need to install anything, .NET included
