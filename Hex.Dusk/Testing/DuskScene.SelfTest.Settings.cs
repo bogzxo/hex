@@ -45,6 +45,11 @@ internal sealed partial class DuskScene
                 && editor.GetValueOrDefault("tab_size") is NumberValue { Value: 2 }
                 && editor.GetValueOrDefault("wrap_code") is BooleanValue { Value: true });
         test.Check("settings: and the row says it's changed", () => SettingsPage!.IsModified!("tab_size"));
+        float scrollSpeed = compositor.ScrollSpeed;
+        test.Run(() => SettingsPage!.Enter("scroll_speed", new NumberValue(2)));
+        test.Check("settings: universal scroll speed is shared and live in Dusk", () =>
+            SettingsPage!.Settings.Any(setting => setting.Key == "scroll_speed") && (host.Settings.Path is null || compositor.ScrollSpeed == 2));
+        test.Run(() => SettingsPage!.Enter("scroll_speed", new NumberValue(scrollSpeed)));
         test.Run(() =>
         {
             SettingsPage!.Reset("tab_size");

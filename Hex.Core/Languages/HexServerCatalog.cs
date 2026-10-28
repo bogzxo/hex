@@ -135,37 +135,7 @@ internal static partial class HexServerCatalog
     /// Where a command is, the file itself for a path, otherwise the first match on the PATH (with PATHEXT's endings on
     /// Windows). Null for nowhere.
     /// </summary>
-    public static string? Locate(string command)
-    {
-        if (command.Length == 0)
-            return null;
-
-        if (command.Contains(Path.DirectorySeparatorChar) || command.Contains(Path.AltDirectorySeparatorChar))
-            return File.Exists(command) ? Path.GetFullPath(command) : null;
-
-        string[] endings = OperatingSystem.IsWindows()
-            ? ["", .. (System.Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM").Split(';', StringSplitOptions.RemoveEmptyEntries)]
-            : [""];
-
-        foreach (string folder in (System.Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            foreach (string ending in endings)
-            {
-                try
-                {
-                    string candidate = Path.Combine(folder.Trim('"'), command + ending);
-                    if (File.Exists(candidate))
-                        return candidate;
-                }
-                catch (ArgumentException)
-                {
-                    break;
-                }
-            }
-        }
-
-        return null;
-    }
+    public static string? Locate(string command) => Horizon.UI.Scripting.LanguageServerProgram.Locate(command);
 
     /// <summary>
     /// The version a program says it is, the first thing in what it prints that looks like one (0.13.0, 19.1.2,
@@ -175,16 +145,7 @@ internal static partial class HexServerCatalog
     {
         try
         {
-            var info = new ProcessStartInfo(program)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                CreateNoWindow = true
-            };
-            foreach (string argument in arguments)
-                info.ArgumentList.Add(argument);
+            var info = Horizon.UI.Scripting.LanguageServerProgram.StartInfo(program, arguments);
 
             using Process? process = Process.Start(info);
             if (process is null)

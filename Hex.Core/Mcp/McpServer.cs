@@ -42,7 +42,8 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
             foreach (JsonNode? each in batch.ToArray())
             {
                 if (await HandleOne(each) is { } answer)
-                    answers.Add(answer);
+                    // Select the DOM overload. Add<JsonObject> serializes a CLR value and needs reflection metadata.
+                    answers.Add((JsonNode)answer);
             }
 
             return answers.Count > 0 ? answers : null;

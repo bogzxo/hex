@@ -13,5 +13,8 @@ internal enum HexView
     Extension,
 
     // A Jupyter notebook as its cells and what running them came to, see DawnScene.Notebook
-    Notebook
+    Notebook,
+
+    // Native Markdown preview, sharing document rendering with notebook Markdown cells.
+    Markdown
 }

@@ -25,6 +25,12 @@ jobs:
             rid: linux-x64
           - os: macos-latest
             rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+          - os: windows-11-arm
+            rid: win-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -50,23 +56,71 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Check release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = ($props.Project.PropertyGroup | Where-Object { $_.Version }).Version
+          if ($env:GITHUB_REF_NAME.Substring(1) -ne $version) { throw "Release tag must match Directory.Build.props ($version)." }
+
       - name: Publish
         run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex
+
+      - name: Publish installer
+        run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup
+
+      - name: macOS icon
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p publish/hex.iconset
+          for size in 16 32 128 256 512; do
+            sips -z "$size" "$size" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}.png"
+            double=$((size * 2))
+            sips -z "$double" "$double" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns publish/hex.iconset -o publish/Hex/Assets/hex_icon.icns
+          cp publish/Hex/Assets/hex_icon.icns publish/Hex.Setup/Assets/hex_icon.icns
+
+      - name: Bundle updater and prepare setup
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath publish/Hex.Setup -Destination publish/Hex/installer -Recurse
+          if ('${{ runner.os }}' -eq 'macOS') {
+            New-Item -ItemType Directory -Path 'publish/Hex Setup.app/Contents' -Force
+            Move-Item -LiteralPath publish/Hex.Setup -Destination 'publish/Hex Setup.app/Contents/MacOS'
+            New-Item -ItemType Directory -Path 'publish/Hex Setup.app/Contents/Resources' -Force
+            Copy-Item -LiteralPath 'publish/Hex Setup.app/Contents/MacOS/Assets/hex_icon.icns' -Destination 'publish/Hex Setup.app/Contents/Resources/hex.icns'
+            @'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0"><dict><key>CFBundleExecutable</key><string>Hex.Installer</string><key>CFBundleIdentifier</key><string>com.bogzxo.hex.setup</string><key>CFBundleName</key><string>Hex Setup</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>hex.icns</string><key>NSHighResolutionCapable</key><true/></dict></plist>
+          '@ | Set-Content -LiteralPath 'publish/Hex Setup.app/Contents/Info.plist'
+          }
 
       - name: Zip
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/Hex -DestinationPath Hex-${{ matrix.rid }}.zip
+        run: |
+          Compress-Archive -Path publish/Hex -DestinationPath Hex-${{ matrix.rid }}.zip
+          Compress-Archive -Path publish/Hex.Setup -DestinationPath Hex-Setup-${{ matrix.rid }}.zip
 
       - name: Zip
         if: runner.os != 'Windows'
         working-directory: publish
-        run: zip -r ../Hex-${{ matrix.rid }}.zip Hex
+        run: |
+          zip -r ../Hex-${{ matrix.rid }}.zip Hex
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            zip -r ../Hex-Setup-${{ matrix.rid }}.zip 'Hex Setup.app'
+          else
+            zip -r ../Hex-Setup-${{ matrix.rid }}.zip Hex.Setup
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: Hex-${{ matrix.rid }}
-          path: Hex-${{ matrix.rid }}.zip
+          path: |
+            Hex-${{ matrix.rid }}.zip
+            Hex-Setup-${{ matrix.rid }}.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

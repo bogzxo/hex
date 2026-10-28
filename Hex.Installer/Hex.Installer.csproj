@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>WinExe</OutputType>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+  <!-- Same native toolchain discovery as Hex, including publish from a normal terminal. -->
+  <UsingTask TaskName="InstallerAddToPath" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup><Directory ParameterType="System.String" Required="true" /></ParameterGroup>
+    <Task><Code Type="Fragment" Language="cs"><![CDATA[
+      string path = System.Environment.GetEnvironmentVariable("PATH") ?? "";
+      if (System.IO.Directory.Exists(Directory) && path.IndexOf(Directory, System.StringComparison.OrdinalIgnoreCase) < 0)
+          System.Environment.SetEnvironmentVariable("PATH", Directory + ";" + path);
+    ]]></Code></Task>
+  </UsingTask>
+  <Target Name="FindInstallerNativeToolchain" BeforeTargets="SetupOSSpecificProps" Condition="'$(OS)' == 'Windows_NT' and '$(PublishAot)' == 'true'">
+    <InstallerAddToPath Directory="$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer" />
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Hex.Installation\Hex.Installation.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
+    <None Include="..\Hex.Shell\Assets\hex_icon.png" Link="Assets\hex_icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\installer\**\*.hor" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

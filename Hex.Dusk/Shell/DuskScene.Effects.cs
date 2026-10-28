@@ -74,6 +74,7 @@ internal sealed partial class DuskScene
         effectSparks = settings.EffectSparks;
         effectGlass = settings.EffectGlass;
         uiAnimation = settings.UiAnimation;
+        compositor.ScrollSpeed = settings.ScrollSpeed;
         popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
         sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
         veil = HexGlass.Veil(settings.GlassClarity);

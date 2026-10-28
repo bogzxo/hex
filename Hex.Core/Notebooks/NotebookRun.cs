@@ -18,6 +18,9 @@ internal sealed class NotebookRun
     private readonly Dictionary<string, NotebookCell> sent = [];
     private readonly Dictionary<string, List<JsonObject>> displays = [];
     private readonly HashSet<NotebookCell> clearing = [];
+    private readonly HashSet<string> replied = [], idle = [];
+    private readonly Queue<string> completed = [];
+    private readonly Dictionary<JsonObject, NotebookCell> owners = [];
 
     /// <summary>The cells sent and not finished, in the order they were sent.</summary>
     public List<NotebookCell> Queued { get; } = [];
@@ -28,10 +31,17 @@ internal sealed class NotebookRun
     /// <summary>A cell sent to run, as the request it went as. Its outputs go, they're about to be made again.</summary>
     public void Sent(NotebookCell cell, string requestId)
     {
+        foreach (string old in sent.Where(pair => pair.Value == cell).Select(pair => pair.Key).ToList())
+        {
+            sent.Remove(old);
+            replied.Remove(old);
+            idle.Remove(old);
+        }
         sent[requestId] = cell;
         Queued.Remove(cell);
         Queued.Add(cell);
-        cell.Outputs.Clear();
+        ClearOutputs(cell);
+        clearing.Remove(cell);
         cell.ExecutionCount = null;
     }
 
@@ -44,6 +54,11 @@ internal sealed class NotebookRun
         sent.Clear();
         Queued.Clear();
         clearing.Clear();
+        displays.Clear();
+        owners.Clear();
+        replied.Clear();
+        idle.Clear();
+        completed.Clear();
         Input = null;
     }
 
@@ -82,6 +97,7 @@ internal sealed class NotebookRun
                 if (message.Type == "execute_result")
                     output["execution_count"] = Count(content);
                 cell.Outputs.Add(output);
+                owners[output] = cell;
 
                 if (content["transient"]?["display_id"]?.GetValue<string>() is { Length: > 0 } id)
                 {
@@ -110,7 +126,10 @@ internal sealed class NotebookRun
                 if (content["wait"]?.GetValue<bool>() == true)
                     clearing.Add(cell);
                 else
-                    cell.Outputs.Clear();
+                {
+                    clearing.Remove(cell);
+                    ClearOutputs(cell);
+                }
                 return cell;
 
             case "input_request":
@@ -120,10 +139,12 @@ internal sealed class NotebookRun
             case "execute_reply":
                 if (Count(content) is { } count)
                     cell.ExecutionCount = count;
-                Queued.Remove(cell);
                 if (Input?.Cell == cell)
                     Input = null;
-                sent.Remove(message.ParentId);
+                replied.Add(message.ParentId);
+                if (content["status"]?.GetValue<string>() == "aborted")
+                    idle.Add(message.ParentId);
+                Finish(message.ParentId, cell);
 
                 // An error the reply says that iopub didn't (a kernel that only says it in its reply)
                 if (content["status"]?.GetValue<string>() == "error" && !cell.Outputs.Any(output => output["output_type"]?.GetValue<string>() == "error"))
@@ -137,6 +158,15 @@ internal sealed class NotebookRun
                     });
                 }
                 return cell;
+
+            case "status":
+                if (content["execution_state"]?.GetValue<string>() == "idle")
+                {
+                    idle.Add(message.ParentId);
+                    Finish(message.ParentId, cell);
+                    return cell;
+                }
+                break;
         }
 
         return null;
@@ -146,7 +176,37 @@ internal sealed class NotebookRun
     private void Clear(NotebookCell cell)
     {
         if (clearing.Remove(cell))
-            cell.Outputs.Clear();
+            ClearOutputs(cell);
+    }
+
+    public void ClearOutputs(NotebookCell cell)
+    {
+        clearing.Remove(cell);
+        foreach (JsonObject output in cell.Outputs)
+            owners.Remove(output);
+        foreach (string id in displays.Keys.ToList())
+        {
+            displays[id].RemoveAll(output => !owners.ContainsKey(output));
+            if (displays[id].Count == 0) displays.Remove(id);
+        }
+        cell.Outputs.Clear();
+    }
+
+    private void Finish(string id, NotebookCell cell)
+    {
+        if (!replied.Contains(id) || !idle.Contains(id)) return;
+        Queued.Remove(cell);
+        replied.Remove(id);
+        idle.Remove(id);
+        completed.Enqueue(id);
+        // Retain recent parent IDs for asynchronous output after execution, without unbounded execution history.
+        while (completed.Count > 256)
+        {
+            string old = completed.Dequeue();
+            sent.Remove(old);
+            replied.Remove(old);
+            idle.Remove(old);
+        }
     }
 
     private static int? Count(JsonObject content) =>
@@ -165,7 +225,7 @@ internal sealed class NotebookRun
         }
 
         // Which cell doesn't matter much to whoever's drawing, they're all drawn again from their outputs
-        return sent.Values.FirstOrDefault();
+        return shown.Select(output => owners.GetValueOrDefault(output)).FirstOrDefault(cell => cell is not null);
     }
 
     // Helper method to run a stream on, into the last output when that's the same stream

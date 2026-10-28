@@ -126,7 +126,7 @@ internal static class NotebookFile
         var top = new JsonObject();
         var cells = new JsonArray();
         foreach (NotebookCell cell in notebook.Cells)
-            cells.Add(WriteCell(cell, notebook.FormatMinor));
+            cells.Add((JsonNode)WriteCell(cell, notebook.FormatMinor));
 
         top["cells"] = cells;
         top["metadata"] = notebook.Metadata.DeepClone();
@@ -159,7 +159,7 @@ internal static class NotebookFile
             written["execution_count"] = cell.ExecutionCount is { } count ? JsonValue.Create(count) : null;
             var outputs = new JsonArray();
             foreach (JsonObject output in cell.Outputs)
-                outputs.Add(Lined(output));
+                outputs.Add((JsonNode)Lined(output));
             written["outputs"] = outputs;
         }
 
@@ -196,11 +196,11 @@ internal static class NotebookFile
             int end = text.IndexOf('\n', start);
             if (end < 0)
             {
-                lines.Add(JsonValue.Create(text[start..]));
+                lines.Add((JsonNode)text[start..]);
                 break;
             }
 
-            lines.Add(JsonValue.Create(text[start..(end + 1)]));
+            lines.Add((JsonNode)text[start..(end + 1)]);
             start = end + 1;
         }
 

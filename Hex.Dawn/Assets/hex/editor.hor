@@ -104,6 +104,8 @@ let notebook_view = compositor.panel({
 });
 
 // A picture opened from the explorer, in place of code, see DawnScene.Images
+let markdown_preview = compositor.panel({ layer: "markdown", parent: center, size: vec(840, 250), clip: true });
+
 let image_view = compositor.panel({
     layer: "image",
     parent: center,

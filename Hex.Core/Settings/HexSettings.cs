@@ -44,6 +44,9 @@ internal sealed partial class HexSettings
     /// <summary>How big the code is drawn against the rest of the editor, 1 for the size it comes at.</summary>
     public float CodeZoom = 1.0f;
 
+    /// <summary>Shared mouse-wheel scrolling distance throughout Dawn and Dusk, relative to the default.</summary>
+    public float ScrollSpeed = 1.0f;
+
     /// <summary>Whether what is selected in the canvas can be dragged bigger by its edges.</summary>
     public bool CanvasHandles = true;
 
@@ -353,6 +356,7 @@ internal sealed partial class HexSettings
         PanelCollapsed = Flag(values, "panel_collapsed", PanelCollapsed);
         Snap = Number(values, "snap", Snap);
         CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
+        ScrollSpeed = ScrollSpeedOf(Number(values, "scroll_speed", ScrollSpeed));
         if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
         if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
         BackdropOn = Flag(values, "backdrop", BackdropOn);
@@ -460,6 +464,8 @@ internal sealed partial class HexSettings
                 if (name is StringValue { Value: { } named }) CatalogExtensions.Add(named);
         }
     }
+
+    internal static float ScrollSpeedOf(float value) => float.IsFinite(value) ? Math.Clamp(value, 0.25f, 5) : 1;
 
     private static float Number(Dictionary<string, IRuntimeValue> values, string key, float otherwise) =>
         values.TryGetValue(key, out var value) && value is NumberValue number ? number.Value : otherwise;
@@ -619,6 +625,7 @@ internal sealed partial class HexSettings
             .Add("panel_collapsed", PanelCollapsed)
             .Add("snap", Snap)
             .Add("code_zoom", CodeZoom)
+            .Add("scroll_speed", ScrollSpeed)
             .Add("canvas_handles", CanvasHandles)
             .Add("reopen_last", ReopenLast)
             .Add("backdrop", BackdropOn)

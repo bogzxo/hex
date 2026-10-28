@@ -16,10 +16,10 @@ internal sealed partial class DawnScene
     }
 
     // Called as the window closes for good, the new Hex started if a restart asked for it
-    private void StartRestart()
+    private bool StartRestart()
     {
         if (restartInto is not { } restart)
-            return;
+            return true;
 
         restartInto = null;
         try
@@ -31,11 +31,13 @@ internal sealed partial class DawnScene
             // A script and its screenshots drive the Hex they were given to, the new one would play them all over again
             start.Environment.Remove("HORIZON_INPUT_SCRIPT");
             start.Environment.Remove("HORIZON_SCREENSHOT");
-            Process.Start(start);
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("The installer or replacement process could not be started.");
+            return true;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             Note(Said("tasks.restart_failed", ("why", e.Message)), error: true);
+            return false;
         }
     }
 }

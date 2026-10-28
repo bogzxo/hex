@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Exercise the same JSON metadata restriction as the native executable. -->
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <!-- The default terminal's tests call Dusk's COM class through its table of functions, the way Windows would -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 

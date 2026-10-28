@@ -382,9 +382,9 @@ internal sealed partial class DawnScene
         folding.Add(Said("code.unfold_all"), () => code.UnfoldAll(), icon: "expand-all");
 
         // Their keys are bound with the designer's, which zooms the canvas with the same ones
-        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = inCode;
-        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_out"), () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = inCode;
-        commands.Add("View/appearance/look:zoom", Said("code.reset_zoom"), () => ZoomCode(0.0f), "Ctrl+0", "screen-normal").IsVisible = inCode;
+        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = () => inCode() || NotebookShown;
+        commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_out"), () => ZoomCode(1.0f / CODE_ZOOM_STEP), "Ctrl+-", "zoom-out").IsVisible = () => inCode() || NotebookShown;
+        commands.Add("View/appearance/look:zoom", Said("code.reset_zoom"), () => ZoomCode(0.0f), "Ctrl+0", "screen-normal").IsVisible = () => inCode() || NotebookShown;
 
         commands.Add("Go/symbols", Said("code.go_to_definition"), codeEditing.GoToDefinition, "F12", "target", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Go/symbols", Said("code.find_all_references"), codeEditing.FindReferences, "Shift+F12", "references", UIKeyUse.BoundWhileTyping).IsVisible = inCode;

@@ -40,6 +40,7 @@ internal sealed partial class DawnScene
         var menu = new Menu("explorer_space");
         menu.Add(Said("explorer_files.new_file"), () => explorer.NewFileIn(ExplorerTarget()), icon: "new-file");
         menu.Add(Said("explorer_files.new_folder"), () => explorer.NewFolderIn(ExplorerTarget()), icon: "new-folder");
+        menu.Add(Said("explorer_files.paste"), () => explorer.PasteIntoAsync(ExplorerTarget()), "Ctrl+V", "clippy").IsEnabled = () => explorer.CanPaste;
         menu.AddSeparator();
         menu.Add(Said("side.refresh"), RefreshFromDisk, icon: "refresh");
         menu.Add(Said("side.collapse"), CollapseExplorer, icon: "collapse-all");

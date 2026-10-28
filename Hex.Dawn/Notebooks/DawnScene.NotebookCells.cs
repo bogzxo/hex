@@ -161,6 +161,7 @@ internal sealed partial class DawnScene
     private void PrepareCellEditor(HexNotebook notebook, NotebookCellEditor editor, NotebookCell cell)
     {
         editor.TextScale = CODE_TEXT * settings.CodeZoom;
+        editor.OnZoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP);
         editor.Font = codeEditing.codeFont;
         editor.Padding = new UIEdges(6.0f, 5.0f, 6.0f, 5.0f);
         editor.LineNumbers = false;
@@ -301,7 +302,13 @@ internal sealed partial class DawnScene
                     view.Editor.Text = cell.Source;
                 view.Shown = cell.Source;
                 if (view.Written is { } markdown)
-                    WriteMarkdown(markdown, cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown"), notebook.Model.Language);
+                {
+                    List<NotebookPicture> previous = markdownPictures.TryGetValue(view, out var old) ? old : [];
+                    var pictures = new List<NotebookPicture>();
+                    markdownPictures[view] = pictures;
+                    WriteMarkdown(markdown, cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown"), notebook.Model.Language, pictures, cell.Rest["attachments"] as System.Text.Json.Nodes.JsonObject);
+                    ReleaseNotebookPictures(previous);
+                }
             }
 
             // A markdown cell is written out unless it's being typed into, or empty
@@ -327,8 +334,8 @@ internal sealed partial class DawnScene
             view.Body.Size = view.Body.Size with { X = body };
             view.Editor.Size = view.Editor.Size with { X = body };
             if (view.Written is { } written)
-                FitWritten(written, body);
-            FitOutputs(view, body);
+                FitWritten(written, body, settings.CodeZoom);
+            FitOutputs(view, body, settings.CodeZoom);
         }
     }
 }

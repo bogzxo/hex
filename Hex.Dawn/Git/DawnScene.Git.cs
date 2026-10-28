@@ -96,6 +96,7 @@ internal sealed partial class DawnScene
     {
         GitFileState state = isFolder ? new GitFileState(git.FolderChange(path), false, false) : git.StateOf(path);
         row.Color = GitColor(state.Change) ?? usual;
+        if (explorer.IsCutPath(path)) row.Color = DimColor;
 
         // A file's letter at the right end in the colour of its change, the same as Source Control has it, a folder only
         // takes the colour

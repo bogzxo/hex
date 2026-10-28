@@ -1133,6 +1133,7 @@ let strings = {
     },
 
     explorer_files: {
+        move_to: "Move To…",
         open: "Open",
         new_file: "New File...",
         new_folder: "New Folder...",
@@ -1296,7 +1297,7 @@ let strings = {
         word_wrap: "Word Wrap",
         code_in_hack: "Code in Hack",
         split_editor: "Split Editor",
-        toggle_designer_code: "Toggle Designer and Code",
+        toggle_designer_code: "Switch Editor View",
         layout_debugger_on: "layout debugger on, padding is green, gaps are orange",
         layout_debugger_off: "layout debugger off",
         editor_scale: "Editor Scale",
@@ -1658,6 +1659,8 @@ let strings = {
     },
 
     settings_catalog: {
+        scroll_speed_title: "Scroll speed",
+        scroll_speed_help: "Mouse-wheel distance across Hex: code, notebooks, previews, terminals, panels, lists and menus. 1× is the default. Zoom and value-editing gestures keep their normal steps.",
         effects_title: "Effects",
         effects_help: "None of them, subtle (the lights switched on under this, and a burst of sparks for a save or a long command that went well when the sparks are on) or all (sparks off the caret as you type as well). The glass and the caret's glide have switches of their own.",
         effect_glass_title: "Glass",
@@ -2103,7 +2106,18 @@ let strings = {
     },
 
     // A Jupyter notebook, its cells, what running them came to and the kernel they ran on, see DawnScene.Notebook
+    markdown: {
+        title: "Preview",
+        tip: "Read Markdown natively; F7 switches between source and preview",
+        shown: "Preview of {name}",
+    },
     notebook: {
+        copy_csv: "Copy CSV",
+        copy_csv_tip: "Copy column headers and all rows in their displayed order",
+        export_csv: "Export CSV…",
+        export_csv_tip: "Save column headers and all rows in their displayed order as CSV",
+        csv_exported: "Exported {name}",
+        csv_failed: "Could not export CSV: {why}",
         menu: "Notebook",
         new: "New Jupyter Notebook...",
         view: "Notebook",

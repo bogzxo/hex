@@ -40,6 +40,7 @@ internal sealed partial class DuskScene
     private (string Name, string About, Action<DuskScript> Run)[] SelfTestSuites =>
     [
         ("ux", "inline search and returning from scrollback to live output", TestUx),
+        ("symbols", "triangle and arrow glyphs on the terminal cell grid", TestSymbols),
         ("start", "the first tab, its shell, the window fitted round it", TestStart),
         ("plugins", "the plugins started, their commands registered, keys.hor read", TestPlugins),
         ("tabs", "tabs by command and by key", TestTabs),

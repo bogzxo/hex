@@ -12,10 +12,15 @@ internal sealed partial class HexExplorer
     private bool clippedCut;
 
     /// <summary>Whether there's anything to paste, something copied or cut that's still on the disk.</summary>
-    internal bool CanPaste => clipped.Any(path => File.Exists(path) || Directory.Exists(path));
+    internal bool CanPaste => !transferring && clipped.Any(path => File.Exists(path) || Directory.Exists(path));
+    private bool transferring;
+    private int clipVersion;
+    internal Action<IReadOnlyList<string>>? PastedPaths { get; set; }
 
     /// <summary>Whether what's on the clipboard was cut, for the self test.</summary>
     internal bool ClippedCut => clippedCut && clipped.Count > 0;
+    internal bool IsCutPath(string path) => clippedCut && clipped.Any(from => PlatformPaths.Same(path, from) || PlatformPaths.IsUnder(path, from));
+    internal void CancelClip() { clipped.Clear(); clippedCut = false; clipVersion++; treeDirty = true; }
 
     /// <summary>Files and folders put on the clipboard to be copied where they're pasted.</summary>
     internal void CopyPaths(IEnumerable<string> paths) => Clip(paths, cut: false);
@@ -26,8 +31,12 @@ internal sealed partial class HexExplorer
     private void Clip(IEnumerable<string> paths, bool cut)
     {
         clipped.Clear();
-        clipped.AddRange(paths.Select(Path.GetFullPath));
+        clipVersion++;
+        foreach (string path in paths.Select(Path.GetFullPath).Distinct(PlatformPaths.Comparer).OrderBy(path => path.Length))
+            if (!workspace.Folders.Contains(path, PlatformPaths.Comparer) && !clipped.Any(parent => PlatformPaths.IsUnder(path, parent)))
+                clipped.Add(path);
         clippedCut = cut;
+        treeDirty = true;
         if (clipped.Count > 0)
             context.Notices.Say(context.Strings.Said(cut ? "explorer_files.cut_said" : "explorer_files.copied_said", ("name", Path.GetFileName(clipped[0].TrimEnd('\\', '/'))), ("count", clipped.Count.ToString())));
     }
@@ -39,40 +48,81 @@ internal sealed partial class HexExplorer
     /// <returns>Where each one ended up.</returns>
     internal List<string> PasteInto(string folder)
     {
-        var made = new List<string>();
         string into = Path.GetFullPath(folder);
-        foreach (string from in clipped.ToList())
-        {
-            if (!File.Exists(from) && !Directory.Exists(from))
-                continue;
+        return FinishTransfer(Transfer(clipped.ToArray(), into, clippedCut), into, clippedCut, clipVersion);
+    }
 
-            if (clippedCut)
+    internal void PasteIntoAsync(string folder)
+    {
+        if (!CanPaste) return;
+        string into = Path.GetFullPath(folder);
+        string[] sources = clipped.ToArray();
+        bool cut = clippedCut;
+        int version = clipVersion;
+        transferring = true;
+        context.Work.InBackground("explorer-transfer", () => Transfer(sources, into, cut), results =>
+        {
+            transferring = false;
+            FinishTransfer(results, into, cut, version);
+        });
+    }
+
+    internal sealed record TransferResult(string From, string? To, string? Error);
+
+    internal static List<TransferResult> Transfer(IReadOnlyList<string> sources, string into, bool cut)
+    {
+        var results = new List<TransferResult>();
+        foreach (string from in sources)
+        {
+            try
             {
-                // Cut and pasted where it is already, nothing moves
-                if (PlatformPaths.Same(Path.GetDirectoryName(from) ?? from, into))
+                if (!Directory.Exists(into)) throw new DirectoryNotFoundException(into);
+                if (cut && PlatformPaths.Same(Path.GetDirectoryName(from) ?? from, into))
                 {
-                    made.Add(from);
+                    results.Add(new(from, from, null));
                     continue;
                 }
-
+                if (Directory.Exists(from) && (PlatformPaths.Same(into, from) || PlatformPaths.IsUnder(into, from)))
+                    throw new IOException("A folder cannot be transferred into itself.");
                 string to = FreeName(into, Path.GetFileName(from.TrimEnd('\\', '/')));
-                if (MovePath(from, to))
-                    made.Add(to);
+                if (cut)
+                {
+                    if (Directory.Exists(from)) Directory.Move(from, to);
+                    else File.Move(from, to);
+                }
+                else CopyOnDisk(from, to);
+                results.Add(new(from, to, null));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            { results.Add(new(from, null, error.Message)); }
+        }
+        return results;
+    }
+
+    private List<string> FinishTransfer(List<TransferResult> results, string into, bool cut, int version)
+    {
+        var made = new List<string>();
+        foreach (var result in results)
+        {
+            if (result.To is not { } to)
+            {
+                context.Notices.Say(context.Strings.Said("explorer_files.not_copied", ("name", Path.GetFileName(result.From)), ("why", result.Error ?? string.Empty)), error: true);
                 continue;
             }
-
-            if (CopyTo(from, FreeName(into, Path.GetFileName(from.TrimEnd('\\', '/')))) is { } copy)
-                made.Add(copy);
+            made.Add(to);
+            if (cut)
+            {
+                if (!PlatformPaths.Same(result.From, to)) Relocated(result.From, to);
+                if (version == clipVersion) clipped.Remove(result.From);
+            }
         }
-
-        if (clippedCut)
-            clipped.Clear();
-
         if (made.Count > 0)
         {
             workspace.Expanded.Add(into);
-            treeDirty = true;
+            tabsDirty = treeDirty = true;
+            window.ShowName();
             FoldersChanged?.Invoke();
+            PastedPaths?.Invoke(made);
             KeepWorkspace();
             context.Notices.Say(context.Strings.Said("explorer_files.pasted", ("name", Path.GetFileName(made[0])), ("folder", Path.GetFileName(into))));
         }
@@ -120,12 +170,6 @@ internal sealed partial class HexExplorer
     {
         try
         {
-            if (File.Exists(from))
-            {
-                File.Copy(from, to);
-                return to;
-            }
-
             // A folder into itself would go on copying the copy
             if (PlatformPaths.IsUnder(to, from))
             {
@@ -133,7 +177,7 @@ internal sealed partial class HexExplorer
                 return null;
             }
 
-            CopyFolder(from, to);
+            CopyOnDisk(from, to);
             return to;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -143,11 +187,25 @@ internal sealed partial class HexExplorer
         }
     }
 
+    private static void CopyOnDisk(string from, string to)
+    {
+        if ((File.GetAttributes(from) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Recursive copies do not follow symbolic links.");
+        if (File.Exists(from)) File.Copy(from, to);
+        else CopyFolder(from, to);
+    }
+
     private static void CopyFolder(string from, string to)
     {
+        if ((File.GetAttributes(from) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Recursive copies do not follow directory links.");
         Directory.CreateDirectory(to);
         foreach (string file in Directory.EnumerateFiles(from))
+        {
+            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Recursive copies do not follow file links.");
             File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+        }
         foreach (string folder in Directory.EnumerateDirectories(from))
             CopyFolder(folder, Path.Combine(to, Path.GetFileName(folder)));
     }

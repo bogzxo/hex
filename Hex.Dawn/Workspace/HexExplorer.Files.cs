@@ -46,9 +46,10 @@ internal sealed partial class HexExplorer
         shown.Add(context.Strings.Said("explorer_files.open_in_terminal"), () => OpenTerminalIn?.Invoke(folder), icon: "terminal");
         shown.Add(context.Strings.Said("explorer_files.find_in_folder"), () => FindInFolder?.Invoke(folder, ScopeOf(folder)), icon: "search");
         shown.AddSeparator();
-        shown.Add(context.Strings.Said("explorer_files.cut"), () => CutPaths([entry.Path]), icon: "diff-removed").IsEnabled = () => !entry.IsRoot;
-        shown.Add(context.Strings.Said("explorer_files.copy"), () => CopyPaths([entry.Path]), icon: "copy").IsEnabled = () => !entry.IsRoot;
-        shown.Add(context.Strings.Said("explorer_files.paste"), () => PasteInto(folder), icon: "clippy").IsEnabled = () => CanPaste;
+        shown.Add(context.Strings.Said("explorer_files.cut"), () => CutPaths(SelectedPaths?.Invoke(entry.Path) ?? [entry.Path]), "Ctrl+X", "diff-removed").IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.copy"), () => CopyPaths(SelectedPaths?.Invoke(entry.Path) ?? [entry.Path]), "Ctrl+C", "copy").IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.paste"), () => PasteIntoAsync(folder), "Ctrl+V", "clippy").IsEnabled = () => CanPaste;
+        shown.Add(context.Strings.Said("explorer_files.move_to"), () => MoveToFolder(SelectedPaths?.Invoke(entry.Path) ?? [entry.Path]), icon: "folder-opened").IsEnabled = () => !entry.IsRoot;
         shown.Add(context.Strings.Said("explorer_files.duplicate"), () => Duplicate(entry.Path), icon: "clone").IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
         shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path), icon: "edit").IsEnabled = () => !entry.IsRoot;
@@ -85,6 +86,17 @@ internal sealed partial class HexExplorer
 
     /// <summary>The Properties panel brought up for a row (and the rows selected with it), the scene's.</summary>
     internal Action<string>? PropertiesOf { get; set; }
+    internal Func<string, IReadOnlyList<string>>? SelectedPaths { get; set; }
+
+    private void MoveToFolder(IReadOnlyList<string> paths)
+    {
+        string[] moving = paths.ToArray();
+        context.Windows.Pick(HexDialogs.PickFolder(Path.GetDirectoryName(moving[0]) ?? browseDirectory, context.Windows.DialogHost), folder =>
+        {
+            CutPaths(moving);
+            PasteIntoAsync(folder);
+        });
+    }
 
     /* Files made, renamed and thrown away */
 
@@ -307,17 +319,22 @@ internal sealed partial class HexExplorer
             return false;
         }
 
+        Relocated(from, to);
+        window.ShowName();
+        tabsDirty = treeDirty = true;
+        FoldersChanged?.Invoke();
+        KeepWorkspace();
+        return true;
+    }
+
+    private void Relocated(string from, string to)
+    {
         Retarget(from, to);
         if (workspace.Expanded.Remove(from))
             workspace.Expanded.Add(to);
         if (Path.GetDirectoryName(to) is { } shownIn)
             workspace.Expanded.Add(shownIn);
 
-        window.ShowName();
-        tabsDirty = treeDirty = true;
-        FoldersChanged?.Invoke();
-        KeepWorkspace();
-        return true;
     }
 
     /// <summary>What is open of a file or a folder that moved goes by its new path, a layout or a file by its new name.</summary>

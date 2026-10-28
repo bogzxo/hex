@@ -101,6 +101,7 @@ public static class EditorSettingsCatalog
 
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
+        new("scroll_speed", HexText.Get("settings_catalog.scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
         new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), MOTION, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true, Unit: "s"),
 
         new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
@@ -233,6 +234,7 @@ public static class EditorSettingsCatalog
         ["glass_rim"] = new NumberValue(HexGlass.RIM),
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
         ["ui_animation"] = new NumberValue(0.0f),
+        ["scroll_speed"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f),
         ["backdrop"] = Values.Bool(false),
         ["backdrop_terminal"] = Values.Bool(false),

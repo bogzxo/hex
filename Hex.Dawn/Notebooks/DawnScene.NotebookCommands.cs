@@ -187,7 +187,7 @@ internal sealed partial class DawnScene
     {
         foreach (NotebookCell cell in cells)
         {
-            cell.Outputs.Clear();
+            notebook.Run.ClearOutputs(cell);
             cell.ExecutionCount = null;
         }
 

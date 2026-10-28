@@ -9,6 +9,7 @@
     <OutputType>Library</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL3050</WarningsAsErrors>
     <InvariantGlobalization>true</InvariantGlobalization>
     <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
   </PropertyGroup>

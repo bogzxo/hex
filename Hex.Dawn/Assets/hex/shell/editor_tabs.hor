@@ -49,6 +49,11 @@ let views = compositor.stack({
 });
 
 // A Jupyter notebook as its cells, the first of its views (DawnScene.Notebook)
+let markdown_button = compositor.button({
+    parent: views, size: vec(0, 28), label: "@markdown.title", tooltip: "@markdown.tip",
+    icon: "open-preview", lbl_scale: 0.14, style: "button_flat", hover: "none", animated: false, visible: false,
+});
+
 let notebook_button = compositor.button({
     parent: views,
     size: vec(0, 28),

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <ProjectReference Include="..\Hex.Installation\Hex.Installation.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <Using Include="Xunit" />
+    <Compile Include="..\Hex.Installer\InstallerLayout.cs" Link="InstallerLayout.cs" />
+    <Compile Include="..\Hex.Installer\InstallerDestination.cs" Link="InstallerDestination.cs" />
+    <None Include="..\Hex.Installer\Assets\installer\**\*.hor" Link="Assets\installer\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Hex.Installer\*.cs;..\Hex.Installation\*.cs;..\Hex.Dawn\Shell\DawnScene.Updates.cs" Link="TestSources\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

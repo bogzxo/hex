@@ -38,6 +38,8 @@ internal sealed partial class DawnScene
         settings.CodeZoom = zoom;
         foreach (HexDocument open in documents)
             open.Editor.TextScale = CODE_TEXT * zoom;
+        foreach (NotebookCellView cell in cellViews)
+            cell.Editor.TextScale = CODE_TEXT * zoom;
 
         SaveSettings();
         Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
@@ -317,6 +319,8 @@ internal sealed partial class DawnScene
             extensionViews.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, extensionViews) - panelLag));
         else if (notebookView.Visible)
             notebookView.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, notebookView) - panelLag));
+        else if (markdownPreview.Visible)
+            markdownPreview.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, markdownPreview) - panelLag));
         else if (imageView.Visible)
             imageView.Size = new Vector2(centerWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(center, imageView) - panelLag));
         else if (!LayoutTools)

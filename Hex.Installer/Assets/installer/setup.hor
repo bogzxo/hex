@@ -1,0 +1,84 @@
+// Hex Setup — editable layout, materials and motion.
+// Keep runtime bindings: card, step, heading, description, version, target,
+// browse, status, progress, detail, primary, cancel.
+#define layout
+
+let background = compositor.panel({ fill: "both", color: vec(0.035, 0.043, 0.058, 1) });
+
+let title_bar = compositor.title_bar({
+    size: vec(0, 38), anchor: "top", pivot: "top", fill: "horizontal",
+    title: "@installer.window.title", icon: "package",
+});
+
+let card = compositor.stack({
+    size: vec(904, 520), direction: "horizontal", spacing: 0,
+    color: vec(0.067, 0.080, 0.104, 1), radius: 20,
+    outline: vec(0.68, 0.76, 0.87, 0.13),
+    glass: 14, lift: 24,
+    intro: "fade", intro_time: 0.24,
+});
+
+let brand = compositor.stack({
+    parent: card, size: vec(280, 520), padding: vec(28, 28, 28, 28), spacing: 0,
+    color: vec(0.085, 0.103, 0.135, 0.96), radius: 20,
+    outline: vec(0.85, 0.72, 0.48, 0.10),
+});
+let wordmark = compositor.stack({ parent: brand, direction: "horizontal", spacing: 12, size: vec(224, 48) });
+let logo = compositor.image({ parent: wordmark, size: vec(40, 40), file: "Assets/hex_icon.png" });
+let name = compositor.label({ parent: wordmark, size: vec(150, 48), text: "@installer.brand.name", text_scale: 0.25, bold: true, align: "left" });
+let brand_gap = compositor.spacer({ parent: brand, size: vec(0, 34) });
+let tagline = compositor.label({
+    parent: brand, size: vec(224, 136), text: "@installer.brand.tagline",
+    text_scale: 0.30, wrap: true, align: "top_left",
+    intro: "slide", intro_time: 0.28, intro_delay: 0.08, intro_offset: vec(0, -8),
+});
+let accent_line = compositor.panel({ parent: brand, size: vec(38, 3), color: vec(1, 0.72, 0.28, 0.9), radius: 1.5 });
+let brand_gap2 = compositor.spacer({ parent: brand, size: vec(0, 30) });
+let modes_card = compositor.stack({
+    parent: brand, size: vec(224, 100), padding: vec(14, 14, 14, 14),
+    color: vec(0.07, 0.085, 0.115, 0.8), radius: 12,
+    outline: vec(0.68, 0.76, 0.87, 0.10), lift: 4,
+});
+let modes = compositor.label({ parent: modes_card, size: vec(196, 72), text: "@installer.brand.modes", text_scale: 0.14, color: vec(0.66, 0.72, 0.82, 1), align: "top_left", wrap: true });
+let brand_gap3 = compositor.spacer({ parent: brand, size: vec(0, 44) });
+let platforms = compositor.label({ parent: brand, size: vec(224, 20), text: "@installer.brand.platforms", text_scale: 0.105, color: vec(0.53, 0.61, 0.73, 1), align: "left" });
+
+let body = compositor.stack({ parent: card, size: vec(624, 520), padding: vec(36, 30, 36, 30), spacing: 0 });
+let step = compositor.label({ parent: body, size: vec(552, 20), text: "@installer.steps.start", text_scale: 0.11, color: vec(0.92, 0.70, 0.35, 1), align: "top_left" });
+let heading_gap = compositor.spacer({ parent: body, size: vec(0, 12) });
+let heading = compositor.label({ parent: body, size: vec(552, 42), text: "@installer.install.heading", text_scale: 0.30, align: "top_left", wrap: true });
+let description = compositor.label({ parent: body, size: vec(552, 42), text: "@installer.install.description", text_scale: 0.145, dim: true, wrap: true, align: "top_left" });
+let package_gap = compositor.spacer({ parent: body, size: vec(0, 12) });
+let package = compositor.stack({ parent: body, size: vec(552, 28), direction: "horizontal", spacing: 10 });
+let channel_badge = compositor.stack({ parent: package, size: vec(112, 26), padding: vec(8, 4, 8, 4), radius: 6, color: vec(1, 0.72, 0.28, 0.075), outline: vec(1, 0.72, 0.28, 0.15) });
+let channel = compositor.label({ parent: channel_badge, size: vec(96, 18), text: "@installer.version.channel", text_scale: 0.105, color: vec(0.97, 0.77, 0.44, 1), align: "center" });
+let version = compositor.label({ parent: package, size: vec(296, 26), text: "@installer.version.channel", text_scale: 0.125, dim: true, align: "left", wrap: true });
+let customize = compositor.button({ parent: package, size: vec(124, 28), label: "@installer.integration.customize", style: "button_flat", icon: "settings-gear", lbl_scale: 0.125, animated: false, hover: "glow", hover_time: 0.12 });
+let destination_gap = compositor.spacer({ parent: body, size: vec(0, 18) });
+let destination = compositor.stack({
+    parent: body, size: vec(552, 84), padding: vec(14, 12, 14, 12), spacing: 8,
+    color: vec(0.04, 0.05, 0.07, 0.92), radius: 12, outline: vec(0.60, 0.68, 0.80, 0.15),
+});
+let destination_title = compositor.label({ parent: destination, size: vec(524, 16), text: "@installer.destination.title", text_scale: 0.105, dim: true, align: "top_left" });
+let destination_row = compositor.stack({ parent: destination, direction: "horizontal", spacing: 12, size: vec(524, 34) });
+let target = compositor.label({ parent: destination_row, size: vec(404, 34), text: "@installer.destination.placeholder", text_scale: 0.12, wrap: true, align: "left" });
+let browse = compositor.button({
+    parent: destination_row, size: vec(108, 34), label: "@installer.actions.browse", icon: "folder-opened", lbl_scale: 0.13,
+    tooltip: "@installer.destination.browse_title", hover: "glow", hover_amount: 0.65, hover_time: 0.12, animated: false,
+});
+let status_gap = compositor.spacer({ parent: body, size: vec(0, 20) });
+let status_area = compositor.stack({ parent: body, size: vec(552, 88), spacing: 8 });
+let status = compositor.label({ parent: status_area, size: vec(552, 22), text: "@installer.status.checking", text_scale: 0.14, wrap: true, align: "top_left" });
+// Keep the track's space when idle so progress never moves the action buttons.
+let progress_slot = compositor.panel({ parent: status_area, size: vec(552, 4) });
+let progress = compositor.progress_bar({ parent: progress_slot, size: vec(552, 4), progress: 0, fill_color: vec(1, 0.72, 0.28, 1), show_text: false });
+let detail = compositor.label({ parent: status_area, size: vec(552, 40), text_scale: 0.115, dim: true, wrap: true, align: "top_left" });
+let action_gap = compositor.spacer({ parent: body, size: vec(0, 18) });
+let buttons = compositor.stack({ parent: body, size: vec(552, 44), spacing: 12, direction: "horizontal" });
+let cancel = compositor.button({ parent: buttons, size: vec(108, 44), label: "@installer.actions.cancel", style: "button_flat", lbl_scale: 0.14, animated: false, hover: "glow", hover_time: 0.12 });
+let action_space = compositor.spacer({ parent: buttons, size: vec(192, 0) });
+let primary = compositor.button({
+    parent: buttons, size: vec(228, 44), enabled: false, primary: true,
+    label: "@installer.actions.install", icon: "arrow-right", lbl_scale: 0.15,
+    animated: false, hover: "lift", hover_amount: 2, hover_time: 0.14,
+});

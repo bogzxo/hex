@@ -71,6 +71,7 @@ internal sealed partial class DawnScene
         // Everything else of Dawn's that moves, the hovers and the drawers, as quick as the motion says. Not the stage,
         // a layout being designed moves the way the game it is for will have it
         compositor.AnimationSpeed = settings.UiAnimation;
+        compositor.ScrollSpeed = settings.ScrollSpeed;
         ApplyTerminalMotion();
 
         if (!EffectsOn)
