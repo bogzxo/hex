@@ -1,4 +1,7 @@
-# Hex 2.5.0
+# Hex 2.5.1
+
+2.5.0 fell over building for Intel macs before it got out, so this is the first of it, with the PATH found on linux
+and macOS again and Setup happy to install under a folder that's a link.
 
 hex has an installer now, and updates itself. [Hex Setup](https://github.com/bogzxo/hex-installer/releases/latest)
 puts it on your machine properly, with shortcuts, a place in the app menu and an uninstaller, and Help > Check for
