@@ -38,7 +38,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The engine (bogzxo/horizon at horizon) and the language inside of it
+          # The extensions (bogzxo/hex-extensions at hex-extensions)
+          submodules: recursive
+
+      # The engine as it is on its development right now, and the language inside of it
+      - uses: actions/checkout@v4
+        with:
+          repository: bogzxo/horizon
+          ref: development
+          path: horizon
           submodules: recursive
 
       - name: Setup .NET

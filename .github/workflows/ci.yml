@@ -1,4 +1,4 @@
-# Every push and pull request, Hex built against the engine it has as a submodule and its unit tests run, on Windows,
+# Every push and pull request, Hex built against the engine on its development and its unit tests run, on Windows,
 # Linux and macOS. The self tests want a window and a Vulkan device, so they aren't run here.
 
 name: CI
@@ -20,7 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The engine (bogzxo/horizon at horizon) and the language inside of it
+          # The extensions (bogzxo/hex-extensions at hex-extensions)
+          submodules: recursive
+
+      # The engine as it is on its development right now, and the language inside of it
+      - uses: actions/checkout@v4
+        with:
+          repository: bogzxo/horizon
+          ref: development
+          path: horizon
           submodules: recursive
 
       - name: Setup .NET

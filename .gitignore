@@ -425,3 +425,6 @@ Thumbs.db
 /images/monika_2.png
 /images/yamada_1.png
 /.hex/settings.hor
+
+# The engine when Hex is built on its own, CI or a clone outside the workspace, it isn't kept here
+/horizon/
