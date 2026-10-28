@@ -31,7 +31,7 @@ internal enum HexSide
 // side bar back the way it was.
 internal sealed partial class DawnScene
 {
-    private HexSide codeSide = HexSide.Outline, designSide = HexSide.Design;
+    private HexSide codeSide = HexSide.Explorer, designSide = HexSide.Design;
 
     // What the side bar was last set up for, so it is only done again when that changes
     private (HexSide Side, bool Tools)? sideShown;

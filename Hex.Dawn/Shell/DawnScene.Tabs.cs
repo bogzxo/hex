@@ -10,6 +10,7 @@ internal sealed partial class DawnScene
     private readonly List<Button> tabButtons = [];
 
     private TabStrip docTabs = null!;
+    private Button allTabs = null!;
 
     private Breadcrumbs crumbs = null!;
 
@@ -22,6 +23,22 @@ internal sealed partial class DawnScene
     private void BuildTabs()
     {
         docTabs = layout.Get<TabStrip>("doc_tabs");
+        allTabs = layout.Get<Button>("all_tabs");
+        allTabs.OnPressed = () =>
+        {
+            var choices = new List<UIChoice>(documents.Count);
+            foreach (HexDocument open in documents)
+            {
+                HexDocument picked = open;
+                choices.Add(new UIChoice(open.Name, () => Show(picked))
+                {
+                    Id = open.Path ?? open.Name,
+                    Detail = open.Path is { } path ? Relative(path) : Said("tabs.never_saved", ("name", open.Name)),
+                    Icon = IconOfDocument(open)
+                });
+            }
+            ChooseFrom(Said("tabs.all"), string.Empty, choices);
+        };
         crumbs = layout.Get<Breadcrumbs>("crumbs");
 
         docTabs.OnSelected = index => Show(documents[index]);
@@ -68,7 +85,7 @@ internal sealed partial class DawnScene
             tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path is { } where ? HexText.MiddleOf(Relative(where)) : Said("tabs.never_saved", ("name", shown.Name));
+            tab.Tooltip = shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;

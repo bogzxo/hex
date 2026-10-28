@@ -20,7 +20,7 @@ internal sealed partial class DuskScene
     {
         // A title once, the first command that has it with its key. Close pane is on two keys, and said twice it read as
         // two things
-        var choices = new List<(string Text, Action Picked)>();
+        var choices = new List<UIChoice>();
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (TerminalCommand command in host.Commands.All)
         {
@@ -32,18 +32,18 @@ internal sealed partial class DuskScene
                 continue;
 
             string name = command.Name;
-            choices.Add(($"{command.Title}{(command.Key.Length > 0 ? $"   ({command.Key})" : string.Empty)}", () => Run(name)));
+            choices.Add(new UIChoice(command.Title, () => Run(name)) { Keys = command.Key, Icon = "terminal" });
         }
 
         // Every look there is, Hex's and the user's, a few letters away like everything else (see DuskScene.Looks)
         foreach (Hex.Shell.HexLook look in Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)))
         {
             Hex.Shell.HexLook picked = look;
-            choices.Add((HexText.Get("looks.command", ("name", look.Name)), () => PickLook(picked)));
+            choices.Add(UIChoice.Of(HexText.Get("looks.command", ("name", look.Name)), () => PickLook(picked)) with { Icon = "color-mode" });
         }
 
         // The picture behind the terminals laid out with the mouse, see DuskScene.BackdropArrange
-        choices.Add((HexText.Get("settings_palette.arrange_backdrop"), ArrangeBackdrop));
+        choices.Add(UIChoice.Of(HexText.Get("settings_palette.arrange_backdrop"), ArrangeBackdrop) with { Icon = "layout" });
 
         ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
     }
@@ -57,6 +57,9 @@ internal sealed partial class DuskScene
     /// what is typed, enter, the first button or a double click picks.
     /// </summary>
     private void ChooseFrom(string title, string message, List<(string Text, Action Picked)> choices, UIRecentList? recent = null)
+        => ChooseFrom(title, message, UIChooser.Rows(choices), recent);
+
+    private void ChooseFrom(string title, string message, List<UIChoice> choices, UIRecentList? recent = null)
     {
         if (chooser is { IsOpen: true })
             chooser.Close();

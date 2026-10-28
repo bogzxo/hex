@@ -89,7 +89,8 @@ internal sealed partial class DawnScene
 
         // The chevron at the end of the panel's tabs folds it down to them, its tabs still there, and opens it again
         float open = 0.0f;
-        test.Run(() => open = bottom.Size.Y);
+        float panelAnimation = settings.UiAnimation;
+        test.Run(() => { settings.UiAnimation = 1.0f; ApplyEffects(); open = bottom.Size.Y; });
         // Every tick of the way, how tall it was laid out and how far the code was from meeting it, which a tick behind was
         // a flash of a gap or the two over each other
         var heights = new HashSet<float>();
@@ -116,6 +117,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("panel: and opens the same way", () => heights.Count >= 4 && seam < 1.0f);
         test.Check("panel: and opens it again as tall as it was", () => !panelFolded && !settings.PanelCollapsed && MathF.Abs(bottom.Bounds.Height - open) < 1.0f);
+        test.Run(() => { settings.UiAnimation = panelAnimation; ApplyEffects(); });
 
         test.Run(() => running.AskConsole("let doubled = speed * 2"));
         test.WaitFor(() => running.consoleAsked is null, 2.0f);

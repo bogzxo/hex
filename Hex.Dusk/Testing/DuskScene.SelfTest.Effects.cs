@@ -2,7 +2,7 @@ using Horizon.UI.Components;
 
 namespace Hex.Dusk;
 
-// The self test of the effects in the terminal. As they come (the Fluid Glass look) the popups are on glass and nothing
+// The self test of the effects in the terminal. As they come (the Flat look) the popups are solid and nothing
 // is thrown, sparks off the cursor as it's typed along a prompt with them all, a burst when a command of a couple of
 // seconds goes well, and nothing left flying or frosted once they and the glass are off (the Flat look).
 internal sealed partial class DuskScene
@@ -11,7 +11,7 @@ internal sealed partial class DuskScene
     {
         TerminalView View() => panel.FocusedView!;
 
-        test.Check("effects: as they come the popups are on glass and nothing flies", () => compositor.PopupGlass is not null && sparks.Count == 0);
+        test.Check("effects: the default Flat look has solid popups and nothing flies", () => compositor.PopupGlass is null && sparks.Count == 0);
 
         test.Run(() =>
         {

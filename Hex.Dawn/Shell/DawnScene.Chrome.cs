@@ -294,7 +294,14 @@ internal sealed partial class DawnScene
         float panelLag = panelTaken - panelBefore;
 
         // The tabs, the breadcrumbs and the panel are the width of the middle, the panel as tall as it was dragged
-        docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, centerWidth - WidthShowing(toolbar)) };
+        // Keep file navigation visible even when view and run controls fill the row.
+        // Narrow windows put those contextual controls on a second row instead of squeezing tabs away.
+        bool stacked = centerWidth < 560.0f;
+        tabRow.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+        float tabRoom = MathF.Max(MIN_FLEXIBLE, centerWidth - (stacked ? 0.0f : WidthShowing(toolbar)));
+        bool overflow = docTabs.Tabs.Count > 1 && docTabs.TabsWidth > tabRoom;
+        allTabs.Visible = overflow;
+        docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, tabRoom - (overflow ? allTabs.Size.X : 0.0f)) };
         crumbs.Size = crumbs.Size with { X = centerWidth };
         bottom.Size = bottom.Size with { X = centerWidth };
         FitRowsTo(problems, problemsScroll);

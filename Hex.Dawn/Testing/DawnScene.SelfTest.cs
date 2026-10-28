@@ -125,6 +125,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
+        ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>
         {
             TestEditorItself(test);

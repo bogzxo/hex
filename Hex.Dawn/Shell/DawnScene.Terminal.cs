@@ -28,6 +28,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
     private void BuildTerminal()
     {
         terminalPanel = layout.Get<TerminalPanel>("terminal");
+        HexTerminalStatus.AddLive(statusBar, terminalPanel, () => bottom.Shown && bottom.Selected == CONSOLE_PAGE);
         terminals = new TerminalHost(terminalPanel, new TerminalHostOptions
         {
             Name = "hex",
@@ -47,7 +48,8 @@ internal sealed partial class DawnScene : ITerminalHostUi
 
             // What a compiler in a terminal says is wrong goes in the Problems panel, until a line is run again
             Problem = (problem, _) => AddTerminalProblem(problem.File, problem.Line, Math.Max(1, problem.Column), problem.Message, problem.Warning),
-            ProblemsCleared = _ => ClearTerminalProblems()
+            ProblemsCleared = _ => ClearTerminalProblems(),
+            SettingsChanged = ApplyTerminalMotion
         });
 
         terminalPanel.OnTabMenu = (tab, point) =>
@@ -89,6 +91,12 @@ internal sealed partial class DawnScene : ITerminalHostUi
         commands.Bind(Key.F6, ToggleTerminalPage, whileTyping: true);
         commands.Bind(Key.GraveAccent, ToggleTerminalFocus, control: true, whileTyping: true, shift: false);
         commands.Bind(Key.GraveAccent, NewTerminal, control: true, whileTyping: true, shift: true);
+    }
+
+    private void ApplyTerminalMotion()
+    {
+        if (terminals is not null)
+            HexMotion.Apply(terminalPanel, terminals.Settings, settings.UiAnimation);
     }
 
     /// <summary>F6, the terminal page brought up with the keyboard in it, or the editor back when it is up.</summary>

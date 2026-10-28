@@ -191,6 +191,7 @@ internal sealed partial class DuskScene
 
     private void BuildStatusBar()
     {
+        HexTerminalStatus.AddLive(statusBar, panel);
         messageItem = statusBar.Add(string.Empty, tooltip: HexText.Get("dusk_chrome.message_tip"));
         themeItem = statusBar.Add(string.Empty, right: true, pressed: () => Run("theme_next"), tooltip: HexText.Get("dusk_chrome.theme_tip"));
         sizeItem = statusBar.Add(string.Empty, right: true, tooltip: HexText.Get("dusk_chrome.size_tip"));

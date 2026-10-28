@@ -77,7 +77,10 @@ internal sealed partial class DuskScene
         popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
         sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
         veil = HexGlass.Veil(settings.GlassClarity);
-        lightEffects.Read(SettingsSections.Read(host.Settings.Path) is { } all ? SettingsSections.Section(all, SettingsSections.EDITOR) : []);
+        lightEffects.CaretGlow = settings.EffectCaretGlow;
+        lightEffects.Spotlight = settings.EffectSpotlight;
+        lightEffects.Ripples = settings.EffectRipples;
+        lightEffects.Trail = settings.EffectTrail;
         ApplyEffects();
     }
 
@@ -91,6 +94,7 @@ internal sealed partial class DuskScene
 
         // The terminal's animations off is nothing moving, the menus and the buttons as well as the splits and the cursor
         compositor.AnimationSpeed = host.Settings.Animations ? uiAnimation : 0.0f;
+        HexMotion.Apply(panel, host.Settings, uiAnimation);
         if (!EffectsOn || !effectSparks)
             sparks.Clear();
         if (!EffectsOn)

@@ -116,10 +116,10 @@ internal sealed partial class DawnScene
         test.Check("launch: started on code the empty layout has no tab, and the status bar says nothing of HIDL or where the caret is", () =>
             PlainStart && documents.Count == 1 && docTabs.Tabs.Count == 0
             && languageItem.IsVisible?.Invoke() == false && caretItem.IsVisible?.Invoke() == false);
-        test.Check("launch: its Start list is New File, Open File, Open Folder, the palette and New Layout last", () =>
+        test.Check("launch: its Start list leads with Open Folder and Open File, then New File, the palette and New Layout", () =>
             plainPage is not null && Descendant<Button>(plainPage, button => Says(button, "welcome.new_file"))?.Parent is { } start
-            && IndexIn(start, "welcome.new_file") < IndexIn(start, "welcome.open_file")
-            && IndexIn(start, "welcome.open_file") < IndexIn(start, "welcome.open_folder")
+            && IndexIn(start, "welcome.open_folder") < IndexIn(start, "welcome.open_file")
+            && IndexIn(start, "welcome.open_file") < IndexIn(start, "welcome.new_file")
             && IndexIn(start, "welcome.commands") < IndexIn(start, "welcome.new_layout")
             && IndexIn(start, "welcome.new_layout") < IndexIn(start, "welcome.keys"));
 

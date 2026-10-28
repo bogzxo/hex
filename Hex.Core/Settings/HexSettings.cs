@@ -85,15 +85,15 @@ internal sealed partial class HexSettings
 
     /// <summary>
     /// Whether the effects that are on throw sparks, whether the caret glides, and whether the dialogs, menus, palette and
-    /// side panels sit over a blur of what is behind them. What it all comes as is the Fluid Glass look (Hex.Shell's HexLooks).
+    /// side panels sit over a blur of what is behind them. New settings start in the Flat look; saved choices are read below.
     /// </summary>
-    public bool EffectSparks, EffectMotion = true, EffectGlass = true;
+    public bool EffectSparks, EffectMotion, EffectGlass;
 
     /// <summary>The effects of light, a glow under the caret, a spotlight under the pointer, rings off clicks, embers behind the pointer.</summary>
-    public bool EffectCaretGlow = true, EffectSpotlight, EffectRipples, EffectTrail;
+    public bool EffectCaretGlow, EffectSpotlight, EffectRipples, EffectTrail;
 
     /// <summary>The look picked last in the settings by its name (one of Hex's three or one of the user's), empty for none.</summary>
-    public string Look = "Fluid Glass";
+    public string Look = "Flat";
 
     /// <summary>
     /// The looks the user saved, in the order they were made, each the visual settings it sets by their keys in this section
@@ -104,8 +104,8 @@ internal sealed partial class HexSettings
     /// <summary>How thick the glass is, the popups' as they are and the sides' worked out of them (the engine's UIGlass.Clear to begin with, Hex.Shell's HexGlass draws it).</summary>
     public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
 
-    /// <summary>How quickly the UI moves (UICompositor.AnimationSpeed), 1 as it comes and 0 for not at all, and how long the caret glides for, 0 for jumping.</summary>
-    public float UiAnimation = 1.0f, CaretGlide = 0.045f;
+    /// <summary>How quickly the UI moves (UICompositor.AnimationSpeed), 0 for no motion, and how long the caret glides for.</summary>
+    public float UiAnimation, CaretGlide;
 
     /// <summary>How many columns wide a tab is and a level of indentation, 1 to 16.</summary>
     public int TabSize = 4;

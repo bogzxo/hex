@@ -10,14 +10,26 @@ let tabs_head = compositor.stack({
 
 let tab_row = compositor.stack({
     parent: tabs_head,
-    size: vec(0, 24),
+    size: vec(0, 0),
     anchor: "left",
     pivot: "left",
     spacing: 0,
     direction: "horizontal",
 });
 
-let doc_tabs = compositor.tab_strip({ parent: tab_row, size: vec(500, 0), max_tab_width: 240 });
+let file_tabs = compositor.stack({ parent: tab_row, spacing: 0, direction: "horizontal", anchor: "left", pivot: "left" });
+
+let doc_tabs = compositor.tab_strip({ parent: file_tabs, size: vec(500, 0), max_tab_width: 240 });
+
+let all_tabs = compositor.button({
+    parent: file_tabs,
+    size: vec(28, 28),
+    icon: "chevron-down",
+    tooltip: "@tabs.all",
+    style: "button_flat",
+    animated: false,
+    visible: false,
+});
 
 let toolbar = compositor.stack({
     parent: tab_row,
@@ -41,7 +53,7 @@ let notebook_button = compositor.button({
     parent: views,
     size: vec(0, 28),
     tooltip: "@notebook.view_tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     label: "@notebook.view",
@@ -55,7 +67,7 @@ let design_view = compositor.button({
     parent: views,
     size: vec(0, 28),
     tooltip: "@toolbar.design_tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     label: "@toolbar.design",
@@ -69,7 +81,7 @@ let code_view = compositor.button({
     parent: views,
     size: vec(0, 28),
     tooltip: "@toolbar.code_tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     label: "@toolbar.code",
@@ -83,7 +95,7 @@ let table_view = compositor.button({
     parent: views,
     size: vec(0, 28),
     tooltip: "@toolbar.table_tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     label: "@toolbar.table",
@@ -103,7 +115,7 @@ let play_button = compositor.button({
     parent: toolbar,
     size: vec(0, 28),
     tooltip: "@toolbar.run_tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     label: "@toolbar.run",
@@ -117,7 +129,7 @@ let run_target_button = compositor.button({
     parent: toolbar,
     size: vec(18, 28),
     tooltip: "@run_target.tip",
-    hover: "lift",
+    hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
     icon: "chevron-down",

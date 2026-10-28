@@ -15,7 +15,7 @@ internal sealed record HexLook(string Name, IReadOnlyDictionary<string, IRuntime
 
 /// <summary>
 /// Hex's looks, the profiles of how it's drawn. Four come with it, Fluid Glass (clear glass that bends what is behind
-/// it at its rim, the one it starts in), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (solid
+/// it at its rim), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (the default, solid
 /// panels, nothing glows or glides) and Visual Studio (that editor's dark theme, square and flat, see
 /// HexLooks.VisualStudio), and the user saves their own from whatever the settings are at. The user's are kept in the
 /// editor's section as looks and the one picked last as look (HexSettings reads and writes both), so Dawn and Dusk pick
@@ -46,7 +46,7 @@ internal static partial class HexLooks
 
     /// <summary>
     /// Clear glass with a bright rim and a strong lens, the light caught at the edges, the caret gliding, and none of the
-    /// effects, a glow following the caret about was the first thing anybody asked to turn off. What Hex comes as.
+    /// effects, a glow following the caret about was the first thing anybody asked to turn off.
     /// </summary>
     public static readonly HexLook Fluid = new(FLUID, new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
     {
@@ -96,8 +96,14 @@ internal static partial class HexLooks
     {
         ["effect_glass"] = Values.Bool(false),
         ["effects"] = new StringValue("none"),
+        ["effect_sparks"] = Values.Bool(false),
+        ["effect_caret_glow"] = Values.Bool(false),
+        ["effect_spotlight"] = Values.Bool(false),
+        ["effect_ripples"] = Values.Bool(false),
+        ["effect_trail"] = Values.Bool(false),
         ["effect_motion"] = Values.Bool(false),
-        ["ui_animation"] = new NumberValue(1.0f)
+        ["ui_animation"] = new NumberValue(0.0f),
+        ["caret_glide"] = new NumberValue(0.0f)
     }, BuiltIn: true);
 
     /// <summary>Visual Studio dark, see HexLooks.VisualStudio.</summary>

@@ -144,7 +144,7 @@ let strings = {
         language: "HIDL Reference",
         changes: "Release Notes",
         recent: "Recent",
-        no_recent: "No recent files"
+        no_recent: "Open a folder or file to start. Recent files will appear here."
     },
 
     // The column on the right
@@ -1331,6 +1331,7 @@ let strings = {
     },
 
     tabs: {
+        all: "Open editors",
         never_saved: "{name}, never saved",
         title: "{name}  -  Hex {version}",
         title_changed: "{name} *  -  Hex {version}",
@@ -1660,7 +1661,7 @@ let strings = {
         effects_title: "Effects",
         effects_help: "None of them, subtle (the lights switched on under this, and a burst of sparks for a save or a long command that went well when the sparks are on) or all (sparks off the caret as you type as well). The glass and the caret's glide have switches of their own.",
         effect_glass_title: "Glass",
-        effect_glass_help: "Whether the dialogs, the menus, the palette and the side panels sit on glass over what is behind them, blurred and bent at the rim.",
+        effect_glass_help: "Blur and refraction behind dialogs, menus, palettes and side panels. Optional GPU work; Flat keeps these surfaces solid.",
         effect_sparks_title: "Sparks",
         effect_sparks_help: "Whether the effects that are on throw sparks, on a save, a long command that went well and as you type.",
         effect_motion_title: "Smooth caret",
@@ -1682,9 +1683,9 @@ let strings = {
         glass_bend_title: "Glass edge bend",
         glass_bend_help: "How far the rim of the popups' glass bends what is behind it, in pixels. 0 is frosted glass, a blur laid flat. More is liquid glass, what's behind bent hard round the rim and split a little into its colours there, the way Apple's is.",
         ui_animation_title: "Interface animation",
-        ui_animation_help: "How quickly the menus, buttons and panels move as they light up, slide open and shut, 1 as they come, 2 twice as quick, 0 for nothing moving at all. Dusk keeps still with its animations off as well.",
+        ui_animation_help: "0 disables interface transitions, caret glide, wrap glide and terminal pane motion. 1 enables normal speed; 2 is twice as quick. Dusk's own Animations switch can also disable its motion. Decorative effects have separate switches.",
         caret_glide_title: "Caret glide time",
-        caret_glide_help: "How long the caret takes to glide to where it goes, in seconds, 0 for it jumping there. Smooth caret has to be on, Dusk's cursor has its own in the terminal's settings.",
+        caret_glide_help: "How long the caret glides, in seconds; 0 makes it immediate. Smooth caret and interface animations must be on. Dusk's cursor has its own duration in Terminal settings.",
         backdrop_title: "Behind the code",
         backdrop_help: "Whether a picture is drawn behind the code, in the bottom right corner of the editor.",
         backdrop_terminal_title: "Behind the terminals",
@@ -2446,6 +2447,8 @@ let strings = {
     },
 
     terminal_page: {
+        return_live: "$(arrow-down) Return to live",
+        return_live_tip: "Scroll to the bottom and return input to this terminal",
         split_right: "Split Terminal",
         console_profile: "HIDL in this file",
         command_panel: "hide the panel",
@@ -2590,6 +2593,8 @@ let strings = {
     },
 
     modes: {
+        active: "{name} is active",
+        switch: "Switch to {name} (Ctrl+Alt+D)",
         toggle_tooltip: "Dusk, the terminal, in this window (Ctrl+Alt+D)",
         command_dusk: "Hex: Dusk, the terminal, in this window",
         no_dusk: "there's no Dusk to swap to"
