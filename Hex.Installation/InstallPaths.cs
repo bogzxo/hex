@@ -34,11 +34,20 @@ public static class InstallPaths
         return full;
     }
 
-    public static void NoLinks(string path)
+    // A link at a path or in the folders between it and a root it's under (an installation's), so nothing written there
+    // goes somewhere else. The folders above the root are where somebody chose to put it and are left alone, macOS has
+    // its temp folder under /var, a link to /private/var, and some Linuxes have /home a link too, and every one of them
+    // was turned down
+    public static void NoLinks(string path, string? root = null)
     {
-        for (string? at = Path.GetFullPath(path); at is not null; at = Path.GetDirectoryName(at))
+        string stop = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root ?? path));
+        for (string? at = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)); at is not null; at = Path.GetDirectoryName(at))
+        {
             if ((File.Exists(at) || Directory.Exists(at)) && File.GetAttributes(at).HasFlag(FileAttributes.ReparsePoint))
                 throw new IOException(InstallText.Get("errors.destination_link", ("path", at)));
+            if (string.Equals(at, stop, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                break;
+        }
     }
 
     public static void CopyTree(string from, string to)

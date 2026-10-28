@@ -52,7 +52,7 @@ public static class InstallTransaction
             throw new InvalidDataException(InstallText.Get("errors.wrong_record"));
         var files = (json["files"] as JsonArray ?? throw new InvalidDataException(InstallText.Get("errors.missing_file_list")))
             .Select(n => n!.GetValue<string>()).ToList();
-        foreach (string file in files) InstallPaths.NoLinks(InstallPaths.Under(root, file));
+        foreach (string file in files) InstallPaths.NoLinks(InstallPaths.Under(root, file), root);
         return (json["version"]!.GetValue<string>(), files);
     }
 
