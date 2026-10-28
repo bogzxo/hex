@@ -56,4 +56,4 @@ dotnet publish Hex.Installer -c Release -r win-x64
 
 `--preview` shows an offline, non-installing UI for screenshots. Normal setup reads GitHub when opened. Internal update handoff arguments are `--update --target <root> --version <tag> --wait-pid <pid> --wait-start <UTC ticks>`; `--uninstall --target <root>` opens removal confirmation. There is no silent destructive mode.
 
-Release packaging publishes the installer separately, copies its complete output into `Hex/installer/`, and uploads both ZIPs. Tag versions must match `Directory.Build.props`. Older portable releases remain usable but cannot perform managed in-place updates.
+Release packaging publishes the installer separately, copies its complete output into `Hex/installer/`, and uploads both ZIPs. [hex-installer](https://github.com/bogzxo/hex-installer) brings each new stable release's `Hex-Setup-*.zip` over to a release of its own within the hour (its Follow Hex workflow, which can also be run by hand), so nothing here needs a token for it. Tag versions must match `Directory.Build.props`. Older portable releases remain usable but cannot perform managed in-place updates.
