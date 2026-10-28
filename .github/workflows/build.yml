@@ -25,8 +25,11 @@ jobs:
             rid: linux-x64
           - os: macos-latest
             rid: osx-arm64
+          # Apple's classic linker turns down an unaligned pointer in .NET's own System.Net.Security.Native on Intel,
+          # the newer one only warns about it
           - os: macos-15-intel
             rid: osx-x64
+            publish_args: -p:UseLdClassicXCodeLinker=false
           - os: ubuntu-24.04-arm
             rid: linux-arm64
           - os: windows-11-arm
@@ -65,10 +68,10 @@ jobs:
           if ($env:GITHUB_REF_NAME.Substring(1) -ne $version) { throw "Release tag must match Directory.Build.props ($version)." }
 
       - name: Publish
-        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex
+        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }}
 
       - name: Publish installer
-        run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup
+        run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }}
 
       - name: macOS icon
         if: runner.os == 'macOS'
