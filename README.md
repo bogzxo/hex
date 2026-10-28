@@ -94,10 +94,15 @@ the status bar says so. Claude Code, or anything else that speaks MCP over stdio
 
 ## Get it
 
-**[Download Hex Setup](https://github.com/bogzxo/hex-installer/releases/latest)**, the installer. Unpack the
-`Hex-Setup` zip for your system and run it, it fetches the newest Hex, gives it shortcuts and a place in the app menu,
-an uninstaller, and updates from inside Hex (Help, Check for Updates). [Hex Setup](docs/installer.md) has what it does
-on each system.
+**Hex Setup**, the installer, for
+[Windows x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.zip),
+[Windows ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.zip),
+[Linux x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip),
+[Linux ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip),
+[macOS Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip) and
+[macOS Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip). Unpack it and run it,
+it fetches the newest Hex, gives it shortcuts and a place in the app menu, an uninstaller, and updates from inside Hex
+(Help, Check for Updates). [Hex Setup](docs/installer.md) has what it does on each system.
 
 Or grab the portable zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it anywhere
 and run `Hex`.
