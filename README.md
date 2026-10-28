@@ -63,6 +63,7 @@ every single time Hex goes online, to GitHub unless it says otherwise.
 - Once a day, new versions of the language servers you've got. Off with one switch in the settings.
 - Once a day, new versions of extensions you installed yourself out of the catalog. Off with another one.
 - The changelog, when you open it.
+- Hex updates, when you choose **Help → Check for Updates**. Setup downloads the release only after you choose Install.
 - An extension, a language server or a debug adapter, when you click install (a server comes through its own
   installer, npm or dotnet or whatever it says).
 
@@ -93,7 +94,13 @@ the status bar says so. Claude Code, or anything else that speaks MCP over stdio
 
 ## Get it
 
-Grab the zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it, run `Hex`.
+**[Download Hex Setup](https://github.com/bogzxo/hex-installer/releases/latest)**, the installer. Unpack the
+`Hex-Setup` zip for your system and run it, it fetches the newest Hex, gives it shortcuts and a place in the app menu,
+an uninstaller, and updates from inside Hex (Help, Check for Updates). [Hex Setup](docs/installer.md) has what it does
+on each system.
+
+Or grab the portable zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it anywhere
+and run `Hex`.
 
 - **Windows** 10 1809 or later.
 - **Linux** with the Vulkan loader and a driver (`libvulkan1` and `mesa-vulkan-drivers` on Debian and Ubuntu).

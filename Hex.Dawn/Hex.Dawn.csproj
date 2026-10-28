@@ -31,6 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\Hex.Installer\Assets\installer\localisation\*.hor" Link="Assets\installer\localisation\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\samples\notebooks\engineering.ipynb" Link="Assets\hex\notebooks\engineering.ipynb" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\hex\**\*.hor">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -40,7 +42,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Svg.Skia" Version="5.2.3" />
+    <PackageReference Include="CSharpMath.SkiaSharp" Version="1.0.0-pre.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
+    <ProjectReference Include="..\Hex.Installation\Hex.Installation.csproj" />
     <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
     <!-- The engine is a submodule at horizon/, the language a submodule inside of that. A workspace above this repo
          (Directory.Build.props) can say to use another checkout of the engine instead, see HorizonRoot -->

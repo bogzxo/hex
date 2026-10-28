@@ -44,6 +44,7 @@ internal sealed partial class DawnScene
     // The pictures of the outputs on screen, by the data they came out of, kept while it's the same data
     private readonly ConditionalWeakTable<JsonNode, Texture> outputPictures = new();
     private readonly Dictionary<NotebookCellView, List<NotebookPicture>> cellPictures = [];
+    private readonly Dictionary<NotebookCellView, List<NotebookPicture>> markdownPictures = [];
 
     // Pictures decoded and waiting for their textures, which are only made while nothing draws (see MakeOutputPictures),
     // by the data they came out of, with the outputs waiting to show them
@@ -58,8 +59,8 @@ internal sealed partial class DawnScene
         foreach (JsonObject output in cell.Outputs)
         {
             hash.Add(RuntimeHelpers.GetHashCode(output));
-            if (output["text"] is JsonValue text && text.TryGetValue(out string? said))
-                hash.Add(said.Length);
+            if (output["text"] is { } text)
+                hash.Add(RuntimeHelpers.GetHashCode(text));
             if (output["data"] is { } data)
                 hash.Add(RuntimeHelpers.GetHashCode(data));
         }
@@ -101,8 +102,7 @@ internal sealed partial class DawnScene
 
         // What it showed before let go of once it's the new list that's kept. Looked for in the old one, nothing was ever freed
         cellPictures[view] = now;
-        foreach (Texture gone in was.Select(picture => picture.Texture).OfType<Texture>().Distinct())
-            FreeOutputPicture(gone);
+        ReleaseNotebookPictures(was);
         view.Outputs.Visible = view.Outputs.Children.Count > 0;
     }
 
@@ -136,6 +136,9 @@ internal sealed partial class DawnScene
     // Helper method for the best of the forms a result came in, a picture, a table, markdown, then text
     private UIComponent? OutputData(HexNotebook notebook, JsonObject data, JsonObject? metadata, List<NotebookPicture> pictures)
     {
+        if (data["image/svg+xml"] is { } svg && RenderedPicture(svg, () => NotebookRender.Svg(NotebookFile.Text(svg)), pictures, NotebookFile.Text(data["text/plain"])) is { } vector)
+            return vector;
+
         foreach (string mime in (string[])["image/png", "image/jpeg", "image/gif", "image/bmp"])
         {
             if (data[mime] is JsonValue value && value.TryGetValue(out string? encoded) && OutputPicture(data[mime]!, encoded, metadata?[mime] as JsonObject, pictures) is { } picture)
@@ -146,8 +149,11 @@ internal sealed partial class DawnScene
         if (data["text/html"] is { } html && OutputHtmlTable(NotebookFile.Text(html)) is { } table)
             return table;
 
+        if (data["text/latex"] is { } formula && RenderedPicture(formula, () => NotebookRender.Math(NotebookFile.Text(formula), transparent: true), pictures, NotebookFile.Text(data["text/plain"]), mathInk: true) is { } math)
+            return math;
+
         if (data["text/markdown"] is { } markdown)
-            return OutputMarkdown(notebook, NotebookFile.Text(markdown));
+            return OutputMarkdown(notebook, NotebookFile.Text(markdown), pictures);
 
         // Other HTML and JSON only when the text is no more than the object's name, IPython's HTML and JSON and a
         // class with only a _repr_html_ said "<IPython.core.display.HTML object>" and nothing else
@@ -155,7 +161,7 @@ internal sealed partial class DawnScene
         if (plain is null || NotebookHtml.IsBareRepr(plain))
         {
             if (data["text/html"] is { } other)
-                return OutputMarkdown(notebook, NotebookHtml.ToMarkdown(NotebookFile.Text(other)));
+                return OutputMarkdown(notebook, NotebookHtml.ToMarkdown(NotebookFile.Text(other)), pictures);
             if (data["application/json"] is { } json)
                 return OutputText(json.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), error: false);
         }
@@ -166,14 +172,20 @@ internal sealed partial class DawnScene
         if (data["text/latex"] is { } latex)
             return OutputText(NotebookFile.Text(latex), error: false);
 
+        if (data["image/svg+xml"] is { } unsupportedSvg)
+            return OutputText("SVG could not be rendered.\n" + NotebookFile.Text(unsupportedSvg), error: true);
+
+        if (data.Count > 0)
+            return OutputText("No static renderer for: " + string.Join(", ", data.Select(entry => entry.Key)), error: false);
+
         return null;
     }
 
     // Helper method for markdown written out, its tables drawn as tables
-    private StackPanel OutputMarkdown(HexNotebook notebook, string markdown)
+    private StackPanel OutputMarkdown(HexNotebook notebook, string markdown, List<NotebookPicture> pictures)
     {
         var written = new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f };
-        WriteMarkdown(written, markdown, notebook.Model.Language);
+        WriteMarkdown(written, markdown, notebook.Model.Language, pictures);
         return written;
     }
 
@@ -214,6 +226,13 @@ internal sealed partial class DawnScene
     // Helper method for a picture out of its base64, decoded once for as long as it's the same data. Its texture is made
     // later while nothing draws, the picture shows it from then on
     private NotebookPicture? OutputPicture(JsonNode data, string encoded, JsonObject? size, List<NotebookPicture> pictures)
+        => OutputPicture(data, () =>
+        {
+            byte[] bytes = Convert.FromBase64String(encoded);
+            return ImageFile.Load(new MemoryStream(bytes));
+        }, size, pictures);
+
+    private NotebookPicture? OutputPicture(JsonNode data, Func<ImagePixels> decode, JsonObject? size, List<NotebookPicture> pictures, float density = 1)
     {
         if (Engine.WindowManager.Graphics is null)
             return null;
@@ -233,10 +252,9 @@ internal sealed partial class DawnScene
                 {
                     try
                     {
-                        byte[] bytes = Convert.FromBase64String(encoded.Replace("\n", string.Empty, StringComparison.Ordinal));
-                        waiting = (ImageFile.Load(new MemoryStream(bytes)), []);
+                        waiting = (decode(), []);
                     }
-                    catch (Exception e) when (e is FormatException or InvalidOperationException or IOException or ArgumentException)
+                    catch (Exception e) when (e is FormatException or InvalidOperationException or IOException or ArgumentException or System.Xml.XmlException)
                     {
                         return null;
                     }
@@ -249,13 +267,13 @@ internal sealed partial class DawnScene
             (natural, tallness) = (waiting.Pixels.Width, waiting.Pixels.Height);
         }
 
-        float width = size?["width"] is JsonValue w && w.TryGetValue(out float wanted) ? wanted : natural;
-        float height = size?["height"] is JsonValue h && h.TryGetValue(out float tall) ? tall : tallness * (width / MathF.Max(1.0f, natural));
+        float width = size?["width"] is JsonValue w && w.TryGetValue(out float wanted) && wanted > 0 && float.IsFinite(wanted) ? wanted : natural / density;
+        float height = size?["height"] is JsonValue h && h.TryGetValue(out float tall) && tall > 0 && float.IsFinite(tall) ? tall : tallness * (width / MathF.Max(1.0f, natural));
         var picture = new NotebookPicture(new Vector2(width, height)) { Texture = made, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(width, height) };
         if (made is null)
         {
             lock (picturesToMake)
-                waiting.Waiting.Add(picture);
+                waiting.Waiting!.Add(picture);
         }
 
         pictures.Add(picture);
@@ -269,6 +287,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void MakeOutputPictures()
     {
+        MakeRenderedNotebookPictures();
         List<(JsonNode Data, ImagePixels Pixels, List<NotebookPicture> Waiting)> making;
         lock (picturesToMake)
         {
@@ -291,21 +310,27 @@ internal sealed partial class DawnScene
     }
 
     // Helper method for the outputs as wide as the cell, a picture no wider than it came or than there's room for
-    private static void FitOutputs(NotebookCellView view, float width)
+    private static void FitOutputs(NotebookCellView view, float width, float zoom = 1)
     {
-        foreach (UIComponent output in view.Outputs.Children)
+        for (int index = 0; index < view.Outputs.Children.Count; index++)
         {
+            UIComponent output = view.Outputs.Children[index];
             switch (output)
             {
                 case NotebookPicture picture:
-                    float scale = MathF.Min(1.0f, width / MathF.Max(1.0f, picture.Natural.X));
+                    picture.Reflow?.Invoke(width, zoom);
+                    float scale = MathF.Min(picture.Reflow is null ? zoom : 1, width / MathF.Max(1.0f, picture.Natural.X));
                     picture.Size = picture.Natural * scale;
                     break;
                 case Label label:
                     label.Size = label.Size with { X = width - 8.0f };
                     break;
                 case StackPanel written:
-                    FitWritten(written, width);
+                    FitWritten(written, width, zoom);
+                    break;
+                case CodeEditor editor:
+                    editor.TextScale = CODE_TEXT * zoom;
+                    editor.Size = editor.Size with { X = width };
                     break;
                 default:
                     output.Size = output.Size with { X = width };
@@ -317,10 +342,11 @@ internal sealed partial class DawnScene
     /// <summary>A cell's outputs let go of, its pictures freed once nothing on screen has them.</summary>
     private void ForgetOutputs(NotebookCellView view)
     {
+        if (markdownPictures.Remove(view, out var written))
+            ReleaseNotebookPictures(written);
         if (!cellPictures.Remove(view, out var pictures))
             return;
-        foreach (Texture picture in pictures.Select(shown => shown.Texture).OfType<Texture>().Distinct())
-            FreeOutputPicture(picture);
+        ReleaseNotebookPictures(pictures);
     }
 
     // Helper method to free a picture an output had, on the thread that draws and a few frames later, the way a closed
@@ -329,6 +355,9 @@ internal sealed partial class DawnScene
     {
         if (cellPictures.Values.Any(shown => shown.Exists(output => ReferenceEquals(output.Texture, picture))))
             return;
+        if (markdownPictures.Values.Any(shown => shown.Exists(output => ReferenceEquals(output.Texture, picture))))
+            return;
+        if (previewPictures.Any(output => ReferenceEquals(output.Texture, picture))) return;
 
         foreach (var (data, kept) in outputPictures.ToList())
         {
@@ -345,5 +374,17 @@ internal sealed partial class DawnScene
 /// <summary>A picture an output drew, and the size it came at, the most it's drawn.</summary>
 internal sealed class NotebookPicture(Vector2 natural) : Image
 {
-    public Vector2 Natural { get; } = natural;
+    protected override bool ClipsChildren => true;
+    public Vector2 Natural { get; set; } = natural;
+    public Label? RenderStatus { get; set; }
+    public string? RenderFallback { get; set; }
+    public bool MathInk { get; set; }
+    public Action<float, float>? Reflow { get; set; }
+    public JsonNode? RenderKey { get; set; }
+
+    protected override void Paint(Horizon.UI.Drawing.UIDrawList list)
+    {
+        if (MathInk) Tint = list.Skin.TextColor;
+        base.Paint(list);
+    }
 }

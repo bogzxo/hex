@@ -51,7 +51,13 @@ internal sealed partial class DawnScene
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
         sideTree.OnExpanding = item => (item.Tag as SideTag)?.Expanding?.Invoke(item);
         sideTree.OnItemContextMenu = (item, point) => (item.Tag as SideTag)?.Menu?.Invoke(point);
-        sideTree.OnKey = (item, key) => (item.Tag as SideTag)?.Key?.Invoke(key) == true;
+        sideTree.OnKey = (item, key) => Side == HexSide.Explorer && ExplorerFileKey(key) || (item.Tag as SideTag)?.Key?.Invoke(key) == true;
+        explorer.SelectedPaths = SelectedWith;
+        explorer.FoldersChanged += folders.Forget;
+        explorer.PastedPaths = paths => pendingExplorerSelection = paths.ToArray();
+        commands.Keys.Add(Silk.NET.Input.Key.V,
+            () => compositor.Focus == sideTree && Side == HexSide.Explorer && ExplorerFileKey(UIKeyboard.PASTE),
+            control: true, whileTyping: true, shift: false, first: true);
 
         // As wide as the components' list whichever of the two is showing, dragged by its edge the same way
         SideGrip(sideTree, UIResize.Right, left: true);
@@ -71,6 +77,11 @@ internal sealed partial class DawnScene
     /// <summary>The folders of the workspace as a tree, a folder's files read when it is opened and kept until they change.</summary>
     private void RebuildExplorer()
     {
+        bool existing = explorer.explorerRows.Any(row => sideTree.Items.Contains(row.Row));
+        string[] selected = [.. explorer.explorerRows.Where(row => sideTree.IsSelected(row.Row)).Select(row => row.Path)];
+        float offset = sideTree.ScrollOffset;
+        bool follow = !existing || !string.Equals(explorerFollowedDocument, document.Path, PlatformPaths.Comparison);
+        explorerFollowedDocument = document.Path;
         treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name));
         explorer.explorerRows.Clear();
         explorerMade = 0;
@@ -86,8 +97,23 @@ internal sealed partial class DawnScene
 
         sideTree.Items = items;
         DecorateRows();
-        ShowOpenInExplorer();
+        if (pendingExplorerSelection is { } pasted)
+        {
+            var rows = explorer.explorerRows.Where(row => pasted.Contains(row.Path, PlatformPaths.Comparer)).Select(row => row.Row).ToList();
+            sideTree.SelectMany(rows);
+            if (rows.Count > 0) sideTree.Reveal(rows[0]);
+            pendingExplorerSelection = null;
+        }
+        else if (follow) ShowOpenInExplorer();
+        else
+        {
+            sideTree.SelectMany([.. explorer.explorerRows.Where(row => selected.Contains(row.Path, PlatformPaths.Comparer)).Select(row => row.Row)]);
+            sideTree.ScrollOffset = offset;
+        }
     }
+
+    private string? explorerFollowedDocument;
+    private string[]? pendingExplorerSelection;
 
     // How many rows of the explorer were made, there is a most
     private int explorerMade;
@@ -118,6 +144,7 @@ internal sealed partial class DawnScene
         explorer.explorerRows.Add((entry.Path, true, item));
         explorerMade++;
         DecorateRow(item, entry.Path, true, entry.IsRoot ? null : FolderColor);
+        if (explorer.IsCutPath(entry.Path)) item.Color = item.IconColor = DimColor;
 
         if (open)
             FillFolder(item);
@@ -173,6 +200,7 @@ internal sealed partial class DawnScene
             explorer.explorerRows.Add((file, false, row));
             explorerMade++;
             DecorateRow(row, file, false, null);
+            if (explorer.IsCutPath(file)) row.Color = row.IconColor = DimColor;
         }
 
         // A folder of the workspace with nothing in it says so, with the two ways of putting something in it

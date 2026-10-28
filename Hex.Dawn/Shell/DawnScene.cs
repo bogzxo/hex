@@ -219,6 +219,7 @@ internal sealed partial class DawnScene : Scene
         WireExplorerHead();
         BuildImageView();
         BuildNotebookView();
+        BuildMarkdownPreview();
         AddNotebookCommands();
         BuildDiffs();
         BuildHistory();
@@ -398,6 +399,7 @@ internal sealed partial class DawnScene : Scene
 
         running.UpdateTable();
         UpdateNotebooks(dt);
+        UpdateMarkdownPreview(dt);
         UpdateTerminal(dt);
         UpdateRemote();
         UpdateMcp(dt);

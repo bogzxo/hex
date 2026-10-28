@@ -1,5 +1,6 @@
 using Hex.Shell;
 
+using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dusk;
@@ -13,20 +14,19 @@ internal sealed partial class DuskScene
     public override bool Persistent => HexModes.Together;
 
     private Button modeToggle = null!;
+    private UIComponent? focusBeforeMode;
 
     private void BuildModes()
     {
-        modeToggle = top.Add(new Button(HexText.Get("dusk_modes.dawn"))
-        {
-            Icon = "code",
-            Tooltip = HexText.Get("dusk_modes.dawn_tooltip"),
-            OnPressed = SwapMode
-        });
+        modeToggle = HexModeSwitch.Add(top, HexMode.Dusk, SwapMode);
 
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dusk)
+            {
+                focusBeforeMode = compositor.Focus;
                 compositor.Focus = null;
+            }
         };
     }
 
@@ -40,7 +40,8 @@ internal sealed partial class DuskScene
     /// <summary>Back from Dawn, the keyboard in the terminal that had it.</summary>
     public override void OnReturned()
     {
-        panel.FocusedView?.Focus();
+        if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode))
+            panel.FocusedView?.Focus();
         ReadEffects();
         ReadBackdrop();
         Engine.WindowManager.RequestFrames();

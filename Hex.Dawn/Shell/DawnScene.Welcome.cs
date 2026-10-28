@@ -1,5 +1,6 @@
 using Horizon.UI;
 using Horizon.UI.Components;
+using System.Numerics;
 
 namespace Hex.Dawn;
 
@@ -14,6 +15,39 @@ internal sealed partial class DawnScene
     private const string WELCOME_LAYOUT = "welcome.hor";
 
     private Panel? welcome;
+    private readonly List<WelcomeSizing> welcomeSizes = [];
+
+    // Components are found once; resize only changes geometry when the available width changes.
+    private sealed class WelcomeSizing(Panel page, UILayout made)
+    {
+        private readonly StackPanel content = made.Get<StackPanel>("page"), columns = made.Get<StackPanel>("columns"),
+            start = made.Get<StackPanel>("start"), recent = made.Get<StackPanel>("recent_column");
+        private readonly Label subtitle = made.Get<Label>("subtitle");
+        private float width;
+
+        public void Fit()
+        {
+            if (!page.Visible || page.Bounds.Width <= 0.0f)
+                return;
+            float wanted = Math.Clamp(page.Bounds.Width - 64.0f, 160.0f, 640.0f);
+            if (wanted == width)
+                return;
+            width = wanted;
+            bool stacked = width < 560.0f;
+            columns.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+            content.Size = content.Size with { X = width };
+            columns.Size = columns.Size with { X = width };
+            subtitle.Size = subtitle.Size with { X = width };
+            float column = stacked ? width : (width - columns.Spacing) * 0.5f;
+            start.Size = start.Size with { X = column };
+            recent.Size = recent.Size with { X = column };
+            foreach (UIComponent child in recent.Children)
+                if (child is StackPanel list)
+                    foreach (UIComponent row in list.Children)
+                        if (row is Label hint)
+                            hint.Size = hint.Size with { X = column };
+        }
+    }
 
     // The empty layout Hex started with, which the welcome is over
     private HexDocument? startedWith;
@@ -69,6 +103,8 @@ internal sealed partial class DawnScene
             codeScroll.Remove(plainPage);
             codeScroll.Add(plainPage);
         }
+        foreach (WelcomeSizing sizing in welcomeSizes)
+            sizing.Fit();
     }
 
     /// <summary>The welcome made in a panel, the canvas of the empty layout or the code panel for the plain one.</summary>
@@ -86,7 +122,13 @@ internal sealed partial class DawnScene
         newLayout.OnPressed = () => Show(NewDocument());
         openFile.OnPressed = OpenPressed;
         PutNewFile(into == codeScroll, newLayout, openFile, made.Get<Button>("commands"));
-        made.Get<Button>("open_folder").OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
+        var openFolder = made.Get<Button>("open_folder");
+        openFolder.OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
+        if (into == codeScroll && openFolder.Parent is { } start)
+        {
+            start.MoveChild(openFolder, 1);
+            start.MoveChild(openFile, 2);
+        }
         made.Get<Button>("commands").OnPressed = CommandPalette;
         made.Get<Button>("keys").OnPressed = OpenKeysWindow;
         made.Get<Button>("language").OnPressed = ShowLanguageHelp;
@@ -99,15 +141,20 @@ internal sealed partial class DawnScene
         {
             string path = recent[i];
             var link = rows[i].Get<Button>("link");
-            link.Label = $"{Path.GetFileName(path)}    {Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty)}";
+            link.Label = HexText.MiddleOf(Path.GetFileName(path), 32);
             link.Icon = HexExplorer.FileIcon(path);
             link.Tooltip = path;
             link.OnPressed = () => Open(path);
         }
 
         if (recent.Count == 0)
-            Hint(list, Said("welcome.no_recent"));
+        {
+            Label hint = Hint(list, Said("welcome.no_recent"));
+            hint.Wrap = true;
+            hint.Size = new Vector2(260.0f, 0.0f);
+        }
 
+        welcomeSizes.Add(new WelcomeSizing(page, made));
         return page;
     }
 
@@ -132,6 +179,7 @@ internal sealed partial class DawnScene
             Hover = like.Hover,
             HoverAmount = like.HoverAmount,
             HoverTime = like.HoverTime,
+            Animated = false,
             OnPressed = NewFileFromWelcome,
         };
 

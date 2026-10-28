@@ -13,6 +13,7 @@ namespace Hex.Core;
 internal static partial class HexExtensionCatalog
 {
     public const string FILE = "extension.hor";
+    public static bool IsLegacyMarkdownPreview(string folder) => Path.GetFileName(folder).Equals("markdown_preview", StringComparison.OrdinalIgnoreCase);
 
     [GeneratedRegex(@"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")]
     private static partial Regex RepoName();
@@ -80,7 +81,7 @@ internal static partial class HexExtensionCatalog
     /// <summary>The folders of a catalog that are extensions, their extension.hor in them, by name.</summary>
     public static IEnumerable<string> Extensions(string catalog) =>
         Directory.Exists(catalog)
-            ? Directory.GetDirectories(catalog).Where(folder => File.Exists(Path.Combine(folder, FILE))).Order(StringComparer.OrdinalIgnoreCase)
+            ? Directory.GetDirectories(catalog).Where(folder => !IsLegacyMarkdownPreview(folder) && File.Exists(Path.Combine(folder, FILE))).Order(StringComparer.OrdinalIgnoreCase)
             : [];
 
     /// <summary>

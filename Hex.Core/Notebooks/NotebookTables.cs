@@ -5,7 +5,8 @@ using System.Text.RegularExpressions;
 namespace Hex.Core.Notebooks;
 
 /// <summary>A table out of markdown or HTML, its header, its rows, and how each column lines up ('l', 'c' or 'r').</summary>
-internal sealed record NotebookTable(List<string> Header, List<List<string>> Rows, List<char> Align);
+internal sealed record NotebookTable(List<string> Header, List<List<string>> Rows, List<char> Align,
+    List<string>? MarkdownHeader = null, List<List<string>>? MarkdownRows = null);
 
 /// <summary>
 /// Tables in what a notebook shows. Markdown's (GitHub's pipes, a header row, a row of dashes and colons saying how each
@@ -22,6 +23,8 @@ internal static partial class NotebookTables
         string[] lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var text = new StringBuilder();
         bool fenced = false;
+        char fenceMarker = '\0';
+        int fenceLength = 0;
 
         void Flush()
         {
@@ -33,8 +36,14 @@ internal static partial class NotebookTables
         for (int i = 0; i < lines.Length; i++)
         {
             string line = lines[i];
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
-                fenced = !fenced;
+            string trimmed = line.TrimStart();
+            if (trimmed.Length >= 3 && trimmed[0] is '`' or '~')
+            {
+                int length = 1;
+                while (length < trimmed.Length && trimmed[length] == trimmed[0]) length++;
+                if (!fenced && length >= 3) { fenced = true; fenceMarker = trimmed[0]; fenceLength = length; }
+                else if (fenced && trimmed[0] == fenceMarker && length >= fenceLength) fenced = false;
+            }
 
             // A row of cells with a row of dashes under it starts a table
             if (!fenced && i + 1 < lines.Length && IsRow(line) && Alignment(lines[i + 1]) is { } align && Cells(line).Count == align.Count)
@@ -52,7 +61,7 @@ internal static partial class NotebookTables
                 }
 
                 i--;
-                pieces.Add((null, new NotebookTable(header.Select(Plain).ToList(), rows.Select(row => row.Select(Plain).ToList()).ToList(), align)));
+                pieces.Add((null, new NotebookTable(header.Select(Plain).ToList(), rows.Select(row => row.Select(Plain).ToList()).ToList(), align, header, rows)));
                 continue;
             }
 
@@ -77,14 +86,23 @@ internal static partial class NotebookTables
 
         var cells = new List<string>();
         var cell = new StringBuilder();
+        int codeTicks = 0;
         for (int i = 0; i < row.Length; i++)
         {
-            if (row[i] == '\\' && i + 1 < row.Length && row[i + 1] == '|')
+            if (row[i] == '`')
+            {
+                int length = 1;
+                while (i + length < row.Length && row[i + length] == '`') length++;
+                codeTicks = codeTicks == 0 ? length : codeTicks == length ? 0 : codeTicks;
+                cell.Append('`', length);
+                i += length - 1;
+            }
+            else if (row[i] == '\\' && i + 1 < row.Length && row[i + 1] == '|')
             {
                 cell.Append('|');
                 i++;
             }
-            else if (row[i] == '|')
+            else if (row[i] == '|' && codeTicks == 0)
             {
                 cells.Add(cell.ToString().Trim());
                 cell.Clear();

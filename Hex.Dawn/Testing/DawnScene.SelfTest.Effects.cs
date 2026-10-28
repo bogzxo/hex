@@ -10,6 +10,8 @@ internal sealed partial class DawnScene
     {
         string file = Path.Combine(testFolder, "effects.txt");
         string was = settings.Effects;
+        float wasGlide = settings.CaretGlide;
+        float wasAnimation = settings.UiAnimation;
         bool wasSparks = settings.EffectSparks, wasMotion = settings.EffectMotion, wasGlass = settings.EffectGlass;
 
         test.Run(() =>
@@ -30,6 +32,8 @@ internal sealed partial class DawnScene
             settings.Effects = "subtle";
             settings.EffectSparks = true;
             settings.EffectMotion = true;
+            settings.CaretGlide = Hex.Shell.EditorSettingsCatalog.CARET_GLIDE;
+            settings.UiAnimation = 1.0f;
             ApplyEffects();
             code.Focus();
             code.Document.Insert("typed ");
@@ -112,6 +116,8 @@ internal sealed partial class DawnScene
             settings.Effects = was;
             settings.EffectSparks = wasSparks;
             settings.EffectMotion = wasMotion;
+            settings.CaretGlide = wasGlide;
+            settings.UiAnimation = wasAnimation;
             settings.EffectGlass = wasGlass;
             ApplyEffects();
 

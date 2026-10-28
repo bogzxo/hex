@@ -1,5 +1,6 @@
 using Hex.Shell;
 
+using Horizon.UI;
 using Horizon.UI.Components;
 
 using Key = Silk.NET.Input.Key;
@@ -16,15 +17,11 @@ internal sealed partial class DawnScene
     public override bool Persistent => HexModes.Together;
 
     private Button modeToggle = null!;
+    private UIComponent? focusBeforeMode, stageFocusBeforeMode;
 
     private void BuildModes()
     {
-        modeToggle = top.Add(new Button(Said("dusk_chrome.name"))
-        {
-            Icon = "terminal",
-            Tooltip = Said("modes.toggle_tooltip"),
-            OnPressed = SwapMode
-        });
+        modeToggle = HexModeSwitch.Add((TitleBar)top, HexMode.Dawn, SwapMode);
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+D", HexOwns);
         HexModes.Leaving += mode =>
@@ -45,6 +42,8 @@ internal sealed partial class DawnScene
     /// <summary>The keyboard given up as the editor is left, or Dusk's terminals never get their keys (there's one keyboard).</summary>
     private void LetGo()
     {
+        focusBeforeMode = compositor.Focus;
+        stageFocusBeforeMode = stage.Focus;
         compositor.Focus = null;
         stage.Focus = null;
         sparks.Clear();
@@ -53,8 +52,9 @@ internal sealed partial class DawnScene
     /// <summary>Back from Dusk, the code given the keyboard again if it's what's showing.</summary>
     public override void OnReturned()
     {
-        if (document.View == HexView.Code || document.IsText)
+        if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
             code.Focus();
+        HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
         Engine.WindowManager.RequestFrames();
     }
 }

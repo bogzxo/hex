@@ -101,6 +101,7 @@ public static class EditorSettingsCatalog
 
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
+        new("scroll_speed", HexText.Get("settings_catalog.scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
         new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), MOTION, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true, Unit: "s"),
 
         new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
@@ -217,14 +218,14 @@ public static class EditorSettingsCatalog
     /// <summary>The number a setting comes as, 0 for one that isn't a number.</summary>
     public static float UsualNumber(string key) => Usual.GetValueOrDefault(key) is NumberValue number ? number.Value : 0.0f;
 
-    /// <summary>What every one of them comes as, the glass, the effects and the motion as the Fluid Glass look has them.</summary>
+    /// <summary>New-install and reset values. Flat surfaces and no decorative motion.</summary>
     public static readonly IReadOnlyDictionary<string, IRuntimeValue> Usual = new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
     {
         ["effects"] = new StringValue("none"),
-        ["effect_glass"] = Values.Bool(true),
+        ["effect_glass"] = Values.Bool(false),
         ["effect_sparks"] = Values.Bool(false),
-        ["effect_motion"] = Values.Bool(true),
-        ["effect_caret_glow"] = Values.Bool(true),
+        ["effect_motion"] = Values.Bool(false),
+        ["effect_caret_glow"] = Values.Bool(false),
         ["effect_spotlight"] = Values.Bool(false),
         ["effect_ripples"] = Values.Bool(false),
         ["effect_trail"] = Values.Bool(false),
@@ -232,8 +233,9 @@ public static class EditorSettingsCatalog
         ["glass_clarity"] = new NumberValue(HexGlass.CLARITY),
         ["glass_rim"] = new NumberValue(HexGlass.RIM),
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
-        ["ui_animation"] = new NumberValue(1.0f),
-        ["caret_glide"] = new NumberValue(CARET_GLIDE),
+        ["ui_animation"] = new NumberValue(0.0f),
+        ["scroll_speed"] = new NumberValue(1.0f),
+        ["caret_glide"] = new NumberValue(0.0f),
         ["backdrop"] = Values.Bool(false),
         ["backdrop_terminal"] = Values.Bool(false),
         ["backdrop_image"] = new StringValue(string.Empty),

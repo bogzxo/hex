@@ -235,11 +235,14 @@ public sealed class McpTests : IDisposable
     [Fact]
     public void A_batch_gets_an_array_of_answers()
     {
+        Assert.False(System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault);
         Write("""[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]""");
         Task<string?> line = answers.ReadLineAsync();
         Assert.True(line.Wait(WAIT_MS));
         JsonArray batch = JsonNode.Parse(line.Result!)!.AsArray();
         Assert.Equal(2, batch.Count);
+        Assert.Equal(1, batch[0]!["id"]!.GetValue<int>());
+        Assert.Empty(batch[0]!["result"]!.AsObject());
         Assert.Equal(3, batch[1]!["result"]!["tools"]!.AsArray().Count);
     }
 

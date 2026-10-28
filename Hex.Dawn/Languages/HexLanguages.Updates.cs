@@ -325,14 +325,7 @@ internal sealed partial class HexLanguages
     /// </summary>
     private static async Task<int> RunCommandLine(string line, WorkContext context)
     {
-        var info = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/s", "/c", line } }
-            : new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", line } };
-        info.UseShellExecute = false;
-        info.RedirectStandardOutput = true;
-        info.RedirectStandardError = true;
-        info.RedirectStandardInput = true;
-        info.CreateNoWindow = true;
+        var info = InstallStartInfo(line);
 
         void Heard(string? said)
         {
@@ -365,5 +358,23 @@ internal sealed partial class HexLanguages
         }
 
         return process.ExitCode;
+    }
+
+    internal static ProcessStartInfo InstallStartInfo(string line)
+    {
+        Horizon.Core.Processes.ProcessEnvironment.WaitForLoginShell();
+        var info = OperatingSystem.IsWindows()
+            // cmd parses shell syntax, not CRT argument escaping. /s removes this one outer quote pair.
+            ? new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe")) { Arguments = "/d /s /c \"" + line + "\"" }
+            : new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", line } };
+        info.UseShellExecute = false;
+        info.RedirectStandardOutput = true;
+        info.RedirectStandardError = true;
+        info.RedirectStandardInput = true;
+        info.CreateNoWindow = true;
+        foreach (var (key, value) in Horizon.Core.Processes.ProcessEnvironment.Current())
+            info.Environment[key] = value;
+
+        return info;
     }
 }

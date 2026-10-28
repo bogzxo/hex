@@ -24,6 +24,11 @@ internal sealed partial class DawnScene
     /// <summary>Puts on screen what the view of the document on screen wants, see the top of this file.</summary>
     private void ApplyView()
     {
+        if (document.View == HexView.Extension && document.ExtensionView == "markdown_preview.preview" && IsMarkdown(document))
+        {
+            document.View = HexView.Markdown;
+            document.ExtensionView = null;
+        }
         // The code may be a little behind the layout while it was out of sight, it is about to be looked at
         if (codeDirty)
         {
@@ -40,9 +45,11 @@ internal sealed partial class DawnScene
         bool picture = document.Picture is not null;
         bool notebook = document.View == HexView.Notebook && IsNotebook(document);
         ApplyNotebookView(notebook);
+        ApplyMarkdownPreview();
+        bool markdown = MarkdownShown;
 
         canvas.Visible = tools;
-        codeScroll.Visible = !tools && !table && !extension && !picture && !notebook;
+        codeScroll.Visible = !tools && !table && !extension && !picture && !notebook && !markdown;
         imageView.Visible = picture;
 
         // The layout isn't laid out and painted while its code is what's on screen, nobody would see it
@@ -53,9 +60,9 @@ internal sealed partial class DawnScene
         // A layout is its designer or its code, a file of code its code or its table when it has one
         ShowViewButtons();
         layout.Get<Button>("design_view").Visible = !document.IsText;
-        layout.Get<Button>("table_view").Visible = document.IsText && !IsNotebook(document);
+        layout.Get<Button>("table_view").Visible = document.IsText && !IsNotebook(document) && !IsMarkdown(document);
         layout.Get<Button>("design_view").Selected = tools;
-        layout.Get<Button>("code_view").Selected = !tools && !table && !extension && !notebook;
+        layout.Get<Button>("code_view").Selected = !tools && !table && !extension && !notebook && !markdown;
         layout.Get<Button>("table_view").Selected = table;
         nameBox.Visible = !document.IsText;
         layout.Get<Label>("inspector_title").Text = Said(tools ? "properties.title" : "properties.file");
@@ -63,7 +70,7 @@ internal sealed partial class DawnScene
         // Play or Run, or what was picked to run beside it (DawnScene.RunTarget)
         ShowRunTarget();
 
-        if (tools || table || extension || picture || notebook)
+        if (tools || table || extension || picture || notebook || markdown)
             code.Unfocus();
         else
             code.Focus();
@@ -77,7 +84,7 @@ internal sealed partial class DawnScene
     private static readonly string[] runnableExtensions = [".d", ".di", ".cs", ".rs", ".go", ".c", ".cpp", ".cc", ".cxx", ".py", ".js", ".mjs"];
 
     /// <summary>The buttons over the editor for the ways the file can be shown, its designer, its code, its table and an extension's.</summary>
-    public void ShowViewButtons() => running.ShowTableButtons(viewButtons.Count + (IsNotebook(document) ? 1 : 0));
+    public void ShowViewButtons() => running.ShowTableButtons(viewButtons.Count + (IsNotebook(document) || IsMarkdown(document) ? 1 : 0));
 
     /// <summary>
     /// Whether Run means anything for a document, what RunOrPlay would do with it. A layout plays, HIDL runs, a file with
@@ -98,14 +105,15 @@ internal sealed partial class DawnScene
     private void SwitchView(HexView view)
     {
         // A file of code has no designer, a layout no table
-        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table) || (view == HexView.Notebook && !IsNotebook(document)))
+        if (document.View == view || (document.IsText && view == HexView.Design) || (!document.IsText && view == HexView.Table) || (view == HexView.Notebook && !IsNotebook(document)) || (view == HexView.Markdown && !IsMarkdown(document)))
             return;
 
         if (document.IsText)
         {
             document.View = view;
             ApplyView();
-            if (view != HexView.Notebook)
+            if (view == HexView.Markdown) Say(Said("markdown.shown", ("name", document.Name)));
+            else if (view != HexView.Notebook)
                 Say(view == HexView.Table ? Said("table.shown", ("file", document.Name)) : Said("views.code_of", ("name", document.Name)));
             return;
         }
@@ -131,7 +139,8 @@ internal sealed partial class DawnScene
             // Round the views a file of code has, its code, its table if it has one, the views of extensions for it
             var round = new List<(HexView View, string? Id)> { (HexView.Code, null) };
             if (IsNotebook(document)) round.Insert(0, (HexView.Notebook, null));
-            if (running.HasTable) round.Add((HexView.Table, null));
+            if (IsMarkdown(document)) round.Add((HexView.Markdown, null));
+            if (running.HasTable && !IsMarkdown(document)) round.Add((HexView.Table, null));
             round.AddRange(ViewsFor(document).Select(kind => (HexView.Extension, (string?)kind.Id)));
             if (round.Count < 2)
                 return;
@@ -275,6 +284,11 @@ internal sealed partial class DawnScene
 
             Show(open);
             Save();
+            if (open.Modified || open.CodeEdited)
+            {
+                restartInto = null;
+                return;
+            }
         }
 
         QuitNow();
@@ -282,11 +296,12 @@ internal sealed partial class DawnScene
 
     private void QuitNow()
     {
+        // A failed update handoff leaves the editor and its backups available.
+        if (!StartRestart()) return;
         // What wasn't saved was saved or thrown away when asked, there's nothing to bring back next time
         Backups.DropAll();
         debugger.Quit();
         closeConfirmed = true;
-        StartRestart();
         Engine.WindowManager.Close();
     }
 

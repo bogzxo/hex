@@ -8,6 +8,7 @@ let bottom = compositor.tabs({
     size: vec(840, 180),
     tabs: ["@panel.problems", "@panel.output", "@panel.console"],
     text_scale: 0.14,
+    header_align: "left",
     spacing: 18,
     resize: "top",
     min_size: vec(0, 80),

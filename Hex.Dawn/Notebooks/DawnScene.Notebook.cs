@@ -60,8 +60,9 @@ internal sealed partial class DawnScene
         });
         BuildNotebookBar();
 
-        notebookScroll = notebookView.Add(new ScrollPanel
+        notebookScroll = notebookView.Add(new NotebookScrollPanel
         {
+            Zoom = delta => ZoomCode(delta > 0 ? CODE_ZOOM_STEP : 1 / CODE_ZOOM_STEP),
             Anchor = Origin.TopLeft,
             Pivot = Origin.TopLeft,
             Position = new Vector2(0.0f, -NOTEBOOK_BAR),

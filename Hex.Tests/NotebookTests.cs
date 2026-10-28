@@ -134,6 +134,8 @@ public class NotebookTests
         run.Take(Said("execute_result", new JsonObject { ["execution_count"] = 7, ["data"] = new JsonObject { ["text/plain"] = "12" } }));
         Assert.True(run.IsQueued(cell));
         run.Take(Said("execute_reply", new JsonObject { ["status"] = "ok", ["execution_count"] = 7 }));
+        Assert.True(run.IsQueued(cell));
+        run.Take(Said("status", new JsonObject { ["execution_state"] = "idle" }));
 
         Assert.False(run.IsQueued(cell));
         Assert.Equal(7, cell.ExecutionCount);

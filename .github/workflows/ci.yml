@@ -40,6 +40,19 @@ jobs:
       - name: Build
         run: dotnet build Hex/Hex.csproj --configuration Release
 
+      - name: Build installer
+        run: dotnet build Hex.Installer/Hex.Installer.csproj --configuration Release
+
+      - name: Test installer transactions
+        run: dotnet test Hex.Installer.Tests --configuration Release --verbosity normal
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install engineering notebook test dependencies
+        run: python -m pip install -r Hex.Tests/engineering-requirements.txt
+
       - name: Test
         run: dotnet test Hex.Tests --configuration Release --verbosity normal --blame-hang-timeout 5m --blame-hang-dump-type none
 

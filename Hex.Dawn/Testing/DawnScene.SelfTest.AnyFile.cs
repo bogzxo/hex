@@ -38,20 +38,20 @@ internal sealed partial class DawnScene
             OutlineHere() is var entries && entries.Select(entry => (entry.Name, entry.Depth)).SequenceEqual([("Notes", 0), ("Under it", 1), ("Deeper", 2)]));
 
         // The preview of Markdown, offered for a Markdown file and nothing else, following its text
-        test.Check("any file: a Markdown file is offered a preview", () => ViewsFor(document).Any(kind => kind.Id == "markdown_preview.preview"));
-        test.Run(() => SwitchToExtensionView("markdown_preview.preview"));
+        test.Check("any file: a Markdown file is offered a native preview", () => IsMarkdown(document) && layout.Get<Horizon.UI.Components.Button>("markdown_button").Visible);
+        test.Run(() => SwitchView(HexView.Markdown));
         test.Settle(0.3f);
         test.Check("any file: the preview draws it as it reads", () =>
-            ShownView is { } shown && shown.Made.Get<Horizon.UI.Components.Label>("text") is { Markdown: true } label && label.Text.Contains("# Notes"));
+            MarkdownShown && Descendants(markdownWritten).OfType<Horizon.UI.Components.Label>().Any(label => label.Markdown && label.Text.Contains("# Notes")));
         test.Run(() => code.Document.Insert("\n- a new line\n"));
         test.Settle(1.5f);
         test.Check("any file: and follows it as it is typed", () =>
-            ShownView is { } shown && shown.Made.Get<Horizon.UI.Components.Label>("text").Text.Contains("- a new line"));
+            MarkdownShown && Descendants(markdownWritten).OfType<Horizon.UI.Components.Label>().Any(label => label.Text.Contains("- a new line")));
         test.Run(() => SwitchView(HexView.Code));
 
         test.Run(() => Open(json));
         test.Settle(0.3f);
-        test.Check("any file: and nothing else is", () => !ViewsFor(document).Any(kind => kind.Id == "markdown_preview.preview"));
+        test.Check("any file: and nothing else is", () => !IsMarkdown(document) && !layout.Get<Horizon.UI.Components.Button>("markdown_button").Visible);
         test.Check("any file: JSON's is its keys", () =>
             OutlineHere() is var entries && entries.Any(entry => entry is { Name: "name", Depth: 0 }) && entries.Any(entry => entry is { Name: "deep", Depth: 1 }));
 

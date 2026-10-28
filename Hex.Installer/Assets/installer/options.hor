@@ -1,0 +1,18 @@
+// Installation preferences, shown by Customize. Names are bound in InstallerScene.
+#define layout
+let options_window = compositor.window({
+    size: vec(560, 460), visible: false, title: "@installer.integration.title", icon: "settings-gear",
+    resize_grip: false, movable: false, padding: vec(24, 18, 24, 20), lift: 28,
+    intro: "fade", intro_time: 0.16,
+});
+let options_body = compositor.stack({ parent: options_window, fill: "both", spacing: 12 });
+let options_description = compositor.label({ parent: options_body, size: vec(512, 44), text: "@installer.integration.description", text_scale: 0.14, wrap: true, dim: true, align: "top_left" });
+let desktop_hex = compositor.toggle({ parent: options_body, size: vec(512, 30), label: "@installer.integration.desktop_hex", state: true, lbl_scale: 0.14 });
+let desktop_dusk = compositor.toggle({ parent: options_body, size: vec(512, 30), label: "@installer.integration.desktop_dusk", state: false, lbl_scale: 0.14 });
+let application_menu = compositor.toggle({ parent: options_body, size: vec(512, 30), label: "@installer.integration.menu_linux", state: true, lbl_scale: 0.14 });
+let menu_dusk = compositor.toggle({ parent: options_body, size: vec(512, 30), label: "@installer.integration.menu_dusk", state: true, lbl_scale: 0.14 });
+let windows_app_paths = compositor.toggle({ parent: options_body, size: vec(512, 30), label: "@installer.integration.app_paths", state: true, lbl_scale: 0.14, tooltip: "@installer.integration.app_paths_help" });
+let options_note = compositor.label({ parent: options_body, size: vec(512, 34), text: "@installer.integration.note", text_scale: 0.115, dim: true, wrap: true, align: "top_left" });
+let options_buttons = compositor.stack({ parent: options_body, direction: "horizontal", spacing: 12, anchor: "right", pivot: "right" });
+let options_cancel = compositor.button({ parent: options_buttons, size: vec(100, 36), label: "@installer.actions.cancel", style: "button_flat" });
+let options_apply = compositor.button({ parent: options_buttons, size: vec(140, 36), label: "@installer.integration.apply", primary: true });

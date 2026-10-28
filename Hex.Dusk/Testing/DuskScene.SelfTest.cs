@@ -39,6 +39,8 @@ internal sealed partial class DuskScene
     /// <summary>The parts of the self test, in the order they run.</summary>
     private (string Name, string About, Action<DuskScript> Run)[] SelfTestSuites =>
     [
+        ("ux", "inline search and returning from scrollback to live output", TestUx),
+        ("symbols", "triangle and arrow glyphs on the terminal cell grid", TestSymbols),
         ("start", "the first tab, its shell, the window fitted round it", TestStart),
         ("plugins", "the plugins started, their commands registered, keys.hor read", TestPlugins),
         ("tabs", "tabs by command and by key", TestTabs),
@@ -311,10 +313,10 @@ internal sealed partial class DuskScene
         test.Settle(settle);
         test.Check("the x on a tab closes it", () => panel.Tabs.Count == 1);
 
-        // The plus, with more than one profile it is a menu
-        test.Click(At(() => Descendants(panel).OfType<Button>().First().Bounds));
+        // The dropdown chooses a profile; the plus starts the default shell directly.
+        test.Click(At(() => panel.ProfilePickerBounds));
         test.Wait();
-        test.Check("the plus lists the profiles", () => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Showing is { } shown && shown.Items.Count == panel.Profiles.Count);
+        test.Check("the dropdown lists the profiles", () => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Showing is { } shown && shown.Items.Count == panel.Profiles.Count);
         test.Click(At(() => chrome.Root.Children.OfType<ContextMenu>().First().ItemBounds(0)));
         test.Wait();
         test.Settle(settle);
@@ -373,7 +375,8 @@ internal sealed partial class DuskScene
         test.Run(() => animated = settings.Animations);
         test.Run(() => Run("animations"));
         test.Check("the animations go on and off with one setting", () => settings.Animations != animated
-            && (panel.AnimationTime > 0.0f) == settings.Animations && panel.FocusedView?.Animated == settings.Animations);
+            && (panel.AnimationTime > 0.0f) == (settings.Animations && uiAnimation > 0.0f)
+            && panel.FocusedView?.Animated == (settings.Animations && uiAnimation > 0.0f));
         test.Run(() => Run("animations"));
         test.Check("and back", () => settings.Animations == animated && panel.AnimationTime == animation);
     }

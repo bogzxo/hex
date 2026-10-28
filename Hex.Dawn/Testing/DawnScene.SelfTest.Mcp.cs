@@ -37,6 +37,16 @@ internal sealed partial class DawnScene
         test.Check("mcp: the server is up, its file in the settings folder says its pipe and a token", () =>
             listing is { Token.Length: 64 } && listing.Pipe == McpDiscovery.PipeOf(System.Environment.ProcessId) && File.Exists(Path.Combine(McpDiscovery.Folder, $"{listing.Pid}.json")));
 
+        Task<JsonNode?>? batchReply = null;
+        test.Run(() => batchReply = MakeMcpServer().HandleLine("""[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]"""));
+        test.WaitFor(() => batchReply?.IsCompleted == true, 5);
+        test.Check("mcp: batch JSON serializes with reflection disabled in native builds", () =>
+            !System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault
+            && batchReply is { IsCompletedSuccessfully: true }
+            && JsonNode.Parse(batchReply.Result!.ToJsonString()) is JsonArray { Count: 2 } batch
+            && batch[0]!["result"] is JsonObject { Count: 0 }
+            && batch[1]!["result"]!["tools"] is JsonArray { Count: > 0 });
+
         // The wrong token isn't let in, the right one is, off the editor's thread as a client would be
         Task<HexMcpTestClient?>? connecting = null;
         test.Run(() => connecting = Task.Run(() =>

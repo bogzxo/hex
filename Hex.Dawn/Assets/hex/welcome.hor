@@ -7,12 +7,14 @@ let welcome = compositor.panel({
     color: vec(0.065, 0.07, 0.092, 1),
 });
 
-// A column in the middle of the canvas, its rows from the left. It hugged the left with half the canvas empty beside it
+// Scroll on short windows; keep the working column centered horizontally on wide ones.
+let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(24, 24, 24, 24) });
+let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
 let page = compositor.stack({
-    parent: welcome,
-    anchor: "center",
-    pivot: "center",
-    pos: vec(0, 24),
+    parent: welcome_body,
+    anchor: "top",
+    pivot: "top",
+    size: vec(640, 0),
     spacing: 18,
 });
 
@@ -48,7 +50,9 @@ let subtitle = compositor.label({
     pivot: "left",
     text: "@welcome.subtitle",
     text_scale: 0.16,
-    color: vec(0.58, 0.6, 0.66, 1),
+    wrap: true,
+    size: vec(560, 0),
+    dim: true,
     align: "left",
 });
 
@@ -56,7 +60,7 @@ let columns = compositor.stack({
     parent: page,
     anchor: "top_left",
     pivot: "top_left",
-    spacing: 64,
+    spacing: 32,
     direction: "horizontal",
 });
 
@@ -85,7 +89,7 @@ let new_layout = compositor.button({
     label: "@welcome.new_layout",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -98,7 +102,7 @@ let open_file = compositor.button({
     label: "@welcome.open_file",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -111,7 +115,7 @@ let open_folder = compositor.button({
     label: "@welcome.open_folder",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -124,7 +128,7 @@ let commands = compositor.button({
     label: "@welcome.commands",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -149,7 +153,7 @@ let keys = compositor.button({
     label: "@welcome.keys",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -162,7 +166,7 @@ let language = compositor.button({
     label: "@welcome.language",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
@@ -175,7 +179,7 @@ let changes = compositor.button({
     label: "@welcome.changes",
     style: "button_flat",
     lbl_scale: 0.15,
-    hover: "nudge",
+    hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });

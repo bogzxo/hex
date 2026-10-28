@@ -125,6 +125,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
+        ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>
         {
             TestEditorItself(test);
@@ -223,6 +224,8 @@ internal sealed partial class DawnScene
         }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
+        ("pyright", "the globally installed Python server, diagnostics, completion and hover", TestPyright),
+        ("npminstall", "a real offline npm install through the language-server Install action", TestNpmInstall),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
             TestLanguages(test);
@@ -260,6 +263,10 @@ internal sealed partial class DawnScene
         }),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
+        ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
+        ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
+        ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
+        ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
@@ -292,7 +299,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AskedSuites(out HashSet<string> asked)
     {
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall")).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

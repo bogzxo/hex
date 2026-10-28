@@ -79,6 +79,7 @@ internal sealed partial class HexExtensions
 
             foreach (string inside in Directory.GetDirectories(full).Order(StringComparer.OrdinalIgnoreCase))
             {
+                if (HexExtensionCatalog.IsLegacyMarkdownPreview(inside)) continue;
                 // One by a folder name that's been found already isn't loaded twice, the first one found is it
                 if (!File.Exists(Path.Combine(inside, HexExtension.FILE)) || all.Any(found => found.Id.Equals(Path.GetFileName(inside), StringComparison.OrdinalIgnoreCase)))
                     continue;

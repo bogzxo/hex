@@ -169,7 +169,8 @@ internal sealed partial class DawnScene
         commands.Add("View/editor", Said("menus.split_editor"), ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
 
         // F7 flips a layout between its designer and its code, the way Visual Studio's designers go
-        commands.Add("View/editor", Said("menus.toggle_designer_code"), ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.IsText;
+        commands.Add("View/editor", Said("menus.toggle_designer_code"), ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled =
+            () => !document.IsText || IsNotebook(document) || IsMarkdown(document) || running.HasTable || ViewsFor(document).Any();
 
         // The size of everything, beside Appearance rather than inside it, a menu in a menu in a menu is a long way down
         Menu size = commands.AddMenu("View/appearance", Said("menus.editor_scale"), "zoom-in");

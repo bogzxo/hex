@@ -46,8 +46,8 @@ internal sealed partial class DawnScene
             cellViews[0].Written is { Visible: true } written && written.Children.FirstOrDefault() is Label { } words && words.Text.StartsWith("# A notebook") && !cellViews[0].Editor.Visible
             && cellViews[1].Editor.Highlighter is { } python && python.Name.Contains("python", StringComparison.OrdinalIgnoreCase));
         test.Check("notebook: a markdown table is drawn as a table, its header its columns", () =>
-            cellViews[0].Written!.Children.OfType<NotebookTableView>().SingleOrDefault() is { } table
-            && table.Columns.Select(column => column.Title).SequenceEqual(["step", "took"]) && table.Rows.Count == 2 && table.Rows[1][1].Text == "9 s");
+            Descendants(cellViews[0].Written!).OfType<NotebookMarkdownTable>().SingleOrDefault() is { } table
+            && table.Cells.Count == 3 && table.Cells[2][1].Children.OfType<Label>().Single().Text == "9 s");
         test.Check("notebook: the Notebook menu is on the bar and the Notebook button picked", () =>
             layout.Get<Button>("notebook_button") is { Visible: true, Selected: true });
 
@@ -157,7 +157,7 @@ internal sealed partial class DawnScene
         test.WaitFor(() => notebookShown!.Run.Queued.Count == 0 && cellViews[4].Outputs.Children.OfType<StackPanel>().Any(), 20.0f);
         test.Check("notebook: a DataFrame's HTML is drawn as its table with its shape under it", () =>
             cellViews[4].Outputs.Children.OfType<StackPanel>().Single() is { } frame
-            && frame.Children.OfType<NotebookTableView>().Single() is { Rows.Count: 1 } table && table.Rows[0][1].Text == "21.5"
+            && Descendants(frame).OfType<NotebookTableView>().Single() is { Rows.Count: 1 } table && table.Rows[0][1].Text == "21.5"
             && frame.Children.OfType<Label>().Single().Text == "1 rows × 1 columns");
 
         // Restarted, what it knew gone and counting from 1
