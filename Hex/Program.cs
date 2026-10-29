@@ -41,10 +41,12 @@ internal static partial class Program
         if (args.Contains("--lsp"))
             return Hex.Core.HidlServer.Serve();
 
-        // An MCP client's way in, its stdin and stdout passed to the Hex that has the folder open (started if none has),
-        // no window of its own. Typed at a prompt rather than started by a client it's Hex with the server on instead
-        if (args.Contains("--mcp") && !args.Contains("--window") && Hex.Core.McpBridge.StdinIsAClient())
+        // An explicit stdio entry point, regardless of the handles a host provides during discovery or startup.
+        // A GUI with its server on is --window --mcp; --mcp-connect never starts a GUI.
+        if (Hex.Core.McpBridge.IsBridgeMode(args))
             return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
+
+        HexLog.Initialize(AppContext.BaseDirectory);
 
 #if DEBUG
         // A Debug Hex's console for its log, made here now Windows doesn't hand one out by itself (app.manifest)
@@ -224,6 +226,8 @@ internal static partial class Program
           --line <n>               the line to put the caret on in it
           --folder <folder>        a folder to open as the workspace (what a folder on its own is)
           --window                 a window of its own rather than the Dawn that's running
+          --mcp-connect            MCP stdio bridge to an existing editor only; never opens a window
+          --mcp                    MCP stdio bridge, starts one editor if needed; --window --mcp opens the editor with its server
           --view <design|code|table>  which view a file comes up in
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes

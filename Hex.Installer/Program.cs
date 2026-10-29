@@ -6,44 +6,14 @@ using Horizon.Engine;
 
 namespace Hex.Installer;
 
-internal sealed record SetupOptions(string Target, bool Uninstall, bool Update, string? Version, int? Parent, long ParentStart, bool Preview)
-{
-    public static SetupOptions Parse(string[] args)
-    {
-        string target = InstallPaths.DefaultRoot;
-        string? version = null;
-        bool uninstall = false, update = false, preview = false;
-        int? parent = null;
-        long start = 0;
-        for (int i = 0; i < args.Length; i++)
-        {
-            string Value() => ++i < args.Length ? args[i] : throw new ArgumentException(InstallText.Get("errors.argument_value"));
-            switch (args[i])
-            {
-                case "--target": target = Path.GetFullPath(Value()); break;
-                case "--uninstall": uninstall = true; break;
-                case "--update": update = true; break;
-                case "--version": version = Value(); break;
-                case "--wait-pid": parent = int.Parse(Value()); break;
-                case "--wait-start": start = long.Parse(Value()); break;
-                case "--preview": preview = true; break;
-                default: throw new ArgumentException(InstallText.Get("errors.option", ("option", args[i])));
-            }
-        }
-        if (uninstall && update || parent.HasValue && (parent <= 0 || start <= 0) || update && (parent is null || version is null))
-            throw new ArgumentException(InstallText.Get("errors.handoff"));
-        if (target.Contains('\n') || target.Contains('\r') || target.Contains('"')) throw new ArgumentException(InstallText.Get("errors.destination"));
-        if (update || uninstall) _ = InstallTransaction.ReadManifest(target);
-        return new(target, uninstall, update, version, parent, start, preview);
-    }
-}
-
 internal static class Program
 {
     public static int Main(string[] args)
     {
         try
         {
+            InstallerHandoff.WaitForLauncher();
+            if (WindowsSetupBundle.TryRun(args, out int result)) return result;
             InstallerStrings.Read();
             var options = SetupOptions.Parse(args);
             InstallPaths.ValidateRid(InstallPaths.Rid);
@@ -52,9 +22,7 @@ internal static class Program
             if (Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory).Equals(installed, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             {
                 string copied = InstallerHandoff.CopyInstaller(installed);
-                var start = new ProcessStartInfo(copied) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(copied)! };
-                foreach (string arg in args) start.ArgumentList.Add(arg);
-                Process.Start(start);
+                InstallerHandoff.StartInstallerCopy(copied, args);
                 return 0;
             }
             Directory.SetCurrentDirectory(AppContext.BaseDirectory);
@@ -79,5 +47,6 @@ internal static class Program
             File.WriteAllText(Path.Combine(Path.GetTempPath(), "hex-setup-error.txt"), e.ToString());
             return 1;
         }
+        finally { InstallerHandoff.CleanupCopyOnExit(); }
     }
 }

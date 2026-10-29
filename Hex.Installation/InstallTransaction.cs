@@ -6,7 +6,15 @@ namespace Hex.Installation;
 /// <summary>Stages complete replacements beside the destination, then swaps directories with rollback.</summary>
 public static class InstallTransaction
 {
-    public static async Task Install(ReleaseAsset release, string root, Action<InstallProgress>? progress, CancellationToken cancel, InstallChoices? choices = null)
+    public static Task Install(ReleaseAsset release, string root, Action<InstallProgress>? progress, CancellationToken cancel, InstallChoices? choices = null, string? package = null)
+    {
+        root = ValidateRoot(root);
+        return Install(release, root, progress, cancel, choices, package, () => PlatformRegistration.Register(root, release.Version),
+            () => RestoreRegistration(root), () => InstallerHandoff.EnsureHexStopped(root));
+    }
+
+    internal static async Task Install(ReleaseAsset release, string root, Action<InstallProgress>? progress, CancellationToken cancel,
+        InstallChoices? choices, string? package, Action register, Action rollbackRegistration, Action ensureStopped)
     {
         root = ValidateRoot(root);
         Directory.CreateDirectory(Path.GetDirectoryName(root)!);
@@ -15,13 +23,21 @@ public static class InstallTransaction
         string stage = root + ".stage-" + Guid.NewGuid().ToString("N");
         try
         {
-            await new ReleaseClient().Download(release, zip, progress, cancel);
+            if (package is null) await new ReleaseClient().Download(release, zip, progress, cancel);
+            else
+            {
+                // Snapshot the handoff package into our private file, so a change after verification cannot affect extraction.
+                await using (var input = new FileStream(package, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous))
+                await using (var output = File.Create(zip))
+                    await input.CopyToAsync(output, cancel);
+                await ReleaseClient.Verify(release, zip, cancel);
+            }
             progress?.Invoke(new(InstallText.Get("status.verifying"), .74f));
             Prepare(zip, stage, root, release.Version, cancel, choices);
             cancel.ThrowIfCancellationRequested();
-            InstallerHandoff.EnsureHexStopped(root);
+            ensureStopped();
             progress?.Invoke(new(InstallText.Get("status.registering"), .9f));
-            Commit(stage, root, () => PlatformRegistration.Register(root, release.Version), () => RestoreRegistration(root));
+            Commit(stage, root, register, rollbackRegistration);
             progress?.Invoke(new(InstallText.Get("status.ready"), 1));
         }
         finally

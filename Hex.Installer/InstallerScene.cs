@@ -167,7 +167,7 @@ internal sealed class InstallerScene : Scene
         Work(async token =>
         {
             if (options.Uninstall) { Report(new(InstallText.Get("status.removing"), .4f)); InstallTransaction.Uninstall(installRoot); }
-            else await InstallTransaction.Install(release!, installRoot, Report, token, choices);
+            else await InstallTransaction.Install(release!, installRoot, Report, token, choices, options.Package);
         }, then: () =>
         {
             completed = true;

@@ -7,7 +7,15 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 /// <summary>One problem, where it is, what it is, and whether it is only a warning.</summary>
-internal readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning, bool Hint = false);
+internal readonly record struct HexProblem(string Path, int Line, int Column, string Text, bool Warning, bool Hint = false)
+{
+    internal int Severity => Hint ? 2 : Warning ? 1 : 0;
+    internal string Shade => Hint ? "accent" : Warning ? "warning" : "error";
+    internal string Icon => Hint ? "info" : Warning ? "warning" : "error";
+
+    internal bool Matches(string query) => Text.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || Path.Replace('\\', '/').Contains(query.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+}
 
 // The panel under the editor, put away and brought back with Ctrl+J. Problems is everything wrong with the file that is
 // open and, after F8, with every file of the workspace, a row a problem, a click goes there. Output is everything Hex has
@@ -25,6 +33,7 @@ internal sealed partial class DawnScene
     private TabPanel bottom = null!;
     private StackPanel problems = null!, output = null!;
     private ScrollPanel problemsScroll = null!, outputScroll = null!;
+    private TextBox problemsFilter = null!;
 
     // What F8 found wrong across the workspace, null until it has been run
     private List<HexResult>? workspaceProblems;
@@ -93,6 +102,19 @@ internal sealed partial class DawnScene
         output = layout.Get<StackPanel>("output");
         problemsScroll = layout.Get<ScrollPanel>("problems_scroll");
         outputScroll = layout.Get<ScrollPanel>("output_scroll");
+        problemsFilter = layout.Get<TextBox>("problems_filter");
+        problemsFilter.OnChanged = _ =>
+        {
+            problemRowsStale = true;
+            problemsScroll.Offset = 0;
+        };
+        layout.Get<Button>("problems_clear").OnPressed = () =>
+        {
+            problemsFilter.Text = string.Empty;
+            problemRowsStale = true;
+            problemsScroll.Offset = 0;
+            problemsFilter.Focus();
+        };
 
         bottom.Show(!settings.PanelHidden, instantly: true);
         if (settings.PanelHeight > 0.0f)
@@ -287,7 +309,7 @@ internal sealed partial class DawnScene
         foreach (var (file, problem) in extensions.ProblemsElsewhere())
         {
             if (Elsewhere(file))
-                problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning));
+                problemList.Add(new HexProblem(file, problem.Line, problem.Column, problem.Message, problem.Warning, problem.Hint));
         }
 
         // An open file's are among its own diagnostics above, underlined in its code
@@ -305,48 +327,65 @@ internal sealed partial class DawnScene
         }
 
         // What's only worth a look is listed, and counted with neither
-        errorCount = problemList.Count(problem => !problem.Warning);
+        errorCount = problemList.Count(problem => !problem.Warning && !problem.Hint);
         warningCount = problemList.Count(problem => problem.Warning && !problem.Hint);
     }
 
     /// <summary>
-    /// Helper method to put the rows of the problems together out of what was gathered, under a row for each file the way
-    /// VS Code has them, the file on screen first. Each row says where on its line first, a long message cut off at the
-    /// panel's edge took where it was with it.
+    /// Filtered problems grouped by severity, then by file, preserving the current file's priority within each severity.
     /// </summary>
     private void RebuildProblems()
     {
-        var groups = problemList.GroupBy(problem => Path.GetFullPath(problem.Path), PlatformPaths.Comparer).ToList();
-        var items = layout.Populate(problems, problemList.Count + groups.Count);
+        var severities = FilterProblems(problemList, problemsFilter.Text);
+        int rowCount = severities.Sum(group => 1 + group.Count()
+            + group.Select(problem => Path.GetFullPath(problem.Path)).Distinct(PlatformPaths.Comparer).Count());
+        var items = layout.Populate(problems, rowCount);
         int at = 0;
-        foreach (var group in groups)
+        foreach (var severity in severities)
         {
-            HexProblem first = group.First();
+            HexProblem kind = severity.First();
             var header = items[at++];
-            header.Get<Label>("caption").Text = FileCaption(first.Path, group.Count());
+            string title = Said(kind.Severity switch { 0 => "panel_tabs.errors", 1 => "panel_tabs.warnings", _ => "panel_tabs.hints" });
+            header.Get<Label>("caption").Text = $"[color:{kind.Shade}]$({kind.Icon})  {UIRichText.Literal(title)}  ({severity.Count()})[/color]";
             header.Get<Label>("caption").Color = null;
             var headerRow = header.Get<Button>("row");
-            headerRow.Tooltip = HexText.MiddleOf(Relative(first.Path));
-            headerRow.OnPressed = () => OpenAt(first.Path, first.Line, first.Column);
+            headerRow.Tooltip = title;
+            headerRow.OnPressed = null;
             headerRow.OnContextMenu = null;
 
-            foreach (HexProblem problem in group)
+            foreach (var group in severity.GroupBy(problem => Path.GetFullPath(problem.Path), PlatformPaths.Comparer))
             {
-                var row = items[at].Get<Button>("row");
-                var caption = items[at++].Get<Label>("caption");
-                caption.Text = ProblemCaption(problem);
-                caption.Color = null;
-                row.Tooltip = $"{problem.Text}\n{HexText.MiddleOf(Relative(problem.Path))}:{problem.Line + 1}:{problem.Column + 1}";
-                row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
-                row.OnContextMenu = _ => ShowProblemMenu(problem);
+                HexProblem first = group.First();
+                var fileHeader = items[at++];
+                fileHeader.Get<Label>("caption").Text = "   " + FileCaption(first.Path, group.Count());
+                fileHeader.Get<Label>("caption").Color = null;
+                var fileRow = fileHeader.Get<Button>("row");
+                fileRow.Tooltip = HexText.MiddleOf(Relative(first.Path));
+                fileRow.OnPressed = () => OpenAt(first.Path, first.Line, first.Column);
+                fileRow.OnContextMenu = null;
+
+                foreach (HexProblem problem in group)
+                {
+                    var row = items[at].Get<Button>("row");
+                    var caption = items[at++].Get<Label>("caption");
+                    caption.Text = ProblemCaption(problem);
+                    caption.Color = null;
+                    row.Tooltip = $"{problem.Text}\n{HexText.MiddleOf(Relative(problem.Path))}:{problem.Line + 1}:{problem.Column + 1}";
+                    row.OnPressed = () => OpenAt(problem.Path, problem.Line, problem.Column);
+                    row.OnContextMenu = _ => ShowProblemMenu(problem);
+                }
             }
         }
 
-        if (problemList.Count == 0)
-            Hint(problems, workspaceProblems is null ? Said("panel_tabs.nothing_wrong_here") : Said("panel_tabs.nothing_wrong_anywhere"));
+        if (severities.Count == 0)
+            Hint(problems, problemList.Count > 0 ? Said("panel_tabs.no_matches")
+                : workspaceProblems is null ? Said("panel_tabs.nothing_wrong_here") : Said("panel_tabs.nothing_wrong_anywhere"));
 
         FitRowsTo(problems, problemsScroll);
     }
+
+    internal static List<IGrouping<int, HexProblem>> FilterProblems(IEnumerable<HexProblem> source, string query) =>
+        source.Where(problem => problem.Matches(query.Trim())).GroupBy(problem => problem.Severity).OrderBy(group => group.Key).ToList();
 
     // What a server says a problem is called, in brackets after what it says about it ("(dscanner.suspicious.unused_variable)")
     private static readonly System.Text.RegularExpressions.Regex ProblemCode = new(@"^(?<said>.*?)\s*\((?<code>[^()\s]+)\)\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -357,8 +396,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private static string ProblemCaption(HexProblem problem)
     {
-        string shade = problem.Hint ? "dim" : problem.Warning ? "warning" : "error";
-        string icon = problem.Hint ? "info" : problem.Warning ? "warning" : "error";
+        string shade = problem.Shade;
+        string icon = problem.Icon;
         string where = $"{problem.Line + 1}:{problem.Column + 1}";
 
         // A compiler's backticks round a name as quotes, they came out as they are

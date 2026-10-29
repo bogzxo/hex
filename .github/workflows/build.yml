@@ -1,6 +1,6 @@
 # Every push to master, Hex published for Windows, Linux and macOS, a zip for each kept with the run (Actions, the
-# run, Artifacts). A native compiler only builds for the system it runs on, so each platform is built on its own.
-# Pushing a tag that starts with v (v0.4.0) builds the same and puts the zips on a GitHub release of that name.
+# run, Artifacts). Windows Setup is a self-extracting EXE. A native compiler only builds for its own system.
+# Pushing a tag that starts with v (v0.4.0) puts the packages on a GitHub release of that name.
 
 name: Build
 
@@ -81,6 +81,17 @@ jobs:
       - name: Publish installer
         run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }}
 
+      - name: Verify standalone setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem -LiteralPath publish/Hex.Setup -Recurse -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'Hex.Installer.exe') { throw 'Windows setup must publish as one EXE.' }
+          # Invalid arguments exit before graphics or any installation, exercising extraction and failure cleanup.
+          $setup = Start-Process -FilePath $files[0].FullName -ArgumentList '--invalid-option' -PassThru -Wait -WindowStyle Hidden
+          if ($setup.ExitCode -ne 1) { throw 'Standalone setup did not forward its exit status.' }
+          if (@(Get-ChildItem -LiteralPath publish/Hex.Setup -Directory).Count -ne 0) { throw 'Setup left its extraction folder behind.' }
+
       - name: macOS icon
         if: runner.os == 'macOS'
         run: |
@@ -113,7 +124,7 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path publish/Hex -DestinationPath Hex-${{ matrix.rid }}.zip
-          Compress-Archive -Path publish/Hex.Setup -DestinationPath Hex-Setup-${{ matrix.rid }}.zip
+          Copy-Item -LiteralPath publish/Hex.Setup/Hex.Installer.exe -Destination Hex-Setup-${{ matrix.rid }}.exe
 
       - name: Zip
         if: runner.os != 'Windows'
@@ -132,6 +143,7 @@ jobs:
           path: |
             Hex-${{ matrix.rid }}.zip
             Hex-Setup-${{ matrix.rid }}.zip
+            Hex-Setup-${{ matrix.rid }}.exe
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -158,4 +170,4 @@ jobs:
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "Hex $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --generate-notes $prerelease
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "Hex $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --generate-notes $prerelease

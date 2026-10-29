@@ -17,6 +17,9 @@ internal static partial class McpBridge
     // How long the pipe of a Hex that's running is given to answer
     private const int CONNECT_MS = 5_000;
 
+    internal static bool IsBridgeMode(string[] args) => args.Contains("--mcp-connect")
+        || (args.Contains("--mcp") && !args.Contains("--window") && !args.Contains("--selftest"));
+
     /// <summary>The bridge, until the client or Hex goes. 0 when it went cleanly, 1 when it never got to Hex.</summary>
     public static int Run(string[] args, string program)
     {
@@ -25,11 +28,15 @@ internal static partial class McpBridge
         DropOwnConsole();
 
         string folder = FolderOf(args);
-        McpListing? listing = McpDiscovery.For(folder, McpDiscovery.All());
+        McpListing? listing = Resolve(folder, args);
         if (listing is null)
         {
-            Say($"no Hex has {folder} open, starting one");
-            listing = StartHex(program, folder);
+            if (args.Contains("--mcp-connect"))
+            {
+                Say($"no matching Hex MCP server for {folder}; open Hex with --window --mcp first. Attach-only mode never opens a window.");
+                return 1;
+            }
+            listing = FindOrStart(folder, program, args);
             if (listing is null)
                 return 1;
         }
@@ -55,6 +62,43 @@ internal static partial class McpBridge
         Pump(pipe);
         return 0;
     }
+
+    private static McpListing? Resolve(string folder, string[] args) =>
+        Select(folder, McpDiscovery.All(), ExplicitFolder(args));
+
+    internal static bool ExplicitFolder(string[] args) => args.Contains("--folder")
+        || args.Any(arg => !arg.StartsWith('-') && Directory.Exists(arg));
+
+    /// <summary>An explicit workspace takes priority; otherwise a single editor is unambiguous.</summary>
+    internal static McpListing? Select(string folder, IEnumerable<McpListing> listings, bool explicitFolder)
+    {
+        var all = listings.OrderBy(listing => listing.Pid).ToList();
+        return McpDiscovery.For(folder, all) ?? (!explicitFolder && all.Count == 1 ? all[0] : null);
+    }
+
+    // Codex chats can each start a bridge before the first editor has published discovery. Serialize launches,
+    // then recheck discovery while holding the same installation-wide lock.
+    internal static McpListing? UnderLaunchLock(string scope, Func<McpListing?> find, Func<McpListing?> start)
+    {
+        string name = "hex-mcp-start-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(scope)))[..24];
+        using var gate = new Mutex(false, name);
+        bool owned = false;
+        try
+        {
+            try { owned = gate.WaitOne(START_WAIT_MS + CONNECT_MS); }
+            catch (AbandonedMutexException) { owned = true; }
+            if (!owned) return null;
+            return find() ?? start();
+        }
+        finally { if (owned) gate.ReleaseMutex(); }
+    }
+
+    private static McpListing? FindOrStart(string folder, string program, string[] args) =>
+        UnderLaunchLock(Path.GetFullPath(McpDiscovery.Folder).ToUpperInvariant(), () => Resolve(folder, args), () =>
+        {
+            Say($"no Hex has {folder} open, starting one");
+            return StartHex(program, folder);
+        });
 
     /// <summary>The folder it's for, --folder's, a folder named on its own, or where it was started.</summary>
     private static string FolderOf(string[] args)

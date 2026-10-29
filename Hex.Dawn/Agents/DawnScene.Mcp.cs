@@ -34,6 +34,7 @@ internal sealed partial class DawnScene
     /// <summary>The status bar's item and the server, when the settings or the command line say so.</summary>
     private void BuildMcp()
     {
+        BuildAgent();
         mcpItem = statusBar.Add("$(robot)", right: true, pressed: () =>
         {
             OpenSettings(null);
@@ -140,6 +141,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateMcp(float dt)
     {
+        UpdateAgent();
         if (mcpHost is null && mcpCurrent is null && mcpCalls.IsEmpty && !agentPointer.Taken)
             return;
 

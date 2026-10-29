@@ -34,4 +34,5 @@
     <None Include="..\Hex.Shell\Assets\hex_icon.png" Link="Assets\hex_icon.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\installer\**\*.hor" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Import Project="WindowsSetupBundle.targets" />
 </Project>

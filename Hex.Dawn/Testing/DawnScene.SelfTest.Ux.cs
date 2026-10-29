@@ -11,6 +11,8 @@ internal sealed partial class DawnScene
         OnCode(test, dataFile);
         float scale = compositor.Scale;
         test.Check("ux: panel navigation is aligned left", () => bottom.HeaderAlign == Origin.Left);
+        test.Check("ux: mode switch sits immediately beside the window controls", () =>
+            modeToggle.Parent is { } modes && MathF.Abs(modes.Bounds.Max.X - ((TitleBar)top).ButtonBounds(0).Min.X) < 1);
         test.Run(() => { sideTree.Focus(); LetGo(); OnReturned(); });
         test.Check("ux: returning from the other mode restores the sidebar's input", () => compositor.Focus == sideTree);
         test.Run(() =>

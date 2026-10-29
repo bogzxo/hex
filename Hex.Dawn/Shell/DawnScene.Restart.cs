@@ -7,12 +7,22 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // The exe to start and what with as the window closes, null for a close that's only a close
-    private (string Exe, IReadOnlyList<string> Arguments)? restartInto;
+    private (string Exe, IReadOnlyList<string> Arguments, Action? Abandoned, Action? Started)? restartInto;
 
-    private void RestartInto(string exe, IReadOnlyList<string> arguments)
+    private void RestartInto(string exe, IReadOnlyList<string> arguments) => RestartInto(exe, arguments, null, null);
+
+    private void RestartInto(string exe, IReadOnlyList<string> arguments, Action? abandoned, Action? started)
     {
-        restartInto = (exe, arguments);
+        AbandonRestart();
+        restartInto = (exe, arguments, abandoned, started);
         AskBeforeClosing();
+    }
+
+    private void AbandonRestart()
+    {
+        var abandoned = restartInto?.Abandoned;
+        restartInto = null;
+        abandoned?.Invoke();
     }
 
     // Called as the window closes for good, the new Hex started if a restart asked for it
@@ -32,10 +42,12 @@ internal sealed partial class DawnScene
             start.Environment.Remove("HORIZON_INPUT_SCRIPT");
             start.Environment.Remove("HORIZON_SCREENSHOT");
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The installer or replacement process could not be started.");
+            restart.Started?.Invoke();
             return true;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            restart.Abandoned?.Invoke();
             Note(Said("tasks.restart_failed", ("why", e.Message)), error: true);
             return false;
         }

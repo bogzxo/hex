@@ -146,6 +146,8 @@ internal sealed partial class DawnScene
         test.Check("mcp: arguments a tool doesn't take come back as its failure, with what it does take", () =>
             HexMcpTestClient.Failed(answer) && Answered().Contains("'path' is required", StringComparison.Ordinal));
 
+        TestAgentMcp(test, Ask, Answered);
+
         // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar
         // jumping about) and then goes, and the server goes with its file when it's switched off
         test.Run(() => client?.Dispose());

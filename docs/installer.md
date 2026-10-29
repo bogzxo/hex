@@ -18,7 +18,9 @@ All installer wording lives in `Hex.Installer/Assets/installer/localisation/en-g
 
 ## Install
 
-Download `Hex-Setup-<rid>.zip` from [the latest release](https://github.com/bogzxo/hex/releases/latest), extract the whole archive, and open `Hex.Installer` (`Hex.Installer.exe` on Windows, `Hex Setup.app` on macOS). Setup shows the destination and release before installing. No administrator access is required.
+On Windows, download and run the single `Hex-Setup-win-x64.exe` or `Hex-Setup-win-arm64.exe` from [the latest release](https://github.com/bogzxo/hex/releases/latest). It extracts its native installer, libraries and editable assets into a unique `Hex.Setup-<id>` folder beside the downloaded EXE, runs setup, and removes that folder after the setup window closes, including cancellation or failure. The download stays in place. Its containing folder must be writable; move the EXE to Downloads if needed. Simultaneous launches use separate folders.
+
+On Linux and macOS, download `Hex-Setup-<rid>.zip`, extract the whole archive, and open `Hex.Installer` or `Hex Setup.app`. Setup shows the destination and release before installing. No administrator access is required.
 
 | Platform | Destination | Integration |
 | --- | --- | --- |
@@ -32,7 +34,15 @@ There is one registered installation per user. `--target <path>` is available fo
 
 ## Updates and uninstall
 
-In Dawn, choose **Help → Check for Updates** (also in the command palette). Checks are explicit; no background polling is added. When a newer stable version exists, **Install** copies the bundled installer to a private temporary directory and uses Hex's normal close prompt. Cancelling the prompt cancels the handoff. A failed process start keeps Hex open. The installer waits for that exact parent process to exit, then downloads the release itself. Other running Hex or Dusk windows must be closed. **Launch Hex** opens the installed version after completion; the editor restores its normal saved session.
+In Dawn, choose **Help → Check for Updates** (also in the command palette). Checks are explicit; no background polling is added. When a newer stable version exists, **Install** downloads and verifies its complete package while Hex stays open. It validates the archive and relocates that release's own installer and dependencies to a private temporary directory, then uses Hex's normal close prompt. Cancelling the download or close prompt discards the prepared copy. A failed process start keeps Hex open. The new installer waits for that exact parent process to exit and re-verifies a private snapshot of the cached package before installing it; there is no second package download. Other running Hex or Dusk windows must be closed. **Launch Hex** opens the installed version after completion; the editor restores its normal saved session.
+
+### Installer update plan and lifecycle
+
+Hex, Setup and the uninstaller share the release version. An application update runs the **new release's installer**, rather than requiring the old installed Setup to understand how to install a newer release. The existing installation transaction replaces `installer/` with the release's files and rolls it back along with Hex if registration fails. The next uninstall therefore uses the updated code. A separate installer-only channel or network check during uninstall is unnecessary; uninstall remains available offline and always asks for confirmation.
+
+The handoff adds `--package <absolute cached ZIP>` to the existing pinned-version and parent-process arguments. Setup accepts this only with `--update`. It checks the published release again, refuses a changed tag or downgrade, verifies the cached package's size and SHA-256, and stages it before changing the installation. Missing, modified, unsafe or incomplete packages fail before commit. The cached ZIP is kept with the temporary installer for retries and is removed by the normal temporary-copy cleanup after Setup exits. Cancelling the close prompt, a failed save, or a failed process start abandons the handoff and cleans up the prepared copy without changing the installed files.
+
+Standalone Setup continues to install the complete release, including its matching installed updater/uninstaller. Its downloaded launcher is a distribution artifact and is not overwritten in place. This avoids modifying a running executable and preserves the existing Windows bundle, Linux and macOS launch behaviour.
 
 Uninstall through Windows Installed Apps / the Start menu, the Linux Uninstall Hex launcher, or the macOS uninstall command. The bundled installer relocates itself before changing the installation. Its confirmation screen is always shown. Only files recorded in `.hex-install.json` are removed; settings, backups, extensions and personal files remain.
 
@@ -44,7 +54,7 @@ Archives must contain one `Hex/` directory. Traversal, symbolic links, special f
 
 Updates stage a complete new directory beside the old one, preserving unowned files and removing obsolete package files. The old directory is moved aside during commit and restored if registration fails. Cancellation is honored before commit; directory replacement finishes safely once it starts. Registration rollback is best effort. A power loss between directory renames can leave a `.previous-<id>` directory beside the destination; retain it for recovery. There is no claim of crash-atomic replacement or OS code signing. SHA-256 verifies the artifact served by GitHub, not an independent publisher signature.
 
-Temporary installer copies are retained until the operating system cleans its temporary directory; this avoids deleting a running executable or a recovery copy. A failed startup records diagnostics in the system temporary directory as `hex-setup-error.txt`.
+On Windows, relocated update/uninstall copies also clean up after exiting: a hidden Windows PowerShell helper waits for the exact launcher process, then removes only its marked, uniquely named setup-copy folder in the system temporary directory. The installed launcher exits before its relocated copy proceeds, allowing uninstall to remove the installed executable. The downloaded launcher stays open until its extracted UI exits so it can remove the extraction folder itself. A killed launcher, power loss or an OS-denied cleanup can leave a `Hex.Setup-<id>` folder (or `hex-setup-<id>` temporary copy); it is safe to remove after setup has exited. Linux/macOS helper copies retain the existing OS-temporary-directory lifetime. A failed startup records diagnostics in the system temporary directory as `hex-setup-error.txt`.
 
 ## Development
 
@@ -56,4 +66,6 @@ dotnet publish Hex.Installer -c Release -r win-x64
 
 `--preview` shows an offline, non-installing UI for screenshots. Normal setup reads GitHub when opened. Internal update handoff arguments are `--update --target <root> --version <tag> --wait-pid <pid> --wait-start <UTC ticks>`; `--uninstall --target <root>` opens removal confirmation. There is no silent destructive mode.
 
-Release packaging publishes the installer separately, copies its complete output into `Hex/installer/`, and uploads both ZIPs. Tag versions must match `Directory.Build.props`. Older portable releases remain usable but cannot perform managed in-place updates.
+Windows native `dotnet publish` automatically packages the entire installer output into `Hex.Installer.exe`, including native libraries, shaders, `.hor` layouts and localisation. The ZIP overlay includes a SHA-256 checksum checked before extraction; it detects corruption, not an independent publisher signature. Use a dedicated publish output directory. `-p:BundleWindowsInstaller=false` retains the loose native output for debugging; normal builds and `--preview` also remain usable with loose assets.
+
+Release packaging copies the installer output into `Hex/installer/` and uploads `Hex-<rid>.zip` plus the standalone Windows `Hex-Setup-<rid>.exe` (or Linux/macOS setup ZIP). The same bundled Windows EXE serves as the updater and uninstaller. Tag versions must match `Directory.Build.props`. Older portable releases remain usable but cannot perform managed in-place updates.

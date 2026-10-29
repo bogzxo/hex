@@ -43,21 +43,21 @@ internal sealed partial class DawnScene
     private void PrepareHexUpdate(ReleaseAsset release)
     {
         string root = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
-        string? installer = null;
-        StartWork("hex-update-prepare", InstallText.Get("updates.preparing"), context =>
+        PreparedInstallerUpdate? installer = null;
+        StartWork("hex-update-prepare", InstallText.Get("updates.preparing"), async context =>
         {
             // Portable copies remain portable; never claim an arbitrary directory as installer-owned.
             _ = InstallTransaction.ReadManifest(root);
-            installer = InstallerHandoff.CopyInstaller(Path.Combine(root, "installer"));
-            return Task.CompletedTask;
+            installer = await PreparedInstallerUpdate.Prepare(release, update => context.Report(update.Fraction, update.Message), context.Token);
         }, result =>
         {
             if (result.State != WorkState.Succeeded || installer is null)
             {
+                installer?.Dispose();
                 Note(InstallText.Get("updates.prepare_failed", ("reason", result.Error ?? "")), error: true);
                 return;
             }
-            RestartInto(installer, InstallerHandoff.UpdateArguments(root, release.Version));
-        }, seen: false, cancellable: false);
+            RestartInto(installer.Executable, installer.Arguments(root), installer.Dispose, installer.HandedOff);
+        }, seen: false, cancellable: true);
     }
 }

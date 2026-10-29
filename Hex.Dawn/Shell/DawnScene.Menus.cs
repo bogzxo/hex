@@ -110,11 +110,11 @@ internal sealed partial class DawnScene
     private void DeclareMenus()
     {
         commands.Declare("File", "new", "save", "close", "path", "workspace", "settings", "exit");
-        commands.Declare("Edit", "history", "clipboard", "find", "files", "comment");
+        commands.Declare("Edit", "history", "clipboard", "find", "files", "comment", "agent");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
         commands.Declare("Notebook", "run", "cells", "clear", "kernel");
-        commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
+        commands.Declare("View", "palette", "sides", "panels", "appearance", "editor", "agent");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");

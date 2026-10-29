@@ -12,7 +12,7 @@ namespace Hex.Core;
 internal sealed class McpPipeHost : IDisposable
 {
     // How many clients at once, more wait for one to go
-    private const int MOST = 4;
+    private const int MOST = 32;
 
     // How long a client has to say the token
     private const int ADMIT_MS = 5000;

@@ -1,4 +1,5 @@
 using Horizon.UI;
+using Horizon.Rendering;
 using Horizon.UI.Components;
 
 namespace Hex.Shell;
@@ -19,7 +20,7 @@ internal static class HexModeSwitch
 
     public static Button Add(TitleBar bar, HexMode current, Action swap)
     {
-        var row = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2.0f });
+        var row = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2.0f, Anchor = Origin.Right, Pivot = Origin.Right });
         Button? destination = null;
         foreach (HexMode mode in (ReadOnlySpan<HexMode>)[HexMode.Dawn, HexMode.Dusk])
         {

@@ -84,6 +84,7 @@ public class HexUxTests
         int switched = 0;
         Button destination = HexModeSwitch.Add(bar, current, () => switched++);
         var row = Assert.IsType<StackPanel>(Assert.Single(bar.Children));
+        Assert.Equal(Horizon.Rendering.Origin.Right, row.Anchor);
         var buttons = row.Children.Cast<Button>().ToArray();
         Assert.Equal(new[] { "Dawn", "Dusk" }, buttons.Select(button => button.Label));
         Button active = Assert.Single(buttons, button => button.Selected);

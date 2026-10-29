@@ -54,6 +54,16 @@ public sealed class ReleaseClient(HttpClient? client = null)
     public static Version VersionOf(string tag) => Version.TryParse(tag.TrimStart('v', 'V'), out var version)
         ? version : throw new InvalidDataException(InstallText.Get("errors.version", ("version", tag)));
 
+    /// <summary>Verify a cached package again in the installer process, before extracting or changing the installation.</summary>
+    public static async Task Verify(ReleaseAsset asset, string path, CancellationToken cancel)
+    {
+        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous);
+        if (input.Length != asset.Size) throw new InvalidDataException(InstallText.Get("errors.verification"));
+        byte[] digest = await SHA256.HashDataAsync(input, cancel);
+        if (!Convert.ToHexString(digest).Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(InstallText.Get("errors.verification"));
+    }
+
     public async Task Download(ReleaseAsset asset, string destination, Action<InstallProgress>? progress, CancellationToken cancel)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, asset.Download);

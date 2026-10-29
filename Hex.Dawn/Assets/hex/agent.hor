@@ -1,0 +1,12 @@
+#define layout
+
+let agent_window = compositor.window({ size: vec(760, 520), min_size: vec(400, 280), resize: "all", title: "@agent.title", icon: "robot", padding: vec(10, 10, 10, 10) });
+let agent_body = compositor.panel({ parent: agent_window, fill: "both", padding: vec(0, 26, 0, 40) });
+let agent_scroll = compositor.scroll({ parent: agent_body, fill: "both", padding: vec(4, 4, 4, 4) });
+let agent_transcript = compositor.label({ parent: agent_scroll, anchor: "top_left", pivot: "top_left", fill: "horizontal", wrap: true, align: "top_left", text_scale: 0.14, text: "" });
+let agent_status = compositor.label({ parent: agent_window, anchor: "top_left", pivot: "top_left", text_scale: 0.12, text: "", dim: true });
+let agent_cancel = compositor.button({ parent: agent_window, anchor: "top_right", pivot: "top_right", pos: vec(-30, 0), size: vec(26, 24), style: "button_flat", icon: "close", tooltip: "@agent.cancel" });
+let agent_clear = compositor.button({ parent: agent_window, anchor: "top_right", pivot: "top_right", size: vec(26, 24), style: "button_flat", icon: "clear-all", tooltip: "@agent.clear" });
+let agent_compose = compositor.panel({ parent: agent_window, anchor: "bottom", pivot: "bottom", fill: "horizontal", size: vec(0, 30), padding: vec(0, 0, 34, 0) });
+let agent_input = compositor.textbox({ parent: agent_compose, fill: "horizontal", size: vec(0, 30), text_scale: 0.14, placeholder: "@agent.input", max_length: 8000 });
+let agent_send = compositor.button({ parent: agent_window, anchor: "bottom_right", pivot: "bottom_right", size: vec(30, 30), icon: "send", style: "button_flat", tooltip: "@agent.send" });

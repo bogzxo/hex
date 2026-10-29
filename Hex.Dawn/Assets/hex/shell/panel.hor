@@ -16,8 +16,18 @@ let bottom = compositor.tabs({
     slide: "down"
 });
 
-let problems_scroll = compositor.scroll({
+let problems_page = compositor.panel({
     parent: bottom,
+    fill: "both"
+});
+
+let problems_search = compositor.panel({ parent: problems_page, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 28), padding: vec(4, 0, 4, 0), color: vec(0, 0, 0, 0) });
+let problems_filter = compositor.textbox({ parent: problems_search, fill: "horizontal", size: vec(0, 28), padding: vec(8, 4, 32, 4), text_scale: 0.13, placeholder: "@panel_tabs.filter", max_length: 400 });
+let problems_clear = compositor.button({ parent: problems_search, anchor: "right", pivot: "right", pos: vec(-4, 0), size: vec(26, 26), icon: "close", style: "button_flat", tooltip: "@panel_tabs.clear_filter" });
+
+let problems_body = compositor.panel({ parent: problems_page, fill: "both", padding: vec(0, 32, 0, 0) });
+let problems_scroll = compositor.scroll({
+    parent: problems_body,
     fill: "both",
     padding: vec(4, 4, 4, 4)
 });

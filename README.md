@@ -81,7 +81,7 @@ on a fucking stick if you want.
 
 Hex doesn't ship an AI and it isn't selling you one. What it has is an [MCP](https://modelcontextprotocol.io) server,
 so the agent *you* chose can drive Hex the way you do. Screenshots, the UI tree, clicks, typing, commands, problems,
-definitions, the terminal and the tasks, 27 tools in total.
+definitions, the terminal and tasks, plus an Agent conversation, requested line edits and dismissible code hints.
 
 ```
 claude mcp add hex -- C:\path\to\Hex.exe --mcp
@@ -95,13 +95,13 @@ the status bar says so. Claude Code, or anything else that speaks MCP over stdio
 ## Get it
 
 **Hex Setup**, the installer, for
-[Windows x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.zip),
-[Windows ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.zip),
+[Windows x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe),
+[Windows ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe),
 [Linux x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip),
 [Linux ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip),
 [macOS Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip) and
-[macOS Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip). Unpack it and run it,
-it fetches the newest Hex, gives it shortcuts and a place in the app menu, an uninstaller, and updates from inside Hex
+[macOS Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip). Run the Windows EXE directly; unpack the Linux or macOS ZIP first.
+Setup fetches the newest Hex, gives it shortcuts and a place in the app menu, an uninstaller, and updates from inside Hex
 (Help, Check for Updates). [Hex Setup](docs/installer.md) has what it does on each system.
 
 Or grab the portable zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it anywhere
