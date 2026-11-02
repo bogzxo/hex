@@ -80,6 +80,10 @@ public sealed class HexAgentsPanelTests : IDisposable
     [Fact]
     public void A_program_is_found_on_the_path_with_its_endings()
     {
+        // A .cmd and PATHEXT's endings are Windows' own, elsewhere a name is found as it is
+        if (!OperatingSystem.IsWindows())
+            return;
+
         File.WriteAllText(Path.Combine(folder, "agent.cmd"), "@echo off");
         Assert.Equal(Path.Combine(folder, "agent.cmd"), HexAgentProcess.Find("agent", folder, ".EXE;.CMD"));
         Assert.Null(HexAgentProcess.Find("nobody", folder, ".EXE;.CMD"));
@@ -91,6 +95,10 @@ public sealed class HexAgentsPanelTests : IDisposable
     [Fact]
     public void A_program_run_has_its_lines_read_back_and_its_exit_said()
     {
+        // A .cmd and PATHEXT's endings are Windows' own, elsewhere a name is found as it is
+        if (!OperatingSystem.IsWindows())
+            return;
+
         string script = Path.Combine(folder, "agent.cmd");
         File.WriteAllText(script, "@echo off\r\nset /p asked=\r\necho {\"type\":\"said\",\"text\":\"%asked%\"}\r\necho oops 1>&2\r\nexit /b 3\r\n");
         using HexAgentProcess run = HexAgentProcess.Start(script, ["--json"], folder, "hello there\n");
