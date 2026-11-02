@@ -31,6 +31,9 @@ internal sealed partial class HexDebugging
         context = with;
         SweepProgramOutputs();
         context.Documents.Opened += PrepareBreakpoints;
+
+        // A closed file's text let go of, this kept every .cs ever opened and all of its editor alive
+        context.Documents.Closed += closed => following.Remove(closed.Editor.Document);
         context.Panels.AddSide(HexSide.Debug, context.Strings.Said("debugging.debug"), DebugSide);
         UICommands commands = context.Commands;
         commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && (IsCSharp(context.Documents.Current.Path) || IsD(context.Documents.Current.Path));

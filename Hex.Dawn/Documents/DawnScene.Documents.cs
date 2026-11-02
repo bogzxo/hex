@@ -498,6 +498,7 @@ internal sealed partial class DawnScene
         ForgetExtensionViews(document);
         DropBackup(document);
         designer.recordPending = false;
+        ForgetClosed(document);
 
         if (documents.Count > 0)
         {
@@ -509,6 +510,40 @@ internal sealed partial class DawnScene
         // designer. Hex is a code editor before it's anything else
         Show(NewDocument());
         startedWith = document;
+    }
+
+    /// <summary>
+    /// Helper method to let go of a closed document everywhere it was remembered as the last one something was worked
+    /// out for, then collect what it had once things settle. Any one of them kept the whole editor, its text, rows and
+    /// colours alive, and a 30 MB file closed left Hex at a gigabyte and a half.
+    /// </summary>
+    private void ForgetClosed(HexDocument gone)
+    {
+        if (lensSeen.Of == gone) lensSeen = (null, -1);
+        if (inlaysFor.Of == gone) inlaysFor = (null, -1);
+        if (semanticsFor.Of == gone) semanticsFor = (null, -1, 0);
+        if (ownSemanticsFor.Of == gone) ownSemanticsFor = (null, -1);
+        if (conflictsFor.Of == gone) conflictsFor = (null, -1);
+        if (conflictsSaid.Of == gone) conflictsSaid = (null, 0);
+        if (branchFor.Document == gone) branchFor = (null, -1);
+        if (outlineKeptFor.Of == gone)
+        {
+            outlineKeptFor = (null, -1);
+            outlineKept = [];
+        }
+        if (crumbsFor.Document == gone) crumbsFor = default;
+        if (peeking?.From == gone) peeking = null;
+        if (panelJudgedFor == gone) panelJudgedFor = null;
+        if (plainFor == gone) plainFor = null;
+        if (languageFor == gone) languageFor = null;
+        if (ReferenceEquals(definesOf.Text, gone.Editor.Text))
+            definesOf = (null, new Dictionary<string, string>());
+        lensFiles.Remove(gone);
+        localisationFound.Remove(gone);
+        agentHintVersions.Remove(gone);
+
+        // Big files leave big holes, the settle collect hands them back to the system instead of keeping them for later
+        settleIn = 2.0f;
     }
 
     // Where the languages of the files of a folder are, by the folder, null for nowhere
