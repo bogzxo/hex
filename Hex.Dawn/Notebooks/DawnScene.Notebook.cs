@@ -23,6 +23,7 @@ internal sealed partial class DawnScene
     private const float NOTEBOOK_BAR = 34.0f;
 
     private Panel notebookView = null!;
+    private NotebookBackdrop notebookBackdrop = null!;
     private StackPanel notebookBar = null!;
     private ScrollPanel notebookScroll = null!;
     private StackPanel notebookCells = null!;
@@ -49,6 +50,14 @@ internal sealed partial class DawnScene
         notebookView.Visible = false;
         Engine.WindowManager.Exclusive += _ => MakeOutputPictures();
         notebookView.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.09f, 0.12f, 1.0f);
+
+        // The picture behind the code, behind the cells too, first so everything is drawn over it
+        notebookBackdrop = notebookView.Add(new NotebookBackdrop
+        {
+            Anchor = Origin.TopLeft,
+            Pivot = Origin.TopLeft,
+            Position = new Vector2(0.0f, -NOTEBOOK_BAR)
+        });
 
         notebookBar = notebookView.Add(new StackPanel
         {
@@ -231,6 +240,7 @@ internal sealed partial class DawnScene
     {
         Vector2 size = notebookView.Size;
         notebookScroll.Size = new Vector2(size.X, MathF.Max(40.0f, size.Y - NOTEBOOK_BAR));
+        notebookBackdrop.Size = notebookScroll.Size;
         notebookProblem.Size = notebookProblem.Size with { X = MathF.Max(100.0f, size.X - 32.0f) };
         FitCellViews(MathF.Max(200.0f, size.X - notebookCells.Padding.Total.X - 14.0f));
     }

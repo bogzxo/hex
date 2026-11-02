@@ -157,6 +157,13 @@ internal sealed partial class DawnScene
         return view;
     }
 
+    // How the code of a cell is filled in, not at all while there's a picture behind the code so it shows through the
+    // cells the way it does through the code view. Filled, the cells covered all of it but the gaps between them, and
+    // only half filled the gaps were bands of the picture brighter than the rest
+    private Vector4 CellEditorColor => backdropPicture is not null
+        ? Vector4.Zero
+        : compositor.Skin is { } skin ? skin.FieldColor with { W = MathF.Max(skin.FieldColor.W, 0.6f) } : new Vector4(0.05f, 0.06f, 0.08f, 1.0f);
+
     // Helper method for a cell's editor, the code's own font and size, the language's colours, as tall as its code
     private void PrepareCellEditor(HexNotebook notebook, NotebookCellEditor editor, NotebookCell cell)
     {
@@ -173,7 +180,7 @@ internal sealed partial class DawnScene
         editor.FitRows = 400;
         editor.Anchor = Origin.TopLeft;
         editor.Pivot = Origin.TopLeft;
-        editor.Color = compositor.Skin is { } skin ? skin.FieldColor with { W = MathF.Max(skin.FieldColor.W, 0.6f) } : new Vector4(0.05f, 0.06f, 0.08f, 1.0f);
+        editor.Color = CellEditorColor;
         editor.Highlighter = cell.Kind switch
         {
             CellKind.Markdown => CodeLanguages.ForExtension(".md"),
