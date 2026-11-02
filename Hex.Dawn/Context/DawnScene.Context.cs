@@ -189,8 +189,8 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         textDialog = UIDialog.Show(chrome, title, text, [.. order.Select(label => new DialogChoice(label, () => answered(label), Risky: label == risky))]);
     }
 
-    void IWindows.Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed) =>
-        AskText(title, text, value, button, typed, box => box.Placeholder = placeholder);
+    void IWindows.Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed, (int From, int To)? selected) =>
+        AskText(title, text, value, button, typed, box => box.Placeholder = placeholder, selected);
 
     void IWindows.PromptLines(string title, string text, string value, string button, string language, Func<string, (string Text, bool Warning)>? note, Action<string> typed) =>
         AskLines(title, text, value, button, language, note, typed);

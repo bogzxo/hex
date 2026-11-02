@@ -214,8 +214,11 @@ internal interface IWindows
     /// </summary>
     void Ask(string title, string text, string[] buttons, Action<string> answered, string? risky = null);
 
-    /// <summary>A line of text asked for, what was typed handed on, enter or the button.</summary>
-    void Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed);
+    /// <summary>
+    /// A line of text asked for, what was typed handed on, enter or the button. All of it starts selected, or the part
+    /// <paramref name="selected"/> says (a file's name without its extension).
+    /// </summary>
+    void Prompt(string title, string text, string value, string button, string placeholder, Action<string> typed, (int From, int To)? selected = null);
 
     /// <summary>
     /// More than a line of text asked for (a commit's message), in a box coloured as a language (by a file name of it,

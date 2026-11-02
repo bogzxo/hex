@@ -67,7 +67,9 @@ internal sealed partial class HexCodeEditing
         commands.Bind(Key.C, () => { if (FindBarOpen) ToggleFindOption(findOptions with { MatchCase = !findOptions.MatchCase }); }, whileTyping: true, alt: true);
         commands.Bind(Key.W, () => { if (FindBarOpen) ToggleFindOption(findOptions with { WholeWord = !findOptions.WholeWord }); }, whileTyping: true, alt: true);
         commands.Bind(Key.R, () => { if (FindBarOpen) ToggleFindOption(findOptions with { Regex = !findOptions.Regex }); }, whileTyping: true, alt: true);
-        commands.Bind(Key.Enter, () => { if (FindBarOpen) ReplaceEvery(); }, control: true, alt: true, whileTyping: true);
+        // Replace all owns Ctrl+Alt+Enter from the bar's boxes, asked before Source Control's commit on the same key. It
+        // was bound alongside it and both went off, the replace and a Stage All and Commit
+        commands.Keys.Add(Key.Enter, ReplaceEveryFromBar, control: true, alt: true, whileTyping: true, first: true);
         commands.Bind(Key.Escape, EscapeFindBar, whileTyping: true);
     }
 
@@ -83,6 +85,16 @@ internal sealed partial class HexCodeEditing
         findCase.TabTo = by => by < 0 ? (replaceRow.Visible ? replaceBox : findBox) : null;
         close.TabTo = by => by > 0 && replaceRow.Visible ? replaceOne : null;
         replaceOne.TabTo = by => by < 0 ? close : null;
+    }
+
+    // Ctrl+Alt+Enter, taken only while the replace row is up and the keyboard's in one of the bar's boxes
+    private bool ReplaceEveryFromBar()
+    {
+        if (!FindBarOpen || !replaceRow.Visible || (compositor.Focus != replaceBox && compositor.Focus != findBox))
+            return false;
+
+        ReplaceEvery();
+        return true;
     }
 
     /// <summary>Ctrl+F, the bar opened over the code with what's selected (a word, a line of it) to look for, its text picked out.</summary>

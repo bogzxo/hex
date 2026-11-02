@@ -24,7 +24,7 @@ internal sealed partial class DawnScene
     private UIDialog? textDialog;
 
     /// <summary>Helper method to ask for a line of text in a dialog and do something with it, enter or the first button.</summary>
-    private void AskText(string title, string message, string start, string go, Action<string> answered, Action<TextBox>? extra = null)
+    private void AskText(string title, string message, string start, string go, Action<string> answered, Action<TextBox>? extra = null, (int From, int To)? selected = null)
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
@@ -44,7 +44,10 @@ internal sealed partial class DawnScene
 
         extra?.Invoke(box);
         box.Focus();
-        box.SelectAll();
+        if (selected is { } part)
+            box.Select(part.From, part.To);
+        else
+            box.SelectAll();
         textDialog = shown;
     }
 

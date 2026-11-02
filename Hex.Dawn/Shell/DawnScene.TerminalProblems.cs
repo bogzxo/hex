@@ -104,6 +104,24 @@ internal sealed partial class DawnScene
             taskWatches.Add((view, view.Screen.Finished, finished));
     }
 
+    /// <summary>
+    /// Called as a terminal's shell ends, true to keep its pane. A task that ends the shell itself (exit 3 in its
+    /// command) keeps its tab with what it printed and says how it ended, the way VS Code does. The tab went the moment
+    /// the shell did and took the output with it, and hex_task_output said the task had never run.
+    /// </summary>
+    private bool TaskShellEnded(TerminalView view, int code)
+    {
+        int at = taskWatches.FindIndex(watch => watch.View == view);
+        if (at < 0)
+            return false;
+
+        Action<int, string> finished = taskWatches[at].Finished;
+        taskWatches.RemoveAt(at);
+        finished(code, view.Screen.LastOutput());
+        view.Feed($"\r\n\u001b[2m{Said("terminal_page.task_ended", ("code", code.ToString()))}\u001b[0m\r\n");
+        return true;
+    }
+
     /// <summary>Every tick, the files that are open told again what the terminal says about them, once that changed.</summary>
     private void UpdateTerminalProblems()
     {
@@ -111,9 +129,11 @@ internal sealed partial class DawnScene
         for (int i = taskWatches.Count - 1; i >= 0; i--)
         {
             var (view, before, finished) = taskWatches[i];
+            // A shell that ended is TaskShellEnded's business, unless its tab is gone already and nothing will hear of it
             if (!view.IsRunning)
             {
-                taskWatches.RemoveAt(i);
+                if (!terminalPanel.Tabs.Any(tab => tab.Views.Contains(view)))
+                    taskWatches.RemoveAt(i);
             }
             else if (view.Screen.Finished > before && view.Screen.AtPrompt)
             {

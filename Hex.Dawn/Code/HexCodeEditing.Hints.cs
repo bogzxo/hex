@@ -54,6 +54,7 @@ internal sealed partial class HexCodeEditing
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.cut"), () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X", "diff-removed").IsEnabled = () => hasSelection && !editor.ReadOnly;
         shown.Add(context.Strings.Said("code_hints.copy"), () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
+        shown.Add(context.Strings.Said("code_hints.paste"), () => { editor.Focus(); UIClipboard.Paste(); }, "Ctrl+V", "clippy").IsEnabled = () => !editor.ReadOnly;
         shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A", "selection");
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.toggle_comment"), () => editor.Document.ToggleComment(), "Ctrl+/", "comment");

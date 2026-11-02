@@ -795,6 +795,7 @@ let strings = {
         rename_it: "Rename Symbol...",
         cut: "Cut",
         copy: "Copy",
+        paste: "Paste",
         select_all: "Select All",
         toggle_comment: "Toggle Line Comment",
         duplicate_line: "Copy Line Down",
@@ -1308,6 +1309,7 @@ let strings = {
         // The menus inside the bar's
         workspace: "Workspace",
         preferences: "Preferences",
+        scratchpads: "Scratchpads",
         appearance: "Appearance",
         layout_debugger: "Layout Debugger",
         git_changes: "Changes",
@@ -1513,6 +1515,25 @@ let strings = {
     conveniences: {
         nothing_closed: "nothing closed to bring back",
         no_scratchpad: "couldn't make a scratchpad, {reason}"
+    },
+
+    scratchpads: {
+        new_in: "New Scratchpad In Language...",
+        open: "Open Scratchpad...",
+        move_command: "Move Scratchpad into Workspace...",
+        language_title: "New Scratchpad",
+        language_text: "the language of the scratchpad, it gets that language's extension",
+        open_title: "Open Scratchpad",
+        open_text: "the scratchpads, the newest first, each by its first line",
+        none: "no scratchpads yet, Ctrl+N makes one",
+        not_one: "the file on screen isn't a scratchpad",
+        no_workspace: "there's no workspace to move it into, open a folder first",
+        move_title: "Move into Workspace",
+        move_text: "the name it gets in {folder}",
+        move: "Move",
+        taken: "{name} is already there",
+        move_failed: "couldn't move the scratchpad, {reason}",
+        moved: "the scratchpad is {path} now"
     },
 
     disk_changes: {
@@ -2467,6 +2488,7 @@ let strings = {
     },
 
     terminal_page: {
+        task_ended: "The task ended with exit code {code}. The tab stays so its output can be read, close it when you're done.",
         return_live: "$(arrow-down) Return to live",
         return_live_tip: "Scroll to the bottom and return input to this terminal",
         split_right: "Split Terminal",

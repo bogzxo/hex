@@ -199,7 +199,7 @@ internal sealed partial class HexGit
                 Color = ColourOf?.Invoke(state.Change),
                 Badge = state.Letter,
                 BadgeColor = ColourOf?.Invoke(state.Change),
-                Tooltip = path,
+                Tooltip = Path.GetRelativePath(repository.Git.Root, path).Replace('\\', '/'),
                 Actions = FileActions(repository, path, state, kind),
                 Tag = new SideTag(Pressed: () => OpenChange(repository, path, stagedSide), Menu: _ => FileMenu(repository, path, state, stagedSide),
                     Key: key => FileKey(repository, path, state, stagedSide, key))

@@ -395,8 +395,17 @@ internal sealed partial class DawnScene
         commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), "F8", "arrow-down", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), "Shift+F8", "arrow-up", UIKeyUse.BoundWhileTyping);
 
-        // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
-        commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
+        // F2 renames, a name in the code, the file or folder picked in the explorer, or what is selected in the designer by
+        // its name in the properties
+        commands.Bind(Key.F2, () =>
+        {
+            if (compositor.Focus is CodeEditor)
+                codeEditing.RenameSymbol();
+            else if (compositor.Focus == sideTree && Side == HexSide.Explorer)
+                RenameInExplorer();
+            else if (LayoutTools)
+                RenameSelected();
+        }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
         commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !debugger.CanDebug(document.Path);

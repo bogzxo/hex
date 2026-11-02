@@ -52,6 +52,14 @@ internal sealed partial class DawnScene : ITerminalHostUi
             SettingsChanged = ApplyTerminalMotion
         });
 
+        // The host closes a pane whose shell ended, except a task's, kept so what it printed can still be read
+        Func<TerminalView, int, bool>? hostExited = terminalPanel.OnExited;
+        terminalPanel.OnExited = (view, code) =>
+        {
+            bool kept = TaskShellEnded(view, code);
+            return (hostExited?.Invoke(view, code) ?? true) && !kept;
+        };
+
         terminalPanel.OnTabMenu = (tab, point) =>
         {
             var shown = new Menu("terminal tab");

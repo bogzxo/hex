@@ -142,7 +142,7 @@ internal sealed partial class DawnScene
         // Source Control, the side of what's changed, a file staged from its right click and committed with a message
         IEnumerable<UITreeItem> SideRows(IEnumerable<UITreeItem> rows) => rows.SelectMany(row => new[] { row }.Concat(SideRows(row.Children ?? [])));
         UITreeItem? Under(string section, string path) => SideRows(sideTree.Items).FirstOrDefault(row =>
-            row.Tooltip is { } tip && PlatformPaths.Same(tip, path) && row.Parent?.Text.StartsWith(section, StringComparison.Ordinal) == true);
+            row.Tooltip is { Length: > 0 } tip && path.Replace('\\', '/').EndsWith("/" + tip, StringComparison.Ordinal) && row.Parent?.Text.StartsWith(section, StringComparison.Ordinal) == true);
 
         test.Run(() => ShowSide(HexSide.SourceControl));
         test.WaitFor(() => Under("Changes", added) is not null, 4.0f);
