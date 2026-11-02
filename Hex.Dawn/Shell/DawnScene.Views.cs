@@ -252,6 +252,9 @@ internal sealed partial class DawnScene
         if (closeQuestion is { IsOpen: true })
             return;
 
+        // Scratchpads are kept without a question, only real files are asked about
+        KeepScratchpads();
+
         var unsaved = documents.Where(open => open.Modified || open.CodeEdited).ToList();
         if (unsaved.Count == 0)
         {

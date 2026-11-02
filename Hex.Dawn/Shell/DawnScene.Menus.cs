@@ -122,6 +122,7 @@ internal sealed partial class DawnScene
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in
+        commands.DeclareSubmenu("File/new", "scratch", Said("menus.scratchpads"), "note");
         commands.DeclareSubmenu("File/workspace", "workspace", Said("menus.workspace"), "folder-library");
         commands.DeclareSubmenu("File/settings", "prefs", Said("menus.preferences"), "settings-gear", "main", "files");
         commands.DeclareSubmenu("View/appearance", "look", Said("menus.appearance"), "layout", "screen", "parts", "zoom");

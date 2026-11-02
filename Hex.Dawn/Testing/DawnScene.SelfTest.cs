@@ -256,6 +256,7 @@ internal sealed partial class DawnScene
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
+        ("scratchpads", "a scratchpad in a language, closed without a question, the empty ones gone, the list by first lines and one moved into the workspace", TestScratchpads),
         ("semantic", "semantic highlighting, HIDL's names by what they are, C# through csharp-ls in ReSharper's colours when it's on this machine", test =>
         {
             TestSemanticHidl(test);

@@ -460,6 +460,10 @@ internal sealed partial class DawnScene
 
     private void Close()
     {
+        // A scratchpad is saved or thrown out without asking
+        if (ClosedScratchpad())
+            return;
+
         // The code on screen is the newest word on whether there is anything to lose
         if (document.Modified || document.CodeEdited || document.GenerateCode() != document.SavedCode)
         {
@@ -540,8 +544,14 @@ internal sealed partial class DawnScene
     /// <summary>The File menu's files, Edit's undo and redo, and Ctrl+Tab through what is open, all going while typing.</summary>
     private void AddDocumentCommands()
     {
-        // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu
-        commands.Add("File/new", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "note", UIKeyUse.BoundWhileTyping);
+        // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu. The
+        // scratchpads have a menu of their own off File, the File menu is long enough as it is
+        commands.Add("File/new/scratch", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "note", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new/scratch", Said("scratchpads.new_in"), NewScratchpadIn, "Ctrl+Alt+N", "note", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new/scratch", Said("scratchpads.open"), OpenScratchpad, icon: "notebook");
+        var move = commands.Add("File/new/scratch", Said("scratchpads.move_command"), MoveScratchpadIntoWorkspace, icon: "go-to-file");
+        move.IsEnabled = () => IsScratchpad(document);
+        move.PaletteOnly = true;
         commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
         commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
         commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
