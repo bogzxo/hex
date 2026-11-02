@@ -7,6 +7,14 @@ internal sealed partial class DawnScene
     private void TestNotebookFile(HexPointerScript test)
     {
         string source = Environment.GetEnvironmentVariable("HEX_NOTEBOOK_TEST_FILE") ?? string.Empty;
+
+        // A real notebook of somebody's, only when one's named, the way the D and C# parts go without their compilers
+        if (!File.Exists(source))
+        {
+            test.Run(() => Console.WriteLine("[Hex self-test] HEX_NOTEBOOK_TEST_FILE isn't a notebook on this machine, the real notebook part is left out"));
+            return;
+        }
+
         string file = Path.Combine(testFolder, "real-notebook.ipynb");
         test.Run(() => { File.Copy(source, file, true); Open(file); });
         test.Wait();

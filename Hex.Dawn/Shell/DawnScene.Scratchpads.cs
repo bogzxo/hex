@@ -23,8 +23,18 @@ internal sealed partial class DawnScene
     /// <summary>Whether a document is a scratchpad, a file of text right in the scratch folder.</summary>
     private bool IsScratchpad(HexDocument of) => of.IsText && of.Path is { } path && IsScratchpad(path);
 
-    private bool IsScratchpad(string path) =>
-        string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.GetFullPath(ScratchFolder).TrimEnd(Path.DirectorySeparatorChar), PlatformPaths.Comparison);
+    private bool IsScratchpad(string path)
+    {
+        // Asked every tick by the auto save, so the answer's kept for the path asked last. Working it out made two strings a tick
+        if (ReferenceEquals(path, scratchAsked.Path))
+            return scratchAsked.Is;
+
+        bool scratch = string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.GetFullPath(ScratchFolder).TrimEnd(Path.DirectorySeparatorChar), PlatformPaths.Comparison);
+        scratchAsked = (path, scratch);
+        return scratch;
+    }
+
+    private (string? Path, bool Is) scratchAsked;
 
     /* Making one */
 

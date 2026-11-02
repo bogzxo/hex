@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // made for it in the test's folder. Bare ones stand in for GitHub, HIDL, the engine with HIDL as a submodule and hex
 // with the engine as one, cloned into a workspace of the same shape with a commit of HIDL's and one of hex's not pushed
 // yet, and Fighter2D not there at all. The dry run says what it would do and changes nothing, then the real one pushes
-// HIDL, moves the engine onto it and pushes that, and moves hex onto the engine and pushes that, all into the bare ones.
+// HIDL, moves the engine onto it and pushes that, and pushes hex as it is, all into the bare ones.
 // Left out when the tests don't run inside such a workspace.
 internal sealed partial class DawnScene
 {
@@ -49,9 +49,8 @@ internal sealed partial class DawnScene
         test.Check("push all: it says what it would push and move, and leaves Fighter2D out", () =>
             work.Items.First(item => item.Key == dryKey).Output is var said
             && said.Contains("  would push 1 commit(s) of horizon/Horizon.HIDL to origin/main")
-            && said.Any(line => line.StartsWith("  would move horizon/Horizon.HIDL from ", StringComparison.Ordinal))
+            && said.Any(line => line.StartsWith("  would move the engine's HIDL from ", StringComparison.Ordinal))
             && said.Contains("  horizon is on GitHub already")
-            && said.Any(line => line.StartsWith("  hex/horizon is at ", StringComparison.Ordinal))
             && said.Contains("  would push 1 commit(s) of hex to origin/main")
             && said.Contains("  Fighter2D isn't here, it's left out")
             && said.Contains("Dry run done, nothing was changed."));
@@ -77,9 +76,9 @@ internal sealed partial class DawnScene
         test.Check("push all: the engine moved onto it, committed and pushed", () =>
             PushGit(origins, "--git-dir=engine.git", "log", "-1", "--format=%s", "main") == "HIDL at HIDL change"
             && PushGit(origins, "--git-dir=engine.git", "rev-parse", "main:Horizon.HIDL") == PushGit(origins, "--git-dir=hidl.git", "rev-parse", "main"));
-        test.Check("push all: hex moved onto the engine, committed and pushed with its own commit", () =>
-            PushGit(origins, "--git-dir=hex.git", "log", "-2", "--format=%s", "main") == "The engine submodule at HIDL at HIDL change\nhex change"
-            && PushGit(origins, "--git-dir=hex.git", "rev-parse", "main:horizon") == PushGit(origins, "--git-dir=engine.git", "rev-parse", "main"));
+        // Hex builds against whatever engine is next to it now, it isn't moved onto one, only its own commit goes
+        test.Check("push all: hex pushed with its own commit and nothing of the engine's", () =>
+            PushGit(origins, "--git-dir=hex.git", "log", "-1", "--format=%s", "main") == "hex change");
 
         test.Run(() =>
         {
