@@ -27,7 +27,14 @@ internal sealed partial class DawnScene
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)
+            {
                 LetGo();
+
+                // The editor stops ticking in Dusk, an agent's call that swapped (a click on the toggle) is answered now or
+                // it would wait out its whole timeout
+                mcpCurrent?.Finish(McpToolResult.Text("Done, and Hex swapped to Dusk, the terminal. The next call brings the editor back."));
+                agentPointer.Release();
+            }
         };
     }
 
@@ -55,6 +62,10 @@ internal sealed partial class DawnScene
         if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
             code.Focus();
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
+
+        // Dusk was made bigger or smaller meanwhile, the editor follows so the swap doesn't jump
+        if (HexModes.Scale is { } shared && shared != compositor.Scale)
+            SetScale(shared, remember: true);
         Engine.WindowManager.RequestFrames();
     }
 }

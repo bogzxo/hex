@@ -198,7 +198,7 @@ internal sealed partial class DawnScene
         for (int settle = 0; settle < 4; settle++)
             yield return null;
 
-        string under = compositor.HoveredComponent is { } over ? $"{McpIdOf(over, 'c')} {over.GetType().Name}" : "nothing of Hex's";
+        string under = compositor.HoveredComponent is { } over ? $"{McpIdOf(over, 'c')} {over.GetType().Name}" : compositor.Modules.Any(module => module.TooltipText is { Length: > 0 }) ? "the tooltip" : "nothing of Hex's";
         string focus = compositor.Focus is { } focused ? $"{McpIdOf(focused, 'c')} {focused.GetType().Name}" : "nothing";
         string dialog = chrome.Dialog is { IsOpen: true } up ? $" A dialog is up ({McpIdOf(up, 'c')}), it takes the pointer before anything under it." : string.Empty;
         yield return McpToolResult.Text($"{(twice ? "Double clicked" : right ? "Right clicked" : "Clicked")} {described} at {window.X:0},{window.Y:0}. "
@@ -314,8 +314,9 @@ internal sealed partial class DawnScene
             yield return null;
 
         string under = compositor.HoveredComponent is { } over ? $"{McpIdOf(over, 'c')} {over.GetType().Name} \"{McpTextOf(over)}\"" : "nothing of Hex's";
-        string? tip = compositor.TooltipOf?.Tooltip ?? compositor.Modules.Select(module => module.TooltipText).FirstOrDefault(text => text is { Length: > 0 });
-        yield return McpToolResult.Text($"Resting on {described}, over {under}. {(tip is { Length: > 0 } ? $"Its tooltip says \"{Plain(tip)}\"." : "No tooltip came up.")}");
+        // What's painted, a tooltip held up while the pointer went over to it says what it said, not what's under it now
+        string? tip = compositor.Modules.Select(module => module.TooltipText).FirstOrDefault(text => text is { Length: > 0 }) ?? compositor.TooltipOf?.Tooltip;
+        yield return McpToolResult.Text($"Resting on {described}, over {under}. {(tip is { Length: > 0 } ? $"Its tooltip says \"{Plain(compositor.Resolve(tip))}\"." : "No tooltip came up.")}");
     }
 }
 

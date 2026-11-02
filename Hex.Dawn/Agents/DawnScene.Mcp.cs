@@ -133,6 +133,10 @@ internal sealed partial class DawnScene
     {
         mcpCalls.Enqueue(call);
         Engine.WindowManager.Wake();
+
+        // The editor isn't ticked while Dusk is on screen, so the call waited there till it timed out. An agent drives the
+        // editor, so it's brought back for it
+        Hex.Shell.HexModes.Bring(Hex.Shell.HexMode.Dawn);
     }
 
     /// <summary>

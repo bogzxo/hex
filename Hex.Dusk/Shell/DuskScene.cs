@@ -108,7 +108,7 @@ internal sealed partial class DuskScene : Scene
             SettingsChanged = SettingsChanged
         });
 
-        SetScale(options.Scale ?? settings.Scale);
+        SetScale(options.Scale ?? HexModes.Scale ?? settings.Scale);
         BuildPanel();
         host.Commands.OnChanged = RefreshMenuKeys;
         host.Blocked = () => chrome.Dialog is not null;

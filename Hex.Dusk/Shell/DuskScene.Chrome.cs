@@ -21,6 +21,8 @@ internal sealed partial class DuskScene
     {
         scale = Scales.MinBy(known => MathF.Abs(known - scale));
         compositor.Scale = scale;
+        if (HexModes.Together)
+            HexModes.Scale = scale;
 
         // The title bar is the window's and the size of the system's whatever the rest is drawn at
         menu.TextScale = MENU_TEXT / scale;

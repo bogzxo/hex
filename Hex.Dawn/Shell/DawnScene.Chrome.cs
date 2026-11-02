@@ -79,6 +79,8 @@ internal sealed partial class DawnScene
 
         // The two are one screen as far as anybody looking at it is concerned
         compositor.Scale = stage.Scale = scale;
+        if (HexModes.Together)
+            HexModes.Scale = scale;
 
         // Except the title bar, which is the window's and the size of the system's whatever the editor is drawn at, its menus with it
         menu.TextScale = MENU_TEXT / scale;
