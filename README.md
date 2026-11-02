@@ -1,6 +1,6 @@
 # Modern Motherfucking Code Editor
 
-**This is an IDE. It opens, you write code, and it gets the fuck out of your way.**
+**This is an IDE. It opens FAST, you write FAST code, and it gets the fuck out of your way, FAST.**
 
 That's entire _fucking_ **POINT**.
 We've been using editors that ship a full chromium browser, a JS runtime, an account system, a
