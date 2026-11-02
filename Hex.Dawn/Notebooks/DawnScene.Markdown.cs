@@ -69,6 +69,10 @@ internal sealed partial class DawnScene
             var old = previewPictures;
             previewPictures = [];
             WriteMarkdown(markdownWritten, document.Editor.Text, "markdown", previewPictures);
+
+            // A preview reads like the page it will be, no buttons over its tables, a right click has them
+            foreach (var tools in markdownWritten.Children.OfType<NotebookTablePanel>())
+                tools.Strip.Visible = false;
             ReleaseNotebookPictures(old);
             markdownVersion = version;
             markdownDelay = 0.15f;

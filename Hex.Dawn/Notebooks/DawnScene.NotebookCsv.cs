@@ -10,6 +10,7 @@ namespace Hex.Dawn;
 internal sealed class NotebookTablePanel(NotebookTableView table) : StackPanel
 {
     public NotebookTableView Table { get; } = table;
+    public StackPanel Strip { get; set; } = null!;
     public Button CopyCsv { get; set; } = null!;
     public Button ExportCsv { get; set; } = null!;
     public Action<string> ExportTo { get; set; } = null!;
@@ -26,7 +27,7 @@ internal sealed partial class DawnScene
         {
             Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 2
         };
-        var strip = panel.Add(new StackPanel
+        var strip = panel.Strip = panel.Add(new StackPanel
         {
             Direction = UIDirection.Horizontal, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4,
             Size = new Vector2(240, 26)
@@ -55,6 +56,15 @@ internal sealed partial class DawnScene
                 WriteNotebookCsv(Path.HasExtension(target) ? target : target + ".csv", csv));
         };
         panel.Add(body ?? view);
+
+        // The same two on a right click anywhere on the table, for where the strip over it is hidden
+        panel.OnContextMenu = _ =>
+        {
+            var menu = new Menu("table");
+            menu.Add(panel.CopyLabel, () => panel.CopyCsv.OnPressed?.Invoke(), icon: "copy");
+            menu.Add(panel.ExportLabel, () => panel.ExportCsv.OnPressed?.Invoke(), icon: "save");
+            ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
+        };
         return panel;
     }
 

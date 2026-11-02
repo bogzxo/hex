@@ -5,6 +5,7 @@ using Hex.Core.Notebooks;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Drawing;
 
 namespace Hex.Dawn;
 
@@ -133,8 +134,15 @@ internal sealed partial class DawnScene
         Anchor = Origin.TopLeft,
         Pivot = Origin.TopLeft,
         TextScale = 0.16f,
-        CodeLanguage = language
+        CodeLanguage = language,
+        Document = true,
+        CodeFont = MarkdownCodeFont
     };
+
+    // The font code in markdown is written in, Hack the way the editor has it, so a block of code keeps its columns
+    private static UIFont? MarkdownCodeFont => markdownCodeFont ??= UIFont.Shared(
+        Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM);
+    private static UIFont? markdownCodeFont;
 
     // Helper method for a table drawn, as tall as its rows and its header up to TABLE_ROWS of them
     private NotebookTablePanel TableView(NotebookTable table)
