@@ -80,7 +80,9 @@ internal sealed partial class DawnScene
         nameBox.Text = shown.Name;
         designer.MarkSelection();
         // The explorer of a workspace stays up the way it does in VS Code, the folder of files opened from goes
-        browsing = browsing && !explorer.workspace.IsEmpty;
+        // and only that, setting it false on any other view put the outline up over Source Control at every tab clicked
+        if (browsing && explorer.workspace.IsEmpty)
+            browsing = false;
         running.Forget();
 
         // Its editor is the one in the code panel (or one of the two side by side), the find bar stays over whichever it is

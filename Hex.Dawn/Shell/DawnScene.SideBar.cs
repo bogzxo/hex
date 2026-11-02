@@ -27,8 +27,8 @@ internal enum HexSide
 
 // The activity bar down the left and the side bar next to it, VS Code's. A file of code has the explorer, search and
 // its outline, the designer of a layout has its toolbox, components and layers instead of the outline, and the explorer
-// and search as well. Each remembers which it was left on, so going from the code to the designer and back puts the
-// side bar back the way it was.
+// and search as well. The explorer, search, debugging and source control stay put going from one to the other, and the
+// outline and the toolbox swap for each other.
 internal sealed partial class DawnScene
 {
     private HexSide codeSide = HexSide.Explorer, designSide = HexSide.Design;
@@ -42,8 +42,18 @@ internal sealed partial class DawnScene
         get => LayoutTools ? designSide : codeSide;
         set
         {
-            if (LayoutTools) designSide = value;
-            else codeSide = value;
+            // The outline and the toolbox belong to their kind of file, the rest are the same whatever's open. Source
+            // Control turned into the outline the moment a code tab was clicked after a layout's, and back again
+            if (value is HexSide.Outline or HexSide.Design)
+            {
+                if (LayoutTools) designSide = value;
+                else codeSide = value;
+            }
+            else
+            {
+                codeSide = designSide = value;
+            }
+
             treeDirty = true;
         }
     }
