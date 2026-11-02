@@ -79,6 +79,20 @@ another), `scroll` and `hover`. `commands` and `run_command` for the command pal
 problems). And `selftest`, which runs suites of the self test in a Hex of its own and says what passed, never in the one
 you're working in.
 
+The harness is the tools for finding code without reading it, all of them off the editor's thread. `map` (the
+folders as a tree with their languages and types), `files` (a file by part of its name), `symbols` (declarations by name,
+ranked), `search` (text or a regex, ranked and grouped by file), `refs` (where a name is used, outside comments and
+strings), `read` (one declaration out of a file by its name, or lines of it), `skim` (what files are, their summaries and
+outlines) and `changes` (what changed since an answer), with `harness_stats` for what they saved. Every one takes
+`max_chars`, and an agent system's extension says how big its answers are otherwise (Claude Code and Codex are in the
+catalog). The index is kept between runs in the settings folder and takes what the language servers of open files say
+they declare. A client can subscribe to `hex://harness/changes` and is told when the workspace changes.
+`docs/agent-harness-plan.md` has how it works and `docs/agent-harness-validation.md` what it saves.
+
+`terminal` lists the terminal's tabs and opens, selects, renames, closes or interrupts one, `terminal_run` runs a
+command in one and waits until it's done, handing back what it printed and its exit code, and `terminal_read` and
+`terminal_send` take a tab. The notebook tools take a `path` and open the notebook first, and `notebook_new` makes one.
+
 Every call runs on Hex's own thread a tick at a time, so a click is a move, a press and a let go like a hand's, and an
 idle Hex wakes for it at once. Points are window pixels, the same in a screenshot as in a click. Moving the real mouse
 takes the pointer back from the agent. The server is `Hex.Core/Mcp` (the protocol, the pipe, the bridge) and

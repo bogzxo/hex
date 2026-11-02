@@ -22,7 +22,10 @@ internal enum HexSide
     Debug,
 
     // Git, what's changed in the repositories of the workspace, staged or not, and committing it
-    SourceControl
+    SourceControl,
+
+    // Agents run from Hex and talked to like a chat (DawnScene.AgentsPanel)
+    Agents
 }
 
 // The activity bar down the left and the side bar next to it, VS Code's. A file of code has the explorer, search and
@@ -88,6 +91,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_design").OnPressed = () => ShowSide(HexSide.Design);
         layout.Get<Button>("act_debug").OnPressed = () => ShowSide(HexSide.Debug);
         layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
+        layout.Get<Button>("act_agents").OnPressed = () => ShowSide(HexSide.Agents);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
         layout.Get<Button>("act_extensions").OnPressed = ShowExtensions;
 
@@ -95,7 +99,7 @@ internal sealed partial class DawnScene
         commands.Add("View/sides", Said("activity.extensions_command"), ShowExtensions, "Ctrl+Shift+X", "extensions", UIKeyUse.BoundWhileTyping);
 
         // Tab from a button of the activity bar goes on to the side it shows, the next stop after the bar, VS Code's order
-        foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_git", "act_settings", "act_extensions"])
+        foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_git", "act_agents", "act_settings", "act_extensions"])
             layout.Get<Button>(act).TabTo = by => by > 0 && left.Shown && sideTree.Visible ? sideTree : null;
     }
 
@@ -162,6 +166,15 @@ internal sealed partial class DawnScene
         if (Side == HexSide.Design)
             return;
 
+        // The agents' box has the keys, there's no list to go down
+        if (Side == HexSide.Agents)
+        {
+            RebuildTree();
+            treeDirty = false;
+            agentsInput.Focus();
+            return;
+        }
+
         RebuildTree();
         treeDirty = false;
         if (!sideTree.Visible)
@@ -189,6 +202,7 @@ internal sealed partial class DawnScene
         HexSide.Design => "act_design",
         HexSide.Debug => "act_debug",
         HexSide.SourceControl => "act_git",
+        HexSide.Agents => "act_agents",
         _ => "act_outline"
     }) is { Visible: true } button ? button : null;
 
@@ -224,6 +238,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_design").Selected = sides && side == HexSide.Design;
         layout.Get<Button>("act_debug").Selected = sides && side == HexSide.Debug;
         layout.Get<Button>("act_git").Selected = sides && side == HexSide.SourceControl;
+        layout.Get<Button>("act_agents").Selected = sides && side == HexSide.Agents;
         layout.Get<Button>("act_extensions").Selected = extensionsUp;
         layout.Get<Button>("act_outline").Visible = !tools;
         layout.Get<Button>("act_design").Visible = tools;

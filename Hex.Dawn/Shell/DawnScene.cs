@@ -192,6 +192,7 @@ internal sealed partial class DawnScene : Scene
         codeEditing.BuildFindBar();
         BuildQuiet();
         BuildTerminal();
+        BuildAgentsPanel();
         StartRemote();
         BuildSideTree();
         BuildExtensionViews();

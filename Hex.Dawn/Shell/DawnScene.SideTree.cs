@@ -368,6 +368,7 @@ internal sealed partial class DawnScene
         ShowExplorerHead(Side);
         PlaceSearchView(Side == HexSide.Search);
         PlaceCommitBox(Side == HexSide.SourceControl);
+        PlaceAgentsView(Side == HexSide.Agents);
 
         switch (Side)
         {
@@ -379,6 +380,8 @@ internal sealed partial class DawnScene
                 break;
             case HexSide.Design:
                 designer.RebuildComponentTree();
+                break;
+            case HexSide.Agents:
                 break;
             default:
                 if (!RebuildSideView())

@@ -40,7 +40,7 @@ internal sealed partial class HexGit
         if (ActiveRepository() is not { HasRemote: true, Status: { Branch: not null } status })
             return string.Empty;
         if (syncing)
-            return "$(sync) " + context.Strings.Said("git.syncing");
+            return "$(sync~spin) " + context.Strings.Said("git.syncing");
         if (status.Upstream is null)
             return "$(cloud-upload) " + context.Strings.Said("git.publish");
         return status.Ahead > 0 || status.Behind > 0 ? $"$(sync) {status.Behind}$(arrow-down) {status.Ahead}$(arrow-up)" : "$(sync)";

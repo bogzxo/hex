@@ -108,6 +108,9 @@ internal sealed partial class HexLanguages
     /// <summary>The name of the server linting a document, null for none.</summary>
     internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
 
+    /// <summary>Whether a document's server is still starting, there and not ready yet and not fallen over, for the status bar's spinner.</summary>
+    internal bool Starting(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) && !server.IsReady && server.Failure is null;
+
     /// <summary>
     /// The program linting a document as somebody knows it, serve-d, csharp-ls, null for none. Its name in
     /// language_servers.hor was what the status bar said, "D, d".

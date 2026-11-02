@@ -237,7 +237,7 @@ internal sealed partial class DawnScene
 
         kernelShown = now;
         kernelButton.Label = KernelStatus(notebook);
-        kernelButton.Icon = notebook.Kernel?.State == KernelState.Busy || notebook.Starting ? "loading" : "server-process";
+        kernelButton.Icon = notebook.Kernel?.State == KernelState.Busy || notebook.Starting ? "loading~spin" : "server-process";
     }
 
     // What the kernel's button was last made to say from

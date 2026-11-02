@@ -172,8 +172,10 @@ internal sealed partial class DawnScene
 
         float width = row.Padding.Total.X, gap = row.Spacing >= 0.0f ? row.Spacing : compositor.Skin?.Spacing ?? 0.0f;
         int shown = 0;
-        foreach (UIComponent child in row.Children)
+        // By index, a foreach over the list as its interface makes an enumerator every tick
+        for (int i = 0; i < row.Children.Count; i++)
         {
+            UIComponent child = row.Children[i];
             if (!child.Visible)
                 continue;
             width += WidthShowing(child);
@@ -266,6 +268,8 @@ internal sealed partial class DawnScene
             treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         if (sideTree.Visible)
             sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
+        if (agentsView.Visible)
+            agentsView.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, agentsView)));
         HoldSideWidth(leftWidth);
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
         rightHead.Size = new Vector2(rightWidth, 24.0f);

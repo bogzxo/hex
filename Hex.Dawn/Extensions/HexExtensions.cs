@@ -188,6 +188,7 @@ internal sealed partial class HexExtensions
         else
         {
             screens.ForgetTitleNote(extension);
+            ForgetAgents(extension);
         }
     }
 }

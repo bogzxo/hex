@@ -8,8 +8,8 @@ telemetry pipeline and an upsell, and somewhere in the middle of all that, there
 
 Hex is the text box, and then everything a working developer actually needs round it, and nothing else.
 
-No Electron. No Chromium wearing a code editor cloak. No accounts, no sign in to sync, no telemetry, no AI sidebar
-that you didn't ask for, no "try our new assistant _we promise we won't spy_", no marketplace of first party "experiences" waving at you from
+No Electron. No Chromium wearing a code editor cloak. No accounts, no sign in to sync, no telemetry, no AI that you
+didn't ask for, no "try our new assistant _we promise we won't spy_", no marketplace of first party "experiences" waving at you from
 the activity bar. It's a native program that draws its own UI on your GPU and does what you fucking tell it to.
 
 ## Fast as fuck, _boy_
@@ -79,18 +79,67 @@ on a fucking stick if you want.
 
 ## Bring your own agent
 
-Hex doesn't ship an AI and it isn't selling you one. What it has is an [MCP](https://modelcontextprotocol.io) server,
-so the agent *you* chose can drive Hex the way you do. Screenshots, the UI tree, clicks, typing, commands, problems,
-definitions, the terminal and tasks, plus an Agent conversation, requested line edits and dismissible code hints.
+Hex doesn't ship an AI and it isn't selling you one. What it does is give the agent *you* chose (Claude Code, Codex,
+whatever's next) the best seat in the house, and then get out of the way like everything else here.
+
+**It runs them.** The robot on the activity bar is the Agents view. Pick an agent, ask it something, and watch it work.
+Every tool it calls gets a row of its own with an icon for what it is and a spinner while it's going, what it said comes
+out as proper Markdown, and a `path:line` in an answer opens the file right there. The file you're looking at goes in
+with the question if you want it to, there's a model picker, a permissions or sandbox picker, Up for what you asked
+last, Escape to stop it, and the tokens and the cost of the turn sit quietly at the top. Hex runs the agent's own
+program (`claude -p`, `codex exec`) with your own account, it doesn't proxy anything anywhere.
+
+**It hands them the codebase without the bill.** Agents spend most of their tokens *finding* things. Grep, a wall of
+absolute paths, a two thousand line file read whole to look at one method, grep again. Hex already knows your
+workspace, so it gives agents a harness over its MCP server that answers the way they actually want it.
+
+- `hex_map` the repository as a tree with the languages and types in each folder
+- `hex_symbols` where something is declared, ranked, `QM` finds `QueueMcp`
+- `hex_search` ranked and grouped by file, declarations first, the path written once and not on every line
+- `hex_refs` where a name is used, without the comments and the strings
+- `hex_read` **one method out of a file by its name**, instead of the whole bloody file
+- `hex_skim` what a bunch of files are, their summaries and outlines, in one call
+- `hex_changes` what moved since the agent last looked, or subscribe and get told
+
+On Hex's own repository a handful of real questions took **10 calls and 72,224 characters** the grep and read way, and
+**7 calls and 18,275** through the harness. That's 75% of the tokens gone, every time, for nothing. The index is kept
+between runs, takes the symbols of your language servers where it can, and answers in a few milliseconds.
+[docs/agent-harness-validation.md](docs/agent-harness-validation.md) has every number.
+
+**And it lets them drive.** Screenshots, the UI tree, clicks, typing, commands, problems, definitions, the terminal with
+a command run and *waited for* down to its exit code, notebooks by their path, tasks, settings, plus line edits you
+asked for and dismissible code hints.
+
+The agents plug in as extensions, Claude Code and Codex are in the catalog (Extensions, Available), and anything that
+speaks MCP over stdio connects the same way.
 
 ```
 claude mcp add hex -- C:\path\to\Hex.exe --mcp
 ```
 
-It's off until you switch it on. When it's on it listens on a pipe only you can open, only from your machine, only with
-a token Hex writes next to itself, and a repository you cloned can't switch it on for you. While an agent's connected
-the status bar says so. Claude Code, or anything else that speaks MCP over stdio, is set up the same way.
+The server is off until you switch it on (or press Send in the Agents view, which is you switching it on). When it's on
+it listens on a pipe only you can open, only from your machine, only with a token Hex writes next to itself, and a
+repository you cloned can't switch it on for you. While an agent's connected the status bar says so.
 [docs/agents.md](docs/agents.md) has the details and every tool.
+
+## Looks like this
+
+![A Jupyter notebook running in Hex, in the Sunset theme](images/gallery/notebook.png)
+*Jupyter notebooks, the real kernel, outputs and all. Sunset.*
+
+![Search across the workspace in the Dead Revolver skin](images/gallery/search_sakura.png)
+*Find in Files. It's a game engine's UI underneath, so it wears game skins too, this one's Dead Revolver, Sakura.*
+
+| | |
+| --- | --- |
+| ![Light](images/gallery/theme_light.png) | ![Retro Windows, Rose](images/gallery/theme_retro.png) |
+| *Light* | *Retro Windows, Rose* |
+| ![Sci-Fi, Green](images/gallery/theme_scifi.png) | ![Sunset](images/gallery/notebook.png) |
+| *Sci-Fi, Green* | *Sunset* |
+
+Thirty odd skins and themes, all of them in **Settings, Appearance**, switched while you watch. And the busy bits
+actually move now, a sync spins, a server that's starting spins, a game that's running pulses, so you can tell at a
+glance whether something's working or dead.
 
 ## Get it
 
@@ -122,5 +171,6 @@ dotnet build Hex/Hex.csproj
 ## More
 
 - [Layouts, HIDL and the workspace](docs/layouts-and-hidl.md), the designer, HIDL's values and console, and its language server
-- [Agents](docs/agents.md), the MCP server and its tools
+- [Agents](docs/agents.md), the MCP server and its tools, and the Agents view
+- [The agent harness](docs/agent-harness-plan.md), how the index, the tools and the agents' extensions work
 - [Hacking on Hex](docs/hacking.md), finding your way round the code, building on every system, the self test

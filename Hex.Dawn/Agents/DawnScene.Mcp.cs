@@ -26,6 +26,9 @@ internal sealed partial class DawnScene
     private float mcpFoldersWait;
     private int mcpClientsShown;
 
+    // Whether a call of an agent was going the last tick, what the robot breathes for
+    private bool mcpCalling;
+
     // When an agent was last on, the item stays a while after so a client that connects for every call (hexmcp, a
     // script) doesn't have the status bar jumping about as the item comes and goes
     private const long MCP_LINGER_MS = 15_000;
@@ -123,10 +126,19 @@ internal sealed partial class DawnScene
     private static void ForgetMcpFile(object? sender, EventArgs e) => McpDiscovery.Remove(System.Environment.ProcessId);
 
     /// <summary>A server for one client, its tools the editor's.</summary>
-    private McpServer MakeMcpServer() => new(mcpTools!, "hex", HexAbout.Version, Said("mcp.instructions"));
+    private McpServer MakeMcpServer()
+    {
+        string usual = Said("mcp.instructions");
+        return new(mcpTools!, "hex", HexAbout.Version, usual)
+        {
+            // An agent system an extension said (hex.agent) has its own said after Hex's, picked by who the client is
+            InstructionsFor = client => HexAgentProfiles.InstructionsFor(client, usual),
+            Resources = HarnessResources()
+        };
+    }
 
     /// <summary>The folders of the workspace, what the bridge picks a Hex by.</summary>
-    private string[] McpFolders() => [.. explorer.workspace.Folders];
+    private string[] McpFolders() => harnessRoots = [.. explorer.workspace.Folders];
 
     /// <summary>A call from a client, queued for the next tick, the editor woken for it. From the pipe's threads.</summary>
     internal void QueueMcp(HexMcpCall call)
@@ -146,11 +158,21 @@ internal sealed partial class DawnScene
     private void UpdateMcp(float dt)
     {
         UpdateAgent();
+        UpdateHarness(dt);
+        UpdateAgentsPanel(dt);
         if (mcpHost is null && mcpCurrent is null && mcpCalls.IsEmpty && !agentPointer.Taken)
             return;
 
         agentPointer.Update(Engine.Input.Mouse.Position);
         RunMcpCalls();
+
+        // The robot breathes while an agent's call is going, so it's plain it's doing something to Hex right now
+        bool calling = mcpCurrent is not null || !mcpCalls.IsEmpty;
+        if (calling != mcpCalling)
+        {
+            mcpCalling = calling;
+            mcpChanged = true;
+        }
 
         if (mcpChanged)
         {
@@ -160,7 +182,8 @@ internal sealed partial class DawnScene
                 Say(Said("mcp.connected", ("client", newest)));
             mcpClientsShown = clients.Count;
             mcpLastOn = System.Environment.TickCount64;
-            mcpItem.Text = clients.Count > 1 ? $"$(robot) {Said("mcp.status_many", ("count", clients.Count.ToString()))}" : $"$(robot) {Said("mcp.status")}";
+            string robot = mcpCalling ? "$(robot~breathe)" : "$(robot)";
+            mcpItem.Text = clients.Count > 1 ? $"{robot} {Said("mcp.status_many", ("count", clients.Count.ToString()))}" : $"{robot} {Said("mcp.status")}";
             mcpItem.Tooltip = Said("mcp.status_tip", ("clients", string.Join(", ", clients)));
         }
 

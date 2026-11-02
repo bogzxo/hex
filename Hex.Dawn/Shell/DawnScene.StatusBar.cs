@@ -14,6 +14,9 @@ internal sealed partial class DawnScene
 {
     private StatusBar statusBar = null!;
     private StatusItem problemsItem = null!, messageItem = null!;
+    // Whether the language server of the file on screen was still starting when the language's item was last written
+    private bool languageStarting;
+
     private StatusItem caretItem = null!, selectionItem = null!, indentItem = null!, endingsItem = null!, languageItem = null!;
     private StatusItem coordsItem = null!, componentsItem = null!, zoomItem = null!, skinItem = null!, screenItem = null!;
     private StatusItem codeZoomItem = null!, runningItem = null!;
@@ -102,7 +105,7 @@ internal sealed partial class DawnScene
             return;
 
         runningShown = extensions.runningName;
-        runningItem.Text = $"$(run) {Said("status_bar.running", ("name", extensions.runningName))}";
+        runningItem.Text = $"$(run~pulse) {Said("status_bar.running", ("name", extensions.runningName))}";
     }
 
     /// <summary>Every tick, what the status bar says brought up to date. Nothing is written into text that hasn't changed.</summary>
@@ -163,13 +166,16 @@ internal sealed partial class DawnScene
                 indentItem.Text = Said(indent.Tabs ? "settings_text.status_tabs" : "status_bar.indent", ("count", indent.Size.ToString()));
             }
 
-            if (languageFor != document || languagesShown != languages.ServersChanged || !ReferenceEquals(languageShownWith, document.Editor.Highlighter))
+            // A server still starting spins in place of the language's icon until it's ready
+            bool starting = languages.Starting(document);
+            if (languageFor != document || languagesShown != languages.ServersChanged || !ReferenceEquals(languageShownWith, document.Editor.Highlighter) || languageStarting != starting)
             {
+                languageStarting = starting;
                 languageFor = document;
                 languageShownWith = document.Editor.Highlighter;
                 languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
-                languageItem.Text = $"$({icon}) {language}";
+                languageItem.Text = $"$({(starting ? "loading~spin" : icon)}) {language}";
             }
             if (settings.CodeZoom != codeZoomShown)
             {
