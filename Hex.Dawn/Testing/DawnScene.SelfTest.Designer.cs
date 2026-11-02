@@ -114,6 +114,9 @@ internal sealed partial class DawnScene
         test.Check("inspector: typing changes the component", () => ((Button)button!).Label == "Fight");
         test.Check("inspector: and the code, on screen as well", () => Code().Contains("label: \"Fight\"") && code.Text.Contains("label: \"Fight\""));
 
+        // The inspector grew, the size's boxes ended up on its bottom edge and the drag started on nothing
+        test.Run(() => inspectorScroll.ScrollIntoView(designer.editors["size"]));
+        test.Settle(0.3f);
         test.Run(() => grab = At(() => ((StackPanel)designer.editors["size"]).Children[0], 0.3f)());
         test.Drag(() => grab, () => grab + new Vector2(160, 0) * compositor.UIScale);
         test.Wait();

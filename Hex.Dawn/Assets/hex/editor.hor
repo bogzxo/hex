@@ -158,4 +158,4 @@ let toasts = compositor.notifications({
     text_scale: 0.14,
 });
 
-compositor.hidden_layers(["files", "code", "table", "extension", "notebook", "image", "values"]);
+compositor.hidden_layers(["files", "code", "table", "extension", "notebook", "markdown", "image", "values"]);

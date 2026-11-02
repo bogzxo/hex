@@ -458,9 +458,12 @@ internal sealed partial class DawnScene
     // The side bar slides away and back, the middle widening and narrowing with it, rather than popping
     private void TestSlidingSides(HexPointerScript test)
     {
-        float wide = 0.0f, during = 0.0f, after = 0.0f, time = left.SlideTime;
+        float wide = 0.0f, during = 0.0f, after = 0.0f, time = left.SlideTime, animation = settings.UiAnimation;
         test.Run(() =>
         {
+            // The self test starts with the UI holding still, which has nothing slide at all
+            settings.UiAnimation = 1.0f;
+            ApplyEffects();
             left.SlideTime = UIComponent.DEFAULT_SLIDE_TIME;
             wide = center.Bounds.Width;
             ToggleSideBar();
@@ -477,6 +480,11 @@ internal sealed partial class DawnScene
         test.Run(ToggleSideBar);
         test.Settle(UIComponent.DEFAULT_SLIDE_TIME * 1.5f);
         test.Check("slide: and comes back the way it went", () => left.Visible && left.Shown && !left.Sliding && Near(center.Bounds.Width, wide, 2));
-        test.Run(() => left.SlideTime = time);
+        test.Run(() =>
+        {
+            left.SlideTime = time;
+            settings.UiAnimation = animation;
+            ApplyEffects();
+        });
     }
 }

@@ -249,6 +249,11 @@ internal sealed partial class HexLanguages
         if (of.Editor.Highlighter is null)
             return bare;
 
+        // A server of the file's own extension is the one, whatever it's coloured as. One coloured as markdown went to
+        // marksman instead of the server it was registered with
+        if (LanguageServers.RegistrationFor(bare) is not null)
+            return bare;
+
         if (!serversRead)
             ReadLanguageServers();
 
