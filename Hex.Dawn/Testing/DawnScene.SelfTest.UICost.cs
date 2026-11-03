@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Horizon.UI.Diagnostics;
+
 namespace Hex.Dawn;
 
 // The self test, what the UI costs doing the same few things every time, sitting still, typing, the wheel going down a big
@@ -82,9 +84,25 @@ internal sealed partial class DawnScene
     // Helper method to count what the UI costs over what a scenario does, and say it
     private void Measure(HexPointerScript test, string name, Action scenario)
     {
-        test.Run(() => compositor.Statistics.Reset());
+        // With HEX_UICOST_PROFILE set every kind of component is timed as it paints as well, which costs a little
+        bool profiled = Environment.GetEnvironmentVariable("HEX_UICOST_PROFILE") is { Length: > 0 };
+        test.Run(() =>
+        {
+            compositor.Statistics.Reset();
+            UIPaintProfile.Reset();
+            UIPaintProfile.On = profiled;
+        });
         scenario();
         test.Run(() => Console.WriteLine($"[Hex self-test] uicost {name}: {compositor.Statistics}"));
         test.Run(() => Console.WriteLine($"[Hex self-test] uicost {name} GPU ms a frame: {compositor.Statistics.GpuBreakdown()}"));
+        if (profiled)
+        {
+            test.Run(() =>
+            {
+                UIPaintProfile.On = false;
+                Console.WriteLine($"[Hex self-test] uicost {name} paint ms a tick: {UIPaintProfile.Slowest(compositor.Statistics.Ticks)}");
+                Console.WriteLine($"[Hex self-test] uicost {name} layout ms a tick: {UIPaintProfile.Slowest(compositor.Statistics.Ticks, measuring: true)}");
+            });
+        }
     }
 }
