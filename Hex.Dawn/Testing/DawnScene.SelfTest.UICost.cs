@@ -85,5 +85,6 @@ internal sealed partial class DawnScene
         test.Run(() => compositor.Statistics.Reset());
         scenario();
         test.Run(() => Console.WriteLine($"[Hex self-test] uicost {name}: {compositor.Statistics}"));
+        test.Run(() => Console.WriteLine($"[Hex self-test] uicost {name} GPU ms a frame: {compositor.Statistics.GpuBreakdown()}"));
     }
 }
