@@ -115,12 +115,12 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             var pictures = cellPictures[cellViews[^1]];
-            canceled = RenderedPicture(System.Text.Json.Nodes.JsonValue.Create("cancel-test")!, () =>
+            canceled = RenderedPicture(System.Text.Json.Nodes.JsonValue.Create("cancel-test")!, density =>
             {
                 started.Set();
                 release.Wait(TimeSpan.FromSeconds(10));
-                return NotebookRender.Svg("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>");
-            }, pictures);
+                return NotebookRender.Svg("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>", density);
+            }, pictures, zoomed: true);
             cellViews[^1].Outputs.Add(canceled!);
         });
         test.WaitFor(() => started.IsSet, 5);

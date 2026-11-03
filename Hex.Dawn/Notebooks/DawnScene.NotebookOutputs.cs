@@ -136,7 +136,7 @@ internal sealed partial class DawnScene
     // Helper method for the best of the forms a result came in, a picture, a table, markdown, then text
     private UIComponent? OutputData(HexNotebook notebook, JsonObject data, JsonObject? metadata, List<NotebookPicture> pictures)
     {
-        if (data["image/svg+xml"] is { } svg && RenderedPicture(svg, () => NotebookRender.Svg(NotebookFile.Text(svg)), pictures, NotebookFile.Text(data["text/plain"])) is { } vector)
+        if (data["image/svg+xml"] is { } svg && RenderedPicture(svg, density => NotebookRender.Svg(NotebookFile.Text(svg), density), pictures, zoomed: true, NotebookFile.Text(data["text/plain"])) is { } vector)
             return vector;
 
         foreach (string mime in (string[])["image/png", "image/jpeg", "image/gif", "image/bmp"])
@@ -149,7 +149,7 @@ internal sealed partial class DawnScene
         if (data["text/html"] is { } html && OutputHtmlTable(NotebookFile.Text(html)) is { } table)
             return table;
 
-        if (data["text/latex"] is { } formula && RenderedPicture(formula, () => NotebookRender.Math(NotebookFile.Text(formula), transparent: true), pictures, NotebookFile.Text(data["text/plain"]), mathInk: true) is { } math)
+        if (data["text/latex"] is { } formula && RenderedPicture(formula, density => NotebookRender.Math(NotebookFile.Text(formula), density, transparent: true), pictures, zoomed: true, NotebookFile.Text(data["text/plain"]), mathInk: true) is { } math)
             return math;
 
         if (data["text/markdown"] is { } markdown)
@@ -319,6 +319,7 @@ internal sealed partial class DawnScene
             {
                 case NotebookPicture picture:
                     picture.Reflow?.Invoke(width, zoom);
+                    picture.KeepDense?.Invoke();
                     float scale = MathF.Min(picture.Reflow is null ? zoom : 1, width / MathF.Max(1.0f, picture.Natural.X));
                     picture.Size = picture.Natural * scale;
                     break;
@@ -381,6 +382,12 @@ internal sealed class NotebookPicture(Vector2 natural) : Image
     public bool MathInk { get; set; }
     public Action<float, float>? Reflow { get; set; }
     public JsonNode? RenderKey { get; set; }
+
+    /// <summary>The pixels a unit of the layout it's rendered at, or on its way to being rendered at.</summary>
+    public float Density { get; set; }
+
+    /// <summary>Renders it again when the screen it's on wants it at another density (a zoom, another monitor), see DawnScene.PictureDensity.</summary>
+    public Action? KeepDense { get; set; }
 
     protected override void Paint(Horizon.UI.Drawing.UIDrawList list)
     {

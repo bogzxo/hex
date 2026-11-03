@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
@@ -11,14 +12,24 @@ using Svg.Skia;
 namespace Hex.Dawn;
 
 /// <summary>CPU rendering of static notebook graphics. GPU uploads remain owned by Dawn's output lifecycle.</summary>
+/// <summary>A picture rendered, and how big it is in the layout's units, which is its pixels over the density it was rendered at.</summary>
+internal readonly record struct NotebookPixels(ImagePixels Pixels, Vector2 Natural);
+
 internal static partial class NotebookRender
 {
-    public const float Density = 2;
+    /// <summary>
+    /// The fewest and the most pixels a unit of the layout is rendered at. A picture is rendered at the density it's
+    /// shown at, a pixel of it to a pixel of the screen. Rendered at twice that and halved by the GPU, a stroke a pixel
+    /// wide came out two pixels at half strength and the lines and the formulas went grey.
+    /// </summary>
+    public const float LeastDensity = 1, MostDensity = 4;
+
     public const int MaxSource = 4_000_000;
     private const int MaxSide = 4096;
     private const int MaxPixels = 8_000_000;
 
-    public static ImagePixels Svg(string source)
+    /// <param name="density">How many pixels a unit of the layout is, see <see cref="LeastDensity"/>.</param>
+    public static NotebookPixels Svg(string source, float density)
     {
         if (source.Length > MaxSource)
             throw new ArgumentException("SVG output exceeds the rendering limit.");
@@ -59,14 +70,17 @@ internal static partial class NotebookRender
         SKRect bounds = picture.CullRect;
         if (!float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height) || bounds.Width <= 0 || bounds.Height <= 0)
             throw new ArgumentException("SVG has no finite drawing area.");
-        float scale = MathF.Min(Density, MathF.Min(MaxSide / bounds.Width, MaxSide / bounds.Height));
+        float scale = MathF.Min(density, MathF.Min(MaxSide / bounds.Width, MaxSide / bounds.Height));
         scale = MathF.Min(scale, MathF.Sqrt(MaxPixels / (bounds.Width * bounds.Height)));
-        return Paint(bounds.Width * scale, bounds.Height * scale, canvas =>
+        ImagePixels pixels = Paint(bounds.Width * scale, bounds.Height * scale, canvas =>
         {
             canvas.Scale(scale);
             canvas.Translate(-bounds.Left, -bounds.Top);
             canvas.DrawPicture(picture);
         });
+
+        // As big as the SVG says, a picture too big for the most pixels allowed is rendered at less and blown up
+        return new NotebookPixels(pixels, new Vector2(pixels.Width, pixels.Height) / scale);
     }
 
     private static bool EmbeddedRaster(string value) => new[] { "data:image/png;base64,", "data:image/jpeg;base64,", "data:image/gif;base64," }
@@ -88,7 +102,8 @@ internal static partial class NotebookRender
         return false;
     }
 
-    public static ImagePixels Math(string source, bool prose = false, bool transparent = false, float width = 600, float zoom = 1)
+    /// <param name="density">How many pixels a unit of the layout is, see <see cref="LeastDensity"/>.</param>
+    public static NotebookPixels Math(string source, float density, bool prose = false, bool transparent = false, float width = 600, float zoom = 1)
     {
         if (source.Length > 32_000)
             throw new ArgumentException("Math output exceeds the rendering limit.");
@@ -96,15 +111,17 @@ internal static partial class NotebookRender
         // separating space, so make the control-word boundary explicit without changing the stored notebook source.
         source = CommandBoundary().Replace(source, "$0 ");
         source = FractionAliases().Replace(source, @"\frac");
-        float size = (prose ? 28 : 36) * zoom;
+        // Sizes and margins in units of the layout, so the formula is the same size whatever it's rendered at
+        float size = (prose ? 14 : 18) * zoom * density;
+        ImagePixels pixels;
         if (prose)
         {
             var painter = new TextPainter { LaTeX = source, FontSize = size, TextColor = transparent ? SKColors.White : SKColors.Black };
-            float pixelsWide = System.Math.Clamp(width * Density - 16, 80, 4000);
+            float pixelsWide = System.Math.Clamp((width - 8) * density, 40 * density, 2000 * density);
             var bounds = painter.Measure(pixelsWide);
             if (painter.ErrorMessage is { } error)
                 throw new ArgumentException(error);
-            return Ink(Paint(MathF.Min(pixelsWide, bounds.Width) + 16, bounds.Height + 24, canvas => painter.Draw(canvas, offsetX: 8, offsetY: 12), white: !transparent), transparent);
+            pixels = Paint(MathF.Min(pixelsWide, bounds.Width) + 8 * density, bounds.Height + 12 * density, canvas => painter.Draw(canvas, offsetX: 4 * density, offsetY: 6 * density), white: !transparent);
         }
         else
         {
@@ -112,8 +129,11 @@ internal static partial class NotebookRender
             var bounds = painter.Measure();
             if (painter.ErrorMessage is { } error)
                 throw new ArgumentException(error);
-            return Ink(Paint(bounds.Width + 24, bounds.Height + 24, canvas => painter.Draw(canvas), white: !transparent), transparent);
+            pixels = Paint(bounds.Width + 12 * density, bounds.Height + 12 * density, canvas => painter.Draw(canvas), white: !transparent);
         }
+
+        pixels = Ink(pixels, transparent);
+        return new NotebookPixels(pixels, new Vector2(pixels.Width, pixels.Height) / density);
     }
 
     // Helper method for math drawn as ink to be tinted, white all over with only its alpha saying where the ink is. The
