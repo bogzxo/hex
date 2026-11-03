@@ -1,7 +1,41 @@
-# Hex 2.7.0 preview
+# Hex 2.7.5
 
-Agents get a home of their own in Hex, hover hints you can actually read, a markdown preview that looks like everyone
-else's, and scratchpads worth opening. It's a preview, Check for Updates stays on 2.6.1 until it isn't.
+The UI moves the way it should now. Scrolling stays on the screen's pixels instead of warbling, nothing jumps,
+morphs or slides into its neighbour between frames, a dragged window keeps up with the mouse, and the plots and
+formulas in a notebook are sharp and dark again. Everything 2.7.0 brought is here too, it's the first of the 2.7s
+that Check for Updates offers.
+
+## smoother
+
+- scrolling anything keeps the words on the screen's pixels at any scale, they used to warble against the boxes under them
+- between two frames a list, a tree, the code or a notebook moves as one, a row coming into sight comes in with the
+  rest and a letter cut off at the edge moves with its line
+- lighting something up under the pointer doesn't nudge or morph what's next to it, and a menu or a tooltip opening
+  over another one comes in rather than the last one sliding over
+- a window dragged by its title bar is where the mouse is, however slow the page it's showing is to draw
+- drawers sliding and panels folding move smoothly, and so do fades
+- the pointer hits what's drawn while a scroll is still easing, not where it was going to be
+
+## sharper and faster
+
+- an SVG or a formula in a notebook is rendered at the screen's own resolution, crisp on a 1080p screen without the
+  lines going grey, and rendered again when the zoom or the monitor changes
+- the settings page is a third of the work to draw, nothing scrolled out of sight is painted any more
+- rounded boxes, their edges and their shadows are drawn in one go, a fifth fewer quads a frame
+- code that hasn't changed isn't painted again
+
+## notebooks
+
+- Enter in a cell no longer scrolls its code up out of the cell
+
+## look
+
+- the Horizon theme's sun has set a little, its gold is a deep orange going on red
+
+# From 2.7.0
+
+Agents get a home of their own in Hex, hover hints you can actually read, a markdown preview that looks like
+everyone else's, and scratchpads worth opening.
 
 ## agents
 
