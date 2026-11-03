@@ -145,7 +145,7 @@ internal sealed partial class DawnScene
                 if (pixels is { } image)
                 {
                     var replaced = new HashSet<Texture>();
-                    var texture = Texture.FromPixels((uint)image.Width, (uint)image.Height, image.Pixels);
+                    var texture = Texture.FromPixels((uint)image.Width, (uint)image.Height, image.Pixels, TextureDefinition.RgbaUnsignedBytePicture);
                     outputPictures.AddOrUpdate(job.Data, texture);
                     foreach (var picture in job.Waiting)
                     {

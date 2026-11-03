@@ -104,7 +104,7 @@ internal static partial class NotebookRender
             var bounds = painter.Measure(pixelsWide);
             if (painter.ErrorMessage is { } error)
                 throw new ArgumentException(error);
-            return Paint(MathF.Min(pixelsWide, bounds.Width) + 16, bounds.Height + 24, canvas => painter.Draw(canvas, offsetX: 8, offsetY: 12), white: !transparent);
+            return Ink(Paint(MathF.Min(pixelsWide, bounds.Width) + 16, bounds.Height + 24, canvas => painter.Draw(canvas, offsetX: 8, offsetY: 12), white: !transparent), transparent);
         }
         else
         {
@@ -112,8 +112,22 @@ internal static partial class NotebookRender
             var bounds = painter.Measure();
             if (painter.ErrorMessage is { } error)
                 throw new ArgumentException(error);
-            return Paint(bounds.Width + 24, bounds.Height + 24, canvas => painter.Draw(canvas), white: !transparent);
+            return Ink(Paint(bounds.Width + 24, bounds.Height + 24, canvas => painter.Draw(canvas), white: !transparent), transparent);
         }
+    }
+
+    // Helper method for math drawn as ink to be tinted, white all over with only its alpha saying where the ink is. The
+    // see-through texels were black, and a mip level halving the picture blended that black into the edges of every
+    // stroke, so tinted the light text of a dark theme every glyph had a dark rim
+    private static ImagePixels Ink(ImagePixels pixels, bool ink)
+    {
+        if (!ink)
+            return pixels;
+
+        Span<uint> texels = MemoryMarshal.Cast<byte, uint>(pixels.Pixels);
+        for (int i = 0; i < texels.Length; i++)
+            texels[i] |= 0x00FFFFFFu;
+        return pixels;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\\[a-zA-Z]+(?=[^a-zA-Z\s{])")]

@@ -299,7 +299,7 @@ internal sealed partial class DawnScene
 
         foreach (var (data, pixels, waiting) in making)
         {
-            Texture texture = Texture.FromPixels((uint)pixels.Width, (uint)pixels.Height, pixels.Pixels);
+            Texture texture = Texture.FromPixels((uint)pixels.Width, (uint)pixels.Height, pixels.Pixels, TextureDefinition.RgbaUnsignedBytePicture);
             outputPictures.AddOrUpdate(data, texture);
             foreach (NotebookPicture picture in waiting)
                 picture.Texture = texture;
