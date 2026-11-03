@@ -265,6 +265,7 @@ internal sealed partial class DawnScene
             TestSemanticD(test);
         }),
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
+        ("uicost", "what the UI costs sitting still, typing, the wheel, a window dragged and a notebook scrolled, said and not checked", TestUICost),
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
         ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
         ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
