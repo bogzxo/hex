@@ -23,6 +23,7 @@ internal sealed partial class DawnScene
     private void BuildTabs()
     {
         docTabs = layout.Get<TabStrip>("doc_tabs");
+        docTabs.HideClippedTabs = true;
         allTabs = layout.Get<Button>("all_tabs");
         allTabs.OnPressed = () =>
         {
@@ -103,7 +104,7 @@ internal sealed partial class DawnScene
         string name = plainShown ? WelcomeTitle()
             : document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
         bool changed = !plainShown && (document.Modified || document.CodeEdited);
-        string version = HexAbout.Version.ToString();
+        string version = HexAbout.Label;
         ((TitleBar)top).Title = titleNote.Length > 0
             ? Said(changed ? "tabs.title_changed_note" : "tabs.title_note", ("name", name), ("version", version), ("note", titleNote))
             : Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name), ("version", version));

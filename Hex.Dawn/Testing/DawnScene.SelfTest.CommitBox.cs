@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
     {
         foreach (UITreeItem row in rows)
         {
-            if (row.Icon == "check" && row.Text.StartsWith("Commit", StringComparison.Ordinal))
+            if (row.Button && row.Icon == "git-commit" && row.Text.StartsWith("Commit", StringComparison.Ordinal))
                 return (row.Text, row.Color == DimColor);
         }
 

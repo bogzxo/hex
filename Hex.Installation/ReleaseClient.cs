@@ -5,7 +5,11 @@ using System.Text.Json.Nodes;
 
 namespace Hex.Installation;
 
-public sealed record ReleaseAsset(string Version, string Name, Uri Download, long Size, string Sha256);
+public sealed record ReleaseAsset(string Version, string Name, Uri Download, long Size, string Sha256, string Label = "")
+{
+    /// <summary>The version the way a person reads it, the number and what the release is called (2.8.0 thickboy).</summary>
+    public string Shown => Label.Length > 0 ? Label : Version.TrimStart('v', 'V');
+}
 public sealed record InstallProgress(string Message, float Fraction);
 
 /// <summary>The public stable release and its exact platform asset. No credentials or remote commands.</summary>
@@ -48,7 +52,24 @@ public sealed class ReleaseClient(HttpClient? client = null)
         long size = asset["size"]!.GetValue<long>();
         if (size <= 0 || size > 2L * 1024 * 1024 * 1024)
             throw new InvalidDataException(InstallText.Get("errors.asset_size"));
-        return new(version, name, url, size, digest[7..]);
+        return new(version, name, url, size, digest[7..], LabelOf(release["name"]?.GetValue<string>(), version));
+    }
+
+    /// <summary>
+    /// What the release calls itself after the number, out of its title (Hex 2.8.0 thickboy). A title that doesn't
+    /// start with Hex and the release's own number says nothing, the number goes on its own then.
+    /// </summary>
+    public static string LabelOf(string? title, string tag)
+    {
+        string number = tag.TrimStart('v', 'V');
+        string said = (title ?? "").Trim();
+        if (said.StartsWith("Hex ", StringComparison.OrdinalIgnoreCase))
+            said = said[4..].TrimStart();
+        said = said.TrimStart('v', 'V');
+        if (!said.StartsWith(number, StringComparison.Ordinal))
+            return number;
+        string name = said[number.Length..].Trim();
+        return name.Length > 0 && name.Length <= 40 && !name.Any(char.IsControl) ? $"{number} {name}" : number;
     }
 
     public static Version VersionOf(string tag) => Version.TryParse(tag.TrimStart('v', 'V'), out var version)
@@ -82,7 +103,7 @@ public sealed class ReleaseClient(HttpClient? client = null)
             if (total > asset.Size) throw new InvalidDataException(InstallText.Get("errors.download_size"));
             hash.AppendData(buffer, 0, read);
             await output.WriteAsync(buffer.AsMemory(0, read), cancel);
-            progress?.Invoke(new(InstallText.Get("status.downloading", ("version", asset.Version), ("downloaded", (total / 1048576f).ToString("0.0")), ("total", (asset.Size / 1048576f).ToString("0.0"))), .1f + .6f * total / asset.Size));
+            progress?.Invoke(new(InstallText.Get("status.downloading", ("version", asset.Shown), ("downloaded", (total / 1048576f).ToString("0.0")), ("total", (asset.Size / 1048576f).ToString("0.0"))), .1f + .6f * total / asset.Size));
         }
         if (total != asset.Size || !Convert.ToHexString(hash.GetHashAndReset()).Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(InstallText.Get("errors.verification"));

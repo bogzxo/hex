@@ -114,6 +114,24 @@ internal sealed partial class DuskScene
         });
         test.Check("the session is written", () => File.Exists(SessionFile) && File.ReadAllText(SessionFile).Contains("split: \"right\""));
 
+        // Changes that leave the tree alone must reach disk through the periodic path too.
+        test.Run(() => panel.Rename(panel.Tabs[1], "autosaved-tab"));
+        test.WaitFor(() => File.ReadAllText(SessionFile).Contains("autosaved-tab"), SESSION_EVERY + 2);
+        test.Check("a rename alone is autosaved without an explicit save", () => File.ReadAllText(SessionFile).Contains("autosaved-tab"));
+        test.Run(() => panel.FocusedView!.PaneName = "autosaved-pane");
+        test.WaitFor(() => File.ReadAllText(SessionFile).Contains("autosaved-pane"), SESSION_EVERY + 2);
+        test.Check("a pane name alone is autosaved too", () => File.ReadAllText(SessionFile).Contains("autosaved-pane"));
+        DateTime unchangedWrite = default;
+        test.Run(() =>
+        {
+            File.SetLastWriteTimeUtc(SessionFile, DateTime.UtcNow.AddMinutes(-2));
+            unchangedWrite = File.GetLastWriteTimeUtc(SessionFile);
+        });
+        test.Settle(SESSION_EVERY + 0.5f);
+        test.Check("an unchanged session is not written again", () => File.GetLastWriteTimeUtc(SessionFile) == unchangedWrite);
+        test.Run(() => panel.Rename(panel.Tabs[1], "kept"));
+        test.WaitFor(() => File.ReadAllText(SessionFile).Contains("title: \"kept\""), SESSION_EVERY + 2);
+
         test.Run(() =>
         {
             foreach (TerminalTab tab in panel.Tabs.ToArray())

@@ -1,7 +1,10 @@
 using Key = Silk.NET.Input.Key;
+using System.Numerics;
 
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Drawing;
+using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
@@ -19,6 +22,8 @@ internal sealed partial class HexCodeEditing
     internal Button findCase = null!, findWord = null!, findRegex = null!, findExpand = null!;
     internal Label findCount = null!;
     internal StackPanel replaceRow = null!;
+    private FindBarLine findLine = null!, replaceLine = null!;
+    internal Button findPrevious = null!, findNext = null!, findClose = null!, replaceOne = null!, replaceAll = null!;
 
     // How it's looked for, and where the caret was when the bar was opened, which the match grows from
     internal UIFindOptions findOptions;
@@ -42,6 +47,17 @@ internal sealed partial class HexCodeEditing
         findExpand = made.Get<Button>("find_expand");
         findCount = made.Get<Label>("find_count");
         replaceRow = made.Get<StackPanel>("replace_row");
+        findLine = FindBarLine.Take(made.Get<StackPanel>("find_row"), 0);
+        replaceLine = FindBarLine.Take(replaceRow, 1);
+        replaceRow = replaceLine;
+        findPrevious = made.Get<Button>("find_previous");
+        findNext = made.Get<Button>("find_next");
+        findClose = made.Get<Button>("find_close");
+        replaceOne = made.Get<Button>("replace_one");
+        replaceAll = made.Get<Button>("replace_all");
+        findLine.CompactGroups = [[findExpand, findBox, findClose], [findCase, findWord, findRegex], [findCount], [findPrevious, findNext]];
+        findLine.BreakAfterFirstGroup = true;
+        replaceLine.CompactGroups = [[made.Get<UIComponent>("replace_gap"), replaceBox, replaceOne, replaceAll]];
         findBar.Visible = false;
 
         findBox.OnChanged = FindTyped;
@@ -263,11 +279,90 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     private void PlaceFindBar()
     {
+        if (codeScroll.Bounds.Width <= 0 || code.CodeBounds.Width <= 0)
+            return;
         float right = code.CodeBounds.Max.X - FIND_BAR_GAP;
-        float most = codeScroll.Bounds.Width - findBar.Bounds.Width - FIND_BAR_GAP;
-        float x = -Math.Clamp(codeScroll.Bounds.Max.X - right, FIND_BAR_GAP, MathF.Max(FIND_BAR_GAP, most));
+        float available = MathF.Max(28, right - codeScroll.Bounds.Min.X - FIND_BAR_GAP - 12);
+        findLine.AvailableWidth = replaceLine.AvailableWidth = available;
+        // Keep the same fields alive through reflow, including their focus, selection and IME state.
+        bool compact = available < FindBarLine.WideWidth;
+        findBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 52)) : 220, 26);
+        replaceBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 84)) : 220, 26);
+        // Leave the two arrows together on the options line when the number fits beside them.
+        float optionButtons = findCase.Size.X + findWord.Size.X + findRegex.Size.X + findPrevious.Size.X + findNext.Size.X + 10;
+        findCount.Size = new Vector2(MathF.Min(available, Math.Clamp(available - optionButtons, 64, 84)), 26);
+        float x = right - codeScroll.Bounds.Max.X;
         if (MathF.Abs(findBar.Position.X - x) > 0.5f)
             findBar.Position = findBar.Position with { X = x };
+    }
+
+    // Keep source order for keyboard traversal and wide layout. Compact visual groups keep dismissal
+    // beside the query and navigation paired. Reparenting and group arrays happen only at construction.
+    private sealed class FindBarLine : StackPanel
+    {
+        internal float AvailableWidth = 620;
+        internal const float WideWidth = 604;
+        internal UIComponent[][] CompactGroups = [];
+        internal bool BreakAfterFirstGroup;
+
+        internal static FindBarLine Take(StackPanel original, int index)
+        {
+            var line = new FindBarLine { Anchor = original.Anchor, Pivot = original.Pivot, Visible = original.Visible };
+            UIComponent parent = original.Parent!;
+            while (original.Children.Count > 0)
+                line.Add(original.Children[0]);
+            parent.Remove(original);
+            parent.Insert(index, line);
+            return line;
+        }
+
+        protected override Vector2 Measure(UISkin skin) => Layout(default, arrange: false);
+
+        protected override void Arrange(UIRect content) => Layout(content, arrange: true);
+
+        private Vector2 Layout(UIRect content, bool arrange)
+        {
+            float x = 0, y = 0, height = 0, width = 0;
+            if (AvailableWidth >= WideWidth)
+            {
+                foreach (UIComponent child in ChildSpan)
+                    Place(child);
+            }
+            else
+            {
+                for (int i = 0; i < CompactGroups.Length; i++)
+                {
+                    UIComponent[] group = CompactGroups[i];
+                    float groupWidth = -2;
+                    foreach (UIComponent child in group)
+                        if (child.Visible) groupWidth += child.DesiredSize.X + 2;
+                    if (x > 0 && ((BreakAfterFirstGroup && i == 1) || x + groupWidth > AvailableWidth))
+                        NextLine();
+                    foreach (UIComponent child in group)
+                        Place(child);
+                }
+            }
+            return new Vector2(width, y + height);
+
+            void NextLine()
+            {
+                y += height + 4;
+                x = height = 0;
+            }
+
+            void Place(UIComponent child)
+            {
+                if (!child.Visible) return;
+                Vector2 size = child.DesiredSize;
+                if (x > 0 && x + size.X > AvailableWidth)
+                    NextLine();
+                if (arrange)
+                    child.ArrangeTree(UIRect.FromCenter(new Vector2(content.Min.X + x + size.X / 2, content.Max.Y - y - size.Y / 2), size));
+                width = MathF.Max(width, x + size.X);
+                x += size.X + 2;
+                height = MathF.Max(height, size.Y);
+            }
+        }
     }
 
     private void UpdateFindCount()

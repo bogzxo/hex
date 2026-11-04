@@ -26,6 +26,9 @@ internal sealed partial class DuskScene : Scene
     // Hex's version, the two are one program now and Dusk said 0.3 in its title bar while the exe said 0.4.0
     public static readonly string VERSION = typeof(DuskScene).Assembly.GetName().Version?.ToString(3) ?? "?";
 
+    /// <summary>The version the way a person reads it, the number and what the release is called (2.8.0 thickboy).</summary>
+    public static string VersionLabel => Hex.Shell.HexVersion.Label;
+
     // How long after it comes up Dusk takes the garbage of starting out and gives the memory back
     private const float SETTLE_SECONDS = 3.0f;
     private float settleIn = SETTLE_SECONDS;

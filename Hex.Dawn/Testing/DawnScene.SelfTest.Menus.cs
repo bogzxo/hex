@@ -100,10 +100,13 @@ internal sealed partial class DawnScene
             foreach (MenuItem row in bar.Items.Where(item => item.Submenu is not null))
             {
                 string label = row.Label;
-                test.Run(() => { if (menu.OpenMenu == bar && row.Listed) menu.OpenSubmenuOf(label); });
-                test.Wait();
+                test.Hover(() => menu.OpenMenu == bar && row.Listed
+                    ? chrome.ToWorld(menu.ItemBounds(label).Center)
+                    : test.Pointer.Position);
+                test.Settle(0.25f);
                 test.Check($"menus ({where}): {bar.Title} > {label} opens inside the window, beside its item", () =>
-                    menu.OpenMenu != bar || !row.Listed || (BarListsInside() && menu.OpenListBounds.Count() == 2));
+                    !(bar.IsVisible?.Invoke() ?? true) || !row.Listed ||
+                    (menu.OpenMenu == bar && menu.OpenSubmenu == row.Submenu && BarListsInside() && menu.OpenListBounds.Count() == 2));
                 MenuShot(test, $"{where}_{bar.Title}_{label}", () => menu.OpenMenu == bar && row.Listed);
             }
 

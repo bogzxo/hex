@@ -231,14 +231,7 @@ internal sealed partial class DawnScene
 
         // Between the title bar with the menus on top and the status bar at the bottom
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
-        float leftWidth = treeScroll.Size.X;
-        float rightWidth = inspectorScroll.Size.X;
-        // A side sliding in or out takes as much of its room as is out, so the middle widens and narrows with it
-        float sides = activity.Bounds.Width
-            + (leftWidth + left.Padding.Total.X) * left.SlideAmount
-            + (rightWidth + right.Padding.Total.X) * right.SlideAmount;
-        // The middle's own padding is the room round its card's contents, inside it
-        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides - center.Padding.Total.X);
+        var (leftWidth, centerWidth, rightWidth) = ColumnWidths(screen.Width);
 
         // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part
         // given its height a column, a params array and a sum of it made garbage every tick
@@ -306,7 +299,13 @@ internal sealed partial class DawnScene
         // Narrow windows put those contextual controls on a second row instead of squeezing tabs away.
         bool stacked = centerWidth < 560.0f;
         tabRow.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+        if (nameBox.Visible)
+        {
+            float otherTools = WidthShowing(toolbar) - WidthShowing(nameBox);
+            nameBox.Size = nameBox.Size with { X = Math.Clamp(centerWidth - otherTools, 48.0f, 160.0f) };
+        }
         float tabRoom = MathF.Max(MIN_FLEXIBLE, centerWidth - (stacked ? 0.0f : WidthShowing(toolbar)));
+        docTabs.MaxTabWidth = MathF.Max(MIN_FLEXIBLE, MathF.Min(240.0f, tabRoom - allTabs.Size.X));
         bool overflow = docTabs.Tabs.Count > 1 && docTabs.TabsWidth > tabRoom;
         allTabs.Visible = overflow;
         docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, tabRoom - (overflow ? allTabs.Size.X : 0.0f)) };

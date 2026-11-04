@@ -9,11 +9,8 @@ internal static class HexModeSwitch
 {
     public static bool RestoreFocus(UICompositor compositor, UIComponent? previous)
     {
-        if (previous?.Module?.Compositor != compositor)
+        if (previous is null || previous.Module?.Compositor != compositor || !previous.IsShownInHierarchy || !previous.EnabledInHierarchy)
             return false;
-        for (UIComponent? at = previous; at is not null; at = at.Parent)
-            if (!at.Visible || !at.Enabled || at.IsOnHiddenLayer)
-                return false;
         compositor.Focus = previous;
         return true;
     }

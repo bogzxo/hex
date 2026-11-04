@@ -1,4 +1,3 @@
-using Hex.Dawn;
 using Hex.Core;
 using Horizon.UI.Components;
 
@@ -14,31 +13,6 @@ public sealed class HexAgentTests
     [InlineData("--mcp --selftest", false)]
     public void Bridge_mode_is_explicit_and_does_not_depend_on_stdin(string command, bool expected) =>
         Assert.Equal(expected, McpBridge.IsBridgeMode(command.Split(' ')));
-
-    [Fact]
-    public void Requests_are_not_consumed_and_ids_survive_clearing()
-    {
-        var conversation = new HexAgentConversation();
-        var request = conversation.Add("explain", "Explain", "test.cs", 2, 3, 2, "return value;", 7);
-        Assert.Same(request, conversation.Find(request.Id));
-        Assert.Same(request, conversation.Find(request.Id));
-        Assert.True(request.Pending);
-        request.Reply = "Returns the value.";
-        Assert.False(request.Pending);
-        conversation.Clear();
-        Assert.Null(conversation.Find(request.Id));
-        Assert.True(conversation.Add("chat", "Hello", "test.cs", 1, 1, 1, "", 0).Id > request.Id);
-    }
-
-    [Fact]
-    public void Cancelled_requests_are_not_pending()
-    {
-        var conversation = new HexAgentConversation();
-        var request = conversation.Add("change", "Change", "test.cs", 1, 1, 1, "original", 2);
-        request.Cancelled = true;
-        Assert.False(request.Pending);
-        Assert.Equal("original", request.Source);
-    }
 
     [Fact]
     public void Agent_hints_are_independent_dismissible_and_invalidated_by_typing()

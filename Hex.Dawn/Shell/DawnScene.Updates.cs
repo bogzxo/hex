@@ -34,7 +34,7 @@ internal sealed partial class DawnScene
                 Note(InstallText.Get("updates.current"));
                 return;
             }
-            UIDialog.Show(chrome, InstallText.Get("updates.title"), InstallText.Get("updates.available", ("version", UIRichText.Literal(release.Version))),
+            UIDialog.Show(chrome, InstallText.Get("updates.title"), InstallText.Get("updates.available", ("version", UIRichText.Literal(release.Shown))),
                 new DialogChoice(InstallText.Get("actions.install_update"), () => PrepareHexUpdate(release)),
                 new DialogChoice(InstallText.Get("actions.later")));
         }, seen: false, cancellable: true);

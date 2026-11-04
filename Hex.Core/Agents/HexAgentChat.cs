@@ -14,6 +14,8 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 {
     public HexAgentEntryKind Kind { get; } = kind;
     public string Text { get; set; } = text;
+    public string? AskedText { get; init; }
+    public string? ContextLocation { get; init; }
     public string? ToolId { get; init; }
     public string? ToolName { get; init; }
     public string? Input { get; init; }
@@ -88,7 +90,7 @@ internal sealed class HexAgentChat(int id, string agent)
     }
 
     /// <summary>A turn started with what somebody asked, the chat named by <paramref name="title"/> (what was asked) the first time.</summary>
-    public HexAgentEntry Ask(string prompt, string? title = null)
+    public HexAgentEntry Ask(string prompt, string? title = null, string? askedText = null, string? contextLocation = null)
     {
         if (Title.Length == 0)
         {
@@ -99,7 +101,7 @@ internal sealed class HexAgentChat(int id, string agent)
         Running = true;
         turnStarted = Environment.TickCount64;
         TurnSeconds = 0;
-        return Add(new HexAgentEntry(HexAgentEntryKind.User, prompt));
+        return Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation });
     }
 
     /// <summary>What the agent said, a row of its own.</summary>

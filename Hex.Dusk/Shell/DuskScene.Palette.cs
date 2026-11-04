@@ -32,7 +32,7 @@ internal sealed partial class DuskScene
                 continue;
 
             string name = command.Name;
-            choices.Add(new UIChoice(command.Title, () => Run(name)) { Keys = command.Key, Icon = "terminal" });
+            choices.Add(new UIChoice(command.Title, () => Run(name)) { Keys = command.Key, Icon = CommandIcon(command.Name) });
         }
 
         // Every look there is, Hex's and the user's, a few letters away like everything else (see DuskScene.Looks)
@@ -45,7 +45,40 @@ internal sealed partial class DuskScene
         // The picture behind the terminals laid out with the mouse, see DuskScene.BackdropArrange
         choices.Add(UIChoice.Of(HexText.Get("settings_palette.arrange_backdrop"), ArrangeBackdrop) with { Icon = "layout" });
 
-        ChooseFrom("Command palette", "Everything Dusk can do, a few letters narrow it down", choices, RecentCommands);
+        ChooseFrom(HexText.Get("dusk_chrome.command_palette"), HexText.Get("dusk_chrome.palette_hint"), choices, RecentCommands);
+    }
+
+    // Menu-wired commands share their glyph with the menu. Names, rather than translated titles, identify the
+    // remaining built-ins; unknown extension actions still get a recognizable command glyph.
+    private string CommandIcon(string name)
+    {
+        foreach (var (item, command) in wiredItems)
+            if (string.Equals(command, name, StringComparison.OrdinalIgnoreCase))
+                return item.Icon;
+
+        return name switch
+        {
+            "next_tab" or "move_tab_right" or "next_command" => "arrow-right",
+            "previous_tab" or "move_tab_left" or "previous_command" => "arrow-left",
+            "rename_pane" => "edit",
+            "zoom_pane" or "quake" => "screen-normal",
+            "settings" or "tui_settings" => "settings-gear",
+            "dawn_mode" or "tui_repl" => "code",
+            "copy" or "copy_output" => "copy",
+            "paste" => "paste",
+            "clear" or "clear_history" => "trash",
+            "history_toggle" or "list_commands" => "history",
+            "find" or "find_next" or "find_previous" or "history_search" => "search",
+            "rerun" => "play",
+            "tui_files" => "folder",
+            "tui_help" => "info",
+            _ when name.StartsWith("new_tab_", StringComparison.Ordinal) => "add",
+            _ when name.StartsWith("split_right_", StringComparison.Ordinal) || name == "run_in_split" => "split-horizontal",
+            _ when name.StartsWith("theme_", StringComparison.Ordinal) => "color-mode",
+            _ when name.StartsWith("swap_pane_", StringComparison.Ordinal) => "layout",
+            _ when name.StartsWith("scroll_", StringComparison.Ordinal) => "list-selection",
+            _ => "extensions"
+        };
     }
 
     /// <summary>Whether a command is one of the core plugin's tab_1, tab_2 and so on, which pick a tab by its number.</summary>

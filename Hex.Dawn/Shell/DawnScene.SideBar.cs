@@ -224,6 +224,8 @@ internal sealed partial class DawnScene
         if (sideShown == (side, tools))
             return;
 
+        // A view picked over another settles in, the first one the side bar is set up with is simply there
+        bool switched = sideShown is { } before && before.Side != side;
         sideShown = (side, tools);
         bool design = tools && side == HexSide.Design;
 
@@ -245,5 +247,7 @@ internal sealed partial class DawnScene
         if (refreshButton is not null)
             refreshButton.Visible = side == HexSide.Explorer;
         treeScroll.Offset = 0;
+        if (switched)
+            ArriveSide();
     }
 }

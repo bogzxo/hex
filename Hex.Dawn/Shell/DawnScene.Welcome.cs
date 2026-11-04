@@ -1,5 +1,7 @@
+using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Skinning;
 using System.Numerics;
 
 namespace Hex.Dawn;
@@ -17,22 +19,26 @@ internal sealed partial class DawnScene
     private Panel? welcome;
     private readonly List<WelcomeSizing> welcomeSizes = [];
 
-    // Components are found once; resize only changes geometry when the available width changes.
+    // The two Welcome pages keep their own column widths, including while the other one is shown.
     private sealed class WelcomeSizing(Panel page, UILayout made)
     {
         private readonly StackPanel content = made.Get<StackPanel>("page"), columns = made.Get<StackPanel>("columns"),
             start = made.Get<StackPanel>("start"), recent = made.Get<StackPanel>("recent_column");
         private readonly Label subtitle = made.Get<Label>("subtitle");
+        public readonly StackPanel List = made.Get<StackPanel>("recent");
+        public void Invalidate() => width = 0;
         private float width;
+        private UISkin? measuredWith;
 
-        public void Fit()
+        public void Fit(UISkin? skin)
         {
             if (!page.Visible || page.Bounds.Width <= 0.0f)
                 return;
             float wanted = Math.Clamp(page.Bounds.Width - 64.0f, 160.0f, 640.0f);
-            if (wanted == width)
+            if (wanted == width && measuredWith == skin)
                 return;
             width = wanted;
+            measuredWith = skin;
             bool stacked = width < 560.0f;
             columns.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
             content.Size = content.Size with { X = width };
@@ -41,11 +47,27 @@ internal sealed partial class DawnScene
             float column = stacked ? width : (width - columns.Spacing) * 0.5f;
             start.Size = start.Size with { X = column };
             recent.Size = recent.Size with { X = column };
-            foreach (UIComponent child in recent.Children)
-                if (child is StackPanel list)
-                    foreach (UIComponent row in list.Children)
-                        if (row is Label hint)
-                            hint.Size = hint.Size with { X = column };
+            foreach (UIComponent row in List.Children)
+            {
+                if (row is Label hint)
+                    hint.Size = hint.Size with { X = column };
+                else if (row is Button link)
+                    FitFile(link, column, skin);
+            }
+        }
+
+        // A long name loses its middle first, the full path still there on hover.
+        private static void FitFile(Button link, float column, UISkin? skin)
+        {
+            link.Size = new Vector2(column, 30);
+            link.Align = Origin.Left;
+            string name = Path.GetFileName(link.Tooltip);
+            int length = name.Length;
+            if (skin is not null)
+                while (length > 4 && skin.Font.Measure($"$({link.Icon}) {HexText.MiddleOf(name, length)}", link.LabelScale).X
+                    + skin.ButtonPadding.Total.X > column)
+                    length--;
+            link.Label = HexText.MiddleOf(name, length);
         }
     }
 
@@ -104,7 +126,7 @@ internal sealed partial class DawnScene
             codeScroll.Add(plainPage);
         }
         foreach (WelcomeSizing sizing in welcomeSizes)
-            sizing.Fit();
+            sizing.Fit(compositor.Skin);
     }
 
     /// <summary>The welcome made in a panel, the canvas of the empty layout or the code panel for the plain one.</summary>
@@ -133,29 +155,37 @@ internal sealed partial class DawnScene
         made.Get<Button>("keys").OnPressed = OpenKeysWindow;
         made.Get<Button>("language").OnPressed = ShowLanguageHelp;
         made.Get<Button>("changes").OnPressed = ShowChangelog;
-        made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Version));
+        made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Label));
 
-        var list = made.Get<StackPanel>("recent");
-        var rows = layout.Populate(list, Math.Min(recent.Count, 10));
+        var sizing = new WelcomeSizing(page, made);
+        welcomeSizes.Add(sizing);
+        FillWelcomeRecent(sizing);
+        return page;
+    }
+
+    // Both pages live for the session, including while hidden behind a document or the other view.
+    private void FillWelcomeRecent(WelcomeSizing sizing)
+    {
+        StackPanel list = sizing.List;
+        foreach (UIComponent child in list.Children.ToArray())
+            list.Remove(child);
+        var rows = layout.Populate(list, recent.Count);
         for (int i = 0; i < rows.Count; i++)
         {
             string path = recent[i];
             var link = rows[i].Get<Button>("link");
-            link.Label = HexText.MiddleOf(Path.GetFileName(path), 32);
+            link.Label = Path.GetFileName(path);
             link.Icon = HexExplorer.FileIcon(path);
             link.Tooltip = path;
             link.OnPressed = () => Open(path);
         }
-
         if (recent.Count == 0)
         {
             Label hint = Hint(list, Said("welcome.no_recent"));
             hint.Wrap = true;
-            hint.Size = new Vector2(260.0f, 0.0f);
+            hint.Size = new Vector2(260, 0);
         }
-
-        welcomeSizes.Add(new WelcomeSizing(page, made));
-        return page;
+        sizing.Invalidate();
     }
 
     /// <summary>

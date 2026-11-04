@@ -21,17 +21,15 @@ internal sealed record HexRunTarget(string Kind, string Path, string Name)
             || values.GetValueOrDefault("path") is not StringValue { Value.Length: > 0 } path)
             return null;
 
-        string full = System.IO.Path.GetFullPath(System.IO.Path.IsPathRooted(path.Value) ? path.Value : System.IO.Path.Combine(relativeTo, path.Value));
+        string full = WorkspacePaths.Read(path.Value, relativeTo);
         return new HexRunTarget(kind.Value, full, values.GetValueOrDefault("name") is StringValue name ? name.Value : string.Empty);
     }
 
     /// <summary>As a workspace file says it, the path relative to a folder when it's on the same drive.</summary>
     public ObjectValue Said(string? relativeTo)
     {
-        string path = relativeTo is not null && string.Equals(System.IO.Path.GetPathRoot(Path), System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(relativeTo)), PlatformPaths.Comparison)
-            ? System.IO.Path.GetRelativePath(relativeTo, Path)
-            : Path;
-        return Natives.Object(("kind", new StringValue(Kind)), ("path", new StringValue(path.Replace('\\', '/'))), ("name", new StringValue(Name)));
+        string path = WorkspacePaths.Write(Path, relativeTo);
+        return Natives.Object(("kind", new StringValue(Kind)), ("path", new StringValue(path)), ("name", new StringValue(Name)));
     }
 
     /// <summary>Whether two say the same, the paths compared the way the system does.</summary>

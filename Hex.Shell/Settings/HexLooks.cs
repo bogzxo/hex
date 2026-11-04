@@ -102,7 +102,7 @@ internal static partial class HexLooks
         ["effect_ripples"] = Values.Bool(false),
         ["effect_trail"] = Values.Bool(false),
         ["effect_motion"] = Values.Bool(false),
-        ["ui_animation"] = new NumberValue(0.0f),
+        ["ui_animation"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f)
     }, BuiltIn: true);
 

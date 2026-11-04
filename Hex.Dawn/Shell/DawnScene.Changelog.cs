@@ -19,7 +19,7 @@ internal sealed partial class DawnScene
     private void ShowChangelog()
     {
         ReadStrings();
-        string header = Said("changelog.header", ("version", HexAbout.Version));
+        string header = Said("changelog.header", ("version", HexAbout.Label));
         string history = Said("changelog.page");
 
         if (options.SelfTest)

@@ -8,6 +8,17 @@ namespace Hex.Tests;
 /// </summary>
 public sealed class ProjectFileEditsTests
 {
+    [Theory]
+    [InlineData(".env", "env")]
+    [InlineData("../shared/a.txt", "shared/a.txt")]
+    public void EditingOneFileLeavesSimilarlyNamedItemsAlone(string existing, string selected)
+    {
+        string project = $"<Project><ItemGroup><None Update='{existing}' CopyToOutputDirectory='Always' /></ItemGroup></Project>";
+        string changed = ProjectFileEdits.SetMetadata(project, "None", selected, ProjectFileEdits.COPY_TO_OUTPUT, "PreserveNewest");
+        Assert.Contains($"Update='{existing}' CopyToOutputDirectory='Always'", changed);
+        Assert.Contains($"Update=\"{selected}\"", changed);
+    }
+
     // Always \n, a raw string takes the line ends of the file it's in, and a Windows checkout made them \r\n and every
     // test that looks for \n failed on CI
     private static readonly string PLAIN = """

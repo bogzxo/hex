@@ -6,8 +6,13 @@
     and keeps its own version, hence going by the project's name.
   -->
   <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
-    <Version>2.7.5</Version>
+    <Version>2.8.0</Version>
+    <!-- What this release is called, said after the number wherever a person reads it (2.8.0 thickboy), empty for none -->
+    <VersionName>thickboy</VersionName>
   </PropertyGroup>
+  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('Hex')) and '$(VersionName)' != ''">
+    <AssemblyMetadata Include="VersionName" Value="$(VersionName)" />
+  </ItemGroup>
 
   <!--
     MSBuild stops at the first Directory.Build.props it finds, so the workspace's one above (the shared engine

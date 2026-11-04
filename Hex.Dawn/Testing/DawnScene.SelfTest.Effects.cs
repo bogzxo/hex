@@ -111,6 +111,39 @@ internal sealed partial class DawnScene
             ApplyEffects();
         });
 
+        float arrivalStart = 0, arrivalLast = 0;
+        bool progressed = false, reversed = false;
+        HexDocument? previous = null;
+        test.Run(() =>
+        {
+            previous = document;
+            settings.UiAnimation = 0.5f;
+            ApplyEffects();
+            string next = Path.Combine(testFolder, "switch-tab.txt");
+            File.WriteAllText(next, "Second editor");
+            Open(next);
+            arrivalStart = arrivalLast = code.Opacity;
+        });
+        test.WaitFor(() =>
+        {
+            float opacity = code.Opacity;
+            progressed |= opacity > arrivalStart && opacity < 1;
+            reversed |= opacity < arrivalLast;
+            arrivalLast = opacity;
+            return opacity >= 1;
+        }, 2);
+        test.Check("effects: tab content stays readable and brightens monotonically", () =>
+            arrivalStart >= 0.8f && arrivalStart < 1 && progressed && !reversed && code.Opacity == 1);
+        test.Run(() =>
+        {
+            CloseNow();
+            Show(previous!);
+            settings.UiAnimation = 0;
+            ApplyEffects();
+        });
+        test.Wait();
+        test.Check("effects: disabling motion settles a returning editor immediately", () => code.Opacity == 1);
+
         test.Run(() =>
         {
             settings.Effects = was;

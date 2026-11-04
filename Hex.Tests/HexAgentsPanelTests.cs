@@ -123,6 +123,24 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Equal("abcdefg...", DawnScene.OneLine("abcdefghijklmnop", 10));
     }
 
+    [Theory]
+    [InlineData("{\"cmd\":\"dotnet build\",\"yield_time_ms\":1000}", "dotnet build")]
+    [InlineData("{\"path\":\"src/main.cs\"}", "src/main.cs")]
+    [InlineData("{\"query\":\"StartMcp\"}", "StartMcp")]
+    [InlineData("dotnet test --no-build", "dotnet test --no-build")]
+    [InlineData("{ partial", "{ partial")]
+    [InlineData("{\"recursive\":true}", "recursive")]
+    [InlineData(null, "")]
+    public void Tool_previews_show_useful_arguments_and_tolerate_raw_input(string? input, string expected) =>
+        Assert.Equal(expected, DawnScene.ToolPreview(input));
+
+    [Fact]
+    public void Tool_labels_fit_even_when_the_panel_is_narrow()
+    {
+        Assert.Equal("..", DawnScene.OneLine("long input", 2));
+        Assert.Equal(".", DawnScene.OneLine("long input", 0));
+    }
+
     /// <summary>A plugin of the catalog loaded against a hex with what an agent system uses, and the run it said.</summary>
     private (HIDLRuntime Runtime, ObjectValue Hex, ObjectValue Run) Load(string id, Dictionary<string, IRuntimeValue>? settings = null)
     {

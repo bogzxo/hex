@@ -126,6 +126,9 @@ internal sealed partial class DawnScene
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
+        ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
+        ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
+        ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>

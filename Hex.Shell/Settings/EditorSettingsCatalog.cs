@@ -218,7 +218,7 @@ public static class EditorSettingsCatalog
     /// <summary>The number a setting comes as, 0 for one that isn't a number.</summary>
     public static float UsualNumber(string key) => Usual.GetValueOrDefault(key) is NumberValue number ? number.Value : 0.0f;
 
-    /// <summary>New-install and reset values. Flat surfaces and no decorative motion.</summary>
+    /// <summary>New-install and reset values. Flat surfaces and no decorative motion, the interface moving at its usual speed.</summary>
     public static readonly IReadOnlyDictionary<string, IRuntimeValue> Usual = new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
     {
         ["effects"] = new StringValue("none"),
@@ -233,7 +233,7 @@ public static class EditorSettingsCatalog
         ["glass_clarity"] = new NumberValue(HexGlass.CLARITY),
         ["glass_rim"] = new NumberValue(HexGlass.RIM),
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
-        ["ui_animation"] = new NumberValue(0.0f),
+        ["ui_animation"] = new NumberValue(1.0f),
         ["scroll_speed"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f),
         ["backdrop"] = Values.Bool(false),

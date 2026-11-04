@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
         if (to == agentsRecall)
             return false;
 
+        agentDraftContext = null;
         agentsRecall = to;
         agentsInput.Text = to == agentsAsked.Count ? string.Empty : agentsAsked[to];
         return true;
@@ -96,54 +97,46 @@ internal sealed partial class DawnScene
         HexExtension? extension = agent is not null && extensions.AgentRuns.TryGetValue(agent, out var run) ? run.Extension : null;
         string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
 
-        // Narrow (a side bar usually is), only the model keeps its words, the file and the rest are their icons with what
-        // they are on hover and the file's chip lit while it goes in front of what's asked
-        float width = treeScroll.Size.X;
-        bool roomy = width >= 460.0f, some = width >= 420.0f;
-        string said = $"{agent}|{agentWithFile}|{file}|{roomy}{some}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))))}";
-        if (said == agentsOptionsDrawn)
-            return;
+        bool compact = agentsCompose.Bounds.Width < 300;
+        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))))}";
+        if (said == agentsOptionsDrawn) return;
         agentsOptionsDrawn = said;
-
         Empty(agentsOptions);
-
-        // The file on screen, lit when it goes in front of what's asked
-        agentsOptions.Add(Picker(!some ? string.Empty : file.Length > 0 ? file : Said("agents_panel.no_file"), "file-code", agentWithFile && file.Length > 0,
-            $"{Said("agents_panel.context")}{(file.Length > 0 ? $" ({file})" : string.Empty)}", () =>
-        {
-            agentWithFile = !agentWithFile;
-            agentsOptionsDrawn = string.Empty;
-        }));
-
-        if (extension is null)
-            return;
-
-        bool first = true;
-        foreach (AgentOption option in options)
-        {
-            bool words = first || roomy;
-            first = false;
-            string now = Values.Text(extensions.SettingOf(extension, option.Key));
-            string label = option.Choices.FirstOrDefault(choice => choice.Value == now).Label ?? (now.Length > 0 ? now : option.Title);
-            Button picker = agentsOptions.Add(Picker(words ? $"{label} $(chevron-down)" : string.Empty, option.Icon, false, $"{option.Title}, {label}", () => { }));
-            picker.OnPressed = () =>
+        bool captured = agentDraftContext is not null;
+        string attached = agentDraftContext is { } snapshot ? Path.GetFileName(snapshot.Path) : string.Empty;
+        if (attached.Length > 12) attached = attached[..10] + "…";
+        if (agentDraftContext is { } position) attached += $":{position.Line}";
+        Button context = agentsOptions.Add(Picker(captured && !compact ? attached : string.Empty, captured ? "close" : "file-code", captured || agentWithFile && file.Length > 0,
+            captured ? $"{AgentDraftCaption()} · {Said("agents_panel.remove_context")}" : $"{Said("agents_panel.context")}{(file.Length > 0 ? $" ({file})" : string.Empty)}", () =>
             {
-                var menu = new Menu("agent option");
+                if (captured) agentDraftContext = null;
+                else agentWithFile = !agentWithFile;
+                agentsOptionsDrawn = string.Empty;
+            }));
+        context.Size = new System.Numerics.Vector2(captured && !compact ? 120 : 32, 32);
+        context.Enabled = captured || file.Length > 0;
+        if (extension is null || options.Count == 0) return;
+        Button settings = agentsOptions.Add(Picker(compact ? string.Empty : Said("agents_panel.options"), "settings-gear", false,
+            Said("agents_panel.options"), () => { }));
+        settings.Size = new System.Numerics.Vector2(compact ? 32 : 100, 32);
+        settings.OnPressed = () =>
+        {
+            var menu = new Menu("agent options");
+            foreach (AgentOption option in options)
+            {
+                Menu choices = menu.AddMenu(option.Title, option.Icon);
                 foreach (var (value, named) in option.Choices)
                 {
                     string chosen = value;
-                    menu.Add(named, () =>
+                    choices.Add(named, () =>
                     {
                         extensions.SetSetting(extension, option.Key, new StringValue(chosen), tell: true);
                         agentsOptionsDrawn = string.Empty;
-                        Say(Said("agents_panel.chose", ("what", option.Title), ("choice", named)));
                     }).IsChecked = () => Values.Text(extensions.SettingOf(extension, option.Key)) == chosen;
                 }
-
-                ContextMenu.Show(chrome, picker.Bounds.PointAt(Origin.TopLeft), menu);
-            };
-        }
-
+            }
+            ContextMenu.Show(chrome, settings.Bounds.PointAt(Origin.TopLeft), menu);
+        };
     }
 
     private static Button Picker(string label, string icon, bool selected, string tooltip, Action pressed) => new()
@@ -185,7 +178,7 @@ internal sealed partial class DawnScene
             || !extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
             return;
 
-        StartAgent(chat, run.Extension, run.Run, asked.Text, chat.Title);
+        StartAgent(chat, run.Extension, run.Run, asked.Text, asked.AskedText ?? chat.Title, asked.ContextLocation);
     }
 
     /// <summary>What the agent said last in the chat on screen, on the clipboard.</summary>

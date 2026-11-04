@@ -1,4 +1,29 @@
-# Hex 2.7.5
+# Hex 2.8.0 thickboy
+
+Hex moves a little now, the way something you can touch does. Windows land rather than appear, the side bar's views
+and the panel's pages settle in, notifications slide up out of the corner and a file switched to fades its code up.
+All of it is small and quick, follows Interface animation (Appearance, Motion) and is gone entirely at 0.
+
+## tactile
+
+- the settings, the keys, About and every other window pop in from a touch smaller and sink away when they're closed,
+  Escape included, and the dim behind a modal one fades out with it
+- a window opened again while it's still going comes straight back rather than opening a second one
+- the side bar fades as it slides in and out, and a view picked from the activity bar drops into place row by row
+- the panel's pages (Problems, Output, Terminal) and every other row of tabs bring the page in from the side it was picked on
+- notifications come in from the right instead of popping up whole
+- switching tabs fades the file's code up from faint
+- dialogs, menus, dropdowns, completions and tooltips go at the speed Interface animation says, they ignored it before
+- scrolling past the top or the bottom of the code, a list, a tree or a table gives a little and springs back, the
+  way it does on a phone, and what's pulled past stays inside of its box
+- the setup and Check for Updates say what a release is called as well as its number
+
+## fixed
+
+- clicking a reference count above a line in a C# file opens its menu without selecting the line under it
+- jumping to a reference in another file keeps the line you land on in place when that file's reference counts load
+
+# From 2.7.5
 
 The UI moves the way it should now. Scrolling stays on the screen's pixels instead of warbling, nothing jumps,
 morphs or slides into its neighbour between frames, a dragged window keeps up with the mouse, and the plots and

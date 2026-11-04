@@ -10,10 +10,6 @@ internal sealed partial class HexDebugging
     // The expressions watched, in the order they were added, kept for every session while Hex runs
     private readonly List<string> watches = [];
 
-    // The rows of the watches for the stop and the frame they were asked for, null while they're coming
-    private List<UITreeItem>? watchesShown;
-    private (int Stop, int Frame) watchesFor = (-1, -1);
-
     // How many times it's stopped, what a data tip or a watch belongs to
     private int stops;
 
@@ -36,7 +32,7 @@ internal sealed partial class HexDebugging
                     return;
 
                 watches.Add(expression);
-                watchesShown = null;
+                variables.ForgetWatches();
                 context.Panels.ShowSide(HexSide.Debug);
                 context.Panels.RefreshSide(HexSide.Debug);
             });
@@ -45,7 +41,7 @@ internal sealed partial class HexDebugging
     private void RemoveWatch(string expression)
     {
         watches.Remove(expression);
-        watchesShown = null;
+        variables.ForgetWatches();
         context.Panels.RefreshSide(HexSide.Debug);
     }
 
@@ -85,38 +81,6 @@ internal sealed partial class HexDebugging
             });
     }
 
-    // The watches' rows, each evaluated in the frame looked at off the editor's thread, handed back
-    private void AskWatches(int frameId, int frameIndex)
-    {
-        if (debugging is not { } session)
-            return;
-
-        watchesFor = (stops, frameIndex);
-        watchesShown = null;
-        string[] asked = [.. watches];
-        int stop = stops;
-        _ = Task.Run(async () =>
-        {
-            var rows = new List<UITreeItem>();
-            foreach (string expression in asked)
-            {
-                DebugVariable? value = await session.TryEvaluate(expression, frameId);
-                UITreeItem row = value is { } said
-                    ? VariableItem(session, said)
-                    : new UITreeItem($"{expression} = ?", "symbol-variable") { Color = context.Panels.Dim, Detail = context.Strings.Said("debugging.not_here") };
-                rows.Add(row);
-            }
-
-            debugWork.Enqueue(() =>
-            {
-                if (watchesFor != (stop, frameIndex))
-                    return;
-                watchesShown = rows;
-                context.Panels.RefreshSide(HexSide.Debug);
-            });
-        });
-    }
-
     /// <summary>The Watch section of the Debug side, what each expression came to while it's stopped, the expressions otherwise.</summary>
     private UITreeItem WatchSection()
     {
@@ -129,10 +93,12 @@ internal sealed partial class HexDebugging
 
         if (DebugStopped && stoppedFrames.Count > 0)
         {
-            if (watchesShown is null || watchesFor != (stops, stoppedFrame))
+            DebugSession session = debugging!;
+            List<UITreeItem>? watchesShown = variables.Watches(session, stoppedFrames[stoppedFrame].Id, watches,
+                (expression, frame) => session.TryEvaluate(expression, frame), session.Variables);
+            if (watchesShown is null)
             {
                 section.Children.Add(NoteItem(context.Strings.Said("debugging.asking")));
-                AskWatches(stoppedFrames[stoppedFrame].Id, stoppedFrame);
                 return section;
             }
 

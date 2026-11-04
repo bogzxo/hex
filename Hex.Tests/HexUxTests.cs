@@ -1,6 +1,8 @@
 using Hex.Core;
 using Hex.Shell;
+using Horizon.Engine;
 using Horizon.HIDL.Runtime;
+using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Tests;
@@ -28,20 +30,20 @@ public class HexUxTests
     }
 
     [Fact]
-    public void New_settings_match_the_motion_free_flat_look_and_reset_values()
+    public void New_settings_match_the_flat_look_and_reset_values()
     {
         var settings = new HexSettings(null);
         Assert.Equal(HexLooks.FLAT, HexLooks.Current(settings, "")?.Name);
         Assert.False(settings.EffectGlass);
         Assert.False(settings.EffectMotion);
-        Assert.Equal(0, settings.UiAnimation);
+        Assert.Equal(1, settings.UiAnimation);
         Assert.Equal(0, settings.CaretGlide);
         foreach (string key in HexLooks.Flat.Values.Keys)
             Assert.True(SettingValues.Same(HexLooks.Get(settings, key, ""), EditorSettingsCatalog.Usual.GetValueOrDefault(key)), key);
     }
 
     [Fact]
-    public void Flat_clears_effects_and_motion_after_an_animated_look()
+    public void Flat_clears_effects_and_caret_glide_after_an_animated_look()
     {
         var settings = new HexSettings(null);
         HexLooks.Apply(HexLooks.Fluid, settings);
@@ -49,7 +51,7 @@ public class HexUxTests
         HexLooks.Apply(HexLooks.Flat, settings);
         Assert.Equal(HexLooks.FLAT, HexLooks.Current(settings, "")?.Name);
         Assert.False(settings.EffectSparks || settings.EffectTrail || settings.EffectRipples || settings.EffectCaretGlow);
-        Assert.Equal(0, settings.UiAnimation);
+        Assert.Equal(1, settings.UiAnimation);
         Assert.Equal(0, settings.CaretGlide);
     }
 
@@ -93,5 +95,25 @@ public class HexUxTests
         Assert.False(destination.Selected);
         destination.OnPressed!();
         Assert.Equal(1, switched);
+    }
+
+    [Fact]
+    public void Returning_from_a_mode_does_not_focus_a_control_on_an_inactive_tab()
+    {
+        var compositor = new UICompositor(new Camera2D(new System.Numerics.Vector2(800, 600)));
+        UIModule module = compositor.CreateModule();
+        var tabs = module.AddComponent(new TabPanel { Tabs = ["First", "Second"] });
+        TextBox first = tabs.Add(new TextBox());
+        tabs.Add(new TextBox());
+        tabs.Selected = 1;
+
+        Assert.False(HexModeSwitch.RestoreFocus(compositor, first));
+        Assert.Null(compositor.Focus);
+
+        tabs.Selected = 0;
+        Assert.True(HexModeSwitch.RestoreFocus(compositor, first));
+        Assert.Same(first, compositor.Focus);
+
+        compositor.RemoveModule(module);
     }
 }

@@ -87,6 +87,8 @@ internal sealed partial class DawnScene
 
         // Its editor is the one in the code panel (or one of the two side by side), the find bar stays over whichever it is
         PlaceEditors();
+        if (was is not null && was != shown)
+            ArriveCode(shown);
 
         ApplyView();
         FoldValuesFor(shown);
@@ -141,7 +143,17 @@ internal sealed partial class DawnScene
         // A file of code that isn't a layout (data, a language, a skin), or any other text, is edited as the text it is.
         // One with nothing in it but bytes is asked about first, opened anyway it's what it says as text, its nothings
         // shown as the sign for one, and saved that way
-        string source = File.ReadAllText(path);
+        string source;
+        try
+        {
+            source = File.ReadAllText(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Say(Said("documents.file_not_read", ("name", Path.GetFileName(path)), ("reason", e.Message)), error: true);
+            return false;
+        }
+
         if (source.Contains('\0'))
         {
             string name = Path.GetFileName(path);

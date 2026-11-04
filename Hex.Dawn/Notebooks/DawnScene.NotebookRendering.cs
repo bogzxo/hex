@@ -190,7 +190,9 @@ internal sealed partial class DawnScene
                         if (picture.Texture is { } old) replaced.Add(old);
                         picture.Texture = texture;
                         picture.Natural = natural;
-                        picture.RenderStatus!.Visible = false;
+                        // A cached picture can be rerendered at a new density without a placeholder label.
+                        if (picture.RenderStatus is { } status)
+                            status.Visible = false;
                     }
                     foreach (var old in replaced) FreeOutputPicture(old);
                     FreeOutputPicture(texture);
@@ -199,11 +201,16 @@ internal sealed partial class DawnScene
                 {
                     foreach (var picture in job.Waiting)
                     {
-                        picture.RenderStatus!.Text = string.IsNullOrWhiteSpace(picture.RenderFallback)
-                            ? "Cannot render output. " + error + "\n" + NotebookFile.Text(job.Data) : picture.RenderFallback;
                         picture.Tooltip = error + "\n" + NotebookFile.Text(job.Data);
-                        picture.Natural = new Vector2(600, 60);
-                        picture.RenderStatus.Size = new Vector2(592, 60);
+                        // A cached picture still has its old texture if the higher-density render fails. Only the
+                        // uncached placeholder has a status label to replace with the readable fallback.
+                        if (picture.RenderStatus is { } status)
+                        {
+                            status.Text = string.IsNullOrWhiteSpace(picture.RenderFallback)
+                                ? "Cannot render output. " + error + "\n" + NotebookFile.Text(job.Data) : picture.RenderFallback;
+                            picture.Natural = new Vector2(600, 60);
+                            status.Size = new Vector2(592, 60);
+                        }
                     }
                 }
             }

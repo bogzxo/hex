@@ -12,10 +12,20 @@ public sealed class InstallationTests : IDisposable
     public InstallationTests() => Directory.CreateDirectory(home);
     public void Dispose() => Directory.Delete(home, true);
 
-    private static string Release(string digest, string asset = "Hex-win-x64.zip", string tag = "v2.4.0", bool preview = false, string host = "github.com") => $$"""
-        {"tag_name":"{{tag}}","draft":false,"prerelease":{{preview.ToString().ToLowerInvariant()}},"assets":[
+    private static string Release(string digest, string asset = "Hex-win-x64.zip", string tag = "v2.4.0", bool preview = false, string host = "github.com", string title = "Hex v2.4.0") => $$"""
+        {"tag_name":"{{tag}}","name":"{{title}}","draft":false,"prerelease":{{preview.ToString().ToLowerInvariant()}},"assets":[
           {"name":"{{asset}}","browser_download_url":"https://{{host}}/bogzxo/hex/releases/download/{{tag}}/{{asset}}","size":3,"digest":"{{digest}}"}]}
         """;
+
+    [Theory]
+    [InlineData("Hex 2.8.0 thickboy", "2.8.0 thickboy")]
+    [InlineData("Hex v2.8.0", "2.8.0")]
+    [InlineData("Something else entirely", "2.8.0")]
+    public void ReadsWhatTheReleaseIsCalled(string title, string shown)
+    {
+        var release = ReleaseClient.Parse(Release("sha256:" + new string('a', 64), tag: "v2.8.0", title: title), "win-x64");
+        Assert.Equal(shown, release.Shown);
+    }
 
     [Theory]
     [InlineData("win-x64")][InlineData("win-arm64")][InlineData("linux-x64")][InlineData("linux-arm64")][InlineData("osx-x64")][InlineData("osx-arm64")]

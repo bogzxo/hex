@@ -44,23 +44,13 @@ opens a window; it reports a connection error on stderr if no matching server is
 connections are supported. The status count says MCP connections: three chats are three connections, not necessarily
 three independent agents. Tool traffic stays on stdout and bridge diagnostics stay on stderr.
 
-## Asking the connected agent
+## Asking about code in Hex
 
-Right-click a line or selection and choose **Explain with Agent** or **Change with Agent...**. Change asks what you
-want done. **View: Agent** opens the conversation window; type a message and press Enter or Send to continue it.
-The window keeps requests and replies during this editor session. Cancel stops pending requests; Clear removes the
-conversation. A connected MCP client is required to send. Pending requests survive a disconnect, but not closing Hex.
+Open **Agents** from the activity bar to start a chat with a provider. **Explain with Agent** and **Change with Agent**
+prepare a draft from the selected code or the line at the caret. Review the draft and send it to the provider from
+the sidebar. Use the history button to revisit chats during the editor session.
 
-The host must arrange for its agent to call `hex_agent_requests`, before and after work or while following the
-conversation. MCP server tools alone cannot wake a sleeping host agent. The window explicitly shows requests as
-waiting until answered; connecting a client does not imply that it is listening to the inbox. This does not install
-a separate model provider or send messages to another Codex chat.
-
-`hex_agent_requests` returns ids, request kinds, user prompts, file paths, 1-based positions, selected whole lines and
-the editor version. Reading does not consume a request. Answer it with `hex_agent_reply(request_id, text)`.
-For a pending change request, `hex_agent_edit(request_id, text, message)` replaces only the captured lines as one undo
-step and leaves the file unsaved. Changed, closed, read-only, cancelled or completed targets are rejected. Request a
-fresh change when the source has moved. Explanations and ordinary chat cannot authorize that edit tool.
+## Editor tools
 
 `hex_agent_hint(id, text, line, column?, path?, version?)` displays an annotation anchored to the specified position in
 an open editor. The source position is marked, with the hint and its × dismiss control on the same code row; hover

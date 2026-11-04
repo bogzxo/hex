@@ -94,8 +94,8 @@ internal sealed partial class DuskScene
         titleShown = panel.Current?.Title;
         string title = titleShown ?? HexText.Get("dusk_chrome.name");
         top.Title = panel.Tabs.Count > 0
-            ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VERSION))
-            : HexText.Get("dusk_chrome.title", ("version", VERSION));
+            ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VersionLabel))
+            : HexText.Get("dusk_chrome.title", ("version", VersionLabel));
         Engine.WindowManager.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.window_title_tab", ("title", title))
             : HexText.Get("dusk_chrome.name");
@@ -166,7 +166,7 @@ internal sealed partial class DuskScene
         Item(help, HexText.Get("dusk_chrome.keyboard_shortcuts"), "keys", "keyboard");
         Item(help, HexText.Get("dusk_chrome.plugins"), "plugins", "extensions");
         help.AddSeparator();
-        help.Add(HexText.Get("dusk_chrome.about"), () => Notify(HexText.Get("dusk_chrome.about_text", ("version", VERSION))), icon: "info");
+        help.Add(HexText.Get("dusk_chrome.about"), () => Notify(HexText.Get("dusk_chrome.about_text", ("version", VersionLabel))), icon: "info");
 
         RefreshMenuKeys();
     }

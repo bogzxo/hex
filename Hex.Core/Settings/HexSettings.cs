@@ -108,7 +108,7 @@ internal sealed partial class HexSettings
     public float GlassBlur = UIGlass.Clear.Blur, GlassClarity = UIGlass.Clear.Clarity, GlassRim = UIGlass.Clear.Rim, GlassBend = UIGlass.Clear.Bend;
 
     /// <summary>How quickly the UI moves (UICompositor.AnimationSpeed), 0 for no motion, and how long the caret glides for.</summary>
-    public float UiAnimation, CaretGlide;
+    public float UiAnimation = 1.0f, CaretGlide;
 
     /// <summary>How many columns wide a tab is and a level of indentation, 1 to 16.</summary>
     public int TabSize = 4;

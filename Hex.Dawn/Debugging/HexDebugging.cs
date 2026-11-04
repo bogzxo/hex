@@ -29,6 +29,9 @@ internal sealed partial class HexDebugging
     public HexDebugging(DawnContext with)
     {
         context = with;
+        variables = new HexDebugVariables(key => context.Strings.Said(key),
+            e => context.Strings.Said("debugging.could_not_ask", ("why", e.Message)), () => context.Panels.Dim,
+            debugWork.Enqueue, () => context.Panels.RefreshSide(HexSide.Debug), context.Panels.RefreshRows);
         SweepProgramOutputs();
         context.Documents.Opened += PrepareBreakpoints;
 
@@ -612,6 +615,7 @@ internal sealed partial class HexDebugging
                     Stopped(happened);
                     break;
                 case DebugEventKind.Continued:
+                    variables.Reset();
                     dStoppedOn = null;
                     ClearExecutionLine();
                     stoppedFrames = [];
@@ -642,6 +646,7 @@ internal sealed partial class HexDebugging
 
     private void Stopped(DebugEvent happened)
     {
+        variables.Reset();
         stoppedFrames = happened.Frames;
         stoppedFrame = 0;
         stops++;
@@ -683,16 +688,16 @@ internal sealed partial class HexDebugging
         if (index < 0 || index >= stoppedFrames.Count)
             return;
 
+        variables.Reset();
         stoppedFrame = index;
         DebugFrame frame = stoppedFrames[index];
         ClearExecutionLine();
-        if (frame.File is not { } file || !File.Exists(file))
-            return;
-
-        context.Documents.OpenAt(file, frame.Line, frame.Column);
-        if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
-            shown.Editor.ExecutionLine = frame.Line;
-        variablesShown = null;
+        if (frame.File is { } file && File.Exists(file))
+        {
+            context.Documents.OpenAt(file, frame.Line, frame.Column);
+            if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
+                shown.Editor.ExecutionLine = frame.Line;
+        }
         context.Panels.RefreshSide(HexSide.Debug);
     }
 
@@ -704,12 +709,12 @@ internal sealed partial class HexDebugging
 
     internal void EndDebugging()
     {
+        variables.Reset();
         ForgetProgramOutput();
         DebugSession? ending = debugging;
         debugging = null;
         building = false;
         stoppedFrames = [];
-        variablesShown = null;
         ClearExecutionLine();
         context.Panels.RefreshSide(HexSide.Debug);
         if (ending is not null)
@@ -719,8 +724,7 @@ internal sealed partial class HexDebugging
     /* The Debug side, the stack, the variables and the breakpoints */
 
     // The variables of the frame looked at, asked for once a stop and kept, null while they're coming
-    private List<UITreeItem>? variablesShown;
-    private int variablesFor = -1;
+    private readonly HexDebugVariables variables;
 
     private List<UITreeItem> DebugSide()
     {
@@ -765,18 +769,12 @@ internal sealed partial class HexDebugging
 
             items.Add(stack);
 
-            var variables = new UITreeItem(context.Strings.Said("debugging.variables"), "symbol-variable") { Expandable = true, Expanded = true };
-            if (variablesShown is null || variablesFor != stoppedFrame)
+            var locals = new UITreeItem(context.Strings.Said("debugging.variables"), "symbol-variable")
             {
-                variables.Children = [NoteItem(context.Strings.Said("debugging.asking"))];
-                AskVariables(stoppedFrames[stoppedFrame].Id, stoppedFrame);
-            }
-            else
-            {
-                variables.Children = variablesShown;
-            }
-
-            items.Add(variables);
+                Expandable = true, Expanded = true,
+                Children = variables.Rows(debugging!, stoppedFrames[stoppedFrame].Id, debugging!.Scopes, debugging!.Variables)
+            };
+            items.Add(locals);
         }
 
         if (watches.Count > 0 || DebugStopped)
@@ -871,95 +869,4 @@ internal sealed partial class HexDebugging
     // Whether what it stopped on last was an exception, what ended the program when the debugger says it ended well
     private bool endedByException;
 
-    // The scopes of a frame and the variables of each, off the editor's thread, handed back as rows
-    private void AskVariables(int frameId, int frameIndex)
-    {
-        if (debugging is not { } session)
-            return;
-
-        variablesFor = frameIndex;
-        variablesShown = null;
-        _ = Task.Run(async () =>
-        {
-            var rows = new List<UITreeItem>();
-            try
-            {
-                // The first scope's variables as they are (the locals), the rest folded under their names. lldb-dap says
-                // every global of the program and the registers too, and flat they buried the locals under __imp_ rows
-                IReadOnlyList<DebugScope> scopes = await session.Scopes(frameId);
-                for (int i = 0; i < scopes.Count; i++)
-                {
-                    if (i > 0)
-                    {
-                        rows.Add(Expanding(new UITreeItem(scopes[i].Name, "symbol-namespace") { Expandable = true }, session, scopes[i].Reference));
-                        continue;
-                    }
-
-                    // Not the compiler's own (dmd's __r103 and __key104 for a foreach), nobody wrote those
-                    foreach (DebugVariable variable in await session.Variables(scopes[i].Reference))
-                    {
-                        if (!variable.Name.StartsWith("__", StringComparison.Ordinal))
-                            rows.Add(VariableItem(session, variable));
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                rows.Add(new UITreeItem(context.Strings.Said("debugging.could_not_ask", ("why", e.Message))) { Color = context.Panels.Dim });
-            }
-
-            debugWork.Enqueue(() =>
-            {
-                if (variablesFor != frameIndex)
-                    return;
-                variablesShown = rows.Count > 0 ? rows : [new UITreeItem(context.Strings.Said("debugging.nothing_in_scope")) { Color = context.Panels.Dim }];
-                context.Panels.RefreshSide(HexSide.Debug);
-            });
-        });
-    }
-
-    // A variable a row, what's inside it asked for as it's opened
-    private UITreeItem VariableItem(DebugSession session, DebugVariable variable)
-    {
-        var item = new UITreeItem($"{variable.Name} = {variable.Value}", "symbol-variable")
-        {
-            Detail = variable.Type ?? string.Empty,
-            Tooltip = $"{variable.Name} = {variable.Value}",
-            Expandable = variable.Reference > 0
-        };
-
-        return variable.Reference > 0 ? Expanding(item, session, variable.Reference) : item;
-    }
-
-    // A row whose children are the variables of a reference (a variable's, a scope's), asked for as it's opened
-    private UITreeItem Expanding(UITreeItem item, DebugSession session, int reference)
-    {
-        item.Tag = new SideTag(Expanding: opened =>
-        {
-            if (opened.Children is not null)
-                return;
-            opened.Children = [new UITreeItem(context.Strings.Said("debugging.asking")) { Color = context.Panels.Dim }];
-            _ = Task.Run(async () =>
-            {
-                var inside = new List<UITreeItem>();
-                try
-                {
-                    foreach (DebugVariable child in await session.Variables(reference))
-                        inside.Add(VariableItem(session, child));
-                }
-                catch (Exception)
-                {
-                    // gone on since, nothing to show
-                }
-
-                debugWork.Enqueue(() =>
-                {
-                    opened.Children = inside;
-                    context.Panels.RefreshRows();
-                });
-            });
-        });
-
-        return item;
-    }
 }

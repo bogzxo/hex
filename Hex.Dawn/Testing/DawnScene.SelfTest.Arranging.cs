@@ -340,8 +340,14 @@ internal sealed partial class DawnScene
         test.Drag(InChrome(() => propertiesEdge), InChrome(() => propertiesEdge - new Vector2(90, 0)));
         test.Wait();
         test.Check("panels: dragging the properties wider makes what is in them wider with them", () =>
-            Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(designer.editors["name"].Bounds.Width, editorWide + 90, 2)
-            && designer.editors["name"].Bounds.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits());
+        {
+            var field = designer.editors["name"].Bounds;
+            bool fits = Near(inspectorScroll.Size.X, propertiesWide + 90, 2) && Near(field.Width, editorWide + 90, 2)
+                && field.Max.X <= inspectorScroll.Bounds.Max.X - 19.5f && Fits();
+            if (!fits)
+                Console.WriteLine($"[Hex self-test] inspector {propertiesWide} -> {inspectorScroll.Size.X}, preferred {settings.RightWidth}, field {editorWide} -> {field.Width}, end inset {inspectorScroll.Bounds.Max.X - field.Max.X}");
+            return fits;
+        });
         test.Check("panels: every kind of editor in them, the ones that are two and four numbers across as well", () =>
             designer.editors["pos"] is StackPanel pair && Near(pair.Bounds.Width, designer.editors["name"].Bounds.Width, 2)
             && designer.editors["padding"] is StackPanel four && Near(four.Bounds.Width, designer.editors["name"].Bounds.Width, 2));

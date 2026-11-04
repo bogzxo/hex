@@ -1,3 +1,4 @@
+using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dusk;
@@ -25,6 +26,10 @@ internal sealed partial class DuskScene
     {
         var keyboard = Engine.Input.Keyboard;
         bool typing = compositor.Focus is TerminalView or TextBox or ArrangeOverlay;
+        // Settings is modeless: only its focused subtree owns input. Keep tracking held keys
+        // below while it owns input, so returning to the terminal cannot replay a shortcut.
+        for (UIComponent? at = compositor.Focus; at is not null && !typing; at = at.Parent)
+            typing = at == settingsView?.Window;
         bool control = keyboard.Control, shift = keyboard.Shift, alt = keyboard.Alt;
 
         var all = host.Commands.All;

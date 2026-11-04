@@ -32,16 +32,25 @@ internal sealed partial class DawnScene
             return;
         }
 
+        if (!CanComposeAgent())
+        {
+            Say(Said("agents_panel.no_agents"));
+            return;
+        }
+
         if (agentChat is null)
         {
             agentChat = new HexAgentChat(++agentChatsMade, agent);
             agentChats.Add(agentChat);
         }
 
+        string prompt = AgentDraftPrompt(asked);
+        string? location = agentDraftContext is { } context
+            ? $"{context.Path}:{context.Line}:{context.Column}–{context.EndLine}:{context.EndColumn}" : null;
         agentsInput.Text = string.Empty;
         RememberAsked(asked);
-        string prompt = agentWithFile ? WithFile(asked) : asked;
-        StartAgent(agentChat, run.Extension, run.Run, prompt, asked);
+        agentDraftContext = null;
+        StartAgent(agentChat, run.Extension, run.Run, prompt, asked, location);
     }
 
     /// <summary>
@@ -59,9 +68,9 @@ internal sealed partial class DawnScene
         return $"[from {where}] The file open in the editor is {where}.{selected}\n\n---\n{asked}";
     }
 
-    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked)
+    private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
     {
-        chat.Ask(prompt, asked);
+        chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
         string? found = HexAgentProcess.Find(program);
         if (found is null)

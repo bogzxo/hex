@@ -66,7 +66,11 @@ internal sealed partial class DawnScene
     private void ApplyEffects()
     {
         foreach (HexDocument open in documents)
+        {
             open.Editor.CaretGlide = CaretGlide;
+            if (settings.UiAnimation == 0 && open.Editor.Opacity < 1)
+                open.Editor.TweenOpacity(1, 0).Complete();
+        }
 
         // Everything else of Dawn's that moves, the hovers and the drawers, as quick as the motion says. Not the stage,
         // a layout being designed moves the way the game it is for will have it

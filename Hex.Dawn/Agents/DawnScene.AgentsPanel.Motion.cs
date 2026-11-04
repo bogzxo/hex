@@ -7,17 +7,13 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// What moves on the Agents page, so it feels alive while an agent works and stays still when it doesn't. A row slides up
-// into place as it comes, a tool that's running breathes, one that's done gives a little pop, three dots bounce while the
-// agent's thinking and hasn't said anything yet, and an agent that's working pulses in the list. All of it through the
-// components' own tweens and as long as the settings' UI animation says, none of it at all with that at 0.
 internal sealed partial class DawnScene
 {
     // How long the page's motion takes at the usual speed, in seconds
-    private const float AGENTS_SLIDE = 0.32f, AGENTS_POP = 0.28f, AGENTS_BREATHE = 0.7f, AGENTS_BOUNCE = 0.38f;
+    private const float AGENTS_SLIDE = 0.32f, AGENTS_POP = 0.28f, AGENTS_BOUNCE = 0.38f;
 
     /// <summary>How long a piece of motion lasts, scaled by the UI animation setting, 0 when it's off.</summary>
-    private float AgentsMotion(float seconds) => settings.UiAnimation <= 0.0f ? 0.0f : seconds * settings.UiAnimation;
+    private float AgentsMotion(float seconds) => HexMotion.Duration(seconds, settings.UiAnimation);
 
     /// <summary>A row sliding up into its place and fading in, the delay for a few coming at once one after another.</summary>
     private void SlideRowIn(UIComponent row, float delay = 0.0f, float fromX = 0.0f)
@@ -25,7 +21,7 @@ internal sealed partial class DawnScene
         float time = AgentsMotion(AGENTS_SLIDE);
         if (time <= 0.0f)
             return;
-        row.SlideIn(new Vector2(fromX, -14.0f), time, AgentsMotion(delay), Easing.OutCubic);
+        row.SlideIn(new Vector2(fromX * 0.5f, -6.0f), time, AgentsMotion(delay), Easing.OutCubic);
     }
 
     /// <summary>A row that just changed (a tool that finished) swelling a touch and settling back.</summary>
@@ -34,17 +30,8 @@ internal sealed partial class DawnScene
         float time = AgentsMotion(AGENTS_POP);
         if (time <= 0.0f)
             return;
-        row.VisualScale = new Vector2(0.97f, 0.97f);
-        row.TweenScale(1.0f, time).SetEasing(Easing.OutBack);
-    }
-
-    /// <summary>Something that's going on breathing, its opacity going down and back up for as long as it's there.</summary>
-    private void Breathe(UIComponent part, float least = 0.45f)
-    {
-        float time = AgentsMotion(AGENTS_BREATHE);
-        if (time <= 0.0f)
-            return;
-        part.TweenOpacity(least, time).SetEasing(Easing.InOutSine).SetLoops(-1, LoopMode.PingPong);
+        row.VisualScale = new Vector2(0.995f, 0.995f);
+        row.TweenScale(1.0f, time).SetEasing(Easing.OutCubic);
     }
 
     /// <summary>A button coming into sight with a pop, Stop as an agent starts.</summary>
@@ -80,7 +67,7 @@ internal sealed partial class DawnScene
             dot.Tweens.KillAll();
             dot.VisualOffset = Vector2.Zero;
             if (time > 0.0f)
-                dot.TweenOffset(new Vector2(0, 5), time).SetEasing(Easing.InOutSine).SetLoops(-1, LoopMode.PingPong).SetDelay(i * time / 3.0f);
+                dot.TweenOffset(new Vector2(0, 3), time).SetEasing(Easing.InOutSine).SetLoops(-1, LoopMode.PingPong).SetDelay(i * time / 3.0f);
             i++;
         }
     }

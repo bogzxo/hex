@@ -325,7 +325,7 @@ internal sealed partial class DuskScene
 
     private void TestPalette(DuskScript test)
     {
-        test.Run(() => Run("palette"));
+        test.Run(() => { panel.FocusedView?.Focus(); Run("palette"); });
         test.Wait();
         test.Run(() => Shot("palette"));
         // A title once, Close pane is on two keys and the palette lists it the one time. Not Tab 1 to Tab 9, their keys are enough.
@@ -333,6 +333,13 @@ internal sealed partial class DuskScene
         test.Check("the command palette comes up with every command, and every look", () => chrome.Dialog is { IsOpen: true }
             && Descendants(chrome.Dialog).OfType<ListBox>().First().Items.Length == host.Commands.All.Where(command => !IsTabNumber(command.Name)).Select(command => command.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count()
                 + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count + 1);
+        test.Check("menu commands share their semantic icons and keep their shortcuts", () =>
+        {
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            return list.Items.Select(id => list.Choice!(id)).Any(choice => choice?.Text == "New tab" && choice.Icon == "add" && choice.Keys == KeyOf("new_tab"))
+                && CommandIcon("split_right") == "split-horizontal" && CommandIcon("split_down") == "split-vertical"
+                && CommandIcon("rename_tab") == "edit" && CommandIcon("extension_test_action") == "extensions";
+        });
         test.Check("a few letters narrow it down", () =>
         {
             var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();
@@ -343,7 +350,42 @@ internal sealed partial class DuskScene
         });
         test.Run(() => chrome.Dialog?.Cancel());
         test.Wait();
-        test.Check("and goes away", () => chrome.Dialog is null);
+        test.Check("and goes away with terminal focus restored", () => chrome.Dialog is null && compositor.Focus == panel.FocusedView);
+
+        bool picked = false;
+        object owner = new();
+        test.Run(() =>
+        {
+            host.Commands.Register("palette_test_first", "Palette test first", () => { }, owner: owner);
+            host.Commands.Register("palette_test_second", "Palette test second", () => picked = true, owner: owner);
+            Run("palette");
+        });
+        test.Wait();
+        test.Check("unknown extension commands have an icon and keyboard navigation selects a row", () =>
+        {
+            var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();
+            box.Text = "Palette test";
+            box.OnChanged?.Invoke(box.Text);
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            box.OnKey?.Invoke(UIKeyboard.DOWN);
+            bool moved = list.Index == 1;
+            box.OnKey?.Invoke(UIKeyboard.UP);
+            bool returned = list.Index == 0;
+            box.OnKey?.Invoke(UIKeyboard.DOWN);
+            return moved && returned && list.Index == 1 && list.Items.Length == 2 && list.Choice!(list.Value)?.Icon == "extensions";
+        });
+        test.Run(() => Descendants(chrome.Dialog!).OfType<TextBox>().First().OnSubmitted?.Invoke("Palette test"));
+        test.Wait();
+        test.Check("Enter executes the selection and restores terminal focus", () => picked && chrome.Dialog is null && compositor.Focus == panel.FocusedView);
+        test.Run(() => Run("palette"));
+        test.Wait();
+        test.Check("the selected command returns as a recent", () =>
+        {
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            return list.Lead > 0 && list.Choice!(list.Items[0])?.Text == "Palette test second";
+        });
+        test.Run(() => { chrome.Dialog?.Cancel(); host.Commands.Unregister(owner); });
+        test.Wait();
     }
 
     private void TestThemes(DuskScript test)

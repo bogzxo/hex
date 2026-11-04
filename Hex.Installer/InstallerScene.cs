@@ -139,7 +139,7 @@ internal sealed class InstallerScene : Scene
         changes.Enqueue(() =>
         {
             release = latest;
-            version.Text = InstallText.Get("version.release", ("version", latest.Version), ("platform", InstallPaths.Rid));
+            version.Text = InstallText.Get("version.release", ("version", latest.Shown), ("platform", InstallPaths.Rid));
             status.Text = InstallText.Get("status.install_ready");
             detail.Text = InstallText.Get("detail.features");
             primary.Label = InstallText.Get("actions.install");

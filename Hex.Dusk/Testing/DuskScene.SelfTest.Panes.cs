@@ -5,6 +5,8 @@ using Horizon.HIDL.Runtime;
 using Horizon.UI;
 using Horizon.UI.Components;
 
+using Key = Silk.NET.Input.Key;
+
 namespace Hex.Dusk;
 
 // The self test of the rest of the plan's step five. Tabs put in another order, panes swapped by their badges and by
@@ -88,6 +90,44 @@ internal sealed partial class DuskScene
             SettingsPage is { } page && page.Settings.Count == TerminalSettings.Described.Length + Hex.Shell.EditorSettingsCatalog.Settings.Length + Hex.Shell.EditorSettingsCatalog.Text.Length
                 + new Hex.Shell.WindowsSource().Settings.Count + new Hex.Shell.DefaultTerminalSource().Settings.Count
             && page.ValueOf!("theme") is StringValue && page.RowsShown == page.Settings.Count);
+        // Exercise the polling path used when the focused control is not a terminal or text box.
+        int settingsTabs = 0;
+        test.Run(() => settingsTabs = panel.Tabs.Count);
+        void TabShortcut() => Engine.Input.Keyboard.Tap([Key.ControlLeft, Key.ShiftLeft, Key.T]);
+        test.Run(TabShortcut);
+        test.Wait();
+        test.Check("settings search keeps terminal shortcuts", () => panel.Tabs.Count == settingsTabs && compositor.Focus == SettingsPage!.Search);
+        test.Run(() => Descendants(settingsView!.Window).OfType<Button>().First(button => button.IsShownInHierarchy).Focus());
+        test.Run(TabShortcut);
+        test.Run(() =>
+        {
+            // The tap is still down this tick. A focus transfer must not replay it through polling.
+            UIComponent? button = compositor.Focus;
+            compositor.Focus = null;
+            UpdateKeys();
+            button?.Focus();
+        });
+        test.Wait();
+        test.Check("a focused settings button keeps terminal shortcuts, including a held key during focus transfer", () => panel.Tabs.Count == settingsTabs && compositor.Focus is Button);
+        test.Run(() =>
+        {
+            SettingsPage!.GoToPart("Appearance");
+            lookPicker!.Focus();
+        });
+        test.Run(TabShortcut);
+        test.Wait();
+        test.Check("the focused look picker keeps terminal shortcuts", () => panel.Tabs.Count == settingsTabs && compositor.Focus == lookPicker);
+        test.Run(() => panel.FocusedView!.Focus());
+        test.Run(() => UIKeyboard.Press(Key.T, true, true, false, false));
+        test.Settle(settle);
+        test.Check("terminal shortcuts resume while modeless settings stays open", () => panel.Tabs.Count == settingsTabs + 1 && SettingsPage is not null);
+        test.Run(() => Run("close_tab"));
+        test.Settle(settle);
+        test.Run(() =>
+        {
+            SettingsPage!.GoToPart(TERMINAL_PART);
+            SettingsPage.Search.Focus();
+        });
         test.Run(() => SettingsPage!.Find("scrollback"));
         test.Settle(0.1f);
         // The section is called Scrollback too, so its four rows come with it
@@ -113,7 +153,51 @@ internal sealed partial class DuskScene
             Math.Abs(host.Settings.TextScale - 0.16f) < 0.001f && host.Settings.PlainProfiles.Count == 0 && !SettingsPage!.IsModified!("wrap_code"));
         test.Run(() => SettingsPage!.OnClose!());
         test.Settle(settle);
-        test.Check("and its x puts it away", () => SettingsPage is null);
+        test.Check("and its x puts it away and restores terminal focus", () => SettingsPage is null && compositor.Focus == panel.FocusedView);
+        test.Run(() => UIKeyboard.Press(Key.T, true, true, false, false));
+        test.Settle(settle);
+        test.Check("terminal shortcuts resume after settings closes", () => panel.Tabs.Count == settingsTabs + 1);
+        test.Run(() => Run("close_tab"));
+        test.Settle(settle);
+
+        // Observe an actual split over time, then the same action with motion disabled.
+        bool savedAnimations = false;
+        float savedAnimationTime = 0, savedUiAnimation = 0, openingRatio = 0;
+        test.Run(() =>
+        {
+            savedAnimations = settings.Animations;
+            savedAnimationTime = settings.AnimationTime;
+            savedUiAnimation = uiAnimation;
+            settings.Animations = true;
+            settings.AnimationTime = 0.8f;
+            uiAnimation = 1;
+            ApplyEffects();
+            Run("split_right");
+            openingRatio = panel.Current!.Tree.Root!.Ratio;
+        });
+        test.Settle(0.15f);
+        test.Check("motion on: the split moves through an intermediate width", () =>
+            panel.Current!.Tree.Root is { Animating: true, Ratio: > 0.5f } split && split.Ratio < openingRatio);
+        test.Run(() => Shot("split-motion-on"));
+        test.WaitFor(() => panel.Current!.Tree.Root!.Animating == false, 3);
+        test.Check("motion on: the split settles at equal widths", () => Math.Abs(panel.Current!.Tree.Root!.Ratio - 0.5f) < 0.001f);
+        test.Run(() =>
+        {
+            settings.Animations = false;
+            ApplyEffects();
+            Run("close_pane");
+            Run("split_right");
+        });
+        test.Check("motion off: the split reaches equal widths immediately", () => panel.Current!.Tree.Root is { Animating: false, Ratio: 0.5f });
+        test.Run(() => Shot("split-motion-off"));
+        test.Run(() =>
+        {
+            Run("close_pane");
+            settings.Animations = savedAnimations;
+            settings.AnimationTime = savedAnimationTime;
+            uiAnimation = savedUiAnimation;
+            ApplyEffects();
+        });
 
         // The drop down, and a key for everywhere: Windows' own, the desktop's elsewhere, bound to hex --dusk --toggle
         if (OperatingSystem.IsWindows())
