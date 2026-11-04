@@ -107,7 +107,7 @@ internal sealed partial class DawnScene
         float zoom = settings.CodeZoom;
         float firstWidth = width, firstZoom = zoom;
         var key = JsonValue.Create(latex)!;
-        var picture = RenderedPicture(key, density => NotebookRender.Math(latex, density, prose: true, transparent: true, width: firstWidth, zoom: firstZoom), pictures, zoomed: false, mathInk: true, keepDense: false);
+        var picture = RenderedPicture(key, density => NotebookRender.MarkdownMath(latex, density, firstWidth, firstZoom), pictures, zoomed: false, mathInk: true, keepDense: false);
         if (picture is null) return null;
         picture.RenderKey = key;
         picture.Reflow = (available, requestedZoom) =>
@@ -137,7 +137,7 @@ internal sealed partial class DawnScene
         picture.RenderKey = key;
         float density = PictureDensity(zoomed: false);
         picture.Density = density;
-        QueueNotebookRender(key, () => NotebookRender.Math(latex, density, prose: true, transparent: true, width: width, zoom: zoom), picture, density);
+        QueueNotebookRender(key, () => NotebookRender.MarkdownMath(latex, density, width, zoom), picture, density);
     }
 
     // A single worker bounds peak CPU and raster memory. Closing or replacing a cell cancels queued work.

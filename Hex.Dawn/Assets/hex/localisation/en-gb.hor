@@ -133,9 +133,9 @@ let strings = {
     // What Hex opens on when nothing is open
     welcome: {
         title: "Hex",
-        subtitle: "A different kind of text editor, for a different kind of person; v{version}\nHex does not collect anything from you, nor does it try to push first party extensions into your face.",
+        subtitle: "A clear space for your next idea.\nOpen a project, pick up where you left off, or start something new.",
         start: "Start",
-        new_file: "New File...",
+        new_file: "New File",
         new_layout: "New Layout",
         open_file: "Open File...",
         open_folder: "Open Folder...",
@@ -317,7 +317,7 @@ let strings = {
     // The command palette (Ctrl+Shift+P), the menu a command is in written quiet in front of it
     palette: {
         title: "Command palette",
-        message: "Everything Hex can do right now, a few letters narrow it down",
+        message: "↑↓ to select · Enter or click to run · Esc or click outside to close",
         terminal: "Terminal"
     },
 
@@ -1553,7 +1553,7 @@ let strings = {
     },
 
     dusk_chrome: {
-        palette_hint: "Type to filter · ↑↓ Select · Enter Run · Esc Close",
+        palette_hint: "↑↓ to select · Enter or click to run · Esc or click outside to close",
         name: "Dusk",
         title_tab: "{title}  -  Dusk {version}",
         title: "Dusk {version}",
@@ -1593,7 +1593,7 @@ let strings = {
 
     dusk_modes: {
         dawn: "Dawn",
-        dawn_tooltip: "Dawn, the editor, in this window (Ctrl+Alt+D)",
+        dawn_tooltip: "Dawn, the editor, in this window (Ctrl+Alt+Shift+D)",
         no_dawn: "there's no Dawn to swap to"
     },
 
@@ -2639,8 +2639,8 @@ let strings = {
 
     modes: {
         active: "{name} is active",
-        switch: "Switch to {name} (Ctrl+Alt+D)",
-        toggle_tooltip: "Dusk, the terminal, in this window (Ctrl+Alt+D)",
+        switch: "Switch to {name} (Ctrl+Alt+Shift+D)",
+        toggle_tooltip: "Dusk, the terminal, in this window (Ctrl+Alt+Shift+D)",
         command_dusk: "Hex: Dusk, the terminal, in this window",
         no_dusk: "there's no Dusk to swap to"
     },
@@ -2740,6 +2740,9 @@ let strings = {
         setup_program: "The {program} command is unavailable. Install the tool or add it to PATH, then return here.",
         browse: "Browse extensions",
         options: "Options",
+        thinking: "Thinking level",
+        thinking_auto: "Auto",
+        thinking_tip: "Thinking level: {level}. Applies to the next message.",
         draft_hint: "You can prepare a draft below. Set up an agent to send it.",
         no_agents: "Choose an agent extension and install its command-line tool.",
         try_map: "Map this workspace",
@@ -2752,6 +2755,7 @@ let strings = {
         with_file: "with {where}",
         tool_running: "running {seconds}s",
         tool_done: "{seconds}s",
+        turn_done: "Completed · {seconds}s",
         tool_failed: "failed {seconds}s",
         given: "Input",
         said: "Output",
@@ -2793,7 +2797,7 @@ let strings = {
     settings_looks: {
         color_theme: "Color Theme...",
         color_theme_title: "Color Theme",
-        color_theme_hint: "Up and down show each theme as you go, Enter keeps it, Escape puts the old one back",
+        color_theme_hint: "↑↓ to preview · Enter or click to keep · Esc or click outside to restore",
         open_file: "Open User Settings File",
         no_file: "There's no settings file to open, {path} couldn't be written"
     },

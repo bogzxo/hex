@@ -26,6 +26,7 @@ internal sealed partial class DuskScene
 
         // The title bar is the window's and the size of the system's whatever the rest is drawn at
         menu.TextScale = MENU_TEXT / scale;
+        HexModeSwitch.SetScale(modeToggle, scale);
         settings.Scale = scale;
     }
 
@@ -49,8 +50,8 @@ internal sealed partial class DuskScene
     private void BuildPanel()
     {
         panel.WorkingDirectory = options.StartIn;
-        // Every pane says what it is along its top, one on its own too, the text started lower the moment a tab was split
-        panel.PaneTitlesAlways = true;
+        // A single terminal is already named by its tab. Split panes keep their own identity headers.
+        panel.PaneTitlesAlways = false;
         panel.OnChanged += PanelChanged;
         panel.OnTabMenu = ShowTabMenu;
     }

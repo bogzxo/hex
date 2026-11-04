@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace Hex.Dusk;
+namespace Hex.Shell;
 
 /// <summary>
-/// Keys pressed for real, through Windows, into Dusk's own window, so the self test goes the whole way a person's
+/// Keys pressed for real, through Windows, into Hex's own window, so the self test goes the whole way a person's
 /// keys go (the window's events, the engine's keyboard hook, the compositor, the terminal, the shell) and not round
 /// it. Nothing of it on another platform, the keys suite says so and skips.
 /// </summary>
@@ -12,7 +12,7 @@ internal static partial class RealKeys
 {
     public static bool Available => OperatingSystem.IsWindows();
 
-    /// <summary>Brings Dusk's window to the front, which is where the keys go. False if Windows wouldn't.</summary>
+    /// <summary>Brings Hex's window to the front, which is where the keys go. False if Windows wouldn't.</summary>
     public static bool Focus()
     {
         if (!Available)
@@ -75,7 +75,7 @@ internal static partial class RealKeys
     /// <summary>How many keys were held back because Dusk wasn't in front, which a check counts as keys that never arrived.</summary>
     public static int HeldBack { get; private set; }
 
-    /// <summary>Whether Dusk's own window is the one in front this moment.</summary>
+    /// <summary>Whether Hex's own window is the one in front this moment.</summary>
     public static bool InFront() => Available && OwnWindow() is var window && window != 0 && GetForegroundWindow() == window;
 
     // Windows sends keys to whatever window is in front, so every key is sent only once Dusk is seen to be that window.

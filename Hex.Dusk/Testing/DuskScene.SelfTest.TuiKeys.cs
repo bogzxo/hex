@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using Horizon.Core.Processes;
 using Horizon.UI.Components;
 
+using Hex.Shell;
+
 namespace Hex.Dusk;
 
 // The arrows pressed for real into a TUI, micro, the whole way a person's go (Windows, the window, the compositor,

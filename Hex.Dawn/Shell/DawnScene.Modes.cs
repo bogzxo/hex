@@ -7,7 +7,7 @@ using Key = Silk.NET.Input.Key;
 
 namespace Hex.Dawn;
 
-// Dawn and Dusk in the one window. Ctrl+Alt+D (the toggle on the title bar, the View menu, the palette, and the same key
+// Dawn and Dusk in the one window. Ctrl+Alt+Shift+D (the toggle on the title bar, the View menu, the palette, and the same key
 // while a terminal has the keyboard) swaps to Dusk and back, see Hex.Shell.HexModes. The editor is kept whole while the
 // terminal is up, its files, its undo and where it was scrolled to, and Dusk the same the other way round. Started on its
 // own by something that isn't Hex.exe there's nothing to swap with in the window, and Dusk is started as a program.
@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
     {
         modeToggle = HexModeSwitch.Add((TitleBar)top, HexMode.Dawn, SwapMode);
 
-        terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+D", HexOwns);
+        terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)

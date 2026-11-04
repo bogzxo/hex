@@ -79,6 +79,7 @@ internal sealed partial class HexDesigner
         module.Position = area.Center + canvasPan;
         module.Clip = new UIRect((area.Min - module.Position) / scale, (area.Max - module.Position) / scale);
         module.FrameColor = FrameColor;
+        module.FrameBackground = compositor.Skin?.Palette.Raised;
     }
 
     private static float CanvasFit(UIRect area, UIRect screen) => MathF.Min(area.Width / screen.Width, area.Height / screen.Height);

@@ -14,7 +14,8 @@ namespace Hex.Shell;
 internal sealed record HexLook(string Name, IReadOnlyDictionary<string, IRuntimeValue> Values, bool BuiltIn = false);
 
 /// <summary>
-/// Hex's looks, the profiles of how it's drawn. Four come with it, Fluid Glass (clear glass that bends what is behind
+/// Hex's looks, the profiles of how it's drawn. Five come with it: Graphite (neutral surfaces and restrained motion),
+/// Fluid Glass (clear glass that bends what is behind
 /// it at its rim), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (the default, solid
 /// panels, nothing glows or glides) and Visual Studio (that editor's dark theme, square and flat, see
 /// HexLooks.VisualStudio), and the user saves their own from whatever the settings are at. The user's are kept in the
@@ -109,8 +110,18 @@ internal static partial class HexLooks
     /// <summary>Visual Studio dark, see HexLooks.VisualStudio.</summary>
     public static readonly HexLook VisualStudio = MakeVisualStudio();
 
+    /// <summary>The quiet neutral workspace, with shared colours in Dawn and Dusk.</summary>
+    public static readonly HexLook Graphite = new("Graphite", new Dictionary<string, IRuntimeValue>(Flat.Values, StringComparer.Ordinal)
+    {
+        [EDITOR_SKIN] = new StringValue("flat"),
+        [EDITOR_THEME] = new StringValue("graphite"),
+        [TERMINAL_THEME] = new StringValue("graphite"),
+        ["effect_motion"] = Values.Bool(true),
+        ["ui_animation"] = new NumberValue(1.0f)
+    }, BuiltIn: true);
+
     /// <summary>The ones that come with Hex, in the order they're shown.</summary>
-    public static readonly HexLook[] BuiltIn = [Fluid, Frosted, Flat, VisualStudio];
+    public static readonly HexLook[] BuiltIn = [Graphite, Fluid, Frosted, Flat, VisualStudio];
 
     /// <summary>Hex's own and then the user's, in the order they were saved.</summary>
     public static List<HexLook> All(HexSettings settings) =>

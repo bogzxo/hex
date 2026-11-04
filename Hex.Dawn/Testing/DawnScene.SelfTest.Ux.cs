@@ -125,6 +125,7 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("ux: plain welcome also shows empty recents", () => plainPage is { Visible: true } && RowsMatch()
             && welcomeSizes.All(s => s.List.Children.OfType<Label>().Any()));
+        test.Check("ux: plain welcome puts away an empty Outline", () => Side != HexSide.Outline || !left.Shown);
         test.Run(() => Shot("ux-welcome"));
         test.Settle(0.2f);
         test.Run(() => { Remember(file); Remember(second); });
@@ -140,6 +141,7 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("ux: welcome recent reopens the file and promotes it everywhere", () => document.Path == file
             && recent[0] == file && RowsMatch() && recentMenu.Items[0].Label.Contains(Path.GetFileName(file)));
+        test.Check("ux: opening a recent document restores Outline", () => Side != HexSide.Outline || settings.SideBarHidden || left.Shown);
         test.Run(() => { plainWelcome = false; CloseAll(); document.View = HexView.Design; ApplyView(); });
         test.Settle(0.3f);
         test.Check("ux: returning to cached designer welcome retains the updated order", () => welcome is { Visible: true } && RowsMatch());

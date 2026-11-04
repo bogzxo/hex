@@ -1,5 +1,7 @@
 using Horizon.UI.Components;
 
+using Hex.Shell;
+
 namespace Hex.Dusk;
 
 // The HIDL REPL as a profile, a program of the terminal's own with no process behind it, typed into for real.

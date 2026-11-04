@@ -47,6 +47,11 @@ internal sealed partial class DawnScene
             float column = stacked ? width : (width - columns.Spacing) * 0.5f;
             start.Size = start.Size with { X = column };
             recent.Size = recent.Size with { X = column };
+            foreach (Button action in start.Children.OfType<Button>())
+            {
+                action.Size = new Vector2(column, 36);
+                action.Align = Origin.Left;
+            }
             foreach (UIComponent row in List.Children)
             {
                 if (row is Label hint)
@@ -59,7 +64,7 @@ internal sealed partial class DawnScene
         // A long name loses its middle first, the full path still there on hover.
         private static void FitFile(Button link, float column, UISkin? skin)
         {
-            link.Size = new Vector2(column, 30);
+            link.Size = new Vector2(column, 36);
             link.Align = Origin.Left;
             string name = Path.GetFileName(link.Tooltip);
             int length = name.Length;
@@ -175,6 +180,7 @@ internal sealed partial class DawnScene
             string path = recent[i];
             var link = rows[i].Get<Button>("link");
             link.Label = Path.GetFileName(path);
+            link.LabelScale = 0.16f;
             link.Icon = HexExplorer.FileIcon(path);
             link.Tooltip = path;
             link.OnPressed = () => Open(path);

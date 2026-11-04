@@ -97,9 +97,15 @@ internal sealed partial class DawnScene
         // The bin with the pointer
         test.Run(() => page.Reveal(ASSOCIATIONS));
         test.Settle(0.3f);
+        test.WaitFor(() => page.IsRowInView(ASSOCIATIONS), 1.0f);
+        test.Hover(() => page.PairBounds(ASSOCIATIONS) is { Edits.Length: > 0 } parts ? chrome.ToWorld(parts.Edits[0].Center) : test.Pointer.Position);
+        test.WaitFor(() => compositor.TooltipOf is Button { Icon: "edit" }, 2.0f);
+        test.Check("settings pairs: the neighboring edit tooltip is showing before deletion", () => compositor.TooltipOf is Button { Icon: "edit" });
         test.Click(() => page.PairBounds(ASSOCIATIONS) is { Removes.Length: > 1 } parts ? chrome.ToWorld(parts.Removes[1].Center) : test.Pointer.Position);
-        test.Wait();
+        test.WaitFor(() => Kept().SequenceEqual([("*.orig", "plaintext")]) && Shown().Count == 1, 1.0f);
         test.Check("settings pairs: the bin takes its pair out", () => Kept().SequenceEqual([("*.orig", "plaintext")]) && Shown().Count == 1);
+        test.Run(() => Shot("settings-pairs-deletion"));
+        test.Settle(0.2f);
 
         // Its reset empties it
         test.Run(() => page.Reset(ASSOCIATIONS));

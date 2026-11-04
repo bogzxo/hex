@@ -70,7 +70,7 @@ internal sealed partial class DawnScene
         Vector4 card = skin.PanelColor with { W = 1.0f };
         bool square = Square(skin);
         float inset = square ? 0.0f : CARD_INSET, radius = square ? 0.0f : CARD_RADIUS;
-        Vector4 window = square ? card : new(card.X * 0.5f, card.Y * 0.5f, card.Z * 0.5f, 1.0f);
+        Vector4 window = square ? card : skin.FieldColor with { W = 1.0f };
         Vector4 none = card with { W = 0.0f };
 
         // The window, the field of light under a veil of its tone on glass, the tone alone without
@@ -107,9 +107,9 @@ internal sealed partial class DawnScene
         // What's inside the cards is the card, the lists have no boxes of their own and the code is the card's colour
         treeScroll.Color = layersScroll.Color = inspectorScroll.Color = none;
         running.ValuesTree.Color = sideTree.Color = none;
-        codeScroll.Color = card;
+        codeScroll.Color = square ? card : skin.FieldColor with { W = 1.0f };
         foreach (HexDocument open in documents)
-            open.Editor.Color = card;
+            open.Editor.Color = codeScroll.Color;
         if (welcome is not null)
             welcome.Color = card;
 

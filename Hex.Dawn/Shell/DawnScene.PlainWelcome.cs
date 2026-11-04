@@ -14,6 +14,7 @@ internal sealed partial class DawnScene
 
     // Whether the toolbar and the Properties are put away for the plain welcome right now
     private bool plainShown;
+    private bool outlineFoldedForWelcome;
 
     // The welcome over the code panel, the plain one, made the first time it is wanted
     private Panel? plainPage;
@@ -115,6 +116,12 @@ internal sealed partial class DawnScene
         {
             // Nothing typed goes into the layout's code under the welcome
             code.Unfocus();
+            // An empty outline has no work to do on Welcome. Restore it when a document arrives.
+            if (Side == HexSide.Outline && left.Shown)
+            {
+                left.Show(false);
+                outlineFoldedForWelcome = true;
+            }
 
             // The side folded the way a file with nothing for it folds it, back for the next file that has something
             if (right.Shown)
@@ -127,6 +134,12 @@ internal sealed partial class DawnScene
         }
 
         toolbar.Visible = true;
+        if (outlineFoldedForWelcome)
+        {
+            outlineFoldedForWelcome = false;
+            if (Side == HexSide.Outline && !settings.SideBarHidden)
+                left.Show(true);
+        }
         FoldValuesFor(document);
     }
 }

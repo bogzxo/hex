@@ -24,7 +24,7 @@ internal sealed partial class HexSettings
     public static readonly float[] Grids = [0.0f, 2.0f, 4.0f, 8.0f, 16.0f];
 
     /// <summary>Which skin the editor itself is drawn in (the flat one unless somebody fancies otherwise) and in which of its themes.</summary>
-    public string EditorSkin = "flat", EditorTheme = "horizon";
+    public string EditorSkin = "flat", EditorTheme = "graphite";
 
     /// <summary>How wide the lists on the left and the properties on the right were dragged, 0 for as their layout has them.</summary>
     public float LeftWidth, RightWidth;

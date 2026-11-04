@@ -84,6 +84,7 @@ internal sealed partial class DawnScene
 
         // Except the title bar, which is the window's and the size of the system's whatever the editor is drawn at, its menus with it
         menu.TextScale = MENU_TEXT / scale;
+        Hex.Shell.HexModeSwitch.SetScale(modeToggle, scale);
 
         if (!remember || options.SelfTest)
             return;

@@ -112,7 +112,8 @@ internal static partial class NotebookRender
         source = CommandBoundary().Replace(source, "$0 ");
         source = FractionAliases().Replace(source, @"\frac");
         // Sizes and margins in units of the layout, so the formula is the same size whatever it's rendered at
-        float size = (prose ? 14 : 18) * zoom * density;
+        // TextPainter uses points (4/3 screen pixels); match the surrounding 14px document prose.
+        float size = (prose ? 10.5f : 18) * zoom * density;
         ImagePixels pixels;
         if (prose)
         {

@@ -58,6 +58,22 @@ public class NotebookRenderingTests
     }
 
     [Fact]
+    public void Native_prose_math_reflows_with_emphasis_code_and_equations()
+    {
+        const string source = "A **bold** paragraph with `code`, *emphasis*, and $\\sigma=\\frac{My}{I}$ in the same line.";
+        var wide = NotebookRender.MarkdownMath(source, Density, width: 600).Pixels;
+        var narrow = NotebookRender.MarkdownMath(source, Density, width: 180).Pixels;
+        var zoomed = NotebookRender.MarkdownMath(source, Density, width: 180, zoom: 1.5f).Pixels;
+        Assert.True(narrow.Height > wide.Height);
+        Assert.True(zoomed.Height > narrow.Height);
+        Assert.InRange(narrow.Width, 1, 360);
+        Assert.Contains(narrow.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha > 200);
+        Assert.Contains(narrow.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha == 0);
+        Assert.Throws<ArgumentException>(() => NotebookRender.MarkdownMath("$\\unknownEngineeringMacro{x}$", Density));
+        Assert.Throws<ArgumentException>(() => NotebookRender.MarkdownMath(new string('x', 32_001), Density));
+    }
+
+    [Fact]
     public void Markdown_tables_keep_formatting_separate_from_plain_export_text()
     {
         var table = NotebookTables.Split("| Assumption | Code |\n|---|---|\n| **Uniform** material | `STRENGTH_FROM` |").Single().Table!;

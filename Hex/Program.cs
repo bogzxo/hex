@@ -66,7 +66,7 @@ internal static partial class Program
         string[] rest = [.. args.Where(arg => !arg.Equals("--dusk", StringComparison.OrdinalIgnoreCase))];
         rest = Dropped(rest, mode, out List<string> more);
 
-        // Either mode can swap to the other in its own window (Ctrl+Alt+D), each made the first time it's wanted
+        // Either mode can swap to the other in its own window (Ctrl+Alt+Shift+D), each made the first time it's wanted
         DawnProgram.Other = DuskProgram.Scene;
         DuskProgram.Other = DawnProgram.Scene;
 

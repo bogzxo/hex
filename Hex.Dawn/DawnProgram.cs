@@ -81,6 +81,7 @@ public static class DawnProgram
     private static void Start(string[] args)
     {
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
+        bool nativeShortcuts = selfTest && args.Contains("native-shortcuts");
 
         // A workspace or the layouts to check that were named are meant from wherever the editor was started, the
         // rest (its skin, its fonts, the layouts folder nobody named) is next to it
@@ -160,13 +161,13 @@ public static class DawnProgram
                 AppId = "hex-dawn",
 
 
-                Mode = selfTest ? RunMode.Game : RunMode.Application,
+                Mode = selfTest && !nativeShortcuts ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
                 Maximized = size is null,
                 VSync = true,
                 FramesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0,
-                UpdatesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0
+                UpdatesPerSecond = selfTest && !options.Watch && !nativeShortcuts ? 240.0 : 120.0
             }
         });
 
@@ -177,7 +178,7 @@ public static class DawnProgram
         var scene = new DawnScene(options);
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
-        // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
+        // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Never in a self test, which
         // is the one mode and nothing else
         if (!selfTest && Other is { } other)
             Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dawn, scene, (mode, folder) => mode == Hex.Shell.HexMode.Dawn ? scene : other(folder));

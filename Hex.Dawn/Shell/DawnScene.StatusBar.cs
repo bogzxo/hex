@@ -142,7 +142,7 @@ internal sealed partial class DawnScene
         {
             problemsShown = (errorCount, warningCount);
             problemsItem.Text = $"$(error) {errorCount}  $(warning) {warningCount}";
-            problemsItem.Background = errorCount > 0 ? ErrorColor with { W = 0.35f } : null;
+            problemsItem.Background = errorCount > 0 ? ErrorColor with { W = 0.12f } : null;
         }
 
         if (!LayoutTools)

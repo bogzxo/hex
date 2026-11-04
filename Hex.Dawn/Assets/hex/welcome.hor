@@ -8,14 +8,14 @@ let welcome = compositor.panel({
 });
 
 // Scroll on short windows; keep the working column centered horizontally on wide ones.
-let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(24, 24, 24, 24) });
+let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(32, 48, 32, 32) });
 let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
 let page = compositor.stack({
     parent: welcome_body,
     anchor: "top",
     pivot: "top",
     size: vec(640, 0),
-    spacing: 18,
+    spacing: 28,
 });
 
 // The icon beside the name, the way an app's welcome window has it
@@ -49,10 +49,10 @@ let subtitle = compositor.label({
     anchor: "left",
     pivot: "left",
     text: "@welcome.subtitle",
-    text_scale: 0.16,
+    text_scale: 0.17,
     wrap: true,
     size: vec(560, 0),
-    dim: true,
+    dim: false,
     align: "left",
 });
 
@@ -60,7 +60,7 @@ let columns = compositor.stack({
     parent: page,
     anchor: "top_left",
     pivot: "top_left",
-    spacing: 32,
+    spacing: 40,
     direction: "horizontal",
 });
 
@@ -88,7 +88,7 @@ let new_layout = compositor.button({
     icon: "new-file",
     label: "@welcome.new_layout",
     style: "button_flat",
-    lbl_scale: 0.15,
+    lbl_scale: 0.16,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -101,7 +101,7 @@ let open_file = compositor.button({
     icon: "go-to-file",
     label: "@welcome.open_file",
     style: "button_flat",
-    lbl_scale: 0.15,
+    lbl_scale: 0.16,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -113,8 +113,9 @@ let open_folder = compositor.button({
     pivot: "left",
     icon: "folder-opened",
     label: "@welcome.open_folder",
-    style: "button_flat",
-    lbl_scale: 0.15,
+    style: "button",
+    primary: false,
+    lbl_scale: 0.16,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -127,58 +128,7 @@ let commands = compositor.button({
     icon: "symbol-misc",
     label: "@welcome.commands",
     style: "button_flat",
-    lbl_scale: 0.15,
-    hover: "none",
-    hover_amount: 4,
-    hover_time: 0.08,
-});
-
-let help_gap = compositor.spacer({ parent: start, size: vec(0, 14) });
-
-let help_title = compositor.label({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    text: "@welcome.help",
-    text_scale: 0.17,
-    bold: true,
-    align: "left",
-});
-
-let keys = compositor.button({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    icon: "keyboard",
-    label: "@welcome.keys",
-    style: "button_flat",
-    lbl_scale: 0.15,
-    hover: "none",
-    hover_amount: 4,
-    hover_time: 0.08,
-});
-
-let language = compositor.button({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    icon: "book",
-    label: "@welcome.language",
-    style: "button_flat",
-    lbl_scale: 0.15,
-    hover: "none",
-    hover_amount: 4,
-    hover_time: 0.08,
-});
-
-let changes = compositor.button({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    icon: "history",
-    label: "@welcome.changes",
-    style: "button_flat",
-    lbl_scale: 0.15,
+    lbl_scale: 0.16,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -209,4 +159,55 @@ let recent = compositor.stack({
     template: "link.hor",
     preview_count: 3,
     spacing: 2,
+});
+
+let help_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
+
+let help_title = compositor.label({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.help",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let keys = compositor.button({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    icon: "keyboard",
+    label: "@welcome.keys",
+    style: "button_flat",
+    lbl_scale: 0.16,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
+});
+
+let language = compositor.button({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    icon: "book",
+    label: "@welcome.language",
+    style: "button_flat",
+    lbl_scale: 0.16,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
+});
+
+let changes = compositor.button({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    icon: "history",
+    label: "@welcome.changes",
+    style: "button_flat",
+    lbl_scale: 0.16,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
 });

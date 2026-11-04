@@ -76,6 +76,7 @@ internal sealed partial class HexProperties
         {
             ShowNav = false,
             CollapsibleSections = true,
+            CompactRows = true,
             CopyValues = true,
             Opaque = false,
             Title = string.Empty,

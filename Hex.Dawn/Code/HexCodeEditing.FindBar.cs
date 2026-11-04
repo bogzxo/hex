@@ -32,6 +32,8 @@ internal sealed partial class HexCodeEditing
     // What the count says, written again only when it changes, and the editor the bar was last looking in
     private (int Index, int Count, bool Error) findCountShown = (-2, -2, false);
     private CodeEditor? findEditor;
+    private CodeEditor? insetEditor;
+    private UIEdges paddingBeforeFind;
 
     internal bool FindBarOpen => findBar.Visible;
 
@@ -153,6 +155,7 @@ internal sealed partial class HexCodeEditing
     internal void CloseFindBar()
     {
         findBar.Visible = false;
+        ReserveFindSpace(0);
         code.FindQuery = string.Empty;
         if (codeScroll.Visible)
             code.Focus();
@@ -282,10 +285,13 @@ internal sealed partial class HexCodeEditing
         if (codeScroll.Bounds.Width <= 0 || code.CodeBounds.Width <= 0)
             return;
         float right = code.CodeBounds.Max.X - FIND_BAR_GAP;
-        float available = MathF.Max(28, right - codeScroll.Bounds.Min.X - FIND_BAR_GAP - 12);
-        findLine.AvailableWidth = replaceLine.AvailableWidth = available;
+        float available = MathF.Max(28, right - code.CodeBounds.Min.X - FIND_BAR_GAP - 12);
         // Keep the same fields alive through reflow, including their focus, selection and IME state.
         bool compact = available < FindBarLine.WideWidth;
+        // In compact mode the bar owns a band above the editor, so it may also use the gutter's width.
+        if (compact)
+            available = MathF.Max(28, right - code.Bounds.Min.X - FIND_BAR_GAP - 12);
+        findLine.AvailableWidth = replaceLine.AvailableWidth = available;
         findBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 52)) : 220, 26);
         replaceBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 84)) : 220, 26);
         // Leave the two arrows together on the options line when the number fits beside them.
@@ -294,6 +300,27 @@ internal sealed partial class HexCodeEditing
         float x = right - codeScroll.Bounds.Max.X;
         if (MathF.Abs(findBar.Position.X - x) > 0.5f)
             findBar.Position = findBar.Position with { X = x };
+        ReserveFindSpace(compact && FindBarOpen ? findBar.DesiredSize.Y + 16 : 0);
+    }
+
+    private void ReserveFindSpace(float height)
+    {
+        if (insetEditor is not null && (insetEditor != code || height <= 0))
+        {
+            insetEditor.Padding = paddingBeforeFind;
+            insetEditor.RevealCaret();
+            insetEditor = null;
+        }
+        if (height <= 0) return;
+        if (insetEditor is null)
+        {
+            insetEditor = code;
+            paddingBeforeFind = code.Padding;
+        }
+        var padding = paddingBeforeFind with { Top = paddingBeforeFind.Top + height };
+        if (MathF.Abs(code.Padding.Top - padding.Top) < 0.5f) return;
+        code.Padding = padding;
+        code.RevealCaret(center: true);
     }
 
     // Keep source order for keyboard traversal and wide layout. Compact visual groups keep dismissal

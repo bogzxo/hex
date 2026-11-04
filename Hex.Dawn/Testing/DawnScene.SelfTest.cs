@@ -125,7 +125,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private (string Name, string About, Action<HexPointerScript> Run)[] SelfTestSuites =>
     [
+        ("native-shortcuts", "Windows key messages through the native keyboard and application shortcut dispatcher", TestNativeShortcuts),
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
+        ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
@@ -228,6 +230,7 @@ internal sealed partial class DawnScene
             TestCodeLensCSharp(test);
         }),
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
+        ("middle-scroll", "middle-click autoscroll and hold-to-scroll without moving the caret", TestMiddleScroll),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
         ("pyright", "the globally installed Python server, diagnostics, completion and hover", TestPyright),
         ("npminstall", "a real offline npm install through the language-server Install action", TestNpmInstall),
@@ -306,7 +309,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AskedSuites(out HashSet<string> asked)
     {
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall")).Select(suite => suite.Name)];
+        // OS input tests take the foreground briefly, so they only run when explicitly named.
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts")).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

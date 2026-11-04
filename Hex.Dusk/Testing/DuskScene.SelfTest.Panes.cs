@@ -61,7 +61,7 @@ internal sealed partial class DuskScene
         test.Check("and the session keeps it", () => TerminalSessions.Write(panel).Contains("name: \"builds\""));
         test.Run(() => Run("close_tab"));
         test.Settle(settle);
-        test.Check("one pane keeps its header, so the text starts where it did split", () => panel.Current!.Tree.Count == 1 && panel.FocusedView!.ShowPaneTitle);
+        test.Check("one unnamed pane uses the tab title without repeating a header", () => panel.Current!.Tree.Count == 1 && !panel.FocusedView!.ShowPaneTitle);
 
         // The mouse and the bell as the settings say
         test.Run(() =>

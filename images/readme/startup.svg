@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-labelledby="title desc">
+  <title id="title">Hex warm launch time, Windows x64 native build</title>
+  <desc id="desc">Ten launches each after one discarded warmup per mode. Dawn median 492 milliseconds, range 472 to 527. Dusk median 474 milliseconds, range 455 to 484. Bars start at zero. Whiskers show the minimum and maximum.</desc>
+  <rect width="1000" height="300" rx="16" fill="#17191d"/>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" fill="#eef0f4">
+    <text x="32" y="40" font-size="22" font-weight="600">A fresh process. About half a second.</text>
+    <text x="32" y="66" font-size="14" fill="#aeb4c0">Process start → first scene · Windows x64 · shader caches populated</text>
+    <g stroke="#343841" stroke-width="1">
+      <path d="M160 92V224 M360 92V224 M560 92V224 M760 92V224"/>
+    </g>
+    <text x="32" y="131" font-size="18">Dawn</text>
+    <rect x="160" y="104" width="492" height="40" rx="6" fill="#72adf3"/>
+    <text x="32" y="200" font-size="18">Dusk</text>
+    <rect x="160" y="173" width="474" height="40" rx="6" fill="#83c9bd"/>
+    <g stroke="#ffffff" stroke-width="2">
+      <path d="M632 124H687 M632 116V132 M687 116V132 M615 193H644 M615 185V201 M644 185V201"/>
+    </g>
+    <text x="790" y="124" font-size="20" font-weight="600">492 ms</text>
+    <text x="790" y="145" font-size="13" fill="#aeb4c0">472–527 ms</text>
+    <text x="790" y="193" font-size="20" font-weight="600">474 ms</text>
+    <text x="790" y="214" font-size="13" fill="#aeb4c0">455–484 ms</text>
+    <g font-size="13" fill="#aeb4c0" text-anchor="middle">
+      <text x="160" y="244">0</text><text x="360" y="244">200</text>
+      <text x="560" y="244">400</text><text x="760" y="244">600 ms</text>
+    </g>
+    <text x="32" y="280" font-size="13" fill="#aeb4c0">Median of 10 launches per mode. Whiskers: min–max. One initial launch per mode discarded.</text>
+  </g>
+</svg>

@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
         return parent.Children.Count;
     }
 
-    private static Label Text(string text, float scale = 0.13f, bool dim = false, bool markdown = false) =>
+    private static Label Text(string text, float scale = 0.16f, bool dim = false, bool markdown = false) =>
         new() { Text = text, TextScale = scale, Dim = dim, Wrap = true, Markdown = markdown, Fill = UIFill.Horizontal, Align = Origin.TopLeft };
 
     /// <summary>The provider selector, rebuilt when its choices, status or available width change.</summary>
@@ -286,7 +286,7 @@ internal sealed partial class DawnScene
             return;
         }
         agentsRows.Add(Text(Said("agents_panel.welcome_title"), 0.17f));
-        agentsRows.Add(Text(Said("agents_panel.welcome_hint"), 0.12f, dim: true));
+        agentsRows.Add(Text(Said("agents_panel.welcome_hint"), 0.15f, dim: true));
         foreach (var (key, icon) in new[] { ("agents_panel.try_map", "map"), ("agents_panel.try_explain", "file-code"), ("agents_panel.try_tests", "beaker") })
         {
             string asked = Said(key);
@@ -316,16 +316,16 @@ internal sealed partial class DawnScene
 
             case HexAgentEntryKind.Text:
                 {
-                Label said = Text(WithPlaces(entry.Text), 0.14f, markdown: true);
+                Label said = Text(WithPlaces(entry.Text), 0.17f, markdown: true);
                 said.OnLink = OpenAgentLink;
                 return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(6, 8, 8, 10) }.With(said);
             }
 
             case HexAgentEntryKind.Thinking:
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(10, 3, 10, 6) }.With(Text(entry.Text, 0.115f, dim: true, markdown: true).Also(label => label.OnLink = OpenAgentLink));
+                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(10, 3, 10, 6) }.With(Text(entry.Text, 0.13f, dim: true, markdown: true).Also(label => label.OnLink = OpenAgentLink));
 
             case HexAgentEntryKind.Note:
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(UIRichText.Literal(entry.Text), 0.11f, dim: true));
+                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(UIRichText.Literal(entry.Text), 0.125f, dim: true));
 
             case HexAgentEntryKind.Error:
             {
@@ -348,14 +348,14 @@ internal sealed partial class DawnScene
             ? (instruction, entry.ContextLocation) : SplitAsked(entry.Text);
         string shown = UIRichText.Literal(asked);
         string? under = with is null ? null : UIRichText.Literal(Said("agents_panel.with_file", ("where", with)));
-        const float scale = 0.13f, padding = 36.0f;
+        const float scale = 0.17f, padding = 36.0f;
         float room = Math.Max(64.0f, AgentsWidth() - 12.0f);
         float longest = room;
         if (skin is not null)
         {
             longest = shown.Split('\n').Max(line => skin.Font.MeasureLine(line, scale, UITextStyle.None, default)) + padding;
             if (under is not null)
-                longest = Math.Max(longest, skin.Font.MeasureLine(under, 0.11f, UITextStyle.None, default) + padding);
+                longest = Math.Max(longest, skin.Font.MeasureLine(under, 0.125f, UITextStyle.None, default) + padding);
         }
 
         var holder = new Panel { Fill = UIFill.Horizontal };
@@ -364,14 +364,14 @@ internal sealed partial class DawnScene
             Anchor = Origin.Right,
             Pivot = Origin.Right,
             Size = new Vector2(Math.Clamp(longest, 60.0f, room * AGENTS_BUBBLE), 0),
-            Color = raised,
+            Color = skin is null ? raised : Vector4.Lerp(raised, skin.AccentColor with { W = 1 }, 0.08f),
             Radius = 10,
             Padding = new UIEdges(13, 10, 13, 10)
         });
         var stack = bubble.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         stack.Add(Text(shown, scale));
         if (under is not null)
-            stack.Add(Text(under, 0.11f, dim: true));
+            stack.Add(Text(under, 0.125f, dim: true));
         return holder;
     }
 
@@ -406,7 +406,7 @@ internal sealed partial class DawnScene
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },
             Style = "button_flat",
             Align = Origin.Left,
-            LabelScale = 0.135f,
+            LabelScale = 0.15f,
             Size = new Vector2(0, 30),
             Fill = UIFill.Horizontal,
             Danger = entry.State == HexAgentToolState.Failed,
@@ -425,7 +425,7 @@ internal sealed partial class DawnScene
             ? stack.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 21), Padding = new UIEdges(28, 0, 8, 3) })
             : holder;
         var right = metadata.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Anchor = compact ? Origin.TopLeft : Origin.TopRight, Pivot = compact ? Origin.TopLeft : Origin.TopRight, Position = compact ? Vector2.Zero : new Vector2(-8, -9) });
-        Label time = right.Add(new Label { Text = state, TextScale = 0.11f, Dim = entry.State != HexAgentToolState.Failed });
+        Label time = right.Add(new Label { Text = state, TextScale = 0.125f, Dim = entry.State != HexAgentToolState.Failed });
         if (entry.State == HexAgentToolState.Running)
             agentsRunningTimes[entry] = time;
         else
@@ -441,22 +441,21 @@ internal sealed partial class DawnScene
         else right.Add(chevron);
         if (!entry.Open && preview.Length > 0)
             stack.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(28, 0, 10, 7) }
-                .With(Text(UIRichText.Literal(OneLine(preview, Math.Max(4, (int)((AgentsWidth() - 48) / 6.0f)))), 0.115f, dim: true)));
+                .With(Text(UIRichText.Literal(OneLine(preview, Math.Max(4, (int)((AgentsWidth() - 48) / 7.0f)))), 0.135f, dim: true)));
 
         if (entry.Open)
         {
-            var opened = stack.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(26, 0, 8, 8) });
-            opened.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(13, 0), Size = new Vector2(1, 0), Fill = UIFill.Vertical, Color = rule });
+            var opened = stack.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(12, 8, 12, 10), Color = skin?.FieldColor, Radius = 6 });
             var said = opened.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
             if (!string.IsNullOrWhiteSpace(entry.Input))
             {
-                said.Add(Text(Said("agents_panel.given"), 0.125f).Also(label => label.Bold = true));
-                said.Add(Text(UIRichText.Literal(Lines(ToolDetails(entry.Input!), 12)), 0.125f));
+                said.Add(Text(Said("agents_panel.given"), 0.135f, dim: true).Also(label => label.Bold = true));
+                said.Add(Text("```json\n" + Lines(ToolDetails(entry.Input!), 12) + "\n```", 0.17f, markdown: true).Also(label => label.CodeFont = code.Font));
             }
             if (!string.IsNullOrWhiteSpace(entry.Output))
             {
-                said.Add(Text(Said("agents_panel.said"), 0.125f).Also(label => label.Bold = true));
-                said.Add(Text(UIRichText.Literal(Lines(entry.Output!, 12)), 0.125f));
+                said.Add(Text(Said("agents_panel.said"), 0.135f, dim: true).Also(label => label.Bold = true));
+                said.Add(Text(UIRichText.Literal(Lines(entry.Output!, 12)), 0.16f));
             }
         }
 

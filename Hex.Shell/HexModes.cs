@@ -5,7 +5,7 @@ using Horizon.Engine;
 namespace Hex.Shell;
 
 /// <summary>
-/// Dawn and Dusk in the one window, swapped with Ctrl+Alt+D (or the toggle on the title bar, the View menu, the
+/// Dawn and Dusk in the one window, swapped with Ctrl+Alt+Shift+D (or the toggle on the title bar, the View menu, the
 /// palette). Hex.exe hands this the way to make each mode's scene (<see cref="Host"/>), and a swap sets the other one,
 /// made the first time it's asked for and kept from then on, so the editor's files and the terminal's shells are where
 /// they were left when it comes back (both scenes are <see cref="Scene.Persistent"/> while this hosts them). Nothing

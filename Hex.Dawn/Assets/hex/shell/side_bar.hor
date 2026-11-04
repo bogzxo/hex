@@ -25,9 +25,9 @@ let tree_title = compositor.label({
     anchor: "left",
     pivot: "left",
     text: "@side.explorer",
-    text_scale: 0.14,
+    text_scale: 0.15,
     bold: true,
-    dim: true,
+    dim: false,
 });
 
 // The explorer's buttons, VS Code's, a new file and a new folder where the selection is, every folder closed, and the files read again

@@ -134,7 +134,7 @@ public static class DuskProgram
 
         var scene = new DuskScene(options);
 
-        // The editor in the same window, Ctrl+Alt+D, when Hex.exe says how to make it, never in a self test
+        // The editor in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it, never in a self test
         if (!selfTest && Other is { } other)
             Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dusk, scene, (mode, folder) => mode == Hex.Shell.HexMode.Dusk ? scene : other(folder));
 

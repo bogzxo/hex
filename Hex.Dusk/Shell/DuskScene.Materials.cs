@@ -42,7 +42,7 @@ internal sealed partial class DuskScene
         Vector4 panelColour = skin.PanelColor with { W = 1.0f };
         // A square theme (Visual Studio's) has the panes flush and square on a window of their own tone, Dawn's the same
         bool square = skin.CornerRadius <= 0.0f;
-        Vector4 window = square ? panelColour : new(panelColour.X * 0.5f, panelColour.Y * 0.5f, panelColour.Z * 0.5f, 1.0f);
+        Vector4 window = square ? panelColour : skin.FieldColor with { W = 1.0f };
 
         glow.UseSkin(skin);
         glow.Veil = glassy ? window with { W = veil } : window;

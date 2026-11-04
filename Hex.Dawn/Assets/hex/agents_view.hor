@@ -22,7 +22,7 @@ let agents_rows = compositor.stack({ parent: agents_scroll, fill: "horizontal", 
 
 // The card at the bottom, the box over the pickers and Send, Stop in Send's place while it's going
 let agents_compose = compositor.panel({ parent: agents_view, anchor: "bottom", pivot: "bottom", fill: "horizontal", size: vec(0, 96), padding: vec(6, 6, 6, 6) });
-let agents_input = compositor.textbox({ parent: agents_compose, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 40), padding: vec(6, 4, 6, 4), text_scale: 0.135, placeholder: "@agents_panel.input", max_length: 20000 });
+let agents_input = compositor.textbox({ parent: agents_compose, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 40), padding: vec(6, 4, 6, 4), text_scale: 0.15, placeholder: "@agents_panel.input", max_length: 20000 });
 let agents_options = compositor.stack({ parent: agents_compose, anchor: "bottom_left", pivot: "bottom_left", direction: "horizontal", spacing: 0 });
 let agents_send = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "arrow-up", tooltip: "@agents_panel.send" });
 let agents_stop = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "debug-stop", tooltip: "@agents_panel.stop", visible: false });

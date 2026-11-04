@@ -90,6 +90,8 @@ internal sealed partial class DawnScene
             && Near(codeEditing.findPrevious.Bounds.Center.Y, codeEditing.findNext.Bounds.Center.Y, 1)
             && Near(codeEditing.replaceBox.Bounds.Center.Y, codeEditing.replaceOne.Bounds.Center.Y, 1)
             && Near(codeEditing.replaceOne.Bounds.Center.Y, codeEditing.replaceAll.Bounds.Center.Y, 1));
+        test.Check("surface: compact find reserves space above the editing context", () =>
+            code.CodeBounds.Max.Y <= codeEditing.findBar.Bounds.Min.Y - 4);
         test.Check("surface: a compact find with room for its options uses three tidy lines", () =>
             codeEditing.findBar.Bounds.Width < 222 || codeEditing.findBar.Bounds.Width >= 616
             || (Near(codeEditing.findCase.Bounds.Center.Y, codeEditing.findNext.Bounds.Center.Y, 1)
@@ -118,6 +120,15 @@ internal sealed partial class DawnScene
         test.Check("surface: the wrapped replace action edits the document", () => code.Text.Contains("sum +=", StringComparison.Ordinal));
         test.Run(() => code.Document.Undo());
         test.Run(() => codeEditing.replaceBox.Focus());
+        test.Settle(0.3f);
+        test.Check("surface: the active match stays below pinned scopes at 200%", () =>
+        {
+            var caret = code.Document.Caret;
+            float y = code.PlaceOf(caret).Y;
+            float row = MathF.Abs(y - code.PlaceOf(new(caret.Line + 1, 0)).Y);
+            return y - row * 0.5f >= code.CodeBounds.Min.Y
+                && y + row * 0.5f <= code.CodeBounds.Max.Y - (code.StickyShown.Count + 1) * row;
+        });
         SurfaceShot(test, "surface_find_200.png");
         test.Run(() => SetScale(findScaleWas, remember: false));
         test.Settle(0.5f);

@@ -5,6 +5,8 @@ using Horizon.UI.Components;
 
 using Key = Silk.NET.Input.Key;
 
+using Hex.Shell;
+
 namespace Hex.Dusk;
 
 /// <summary>
@@ -39,6 +41,9 @@ internal sealed partial class DuskScene
     /// <summary>The parts of the self test, in the order they run.</summary>
     private (string Name, string About, Action<DuskScript> Run)[] SelfTestSuites =>
     [
+        ("graphite", "the shared Graphite profile, terminal palette and readable neutral chrome", TestGraphite),
+        ("bell", "terminal cursor movement and visual bell", TestBell),
+        ("interactions", "palette dismissal, single-click results, empty queries and focus restoration", TestInteractions),
         ("ux", "inline search and returning from scrollback to live output", TestUx),
         ("symbols", "triangle and arrow glyphs on the terminal cell grid", TestSymbols),
         ("start", "the first tab, its shell, the window fitted round it", TestStart),
@@ -180,7 +185,7 @@ internal sealed partial class DuskScene
         test.Check("the core, themes and profiles plugins started", () => host.Plugins.Count(plugin => plugin.Enabled && plugin.Failed is null && plugin.Runtime is not null) >= 3);
         test.Check("the plugins registered the commands", () => host.Commands.Contains("new_tab") && host.Commands.Contains("split_right") && host.Commands.Contains("theme_next") && host.Commands.Count > 25);
         test.Check("keys.hor put new_tab on Ctrl+Shift+T", () => KeyOf("new_tab") == "Ctrl+Shift+T" && KeyOf("palette") == "Ctrl+Shift+P");
-        test.Check("the window plugin puts the swap to Dawn on Ctrl+Alt+D", () => KeyOf("dawn_mode") == "Ctrl+Alt+D");
+        test.Check("the window plugin puts the swap to Dawn on Ctrl+Alt+Shift+D", () => UIKeys.Read(KeyOf("dawn_mode")) == UIKeys.Read("Ctrl+Alt+Shift+D"));
         test.Check("the menus say the keys", () => menu.Menus[0].Items.First(item => item.Label == "New tab").Shortcut == "Ctrl+Shift+T");
         test.Check("a profile a shell, the machine's in it", () => OperatingSystem.IsWindows()
             ? panel.Profiles.Count >= 2 && panel.Profiles.Exists(profile => profile.Id == "cmd")
@@ -653,7 +658,11 @@ internal sealed partial class DuskScene
     private void Shot(string name)
     {
         if (System.Environment.GetEnvironmentVariable("DUSK_SELFTEST_SHOTS") is { Length: > 0 } folder)
+        {
             Engine.CaptureScreenshot(Path.Combine(folder, name + ".png"));
+            Engine.WindowManager.RequestFrames(0.2);
+            Engine.WindowManager.Wake();
+        }
     }
 
     /// <summary>Everything inside of a component, all the way down.</summary>

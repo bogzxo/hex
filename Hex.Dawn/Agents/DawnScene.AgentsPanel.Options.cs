@@ -17,6 +17,7 @@ internal sealed partial class DawnScene
 {
     private StackPanel agentsOptions = null!;
     private string agentsOptionsDrawn = string.Empty;
+    private Button? agentsThinking;
 
     // What was asked in this run, the newest last, and how far back Up has gone (Count for not at all)
     private readonly List<string> agentsAsked = [];
@@ -102,6 +103,7 @@ internal sealed partial class DawnScene
         if (said == agentsOptionsDrawn) return;
         agentsOptionsDrawn = said;
         Empty(agentsOptions);
+        agentsThinking = null;
         bool captured = agentDraftContext is not null;
         string attached = agentDraftContext is { } snapshot ? Path.GetFileName(snapshot.Path) : string.Empty;
         if (attached.Length > 12) attached = attached[..10] + "…";
@@ -116,9 +118,11 @@ internal sealed partial class DawnScene
         context.Size = new System.Numerics.Vector2(captured && !compact ? 120 : 32, 32);
         context.Enabled = captured || file.Length > 0;
         if (extension is null || options.Count == 0) return;
-        Button settings = agentsOptions.Add(Picker(compact ? string.Empty : Said("agents_panel.options"), "settings-gear", false,
+        AgentOption? thinking = options.FirstOrDefault(option => option.Key is
+            "effort" or "reasoning_effort" or "reasoningEffort" or "thinking_level" or "thinkingLevel" or "thinking");
+        Button settings = agentsOptions.Add(Picker(compact || thinking is not null ? string.Empty : Said("agents_panel.options"), "settings-gear", false,
             Said("agents_panel.options"), () => { }));
-        settings.Size = new System.Numerics.Vector2(compact ? 32 : 100, 32);
+        settings.Size = new System.Numerics.Vector2(compact || thinking is not null ? 32 : 100, 32);
         settings.OnPressed = () =>
         {
             var menu = new Menu("agent options");
@@ -137,6 +141,31 @@ internal sealed partial class DawnScene
             }
             ContextMenu.Show(chrome, settings.Bounds.PointAt(Origin.TopLeft), menu);
         };
+        if (thinking is not null)
+        {
+            string value = Values.Text(extensions.SettingOf(extension, thinking.Key));
+            string current = value.Length == 0 ? Said("agents_panel.thinking_auto")
+                : thinking.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
+            float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - 48));
+            agentsThinking = agentsOptions.Add(Picker(room >= 60 ? current : string.Empty, "lightbulb", false,
+                Said("agents_panel.thinking_tip", ("level", current)), () => { }));
+            agentsThinking.Size = new System.Numerics.Vector2(room, 32);
+            Button thinkingButton = agentsThinking;
+            thinkingButton.OnPressed = () =>
+            {
+                var menu = new Menu(Said("agents_panel.thinking"));
+                foreach (var (choiceValue, label) in thinking.Choices)
+                {
+                    string selected = choiceValue;
+                    menu.Add(label, () =>
+                    {
+                        extensions.SetSetting(extension, thinking.Key, new StringValue(selected), tell: true);
+                        agentsOptionsDrawn = string.Empty;
+                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, thinking.Key)) == selected;
+                }
+                ContextMenu.Show(chrome, thinkingButton.Bounds.PointAt(Origin.TopLeft), menu);
+            };
+        }
     }
 
     private static Button Picker(string label, string icon, bool selected, string tooltip, Action pressed) => new()
@@ -144,8 +173,8 @@ internal sealed partial class DawnScene
         Label = label,
         Icon = icon,
         Style = "button_flat",
-        LabelScale = 0.115f,
-        Size = new System.Numerics.Vector2(0, 22),
+        LabelScale = 0.135f,
+        Size = new System.Numerics.Vector2(0, 32),
         Selected = selected,
         Animated = false,
         Tooltip = tooltip,

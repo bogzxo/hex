@@ -210,7 +210,7 @@ internal sealed partial class DawnScene
         commands.Add("Terminal/terminals", Said("terminal_menu.new_terminal"), NewTerminal, "Ctrl+Shift+`", "add");
         commands.Add("Terminal/terminals", Said("terminal_menu.new_with_profile"), () => InTerminal(terminals.NewTabWith), icon: "terminal");
         commands.Add("Terminal/terminals", Said("terminal_menu.split"), () => InTerminal(() => terminals.Run("split_right")), icon: "split-horizontal");
-        commands.Add("Terminal/terminals", Said("menus.dusk_terminal"), SwapMode, "Ctrl+Alt+D", "terminal", UIKeyUse.BoundWhileTyping);
+        commands.Add("Terminal/terminals", Said("menus.dusk_terminal"), SwapMode, "Ctrl+Alt+Shift+D", "terminal", UIKeyUse.BoundWhileTyping);
         commands.Add("Terminal/pane", Said("terminal_menu.clear"), () => InTerminal(() => terminals.Run("clear")), icon: "clear-all");
         commands.Add("Terminal/pane", Said("terminal_menu.rename"), () => InTerminal(() => terminals.Run("rename_tab")), icon: "edit");
         commands.Add("Terminal/pane", Said("terminal_menu.kill"), () => InTerminal(() => terminals.Run("close_tab")), icon: "trash")

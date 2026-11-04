@@ -31,7 +31,7 @@ internal sealed partial class DawnScene
             SettingsWindow is { Visible: true } window && window.Parent == chrome.Root && SettingsPage is { } page
             && page.Settings.Any(setting => setting.Key == "editor_skin") && page.Settings.Any(setting => setting.Key == "scrollback")
             && page.Settings.Any(setting => setting.Key == "backdrop_image") && page.Settings.Any(setting => setting.Key == "layout_skin")
-            && Value("editor_skin") is StringValue { Value: "Horizon" });
+            && Value("editor_skin") is StringValue { Value: "Graphite" });
         test.Check("settings: in order, how Hex looks first with both modes' themes in it, then the editor, the terminal and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(Hex.Shell.EditorSettingsCatalog.Parts)
             && SettingsPage.Settings.Where(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
@@ -276,10 +276,10 @@ internal sealed partial class DawnScene
             settings.EditorTheme != "horizon" && settings.EditorSkin == "flat" && compositor.Skin?.Theme == settings.EditorTheme && next!.Replace(' ', '_').EndsWith(settings.EditorTheme, StringComparison.OrdinalIgnoreCase));
         test.Check("settings: the editor can wear any skin there is, the row has every one of them", () =>
             SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices is { } listed && listed.Length > UISkins.Available.Count && listed.Any(text => text.Contains("Dead Revolver")));
-        // The lists of the sides are the panel's colour, see through on glass, and the code's box the panel itself
+        // Lists sit on the panel, and the document has the quieter field tone. Square skins stay flush.
         test.Check("settings: boxes, background and all", () =>
             compositor.Skin is { } worn && treeScroll.Color is { } box && box with { W = 1.0f } == worn.PanelColor with { W = 1.0f }
-            && codeScroll.Color == worn.PanelColor with { W = 1.0f });
+            && codeScroll.Color == (Square(worn) ? worn.PanelColor : worn.FieldColor) with { W = 1.0f });
         test.Run(() => UseEditorTheme("light", save: false));
 
         // The skin swaps on the thread that draws, waited on rather than given a fixed time
@@ -378,7 +378,7 @@ internal sealed partial class DawnScene
         Vector2 closeAt = Vector2.Zero;
         test.Run(() => closeAt = chrome.ToWorld(SettingsWindow!.CloseBounds.Center));
         test.Click(() => closeAt);
-        test.Wait();
+        test.WaitFor(() => SettingsWindow is null, 2.0f);
         test.Check("settings: the x closes them", () => SettingsWindow is null && !chrome.Root.Children.OfType<WindowPanel>().Any());
         TestSideKeys(test);
 

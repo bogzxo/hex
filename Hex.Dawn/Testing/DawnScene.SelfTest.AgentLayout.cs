@@ -57,10 +57,13 @@ internal sealed partial class DawnScene
             string folder = Path.Combine(testFolder, "layout_agent");
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, HexExtension.FILE), """
-                let extension = { name: "Layout fixture" };
+                let extension = { name: "Layout fixture", settings: {
+                    effort: { title: "Thinking level", kind: "choice", choices: ["", "low", "high"], default: "" }
+                } };
                 func on_start(hex) {
                     hex.agent({ id: "layout_agent", name: "Workspace assistant", run: { program: hex.executable,
-                        options: [{ id: "model", title: "Model", choices: [{ value: "default", label: "Default" }] }] } });
+                        options: [{ id: "model", title: "Model", choices: [{ value: "default", label: "Default" }] },
+                            { id: "effort", title: "Thinking level", choices: [{ value: "", label: "Auto" }, { value: "low", label: "Low" }, { value: "high", label: "High" }] }] } });
                 }
                 """);
             provider = new HexExtension(folder, builtIn: false) { Enabled = true };
@@ -72,6 +75,15 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: installing a provider enables the existing draft", () =>
             agentsSend.Enabled && agentsInput.Text == "Explain the settings loader");
+        test.Check("agents layout: thinking level is directly available in the composer", () => agentsThinking is { Enabled: true });
+        test.Run(() => agentsThinking!.OnPressed!());
+        test.Wait();
+        PressKeys(test, "End");
+        PressKeys(test, "Enter");
+        test.Settle(0.2f);
+        test.Check("agents layout: thinking selection persists in the provider setting and updates its picker", () =>
+            agentsThinking?.Tooltip.Contains("High", StringComparison.Ordinal) == true
+            && Horizon.HIDL.Runtime.Values.Text(extensions.SettingOf(provider!, "effort")) == "high");
         test.Run(() => RequestAgent("explain"));
         test.Settle(0.3f);
         test.Check("agents layout: actions fit the minimum sidebar", () =>

@@ -14,10 +14,10 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // How long a view of the side bar takes to settle, a beat between its rows, and how far they drop from
-    private const float SIDE_ARRIVE = 0.2f, SIDE_STAGGER = 0.025f, SIDE_DROP = 6.0f;
+    private const float SIDE_ARRIVE = 0.16f, SIDE_STAGGER = 0.012f, SIDE_DROP = 4.0f;
 
     // How long the code of a file switched to takes to fade up, and from how faint
-    private const float CODE_ARRIVE = 0.12f, CODE_FROM = 0.84f;
+    private const float CODE_ARRIVE = 0.10f, CODE_FROM = 0.96f;
 
     /// <summary>How long a piece of Dawn's motion lasts, scaled by the interface animation setting, 0 when it's off.</summary>
     private float MotionFor(float seconds) => HexMotion.Duration(seconds, settings.UiAnimation);

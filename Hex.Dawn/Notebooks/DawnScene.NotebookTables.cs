@@ -90,8 +90,7 @@ internal sealed partial class DawnScene
             string original = string.Concat(paragraph.Select(piece => piece.Math ? "$" + piece.Text + "$" : piece.Text));
             if (paragraph.Any(piece => piece.Math))
             {
-                string latex = string.Concat(paragraph.Select(piece => piece.Math ? "$" + piece.Text + "$" : NotebookMath.MarkdownText(piece.Text)));
-                if (ProseMathPicture(latex, pictures) is { } rendered)
+                if (ProseMathPicture(original, pictures) is { } rendered)
                     into.Add(rendered);
                 else
                     into.Add(MarkdownLabel(original, language));

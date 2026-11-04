@@ -1,4 +1,18 @@
-# Hex 2.8.0 thickboy
+# Hex 2.8.2 thickboy
+
+A quieter Hex. Graphite is the new look and what a fresh install starts in, neutral surfaces in Dawn and Dusk alike
+with the motion toned down, and the README has been written again with pictures of the real thing.
+
+## changed
+
+- Graphite comes first among the looks (Appearance), with a Graphite theme for the code and the terminal
+- the side bar's views and a file switched to settle in quicker and from closer, so moving around reads as calm
+- Dawn and Dusk swap with Ctrl+Alt+Shift+D now, Ctrl+Alt+D is left to whatever else wants it
+- the welcome page, the command palette and the theme picker say plainly what the keys and the mouse do
+- the agents panel has a thinking level for the next message, and says how long a turn took once it's done
+- markdown in a notebook is set in the UI's fonts, only the formulas go through the maths typesetting
+
+# From 2.8.0
 
 Hex moves a little now, the way something you can touch does. Windows land rather than appear, the side bar's views
 and the panel's pages settle in, notifications slide up out of the corner and a file switched to fades its code up.
