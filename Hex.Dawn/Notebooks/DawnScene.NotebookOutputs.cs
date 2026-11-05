@@ -137,12 +137,18 @@ internal sealed partial class DawnScene
     private UIComponent? OutputData(HexNotebook notebook, JsonObject data, JsonObject? metadata, List<NotebookPicture> pictures)
     {
         if (data["image/svg+xml"] is { } svg && RenderedPicture(svg, density => NotebookRender.Svg(NotebookFile.Text(svg), density), pictures, zoomed: true, NotebookFile.Text(data["text/plain"])) is { } vector)
+        {
+            OfferSaveImage(vector, "image/svg+xml", svg);
             return vector;
+        }
 
         foreach (string mime in (string[])["image/png", "image/jpeg", "image/gif", "image/bmp"])
         {
             if (data[mime] is JsonValue value && value.TryGetValue(out string? encoded) && OutputPicture(data[mime]!, encoded, metadata?[mime] as JsonObject, pictures) is { } picture)
+            {
+                OfferSaveImage(picture, mime, data[mime]!);
                 return picture;
+            }
         }
 
         // A DataFrame's HTML is drawn as a table rather than its text/plain's columns of spaces

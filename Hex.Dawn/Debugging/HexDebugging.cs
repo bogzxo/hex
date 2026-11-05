@@ -265,7 +265,7 @@ internal sealed partial class HexDebugging
         if (context.Settings.Values.DebuggerPath.Length > 0 && File.Exists(context.Settings.Values.DebuggerPath))
             return context.Settings.Values.DebuggerPath;
 
-        foreach (string folder in new[] { AppContext.BaseDirectory, TerminalFiles.UserFolder })
+        foreach (string folder in new[] { Hex.Core.HexHost.ProgramFolder, TerminalFiles.UserFolder })
         {
             string there = Path.Combine(folder, "netcoredbg", exe);
             if (File.Exists(there))

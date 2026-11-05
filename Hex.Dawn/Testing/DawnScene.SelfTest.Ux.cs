@@ -42,6 +42,13 @@ internal sealed partial class DawnScene
         test.Check("ux: dismissing the editor list returns input to the editor", () => compositor.Focus == code);
         test.Run(() => { wideSideWidth = fittedLeft; SetScale(2.0f, remember: false); });
         test.Settle(0.2f);
+        test.Check("ux: mobile title bar and menus follow the chosen UI zoom", () =>
+        {
+            bool nativeChrome = (Engine.WindowManager.Features & Horizon.Platform.PlatformFeatures.Window) != 0;
+            return ((TitleBar)top).PixelSized == nativeChrome
+                && MathF.Abs(menu.TextScale - MENU_TEXT / (nativeChrome ? 2.0f : 1.0f)) < 0.0001f
+                && MathF.Abs(modeToggle.LabelScale - 0.14f / (nativeChrome ? 2.0f : 1.0f)) < 0.0001f;
+        });
         test.Check("ux: narrow editor keeps file navigation on its own row", () => tabRow.Direction == UIDirection.Vertical
             && docTabs.Bounds.Max.X <= center.Bounds.Max.X + 1.0f
             && allTabs.Bounds.Max.X <= center.Bounds.Max.X + 1.0f);

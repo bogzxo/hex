@@ -17,7 +17,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             File.WriteAllText(csharp, BigCSharp(20000));
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "notebooks", "engineering.ipynb"), notebook, true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "notebooks", "engineering.ipynb"), notebook, true);
             Open(csharp);
             code.GoTo(code.Document.LineCount / 2, 0);
         });

@@ -27,7 +27,7 @@ internal sealed partial class DawnScene
         // the files by hand is underlined in them and listed in Problems (SettingsDiagnostics)
         SettingsSections.Missing = Said("settings_problems.no_settings", ("skeleton", Said("settings_problems.skeleton")));
         diagnosticSources.Add(SettingsDiagnosticsOf);
-        settings = new HexSettings(kept ? Horizon.UI.Components.TerminalFiles.Settings() : null, Path.Combine(AppContext.BaseDirectory, HexSettings.FILE));
+        settings = new HexSettings(kept ? Horizon.UI.Components.TerminalFiles.Settings() : null, Path.Combine(Hex.Core.HexHost.ProgramFolder, HexSettings.FILE));
 
         layersScroll = layout.Get<ScrollPanel>("layers_scroll");
         usualLeft = treeScroll.Size.X;

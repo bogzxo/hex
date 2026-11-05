@@ -2,7 +2,7 @@ using System.Numerics;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dusk;
 
@@ -32,12 +32,12 @@ internal sealed partial class DuskScene
         test.Check("interaction: the next workspace click works", () => behindClicks == 1);
         test.Run(() => { panel.FocusedView!.Focus(); Run("palette"); Remember(); query.Text = "zzzz-no-match-987654"; query.OnChanged?.Invoke(query.Text); });
         test.Settle(0.3f);
-        test.Run(() => { Engine.Input.Keyboard.Tap([Key.Enter]); UIKeyboard.Press(Key.Enter, false, false, false, false); });
+        test.Run(() => Engine.Input.Keyboard.Tap([Key.Enter]));
         test.Wait();
         test.Check("interaction: no-match Enter preserves the palette", () => shown.IsOpen && compositor.Focus == query);
         test.Click(() => chrome.ToWorld(Descendants(shown).OfType<Label>().First(label => label.Visible && label.Text.StartsWith("Nothing matches")).Bounds.Center));
         test.Check("interaction: empty-result click preserves typing focus", () => shown.IsOpen && compositor.Focus == query);
-        test.Run(() => { Engine.Input.Keyboard.Tap([Key.Escape]); UIKeyboard.Press(Key.Escape, false, false, false, false); });
+        test.Run(() => Engine.Input.Keyboard.Tap([Key.Escape]));
         test.Wait();
         test.Check("interaction: Escape returns to the terminal", () => !shown.IsOpen && compositor.Focus == panel.FocusedView);
         test.Run(() => { Run("palette"); Remember(); });

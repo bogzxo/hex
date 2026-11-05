@@ -1,0 +1,88 @@
+dawn 0 (DISCARDED WARMUP)
+[Info] [Startup] main at 18 ms.
+[Info] [Startup] first frame of the scene shown at 3581 ms.
+
+dawn 1 (MEASURED)
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] first frame of the scene shown at 495 ms.
+
+dawn 2 (MEASURED)
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] first frame of the scene shown at 527 ms.
+
+dawn 3 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 492 ms.
+
+dawn 4 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 510 ms.
+
+dawn 5 (MEASURED)
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] first frame of the scene shown at 488 ms.
+
+dawn 6 (MEASURED)
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] first frame of the scene shown at 486 ms.
+
+dawn 7 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 504 ms.
+
+dawn 8 (MEASURED)
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] first frame of the scene shown at 472 ms.
+
+dawn 9 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 487 ms.
+
+dawn 10 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 492 ms.
+
+dusk 0 (DISCARDED WARMUP)
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] first frame of the scene shown at 496 ms.
+
+dusk 1 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 455 ms.
+
+dusk 2 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 479 ms.
+
+dusk 3 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 470 ms.
+
+dusk 4 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 477 ms.
+
+dusk 5 (MEASURED)
+[Info] [Startup] main at 13 ms.
+[Info] [Startup] first frame of the scene shown at 464 ms.
+
+dusk 6 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 480 ms.
+
+dusk 7 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 463 ms.
+
+dusk 8 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 471 ms.
+
+dusk 9 (MEASURED)
+[Info] [Startup] main at 11 ms.
+[Info] [Startup] first frame of the scene shown at 478 ms.
+
+dusk 10 (MEASURED)
+[Info] [Startup] main at 12 ms.
+[Info] [Startup] first frame of the scene shown at 484 ms.
+

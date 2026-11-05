@@ -24,6 +24,9 @@ internal static partial class Program
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
         Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
+        // Hex is a desktop program, its windows, keys and clipboard are the desktop's
+        Horizon.Platform.Desktop.DesktopPlatform.Install();
+
         // The old exe and dlls a build of Hex over itself moved aside go, see HexSelfBuild
         Hex.Core.Projects.HexSelfBuild.CleanUpSoon();
 
@@ -68,6 +71,9 @@ internal static partial class Program
 
         // Either mode can swap to the other in its own window (Ctrl+Alt+Shift+D), each made the first time it's wanted
         DawnProgram.Other = DuskProgram.Scene;
+
+        // The native self test posts keys to the desktop's own window, which only Hex.exe knows the platform of
+        DawnProgram.NativeWindow = engine => engine.WindowManager.Host is Horizon.Platform.Desktop.DesktopHost desktop ? desktop.Window.Win32Handle : 0;
         DuskProgram.Other = DawnProgram.Scene;
 
         if (mode == HexMode.Dusk)

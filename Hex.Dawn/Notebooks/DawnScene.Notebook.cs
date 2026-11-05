@@ -208,6 +208,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateNotebooks(float dt)
     {
+        UpdateHtmlExport();
         foreach (HexNotebook notebook in notebooks.Values)
         {
             TakeKernelEvents(notebook);

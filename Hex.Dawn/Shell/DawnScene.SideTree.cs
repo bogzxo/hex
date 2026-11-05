@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
         explorer.SelectedPaths = SelectedWith;
         explorer.FoldersChanged += folders.Forget;
         explorer.PastedPaths = paths => pendingExplorerSelection = paths.ToArray();
-        commands.Keys.Add(Silk.NET.Input.Key.V,
+        commands.Keys.Add(Horizon.Input.Key.V,
             () => compositor.Focus == sideTree && Side == HexSide.Explorer && ExplorerFileKey(UIKeyboard.PASTE),
             control: true, whileTyping: true, shift: false, first: true);
 

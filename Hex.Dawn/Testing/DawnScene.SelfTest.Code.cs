@@ -235,9 +235,9 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             beforeArt = document;
-            System.IO.File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex_icon.png"), picture, overwrite: true);
+            System.IO.File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex_icon.png"), picture, overwrite: true);
             Directory.CreateDirectory(sprites);
-            System.IO.File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "global", "loading.aseprite"), aseprite, overwrite: true);
+            System.IO.File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "global", "loading.aseprite"), aseprite, overwrite: true);
             System.IO.File.WriteAllText(artFile,
                 "let play = { text: \"$(play) go\", icon: \"save\" };\n"
                 + "let picture = \"selftest_art.png\";\n"

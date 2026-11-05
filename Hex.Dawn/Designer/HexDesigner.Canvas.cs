@@ -3,8 +3,8 @@ using System.Numerics;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
-using MouseButton = Silk.NET.Input.MouseButton;
+using Key = Horizon.Input.Key;
+using MouseButton = Horizon.Input.MouseButton;
 
 namespace Hex.Dawn;
 

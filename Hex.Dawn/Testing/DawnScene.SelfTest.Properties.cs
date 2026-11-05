@@ -46,7 +46,7 @@ internal sealed partial class DawnScene
             File.WriteAllText(data, "some data\r\nmore\r\n");
             File.WriteAllText(first, "{}\n");
             File.WriteAllText(second, "{}\n");
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
             explorer.OpenFolder(folder);
             Open(data);
         });

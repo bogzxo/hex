@@ -78,7 +78,7 @@ internal sealed partial class DawnScene
         Directory.CreateDirectory(data);
 
         // The art of the skin's sheet, its spinning cursor being an animation of four frames
-        string skin = Path.Combine(AppContext.BaseDirectory, "Assets", "uix", "dead_revolver");
+        string skin = Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "uix", "dead_revolver");
         string art = Path.Combine(game, "Assets", "art");
         Directory.CreateDirectory(art);
         foreach (string file in Directory.EnumerateFiles(skin))

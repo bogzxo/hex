@@ -32,7 +32,7 @@ internal sealed partial class HexCodeEditing
     }
 
     // Where a font's file is, Assets/fonts/name/name.ttf
-    private static string FontFile(string name) => Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", name, name + ".ttf");
+    private static string FontFile(string name) => Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", name, name + ".ttf");
 
     /// <summary>The code in Hack, or in the skin's font, kept in the settings.</summary>
     internal void ToggleCodeFont()

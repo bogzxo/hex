@@ -6,7 +6,7 @@ using Horizon.UI.Components;
 
 using Hex.Shell;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 

@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
@@ -6,7 +6,7 @@ using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -576,7 +576,7 @@ internal sealed partial class DawnScene
         // and was 60 ms an open, so what was found for a folder is kept until something changes in the workspace
         string from = Path.GetDirectoryName(Path.GetFullPath(path)) ?? path;
         if (!languagesNear.TryGetValue(from, out string? folder))
-            languagesNear[from] = folder = Horizon.Content.Localisation.FindNear(path);
+            languagesNear[from] = folder = LanguagesNear(path);
 
         if (folder is null || folder == Horizon.Content.Localisation.Folder)
             return;
@@ -588,6 +588,20 @@ internal sealed partial class DawnScene
         string language = languages.Contains(Horizon.Content.Localisation.DEFAULT_LANGUAGE) ? Horizon.Content.Localisation.DEFAULT_LANGUAGE : languages[0];
         if (Horizon.Content.Localisation.Load(folder, language) && announce)
             Say(Said("documents.languages_loaded", ("language", language), ("folder", folder)));
+    }
+
+    // The languages' folder near a layout, none when a folder on the way up can't be listed. On a tablet the app's own
+    // folder is inside /data/user/0, which an app may go through but not list
+    private static string? LanguagesNear(string path)
+    {
+        try
+        {
+            return Horizon.Content.Localisation.FindNear(path);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The File menu's files, Edit's undo and redo, and Ctrl+Tab through what is open, all going while typing.</summary>
@@ -607,6 +621,7 @@ internal sealed partial class DawnScene
 
         // A folder right under a file, the way they're opened one after the other, not down with the workspaces
         commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "root-folder-opened", UIKeyUse.BoundWhileTyping);
+        AddHostedCommands();
         recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 

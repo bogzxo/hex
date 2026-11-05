@@ -335,7 +335,7 @@ internal sealed partial class DawnScene
         Enter("backdrop_wrap", Values.Bool(true));
 
         // A picture of its own, and the usual one back by the row's button
-        string picture = Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        string picture = Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
         Enter("backdrop_image", new StringValue(picture));
         test.Wait();
         test.Check("settings: a picture of its own is the backdrop from then on", () => settings.BackdropImage == Path.GetFullPath(picture) && code.Backdrop is not null);
@@ -413,7 +413,7 @@ internal sealed partial class DawnScene
         void PressCtrlShiftG() => test.Run(() =>
         {
             bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
-            commands.Keys.Update(key => key == Silk.NET.Input.Key.G, control: true, shift: true, alt: false, typing);
+            commands.Keys.Update(key => key == Horizon.Input.Key.G, control: true, shift: true, alt: false, typing);
         });
 
         string noGroup = Said("designer_selection.no_group");

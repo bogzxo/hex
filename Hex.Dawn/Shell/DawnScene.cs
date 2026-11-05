@@ -168,6 +168,7 @@ internal sealed partial class DawnScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
         codeEditing = new HexCodeEditing(Context);
@@ -431,6 +432,8 @@ internal sealed partial class DawnScene : Scene
     {
         UpdateDialog();
         UpdateClosing();
+        UpdateHosted();
+        UpdateRenderScale();
         Hex.Shell.HexModes.Update();
         ColourChrome();
         PlaceCanvas();

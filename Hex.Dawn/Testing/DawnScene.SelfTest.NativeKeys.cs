@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Hex.Shell;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -35,6 +35,9 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("native keys: mode shortcut reaches application commands from code", () => swaps == 1);
         test.Run(() => RealKeys.Focus());
+        // Windows can refuse activation from a background runner. Allow the operator to focus this window;
+        // the foreground assertion and every OS key's guard still apply.
+        test.WaitFor(RealKeys.InFront, 30.0f);
         test.Check("native keys: OS input is targeted at the test window", RealKeys.InFront);
         test.Settle(0.5f);
         test.Run(() => RealKeys.Press(0x76));
@@ -65,7 +68,11 @@ internal sealed partial class DawnScene
     // Post to this test window only. Unlike Keyboard.Tap, these traverse the native window's key callbacks.
     private void PostNativeChord(params uint[] keys)
     {
-        nint window = Engine.WindowManager.Window.Native!.Win32!.Value.Hwnd;
+        // The desktop's own window, a self test on Windows may reach past the engine's contract for it. Hex.exe says
+        // how to find it (DawnProgram.NativeWindow), Dawn itself never names the desktop platform so a phone can host it
+        nint window = DawnProgram.NativeWindow?.Invoke(Engine) ?? 0;
+        if (window == 0)
+            throw new InvalidOperationException("The self-test window has no HWND to post keys to.");
         foreach (uint key in keys) Post(key, false);
         for (int i = keys.Length - 1; i >= 0; i--) Post(keys[i], true);
         void Post(uint key, bool up)

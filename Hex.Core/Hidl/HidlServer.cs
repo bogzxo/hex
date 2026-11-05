@@ -492,7 +492,7 @@ internal sealed partial class HidlServer : IDisposable
     {
         try
         {
-            return Localisation.ReadFile(Path.Combine(AppContext.BaseDirectory, STRINGS_FILE));
+            return Localisation.ReadFile(Path.Combine(Hex.Core.HexHost.ProgramFolder, STRINGS_FILE));
         }
         catch (Exception)
         {

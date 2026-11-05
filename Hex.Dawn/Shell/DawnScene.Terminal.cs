@@ -7,7 +7,7 @@ using Horizon.UI.Components;
 using Horizon.UI.Drawing;
 using Horizon.UI.Skinning;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -25,6 +25,9 @@ internal sealed partial class DawnScene : ITerminalHostUi
     // Hex's own commands on the host, owned by this so a plugin can't take them away
     private static readonly object HexOwns = new();
 
+    // The terminal's own files the engine ships (TerminalHost.EnginePlugins and EngineKeys), from Hex's program folder
+    private static string EngineTerminal => Path.Combine(Hex.Core.HexHost.ProgramFolder, TerminalHostOptions.ENGINE_ASSETS);
+
     private void BuildTerminal()
     {
         terminalPanel = layout.Get<TerminalPanel>("terminal");
@@ -34,8 +37,9 @@ internal sealed partial class DawnScene : ITerminalHostUi
             Name = "hex",
             Version = HexAbout.Version,
             ObjectNames = ["terminal"],
-            PluginFolders = [(TerminalHost.EnginePlugins, true), (Path.Combine(TerminalFiles.UserFolder, TerminalFiles.PLUGINS), false)],
-            KeysFiles = [TerminalHost.EngineKeys, TerminalFiles.Keys()],
+            // The engine's terminal files out of Hex's program folder, which on a tablet isn't where the assemblies are
+            PluginFolders = [(Path.Combine(EngineTerminal, "plugins"), true), (Path.Combine(TerminalFiles.UserFolder, TerminalFiles.PLUGINS), false)],
+            KeysFiles = [Path.Combine(EngineTerminal, "keys.hor"), TerminalFiles.Keys()],
             SettingsFile = TerminalFiles.Settings(),
             HistoryFile = TerminalFiles.History(),
             Say = (message, error) => Say(message, error),
@@ -177,7 +181,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
         if (!terminalFontSet && Horizon.Graphics.GraphicsDevice.IsAvailable)
         {
             terminalFontSet = true;
-            terminalPanel.Font = UIFont.Shared(Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM, terminal: true);
+            terminalPanel.Font = UIFont.Shared(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM, terminal: true);
         }
 
         if (compositor.Skin is { } skin && !ReferenceEquals(skin, terminalColouredFor))

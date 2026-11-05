@@ -23,7 +23,8 @@ internal sealed partial class DawnScene
             test.Run(() =>
             {
                 Engine.Input.Keyboard.Tap(stroke.Keys);
-                UIKeyboard.Press(stroke.Key, stroke.Control, stroke.Shift, stroke.Alt, stroke.Super);
+                if (!stroke.Control && !stroke.Alt && !stroke.Super && UIKeyboard.CharacterOf(stroke.Key, stroke.Shift) is { } character)
+                    Engine.Input.Post(Horizon.Input.InputEvent.Typed(character.ToString()));
             });
             test.Wait();
         }

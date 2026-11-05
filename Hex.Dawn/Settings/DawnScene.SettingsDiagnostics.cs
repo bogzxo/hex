@@ -140,6 +140,8 @@ internal sealed partial class DawnScene
         ["git_autofetch_interval"] = (1.0f, 60.0f),
         ["git_subject_length"] = (20.0f, 100.0f),
         ["git_line_length"] = (40.0f, 120.0f),
+        ["render_scale_percent"] = (25.0f, 100.0f),
+        ["render_sharpness"] = (0.0f, 1.0f),
         ["glass_blur"] = (0.0f, 64.0f),
         ["glass_clarity"] = (0.0f, 1.0f),
         ["glass_rim"] = (0.0f, 1.0f),

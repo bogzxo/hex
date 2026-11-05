@@ -277,7 +277,7 @@ internal sealed partial class DawnScene
             code.Document.MoveTo(new UITextPosition(0, 0));
             code.Document.Insert("gamma ");
             compositor.Focus = code;
-            commands.Keys.Update(key => key == Silk.NET.Input.Key.S, control: true, shift: false, alt: false, typing: true);
+            commands.Keys.Update(key => key == Horizon.Input.Key.S, control: true, shift: false, alt: false, typing: true);
             onDisk = File.ReadAllText(plain);
         });
         test.Check("text: format on save without a server saves", () =>

@@ -64,6 +64,10 @@ internal sealed partial class HexLanguages
         if (context.Options.SelfTest || context.Options.Check.Length > 0)
             return;
 
+        // Nothing to look for or offer where nothing downloaded can run, see HexHost.RunsDownloads
+        if (!HexHost.RunsDownloads)
+            return;
+
         ProbeServers(ServerEntries, () =>
         {
             bool due = !DateTimeOffset.TryParse(settings.ServersChecked, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var last)
@@ -257,6 +261,13 @@ internal sealed partial class HexLanguages
     /// </summary>
     internal void InstallServer(HexServerEntry entry)
     {
+        // A tablet runs only the programs it ships with, a server downloaded there would never start
+        if (HexHost.NoDownloads(entry.Name) is { } why)
+        {
+            context.Notices.Say(why, error: true);
+            return;
+        }
+
         bool there = serversFound.TryGetValue(entry.Name, out ServerFound? found) && found.Path is not null;
         string line = there ? entry.Update : entry.Install;
         if (line.Length == 0)

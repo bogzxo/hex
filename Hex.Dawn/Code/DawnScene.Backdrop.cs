@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
     private bool backdropRead;
 
     /// <summary>The picture the settings say, empty for the usual one.</summary>
-    private string BackdropPath => settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+    private string BackdropPath => settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
 
     /// <summary>The picture read again as the settings say, and handed to every editor of code.</summary>
     private void ApplyBackdrop()

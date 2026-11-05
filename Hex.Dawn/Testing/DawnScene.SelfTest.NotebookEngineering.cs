@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
         string file = Path.Combine(testFolder, "engineering.ipynb");
         test.Run(() =>
         {
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "notebooks", "engineering.ipynb"), file, true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "notebooks", "engineering.ipynb"), file, true);
             Open(file);
         });
         test.Wait();

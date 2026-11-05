@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;

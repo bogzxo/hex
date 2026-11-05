@@ -71,6 +71,7 @@
     <ProjectReference Include="..\Hex.Dawn\Hex.Dawn.csproj" />
     <ProjectReference Include="..\Hex.Dusk\Hex.Dusk.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Platform.Desktop\Horizon.Platform.Desktop.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
   </ItemGroup>
 

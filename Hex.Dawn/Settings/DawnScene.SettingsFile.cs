@@ -401,6 +401,7 @@ internal sealed partial class DawnScene
             ShowBackdropEverywhere();
 
         ApplyEffects();
+        ApplyRenderScale();
     }
 
     /* The folder's own file */

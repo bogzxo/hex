@@ -10,6 +10,9 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        // The installer's window is the desktop's
+        Horizon.Platform.Desktop.DesktopPlatform.Install();
+
         try
         {
             InstallerHandoff.WaitForLauncher();

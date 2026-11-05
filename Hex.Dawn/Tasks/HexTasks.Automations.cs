@@ -29,17 +29,174 @@ internal sealed partial class HexTasks
     private float automationsAge = AUTOMATIONS_EVERY;
     private readonly HashSet<string> automationKeysDown = new(StringComparer.Ordinal);
 
+    // Candidate task files are checked in place every second. Their paths and the resulting source list are rebuilt
+    // only when a candidate appears/disappears, a source changes, or the document/workspace roots change.
+    private sealed class AutomationFileCandidate(string root)
+    {
+        internal string Root { get; } = root;
+        internal string Plain { get; } = Path.Combine(root, TASKS_FILE);
+        internal string Hidden { get; } = Path.Combine(root, ".hex", TASKS_FILE);
+        internal string? Selected;
+    }
+
+    private readonly record struct AutomationSource(string File, DateTime Written);
+    private readonly record struct AutomationBinding(HexAutomation Automation, string Id, UIKeyStroke Key);
+    private List<AutomationFileCandidate> automationPrimaryCandidates = [];
+    private List<AutomationFileCandidate> automationWorkspaceCandidates = [];
+    private List<AutomationSource> automationSources = [];
+    private List<AutomationBinding> automationBindings = [];
+    private string? automationDocument;
+    private string? automationWorkspaceFile;
+    private string[] automationRoots = [];
+    private bool automationCacheReady;
+
     private void AddAutomationCommands() =>
         context.Commands.Add("Terminal/tasks", context.Strings.Said("automations.run_automation"), ChooseAutomation, icon: "run-all");
 
     /// <summary>Every automation of the tasks.hor files there are (TasksFiles), in the order they have them.</summary>
     internal List<HexAutomation> Automations()
     {
-        var all = new List<HexAutomation>();
-        foreach (var (file, root) in TasksFiles())
-            all.AddRange(AutomationsOf(file, root));
+        bool changed = RefreshAutomationFiles();
+        if (!changed)
+        {
+            foreach (AutomationSource source in automationSources)
+            {
+                if (File.GetLastWriteTimeUtc(source.File) == source.Written)
+                    continue;
+                changed = true;
+                break;
+            }
+        }
 
+        if (!changed)
+            return automationsKnown;
+
+        var all = new List<HexAutomation>();
+        var sources = new List<AutomationSource>(automationPrimaryCandidates.Count + automationWorkspaceCandidates.Count);
+        string? primaryRoot = null;
+        foreach (AutomationFileCandidate candidate in automationPrimaryCandidates)
+        {
+            if (candidate.Selected is not { } file)
+                continue;
+            all.AddRange(AutomationsOf(file, candidate.Root));
+            // Keep the stamp of the parsed contents: a write during parsing must trigger another read next poll.
+            sources.Add(new AutomationSource(file, tasksRead[file].Written));
+            primaryRoot = candidate.Root;
+            break;
+        }
+        foreach (AutomationFileCandidate candidate in automationWorkspaceCandidates)
+        {
+            if (candidate.Selected is not { } file || (primaryRoot is not null && string.Equals(candidate.Root, primaryRoot, PlatformPaths.Comparison)))
+                continue;
+            all.AddRange(AutomationsOf(file, candidate.Root));
+            sources.Add(new AutomationSource(file, tasksRead[file].Written));
+        }
+
+        automationSources = sources;
+        automationBindings = [];
+        foreach (HexAutomation automation in all)
+            if (automation.Key.Length > 0 && UIKeys.Read(automation.Key) is { } key)
+                automationBindings.Add(new AutomationBinding(automation, AutomationKey(automation), new UIKeyStroke(key.Key, key.Control, key.Shift, key.Alt)));
         return automationsKnown = all;
+    }
+
+    // Rebuild the path candidates only when the document or the workspace roots change. File.Exists then notices a
+    // tasks.hor being made/removed, including a nearer file that should take precedence over one already found.
+    private bool RefreshAutomationFiles()
+    {
+        IReadOnlyList<string> roots = context.Workspace.Roots;
+        string? document = context.Documents.Current.Path;
+        string? workspaceFile = context.Workspace.File;
+        bool inputsChanged = !automationCacheReady
+            || !string.Equals(document, automationDocument, StringComparison.Ordinal)
+            || !string.Equals(workspaceFile, automationWorkspaceFile, StringComparison.Ordinal)
+            || roots.Count != automationRoots.Length;
+        if (!inputsChanged)
+            for (int i = 0; i < roots.Count; i++)
+                if (!string.Equals(roots[i], automationRoots[i], StringComparison.Ordinal))
+                {
+                    inputsChanged = true;
+                    break;
+                }
+
+        if (inputsChanged)
+        {
+            automationDocument = document;
+            automationWorkspaceFile = workspaceFile;
+            automationRoots = [.. roots];
+            BuildAutomationCandidates(document, roots, workspaceFile);
+            automationCacheReady = true;
+            return true;
+        }
+
+        return RefreshAutomationCandidates(automationPrimaryCandidates) | RefreshAutomationCandidates(automationWorkspaceCandidates);
+    }
+
+    private bool RefreshAutomationCandidates(List<AutomationFileCandidate> candidates)
+    {
+        bool changed = false;
+        foreach (AutomationFileCandidate candidate in candidates)
+        {
+            string? selected = File.Exists(candidate.Plain) ? candidate.Plain
+                : File.Exists(candidate.Hidden) ? candidate.Hidden : null;
+            if (string.Equals(selected, candidate.Selected, PlatformPaths.Comparison))
+                continue;
+            if (candidate.Selected is { } oldFile)
+                tasksRead.Remove(oldFile);
+            if (selected is { } newFile)
+                tasksRead.Remove(newFile);
+            candidate.Selected = selected;
+            changed = true;
+        }
+        return changed;
+    }
+
+    private void BuildAutomationCandidates(string? document, IReadOnlyList<string> roots, string? workspaceFile)
+    {
+        automationPrimaryCandidates = [];
+        automationWorkspaceCandidates = [];
+        var seenPrimary = new HashSet<string>(PlatformPaths.Comparer);
+        var seenWorkspace = new HashSet<string>(PlatformPaths.Comparer);
+        static AutomationFileCandidate Candidate(string root)
+        {
+            string full = Path.GetFullPath(root);
+            var candidate = new AutomationFileCandidate(full);
+            candidate.Selected = File.Exists(candidate.Plain) ? candidate.Plain
+                : File.Exists(candidate.Hidden) ? candidate.Hidden : null;
+            return candidate;
+        }
+        void AddPrimary(string root)
+        {
+            string full = Path.GetFullPath(root);
+            if (seenPrimary.Add(full))
+                automationPrimaryCandidates.Add(Candidate(full));
+        }
+        void AddWorkspace(string root)
+        {
+            string full = Path.GetFullPath(root);
+            if (seenWorkspace.Add(full))
+                automationWorkspaceCandidates.Add(Candidate(full));
+        }
+
+        string primary = RootFor(document);
+        if (document is not null && Path.GetDirectoryName(Path.GetFullPath(document)) is { } own && PlatformPaths.IsUnder(own, primary))
+        {
+            for (string? folder = own; folder is not null; folder = Path.GetDirectoryName(folder))
+            {
+                AddPrimary(folder);
+                if (PlatformPaths.Same(folder, primary))
+                    break;
+            }
+        }
+        else
+        {
+            AddPrimary(primary);
+        }
+
+        foreach (string root in roots)
+            AddWorkspace(root);
+        if (workspaceFile is { } file && Path.GetDirectoryName(Path.GetFullPath(file)) is { } saved)
+            AddWorkspace(saved);
     }
 
     /// <summary>What the automations add to the command palette, each Automation and its title, its key with it.</summary>
@@ -180,20 +337,21 @@ internal sealed partial class HexTasks
     private void UpdateAutomationKeys()
     {
         var keyboard = context.Keyboard;
-        foreach (HexAutomation automation in automationsKnown)
+        foreach (AutomationBinding binding in automationBindings)
         {
-            if (automation.Key.Length == 0 || UIKeys.Read(automation.Key) is not { } key || (context.Typing && !key.Control && !key.Alt))
+            HexAutomation automation = binding.Automation;
+            UIKeyStroke key = binding.Key;
+            if (context.Typing && !key.Control && !key.Alt)
                 continue;
 
             bool down = keyboard.IsDown(key.Key) && keyboard.Control == key.Control && keyboard.Shift == key.Shift && keyboard.Alt == key.Alt;
-            string id = AutomationKey(automation);
             if (!down)
             {
-                automationKeysDown.Remove(id);
+                automationKeysDown.Remove(binding.Id);
                 continue;
             }
 
-            if (automationKeysDown.Add(id))
+            if (automationKeysDown.Add(binding.Id))
                 RunAutomation(automation);
         }
     }

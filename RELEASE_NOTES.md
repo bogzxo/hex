@@ -1,3 +1,26 @@
+# Hex 2.8.8 thickboy
+
+Hex fits on a tablet now. Dawn runs on Android with touch, a keyboard and a mouse, and keeps your files and settings
+in the app's storage. This is still early. The editor works, but Android rendering is not yet as quick as it needs
+to be, and local notebook kernels, language servers and running projects are still desktop jobs.
+
+## changed
+
+- rendering has its own settings now, with Auto, native or a manual scale, CAS, FSR 1, Snapdragon GSR 1, bilinear and
+  nearest. Keep the interface sharp at native resolution, or scale the whole frame if the GPU needs a break
+- notebooks export to one HTML file, including unsaved cells and their current outputs. No kernel needed, no extra
+  files to carry about. SVG plots and formulas stay vector instead of becoming blurry screenshots
+- right-click an output picture to save its original SVG or PNG
+- Android has the same Hex icon, a real shell on supported devices, and backups when the app goes into the background
+- plain boxes and shadows no longer pay for the text shader's texture work
+
+## fixed
+
+- mobile title bar text follows the interface zoom instead of cancelling it out
+- pulling past the end of a page lets the spring settle after you let go, instead of feeding it more scroll impulses
+- missing upscale shaders fall back without throwing away the setting you picked
+- Android asks before closing unsaved work
+
 # Hex 2.8.2 thickboy
 
 A quieter Hex. Graphite is the new look and what a fresh install starts in, neutral surfaces in Dawn and Dusk alike

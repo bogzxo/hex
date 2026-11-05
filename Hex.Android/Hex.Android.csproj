@@ -1,0 +1,105 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Hex on an Android tablet, Dawn the editor with a keyboard and a mouse plugged in (touch works too). The same Dawn,
+    Core and Shell a desktop Hex is made of, this is only the head, the activity that makes the engine and the
+    packaging. Nothing desktop is referenced, no Horizon.Platform.Desktop, no Dusk, no SDL or GLFW.
+
+    Not in Hex.sln or the workspace solution, a desktop build must never need the Android workload. Built on its own,
+    see README.md next to this for the commands and docs/android.md for what works on a tablet and what doesn't.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net11.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Hex.Android</AssemblyName>
+    <RootNamespace>Hex.Android</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WarningLevel>4</WarningLevel>
+
+    <ApplicationId>dev.horizon.hex</ApplicationId>
+    <ApplicationTitle>Hex</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
+
+    <!-- arm64 is the target that counts (the SM-T725), x64 only builds for an emulator -->
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+
+    <!-- The assemblies go in the APK so adb install is all a tablet needs -->
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+
+    <!-- Assets keep their logical paths (Assets/..., shaders/...), the same trick as Horizon.Testing.Android -->
+    <MonoAndroidAssetsPrefix>ApkAssets</MonoAndroidAssetsPrefix>
+
+    <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <PublishAot Condition="'$(PublishAot)' == ''">true</PublishAot>
+    <AndroidLinkMode>None</AndroidLinkMode>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <!-- NativeAOT compiles the editor and runtime into one arm64 library, with no JIT or interpreter.
+       Keep the speed preference explicit: Android otherwise favors size for some library paths. -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <AndroidLinkMode>Full</AndroidLinkMode>
+    <PublishTrimmed>true</PublishTrimmed>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <UseSizeOptimizedLinq>false</UseSizeOptimizedLinq>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hex.Core\Hex.Core.csproj" />
+    <ProjectReference Include="..\Hex.Shell\Hex.Shell.csproj" />
+    <ProjectReference Include="..\Hex.Dawn\Hex.Dawn.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Tooling\Horizon.Tooling.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Terminal\Horizon.Terminal.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Platform.Android\Horizon.Platform.Android.csproj" />
+  </ItemGroup>
+
+  <!--
+    Content. Everything the projects Hex is made of copy next to Hex.exe on a desktop under Assets\ and shaders\ (the
+    engine's fonts, skins and shaders, Hex's layouts, images, localisation and built in extensions, the terminal's
+    files) goes into the APK at the same path, found the way the desktop build finds it rather than listed again here,
+    so a file added to Dawn is on the tablet with nothing to remember. Plus Hex's own shader pack, see shaders/README.
+    Natives, symbols, manifests and Syncthing's temporary files never go.
+  -->
+  <Target Name="HexContentAssets" BeforeTargets="_ComputeAndroidAssetsPaths" DependsOnTargets="GetCopyToOutputDirectoryItems">
+    <ItemGroup>
+      <_HexCopied Include="@(_TransitiveItemsToCopyToOutputDirectory);@(_ThisProjectItemsToCopyToOutputDirectory)" />
+      <_HexContent Include="@(_HexCopied)"
+                   Condition="($([System.String]::Copy('%(_HexCopied.TargetPath)').StartsWith('Assets\')) or $([System.String]::Copy('%(_HexCopied.TargetPath)').StartsWith('shaders\')))
+                              and '%(_HexCopied.Extension)' != '.dll' and '%(_HexCopied.Extension)' != '.so' and '%(_HexCopied.Extension)' != '.dylib'
+                              and '%(_HexCopied.Extension)' != '.exe' and '%(_HexCopied.Extension)' != '.pdb' and '%(_HexCopied.Extension)' != '.manifest'
+                              and '%(_HexCopied.Extension)' != '.tmp' and '%(_HexCopied.Extension)' != '.ai' and !$([System.String]::Copy('%(_HexCopied.Filename)').StartsWith('~syncthing~'))" />
+      <!-- zsh's start up files for the terminal's shell integration are dotfiles aapt2 won't take, and there's no zsh on a tablet -->
+      <_HexZsh Include="@(_HexContent)" Condition="$([System.String]::Copy('%(_HexContent.TargetPath)').StartsWith('Assets\terminal\shell\zsh\'))" />
+      <_HexContent Remove="@(_HexZsh)" />
+      <AndroidAsset Include="@(_HexContent->'%(FullPath)')" Link="ApkAssets\%(_HexContent.TargetPath)" />
+      <AndroidAsset Include="$(MSBuildThisFileDirectory)shaders\packed\*.hzshaders" Link="ApkAssets\shaders\packed\%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <!-- aapt2 leaves out dotfiles and folders starting with an underscore without a word, an error here instead -->
+    <ItemGroup>
+      <_HexHidden Include="@(AndroidAsset)" Condition="$([System.String]::Copy('%(AndroidAsset.Link)').Contains('\_')) or $([System.String]::Copy('%(AndroidAsset.Link)').Contains('\.'))" />
+      <_HexPacks Include="@(AndroidAsset)" Condition="'%(AndroidAsset.Extension)' == '.hzshaders'" />
+    </ItemGroup>
+    <Error Condition="'@(_HexHidden)' != ''" Text="aapt2 would leave these out of the APK, a file or folder starting with '_' or '.' is ignored by its default pattern. @(_HexHidden->'%(Link)', ', ')" />
+    <Error Condition="'@(_HexPacks)' == ''" Text="No shader pack is going into the APK. Build the engine's pack (horizon/Horizon/shaders/packed) first, see Hex.Android/README.md." />
+    <Message Importance="high" Text="Hex.Android content, @(_HexContent->Count()) files from the projects and @(_HexPacks->Count()) shader packs." />
+  </Target>
+
+</Project>

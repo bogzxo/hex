@@ -10,7 +10,7 @@ internal sealed partial class DuskScene
 {
     private const float SESSION_EVERY = 3.0f;
     private float sessionDue = SESSION_EVERY;
-    private string? savedSession;
+    private TerminalSessions.Snapshot? savedSessionState;
 
     private string SessionFile => TerminalFiles.Sessions(options.SelfTest ? null : AppContext.BaseDirectory);
 
@@ -48,11 +48,13 @@ internal sealed partial class DuskScene
 
         try
         {
-            string session = TerminalSessions.Write(panel);
-            if (session == savedSession)
+            if (savedSessionState is not null && TerminalSessions.Matches(panel, savedSessionState))
                 return;
+
+            string session = TerminalSessions.Write(panel);
+            TerminalSessions.Snapshot state = TerminalSessions.Capture(panel);
             File.WriteAllText(SessionFile, session);
-            savedSession = session;
+            savedSessionState = state;
         }
         catch (Exception e)
         {

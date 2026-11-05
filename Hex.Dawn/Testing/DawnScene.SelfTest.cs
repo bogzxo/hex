@@ -224,6 +224,7 @@ internal sealed partial class DawnScene
             TestTerminalScroll(test);
             TestDuskFiles(test);
         }),
+        ("pty", "the shell under the terminal itself, started in its folder, a line in and out, a new size heard and exit ending it with its code", TestPty),
         ("lens", "reference counts over the declarations of a HIDL file and of C# through csharp-ls when it's on this machine, a press listing where each is used and a pick going there", test =>
         {
             TestCodeLens(test);
@@ -275,6 +276,7 @@ internal sealed partial class DawnScene
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
         ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
         ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
+        ("notebookhtml", "a notebook exported as HTML from the palette through the save dialog, unsaved edits in it, the notebook left unsaved, SVG kept vector", TestNotebookHtml),
         ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),

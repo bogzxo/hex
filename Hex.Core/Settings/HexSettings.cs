@@ -87,6 +87,17 @@ internal sealed partial class HexSettings
     public string Effects = "none";
 
     /// <summary>
+    /// How many pixels Hex is drawn with, the engine's render scale (WindowManager.Scaling). auto lets the screen decide
+    /// (a dense tablet draws fewer), native is a pixel for every pixel, manual is <see cref="RenderScalePercent"/> of
+    /// them. The UI stays at the window's own pixels unless <see cref="RenderComposition"/> says whole_frame, and as Hex
+    /// is nearly all UI that's the one that saves the GPU anything, at the price of softer text.
+    /// </summary>
+    public string RenderScale = "auto", RenderUpscaler = "cas", RenderComposition = "native_ui";
+
+    /// <summary>The share of each side drawn with a manual render scale, 25 to 100, and how hard CAS sharpens, 0 to 1.</summary>
+    public float RenderScalePercent = 75.0f, RenderSharpness = 0.0f;
+
+    /// <summary>
     /// Whether the effects that are on throw sparks, whether the caret glides, and whether the dialogs, menus, palette and
     /// side panels sit over a blur of what is behind them. New settings start in the Flat look; saved choices are read below.
     /// </summary>
@@ -383,6 +394,11 @@ internal sealed partial class HexSettings
         if (values.TryGetValue("git_smart_commit", out var smart) && smart is StringValue { Value: "ask" or "always" or "never" } smartly) GitSmartCommit = smartly.Value;
         GitSubjectLength = (int)Math.Clamp(Number(values, "git_subject_length", GitSubjectLength), 20.0f, 100.0f);
         GitLineLength = (int)Math.Clamp(Number(values, "git_line_length", GitLineLength), 40.0f, 120.0f);
+        if (values.TryGetValue("render_scale", out var scaled) && scaled is StringValue { Value: "auto" or "native" or "manual" } scaling) RenderScale = scaling.Value;
+        if (values.TryGetValue("render_upscaler", out var upscaled) && upscaled is StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler) RenderUpscaler = upscaler.Value;
+        if (values.TryGetValue("render_composition", out var composed) && composed is StringValue { Value: "native_ui" or "whole_frame" } composition) RenderComposition = composition.Value;
+        RenderScalePercent = Math.Clamp(Number(values, "render_scale_percent", RenderScalePercent), 25.0f, 100.0f);
+        RenderSharpness = Math.Clamp(Number(values, "render_sharpness", RenderSharpness), 0.0f, 1.0f);
         if (values.TryGetValue("effects", out var effects) && effects is StringValue { Value: "none" or "subtle" or "all" } effected) Effects = effected.Value;
         EffectSparks = Flag(values, "effect_sparks", EffectSparks);
         EffectMotion = Flag(values, "effect_motion", EffectMotion);
@@ -653,6 +669,11 @@ internal sealed partial class HexSettings
             .Add("git_smart_commit", GitSmartCommit)
             .Add("git_subject_length", GitSubjectLength)
             .Add("git_line_length", GitLineLength)
+            .Add("render_scale", RenderScale)
+            .Add("render_scale_percent", RenderScalePercent)
+            .Add("render_upscaler", RenderUpscaler)
+            .Add("render_sharpness", RenderSharpness)
+            .Add("render_composition", RenderComposition)
             .Add("effects", Effects)
             .Add("effect_sparks", EffectSparks)
             .Add("effect_motion", EffectMotion)

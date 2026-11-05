@@ -145,7 +145,13 @@ internal sealed class HexPointerScript
     private void Say(string line)
     {
         if (!Quiet)
-            Console.WriteLine($"[Hex self-test] {line}");
+        {
+            // Keep every Android check in the host's logcat channel and persistent debug.log as well.
+            if (OperatingSystem.IsAndroid())
+                Horizon.Logging.Log.Info($"[Hex self-test] {line}");
+            else
+                Console.WriteLine($"[Hex self-test] {line}");
+        }
     }
 
     /// <summary>Helper method to count a step that threw as a failure and say so, the test going on after it.</summary>
@@ -153,6 +159,8 @@ internal sealed class HexPointerScript
     {
         Failed++;
         Say($"step threw: {e.GetType().Name}: {e.Message}");
+        // Where it threw, in the log rather than the run's output, which a failure on a tablet can only be found by
+        Horizon.Logging.Log.Warning($"[Hex self-test] {what} threw {e}");
         Say($"FAIL: {what} threw");
     }
 

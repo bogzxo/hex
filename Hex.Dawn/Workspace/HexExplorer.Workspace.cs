@@ -50,7 +50,7 @@ internal sealed partial class HexExplorer
             if (settings.LastWorkspace.Length > 0 && File.Exists(settings.LastWorkspace))
                 last = HexWorkspace.Load(settings.LastWorkspace);
             else if (UntitledWorkspacePath is { } untitled && File.Exists(untitled))
-                last.Read(File.ReadAllText(untitled), AppContext.BaseDirectory);
+                last.Read(File.ReadAllText(untitled), Hex.Core.HexHost.ProgramFolder);
         }
         catch (Exception e)
         {
