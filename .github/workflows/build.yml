@@ -85,6 +85,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          foreach ($exe in @('publish/Hex/Hex.exe', 'publish/Hex.Setup/Hex.Installer.exe')) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path $exe))
+            $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+            $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 24 + 68)
+            if ($subsystem -ne 2) { throw "$exe must use the Windows GUI subsystem, not open a console." }
+          }
           $files = @(Get-ChildItem -LiteralPath publish/Hex.Setup -Recurse -File)
           if ($files.Count -ne 1 -or $files[0].Name -ne 'Hex.Installer.exe') { throw 'Windows setup must publish as one EXE.' }
           # Invalid arguments exit before graphics or any installation, exercising extraction and failure cleanup.

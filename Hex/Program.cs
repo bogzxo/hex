@@ -52,8 +52,8 @@ internal static partial class Program
         HexLog.Initialize(AppContext.BaseDirectory);
 
 #if DEBUG
-        // A Debug Hex's console for its log, made here now Windows doesn't hand one out by itself (app.manifest)
-        if (OperatingSystem.IsWindows())
+        // A debug console is opt-in, ordinary launches only open the editor or terminal window
+        if (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("HEX_CONSOLE") == "on")
             ConsoleForTheLog(args);
 #endif
 
