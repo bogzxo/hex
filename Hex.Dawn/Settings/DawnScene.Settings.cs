@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
 
     private void SaveSettings()
     {
+        if (ReferenceEquals(zoomSettingsPending, settings)) zoomSettingsPending = null;
         if (settings.Save() is { } problem)
             Say(problem, error: true);
         else

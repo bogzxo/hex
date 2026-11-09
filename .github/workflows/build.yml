@@ -41,11 +41,11 @@ jobs:
           # The extensions (bogzxo/hex-extensions at hex-extensions)
           submodules: recursive
 
-      # The engine as it is on its development right now, and the language inside of it
+      # The engine tested for this release, and the language inside of it
       - uses: actions/checkout@v4
         with:
           repository: bogzxo/horizon
-          ref: development
+          ref: 0bcb94162f6012ed81fd3a8ddf8fe7cdb88155ec
           path: horizon
           submodules: recursive
 
@@ -156,7 +156,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # RELEASE_NOTES.md is what the release says, GitHub's list of what changed goes under it
+      # RELEASE_NOTES.md is what the release says
       - uses: actions/checkout@v4
         with:
           sparse-checkout: RELEASE_NOTES.md
@@ -179,4 +179,4 @@ jobs:
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md --generate-notes $prerelease
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md $prerelease

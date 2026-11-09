@@ -28,6 +28,7 @@ internal sealed partial class DawnScene
         {
             if (mode == HexMode.Dawn)
             {
+                FlushZoomSettings();
                 LetGo();
 
                 // The editor stops ticking in Dusk, an agent's call that swapped (a click on the toggle) is answered now or

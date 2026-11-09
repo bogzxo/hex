@@ -97,9 +97,10 @@ internal static class HexSourceEdits
             start = lineStart;
             end = Math.Min(text.Length, lineEnd + 1);
         }
-        else
+        else if (comma >= 0)
         {
-            // On one line, the space after its comma goes with it
+            // On one line, the space after its comma goes with it. The last one has none, the space before the } is the
+            // object's own and stays
             while (end < close && text[end] == ' ')
                 end++;
         }

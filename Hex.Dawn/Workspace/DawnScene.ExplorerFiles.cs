@@ -6,7 +6,7 @@ internal sealed partial class DawnScene
 {
     private bool ExplorerFileKey(char key)
     {
-        var paths = sideTree.SelectedItems.Select(item => item.Tooltip)
+        var paths = sideTree.SelectedItems.Where(item => !solutionHeads.ContainsKey(item)).Select(item => item.Tooltip)
             .Where(path => (File.Exists(path) || Directory.Exists(path)) && !explorer.workspace.Folders.Contains(path, PlatformPaths.Comparer)).ToList();
         switch (key)
         {
@@ -27,7 +27,7 @@ internal sealed partial class DawnScene
     // F2 with the explorer's row picked, the rename its menu has. Not a folder of the workspace, that's taken out instead
     private void RenameInExplorer()
     {
-        if (sideTree.Selected?.Tooltip is { } path && (File.Exists(path) || Directory.Exists(path))
+        if (sideTree.Selected is { } row && !solutionHeads.ContainsKey(row) && row.Tooltip is { } path && (File.Exists(path) || Directory.Exists(path))
             && !explorer.workspace.Folders.Contains(path, PlatformPaths.Comparer))
             explorer.RenamePath(path);
     }

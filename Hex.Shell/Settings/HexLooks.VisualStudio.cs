@@ -11,8 +11,11 @@ internal static partial class HexLooks
     /// <summary>The theme of the flat skin the Visual Studio look puts on, Dawn's and Dusk's.</summary>
     public const string VISUAL_STUDIO_THEME = "visual_studio";
 
-    /// <summary>The keys of the editor's section only the Visual Studio look sets, the font of the code and whose colours C# is in.</summary>
-    public const string CODE_FONT = "code_font", CSHARP_COLORS = "csharp_colors";
+    /// <summary>
+    /// The keys of the editor's section only the Visual Studio look sets, the font of the code, whose colours C# is in
+    /// and whether the keyboard is Visual Studio's.
+    /// </summary>
+    public const string CODE_FONT = "code_font", CSHARP_COLORS = "csharp_colors", VISUAL_STUDIO_KEYS = "visual_studio_keys";
 
     // The look itself, made by a method so it's there before BuiltIn lists it whatever order the two files are read in
     private static HexLook MakeVisualStudio() => new(VISUAL_STUDIO, new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
@@ -31,7 +34,8 @@ internal static partial class HexLooks
         [EDITOR_THEME] = new StringValue(VISUAL_STUDIO_THEME),
         [TERMINAL_THEME] = new StringValue(VISUAL_STUDIO_THEME),
         [CODE_FONT] = new StringValue("cascadia_mono"),
-        [CSHARP_COLORS] = new StringValue("skin")
+        [CSHARP_COLORS] = new StringValue("skin"),
+        [VISUAL_STUDIO_KEYS] = Values.Bool(true)
     }, BuiltIn: true);
 
     /// <summary>Whether a look sets the code's font or the colours of C#, which the modes put in force after it's picked.</summary>

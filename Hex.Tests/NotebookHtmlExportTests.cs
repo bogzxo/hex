@@ -34,7 +34,7 @@ public class NotebookHtmlExportTests
     }
 
     // What the page says once every entity is read back, for checking text whatever way it was encoded
-    private static string Read(string html) => WebUtility.HtmlDecode(html);
+    private static string Read(string html) => WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Replace(html, "</?span\\b[^>]*>", ""));
 
     // The SVG documents a page has as images, decoded
     private static List<string> Svgs(string html) => [.. Regex.Matches(html, "data:image/svg\\+xml;base64,([A-Za-z0-9+/=]+)")
@@ -319,7 +319,7 @@ public class NotebookHtmlExportTests
         model.Cells[0].Outputs[0]["text"] = "after\n";
         model.Cells.Add(new NotebookCell { Kind = CellKind.Markdown, Source = "later" });
         string html = NotebookHtmlExport.Write(snapshot, Plain);
-        Assert.Contains("a = 1", html);
+        Assert.Contains("a = 1", Read(html));
         Assert.Contains("before", html);
         Assert.DoesNotContain("later", html);
 

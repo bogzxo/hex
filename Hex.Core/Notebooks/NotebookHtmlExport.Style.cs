@@ -30,6 +30,12 @@ pre.stream, pre.text, pre.error { padding: 2px 4px; white-space: pre-wrap; overf
 pre.stderr { background: var(--stderr-bg); }
 pre.error { background: var(--error-bg); border-left: 3px solid var(--error); padding-left: 8px; }
 code { font-family: var(--mono); font-size: 0.9em; background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+.syntax-keyword { color: #8250df; font-weight: 600; }
+.syntax-string { color: #0a3069; }
+.syntax-comment { color: #57606a; font-style: italic; }
+.syntax-number { color: #0550ae; }
+.syntax-type { color: #953800; }
+.syntax-function { color: #6639ba; }
 pre code { background: none; padding: 0; font-size: inherit; }
 .cell.raw pre { color: var(--muted); }
 h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 1.2em 0 0.5em; }

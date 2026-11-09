@@ -23,11 +23,11 @@ jobs:
           # The extensions (bogzxo/hex-extensions at hex-extensions)
           submodules: recursive
 
-      # The engine as it is on its development right now, and the language inside of it
+      # The engine tested for this release, and the language inside of it
       - uses: actions/checkout@v4
         with:
           repository: bogzxo/horizon
-          ref: development
+          ref: 0bcb94162f6012ed81fd3a8ddf8fe7cdb88155ec
           path: horizon
           submodules: recursive
 

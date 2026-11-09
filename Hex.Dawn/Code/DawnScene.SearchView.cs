@@ -250,7 +250,7 @@ internal sealed partial class DawnScene
         bool error = searchError is not null;
         searchMessage.Color = error ? ErrorColor : DimColor;
         searchMessage.Text = searchError is { } bad ? Said("search.bad_regex", ("error", bad))
-            : results is null ? string.Empty
+            : results is null || ResultsTreeShown ? string.Empty
             : results.Count == 0 ? Said("search.none")
             : Said("search.summary", ("results", HexText.Count("result", results.Count)), ("files", HexText.Count("file", ResultFiles(results))));
         searchMessage.Visible = searchMessage.Text.Length > 0;

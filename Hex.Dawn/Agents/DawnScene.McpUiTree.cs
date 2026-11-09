@@ -97,14 +97,15 @@ internal sealed partial class DawnScene
 
         string id = McpIdOf(component, 'c');
         var weak = new WeakReference<UIComponent>(component);
-        Func<Vector2?> target = () => weak.TryGetTarget(out UIComponent? alive) && alive.Module is { } at ? McpCenter(McpBox(at, alive.Bounds)) : null;
+        Func<Vector2?> target = () => weak.TryGetTarget(out UIComponent? alive) && alive.Module is { } at ? McpCenter(McpBox(at, McpBroughtIntoView(alive))) : null;
         mcpTargets[id] = target;
 
         string text = McpTextOf(component);
         if (text.Length == 0 && component.Tooltip.Length > 0)
             text = $"tip: {Plain(compositor.Resolve(component.Tooltip))}";
 
-        into.Add(new HexScreenNode(id, component.GetType().Name, text, names.GetValueOrDefault(component), McpBox(module, component.Bounds), depth,
+        string kind = McpScrolledAway(component) is null ? component.GetType().Name : $"{component.GetType().Name}(scrolled away)";
+        into.Add(new HexScreenNode(id, kind, text, names.GetValueOrDefault(component), McpBox(module, component.Bounds), depth,
             component.EnabledInHierarchy, component.IsFocused, component.IsInteractive, target));
 
         // What some components draw that isn't a component of its own
@@ -115,6 +116,9 @@ internal sealed partial class DawnScene
                 break;
             case StatusBar bar:
                 McpStatusItems(module, bar, depth + 1, into);
+                break;
+            case Notifications cards:
+                McpCards(module, cards, depth + 1, into);
                 break;
             case TabStrip strip:
                 for (int i = 0; i < strip.Tabs.Count; i++)
@@ -166,6 +170,30 @@ internal sealed partial class DawnScene
         Func<Vector2?> target = () => owner.Module is not null ? McpCenter(McpBox(module, boundsOf(index))) : null;
         mcpTargets[id] = target;
         into.Add(new HexScreenNode(id, selected ? "Tab(current)" : "Tab", Plain(title), null, McpBox(module, bounds), depth, true, false, true, target));
+    }
+
+    // The cards in the corner, what each says and its buttons, the way a dialog's are. Use Visual Studio Keys on its
+    // card couldn't be found by its words, the cards draw their buttons rather than having them
+    private void McpCards(UIModule module, Notifications cards, int depth, List<HexScreenNode> into)
+    {
+        for (int i = 0; i < cards.Cards.Count; i++)
+        {
+            UINotification card = cards.Cards[i];
+            UIRect bounds = cards.CardBoundsOf(card);
+            if (bounds.Width <= 0.0f)
+                continue;
+
+            string id = McpIdOf(card, 'n');
+            into.Add(new HexScreenNode(id, "Notification", Plain(card.Text), null, McpBox(module, bounds), depth, true, false, false, () => null));
+            for (int action = 0; action < card.Actions.Count; action++)
+            {
+                int which = action;
+                string button = $"{id}.{action}";
+                Func<Vector2?> target = () => cards.ActionBoundsOf(card, which) is { Width: > 0.0f } now ? McpCenter(McpBox(module, now)) : null;
+                mcpTargets[button] = target;
+                into.Add(new HexScreenNode(button, "Button", Plain(card.Actions[action].Label), null, McpBox(module, cards.ActionBoundsOf(card, action)), depth + 1, true, false, true, target));
+            }
+        }
     }
 
     private void McpStatusItems(UIModule module, StatusBar bar, int depth, List<HexScreenNode> into)

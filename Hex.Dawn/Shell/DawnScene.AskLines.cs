@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
     // How big the box is, a commit message's worth
     private static readonly Vector2 LinesBoxSize = new(620.0f, 200.0f);
 
-    private void AskLines(string title, string message, string start, string go, string language, Func<string, (string Text, bool Warning)>? note, Action<string> answered)
+    private void AskLines(string title, string message, string start, string go, string language, Func<string, (string Text, bool Warning)>? note, Action<string> answered, Action<CodeEditor>? prepare = null)
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
@@ -51,6 +51,7 @@ internal sealed partial class DawnScene
             return true;
         };
 
+        prepare?.Invoke(box);
         box.Focus();
         textDialog = shown;
     }

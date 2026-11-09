@@ -51,6 +51,13 @@ internal sealed class NotebookCellCard : Panel
 internal sealed class NotebookCellEditor : CodeEditor
 {
     public Action? Escaped { get; set; }
+    public Action<NotebookCellEditor>? Arranged { get; set; }
+
+    protected override void Arrange(UIRect content)
+    {
+        base.Arrange(content);
+        Arranged?.Invoke(this);
+    }
 
     public NotebookCellEditor(string text) : base(text)
     {
@@ -136,7 +143,7 @@ internal sealed partial class DawnScene
         var count = gutter.Add(new Label { Anchor = Origin.TopRight, Align = Origin.TopRight, TextScale = 0.125f, Dim = true });
 
         var body = row.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f });
-        var editor = body.Add(new NotebookCellEditor(cell.Source));
+        var editor = body.Add(new NotebookCellEditor(cell.Source) { Arranged = FitNotebookWrap });
         PrepareCellEditor(notebook, editor, cell);
         var outputs = body.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 2.0f });
 

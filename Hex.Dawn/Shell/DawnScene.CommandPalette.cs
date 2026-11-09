@@ -88,14 +88,30 @@ internal sealed partial class DawnScene
         ChooseFrom(title, message, UIChooser.Rows(choices), shortestFirst, prefixed, recent, typed);
 
     /// <summary>The same with rows in their parts, a symbol, a folder or an author dim after, each piece of a commit in its colour.</summary>
+    /// <param name="searched">The lists searched off the editor's thread rather than narrowed down, by prefix, Go to All's.</param>
     private void ChooseFrom(string title, string message, List<UIChoice> choices, bool shortestFirst = false,
-        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "")
+        Func<char, List<UIChoice>?>? prefixed = null, UIRecentList? recent = null, string typed = "", Func<char, UIChoiceSearch?>? searched = null)
     {
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
-        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed);
+        textDialog = UIChooser.Show(chrome, title, message, choices, "@choose.placeholder", shortestFirst, prefixed, recent, typed, searched);
     }
 
     void IWindows.Choose(string title, string message, List<UIChoice> choices) => ChooseFrom(title, message, choices);
+
+    void IWindows.ChooseAtCaret(string title, string message, List<UIChoice> choices, CodeEditor editor)
+    {
+        ChooseFrom(title, message, choices);
+
+        // Under the caret's line, put from the editor's module into the one the list is in. An editor that hasn't been
+        // drawn yet has nowhere to say, the list hangs from the top as ever
+        if (textDialog is not { IsOpen: true } shown || editor.Module is not { } from || editor.CaretLineHeight <= 0.0f)
+            return;
+
+        float half = editor.CaretLineHeight * 0.5f;
+        Vector2 under = chrome.ToLocal(from.ToWorld(editor.CaretPoint - new Vector2(0.0f, half)));
+        Vector2 over = chrome.ToLocal(from.ToWorld(editor.CaretPoint + new Vector2(0.0f, half)));
+        shown.PlaceAt(under, over.Y - under.Y);
+    }
 }

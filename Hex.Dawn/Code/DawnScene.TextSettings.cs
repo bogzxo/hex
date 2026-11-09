@@ -161,6 +161,7 @@ internal sealed partial class DawnScene
             "caret_fast_rate" => new NumberValue(hex.settings.CaretFastRate),
             "sticky_scroll" => Values.Bool(hex.settings.StickyScroll),
             "format_on_save" => Values.Bool(hex.settings.FormatOnSave),
+            "format_on_type" => Values.Bool(hex.settings.FormatOnType),
             "files_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.FilesExclude),
             "search_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.SearchExclude),
             "search_use_ignore_files" => Values.Bool(hex.settings.SearchUseIgnoreFiles),
@@ -219,6 +220,9 @@ internal sealed partial class DawnScene
                     break;
                 case ("format_on_save", BooleanValue format):
                     settings.FormatOnSave = format.Value;
+                    break;
+                case ("format_on_type", BooleanValue formatTyped):
+                    settings.FormatOnType = formatTyped.Value;
                     break;
 
                 // What the walk of the files leaves out, nothing of an open file's. The explorer shows it straight away,

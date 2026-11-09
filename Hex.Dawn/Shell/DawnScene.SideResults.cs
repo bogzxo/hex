@@ -35,6 +35,13 @@ internal sealed partial class DawnScene
             return;
         }
 
+        // A call hierarchy's tree over the results it came with (DawnScene.SideResultsTree)
+        if (ResultsTreeShown)
+        {
+            sideTree.Items = resultsTree!.Value.Rows;
+            return;
+        }
+
         // What Replace All would make of each match, while the replace row of the view's own results has something in it
         string? with = null;
         Regex? pattern = null;

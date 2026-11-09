@@ -154,6 +154,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether Ctrl+S has the file's language server format it before it's written, when the server can.</summary>
     public bool FormatOnSave;
 
+    /// <summary>Whether native language servers format statement endings and new lines as they are typed.</summary>
+    public bool FormatOnType = true;
+
     /// <summary>Whether a file of code loses the spaces at the ends of its lines and gets a newline at its end when saved.</summary>
     public bool TrimWhitespace = true, FinalNewline;
 
@@ -178,6 +181,15 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether names are coloured by what they are (a class, a field, a parameter), from the language servers and from HIDL itself.</summary>
     public bool SemanticHighlighting = true;
+
+    /// <summary>Whether the keys are Visual Studio's where they differ from VS Code's (Ctrl+- back, Ctrl+K Ctrl+D formats), the Visual Studio look turns it on.</summary>
+    public bool VisualStudioKeys;
+
+    /// <summary>
+    /// Whether Visual Studio's keys were ever turned on or off, or kept as they were when a folder with a solution
+    /// offered them. Until then such a folder offers them once.
+    /// </summary>
+    public bool VisualStudioKeysChosen;
 
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
@@ -219,6 +231,7 @@ internal sealed partial class HexSettings
 
     /// <summary>Where netcoredbg is, empty to look for it (DawnScene.Debugging).</summary>
     public string DebuggerPath = string.Empty;
+    public readonly Dictionary<string, bool> ExceptionBreakpoints = new(StringComparer.Ordinal);
 
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
     public readonly Dictionary<string, string> ServerPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -385,6 +398,10 @@ internal sealed partial class HexSettings
         InlayHints = Flag(values, "inlay_hints", InlayHints);
         CodeLensReferences = Flag(values, "code_lens_references", CodeLensReferences);
         SemanticHighlighting = Flag(values, "semantic_highlighting", SemanticHighlighting);
+        // A file from before there were Visual Studio's keys, in the Visual Studio look, has them as the look has now
+        bool lookOfVisualStudio = values.TryGetValue("look", out var lookNamed) && lookNamed is StringValue { Value: "Visual Studio" };
+        VisualStudioKeys = Flag(values, "visual_studio_keys", VisualStudioKeys || lookOfVisualStudio);
+        VisualStudioKeysChosen = Flag(values, "visual_studio_keys_chosen", VisualStudioKeysChosen);
         if (values.TryGetValue("csharp_colors", out var csharp) && csharp is StringValue { Value: "resharper" or "visual_studio" or "skin" } colored) CSharpColors = colored.Value;
         McpServer = Flag(values, "mcp_server", McpServer);
         GitAutoFetch = Flag(values, "git_autofetch", GitAutoFetch);
@@ -435,12 +452,19 @@ internal sealed partial class HexSettings
         CaretFastRate = Math.Clamp(Number(values, "caret_fast_rate", CaretFastRate), 30.0f, 200.0f);
         StickyScroll = Flag(values, "sticky_scroll", StickyScroll);
         FormatOnSave = Flag(values, "format_on_save", FormatOnSave);
+        FormatOnType = Flag(values, "format_on_type", FormatOnType);
         TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
         FinalNewline = Flag(values, "final_newline", FinalNewline);
         AutoSave = Flag(values, "auto_save", AutoSave);
         AutoSaveDelay = Math.Clamp(Number(values, "auto_save_delay", AutoSaveDelay), 0.25f, 60.0f);
         RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
         if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
+        if (values.GetValueOrDefault("exception_breakpoints") is ObjectValue exceptionFilters)
+        {
+            ExceptionBreakpoints.Clear();
+            foreach (var (name, value) in exceptionFilters.Properties)
+                if (value is BooleanValue enabled) ExceptionBreakpoints[name] = enabled.Value;
+        }
         if (values.TryGetValue("git_account", out var account) && account is StringValue accountNamed) GitAccount = accountNamed.Value.Trim();
         Names(values, "language_server_paths", ServerPaths);
         if (values.ContainsKey("files_associations"))
@@ -571,6 +595,13 @@ internal sealed partial class HexSettings
         return named;
     }
 
+    private HIDLObject ExceptionBreakpointsObject()
+    {
+        var filters = new HIDLObject();
+        foreach (var (name, enabled) in ExceptionBreakpoints.OrderBy(pair => pair.Key, StringComparer.Ordinal)) filters.Add(name, enabled);
+        return filters;
+    }
+
     /// <summary>Writes the settings to their file. Says what went wrong if they couldn't be, null if they could.</summary>
     public string? Save()
     {
@@ -659,6 +690,8 @@ internal sealed partial class HexSettings
             .Add("inlay_hints", InlayHints)
             .Add("code_lens_references", CodeLensReferences)
             .Add("semantic_highlighting", SemanticHighlighting)
+            .Add("visual_studio_keys", VisualStudioKeys)
+            .Add("visual_studio_keys_chosen", VisualStudioKeysChosen)
             .Add("csharp_colors", CSharpColors)
             .Add("mcp_server", McpServer)
             .Add("git_autofetch", GitAutoFetch)
@@ -703,12 +736,14 @@ internal sealed partial class HexSettings
             .Add("caret_fast_rate", CaretFastRate)
             .Add("sticky_scroll", StickyScroll)
             .Add("format_on_save", FormatOnSave)
+            .Add("format_on_type", FormatOnType)
             .Add("trim_whitespace", TrimWhitespace)
             .Add("final_newline", FinalNewline)
             .Add("auto_save", AutoSave)
             .Add("auto_save_delay", AutoSaveDelay)
             .Add("run_to_terminal", RunToTerminal)
             .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
+            .Add("exception_breakpoints", ExceptionBreakpointsObject())
             .Add("language_server_paths", Named(ServerPaths, paths: true))
             .Add("files_associations", Named(FileAssociations))
             .Add("files_exclude", Horizon.HIDL.Library.Natives.List(FilesExclude))

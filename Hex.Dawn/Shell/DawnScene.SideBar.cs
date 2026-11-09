@@ -21,6 +21,9 @@ internal enum HexSide
     // Debugging, the stack where it stopped, the variables and the breakpoints
     Debug,
 
+    // The tests of the workspace, Visual Studio's Test Explorer (HexTestExplorer)
+    Tests,
+
     // Git, what's changed in the repositories of the workspace, staged or not, and committing it
     SourceControl,
 
@@ -90,6 +93,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").OnPressed = () => ShowSide(HexSide.Outline);
         layout.Get<Button>("act_design").OnPressed = () => ShowSide(HexSide.Design);
         layout.Get<Button>("act_debug").OnPressed = () => ShowSide(HexSide.Debug);
+        layout.Get<Button>("act_tests").OnPressed = ToggleTestExplorer;
         layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_agents").OnPressed = () => ShowSide(HexSide.Agents);
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
@@ -99,8 +103,22 @@ internal sealed partial class DawnScene
         commands.Add("View/sides", Said("activity.extensions_command"), ShowExtensions, "Ctrl+Shift+X", "extensions", UIKeyUse.BoundWhileTyping);
 
         // Tab from a button of the activity bar goes on to the side it shows, the next stop after the bar, VS Code's order
-        foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_git", "act_agents", "act_settings", "act_extensions"])
+        foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_tests", "act_git", "act_agents", "act_settings", "act_extensions"])
             layout.Get<Button>(act).TabTo = by => by > 0 && left.Shown && sideTree.Visible ? sideTree : null;
+    }
+
+    // The activity button toggles; the Test menu's Show command always reveals the view.
+    // Keep this path identical in self-tests so repeated clicks exercise the real behavior.
+    private void ToggleTestExplorer()
+    {
+        if (Side == HexSide.Tests && left.Shown && !extensionsUp)
+            ToggleSideBar();
+        else
+        {
+            extensionsUp = false;
+            sideShown = null;
+            testExplorer.Show();
+        }
     }
 
     // Whether the settings are up on Extensions because the activity bar's button asked for them, which is lit while they are
@@ -201,6 +219,7 @@ internal sealed partial class DawnScene
         HexSide.Search => "act_search",
         HexSide.Design => "act_design",
         HexSide.Debug => "act_debug",
+        HexSide.Tests => "act_tests",
         HexSide.SourceControl => "act_git",
         HexSide.Agents => "act_agents",
         _ => "act_outline"
@@ -239,6 +258,7 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_outline").Selected = sides && side == HexSide.Outline;
         layout.Get<Button>("act_design").Selected = sides && side == HexSide.Design;
         layout.Get<Button>("act_debug").Selected = sides && side == HexSide.Debug;
+        layout.Get<Button>("act_tests").Selected = sides && side == HexSide.Tests;
         layout.Get<Button>("act_git").Selected = sides && side == HexSide.SourceControl;
         layout.Get<Button>("act_agents").Selected = sides && side == HexSide.Agents;
         layout.Get<Button>("act_extensions").Selected = extensionsUp;

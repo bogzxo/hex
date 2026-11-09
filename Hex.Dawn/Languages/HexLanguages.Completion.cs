@@ -20,6 +20,7 @@ internal sealed partial class HexLanguages
     {
         public ServerWord Word;
         public int Generation;
+        public int Version;
         public string Prefix = string.Empty;
         public bool Typed;
         public bool Answered;
@@ -30,6 +31,10 @@ internal sealed partial class HexLanguages
     private readonly Dictionary<HexDocument, ServerAsking> serverAsked = [];
     private readonly ConcurrentQueue<(HexDocument Of, int Generation, LanguageServerCompletions? Found)> serverAnswers = new();
     private int serverGeneration;
+    private bool presentingServerAnswer;
+
+    internal bool TriggersCompletion(HexDocument of, char character) => linters.TryGetValue(of, out var server)
+        && server.Failure is null && server.TriggersCompletion(character);
 
     /// <summary>
     /// What the server of a file of another language offers at the caret, what it said last time while it is still
@@ -55,12 +60,17 @@ internal sealed partial class HexLanguages
             asked.Typed = editor.CompletionTyped;
             if (!asked.Answered)
                 return asked.Offered ?? Waiting(of, word.Start);
-            if (!asked.Incomplete || asked.Prefix == prefix)
+            if ((editor.CompletionTyped || presentingServerAnswer)
+                && (!asked.Incomplete || asked.Prefix == prefix)
+                && (asked.Version != doc.Version || asked.Prefix == prefix)
+                && (asked.Version == doc.Version || asked.Offered is not { } offer
+                    || !offer.Items.Any(item => item.AdditionalEdits is { Count: > 0 } || item.ReplacementStart is not null || item.ReplacementEnd is not null)))
                 return asked.Offered;
         }
 
-        // Typed, nothing started is nothing to ask about, unless it comes straight after a dot
-        char? trigger = start > 0 && line[start - 1] == '.' ? '.' : null;
+        // Only an actual typed trigger uses TriggerCharacter. Ctrl+Space is Invoked, including after a trigger.
+        char? trigger = editor.CompletionTyped && caret.Column > 0 && server.TriggersCompletion(line[caret.Column - 1])
+            ? line[caret.Column - 1] : null;
         if (editor.CompletionTyped && prefix.Length == 0 && trigger is null)
             return null;
 
@@ -73,6 +83,7 @@ internal sealed partial class HexLanguages
         {
             Word = word,
             Generation = ++serverGeneration,
+            Version = doc.Version,
             Prefix = prefix,
             Typed = editor.CompletionTyped,
 
@@ -106,7 +117,9 @@ internal sealed partial class HexLanguages
 
             asked.Answered = true;
             asked.Incomplete = answer.Found?.Incomplete ?? false;
-            asked.Offered = answer.Found is { } found ? new UICompletionRequest(asked.Word.Start, found.Items) : null;
+            asked.Offered = answer.Found is { } found ? new UICompletionRequest(asked.Word.Start,
+                found.Items.Select(item => item.AdditionalEdits is { Count: > 0 } || item.ReplacementStart is not null || item.ReplacementEnd is not null
+                    ? item with { ExpectedVersion = asked.Version } : item).ToArray()) : null;
 
             // Only for the word it was asked about, the caret having gone somewhere else is the end of it
             CodeEditor editor = answer.Of.Editor;
@@ -116,7 +129,13 @@ internal sealed partial class HexLanguages
             UITextPosition caret = editor.Document.Caret;
             int start = caret.Column - editor.Document.WordBeforeCaret().Length;
             if (caret.Line == asked.Word.Line && start == asked.Word.Start)
-                editor.Complete(asked.Typed);
+            {
+                // Presenting an answer must reuse it; an explicit Ctrl+Space asks afresh, including
+                // after an empty response from a server that was still indexing the workspace.
+                presentingServerAnswer = true;
+                try { editor.Complete(asked.Typed); }
+                finally { presentingServerAnswer = false; }
+            }
         }
     }
 

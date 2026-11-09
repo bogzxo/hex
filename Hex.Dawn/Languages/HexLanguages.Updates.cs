@@ -286,6 +286,13 @@ internal sealed partial class HexLanguages
             return;
         }
 
+        if (MissingNpm(line))
+        {
+            context.Notices.Notify(NpmHint, error: false,
+                (context.Strings.Said("language_updates.get_npm"), OpenNpmSetup));
+            return;
+        }
+
         // A program that's running can't be written over, the server goes first (its process gone before the command starts)
         Task stopped = StopServer(entry);
         string? before = found?.Version;

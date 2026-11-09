@@ -131,6 +131,13 @@ internal sealed partial class HexProperties
             }
         });
 
+        context.Documents.Closed += closed =>
+        {
+            if (!ReferenceEquals(shownDocument, closed)) return;
+            shownDocument = null;
+            rowsStale = true;
+        };
+
         Dotnet.Changed += project => projectsChanged = true;
     }
 

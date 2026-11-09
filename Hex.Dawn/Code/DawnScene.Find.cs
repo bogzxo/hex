@@ -171,7 +171,53 @@ internal sealed partial class DawnScene
             ? Said("find_menu.go_to_line_prompt", ("lines", HexText.Count("line", code.Document.LineCount)), ("file", document.Path is { } shownPath ? Path.GetFileName(shownPath) : document.Name))
             : Said("find_menu.open_file_prompt", ("count", HexText.Count("file", names.Length)), ("where", where));
         ChooseFrom(Said(typed.StartsWith(':') ? "find_menu.go_to_line_title" : "find_menu.open_file_title"), prompt,
-            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed);
+            choices, shortestFirst: names.Length > 0, prefixed: QuickOpenPrefix, recent: RecentOpened, typed: typed, searched: QuickOpenSearch());
+    }
+
+    /// <summary>
+    /// Quick open's lists that are searched rather than narrowed, # for every declaration of the workspace and the game's
+    /// texts after them, VS Code's #. The search is only made the first time # is typed.
+    /// </summary>
+    private Func<char, UIChoiceSearch?> QuickOpenSearch()
+    {
+        UIChoiceSearch? symbols = null, lines = null;
+        return prefix => prefix switch
+        {
+            '#' => symbols ??= SymbolSearch(withTexts: true),
+            ':' => lines ??= LineSearch(),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Ctrl+G's lines searched by their number, the line typed first and the ones whose numbers start with it after. As a
+    /// narrowed list 13 and Enter went to line 133, the letters of a number matched anywhere. Letters look in the lines'
+    /// text instead. The lines are read now, on the editor's thread.
+    /// </summary>
+    private UIChoiceSearch LineSearch()
+    {
+        List<UIChoice> all = QuickOpenPrefix(':')!;
+        return (typed, cancel) =>
+        {
+            string asked = typed.Trim();
+            if (asked.Length == 0)
+                return all;
+
+            if (int.TryParse(asked, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int number))
+            {
+                var found = new List<UIChoice>();
+                if (number >= 1 && number <= all.Count)
+                    found.Add(all[number - 1]);
+                for (int line = 1; line <= all.Count && found.Count < 200 && !cancel.IsCancellationRequested; line++)
+                {
+                    if (line != number && line.ToString(System.Globalization.CultureInfo.InvariantCulture).StartsWith(asked, StringComparison.Ordinal))
+                        found.Add(all[line - 1]);
+                }
+                return found;
+            }
+
+            return [.. all.Where(choice => choice.Text.Contains(asked, StringComparison.OrdinalIgnoreCase)).Take(200)];
+        };
     }
 
     /// <summary>
@@ -223,14 +269,6 @@ internal sealed partial class DawnScene
                     }) with { TextDigits = digits });
                 }
                 return lines;
-
-            case '#':
-                // A text by its key, what it says dim after it
-                return [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key =>
-                {
-                    string says = HexEvaluation.Shorten(Localisation.Get(key), 60);
-                    return new UIChoice(key, () => codeEditing.GoToKey(key)) { Detail = says, Icon = "symbol-string", Id = $"{key}   {says}" };
-                })];
 
             default:
                 return null;
@@ -319,6 +357,7 @@ internal sealed partial class DawnScene
         commands.Add("Go/open", Said("find_menu.go_to_file"), QuickOpen, "Ctrl+P", "go-to-file", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/open", Said("find_menu.go_to_line"), GoToLine, "Ctrl+G", "list-ordered").IsVisible = () => !LayoutTools;
         commands.Add("Go/open", Said("find_menu.go_to_symbol"), GoToSymbol, icon: "symbol-variable").IsVisible = () => !LayoutTools;
+        commands.Add("Go/open", Said("go_to_all.command"), GoToAll, "Ctrl+T", "symbol-class", UIKeyUse.BoundWhileTyping);
 
         // Ctrl+G groups what is selected in a layout, it only goes to a line where there is code to go about in
         commands.Bind(Key.G, () => { if (!LayoutTools || compositor.Focus is CodeEditor) GoToLine(); }, control: true, whileTyping: true, shift: false);

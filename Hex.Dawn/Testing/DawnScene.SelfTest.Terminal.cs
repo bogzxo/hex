@@ -83,10 +83,13 @@ internal sealed partial class DawnScene
 
         // A compiler's error in a shell's output, into the Problems panel, and out again when the next line is run
         test.Run(() => terminalPanel.Select(0));
+        // The file is one that's there, a problem read off a terminal whose file isn't there is half a path and dropped
+        string compiled = Path.Combine(testFolder, "Program.cs");
+        test.Run(() => File.WriteAllText(compiled, "class Program\n{\n}\n"));
         // Said in two halves, so the line typed isn't itself the error: PowerShell's on Windows, sh's anywhere else
         test.Run(() => terminalPanel.FocusedView?.Send(OperatingSystem.IsWindows()
-            ? "Write-Output ('C:\\hex\\Program.cs(12,5): error CS1002: ; expect' + 'ed')\r"
-            : "printf '%s\\n' '/tmp/hex/Program.cs(12,5): error CS1002: ; expect''ed'\r"));
+            ? $"Write-Output ('{compiled}(12,5): error CS1002: ; expect' + 'ed')\r"
+            : $"printf '%s\\n' '{compiled}(12,5): error CS1002: ; expect''ed'\r"));
         test.WaitFor(() => problemList.Any(problem => problem.Text.Contains("CS1002")), 8.0f);
         test.Check("terminal: a compiler's error in a shell's output is in the Problems panel", () =>
             problemList.Any(problem => problem.Text == "; expected (CS1002)" && problem.Line == 11 && problem.Path.EndsWith("Program.cs")));

@@ -22,7 +22,6 @@ internal static partial class Program
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
-        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
         // Hex is a desktop program, its windows, keys and clipboard are the desktop's
         Horizon.Platform.Desktop.DesktopPlatform.Install();
@@ -50,6 +49,9 @@ internal static partial class Program
             return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
 
         HexLog.Initialize(AppContext.BaseDirectory);
+        // Trace only after selecting Hex's logger. Tracing earlier creates the default logger,
+        // which holds debug.log open and prevents Hex's single-file logger from writing it.
+        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
 #if DEBUG
         // A debug console is opt-in, ordinary launches only open the editor or terminal window

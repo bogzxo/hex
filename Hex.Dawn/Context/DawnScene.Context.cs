@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 
 using Hex.Shell;
@@ -21,6 +21,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     private HexLanguages languages = null!;
     private HexTasks tasks = null!;
     private HexDebugging debugger = null!;
+    private HexTestExplorer testExplorer = null!;
     private HexTerminalFiles terminalFiles = null!;
     private HexExtensions extensions = null!;
     private HexRunning running = null!;
@@ -75,6 +76,17 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     void IDocuments.Rewrite(HexDocument of, string text) => Rewrite(of, text);
 
+    bool IDocuments.Rewrite(HexDocument of, IReadOnlyList<UITextEdit> edits)
+    {
+        if (!of.Editor.Document.ApplyEdits(edits)) return false;
+        if (of != document)
+        {
+            of.Modified = of.Editor.Text != of.SavedCode;
+            tabsDirty = true;
+        }
+        return true;
+    }
+
     /// <summary>A document's text replaced as one step to undo, its tab saying it has changes when it isn't the one on screen.</summary>
     private void Rewrite(HexDocument of, string text)
     {
@@ -121,6 +133,30 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             explorer.workspace.RunTarget = value;
             explorer.KeepWorkspace();
         }
+    }
+
+    IReadOnlyList<string> IWorkspace.WatchExpressions => explorer.workspace.Watches;
+    void IWorkspace.KeepWatchExpressions(IReadOnlyList<string> expressions)
+    {
+        explorer.workspace.Watches.Clear();
+        explorer.workspace.Watches.AddRange(expressions);
+        explorer.KeepWorkspace();
+    }
+
+    string IWorkspace.Configuration => explorer.workspace.Configuration;
+
+    string? IWorkspace.Solution => explorer.workspace.Solution ?? Hex.Core.Projects.DotnetSolutionTree.OnlySolutionIn(explorer.workspace.Folders);
+
+    string? IWorkspace.LaunchProfileOf(string project) => explorer.workspace.LaunchProfiles.GetValueOrDefault(Path.GetFullPath(project));
+
+    void IWorkspace.PickLaunchProfile(string project, string? profile)
+    {
+        if (profile is null)
+            explorer.workspace.LaunchProfiles.Remove(Path.GetFullPath(project));
+        else
+            explorer.workspace.LaunchProfiles[Path.GetFullPath(project)] = profile;
+        explorer.KeepWorkspace();
+        ShowRunTarget();
     }
 
     string IWorkspace.Relative(string path) => Relative(path);
@@ -195,6 +231,16 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IWindows.PromptLines(string title, string text, string value, string button, string language, Func<string, (string Text, bool Warning)>? note, Action<string> typed) =>
         AskLines(title, text, value, button, language, note, typed);
 
+    void IWindows.PromptExpression(string title, string text, string value, string button, string language, Action<CodeEditor> prepare, Action<string> typed) =>
+        AskLines(title, text, value, button, language, null, typed, box =>
+        {
+            box.Size = new(620.0f, 70.0f);
+            box.WordWrap = false;
+            box.OnEnter = box.OnControlEnter;
+            box.Document.SelectAll();
+            prepare(box);
+        });
+
     void IWindows.Menu(Menu menu) => contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
     void IWindows.MenuAt(Menu menu, Vector2 at) => contextMenu = ContextMenu.ShowAt(chrome, at, menu);
     string IWindows.BrowseFolder
@@ -255,7 +301,8 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void ITerminals.RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished, string? shell)
     {
         // The code keeps the keyboard, the way a task's terminal doesn't take it in VS Code. The build took it and what was
-        // typed next (Ctrl+G and a line) went to the shell
+        // typed next (Ctrl+G and a line) went to the shell. A list of the side does too, Run All from the Test Explorer
+        // left the keyboard in the tests' terminal
         UIComponent? had = compositor.Focus;
         try
         {
@@ -263,8 +310,8 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         }
         finally
         {
-            if (had is CodeEditor { Module: not null } editor)
-                editor.Focus();
+            if (had is CodeEditor { Module: not null } or TreeView { Module: not null, Visible: true })
+                had.Focus();
         }
     }
 
@@ -294,6 +341,15 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
             WatchTask(made, finished);
         }
     }
+
+    bool ITerminals.TabRunning(string key) => TaskViewOf(key) is not null;
+
+    void ITerminals.InterruptTab(string key) => TaskViewOf(key)?.Send("");
+
+    // The pane of a tab a task was run in while what it ran is still going, null once it's done or the tab is gone
+    private TerminalView? TaskViewOf(string key) =>
+        terminalPanel.Tabs.FirstOrDefault(open => open.Tag is string was && was == key)?.Views.FirstOrDefault() is { IsRunning: true } view
+        && taskWatches.Any(watch => watch.View == view) ? view : null;
 
     int ITerminals.TerminalErrors => terminalProblems.Count(problem => !problem.Warning);
     void ITerminals.AddProblem(string path, int line, int column, string message, bool warning) => AddTerminalProblem(path, line, Math.Max(1, column), message, warning);
@@ -325,12 +381,35 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     }
 
     void IPanels.RefreshRows() => sideTree.Refresh();
+    private (HexSide Side, string Id)? sideRevealRow;
+    void IPanels.RevealSideRow(string id)
+    {
+        sideRevealRow = (Side, id);
+        treeDirty = true;
+    }
+
+    private void RevealRequestedSideRow()
+    {
+        if (sideRevealRow is not {} wanted) return;
+        sideRevealRow = null;
+        if (wanted.Side != Side) return;
+        for (int index = 0; index < sideTree.VisibleCount; index++)
+        {
+            var row = sideTree.VisibleAt(index);
+            if (row.Tag is not SideTag { Id: {} id } || id != wanted.Id) continue;
+            sideTree.Reveal(row);
+            return;
+        }
+    }
+    void IPanels.AddSideHead(HexSide side, UIComponent head) => AddSideHead(side, head);
+    UITreeItem? IPanels.FocusedSideRow => compositor.Focus == sideTree && sideTree.Visible ? sideTree.Selected : null;
     void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
     void IPanels.ShowProblems() => ShowPanel(PROBLEMS_PAGE);
     void IPanels.ShowTerminals() => ShowPanel(CONSOLE_PAGE);
     bool IPanels.TerminalsShown => bottom.Shown && bottom.Selected == CONSOLE_PAGE;
     Vector4 IPanels.Warning => WarningColor;
     void IPanels.RefreshProblems() => problemsDirty = true;
+    void IPanels.AddProblems(Func<IReadOnlyList<HexProblem>> source) => problemSources.Add(source);
 
     bool IPanels.SideBarShown
     {
@@ -363,6 +442,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
         UseSideTree(true);
         treeTitle.Text = view.Title;
         sideTree.Items = view.Rows();
+        PutBackSidePlace();
         return true;
     }
 
@@ -415,6 +495,8 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     HexValues? IEditorWindow.LastRun => running.LastRunOf == document ? running.LastRun : null;
     void IEditorWindow.ShowResults(string title, List<HexResult> found) => ShowResults(title, found);
+    void IEditorWindow.ShowResultsTree(string title, List<UITreeItem> rows) => ShowResultsTree(title, rows);
+    void IEditorWindow.RefreshResultsTree() => RefreshResultsTree();
 
     void IEditorWindow.AddCodeMenu(Menu menu)
     {

@@ -26,6 +26,7 @@ internal sealed partial class DawnScene
             start = made.Get<StackPanel>("start"), recent = made.Get<StackPanel>("recent_column");
         private readonly Label subtitle = made.Get<Label>("subtitle");
         public readonly StackPanel List = made.Get<StackPanel>("recent");
+        public readonly Button CommandsButton = made.Get<Button>("commands");
         public void Invalidate() => width = 0;
         private float width;
         private UISkin? measuredWith;
@@ -157,6 +158,7 @@ internal sealed partial class DawnScene
             start.MoveChild(openFile, 2);
         }
         made.Get<Button>("commands").OnPressed = CommandPalette;
+        made.Get<Button>("commands").Label = WithCommandShortcut(Said("welcome.commands"), "menus.command_palette");
         made.Get<Button>("keys").OnPressed = OpenKeysWindow;
         made.Get<Button>("language").OnPressed = ShowLanguageHelp;
         made.Get<Button>("changes").OnPressed = ShowChangelog;

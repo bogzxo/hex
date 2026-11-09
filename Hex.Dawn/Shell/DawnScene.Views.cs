@@ -93,6 +93,7 @@ internal sealed partial class DawnScene
     /// </summary>
     internal bool Runnable(HexDocument shown)
     {
+        if (HexDebugging.IsDebuggerSourcePath(shown.Path)) return debugger.DebugStopped;
         if (!shown.IsText || debugger.DebugStopped)
             return true;
         if (shown.Picture is not null || shown.Path is not { } path)

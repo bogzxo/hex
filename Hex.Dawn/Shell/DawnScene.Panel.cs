@@ -28,12 +28,15 @@ internal sealed partial class DawnScene
 
     private const int PROBLEMS_PAGE = 0, OUTPUT_PAGE = 1;
     private const int MAX_OUTPUT = 400;
-    private const float MIN_PANEL = 80.0f, MAX_PANEL = 600.0f;
+    private const float MIN_PANEL = 80.0f, MAX_PANEL = 600.0f, MIN_KEPT_PANEL = 140.0f;
 
     private TabPanel bottom = null!;
     private StackPanel problems = null!, output = null!;
     private ScrollPanel problemsScroll = null!, outputScroll = null!;
     private TextBox problemsFilter = null!;
+
+    // Where else problems come from, the parts that have their own (the tests that failed)
+    private readonly List<Func<IReadOnlyList<HexProblem>>> problemSources = [];
 
     // What F8 found wrong across the workspace, null until it has been run
     private List<HexResult>? workspaceProblems;
@@ -116,8 +119,10 @@ internal sealed partial class DawnScene
             problemsFilter.Focus();
         };
 
+        // A height kept from before that has room for no more than a row or two is taken for broken, the panel comes up
+        // as tall as it's laid out (eight rows of problems) and not four rows high with the rest to scroll through
         bottom.Show(!settings.PanelHidden, instantly: true);
-        if (settings.PanelHeight > 0.0f)
+        if (settings.PanelHeight >= MIN_KEPT_PANEL)
             bottom.Size = bottom.Size with { Y = Math.Clamp(settings.PanelHeight, MIN_PANEL, MAX_PANEL) };
         panelWanted = bottom.Size.Y;
 
@@ -318,6 +323,9 @@ internal sealed partial class DawnScene
             if (Elsewhere(problem.Path))
                 problemList.Add(problem);
         }
+
+        foreach (Func<IReadOnlyList<HexProblem>> source in problemSources)
+            problemList.AddRange(source());
 
         // What's wrong with the settings files written by hand, an open one's underlined in it the same way
         foreach (HexProblem problem in SettingsProblems())

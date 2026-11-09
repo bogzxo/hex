@@ -33,7 +33,8 @@ internal sealed partial class DawnScene
         int failed = 0;
         foreach (string file in files)
         {
-            if (!Open(file) || (options.Exercise && !Exercise(file)))
+            // A file of data is only opened, a layout that doesn't build opens as its code and fails
+            if (!Open(file) || (options.Exercise && !document.IsText && !Exercise(file)))
             {
                 Console.WriteLine($"[Hex check] FAIL: {file}");
                 failed++;
@@ -112,7 +113,7 @@ internal sealed partial class DawnScene
         Expect(document.Undo() && document.GenerateCode() == untouched && AllNamed(), "undo didn't give the layout back");
         Expect(document.Redo() && document.GenerateCode() == changed && AllNamed(), "redo didn't make the change again");
         Expect(document.Undo() && document.GenerateCode() == untouched, "undo didn't work a second time");
-        Expect(System.IO.File.ReadAllText(file) == untouched, "the file isn't the layout it started as");
+        Expect(System.IO.File.ReadAllText(file).Replace("\r\n", "\n") == untouched, "the file isn't the layout it started as");
 
         designer.Restored("exercised");
 

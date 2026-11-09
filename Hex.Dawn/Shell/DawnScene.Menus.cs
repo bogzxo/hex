@@ -58,16 +58,27 @@ internal sealed partial class DawnScene
     {
         if (!debugger.DebugStopped && !LayoutTools && RunChosen(debug: true))
             return;
+        if (HexDebugging.IsDebuggerSourcePath(document.Path))
+        {
+            if (debugger.DebugStopped) debugger.DebugOrContinue();
+            else if (!debugger.Debugging) Say(Said("debugging.source_cannot_run"));
+            return;
+        }
 
         // C# and D are debugged when there's a debugger to do it with (netcoredbg, lldb-dap), breakpoints or not, the way F5
         // is in VS Code, and Ctrl+F5 runs without it. While something is being debugged F5 goes on from where it stopped.
-        // D was only debugged with a breakpoint and C# always, F5 meant two things. Without netcoredbg F5 builds and runs
-        // C# the way any other program is, and says once that it isn't being debugged
+        // D was only debugged with a breakpoint and C# always, F5 meant two things. Without netcoredbg the first F5 installs
+        // it and goes on into the debug session (HexDebugging.InstallingFirst), and only where it can't be installed does F5
+        // build and run C# the way any other program is, saying once that it isn't being debugged
         bool debuggable = debugger.CanDebug(document.Path);
         if (!LayoutTools && HexDebugging.IsCSharp(document.Path) && !debuggable && !debugger.DebugStopped)
+        {
+            if (debugger.InstallingFirst(RunOrPlay))
+                return;
             debugger.SayRunWithoutDebugger();
+        }
 
-        if (debugger.DebugStopped || (!LayoutTools && debuggable)) debugger.DebugOrContinue();
+        if (debugger.DebugStopped || (!LayoutTools && (debuggable || HexDebugging.IsPython(document.Path)))) debugger.DebugOrContinue();
         else if (LayoutTools) designer.PlayIntros();
         else if (document.IsText && document.Path is { } path && !IsHidl(path))
         {
@@ -85,6 +96,7 @@ internal sealed partial class DawnScene
     {
         if (LayoutTools || RunChosen(debug: false))
             return;
+        if (HexDebugging.IsDebuggerSourcePath(document.Path)) { Say(Said("debugging.source_cannot_run")); return; }
 
         if (document.IsText && document.Path is { } path && !IsHidl(path))
         {
@@ -110,13 +122,14 @@ internal sealed partial class DawnScene
     private void DeclareMenus()
     {
         commands.Declare("File", "new", "save", "close", "path", "workspace", "settings", "exit");
-        commands.Declare("Edit", "history", "clipboard", "find", "files", "comment", "agent");
+        commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment", "agent");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
         commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
         commands.Declare("View", "palette", "sides", "panels", "appearance", "editor", "agent");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
+        commands.Declare("Test", "tests");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
         commands.Declare("Help", "help", "developer", "about");

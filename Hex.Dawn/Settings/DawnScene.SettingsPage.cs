@@ -323,6 +323,7 @@ internal sealed partial class DawnScene
             "inlay_hints" => Values.Bool(hex.settings.InlayHints),
             "code_lens_references" => Values.Bool(hex.settings.CodeLensReferences),
             "semantic_highlighting" => Values.Bool(hex.settings.SemanticHighlighting),
+            "visual_studio_keys" => Values.Bool(hex.settings.VisualStudioKeys),
             "csharp_colors" => new StringValue(hex.settings.CSharpColors),
             "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
             "git_autofetch_interval" => new NumberValue(hex.settings.GitAutoFetchInterval),
@@ -482,6 +483,10 @@ internal sealed partial class DawnScene
                 case ("semantic_highlighting", BooleanValue semantic):
                     settings.SemanticHighlighting = semantic.Value;
                     hex.ForgetSemantics();
+                    break;
+                case ("visual_studio_keys", BooleanValue visualStudio):
+                    settings.VisualStudioKeys = visualStudio.Value;
+                    hex.ApplyKeyLayer();
                     break;
                 case ("csharp_colors", StringValue { Value: "resharper" or "visual_studio" or "skin" } csharp):
                     settings.CSharpColors = csharp.Value;

@@ -1,14 +1,21 @@
 using System.Numerics;
 
+using Hex.Core.Projects;
+
 namespace Hex.Dawn;
 
 // The arrow beside the Run button, what F5 and the button run. It drops a menu of the workspace's run tasks, its .NET
 // programs and the file on screen (HexTasks.RunTargets), the one picked ticked and kept with the workspace. The button
 // says what it runs. A project picked is debugged with F5 where there's a debugger for it and run with Ctrl+F5, a task
-// runs as tasks do, and the file on screen is what F5 always did.
+// runs as tasks do (F5 debugs one that's a dotnet run of a project), and the file on screen is what F5 always did.
 internal sealed partial class DawnScene
 {
-    private void WireRunTarget() => layout.Get<Button>("run_target_button").OnPressed = ShowRunTargets;
+    private void WireRunTarget()
+    {
+        layout.Get<Button>("run_target_button").OnPressed = ShowRunTargets;
+        WireConfiguration();
+        WireLaunchProfiles();
+    }
 
     /// <summary>The menu of what can run, under the arrow, the one that runs now ticked.</summary>
     private void ShowRunTargets()
@@ -33,6 +40,9 @@ internal sealed partial class DawnScene
     {
         Context.Workspace.RunTarget = choice.Target;
         ShowRunTarget();
+
+        // The Solution view has the startup project in bold
+        treeDirty |= Side == HexSide.Explorer;
         Say(Said("run_target.chosen", ("name", choice.Label)));
     }
 
@@ -52,6 +62,12 @@ internal sealed partial class DawnScene
             : tools ? Said("toolbar.play_tip") : FileRunTip();
         play.Visible = chosen is not null || Runnable(document);
         layout.Get<Button>("run_target_button").Visible = !tools;
+
+        // Debug or Release beside them, what builds and runs build (DawnScene.SolutionMenus)
+        var configuration = layout.Get<Button>("configuration_button");
+        configuration.Visible = !tools;
+        configuration.Label = explorer.workspace.Configuration;
+        ShowLaunchProfile(chosen, tools);
         layout.Get<UIComponent>("tools_rule3").Visible = play.Visible || !tools;
     }
 
@@ -80,18 +96,39 @@ internal sealed partial class DawnScene
         if (tasks.ChosenRun() is not { } chosen)
             return false;
 
+        // A run task that's a dotnet run of a project is that project debugged, with its arguments and its configuration,
+        // once what it depends on has built. It ran in a terminal and went straight past every breakpoint
         if (chosen.Task is { } task)
         {
+            if (debug && PythonRunLine.Of(task.Command, task.WorkingFolder()) is { } python)
+            {
+                debugger.DebugPythonRun(python, go => tasks.RunFirstThen(task, go));
+                return true;
+            }
+            if (debug && DotnetRunLine.Of(task.Command, task.WorkingFolder()) is { } run)
+            {
+                if (debugger.Netcoredbg() is null && debugger.InstallingFirst(RunOrPlay))
+                    return true;
+                if (debugger.Netcoredbg() is not null)
+                {
+                    debugger.DebugRun(run, task.WorkingFolder(), go => tasks.RunFirstThen(task, go));
+                    return true;
+                }
+            }
+
             tasks.Run(task);
             return true;
         }
 
         if (chosen.Project is { } project)
         {
-            if (debug && project.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && debugger.Netcoredbg() is not null)
+            bool csharp = debug && project.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
+            if (csharp && debugger.Netcoredbg() is null && debugger.InstallingFirst(RunOrPlay))
+                return true;
+            if (csharp && debugger.Netcoredbg() is not null)
                 debugger.DebugProject(project);
             else
-                tasks.Run(HexTasks.ProjectTask(project));
+                tasks.RunProject(project);
             return true;
         }
 

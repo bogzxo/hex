@@ -61,7 +61,8 @@ internal sealed partial class HexProperties
         }
 
         GitRows(rows);
-        ProjectRows(rows);
+        if (!ProjectFileRows(rows))
+            ProjectRows(rows);
         page.Settings = rows;
         page.Refresh();
     }
@@ -174,7 +175,8 @@ internal sealed partial class HexProperties
     private void TextRows(List<UISetting> rows, HexDocument? open)
     {
         string group = Said("text");
-        string? path = shown.Count == 1 ? shown[0] : open?.Path;
+        // A diff is of a file, the language it's in is that file's
+        string? path = shown.Count == 1 ? shown[0] : open?.Path ?? open?.DiffOf;
 
         // Every language there's a grammar for, Auto Detect first saying what that comes to, Change Language Mode beside it
         CodeLanguage[] languages = [.. CodeLanguages.Languages().Append(new CodeLanguage("HIDL", "hidl", [".hor"])).OrderBy(language => language.Name, StringComparer.OrdinalIgnoreCase)];
@@ -330,6 +332,12 @@ internal sealed partial class HexProperties
             case BUILD_ACTION or COPY:
                 ChangeProject(key, text);
                 break;
+            case FRAMEWORK or OUTPUT_TYPE or ASSEMBLY or ROOT_NAMESPACE or NULLABLE:
+                ChangeProjectFile(key, text);
+                break;
+            case PROFILE or ARGUMENTS or WORKING or APPLICATION_URLS or ENVIRONMENT:
+                ChangeLaunch(key, value);
+                break;
         }
     }
 
@@ -367,11 +375,13 @@ internal sealed partial class HexProperties
             ChangeLanguageMode?.Invoke();
         else if (key == PROJECT && shownProject is { } project)
             context.Documents.Open(project);
+        else if (key == PROFILE && shownProject is { } launched)
+            OpenLaunchSettings(launched);
     }
 
     private string? NoteOf(string key) => key switch
     {
-        COPY or BUILD_ACTION when notes.TryGetValue(key, out string? from) => Said("set_in", ("file", Path.GetFileName(from))),
+        COPY or BUILD_ACTION or FRAMEWORK or OUTPUT_TYPE or ASSEMBLY or ROOT_NAMESPACE or NULLABLE when notes.TryGetValue(key, out string? from) => Said("set_in", ("file", Path.GetFileName(from))),
         _ => null
     };
 

@@ -389,6 +389,8 @@ internal sealed partial class DawnScene
             ForgetSemantics();
         if (now.CSharpColors != was.CSharpColors)
             languages.ApplyCSharpColors();
+        if (now.VisualStudioKeys != was.VisualStudioKeys)
+            ApplyKeyLayer();
         if (now.McpServer != was.McpServer)
             ApplyMcp();
         if (now.GitSmartCommit != was.GitSmartCommit)

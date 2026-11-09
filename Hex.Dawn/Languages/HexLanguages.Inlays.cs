@@ -6,6 +6,10 @@ namespace Hex.Dawn;
 // The inlay hints of a file of another language, asked of its server (textDocument/inlayHint) for the whole file.
 internal sealed partial class HexLanguages
 {
+    internal (object? Server, int Refresh) InlaySourceOf(HexDocument of) =>
+        linters.TryGetValue(of, out var server) && server.IsReady && server.Failure is null && server.Offers("inlayHintProvider")
+            ? (server, server.InlayRefreshes) : default;
+
     /// <summary>
     /// Asks a document's server for its inlay hints and does something with them once they're in, on the editor's thread.
     /// False for a document whose server doesn't do them, or that has no server.
@@ -16,6 +20,7 @@ internal sealed partial class HexLanguages
             return false;
 
         // Always answered, a server that fell over says nothing rather than leaving the hints waiting on it for good
+        FlushEditsToServer(server);
         When(server.InlayHints(path, 0, of.Editor.Document.LineCount).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : [], TaskScheduler.Default), then);
         return true;
     }

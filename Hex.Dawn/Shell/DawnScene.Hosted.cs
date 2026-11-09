@@ -30,6 +30,7 @@ internal sealed partial class DawnScene
         if (DawnProgram.flushWanted)
         {
             DawnProgram.flushWanted = false;
+            FlushZoomSettings();
             backupWait = 0.0f;
             UpdateBackups(0.0f);
             explorer.KeepWorkspace();

@@ -35,13 +35,17 @@ internal sealed partial class DawnScene
         // Close enough to the size it comes at is that size, a few steps in and out land back on it
         if (MathF.Abs(zoom - 1.0f) < 0.02f) zoom = 1.0f;
 
+        if (settings.CodeZoom == zoom) return;
+        if (NotebookShown)
+            ((NotebookScrollPanel)notebookScroll).PreserveCentre(cellViews.Select(cell => (UIComponent)cell.Card));
+
         settings.CodeZoom = zoom;
         foreach (HexDocument open in documents)
             open.Editor.TextScale = CODE_TEXT * zoom;
         foreach (NotebookCellView cell in cellViews)
             cell.Editor.TextScale = CODE_TEXT * zoom;
 
-        SaveSettings();
+        QueueZoomSettings();
         Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
@@ -286,7 +290,13 @@ internal sealed partial class DawnScene
         {
             float others = Spoken(center, shown) - panelBefore;
             float gap = center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f;
-            float most = Math.Clamp(height - others - gap - MIN_FLEXIBLE, MIN_PANEL, MAX_PANEL);
+            // The compact find/replace panel lives in the editor's top padding.
+            // Reserve that band as well as readable text below pinned scopes; an
+            // 80-unit outer editor could otherwise have a negative text height.
+            float editorMinimum = shown == codeScroll
+                ? code.Padding.Total.Y + MathF.Max(MIN_FLEXIBLE, 7 * MathF.Max(16, code.CaretLineHeight))
+                : MIN_FLEXIBLE;
+            float most = Math.Clamp(height - others - gap - editorMinimum, MIN_PANEL, MAX_PANEL);
             bottom.MaxSize = new Vector2(0.0f, most);
             float open = Math.Min(Math.Max(panelWanted, MIN_PANEL), most);
             if (MathF.Abs(bottom.Size.Y - open) > 0.5f)

@@ -1,4 +1,4 @@
-using Horizon.UI.Scripting;
+﻿using Horizon.UI.Scripting;
 
 namespace Hex.Dawn;
 
@@ -47,8 +47,8 @@ internal sealed partial class HexLanguages
         IReadOnlyList<LanguageServer> running = LanguageServers.Running;
         for (int i = 0; i < running.Count; i++)
         {
-            while (running[i].TryTakeEdits(out var edits))
-                ApplyEdits(edits);
+            while (running[i].TryTakeEdits(out var request))
+                ApplyRequested(running[i], request);
         }
     }
 
@@ -57,7 +57,7 @@ internal sealed partial class HexLanguages
     {
         server = null!;
         path = string.Empty;
-        if (of.Path is not { } at || !linters.TryGetValue(of, out LanguageServer? found) || found.Failure is not null || !found.Offers(provider))
+        if (!CanRequest(of, provider) || of.Path is not { } at || !linters.TryGetValue(of, out LanguageServer? found) || found.Failure is not null || !found.Offers(provider))
             return false;
 
         if (lintIn.Remove(of))
@@ -72,38 +72,45 @@ internal sealed partial class HexLanguages
 
     /// <summary>Whether a document's server does something, for a command that's only there when it does.</summary>
     internal bool CanServe(HexDocument of, string provider) =>
-        of.Path is not null && linters.TryGetValue(of, out LanguageServer? server) && server.Failure is null && server.Offers(provider);
+        CanRequest(of, provider) && of.Path is not null && linters.TryGetValue(of, out LanguageServer? server) && server.Failure is null && server.Offers(provider);
 
     /* What the pointer rests on, and what a call takes */
 
-    // What the server last said about a name and where, and the place being asked about now
-    private (HexDocument? Of, int Version, int Line, int Column, string? Said) hovered;
-    private (HexDocument? Of, int Version, int Line, int Column) hovering;
+    private sealed record HoverRequest(HexDocument Of, LanguageServer Server, string? Path, int Version,
+        UITextPosition Position, int Workspace);
+    private (HoverRequest? Request, string? Said) hovered;
+    private HoverRequest? hovering;
+    private long hoverRequestNumber;
 
-    /// <summary>
-    /// What a document's server says the name at a place is, markdown. Nothing the first time, the editor is asked to ask
-    /// again once it's in. Empty rather than null for a file of a server, HIDL's own hints read a D word as HIDL.
-    /// </summary>
     private string? ServerHover(HexDocument of, CodeEditor editor, UITextPosition at)
     {
         if (!Serves(of, "hoverProvider", out LanguageServer server, out string path))
             return linters.ContainsKey(of) ? string.Empty : null;
 
-        int version = editor.Document.Version;
-        if (hovered.Of == of && (hovered.Version, hovered.Line, hovered.Column) == (version, at.Line, at.Column))
-            return hovered.Said ?? string.Empty;
+        var request = new HoverRequest(of, server, of.Path, editor.Document.Version, at, editWorkspaceGeneration);
+        return RequestHover(request, () => server.Hover(path, at.Line, at.Column));
+    }
 
-        if (hovering != (of, version, at.Line, at.Column))
+    private string RequestHover(HoverRequest request, Func<Task<string?>> ask)
+    {
+        if (hovered.Request == request)
+            return hovered.Said ?? string.Empty;
+        if (hovering != request)
         {
-            hovering = (of, version, at.Line, at.Column);
-            When(server.Hover(path, at.Line, at.Column), said =>
+            hovering = request;
+            long number = ++hoverRequestNumber;
+            Task<string?> answer = ask().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
+            When(answer, said =>
             {
-                hovered = (of, version, at.Line, at.Column, said is null ? null : Printable(said));
-                if (said is not null)
-                    editor.AskAgain();
+                if (number != hoverRequestNumber) return;
+                hovering = null;
+                if (request.Workspace != editWorkspaceGeneration || request.Of.Path != request.Path
+                    || request.Of.Editor.Document.Version != request.Version || context.Documents.Current != request.Of
+                    || linters.GetValueOrDefault(request.Of) != request.Server || request.Server.Failure is not null) return;
+                hovered = (request, said is null ? null : Printable(said));
+                request.Of.Editor.AskAgain();
             });
         }
-
         return string.Empty;
     }
 
@@ -128,7 +135,7 @@ internal sealed partial class HexLanguages
         }
 
         UITextPosition caret = of.Editor.Document.Caret;
-        When(server.Hover(path, caret.Line, caret.Column), said =>
+        WhenNavigating(CaptureNavigation(of, server), server.Hover(path, caret.Line, caret.Column), said =>
         {
             if (said is null)
                 context.Notices.Say(context.Strings.Said("code_server.no_hover", ("word", word)));
@@ -173,13 +180,14 @@ internal sealed partial class HexLanguages
     // Two blank lines or more, with whatever spaces are on them
     private static readonly System.Text.RegularExpressions.Regex BlankLines = new(@"\n(?:[ \t]*\n){2,}", System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    // What the server last said a call takes and where the caret was, and whether it's being asked
-    private (HexDocument? Of, int Version, UITextPosition Caret, UISignature? Said) signed;
-    private bool signing;
+    private sealed record SignatureRequest(HexDocument Of, LanguageServer Server, int Version, UITextPosition Caret, string Name, int Argument);
+    private (SignatureRequest? Request, UISignature? Said) signed;
+    private SignatureRequest? signing;
+    private long signatureRequestNumber;
 
     /// <summary>
-    /// What a document's server says the call at the caret takes. The last one it said while it's asked again, so the box
-    /// over the call doesn't blink as each letter is typed.
+    /// Signature help belongs to the exact document, server and caret that requested it.
+    /// A slow answer must not block a newer request or replace its parameter highlight.
     /// </summary>
     private UISignature? ServerSignature(HexDocument of, string name, int argument)
     {
@@ -187,22 +195,32 @@ internal sealed partial class HexLanguages
             return null;
 
         UITextPosition caret = of.Editor.Document.Caret;
-        int version = of.Editor.Document.Version;
-        if (signed.Of == of && signed.Version == version && signed.Caret == caret)
+        var request = new SignatureRequest(of, server, of.Editor.Document.Version, caret, name, argument);
+        return RequestSignature(request, () => server.Signature(path, caret.Line, caret.Column, argument));
+    }
+
+    private UISignature? RequestSignature(SignatureRequest request, Func<Task<UISignature?>> ask)
+    {
+        if (signed.Request == request)
             return signed.Said;
 
-        if (!signing)
+        if (signing != request)
         {
-            signing = true;
-            When(server.Signature(path, caret.Line, caret.Column), said =>
+            signing = request;
+            long number = ++signatureRequestNumber;
+            Task<UISignature?> asked = ask()
+                .ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
+            When(asked, said =>
             {
-                signing = false;
-                signed = (of, version, caret, said);
-                of.Editor.AskAgain();
+                if (number != signatureRequestNumber) return;
+                signing = null;
+                if (request.Of.Editor.Document.Version != request.Version || request.Of.Editor.Document.Caret != request.Caret
+                    || context.Documents.Current != request.Of || linters.GetValueOrDefault(request.Of) != request.Server) return;
+                signed = (request, said);
+                request.Of.Editor.AskAgain();
             });
         }
-
-        return signed.Of == of ? signed.Said : null;
+        return null;
     }
 
     /* Going to where something is */
@@ -215,7 +233,8 @@ internal sealed partial class HexLanguages
 
         UITextPosition caret = of.Editor.Document.Caret;
         string word = WordAtCaret(of);
-        When(server.Definition(path, caret.Line, caret.Column), places =>
+        var request = CaptureNavigation(of, server);
+        WhenNavigating(request, server.Definition(path, caret.Line, caret.Column), places =>
         {
             if (places.Count == 0)
             {
@@ -225,7 +244,7 @@ internal sealed partial class HexLanguages
 
             if (places.Count > 1)
             {
-                ShowPlaces(context.Strings.Said("code_server.definitions_title", ("word", word), ("count", places.Count.ToString())), places);
+                ShowDefinitionPlaces(context.Strings.Said("code_server.definitions_title", ("word", word), ("count", places.Count.ToString())), server, places, word, request.Workspace);
                 return;
             }
 
@@ -233,7 +252,7 @@ internal sealed partial class HexLanguages
             Console.WriteLine($"[Hex] {server.Name} says {word} is declared in {place.Path} on line {place.Line + 1}.");
             if (!place.OnDisk)
             {
-                OpenSource(server, place, word);
+                OpenSource(server, place, word, request);
                 return;
             }
 
@@ -250,9 +269,9 @@ internal sealed partial class HexLanguages
     /// F12 on a name of the framework (Console), its source as the server decompiles it, opened to be read with the caret
     /// on the name. It said csharp didn't know where Console was declared.
     /// </summary>
-    private void OpenSource(LanguageServer server, LanguageServerPlace place, string word)
+    private void OpenSource(LanguageServer server, LanguageServerPlace place, string word, NavigationRequest request, bool alignName = true)
     {
-        When(server.Source(place.Path), source =>
+        WhenNavigating(request, server.Source(place.Path), source =>
         {
             if (source is null)
             {
@@ -260,11 +279,18 @@ internal sealed partial class HexLanguages
                 return;
             }
 
-            string file = Path.Combine(DecompiledFolder, place.Path[(place.Path.LastIndexOf('/') + 1)..]);
+            string file = SourceCachePath(server.RootDirectory, place.Path);
             try
             {
-                Directory.CreateDirectory(DecompiledFolder);
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, source);
+                if (context.Documents.Find(file) is {} existing)
+                {
+                    existing.Editor.Text = source;
+                    existing.SavedCode = existing.Editor.Text;
+                    existing.DiskText = source;
+                    existing.Modified = false;
+                }
             }
             catch (Exception e)
             {
@@ -273,9 +299,9 @@ internal sealed partial class HexLanguages
             }
 
             var onDisk = place with { Path = file };
-            context.Documents.OpenAt(file, place.Line, NameColumn(onDisk, word));
+            context.Documents.OpenAt(file, place.Line, alignName ? NameColumn(onDisk, word) : place.Character);
             if (context.Documents.Find(file) is { } opened)
-                opened.Editor.ReadOnly = true;
+                AttachSource(opened, server, place.Path);
             context.Notices.Say(context.Strings.Said("code_server.decompiled", ("word", word), ("file", Path.GetFileName(file))));
         });
     }
@@ -294,19 +320,10 @@ internal sealed partial class HexLanguages
             return true;
         }
 
-        When(server.References(path, caret.Line, caret.Column), all =>
+        var request = CaptureNavigation(of, server);
+        WhenNavigating(request, server.References(path, caret.Line, caret.Column), all =>
         {
-            // The project's own only. serve-d says every name like it in the standard library as well, and nothing there can
-            // use a name of the project's. For a name of the library's (writeln) it said the library's 309 places and none of
-            // the project's, so the project's uses are looked for by the word instead
-            var lines = new Dictionary<string, string[]>(PlatformPaths.Comparer);
-            var places = all.Where(place => PlatformPaths.IsUnder(place.Path, server.RootDirectory) || context.Workspace.Roots.Any(root => PlatformPaths.IsUnder(place.Path, root))).ToList();
-            if (places.Count == 0)
-                places = WordPlaces(word);
-
-            // Never a text or a comment that says the name, which serve-d counted as using it
-            places = [.. places.Where(place => !HexSearch.InTextOrComment(LineOf(place, lines), place.Character))];
-
+            List<LanguageServerPlace> places = ProjectPlaces(server, all, word);
             if (places.Count == 0)
             {
                 context.Notices.Say(context.Strings.Said("code_server.no_references", ("word", word)));
@@ -318,6 +335,22 @@ internal sealed partial class HexLanguages
                 ("files", HexText.Count("file", places.Select(place => place.Path).Distinct(PlatformPaths.Comparer).Count()))));
         });
         return true;
+    }
+
+    /// <summary>
+    /// The places a server said a name is used that are the project's own. serve-d says every name like it in the
+    /// standard library as well, and nothing there can use a name of the project's. For a name of the library's
+    /// (writeln) it said the library's 309 places and none of the project's, so the project's uses are looked for by the
+    /// word instead. Never a text or a comment that says the name, which serve-d counted as using it.
+    /// </summary>
+    private List<LanguageServerPlace> ProjectPlaces(LanguageServer server, IReadOnlyList<LanguageServerPlace> all, string word)
+    {
+        var lines = new Dictionary<string, string[]>(PlatformPaths.Comparer);
+        var places = all.Where(place => PlatformPaths.IsUnder(place.Path, server.RootDirectory) || context.Workspace.Roots.Any(root => PlatformPaths.IsUnder(place.Path, root))).ToList();
+        if (places.Count == 0)
+            places = WordPlaces(word);
+
+        return [.. places.Where(place => !HexSearch.InTextOrComment(LineOf(place, lines), place.Character))];
     }
 
     // Places listed in the side bar's results, each with its line's text, read off the file or the editor that has it open
@@ -388,58 +421,133 @@ internal sealed partial class HexLanguages
     /* Changing it */
 
     /// <summary>
-    /// F2 in a file of a server's, the name at the caret renamed everywhere the server knows of it. A server that says it
-    /// renames and then can't there (serve-d) has Hex's own way do it, the name as a word of its own. False when its server
-    /// doesn't rename at all.
+    /// F2 renames only references resolved by the language server. An empty response is a rejected or unavailable
+    /// rename, never permission to replace unrelated words. False when no server offers rename.
     /// </summary>
-    internal bool Rename(HexDocument of, Action<string, string> byWords)
+    internal bool Rename(HexDocument of)
     {
-        if (!CanServe(of, "renameProvider"))
+        if (of.Editor.ReadOnly) return true;
+        if (!Serves(of, "renameProvider", out LanguageServer server, out string path))
             return false;
 
         string word = WordAtCaret(of);
+        UITextPosition caret = of.Editor.Document.Caret;
+        EditSnapshot promptSnapshot = CaptureEdits();
+        NavigationRequest request = CaptureNavigation(of, server);
+        if (server.PreparesRename)
+        {
+            FlushEditsToServer(server);
+            WhenNavigating(request, server.PrepareRename(path, caret.Line, caret.Column).ContinueWith(task =>
+                (Prepared: task.IsCompletedSuccessfully ? task.Result : null, Error: task.Exception?.GetBaseException().Message), TaskScheduler.Default), result =>
+            {
+                if (context.Documents.Current != of || of.Editor.Document.Caret != caret || !EditsCurrent(promptSnapshot, [path])) return;
+                if (result.Prepared is null)
+                {
+                    string message = context.Strings.Said("code_server.not_renamed", ("server", ShownName(server)), ("name", word));
+                    context.Notices.Say(result.Error is null ? message : message + "\n" + result.Error, error: true);
+                    return;
+                }
+                string? suggested = result.Prepared.Placeholder;
+                if (suggested is null && result.Prepared.Range is { } range)
+                {
+                    var text = of.Editor.Document;
+                    if (range.Line >= text.LineCount || range.EndLine >= text.LineCount
+                        || range.Character > text.LineAt(range.Line).Length || range.EndCharacter > text.LineAt(range.EndLine).Length) return;
+                    suggested = text.TextBetween(new(range.Line, range.Character), new(range.EndLine, range.EndCharacter));
+                }
+                PromptRename(of, suggested ?? word, caret, promptSnapshot, request);
+            });
+        }
+        else PromptRename(of, word, caret, promptSnapshot, request);
+        return true;
+    }
+
+    private void PromptRename(HexDocument of, string word, UITextPosition caret, EditSnapshot promptSnapshot, NavigationRequest request)
+    {
         if (word.Length == 0)
         {
             context.Notices.Say(context.Strings.Said("code_hints.caret_not_on_name"), error: true);
-            return true;
+            return;
         }
 
-        UITextPosition caret = of.Editor.Document.Caret;
+        string originalPath = of.Path!;
         context.Windows.Prompt(context.Strings.Said("code_hints.rename"), context.Strings.Said("code_server.rename_prompt", ("name", word)), word, context.Strings.Said("code_hints.rename"), string.Empty, renamed =>
         {
-            if (renamed.Length == 0 || renamed == word || !Serves(of, "renameProvider", out LanguageServer server, out string path))
+            if (!NavigationCurrent(request) || !EditsCurrent(promptSnapshot, [originalPath]) || renamed.Length == 0 || renamed == word || !Serves(of, "renameProvider", out LanguageServer server, out string path))
                 return;
 
+            FlushEditsToServer(server);
+            EditSnapshot snapshot = CaptureEdits();
             When(server.Rename(path, caret.Line, caret.Column, renamed), edits =>
             {
+                if (!EditsCurrent(snapshot, edits is null ? [path] : edits.Keys.Append(path)))
+                    return;
                 if (edits is null || edits.Count == 0)
                 {
-                    byWords(word, renamed);
+                    context.Notices.Say(context.Strings.Said("code_server.not_renamed", ("server", ShownName(server)), ("name", word)), error: true);
                     return;
                 }
 
                 var (places, files) = ApplyEdits(edits);
+                if (files == 0)
+                    return;
+                ShowRenamed(word, renamed, edits);
                 context.Notices.Say(context.Strings.Said("code_server.renamed", ("name", word), ("renamed", renamed), ("places", HexText.Count("place", places)), ("files", HexText.Count("file", files))));
             });
         });
-        return true;
+    }
+
+    /// <summary>
+    /// Every place a rename changed, listed on the left to look over, VS's rename preview after the fact. Nothing is
+    /// saved yet, so a place that's wrong is a click away and Ctrl+Z in it takes it back. The places are where the edits
+    /// were, moved along a line by the names before them on it that grew or shrank.
+    /// </summary>
+    private void ShowRenamed(string word, string renamed, IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> edits)
+    {
+        var places = new List<LanguageServerPlace>();
+        foreach (var (file, changes) in edits)
+        {
+            foreach (var onLine in changes.GroupBy(edit => edit.Line))
+            {
+                int shift = 0;
+                foreach (LanguageServerEdit edit in onLine.OrderBy(edit => edit.Character))
+                {
+                    int at = edit.Character + shift;
+                    places.Add(new LanguageServerPlace(file, edit.Line, at, edit.Line, at + edit.Text.Length));
+                    shift += edit.Text.Length - (edit.EndLine == edit.Line ? edit.EndCharacter - edit.Character : 0);
+                }
+            }
+        }
+
+        if (places.Count > 0)
+            ShowPlaces(context.Strings.Said("code_server.renamed_title", ("name", word), ("renamed", renamed), ("count", places.Count.ToString())), places);
     }
 
     /// <summary>Shift+Alt+F, the file on screen formatted by its server.</summary>
-    private void FormatDocument()
+    private void FormatDocument() => FormatCode(selection: false);
+
+    internal void FormatSelection() => FormatCode(selection: true);
+
+    private void FormatCode(bool selection)
     {
         HexDocument of = context.Documents.Current;
-        if (!Serves(of, "documentFormattingProvider", out LanguageServer server, out string path))
+        UITextDocument text = of.Editor.Document;
+        if (selection && !text.HasSelection) return;
+        if (!Serves(of, selection ? "documentRangeFormattingProvider" : "documentFormattingProvider", out LanguageServer server, out string path))
         {
             context.Notices.Say(context.Strings.Said("code_server.cannot_format"), error: true);
             return;
         }
 
-        int version = of.Editor.Document.Version;
+        EditSnapshot snapshot = CaptureEdits();
         // The file's own indentation, its tab size and spaces or tabs, as the settings and its .editorconfig made it
-        When(server.Format(path, of.Editor.TabSize, insertSpaces: !of.Editor.Document.Indent.StartsWith('\t')), edits =>
+        var request = selection
+            ? server.FormatRange(path, text.SelectionStart.Line, text.SelectionStart.Column, text.SelectionEnd.Line, text.SelectionEnd.Column,
+                of.Editor.TabSize, insertSpaces: !text.Indent.StartsWith('\t'))
+            : server.Format(path, of.Editor.TabSize, insertSpaces: !text.Indent.StartsWith('\t'));
+        When(request, edits =>
         {
-            if (of.Editor.Document.Version != version)
+            if (!EditsCurrent(snapshot, [path]))
                 return;
 
             if (edits is null || edits.Count == 0)
@@ -448,7 +556,7 @@ internal sealed partial class HexLanguages
                 return;
             }
 
-            Rewrite(of, edits);
+            if (!Rewrite(of, edits)) return;
             context.Notices.Say(context.Strings.Said("code_server.formatted", ("server", ShownName(server))));
         });
     }
@@ -457,26 +565,35 @@ internal sealed partial class HexLanguages
     /// Ctrl+., the fixes the compiler's own words make plain and the fixes and refactorings the server has for the caret's
     /// line (or what's selected), picked from a list.
     /// </summary>
-    private void QuickFix()
+    internal void QuickFix()
     {
         HexDocument of = context.Documents.Current;
+        if (of.Editor.ReadOnly) return;
         UITextDocument text = of.Editor.Document;
         UITextPosition from = text.HasSelection ? text.SelectionStart : new UITextPosition(text.Caret.Line, 0);
         UITextPosition to = text.HasSelection ? text.SelectionEnd : new UITextPosition(text.Caret.Line, text.LineAt(text.Caret.Line).Length);
         List<LanguageServerAction> own = CompilerFixes(of, from.Line, to.Line);
+        EditSnapshot snapshot = CaptureEdits();
 
         if (!Serves(of, "codeActionProvider", out LanguageServer server, out string path))
         {
-            OfferFixes(own, null);
+            OfferFixes(of, own, null, snapshot);
             return;
         }
 
-        When(server.Actions(path, from.Line, from.Column, to.Line, to.Column), actions => OfferFixes([.. own, .. actions], server));
+        // A server that failed to answer still has the compiler's fixes offered, or it's said there are none. Nothing
+        // came up at all and Ctrl+. looked like it had been swallowed
+        FlushEditsToServer(server);
+        Task<IReadOnlyList<LanguageServerAction>> asked = server.Actions(path, from.Line, from.Column, to.Line, to.Column)
+            .ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : (IReadOnlyList<LanguageServerAction>)[], TaskScheduler.Default);
+        When(asked, actions => OfferFixes(of, [.. own, .. actions], server, snapshot));
     }
 
     // The fixes there are, picked from a list, or said there are none
-    private void OfferFixes(IReadOnlyList<LanguageServerAction> actions, LanguageServer? server)
+    private void OfferFixes(HexDocument of, IReadOnlyList<LanguageServerAction> actions, LanguageServer? server, EditSnapshot snapshot)
     {
+        if (of.Path is not { } path || !EditsCurrent(snapshot, [path]))
+            return;
         if (actions.Count == 0)
         {
             context.Notices.Say(context.Strings.Said("code_server.no_fixes_here"));
@@ -484,18 +601,51 @@ internal sealed partial class HexLanguages
         }
 
         // What fixes the line first, the refactors after. csharp-ls put Extract local function over the fix for a
-        // misspelt name, and Enter took it
-        context.Windows.Choose(context.Strings.Said("code_server.fixes_title"), context.Strings.Said("code_server.fixes_prompt", ("server", server is null ? "the compiler" : ShownName(server))),
-            [.. actions.OrderBy(action => action.Fixes ? 0 : 1).Select(action => (action.Title, (Action)(() => TakeAction(server, action))))]);
+        // misspelt name, and Enter took it. By the caret with what each would change under the list, Visual Studio's
+        // lightbulb, rather than up at the top of the window
+        of.Editor.HideSignature();
+        string text = of.Editor.Text;
+        List<UIChoice> choices = [.. actions.OrderBy(action => action.Fixes ? 0 : 1).Select(action =>
+            new UIChoice(action.Title, () => TakeAction(server, action, snapshot, path)) { Preview = FixPreview(of.Path, text, action) })];
+        context.Windows.ChooseAtCaret(context.Strings.Said("code_server.fixes_title"),
+            context.Strings.Said("code_server.fixes_prompt", ("server", server is null ? "the compiler" : ShownName(server))), choices, of.Editor);
     }
 
     // A fix picked, its edits made and its command run (which may ask for more edits, taken as they come)
-    private void TakeAction(LanguageServer? server, LanguageServerAction action)
+    private void TakeAction(LanguageServer? server, LanguageServerAction action, EditSnapshot snapshot, string origin)
     {
-        if (action.Edits.Count > 0)
-            ApplyEdits(action.Edits);
+        if (!EditsCurrent(snapshot, action.Edits.Keys.Append(origin))) return;
+        if (action.Resolve is { } resolve)
+        {
+            When(resolve().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default), resolved =>
+            {
+                if (resolved is null) context.Notices.Say(context.Strings.Said("code_server.resolve_failed"), error: true);
+                else TakeAction(server, resolved, snapshot, origin);
+            });
+            return;
+        }
+        if (server is not null && action.Command is not null && commandsPending.ContainsKey(server))
+        {
+            context.Notices.Say(context.Strings.Said("code_server.command_pending"), error: true);
+            return;
+        }
+        if (action.Edits.Count > 0 && ApplyEdits(action.Edits).Files == 0)
+            return;
         if (server is not null && action.Command is { } command)
-            When(server.Execute(command).ContinueWith(_ => true, TaskScheduler.Default), _ => { });
+        {
+            var pending = new PendingEditCommand(CaptureEdits());
+            commandsPending[server] = pending;
+            When(server.Execute(command).ContinueWith(task => task.IsCompletedSuccessfully, TaskScheduler.Default), succeeded =>
+            {
+                if (commandsPending.GetValueOrDefault(server) == pending)
+                    commandsPending.Remove(server);
+                if (succeeded && !pending.Failed)
+                    context.Notices.Say(context.Strings.Said("code_server.applied", ("title", action.Title)));
+                else if (!pending.Failed)
+                    context.Notices.Say(context.Strings.Said("code_server.edit_conflict"), error: true);
+            });
+            return;
+        }
         context.Notices.Say(context.Strings.Said("code_server.applied", ("title", action.Title)));
     }
 
@@ -506,17 +656,34 @@ internal sealed partial class HexLanguages
     /// </summary>
     private (int Places, int Files) ApplyEdits(IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> edits)
     {
-        int places = 0, files = 0;
+        var prepared = new List<(HexDocument Document, IReadOnlyList<LanguageServerEdit> Changes)>();
         foreach (var (file, changes) in edits)
         {
             if (changes.Count == 0)
                 continue;
-
-            HexDocument? open = context.Documents.Find(file) ?? (File.Exists(file) ? context.Documents.OpenBehind(file) : null);
-            if (open is not { IsText: true })
+            HexDocument? doc = context.Documents.Find(file) ?? (File.Exists(file) ? context.Documents.OpenBehind(file) : null);
+            if (doc is not { IsText: true })
+            {
+                context.Notices.Say(context.Strings.Said("code_server.edit_conflict"), error: true);
+                return (0, 0);
+            }
+            // Validate every target before changing any buffer.
+            var sorted = SortUsings(doc.Editor.Text, changes);
+            if (!doc.Editor.Document.CanApplyEdits(EditorEdits(sorted)))
+            {
+                context.Notices.Say(context.Strings.Said("code_server.edit_conflict"), error: true);
+                return (0, 0);
+            }
+            prepared.Add((doc, sorted));
+        }
+        int places = 0, files = 0;
+        foreach (var (open, changes) in prepared)
+        {
+            if (changes.Count == 0)
                 continue;
 
-            Rewrite(open, changes);
+            // A using a fix puts in goes where it goes in order among the others (HexLanguages.Usings)
+            if (!Rewrite(open, changes)) return (0, 0);
             places += changes.Count;
             files++;
         }
@@ -528,33 +695,36 @@ internal sealed partial class HexLanguages
     /// A document's text with a server's edits made to it, one step of its undo, the caret moved down by the lines put in
     /// over it. A fix that put a using at the top left the caret where it was, on the line above the one it had been on.
     /// </summary>
-    private void Rewrite(HexDocument of, IReadOnlyList<LanguageServerEdit> edits)
+    private bool Rewrite(HexDocument of, IReadOnlyList<LanguageServerEdit> edits)
     {
-        UITextPosition caret = of.Editor.Document.Caret;
-        int moved = 0;
-        foreach (LanguageServerEdit edit in edits)
-        {
-            if (edit.EndLine < caret.Line)
-                moved += edit.Text.Count(character => character == '\n') - (edit.EndLine - edit.Line);
-        }
-
-        context.Documents.Rewrite(of, LanguageServer.Apply(of.Editor.Text, edits));
-        if (moved != 0)
-        {
-            int line = Math.Clamp(caret.Line + moved, 0, of.Editor.Document.LineCount - 1);
-            of.Editor.Document.MoveTo(new UITextPosition(line, Math.Min(caret.Column, of.Editor.Document.LineAt(line).Length)));
-        }
+        bool applied = context.Documents.Rewrite(of, EditorEdits(edits));
+        if (!applied) context.Notices.Say(context.Strings.Said("code_server.edit_conflict"), error: true);
+        return applied;
     }
+
+    private static UITextEdit[] EditorEdits(IReadOnlyList<LanguageServerEdit> edits) => edits.Select(edit =>
+        new UITextEdit(new(edit.Line, edit.Character), new(edit.EndLine, edit.EndCharacter), edit.Text)).ToArray();
 
     /// <summary>The commands that go through a file's server, there when the file on screen has a server that does them.</summary>
     private void AddServerCommands()
     {
         UICommands commands = context.Commands;
+        commands.Add("Go/symbols", context.Strings.Said("code_server.related_diagnostic"), GoToRelatedDiagnostic, icon: "go-to-file")
+            .IsVisible = () => RelatedDiagnosticsAtCaret().Count > 0;
+        commands.Add("Go/symbols", context.Strings.Said("code_server.diagnostic_documentation"), OpenDiagnosticDocumentation, icon: "info")
+            .IsVisible = () => DiagnosticDocumentationAtCaret() is not null;
+        commands.Add("Edit/comment", context.Strings.Said("code_server.organize_imports"), OrganizeImports, icon: "list-flat")
+            .IsVisible = CanOrganizeImports;
         commands.Add("Edit/comment", context.Strings.Said("code_server.format_document"), FormatDocument, "Shift+Alt+F", "list-flat", UIKeyUse.BoundWhileTyping)
             .IsVisible = () => CanServe(context.Documents.Current, "documentFormattingProvider");
+        var formatSelection = commands.Add("Edit/comment", context.Strings.Said("code_server.format_selection"), FormatSelection, "Ctrl+K Ctrl+F", "list-flat", UIKeyUse.BoundWhileTyping);
+        formatSelection.IsVisible = () => CanServe(context.Documents.Current, "documentRangeFormattingProvider");
+        formatSelection.IsEnabled = () => context.Documents.Current.Editor.Document.HasSelection;
         commands.Add("Edit/comment", context.Strings.Said("code_server.quick_fix"), QuickFix, "Ctrl+.", "lightbulb", UIKeyUse.BoundWhileTyping)
             .IsVisible = () => context.Documents.Current is { IsText: true, Path: not null } current && (CanServe(current, "codeActionProvider") || Checked(current));
         commands.Add("Go/symbols", context.Strings.Said("code_server.show_hover"), ShowHover, "Ctrl+Shift+I", "info", UIKeyUse.BoundWhileTyping)
             .IsVisible = () => CanServe(context.Documents.Current, "hoverProvider");
+        commands.Add("Run/check", context.Strings.Said("languages.restart_server"), RestartCurrentServer, icon: "refresh")
+            .IsVisible = () => context.Documents.Current is { IsText: true, Path: { } path } && LanguageServers.RegistrationFor(CodeLanguages.WithoutBackupSuffix(path)) is not null;
     }
 }

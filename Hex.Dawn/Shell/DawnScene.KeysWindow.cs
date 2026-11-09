@@ -483,6 +483,19 @@ internal sealed partial class DawnScene
         if (!rebound.Any(pair => pair.Label == label) || !originalKeys.TryGetValue(label, out string? original))
             return;
 
+        // With Visual Studio's keys on, its key is the default one. It stays in the list of changed keys as the layer's,
+        // which keys.hor leaves out
+        if (LayerKeyOf(label) is { } layered)
+        {
+            if (!Rebind(label, layered))
+                return;
+
+            SaveKeys();
+            FillKeysTree();
+            Say(Said("keys.reset_done", ("command", label), ("key", layered.Length > 0 ? layered : Said("keys.no_key"))));
+            return;
+        }
+
         if (!Rebind(label, original))
             return;
 
@@ -501,16 +514,12 @@ internal sealed partial class DawnScene
     /// <summary>Reset All. Every key back where it was, and keys.hor gone.</summary>
     private void PutKeysBack()
     {
-        // Each back on its own key without taking it off anything, two that came with the same key go back to sharing it
-        bool changed = rebound.Count > 0;
-        foreach (var (label, original) in originalKeys.ToList())
-            Rebind(label, original, keepOthers: true);
-
-        rebound.Clear();
-        keysTaken.Clear();
-        originalKeys.Clear();
+        // Each back on its own key without taking it off anything, two that came with the same key go back to sharing it,
+        // and Visual Studio's on top again when they're on (ApplyKeyLayer)
+        bool changed = HandKeys().Any();
         if (keysPath is not null && File.Exists(keysPath))
             File.Delete(keysPath);
+        ApplyKeyLayer(force: true);
 
         FillKeysTree();
         Say(Said(changed ? "keys.back" : "keys.back_already"));

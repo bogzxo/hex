@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 using Hex.Shell;
 
@@ -75,6 +75,9 @@ internal interface IDocuments
     /// <summary>A document's text replaced as one step to undo, its tab saying it has changes when it isn't the one on screen.</summary>
     void Rewrite(HexDocument of, string text);
 
+    /// <summary>Applies native text edits as one undo step, preserving selection and breakpoint tracking.</summary>
+    bool Rewrite(HexDocument of, IReadOnlyList<UITextEdit> edits);
+
     /// <summary>Opens a file, or shows it open, with the caret at a line and column of it (from 0).</summary>
     void OpenAt(string path, int line, int column);
 
@@ -112,6 +115,9 @@ internal interface IDocuments
 /// <summary>The folders of the workspace, and what changes in them on the disk.</summary>
 internal interface IWorkspace
 {
+    IReadOnlyList<string> WatchExpressions => [];
+    void KeepWatchExpressions(IReadOnlyList<string> expressions) { }
+
     /// <summary>The workspace's folders, none for no workspace.</summary>
     IReadOnlyList<string> Folders { get; }
 
@@ -123,6 +129,21 @@ internal interface IWorkspace
 
     /// <summary>What F5 and the Run button run, null for the file on screen, kept with the workspace as it's set.</summary>
     HexRunTarget? RunTarget { get; set; }
+
+    /// <summary>What builds and runs build, Debug or Release, picked beside the Run button and kept with the workspace.</summary>
+    string Configuration { get; }
+
+    /// <summary>The selected solution, or the sole solution at the workspace roots. Null for folder-only workspaces.</summary>
+    string? Solution => null;
+
+    /// <summary>
+    /// The launch profile of a project's launchSettings.json picked beside Debug or Release, what F5 and Ctrl+F5 start it
+    /// with, null for none picked (the first one goes then).
+    /// </summary>
+    string? LaunchProfileOf(string project);
+
+    /// <summary>A project's launch profile picked, null to go back to the first, kept with the workspace.</summary>
+    void PickLaunchProfile(string project, string? profile);
 
     /// <summary>A file by where it is in the folders things are looked for in, with the name of its folder in front when there is more than one.</summary>
     string Relative(string path);
@@ -209,6 +230,12 @@ internal interface IWindows
     void Choose(string title, string message, List<UIChoice> choices);
 
     /// <summary>
+    /// The same by the caret of a code editor rather than hanging from the top, Visual Studio's list of fixes by its
+    /// lightbulb. A row's preview shows under the list while it's highlighted.
+    /// </summary>
+    void ChooseAtCaret(string title, string message, List<UIChoice> choices, CodeEditor editor);
+
+    /// <summary>
     /// A question with buttons, the label of the one pressed handed on. The one named risky (Discard, Drop) can't be taken
     /// back, it goes at the right end in red, and the keyboard and Escape are on the other end of the row.
     /// </summary>
@@ -226,6 +253,9 @@ internal interface IWindows
     /// about what's typed as it's typed, a warning in the warning colour.
     /// </summary>
     void PromptLines(string title, string text, string value, string button, string language, Func<string, (string Text, bool Warning)>? note, Action<string> typed);
+
+    /// <summary>A code expression with completion, Enter to accept a suggestion or submit, and Ctrl+Enter to submit.</summary>
+    void PromptExpression(string title, string text, string value, string button, string language, Action<CodeEditor> prepare, Action<string> typed);
 
     /// <summary>A menu where the pointer is.</summary>
     void Menu(Menu menu);
@@ -279,6 +309,12 @@ internal interface ITerminals
     /// </summary>
     void RunInTab(string key, string title, string folder, string commandLine, Action<int, string>? finished = null, string? shell = null);
 
+    /// <summary>Whether what was run in the tab of a key (RunInTab) is still going, its shell not back at its prompt.</summary>
+    bool TabRunning(string key);
+
+    /// <summary>What's going in the tab of a key stopped, a Ctrl+C typed into it, the way it's stopped by hand.</summary>
+    void InterruptTab(string key);
+
     /// <summary>How many errors the terminals have said there are (a build's), the ones in the Problems panel.</summary>
     int TerminalErrors { get; }
 
@@ -316,6 +352,15 @@ internal interface IPanels
     /// <summary>The side bar's rows drawn again as they are, after one was filled in as it opened.</summary>
     void RefreshRows();
 
+    /// <summary>Scroll an identified row into view after the side bar's next rebuild, preserving keyboard focus.</summary>
+    void RevealSideRow(string id);
+
+    /// <summary>Something a view of the side bar has over its rows (the Test Explorer's search box), shown only while the bar is on it.</summary>
+    void AddSideHead(HexSide side, UIComponent head);
+
+    /// <summary>The side bar's selected row while its rows have the keyboard, null otherwise.</summary>
+    UITreeItem? FocusedSideRow { get; }
+
     /// <summary>The panel's output brought up.</summary>
     void ShowOutput();
 
@@ -333,6 +378,9 @@ internal interface IPanels
 
     /// <summary>The Problems panel put together again, for problems of files that aren't on screen.</summary>
     void RefreshProblems();
+
+    /// <summary>More problems for the Problems panel, listed whether their file is open or not (the tests that failed), RefreshProblems once they change.</summary>
+    void AddProblems(Func<IReadOnlyList<HexProblem>> source);
 
     /// <summary>Whether the side bar is out, and putting it out or away as Ctrl+B does, kept as that is.</summary>
     bool SideBarShown { get; set; }
@@ -425,6 +473,12 @@ internal interface IEditorWindow
 
     /// <summary>The places something was found, listed in the side bar's search view.</summary>
     void ShowResults(string title, List<HexResult> found);
+
+    /// <summary>Rows of a tree listed in the side bar's search view in place of what was found, a call hierarchy.</summary>
+    void ShowResultsTree(string title, List<UITreeItem> rows);
+
+    /// <summary>The rows of the tree drawn again, some of them were filled in, while it's still the one shown.</summary>
+    void RefreshResultsTree();
 
     /// <summary>The view of the side bar that's what's on screen's own, the components or the outline.</summary>
     HexSide HomeSide { get; }

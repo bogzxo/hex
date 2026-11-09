@@ -124,6 +124,11 @@ internal sealed partial class HexCodeEditing
             }
         }
 
+        // A file that isn't HIDL (a .txt, a log, a language with no server) has nothing to complete. HIDL's completion read
+        // the whole of a 50,000 line text file for every key typed, a third of a second each
+        if (editor.Highlighter is not HidlHighlighter)
+            return null;
+
         // The rest is HIDL's, worked out as the language server works it out, with the names of the workspace
         UITextPosition caret = editor.Document.Caret;
         return HidlAnalysis.Complete(editor.Text, caret.Line, caret.Column, Vocabulary());
@@ -138,6 +143,14 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     internal void GoToDefinition()
     {
+        // An #include goes to the file it brings in, Slang's and C's alike. F12 on #include <common/camera.slang> said
+        // camera wasn't declared with a let anywhere
+        if (IncludedFile() is { } included)
+        {
+            context.Documents.OpenAt(included, 0, 0);
+            return;
+        }
+
         // A file of a language server's goes where the server says
         if (languages?.GoToDefinition(document) == true)
             return;
@@ -176,6 +189,25 @@ internal sealed partial class HexCodeEditing
 
         string word = line[start..end];
 
+        // A file of a language with no server of its own (Slang, HLSL) goes to where the workspace's index has the name
+        // declared. F12 on toClip in a shader said it wasn't declared with a let anywhere, which is HIDL's word for it
+        if (document.Path is { } at && !IsHidlFile(at) && Declarations?.Invoke(word) is { Count: > 0 } declared)
+        {
+            // The same file's own first, then the rest
+            var places = declared.OrderBy(place => PlatformPaths.Comparer.Equals(place.Path, Path.GetFullPath(at)) ? 0 : 1).ToList();
+            if (places.Count == 1)
+            {
+                context.Documents.OpenAt(places[0].Path, places[0].Line, places[0].Column);
+                context.Notices.Say(context.Strings.Said("code_completion.declared_in_file", ("word", word), ("file", context.Workspace.Relative(places[0].Path)), ("line", (places[0].Line + 1).ToString())));
+            }
+            else
+            {
+                window.ShowResults(context.Strings.Said("code_completion.declared_places", ("word", word), ("count", places.Count.ToString())),
+                    [.. places.Select(place => new HexResult(place.Path, place.Line, place.Column, place.Says, word.Length, place.Column))]);
+            }
+            return;
+        }
+
         // In this file
         if (FindDeclaration(code.Text, word, caret) is { } here)
         {
@@ -210,6 +242,47 @@ internal sealed partial class HexCodeEditing
             ? context.Strings.Said("code_completion.not_declared_in_folder", ("word", word), ("folder", roots[0]))
             : context.Strings.Said("code_completion.not_declared_in_folders", ("word", word), ("count", roots.Count.ToString())), error: true);
     }
+
+    /// <summary>
+    /// The file the #include on the caret's line names, found next to this file, then in each folder above it and a
+    /// shaders folder in each, the way the engine's shader compiler looks. Null when the line isn't an include or nothing
+    /// is there.
+    /// </summary>
+    private string? IncludedFile()
+    {
+        if (document.Path is not { } path)
+            return null;
+
+        string line = code.Document.LineAt(code.Document.Caret.Line);
+        if (IncludeLine.Match(line) is not { Success: true } match)
+            return null;
+
+        string named = match.Groups[1].Value.Replace('/', Path.DirectorySeparatorChar);
+        for (string? folder = Path.GetDirectoryName(Path.GetFullPath(path)); folder is not null; folder = Path.GetDirectoryName(folder))
+        {
+            foreach (string candidate in (string[])[Path.Combine(folder, named), Path.Combine(folder, "shaders", named)])
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+
+            if (context.Workspace.Roots.Any(root => PlatformPaths.Comparer.Equals(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), folder)))
+                break;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Where the workspace's index has a name declared, each place with its line's text, for F12 in a language Hex has
+    /// no server for. Set by the scene, which has the index.
+    /// </summary>
+    internal Func<string, IReadOnlyList<(string Path, int Line, int Column, string Says)>>? Declarations { get; set; }
+
+    // Whether a file is HIDL, which finds its declarations its own way
+    private static bool IsHidlFile(string path) => Path.GetExtension(path).ToLowerInvariant() is ".hor" or ".jab" or ".hex-workspace";
+
+    private static readonly System.Text.RegularExpressions.Regex IncludeLine = new(@"^\s*#\s*include\s*[<""]([^>""]+)[>""]", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
     /// Where a name is declared in some code, by its tokens, null for nowhere. Given where it's used, the parameter or

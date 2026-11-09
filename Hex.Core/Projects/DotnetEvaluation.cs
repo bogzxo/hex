@@ -26,7 +26,7 @@ internal sealed class DotnetEvaluation
     public static readonly string[] CommonItemTypes = ["None", "Compile", "Content", "EmbeddedResource", "AdditionalFiles"];
 
     /// <summary>The properties asked of every project.</summary>
-    public static readonly string[] Asked = ["OutDir", "TargetPath", "AssemblyName", "OutputType", "TargetFramework", "TargetFrameworks", "UsingMicrosoftNETSdk"];
+    public static readonly string[] Asked = ["OutDir", "TargetPath", "AssemblyName", "OutputType", "TargetFramework", "TargetFrameworks", "UsingMicrosoftNETSdk", "RootNamespace", "Nullable"];
 
     public string Project { get; init; } = string.Empty;
     public Dictionary<string, string> Properties { get; } = new(StringComparer.OrdinalIgnoreCase);

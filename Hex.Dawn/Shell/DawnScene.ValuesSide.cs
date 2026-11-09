@@ -12,7 +12,8 @@ internal sealed partial class DawnScene
 
     private void FoldValuesFor(HexDocument shown)
     {
-        bool nothing = shown.IsText && shown.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase);
+        // A diff is looked at and has no file of its own, it put the side up for nothing every time one was opened
+        bool nothing = shown.DiffOf is not null || shown.IsText && shown.Path is { } path && !path.EndsWith(".hor", StringComparison.OrdinalIgnoreCase);
         if (nothing && right.Shown && properties?.Pinned != true)
         {
             valuesFoldedForFile = true;

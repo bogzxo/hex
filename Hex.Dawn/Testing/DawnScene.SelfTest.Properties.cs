@@ -108,10 +108,13 @@ internal sealed partial class DawnScene
 
         /* The folder they're in, Copy always for everything in it */
 
-        test.Run(() => properties.Follow([assets]));
+        test.Run(() => sideTree.SelectMany(explorer.explorerRows
+            .Where(row => PlatformPaths.Same(row.Path, assets)).Select(row => row.Row).ToList()));
         test.WaitFor(() => properties.Shown.SequenceEqual([Path.GetFullPath(assets)]) && !properties.ProjectBusy, 30.0f);
         test.Run(() => properties.Page.Enter("copy_to_output", new StringValue(DotnetEvaluation.ALWAYS)));
         test.WaitFor(() => !properties.ProjectBusy && File.ReadAllText(project).Contains("Always"), 60.0f);
+        test.Check("properties: the selected folder stays selected after project refresh", () =>
+            sideTree.SelectedItems.Count == 1 && properties.Shown.SequenceEqual([Path.GetFullPath(assets)]));
         test.Check("properties: a folder's setting goes to every file of the project in it", () =>
             DotnetProjects.Shared.Known(project) is { } known && known.BuildItemOf(first)?.CopyToOutput == DotnetEvaluation.ALWAYS
             && known.BuildItemOf(second)?.CopyToOutput == DotnetEvaluation.ALWAYS && Value("contents").Contains('2'));

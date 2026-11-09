@@ -22,6 +22,23 @@ internal sealed partial class DawnScene
         Pick("File", () => "Settings...");
         test.Settle(0.4f);
         test.Run(() => Shot("settings-first-open"));
+        ScrollPanel? middlePanel = null;
+        float middleOffset = 0;
+        test.Run(() =>
+        {
+            middlePanel = Descendants(SettingsPage!).OfType<ScrollPanel>()
+                .Where(panel => panel.MaxOffset > 100 && panel.IsShownInHierarchy)
+                .OrderByDescending(panel => panel.Bounds.Width).FirstOrDefault();
+            middleOffset = middlePanel?.Offset ?? 0;
+        });
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Hover(() => chrome.ToWorld(middlePanel!.Bounds.Center - new Vector2(0, 70)));
+        test.Settle(0.5f);
+        test.Check("settings: middle click autoscroll moves the settings panel", () => middlePanel is not null && middlePanel.Offset > middleOffset);
+        test.Run(() => Shot("settings-middle-scroll"));
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Check("settings: second middle click stops autoscroll", () => compositor.AutoScrollTarget is null);
+        test.Run(() => { if (middlePanel is not null) middlePanel.Offset = middleOffset; });
         test.Check("nav: other parts folded on first open", () =>
             SettingsPage is { } page && !Horizon.UI.Components.SettingsPage.IsPartCollapsed("Editor")
             && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Terminal") && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Appearance")

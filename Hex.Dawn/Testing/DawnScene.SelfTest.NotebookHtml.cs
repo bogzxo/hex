@@ -19,7 +19,7 @@ internal sealed partial class DawnScene
         string page = Path.Combine(testFolder, "export sample.html");
         const string MARKER = "Unsaved edit, exported as it is ✓";
         string onDisk = string.Empty;
-        int version = 0;
+
 
         test.Run(() =>
         {
@@ -41,7 +41,7 @@ internal sealed partial class DawnScene
             NotebookChanged(notebookShown, now: true);
         });
         test.WaitFor(() => !notebookShown!.Changed, 5);
-        test.Run(() => version = document.Editor.Document.Version);
+
         test.Check("notebook html: the edit is in the notebook and not saved", () => document.Modified && File.ReadAllText(file) == onDisk);
 
         test.Check("notebook html: Export as HTML is in the Notebook menu and the palette", () =>
@@ -56,7 +56,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Run(() => Shot("notebook-html-dialog"));
         Press("Save");
-        test.WaitFor(() => htmlExport is null && File.Exists(page), 60);
+        test.WaitFor(() => htmlExecution is null && htmlExport is null && File.Exists(page), 60);
         test.Settle(0.3f);
         test.Run(() => Shot("notebook-html-exported"));
 
@@ -65,8 +65,8 @@ internal sealed partial class DawnScene
         test.Check("notebook html: the page is next to the notebook, named after it, with the unsaved edit in it", () =>
             html.StartsWith("<!DOCTYPE html>", StringComparison.Ordinal) && System.Net.WebUtility.HtmlDecode(html).Contains(MARKER, StringComparison.Ordinal)
             && html.Contains("<title>export sample</title>", StringComparison.Ordinal));
-        test.Check("notebook html: exporting didn't save or change the notebook", () =>
-            document.Modified && File.ReadAllText(file) == onDisk && document.Editor.Document.Version == version);
+        test.Check("notebook html: exporting leaves the notebook unsaved", () =>
+            document.Modified && File.ReadAllText(file) == onDisk);
         test.Check("notebook html: the page runs nothing and fetches nothing", () =>
             !html.Contains("<script", StringComparison.OrdinalIgnoreCase) && !html.Contains(" src=\"http", StringComparison.OrdinalIgnoreCase)
             && !html.Contains("<link", StringComparison.OrdinalIgnoreCase));
@@ -96,8 +96,8 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("notebook html: a page that's there isn't replaced on the first Save", () => File.GetLastWriteTimeUtc(page) == first && htmlExport is null);
         Press("Save");
-        test.WaitFor(() => htmlExport is null && File.GetLastWriteTimeUtc(page) != first, 60);
-        test.Check("notebook html: and is on the second", () => File.GetLastWriteTimeUtc(page) != first && File.ReadAllText(page) == html);
+        test.WaitFor(() => htmlExecution is null && htmlExport is null && File.GetLastWriteTimeUtc(page) != first, 60);
+        test.Check("notebook html: and is on the second", () => File.GetLastWriteTimeUtc(page) != first && File.ReadAllText(page).Contains("<!DOCTYPE html>", StringComparison.Ordinal));
 
         // Cancelled, nothing written
         DateTime second = DateTime.MinValue;
@@ -138,6 +138,59 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => original is null || File.Exists(svgFile), 10);
         test.Check("notebook html: Save Image As writes an SVG output byte for byte", () => original is null || File.ReadAllText(svgFile) == original);
+
+        // Execution failure must not replace a previously exported page.
+        string previous = string.Empty;
+        NotebookCell failure = new() { Kind = CellKind.Code, Source = "raise ValueError('HTML_EXPORT_FAILURE')" };
+        test.Run(() =>
+        {
+            previous = File.ReadAllText(page);
+            notebookShown!.Model.Cells.Add(failure);
+            NotebookChanged(notebookShown, now: true);
+            BeginHtmlExport(notebookShown, "export sample", page);
+        });
+        test.WaitFor(() => htmlExecution is null && htmlExport is null, 60);
+        test.Check("notebook html: failed execution preserves the previous HTML", () =>
+            failure.Outputs.Any(output => output["output_type"]?.GetValue<string>() == "error") && File.ReadAllText(page) == previous);
+        test.Run(() =>
+        {
+            failure.Source = "print(6 * 7)";
+            NotebookChanged(notebookShown!, now: true);
+            BeginHtmlExport(notebookShown!, "export sample", page);
+        });
+        test.WaitFor(() => htmlExecution is null && htmlExport is null, 60);
+        test.Check("notebook html: corrected code executes and exports fresh output", () =>
+            notebookShown!.Run.Succeeded(failure) && failure.Outputs.Any(output => output["text"]?.GetValue<string>()?.Trim() == "42") &&
+            File.ReadAllText(page) != previous);
+        test.Run(() => notebookShown!.Model.Cells.Remove(failure));
+
+        NotebookCell? slow = null;
+        string originalSource = string.Empty;
+        test.Run(() =>
+        {
+            previous = File.ReadAllText(page);
+            slow = notebookShown!.Model.Cells.First(cell => cell.Kind == CellKind.Code);
+            originalSource = slow.Source;
+            slow.Source = "import time; time.sleep(10)";
+            NotebookChanged(notebookShown, now: true);
+            BeginHtmlExport(notebookShown, "export sample", page);
+        });
+        test.WaitFor(() => slow is not null && notebookShown!.Run.IsQueued(slow), 10);
+        test.Run(() => InterruptKernel(notebookShown!));
+        test.WaitFor(() => notebookShown!.Run.Queued.Count == 0, 10);
+        test.Check("notebook html: interrupt cancels export and preserves the page", () =>
+            htmlExecution is null && htmlExport is null && File.ReadAllText(page) == previous);
+        test.Run(() =>
+        {
+            slow!.Source = originalSource;
+            NotebookChanged(notebookShown!, now: true);
+            BeginHtmlExport(notebookShown!, "export sample", page);
+            slow.Source += "\n# changed during export";
+        });
+        test.WaitFor(() => htmlExecution is null, 10);
+        test.Check("notebook html: edits during execution cannot export stale results", () =>
+            htmlExport is null && File.ReadAllText(page) == previous);
+        test.Run(() => slow!.Source = originalSource);
 
         // Put back as it was, nothing saved
         test.Run(() =>

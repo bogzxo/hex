@@ -267,6 +267,7 @@ internal static partial class HexLooks
         "caret_glide" => new NumberValue(settings.CaretGlide),
         CODE_FONT => new StringValue(settings.CodeFont),
         CSHARP_COLORS => new StringValue(settings.CSharpColors),
+        VISUAL_STUDIO_KEYS => Values.Bool(settings.VisualStudioKeys),
         EDITOR_SKIN => new StringValue(settings.EditorSkin),
         EDITOR_THEME => new StringValue(settings.EditorTheme),
         TERMINAL_THEME => new StringValue(terminalTheme),
@@ -294,6 +295,7 @@ internal static partial class HexLooks
             case ("caret_glide", NumberValue glide): settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f); break;
             case (CODE_FONT, StringValue font): settings.CodeFont = font.Value; break;
             case (CSHARP_COLORS, StringValue { Value: "resharper" or "visual_studio" or "skin" } colors): settings.CSharpColors = colors.Value; break;
+            case (VISUAL_STUDIO_KEYS, BooleanValue on): settings.VisualStudioKeys = on.Value; break;
             case (EDITOR_SKIN, StringValue { Value.Length: > 0 } skin): settings.EditorSkin = skin.Value; break;
             case (EDITOR_THEME, StringValue theme): settings.EditorTheme = theme.Value; break;
         }

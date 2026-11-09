@@ -34,6 +34,8 @@ internal sealed partial class DawnScene : IHexLookOwner
             }
         }
 
+        // Visual Studio's has its keys too, nothing happens to them when they're as they were
+        ApplyKeyLayer();
         ApplyEffects();
         SaveSettings();
         settingsView?.Refresh();

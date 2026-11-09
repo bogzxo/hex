@@ -142,6 +142,35 @@ let run_target_button = compositor.button({
     animated: false,
 });
 
+// Debug or Release, what builds and runs build
+let configuration_button = compositor.button({
+    parent: toolbar,
+    size: vec(0, 28),
+    tooltip: "@solution.configuration_tip",
+    hover: "none",
+    hover_amount: 1.5,
+    hover_time: 0.08,
+    label: "Debug",
+    lbl_scale: 0.13,
+    style: "button_flat",
+    animated: false,
+});
+
+// The launch profile of the project F5 runs, what its program is started with
+let launch_profile_button = compositor.button({
+    parent: toolbar,
+    size: vec(0, 28),
+    tooltip: "@launch_profile.tip",
+    hover: "none",
+    hover_amount: 1.5,
+    hover_time: 0.08,
+    label: "",
+    lbl_scale: 0.13,
+    style: "button_flat",
+    animated: false,
+    visible: false,
+});
+
 let name_box = compositor.textbox({
     parent: toolbar,
     size: vec(160, 24),

@@ -192,6 +192,9 @@ internal sealed partial class DawnScene
         if (!notebooks.Remove(closed, out HexNotebook? notebook))
             return;
 
+        // The hidden kernel button's memo must not retain the closed notebook and its document.
+        if (ReferenceEquals(kernelShown.Item1, notebook)) kernelShown = default;
+
         if (notebook == notebookShown)
         {
             notebookShown = null;
@@ -240,9 +243,34 @@ internal sealed partial class DawnScene
     private void FitNotebook()
     {
         Vector2 size = notebookView.Size;
-        notebookScroll.Size = new Vector2(size.X, MathF.Max(40.0f, size.Y - NOTEBOOK_BAR));
+        Vector2 scrollSize = new(size.X, MathF.Max(40.0f, size.Y - NOTEBOOK_BAR));
+        if (notebookScroll.Size != scrollSize && NotebookShown)
+            ((NotebookScrollPanel)notebookScroll).PreserveCentre(cellViews.Select(cell => (UIComponent)cell.Card));
+        notebookScroll.Size = scrollSize;
         notebookBackdrop.Size = notebookScroll.Size;
+        // Share the one viewport backdrop with the existing alpha-aware row wrapper.
+        // WrapAreas are relative to each editor's text area, while the picture stays
+        // fixed in the notebook viewport as cells scroll past it.
+        foreach (NotebookCellView view in cellViews)
+            FitNotebookWrap(view.Editor);
         notebookProblem.Size = notebookProblem.Size with { X = MathF.Max(100.0f, size.X - 32.0f) };
         FitCellViews(MathF.Max(200.0f, size.X - notebookCells.Padding.Total.X - 14.0f));
     }
+
+    // Also called after each cell is arranged: scrolling changes the text origin after measurement.
+    private void FitNotebookWrap(NotebookCellEditor editor)
+    {
+        editor.WrapAreas.Clear();
+        editor.FlowRate = settings.WrapFlow;
+        if (backdropShape is { } shape && backdropPicture is { IsValid: true } picture &&
+            settings.BackdropOpacity > 0 && editor.BackdropRoom is { } room)
+        {
+            UIRect placed = CodeEditor.PlaceBackdrop(notebookBackdrop.Bounds,
+                notebookBackdrop.Module?.Frame ?? notebookBackdrop.Bounds, picture,
+                settings.BackdropScale, new Vector2(settings.BackdropAcross, settings.BackdropUp), settings.BackdropStretch);
+            editor.WrapAreas.Add(new UIWrapArea(shape,
+                new UIRect(placed.Min - room.Min, placed.Max - room.Min), settings.BackdropWrapMargin));
+        }
+    }
+
 }

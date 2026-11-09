@@ -74,12 +74,19 @@ internal sealed partial class DawnScene
         test.Check("surface: the find bar keeps left of the minimap and the scroll bar", () =>
             codeEditing.FindBarOpen && codeEditing.findBar.Bounds.Max.X <= code.CodeBounds.Max.X - 4.0f && code.FoundCount > 100);
 
-        float findScaleWas = 0;
+        float findScaleWas = 0, panelHeightWas = 0;
+        bool panelShownWas = false;
+        int panelPageWas = 0;
         var originalFindBox = codeEditing.findBox;
         var originalReplaceBox = codeEditing.replaceBox;
         test.Run(() =>
         {
             findScaleWas = compositor.Scale;
+            panelHeightWas = panelWanted;
+            panelShownWas = bottom.Shown;
+            panelPageWas = bottom.Selected;
+            ShowPanel(OUTPUT_PAGE);
+            panelWanted = 400;
             SetScale(2.0f, remember: false);
         });
         test.Settle(0.5f);
@@ -126,11 +133,21 @@ internal sealed partial class DawnScene
             var caret = code.Document.Caret;
             float y = code.PlaceOf(caret).Y;
             float row = MathF.Abs(y - code.PlaceOf(new(caret.Line + 1, 0)).Y);
+            Console.WriteLine($"[Hex self-test] find visibility: caret={caret}, y={y}, row={row}, bounds={code.CodeBounds}, sticky={code.StickyShown.Count}");
             return y - row * 0.5f >= code.CodeBounds.Min.Y
                 && y + row * 0.5f <= code.CodeBounds.Max.Y - (code.StickyShown.Count + 1) * row;
         });
         SurfaceShot(test, "surface_find_200.png");
-        test.Run(() => SetScale(findScaleWas, remember: false));
+        test.Check("surface: compact find and the bottom panel leave usable editor space", () =>
+            code.CodeBounds.Height >= 7 * MathF.Max(16, code.CaretLineHeight) - 1 &&
+            codeScroll.Bounds.Min.Y >= bottom.Bounds.Max.Y - 1);
+        test.Run(() =>
+        {
+            panelWanted = panelHeightWas;
+            bottom.Select(panelPageWas);
+            bottom.Show(panelShownWas, instantly: true);
+            SetScale(findScaleWas, remember: false);
+        });
         test.Settle(0.5f);
         test.Check("surface: returning to the wide layout keeps the same focused find fields", () =>
             ReferenceEquals(originalFindBox, codeEditing.findBox) && ReferenceEquals(originalReplaceBox, codeEditing.replaceBox)

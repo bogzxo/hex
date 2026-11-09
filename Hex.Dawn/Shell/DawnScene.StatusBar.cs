@@ -117,6 +117,7 @@ internal sealed partial class DawnScene
         UpdateImageView();
         UpdateConflicts();
         UpdateInlays();
+        UpdateNativeFolding();
         UpdateReferenceLenses();
         UpdateSemantics();
 

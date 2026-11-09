@@ -86,6 +86,7 @@ internal sealed partial class DawnScene
 
         TestKeysChords(test, command, zen, shortcuts);
         TestKeysClashActions(test, command, zen, shortcuts, Row, Clashes);
+        TestVisualStudioKeys(test, command);
     }
 
     /// <summary>A chord pressed goes off, its first key alone waits and Escape leaves it, the dialog and the file take one.</summary>
@@ -121,7 +122,7 @@ internal sealed partial class DawnScene
         test.Check("keys: chord works: a second key that's no chord says it's not a command", () =>
             Quiet == wasQuiet && commands.Keys.Pending is null && messageItem.Text.Contains(Said("keys_chords.not_a_command", ("keys", "Ctrl+K Q"))));
 
-        // The dialog takes Ctrl+K and then Ctrl+C as one chord, the keys file keeps it, reset puts the default back
+        // The dialog takes Ctrl+K and then Ctrl+J as one chord (Ctrl+K Ctrl+C is Comment Selection's), the keys file keeps it, reset puts the default back
         string file = Path.Combine(testFolder, "selftest_chord_keys.hor");
         List<(string Label, string Key)> read = [];
         test.Run(() => AskForKey(command("Go to File")!));
@@ -129,7 +130,7 @@ internal sealed partial class DawnScene
         test.Run(() => KeyStrokeFor(keyFor!, Key.K, control: true, shift: false, alt: false));
         test.Check("keys: chord recorded: the dialog shows the first key and waits for a second", () =>
             keyDialog is { IsOpen: true } && keyFor is not null && keyChordLine is { } line && line.Text.Contains("Ctrl+K") && command("Go to File")!.Shortcut == "Ctrl+P");
-        test.Run(() => KeyStrokeFor(keyFor!, Key.C, control: true, shift: false, alt: false));
+        test.Run(() => KeyStrokeFor(keyFor!, Key.J, control: true, shift: false, alt: false));
         test.Wait();
         test.Run(() =>
         {
@@ -141,19 +142,19 @@ internal sealed partial class DawnScene
         });
         test.Wait();
         test.Check("keys: chord recorded and kept", () =>
-            command("Go to File")!.Shortcut == "Ctrl+K Ctrl+C" && read is [("Go to File", "Ctrl+K Ctrl+C")] && keyDialog is not { IsOpen: true }
-            && commands.Keys.Has(new UIKeyStroke(Key.K, true, false, false), new UIKeyStroke(Key.C, true, false, false)) && !commands.Keys.Has(Key.P, true, false, false));
+            command("Go to File")!.Shortcut == "Ctrl+K Ctrl+J" && read is [("Go to File", "Ctrl+K Ctrl+J")] && keyDialog is not { IsOpen: true }
+            && commands.Keys.Has(new UIKeyStroke(Key.K, true, false, false), new UIKeyStroke(Key.J, true, false, false)) && !commands.Keys.Has(Key.P, true, false, false));
 
         // The recorder in the filter takes the chord as well and leaves the command on it
         test.Run(() =>
         {
             RecordKeys(true);
             KeyRecorded(Key.K, control: true, shift: false, alt: false);
-            KeyRecorded(Key.C, control: true, shift: false, alt: false);
+            KeyRecorded(Key.J, control: true, shift: false, alt: false);
         });
         test.Wait();
         test.Check("keys: chord recorded: the filter's recorder takes two keys as a chord", () =>
-            keysFilter!.Text == "Ctrl+K Ctrl+C" && keysTree!.Items is [{ Tag: MenuItem item }] && LabelOf(item) == "Go to File");
+            keysFilter!.Text == "Ctrl+K Ctrl+J" && keysTree!.Items is [{ Tag: MenuItem item }] && LabelOf(item) == "Go to File");
         test.Run(() =>
         {
             RecordKeys(false);
@@ -162,7 +163,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("keys: chord recorded: reset puts the default back", () =>
             command("Go to File")!.Shortcut == "Ctrl+P" && commands.Keys.Has(Key.P, true, false, false)
-            && !commands.Keys.Has(new UIKeyStroke(Key.K, true, false, false), new UIKeyStroke(Key.C, true, false, false))
+            && !commands.Keys.Has(new UIKeyStroke(Key.K, true, false, false), new UIKeyStroke(Key.J, true, false, false))
             && command(zen)!.Shortcut == "Ctrl+K Z" && command(shortcuts)!.Shortcut == "Ctrl+K Ctrl+S");
     }
 

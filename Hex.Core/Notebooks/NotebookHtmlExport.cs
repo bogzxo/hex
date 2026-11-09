@@ -42,7 +42,7 @@ internal static partial class NotebookHtmlExport
             .Append("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'\">\n")
             .Append("<title>").Append(title).Append("</title>\n<style>\n").Append(STYLE).Append("</style>\n</head>\n<body>\n<main class=\"notebook\">\n");
 
-        string language = notebook.Language;
+        string language = ExportLanguage(notebook.Metadata, "python");
         foreach (NotebookCell cell in notebook.Cells)
         {
             switch (cell.Kind)
@@ -54,7 +54,7 @@ internal static partial class NotebookHtmlExport
                     page.Append("<section class=\"cell raw\"><pre>").Append(Encode(cell.Source)).Append("</pre></section>\n");
                     break;
                 default:
-                    WriteCode(page, cell, language, options);
+                    WriteCode(page, cell, ExportLanguage(cell.Metadata, language), options);
                     break;
             }
         }
@@ -69,7 +69,7 @@ internal static partial class NotebookHtmlExport
         string count = cell.ExecutionCount is { } run ? run.ToString(System.Globalization.CultureInfo.InvariantCulture) : " ";
         page.Append("<section class=\"cell code\">\n<div class=\"input\"><div class=\"prompt\">In&nbsp;[").Append(count).Append("]:</div>")
             .Append("<pre class=\"source\"><code class=\"language-").Append(Encode(Plain(language))).Append("\">")
-            .Append(Encode(cell.Source)).Append("</code></pre></div>\n");
+            .Append(HighlightCode(cell.Source, language)).Append("</code></pre></div>\n");
 
         if (cell.Outputs.Count > 0)
         {

@@ -8,20 +8,23 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// The notebook on screen saved as one HTML page (Notebook, Export as HTML...), the cells and outputs as they are now,
-// unsaved ones too, without running anything or touching the notebook's own file. Asked where with the same dialog as
-// every save, made and written off the editor's thread, said when it's done with a way to open it. An output's picture
-// can be saved as the file it came as from its right click (an SVG as its SVG)
+// Run the current cells before exporting; never replace an existing page with stale or failed results.
 internal sealed partial class DawnScene
 {
     // The export being written, where to, and null once it's done and said
     private Task? htmlExport;
+    private HtmlExecution? htmlExecution;
+    private sealed record HtmlExecution(HexNotebook Notebook, string Title, (NotebookCell Cell, CellKind Kind, string Source)[] Cells)
+    {
+        public int Next;
+        public NotebookCell? Running;
+    }
     private string htmlExportTarget = string.Empty;
 
     /// <summary>The notebook as an HTML page, saved where it's asked to be.</summary>
     private void ExportNotebookHtml(HexNotebook notebook)
     {
-        if (htmlExport is { IsCompleted: false })
+        if (htmlExecution is not null || htmlExport is not null)
         {
             Say(Said("notebook.html_busy"));
             return;
@@ -36,14 +39,81 @@ internal sealed partial class DawnScene
             if (!target.EndsWith(".html", StringComparison.OrdinalIgnoreCase) && !target.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
                 target += ".html";
 
-            // What it is now, copied on this thread, so a kernel's output coming in or typing meanwhile can't reach it
-            Notebook now = NotebookSnapshot(notebook.Model);
-            var options = new NotebookHtmlOptions { Title = title, Math = NotebookRender.MathSvg };
-            htmlExportTarget = target;
-            Say(Said("notebook.html_exporting", ("name", Path.GetFileName(target))));
-            htmlExport = Task.Run(() => File.WriteAllText(target, NotebookHtmlExport.Write(now, options), new UTF8Encoding(false)));
-            htmlExport.ContinueWith(_ => Engine.WindowManager.Wake(), TaskScheduler.Default);
+            BeginHtmlExport(notebook, title, target);
         });
+    }
+
+    private void BeginHtmlExport(HexNotebook notebook, string title, string target)
+    {
+        if (htmlExecution is not null || htmlExport is not null || notebook.Starting ||
+            notebook.Waiting.Count > 0 || notebook.Run.Queued.Count > 0 || notebook.Kernel?.State == KernelState.Busy)
+        {
+            Notify(Said("notebook.html_run_busy"), error: true);
+            return;
+        }
+        htmlExportTarget = target;
+        htmlExecution = new(notebook, title, notebook.Model.Cells.Select(cell => (cell, cell.Kind, cell.Source)).ToArray());
+        Say(Said("notebook.html_running"));
+    }
+
+    private void CancelHtmlExecution(HexNotebook notebook, string reason)
+    {
+        if (htmlExecution?.Notebook != notebook) return;
+        htmlExecution = null;
+        Notify(Said("notebook.html_failed", ("why", reason)), error: true);
+    }
+
+    private void UpdateHtmlExecution()
+    {
+        if (htmlExecution is not { } work) return;
+        HexNotebook notebook = work.Notebook;
+        if (!notebooks.Values.Contains(notebook) || notebook.Model.Cells.Count != work.Cells.Length ||
+            work.Cells.Where((saved, index) => notebook.Model.Cells[index] != saved.Cell ||
+                saved.Cell.Kind != saved.Kind || saved.Cell.Source != saved.Source).Any() ||
+            (!notebook.Changed && notebook.Document.Editor.Document.Version != notebook.JsonVersion))
+        {
+            CancelHtmlExecution(notebook, Said("notebook.html_changed"));
+            return;
+        }
+        if (work.Running is not null && !notebook.Starting && notebook.Kernel is null or { State: KernelState.Dead })
+        {
+            CancelHtmlExecution(notebook, Said("notebook.html_incomplete"));
+            return;
+        }
+        if (notebook.Starting || notebook.Waiting.Count > 0 || notebook.Run.Queued.Count > 0) return;
+        if (work.Running is { } ran && (!notebook.Run.Succeeded(ran) ||
+            ran.Outputs.Any(output => output["output_type"]?.GetValue<string>() == "error")))
+        {
+            var error = ran.Outputs.FirstOrDefault(output => output["output_type"]?.GetValue<string>() == "error");
+            string why = error is null ? Said("notebook.html_incomplete") :
+                $"{error["ename"]}: {error["evalue"]}";
+            CancelHtmlExecution(notebook, Said("notebook.html_cell_failed", ("cell", work.Next.ToString()), ("why", why)));
+            return;
+        }
+        while (work.Next < work.Cells.Length)
+        {
+            NotebookCell cell = work.Cells[work.Next++].Cell;
+            if (cell.Kind != CellKind.Code) continue;
+            work.Running = cell;
+            RunCells(notebook, [cell]);
+            return;
+        }
+        Notebook now = NotebookSnapshot(notebook.Model);
+        var options = new NotebookHtmlOptions { Title = work.Title, Math = NotebookRender.MathSvg };
+        string target = htmlExportTarget;
+        htmlExecution = null;
+        Say(Said("notebook.html_exporting", ("name", Path.GetFileName(target))));
+        htmlExport = Task.Run(() =>
+        {
+            string temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temp, NotebookHtmlExport.Write(now, options), new UTF8Encoding(false));
+                File.Move(temp, target, overwrite: true);
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
+        });
+        htmlExport.ContinueWith(_ => Engine.WindowManager.Wake(), TaskScheduler.Default);
     }
 
     /// <summary>A copy of a notebook that shares nothing it could change with the one being edited.</summary>
@@ -78,6 +148,7 @@ internal sealed partial class DawnScene
     // Every tick, an export that's finished said, with a way to open what it wrote
     private void UpdateHtmlExport()
     {
+        UpdateHtmlExecution();
         if (htmlExport is not { IsCompleted: true } done)
             return;
 

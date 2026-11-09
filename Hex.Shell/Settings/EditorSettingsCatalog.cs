@@ -58,6 +58,7 @@ public static class EditorSettingsCatalog
         new("caret_fast_rate", HexText.Get("settings_text.caret_fast_rate_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_rate_help"), TEXT, Least: 30.0f, Most: 200.0f, Step: 5.0f, Slider: true, Unit: "/s"),
         new("sticky_scroll", HexText.Get("settings_text.sticky_scroll_title"), UIFormKind.Flag, HexText.Get("settings_text.sticky_scroll_help"), TEXT),
         new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES),
+        new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), TEXT),
         Patterns("files_exclude"),
         Patterns("search_exclude"),
         new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH)
@@ -143,6 +144,7 @@ public static class EditorSettingsCatalog
         new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
         Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
+        new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), CODE),
 
         new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
         new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
@@ -283,6 +285,7 @@ public static class EditorSettingsCatalog
         ["caret_fast_rate"] = new NumberValue(80.0f),
         ["sticky_scroll"] = Values.Bool(true),
         ["format_on_save"] = Values.Bool(false),
+        ["format_on_type"] = Values.Bool(true),
         ["code_zoom"] = new NumberValue(1.0f),
         ["code_font"] = new StringValue("hack"),
         ["wrap_code"] = Values.Bool(false),
@@ -292,6 +295,7 @@ public static class EditorSettingsCatalog
         ["code_lens_references"] = Values.Bool(true),
         ["semantic_highlighting"] = Values.Bool(true),
         ["csharp_colors"] = new StringValue("resharper"),
+        ["visual_studio_keys"] = Values.Bool(false),
         ["git_autofetch"] = Values.Bool(true),
         ["git_autofetch_interval"] = new NumberValue(3.0f),
         ["git_pull_mode"] = new StringValue("default"),

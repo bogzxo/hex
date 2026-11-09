@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;
@@ -51,7 +51,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
             ProgramFor = profile => profile.Id == HexRunning.CONSOLE_PROFILE ? running.MakeConsole() : null,
 
             // What a compiler in a terminal says is wrong goes in the Problems panel, until a line is run again
-            Problem = (problem, _) => AddTerminalProblem(problem.File, problem.Line, Math.Max(1, problem.Column), problem.Message, problem.Warning),
+            Problem = (problem, _) => AddTerminalProblem(problem.File, problem.Line, Math.Max(1, problem.Column), problem.Message, problem.Warning, read: true),
             ProblemsCleared = _ => ClearTerminalProblems(),
             SettingsChanged = ApplyTerminalMotion
         });
@@ -75,10 +75,13 @@ internal sealed partial class DawnScene : ITerminalHostUi
 
         terminals.Blocked = () => chrome.Dialog is not null;
         terminals.Start();
+        WirePythonTerminal();
+        WireDotnetTerminal();
 
         // What it says is wrong is underlined in the files that are open too, until they're saved
         diagnosticSources.Add(TerminalDiagnosticsOf);
         documentSaved += ForgetTerminalProblemsOf;
+        languages.ServerSaid += ServerSaidOf;
 
         // The console after the machine's shells, a new terminal is a shell and the console is asked for by name
         terminalPanel.Profiles.Add(new TerminalProfile(Said("terminal_page.console_profile"), string.Empty, "symbol-namespace", HexRunning.CONSOLE_PROFILE) { Kind = TerminalProfileKind.Embedded });
@@ -91,6 +94,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminals.Commands.Register("hex_terminal_focus", Said("terminal_page.command_terminal_focus"), ToggleTerminalFocus, "Ctrl+`", HexOwns);
         terminals.Commands.Register("hex_new_terminal", Said("terminal_page.command_new_terminal"), NewTerminal, "Ctrl+Shift+`", HexOwns);
         terminals.Commands.Register("hex_run", Said("terminal_page.command_run"), RunOrPlay, "F5", HexOwns);
+        terminals.Commands.Register("hex_stop", Said("terminal_page.command_stop"), () => debugger.StopDebugging(), "Shift+F5", HexOwns);
         terminals.Commands.Register("hex_palette", Said("terminal_page.command_palette"), CommandPalette, "F1", HexOwns);
         terminals.Commands.Register("hex_run_to_terminal", Said("terminal_page.command_run_to_terminal"), () =>
         {
@@ -202,7 +206,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
     /// <summary>The tabs the workspace kept when the settings say so and there are any, a shell in the workspace's folder otherwise.</summary>
     private void OpenTerminals()
     {
-        if (terminals.Settings.RestoreSessions && explorer.workspace.Terminal is { } kept && TerminalSessions.Restore(terminalPanel, kept, terminals.ProfileCalled))
+        if (terminals.Settings.RestoreSessions && explorer.workspace.Terminal is { } kept && TerminalSessions.Restore(terminalPanel, kept, RestoredTerminalProfile))
         {
             return;
         }
