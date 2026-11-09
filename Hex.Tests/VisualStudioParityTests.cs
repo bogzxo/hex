@@ -101,11 +101,11 @@ public sealed class VisualStudioParityTests
     public void CallsSayTheirOtherEndAndWhereTheCallsAre()
     {
         const string ITEM = """
-            { "name": "{0}", "detail": "Demo.Loop", "kind": 6, "uri": "file:///C:/demo/{1}",
+            { "name": "{0}", "detail": "Demo.Loop", "kind": 6, "uri": "{1}",
               "range": { "start": { "line": 3, "character": 4 }, "end": { "line": 9, "character": 5 } },
               "selectionRange": { "start": { "line": 3, "character": 16 }, "end": { "line": 3, "character": 24 } } }
             """;
-        string Item(string name, string file) => ITEM.Replace("{0}", name).Replace("{1}", file);
+        string Item(string name, string file) => ITEM.Replace("{0}", name).Replace("{1}", new Uri(Path.Combine(Path.GetTempPath(), "hex-call-hierarchy", file)).AbsoluteUri);
 
         JsonNode? incoming = JsonNode.Parse($$"""
             [ { "from": {{Item("Simulate", "Loop.cs")}},
@@ -126,7 +126,7 @@ public sealed class VisualStudioParityTests
             [ { "to": {{Item("WaitUntil", "Clock.cs")}},
                 "fromRanges": [ { "start": { "line": 5, "character": 8 }, "end": { "line": 5, "character": 17 } } ] } ]
             """);
-        LanguageServerCall called = Assert.Single(LanguageServer.CallsOf(outgoing, "to", @"C:\demo\Loop.cs"));
+        LanguageServerCall called = Assert.Single(LanguageServer.CallsOf(outgoing, "to", Path.Combine(Path.GetTempPath(), "hex-call-hierarchy", "Loop.cs")));
         Assert.Equal("Clock.cs", Path.GetFileName(called.Other.Declared.Path));
         Assert.Equal("Loop.cs", Path.GetFileName(Assert.Single(called.Sites).Path));
         Assert.Empty(LanguageServer.CallsOf(JsonNode.Parse("null"), "from", null));
