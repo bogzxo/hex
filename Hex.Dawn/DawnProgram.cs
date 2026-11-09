@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 
 using Horizon.Core;
@@ -6,7 +6,7 @@ using Horizon.Engine;
 
 namespace Hex.Dawn;
 
-public static class DawnProgram
+public static partial class DawnProgram
 {
     private const string ARGUMENT_OPEN = "--open";
     private const string ARGUMENT_WORKSPACE = "--workspace";
@@ -92,7 +92,7 @@ public static class DawnProgram
         string started = Directory.GetCurrentDirectory();
         var (files, folderNamed) = HexLaunch.Parse(args, started);
         string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(Path.Combine(started, asked)) ? Path.GetFullPath(Path.Combine(started, asked)) : folderNamed;
-        Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+        Directory.SetCurrentDirectory(Hex.Core.HexHost.ProgramFolder);
 
         if (selfTest)
         {
@@ -188,7 +188,7 @@ public static class DawnProgram
         // Pause and the rest of it on its buttons
         if (engine.Debugger is { } debugger)
         {
-            debugger.ToggleKey = Silk.NET.Input.Key.Pause;
+            debugger.ToggleKey = Horizon.Input.Key.Pause;
             debugger.PauseKey = null;
             debugger.StepKey = null;
         }

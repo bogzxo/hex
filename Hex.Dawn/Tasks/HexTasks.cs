@@ -9,7 +9,8 @@ namespace Hex.Dawn;
 // the Run menu or the palette asks which, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task,
 // when there is one (and Set Up F5 when there isn't, HexTasks.Setup). A task runs in a terminal tab named after it, the
 // same tab again the next time while its shell is still there, so a build run twice doesn't leave two tabs behind, or
-// in a Dusk window of its own when it says so. One that depends on another runs that first, and goes on only if it worked.
+// in a Dusk window of its own when it says so. One that depends on another runs that first (and what that one depends on
+// before it), and goes on only if it worked.
 internal sealed partial class HexTasks
 {
     internal const string TASKS_FILE = "tasks.hor";
@@ -175,6 +176,8 @@ internal sealed partial class HexTasks
 
         string line = CommandLineOf(task, context.Terminals.UsualProfileId);
         Exits.Remove(TabOf(task));
+        if (task.Group == "run" && !task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
+            runsGoing.Add(TabOf(task));
         if (task.Terminal.Equals(HexTask.DUSK, StringComparison.OrdinalIgnoreCase))
         {
             context.Terminals.RunInDusk(task.WorkingFolder(), line);
@@ -191,6 +194,36 @@ internal sealed partial class HexTasks
     }
 
     /// <summary>
+    /// The tasks a task depends on run one after the other in the tab of the last of them, and something done once they
+    /// all worked, at once when it depends on none. F5 on a run task that's a dotnet run builds what it says first this
+    /// way and then debugs the project rather than running it in the tab.
+    /// </summary>
+    internal void RunFirstThen(HexTask task, Action then)
+    {
+        List<HexTask> first = DependenciesOf(task);
+        if (first.Count == 0)
+        {
+            then();
+            return;
+        }
+
+        context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
+        HexTask last = first[^1];
+        string line = ChainedLine(first, context.Terminals.UsualProfileId);
+        Exits.Remove(TabOf(last));
+        RunMindingSelf(last, () =>
+        {
+            context.Terminals.RunInTab(TabOf(last), last.Name, last.WorkingFolder(), line, (exit, said) =>
+            {
+                Ended(last, exit, said);
+                if (exit == 0)
+                    then();
+            });
+            context.Notices.Say(context.Strings.Said("tasks.running", ("name", last.Name)));
+        });
+    }
+
+    /// <summary>
     /// A task's shell said it was done, how it went said along the bottom. One that failed with errors a compiler said has
     /// them brought up in the Problems panel, the way Visual Studio's Error List comes up after a build that broke. It
     /// said "running build" long after the build was over. What it wrote is looked at for a fix (HexTasks.Fixes).
@@ -198,6 +231,7 @@ internal sealed partial class HexTasks
     private void Ended(HexTask task, int exit, string said)
     {
         Exits[TabOf(task)] = exit;
+        runsGoing.Remove(TabOf(task));
         SelfBuildEnded(task, exit);
         int errors = context.Terminals.TerminalErrors;
         if (exit == 0)
@@ -215,19 +249,32 @@ internal sealed partial class HexTasks
     }
 
     /// <summary>
-    /// The command line a task runs as in a shell of a profile (its id, pwsh, powershell, cmd, bash), the one it depends on
-    /// in front of it when it says one, the second only if the first worked. Windows PowerShell has no double ampersand,
-    /// it asks $? instead.
+    /// The command line a task runs as in a shell of a profile (its id, pwsh, powershell, cmd, bash), what it depends on
+    /// in front of it when it says something, each only if the one before worked. Windows PowerShell has no double
+    /// ampersand, it asks $? instead.
     /// </summary>
-    internal string CommandLineOf(HexTask task, string shell)
-    {
-        if (DependencyOf(task) is not { } first)
-            return task.Command;
+    internal string CommandLineOf(HexTask task, string shell) => ChainedLine([.. DependenciesOf(task), task], shell);
 
-        // Run from the task's own folder, the one before it may run somewhere else
-        string before = first.Folder == task.Folder ? first.Command : $"{ChangeFolder(first.WorkingFolder(), shell)} {Then(shell)} {first.Command}";
-        string after = first.Folder == task.Folder ? task.Command : $"{ChangeFolder(task.WorkingFolder(), shell)} {Then(shell)} {task.Command}";
-        return Chain(shell, before, after);
+    /// <summary>
+    /// Some tasks one after the other on one command line, each only if the one before worked, and each in its own folder.
+    /// The shell starts in the last one's, which is where its tab is opened.
+    /// </summary>
+    internal static string ChainedLine(IReadOnlyList<HexTask> steps, string shell)
+    {
+        string at = steps[^1].WorkingFolder();
+        var lines = new string[steps.Count];
+        for (int i = 0; i < steps.Count; i++)
+        {
+            string folder = steps[i].WorkingFolder();
+            lines[i] = PlatformPaths.Same(folder, at) ? steps[i].Command : $"{ChangeFolder(folder, shell)} {Then(shell)} {steps[i].Command}";
+            at = folder;
+        }
+
+        // Folded from the end, a; if ($?) { b; if ($?) { c } } in Windows PowerShell
+        string line = lines[^1];
+        for (int i = lines.Length - 2; i >= 0; i--)
+            line = Chain(shell, lines[i], line);
+        return line;
     }
 
     /// <summary>Two command lines, the second only if the first worked, in the shell of a profile.</summary>

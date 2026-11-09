@@ -2,7 +2,7 @@ using System.Text;
 
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 

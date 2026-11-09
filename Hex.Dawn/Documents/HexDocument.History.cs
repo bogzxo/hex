@@ -22,7 +22,7 @@ internal sealed partial class HexDocument
     /// <returns>Whether there was anything new to note.</returns>
     public bool Record()
     {
-        string now = GenerateBody();
+        string now = GenerateCode();
         if (now == recorded)
             return false;
 
@@ -47,7 +47,7 @@ internal sealed partial class HexDocument
     {
         undone.Clear();
         redone.Clear();
-        recorded = GenerateBody();
+        recorded = GenerateCode();
     }
 
     /// <summary>Takes the last change back.</summary>

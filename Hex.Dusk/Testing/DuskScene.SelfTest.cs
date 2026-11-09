@@ -3,7 +3,7 @@ using System.Numerics;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Hex.Shell;
 
@@ -450,7 +450,7 @@ internal sealed partial class DuskScene
         TerminalView? innermost = null;
         test.Run(() => innermost = panel.FocusedView);
         test.Check("a new split is the active pane", () => Shape() == "[o|[o/F]]");
-        test.Run(() => KeyPressed(Press(Silk.NET.Input.Key.W)));
+        test.Run(() => KeyPressed(Press(Horizon.Input.Key.W)));
         test.Settle(settle);
         test.Check("Ctrl+Shift+W closes the active pane and not the tab", () => panel.Tabs.Count == 1 && panel.Current?.Tree.Count == 2 && panel.TabOf(innermost!) is null);
         test.Check("and the keyboard goes to the innermost pane left", () => Shape() == "[o|F]");
@@ -627,7 +627,7 @@ internal sealed partial class DuskScene
         // Off, the arrows go to the shell
         test.Run(() => settings.History = false);
         test.Run(() => panel.FocusedView?.Send("\u001b"));
-        test.Check("with the history off, Up is the shell's", () => !KeyPressed(new UIKeyPress(Silk.NET.Input.Key.Up, false, false, false, false)));
+        test.Check("with the history off, Up is the shell's", () => !KeyPressed(new UIKeyPress(Horizon.Input.Key.Up, false, false, false, false)));
         test.Run(() => settings.History = true);
     }
 

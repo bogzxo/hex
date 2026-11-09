@@ -8,7 +8,19 @@ internal sealed partial class HexLanguages
 {
     // The servers started again by themselves after stopping, once each a run, a server that stops as it starts isn't
     // started for ever
-    private readonly HashSet<string> restartedOnce = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> restartedOnce = new(StringComparer.Ordinal);
+
+    private void RestartStoppedServer(LanguageServer server)
+    {
+        var documents = linters.Where(pair => ReferenceEquals(pair.Value, server)).Select(pair => pair.Key).ToArray();
+        foreach (var document in documents) StopLinting(document);
+        _ = LanguageServers.Stop(server);
+        foreach (var document in documents)
+        {
+            StartLinting(document);
+            context.Documents.DiagnosticsChanged(document);
+        }
+    }
 
     // The servers that stopped this tick, dealt with after going through them, which starting one again changes
     private readonly List<(LanguageServer Server, string Why)> stoppedNow = [];
@@ -27,7 +39,7 @@ internal sealed partial class HexLanguages
             ServerStopped(server, why);
     }
 
-    private void ServerStopped(LanguageServer server, string why)
+    internal void ServerStopped(LanguageServer server, string why)
     {
         Console.WriteLine($"[Hex] {server.Name} stopped, {why}");
         ServersChanged++;
@@ -38,8 +50,7 @@ internal sealed partial class HexLanguages
                 context.Documents.DiagnosticsChanged(of);
         }
 
-        // One that never got going isn't working to have stopped, what's missing about it is said where it's looked for
-        if (!server.IsReady || ServerEntry(server.Name) is not { } entry)
+        if (ServerEntry(server.Name) is not { } entry)
             return;
 
         string shown = Path.GetFileNameWithoutExtension(CommandOf(entry));
@@ -48,15 +59,38 @@ internal sealed partial class HexLanguages
         if (StoppedForWant(server, entry, shown))
             return;
 
-        if (restartedOnce.Add(server.Name))
+        // An installed executable can exit before initialize (missing runtime, invalid
+        // configuration, incompatible server). Missing-tool hints do not cover this.
+        // Offer recovery without repeatedly starting a process that cannot initialize.
+        if (!server.IsReady)
+        {
+            context.Notices.Notify(context.Strings.Said("languages.server_start_failed", ("server", shown), ("why", why)), error: true,
+                (context.Strings.Said("languages.start_again"), () => RestartStoppedServer(server)),
+                (context.Strings.Said("code_server.open_settings"), () => context.Windows.OpenSettings(SERVER_SECTION)),
+                (context.Strings.Said("languages.show_server_output"), () => ShowServerOutput(server)));
+            return;
+        }
+
+        string identity = server.Name + "\n" + server.RootDirectory + "\n" + server.Settings?.ToJsonString();
+        if (restartedOnce.Add(identity))
         {
             context.Notices.Say(context.Strings.Said("languages.server_restarted_after", ("server", shown)));
-            RestartServer(entry);
+            RestartStoppedServer(server);
             return;
         }
 
         context.Notices.Notify(context.Strings.Said("languages.server_stopped", ("server", shown), ("why", why)), error: true,
-            (context.Strings.Said("languages.start_again"), () => RestartServer(entry)));
+            (context.Strings.Said("languages.start_again"), () => RestartStoppedServer(server)),
+            (context.Strings.Said("languages.show_server_output"), () => ShowServerOutput(server)));
+    }
+
+    private void ShowServerOutput(LanguageServer server)
+    {
+        string output = server.ErrorOutput;
+        context.Notices.Note($"{server.Name}: {server.Failure}", error: true);
+        context.Notices.Note(string.IsNullOrWhiteSpace(output)
+            ? context.Strings.Said("languages.no_server_output") : output, error: true);
+        context.Panels.ShowOutput();
     }
 
     /// <summary>Whether the server linting a document stopped, for the status bar to say so.</summary>

@@ -3,8 +3,8 @@ using System.Numerics;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
-using MouseButton = Silk.NET.Input.MouseButton;
+using Key = Horizon.Input.Key;
+using MouseButton = Horizon.Input.MouseButton;
 
 namespace Hex.Dawn;
 
@@ -35,6 +35,7 @@ internal sealed partial class HexDesigner
     // How far past fitting the screen into the canvas it's zoomed in, and how far it's been dragged about (in the editor's units)
     internal float canvasZoom = 1.0f;
     private Vector2 canvasPan;
+    private float previousCanvasFit;
     private float previewAspect;
 
     // Dragging the canvas about with the middle button, or space and the left one
@@ -70,7 +71,13 @@ internal sealed partial class HexDesigner
             return;
 
         UIRect screen = PreviewScreen();
-        float scale = CanvasFit(area, screen) * canvasZoom;
+        float fit = CanvasFit(area, screen);
+        // Pan is stored in viewport units. Keep its corresponding layout point
+        // at the viewport centre when resizing changes the fit scale.
+        if (previousCanvasFit > 0 && fit > 0)
+            canvasPan = ResizeCanvasPan(canvasPan, previousCanvasFit, fit);
+        previousCanvasFit = fit;
+        float scale = fit * canvasZoom;
 
         // In the units of the editor's layout, the UI scales the two of them together
         var module = document.Module;
@@ -81,6 +88,9 @@ internal sealed partial class HexDesigner
         module.FrameColor = FrameColor;
         module.FrameBackground = compositor.Skin?.Palette.Raised;
     }
+
+    internal static Vector2 ResizeCanvasPan(Vector2 pan, float before, float after) =>
+        before > 0 && after > 0 ? pan * (after / before) : pan;
 
     private static float CanvasFit(UIRect area, UIRect screen) => MathF.Min(area.Width / screen.Width, area.Height / screen.Height);
 

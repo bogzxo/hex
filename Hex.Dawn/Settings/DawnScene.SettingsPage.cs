@@ -294,6 +294,7 @@ internal sealed partial class DawnScene
             new("editor_skin", Said("settings_page.dawn_theme"), UIFormKind.Choice, Said("settings_page.dawn_theme_help"), EditorSettingsCatalog.THEME,
                 [.. EditorSkins().Select(choice => choice.Text)], Buttons: [Said("settings_window.preview_themes")]),
             .. EditorSettingsCatalog.Settings,
+            EditorSettingsCatalog.RenderNow,
             new("size", Said("settings_page.size"), UIFormKind.Choice, Said("settings_page.size_help"), PANELS, [.. Scales.Select(DescribeScale)]),
             new("panels", Said("settings.editor.panels"), UIFormKind.Text, Said("settings_page.panels_help"), PANELS, Buttons: [Said("settings_page.put_back")], ButtonsOnly: true),
             new("layout_skin", Said("settings_page.layout_skin"), UIFormKind.Choice, Said("settings_page.layout_skin_help"), EditorSettingsCatalog.DESIGNER,
@@ -322,6 +323,7 @@ internal sealed partial class DawnScene
             "inlay_hints" => Values.Bool(hex.settings.InlayHints),
             "code_lens_references" => Values.Bool(hex.settings.CodeLensReferences),
             "semantic_highlighting" => Values.Bool(hex.settings.SemanticHighlighting),
+            "visual_studio_keys" => Values.Bool(hex.settings.VisualStudioKeys),
             "csharp_colors" => new StringValue(hex.settings.CSharpColors),
             "git_autofetch" => Values.Bool(hex.settings.GitAutoFetch),
             "git_autofetch_interval" => new NumberValue(hex.settings.GitAutoFetchInterval),
@@ -359,6 +361,12 @@ internal sealed partial class DawnScene
             "effect_ripples" => Values.Bool(hex.settings.EffectRipples),
             "effect_trail" => Values.Bool(hex.settings.EffectTrail),
             "glass_blur" => new NumberValue(hex.settings.GlassBlur),
+            "render_scale" => new StringValue(hex.settings.RenderScale),
+            "render_scale_percent" => new NumberValue(hex.settings.RenderScalePercent),
+            "render_upscaler" => new StringValue(hex.settings.RenderUpscaler),
+            "render_sharpness" => new NumberValue(hex.settings.RenderSharpness),
+            "render_composition" => new StringValue(hex.settings.RenderComposition),
+            "render_scale_now" => new StringValue(hex.DescribeRenderScale()),
             "glass_clarity" => new NumberValue(hex.settings.GlassClarity),
             "glass_rim" => new NumberValue(hex.settings.GlassRim),
             "glass_bend" => new NumberValue(hex.settings.GlassBend),
@@ -382,7 +390,7 @@ internal sealed partial class DawnScene
             // Only a size somebody picked and that's kept for next time, a window that's another size than the last run's
             // isn't a change of anybody's
             "size" => hex.scalePicked || (!hex.options.SelfTest && File.Exists(ScalePath)),
-            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP => false,
+            "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or "render_scale_now" => false,
             "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
         };
@@ -475,6 +483,10 @@ internal sealed partial class DawnScene
                 case ("semantic_highlighting", BooleanValue semantic):
                     settings.SemanticHighlighting = semantic.Value;
                     hex.ForgetSemantics();
+                    break;
+                case ("visual_studio_keys", BooleanValue visualStudio):
+                    settings.VisualStudioKeys = visualStudio.Value;
+                    hex.ApplyKeyLayer();
                     break;
                 case ("csharp_colors", StringValue { Value: "resharper" or "visual_studio" or "skin" } csharp):
                     settings.CSharpColors = csharp.Value;
@@ -573,6 +585,26 @@ internal sealed partial class DawnScene
                 case ("effect_trail", BooleanValue effecttrail):
                     settings.EffectTrail = effecttrail.Value;
                     hex.ApplyEffects();
+                    break;
+                case ("render_scale", StringValue { Value: "auto" or "native" or "manual" } scale):
+                    settings.RenderScale = scale.Value;
+                    hex.ApplyRenderScale();
+                    break;
+                case ("render_scale_percent", NumberValue percent):
+                    settings.RenderScalePercent = Math.Clamp(percent.Value, 25.0f, 100.0f);
+                    hex.ApplyRenderScale();
+                    break;
+                case ("render_upscaler", StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler):
+                    settings.RenderUpscaler = upscaler.Value;
+                    hex.ApplyRenderScale();
+                    break;
+                case ("render_sharpness", NumberValue sharpness):
+                    settings.RenderSharpness = Math.Clamp(sharpness.Value, 0.0f, 1.0f);
+                    hex.ApplyRenderScale();
+                    break;
+                case ("render_composition", StringValue { Value: "native_ui" or "whole_frame" } composition):
+                    settings.RenderComposition = composition.Value;
+                    hex.ApplyRenderScale();
                     break;
                 case ("glass_blur", NumberValue blur):
                     settings.GlassBlur = Math.Clamp(blur.Value, 0.0f, 64.0f);

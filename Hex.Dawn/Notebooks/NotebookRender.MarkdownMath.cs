@@ -13,7 +13,7 @@ internal static partial class NotebookRender
     private static readonly Lazy<SKTypeface> CodeFace = new(() => LoadProseFace("hack"));
 
     private static SKTypeface LoadProseFace(string name) =>
-        SKTypeface.FromFile(Path.Combine(AppContext.BaseDirectory, "Assets", "fonts", name, name + ".ttf"))
+        SKTypeface.FromFile(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", name, name + ".ttf"))
         ?? SKTypeface.FromFamilyName(name == "hack" ? "Consolas" : "Segoe UI");
 
     private sealed record InlineRun(string Text, SKFont Font, MathPainter? Math, bool Code,

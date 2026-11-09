@@ -73,6 +73,13 @@ internal sealed partial class DawnScene
         if (mcpOwner is not null && mcpOwner != this)
             return false;
 
+        // The server is a named pipe for a client on the same machine to reach, a tablet has no such client
+        if (!HexHost.Pipes)
+        {
+            Say($"The MCP server needs a client on the same machine to reach it over a named pipe, and Hex on {HexHost.Name} has none.", error: true);
+            return false;
+        }
+
         try
         {
             int pid = System.Environment.ProcessId;

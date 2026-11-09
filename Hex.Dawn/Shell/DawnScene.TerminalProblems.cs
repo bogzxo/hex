@@ -18,19 +18,29 @@ internal sealed partial class DawnScene
     // Whether the files that are open have to be told again what the terminal says about them
     private bool terminalProblemsChanged;
 
-    private void AddTerminalProblem(string path, int line, int column, string message, bool warning)
+    private void AddTerminalProblem(string path, int line, int column, string message, bool warning, bool read = false)
     {
         // A path said relative to where the shell was is taken from the terminal's folder
         string full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(terminalPanel.FocusedView?.WorkingDirectory ?? TerminalFolder(), path));
+
+        // One read off the output whose file isn't there is half a path the console broke at its edge that couldn't be
+        // put back together, a row nobody can go to. What has no folder and no extension to it (MSBUILD, CSC) is the tool
+        // that said it and stays
+        if (read && !File.Exists(full) && !Directory.Exists(full) && (path.IndexOfAny(['/', '\\', '.']) >= 0))
+            return;
 
         // A compiler's code after what it says, the way a language server says it (CS1061: what, read as what (CS1061)),
         // so it sits in its own column in Problems and the build's word on a line is the server's said once
         message = CodeAfter(message);
         var problem = new HexProblem(full, Math.Max(0, line - 1), Math.Max(0, column - 1), message, warning);
-        if (terminalProblems.Contains(problem))
+
+        // A build says its warnings as it goes and again at the end, they're the one problem
+        if (terminalProblems.Any(was => was.Line == problem.Line && was.Column == problem.Column && was.Warning == problem.Warning && was.Text == problem.Text && PlatformPaths.Same(was.Path, problem.Path)))
             return;
 
         terminalProblems.Add(problem);
+        if (OpenDocument(full) is { } open)
+            builtVersions.TryAdd(open, open.Editor.Document.Version);
         problemsDirty = true;
         terminalProblemsChanged = true;
     }
@@ -41,6 +51,7 @@ internal sealed partial class DawnScene
             return;
 
         terminalProblems.Clear();
+        builtVersions.Clear();
         problemsDirty = true;
         terminalProblemsChanged = true;
     }
@@ -55,21 +66,86 @@ internal sealed partial class DawnScene
         terminalProblemsChanged = true;
     }
 
-    /// <summary>What the terminal said about a document, underlined in its code with the rest of what's wrong with it.</summary>
+    /// <summary>
+    /// What the terminal said about a document, underlined in its code with the rest of what's wrong with it. What its
+    /// server says too on the same line with the same code is the server's, the build's word on it is left out. The two
+    /// were listed one under the other, and the build's stayed after the server's had gone with the mistake.
+    /// </summary>
     private IReadOnlyList<UICodeDiagnostic>? TerminalDiagnosticsOf(HexDocument of)
     {
         if (terminalProblems.Count == 0 || of.Path is not { } path)
             return null;
 
+        IReadOnlyList<UICodeDiagnostic>? live = languages.ServerDiagnosticsOf(of);
         List<UICodeDiagnostic>? found = null;
         foreach (HexProblem problem in terminalProblems)
         {
-            if (PlatformPaths.Same(problem.Path, path))
+            if (PlatformPaths.Same(problem.Path, path) && !SaidLive(live, problem))
                 (found ??= []).Add(new UICodeDiagnostic(problem.Line, problem.Column, WordLength(of.Editor.Text, problem.Line, problem.Column), problem.Text, problem.Warning));
         }
 
         return found;
     }
+
+    // What a compiler calls a problem, the code in brackets at the end of what it says (CS0029), empty for none
+    private static readonly System.Text.RegularExpressions.Regex CodeAtEnd = new(@"\((?<code>[A-Za-z]+\d+)\)\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>The code a problem is known by, what's in brackets at the end of what it says (CS0029), empty when it has none.</summary>
+    internal static string CodeOf(string message) => CodeAtEnd.Match(message) is { Success: true } coded ? coded.Groups["code"].Value : string.Empty;
+
+    /// <summary>Whether a server says what a build said, on the same line with the same code (or the same words, for a problem with no code).</summary>
+    internal static bool SaidLive(IReadOnlyList<UICodeDiagnostic>? live, HexProblem problem)
+    {
+        if (live is not { Count: > 0 })
+            return false;
+
+        string code = CodeOf(problem.Text);
+        foreach (UICodeDiagnostic diagnostic in live)
+        {
+            if (diagnostic.Line == problem.Line && (code.Length > 0 ? CodeOf(diagnostic.Message) == code : diagnostic.Message == problem.Text))
+                return true;
+        }
+
+        return false;
+    }
+
+    // The version each open file was at as the build spoke of it (or its server first did, for one opened after), to
+    // tell a word on the text the build saw from one on text changed since
+    private readonly Dictionary<HexDocument, int> builtVersions = [];
+
+    /// <summary>
+    /// A file's server said what's wrong with it. When it says nothing is, the build's errors in it are older than that
+    /// and go, they'd stay listed until the next build after the mistake was put right. Once the file's been changed
+    /// since and the server's had the change, a build error the server no longer has on its line with its code goes
+    /// too, the way Visual Studio drops one as IntelliSense agrees. A CS1503 stayed after its line was fixed because
+    /// the file still had other errors. Warnings stay, a build's analyzers say things the server never does.
+    /// </summary>
+    private void ServerSaidOf(HexDocument of, IReadOnlyList<UICodeDiagnostic> found)
+    {
+        if (terminalProblems.Count == 0 || of.Path is not { } path)
+            return;
+
+        // A file opened after the build is as the build saw it the first time its server speaks
+        int version = of.Editor.Document.Version;
+        bool edited = false;
+        if (!builtVersions.TryGetValue(of, out int built))
+            builtVersions[of] = version;
+        else
+            edited = built != version && !languages.ChangePending(of);
+        bool clean = !found.Any(diagnostic => !diagnostic.Warning);
+        if (terminalProblems.RemoveAll(problem => PlatformPaths.Same(problem.Path, path) && BuildErrorGone(problem, found, clean, edited)) == 0)
+            return;
+
+        problemsDirty = true;
+        terminalProblemsChanged = true;
+    }
+
+    /// <summary>
+    /// Whether a build's problem in a file is over by what its server said, an error once the server says nothing's
+    /// wrong, or once the file was changed and the server doesn't say it on its line with its code any more.
+    /// </summary>
+    internal static bool BuildErrorGone(HexProblem problem, IReadOnlyList<UICodeDiagnostic> found, bool clean, bool edited) =>
+        !problem.Warning && (clean || edited && !SaidLive(found, problem));
 
     /// <summary>
     /// How long the word at a place in some text is, the rest of the line from it for a place on no word (a string, a

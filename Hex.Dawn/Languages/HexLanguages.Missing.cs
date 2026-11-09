@@ -82,6 +82,11 @@ internal sealed partial class HexLanguages
         string said = install.Length > 0
             ? context.Strings.Said("code_server.missing", ("command", command), ("install", install))
             : context.Strings.Said("code_server.missing_no_install", ("command", command));
+        if (MissingNpm(install))
+        {
+            said += " " + NpmHint;
+            getIt = (context.Strings.Said("language_updates.get_npm"), OpenNpmSetup);
+        }
         context.Notices.Notify(said, error: false, getIt, settingsButton, quiet);
         MissingNotices.Add(said);
     }

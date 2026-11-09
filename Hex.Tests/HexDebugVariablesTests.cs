@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Threading.Channels;
 
 using Hex.Dawn;
@@ -10,6 +10,127 @@ namespace Hex.Tests;
 
 public sealed class HexDebugVariablesTests
 {
+    [Fact]
+    public async Task VariableWatchpointMetadataUsesItsContainerAndRetiresWithTheFrame()
+    {
+        var view = new View();
+        object session = new();
+        Task<IReadOnlyList<DebugVariable>> Values(int reference) => Task.FromResult<IReadOnlyList<DebugVariable>>(
+            reference == 10 ? [new("box", "{}", "Box", 20)] : [new("value", "42", "int", 0)]);
+        view.Variables.Rows(session, 10, Locals, Values); await view.Apply();
+        var root = Assert.Single(view.Variables.Rows(session, 10, Locals, Values));
+        var rootTag = Assert.IsType<SideTag>(root.Tag);
+        Assert.Equal(10, rootTag.DebugContainer);
+        Assert.Equal("box", rootTag.DebugValue!.Value.Name);
+        rootTag.Expanding!(root); await view.Apply();
+        var childTag = Assert.IsType<SideTag>(Assert.Single(root.Children!).Tag);
+        Assert.Equal(20, childTag.DebugContainer);
+        Assert.Equal("value", childTag.DebugValue!.Value.Name);
+        Assert.True(childTag.DebugCurrent!());
+        view.Variables.Reset();
+        Assert.False(rootTag.DebugCurrent!());
+        Assert.False(childTag.DebugCurrent());
+    }
+
+    [Fact]
+    public async Task FailedChildExpansionCanRetryWithoutReopeningAndRetiresItsActions()
+    {
+        var view = new View();
+        object session = new();
+        int calls = 0;
+        Task<IReadOnlyList<DebugVariable>> Values(int reference)
+        {
+            if (reference == 10) return Task.FromResult<IReadOnlyList<DebugVariable>>([new("item", "object", "object", 20)]);
+            calls++;
+            return calls == 1 ? Task.FromException<IReadOnlyList<DebugVariable>>(new IOException("adapter unavailable"))
+                : Task.FromResult<IReadOnlyList<DebugVariable>>([new("value", "42", "int", 0)]);
+        }
+        view.Variables.Rows(session, 10, Locals, Values); await view.Apply();
+        var root = Assert.Single(view.Variables.Rows(session, 10, Locals, Values));
+        Assert.IsType<SideTag>(root.Tag).Expanding!(root); await view.Apply();
+        Assert.Contains(root.Children!, row => row.Text == "adapter unavailable");
+        var retry = Assert.IsType<SideTag>(root.Children![^1].Tag);
+        retry.Pressed!(); retry.Pressed!(); await view.Apply();
+        Assert.Equal(2, calls);
+        Assert.Equal("value = 42", Assert.Single(root.Children).Text);
+        view.Variables.Reset(); retry.Pressed!(); await Task.Delay(50);
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task IndexedCollectionPagingRequestsOnlyHundredItemsAndRejectsStaleActions()
+    {
+        using var outgoing = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        using var adapterIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, outgoing.ClientSafePipeHandle);
+        using var incoming = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        using var clientIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, incoming.ClientSafePipeHandle);
+        using var session = DebugSession.Over(clientIn, outgoing);
+        var view = new View();
+        Task<IReadOnlyList<DebugVariable>> Values(int _) => Task.FromResult<IReadOnlyList<DebugVariable>>([new("items", "250 items", "array", 20) { IndexedVariables = 250, NamedVariables = 0 }]);
+        view.Variables.Rows(session, 1, Locals, Values);
+        await view.Apply();
+        var root = Assert.Single(view.Variables.Rows(session, 1, Locals, Values));
+        Assert.IsType<SideTag>(root.Tag).Expanding!(root);
+        async Task Page(int start, int count, bool error = false)
+        {
+            var request = await Task.Run(() =>
+            {
+                var header = new System.Text.StringBuilder();
+                while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal)) header.Append((char)adapterIn.ReadByte());
+                int length = int.Parse(header.ToString().Split('\r')[0][15..]);
+                byte[] bytes = new byte[length]; adapterIn.ReadExactly(bytes);
+                return System.Text.Json.Nodes.JsonNode.Parse(bytes)!.AsObject();
+            }).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("variables", request["command"]!.GetValue<string>());
+            Assert.Equal(start, request["arguments"]!["start"]!.GetValue<int>());
+            Assert.Equal(100, request["arguments"]!["count"]!.GetValue<int>());
+            Assert.Equal("indexed", request["arguments"]!["filter"]!.GetValue<string>());
+            var values = new System.Text.Json.Nodes.JsonArray();
+            for (int n = start; n < start + count; n++) values.Add(new System.Text.Json.Nodes.JsonObject { ["name"] = n.ToString(), ["value"] = n.ToString(), ["variablesReference"] = 0 });
+            var response = new System.Text.Json.Nodes.JsonObject { ["seq"] = 1, ["type"] = "response", ["request_seq"] = request["seq"]!.GetValue<int>(), ["command"] = "variables", ["success"] = !error, ["message"] = "paging failed",
+                ["body"] = new System.Text.Json.Nodes.JsonObject { ["variables"] = values } };
+            byte[] body = System.Text.Encoding.UTF8.GetBytes(response.ToJsonString());
+            incoming.Write(System.Text.Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n")); incoming.Write(body); incoming.Flush();
+            await view.Apply();
+        }
+        await Page(0, 100);
+        Assert.Equal(101, root.Children!.Count);
+        var more = Assert.IsType<SideTag>(root.Children[^1].Tag);
+        more.Pressed!(); await Page(100, 0, error: true);
+        Assert.Equal(102, root.Children.Count);
+        Assert.Contains(root.Children, row => row.Text.Contains("paging failed"));
+        Assert.Equal("debugging.retry_variables", root.Children[^1].Text);
+        Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(100, 100);
+        Assert.Equal(201, root.Children.Count);
+        Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(200, 50);
+        Assert.Equal(250, root.Children.Count);
+        Assert.Equal("249 = 249", root.Children[^1].Text);
+        int refreshed = view.RowRefreshes;
+        view.Variables.Reset();
+        more.Pressed!();
+        Assert.Equal(refreshed, view.RowRefreshes);
+    }
+
+    [Fact]
+    public async Task ChildRowsKeepNativeExpressionsSeparateFromDisplayNames()
+    {
+        var view = new View();
+        object session = new();
+        Task<IReadOnlyList<DebugVariable>> Values(int reference) => Task.FromResult<IReadOnlyList<DebugVariable>>(
+            reference == 10 ? [new("items", "[42]", "list", 20) { EvaluateName = "items" }]
+                : [new("0", "42", "int", 0) { EvaluateName = "items[0]" }]);
+        view.Variables.Rows(session, 10, Locals, Values);
+        await view.Apply();
+        var root = Assert.Single(view.Variables.Rows(session, 10, Locals, Values));
+        var tag = Assert.IsType<SideTag>(root.Tag);
+        Assert.Equal("items", tag.DebugExpression);
+        tag.Expanding!(root);
+        await view.Apply();
+        var child = Assert.Single(root.Children!);
+        Assert.Equal("0 = 42", child.Text);
+        Assert.Equal("items[0]", Assert.IsType<SideTag>(child.Tag).DebugExpression);
+    }
+
     private sealed class View
     {
         private readonly Channel<Action> work = Channel.CreateUnbounded<Action>();
@@ -25,6 +146,59 @@ public sealed class HexDebugVariablesTests
     private static Task<IReadOnlyList<DebugScope>> Locals(int frame) => Task.FromResult<IReadOnlyList<DebugScope>>([new("Locals", frame)]);
     private static Task<IReadOnlyList<DebugVariable>> Value(string value) => Task.FromResult<IReadOnlyList<DebugVariable>>([new("answer", value, "int", 0)]);
     private static TaskCompletionSource<IReadOnlyList<DebugScope>> PendingScopes() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    [Fact]
+    public async Task ReadOnlyParentStillExpandsAndAllowsEditingMutableChildren()
+    {
+        var view = new View();
+        object session = new();
+        var edited = new List<string>();
+        void Edit(int parent, DebugVariable variable) => edited.Add(variable.Name);
+        Task<IReadOnlyList<DebugVariable>> Values(int reference) => Task.FromResult<IReadOnlyList<DebugVariable>>(
+            reference == 10 ? [new("box", "{}", "Box", 20) { ReadOnly = true }]
+                : [new("constant", "42", "int", 0) { ReadOnly = true }, new("mutable", "1", "int", 0)]);
+        view.Variables.Rows(session, 10, Locals, Values, Edit);
+        await view.Apply();
+        var row = Assert.Single(view.Variables.Rows(session, 10, Locals, Values, Edit));
+        Assert.Contains("debugging.read_only", row.Detail);
+        var tag = Assert.IsType<SideTag>(row.Tag);
+        Assert.Null(tag.Menu);
+        tag.Expanding!(row);
+        await view.Apply();
+        Assert.Null((row.Children![0].Tag as SideTag)?.Menu);
+        Assert.IsType<SideTag>(row.Children[1].Tag).Menu!(default);
+        Assert.Equal(["mutable"], edited);
+    }
+
+    [Fact]
+    public async Task EditableChildrenKeepTheirOwningReferenceAndRetiredRowsCannotEdit()
+    {
+        var view = new View();
+        object session = new();
+        var edits = new List<(int Parent, string Name)>();
+        void Edit(int parent, DebugVariable variable) => edits.Add((parent, variable.Name));
+        Task<IReadOnlyList<DebugVariable>> Values(int reference) => Task.FromResult<IReadOnlyList<DebugVariable>>(
+            reference == 10 ? [new("box", "{}", "Box", 20)] : [new("answer", "42", "int", 0)]);
+        view.Variables.Rows(session, 10, Locals, Values, Edit);
+        await view.Apply();
+        var row = Assert.Single(view.Variables.Rows(session, 10, Locals, Values, Edit));
+        var tag = Assert.IsType<SideTag>(row.Tag);
+        tag.Menu!(default);
+        tag.Expanding!(row);
+        await view.Apply();
+        var child = Assert.Single(row.Children!);
+        var childTag = Assert.IsType<SideTag>(child.Tag);
+        childTag.Menu!(default);
+        Assert.Equal([(10, "box"), (20, "answer")], edits);
+        view.Variables.Reset();
+        tag.Menu(default);
+        childTag.Menu(default);
+        Assert.Equal(2, edits.Count);
+        view.Variables.Rows(session, 10, Locals, Values);
+        await view.Apply();
+        var readOnly = Assert.Single(view.Variables.Rows(session, 10, Locals, Values));
+        Assert.Null(Assert.IsType<SideTag>(readOnly.Tag).Menu);
+    }
 
     [Theory]
     [InlineData(false)]
@@ -76,6 +250,22 @@ public sealed class HexDebugVariablesTests
         ((SideTag)oldWatch.Tag!).Expanding!(oldWatch);
         Assert.Null(oldWatch.Children);
         Assert.Equal(0, requests);
+    }
+
+    [Fact]
+    public async Task EvaluatedValueMetadataRetainsReadOnlyStateAndRetiresWithItsFrame()
+    {
+        var view = new View();
+        object session = new();
+        view.Variables.Rows(session, 10, Locals, _ => Value("current"));
+        await view.Apply();
+        var value = new DebugVariable("answer", "42", "int", 0) { ReadOnly = true };
+        UITreeItem row = view.Variables.Items(session, _ => Value("unused"))(value);
+        var tag = Assert.IsType<SideTag>(row.Tag);
+        Assert.Equal(value, tag.DebugValue);
+        Assert.True(tag.DebugCurrent!());
+        view.Variables.Reset();
+        Assert.False(tag.DebugCurrent());
     }
 
     [Fact]

@@ -79,8 +79,13 @@ internal sealed partial class DawnScene
             return;
 
         picture.Density = density;
-        QueueNotebookRender(data, () => render(density), picture, density);
+        QueueDenseNotebookRender(data, render, picture, density);
     }
+
+    // Keep the capturing closure out of the idle density check: the compiler allocates
+    // a closure at method entry even when that method returns before the lambda.
+    private void QueueDenseNotebookRender(JsonNode data, Func<float, NotebookPixels> render, NotebookPicture picture, float density) =>
+        QueueNotebookRender(data, () => render(density), picture, density);
 
     private void QueueNotebookRender(JsonNode data, Func<NotebookPixels> render, NotebookPicture picture, float density)
     {

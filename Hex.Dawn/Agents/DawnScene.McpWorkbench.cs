@@ -383,7 +383,7 @@ internal sealed partial class DawnScene
             return McpToolResult.Error("Say which suites, \"list\" lists them.");
 
         bool list = suites is ["list"];
-        var start = new ProcessStartInfo(System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"))
+        var start = new ProcessStartInfo(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))
         {
             UseShellExecute = false,
             CreateNoWindow = true,

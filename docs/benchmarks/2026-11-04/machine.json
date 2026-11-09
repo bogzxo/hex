@@ -1,0 +1,29 @@
+{
+    "DateUtc":  "2026-11-04T18:12:27.3523095Z",
+    "SamplesPerMode":  10,
+    "DiscardedWarmupsPerMode":  1,
+    "SettleSeconds":  5,
+    "IdleSeconds":  5,
+    "Cpu":  {
+                "Name":  "AMD Ryzen 5 5600X 6-Core Processor             ",
+                "NumberOfCores":  6,
+                "NumberOfLogicalProcessors":  12
+            },
+    "Os":  {
+               "Caption":  "Microsoft Windows 11 Pro",
+               "Version":  "10.0.26300",
+               "BuildNumber":  "26300"
+           },
+    "RamBytes":  34269315072,
+    "Gpu":  {
+                "Name":  "NVIDIA GeForce RTX 3060",
+                "DriverVersion":  "32.0.16.2101"
+            },
+    "BinarySha256":  "E66A1C0CB7CEE5C287E724515FF83CD2CF5CABDBDCB80FE00BCF03EEA4488445",
+    "HexHead":  "e825f671b52afca52da08aaf8162ba8fe9bbf5ae",
+    "LocalChangesIncluded":  true,
+    "Workspace":  "Hex repository; DawnScene.cs open in Dawn; one default shell in Dusk",
+    "Window":  "1600x900 requested; default display scaling",
+    "Profile":  "FolderProfile: Release, win-x64, NativeAOT, self-contained",
+    "Scope":  "Hex process only; language servers, shells and other child processes are excluded from CPU/memory"
+}

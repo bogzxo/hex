@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 using Horizon.HIDL.Runtime;
 using Horizon.UI;
@@ -133,6 +133,8 @@ internal sealed partial class DawnScene
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
+        ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),
+        ("lossless", "every .hor of the engine's Assets and Hex's own saved unchanged byte for byte, a hand written layout edited in place", TestLossless),
         ("layout", "the designer, adding, selecting, editing, undo, the canvas, saving and opening, tabs", test =>
         {
             TestEditorItself(test);
@@ -194,6 +196,7 @@ internal sealed partial class DawnScene
             TestCompletion(test);
             TestParity(test);
         }),
+        ("reload-integrity", "failed layout reloads preserve the open document", TestReloadIntegrity),
         ("workspace", "folders, the explorer, copying, moving and renaming files in it, closing tabs, the help windows, the conveniences, files changed on the disk", test =>
         {
             // The explorer is the side bar of a file of code, which the code's part leaves on screen
@@ -224,6 +227,7 @@ internal sealed partial class DawnScene
             TestTerminalScroll(test);
             TestDuskFiles(test);
         }),
+        ("pty", "the shell under the terminal itself, started in its folder, a line in and out, a new size heard and exit ending it with its code", TestPty),
         ("lens", "reference counts over the declarations of a HIDL file and of C# through csharp-ls when it's on this machine, a press listing where each is used and a pick going there", test =>
         {
             TestCodeLens(test);
@@ -232,7 +236,95 @@ internal sealed partial class DawnScene
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("middle-scroll", "middle-click autoscroll and hold-to-scroll without moving the caret", TestMiddleScroll),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
+        ("server-startup", "Language server initialization failure recovery", TestServerStartup),
         ("pyright", "the globally installed Python server, diagnostics, completion and hover", TestPyright),
+        ("python-stubs", "Python stub diagnostics, hover and consumer type checking", TestPythonStubs),
+        ("python-rename", "Python semantic rename across unopened files and unsaved buffers", TestPythonRename),
+        ("completion-imports", "Native completion imports, undo and stale edit protection", TestCompletionImports),
+        ("completion-imports-boundary", "Native completion imports at the start of the replaced symbol", test => TestCompletionImports(test, firstColumn: true)),
+        ("cpp-include-completion", "C++ header completion through native compilation and debugging", TestCppIncludes),
+        ("completion-documentation", "Native C# completion signatures and XML documentation", TestCompletionDocumentation),
+        ("completion-triggers", "Native C++ scope and Python dictionary completion from typed punctuation", test => { TestCompletionTriggers(test, "cpp"); TestCompletionTriggers(test, "python"); }),
+        ("header-path-completion", "Native C++ include paths with punctuation, subdirectories and undo", TestHeaderPathCompletion),
+        ("using-quick-fix", "Native C# using quick fix preserves unsaved work and breakpoints", TestUsingQuickFix),
+        ("range-formatting", "Native selection formatting preserves surrounding code, typing and undo", TestRangeFormatting),
+        ("on-type-formatting", "Native C#/C++ typing formats, indentation, undo and stale response safety", test => { TestOnTypeFormatting(test, "csharp"); TestOnTypeFormatting(test, "cpp"); TestOnTypeFormatting(test, "python"); TestOnTypeFormattingSettings(test); }),
+        ("type-hierarchy", "Native C++ base and derived type trees and declaration navigation", TestTypeHierarchy),
+        ("native-inlays", "Native C++ hints appear after server startup without typing", TestNativeInlays),
+        ("native-signatures", "Native C++ active parameters follow the caret", TestNativeSignatures),
+        ("signature-documentation", "Native C#/Python/C++ method and parameter documentation in signature help", test => { TestSignatureDocumentation(test, "csharp"); TestSignatureDocumentation(test, "python"); TestSignatureDocumentation(test, "cpp"); }),
+        ("python-signatures", "Native Python active parameters follow the caret", test => TestNativeSignatures(test, "python")),
+        ("csharp-signatures", "Native C# active parameters follow the caret", test => TestNativeSignatures(test, "csharp")),
+        ("quoted-signatures", "Quoted commas preserve signature arguments in C#, Python and C++", test =>
+        {
+            TestNativeSignatures(test, "csharp", true);
+            TestNativeSignatures(test, "python", true);
+            TestNativeSignatures(test, "cpp", true);
+        }),
+        ("hidl-inlays", "HIDL parameter hints, caret layout and editing", TestInlays),
+        ("call-hierarchy", "Native C++ callers, callees and source navigation", TestCallHierarchy),
+        ("frame-values", "Pinned values follow the selected native call-stack frame", TestFrameValues),
+        ("python-data-tips", "Native Python compound data tips and pinned refresh", test => TestNativeDataTips(test, "python")),
+        ("python-list-tips", "Native Python list item watch expressions", test => TestNativeDataTips(test, "python", true)),
+        ("cpp-data-tips", "Native C++ compound data tips and pinned refresh", test => TestNativeDataTips(test, "cpp")),
+        ("csharp-data-tips", "Native C# compound data tips and pinned refresh", test => TestNativeDataTips(test, "csharp")),
+        ("csharp-exceptions", "Native C# thrown-exception filters, continuation and saved selection", test => TestExceptionBreakpoints(test, false)),
+        ("python-exceptions", "Native Python raised-exception filters, continuation and saved selection", test => TestExceptionBreakpoints(test, true)),
+        ("python-threads", "Python thread selection, stacks, locals and stepping", test => TestDebugThreads(test, "python")),
+        ("cpp-threads", "C++ thread selection, stacks, locals and stepping", test => TestDebugThreads(test, "cpp")),
+        ("debug-threads", "Native thread selection, stacks, locals and stepping", TestDebugThreads),
+        ("csharp-run-to", "Temporary Run to Cursor breakpoint lifecycle", test => TestRunToCursor(test, "csharp")),
+        ("python-run-to", "Python Run to Cursor", test => TestRunToCursor(test, "python")),
+        ("set-next-statement", "Native execution jumps, skipped statements, errors and capability gating", test => { TestSetNextStatement(test, "python"); TestSetNextStatement(test, "csharp"); TestSetNextStatement(test, "cpp"); }),
+        ("debug-completion", "Native paused-frame expression completion, acceptance, undo and stale prompts", test => { TestDebugCompletion(test, "python"); TestDebugCompletion(test, "cpp"); TestDebugCompletion(test, "csharp"); }),
+        ("data-breakpoints", "Native write watchpoints, value-change stops, controls and session lifetime", test => { TestDataBreakpoints(test, "cpp"); TestDataBreakpoints(test, "python"); TestDataBreakpoints(test, "csharp"); }),
+        ("cpp-run-to", "C++ Run to Cursor", test => TestRunToCursor(test, "cpp")),
+        ("csharp-edit-variable", "Native local variable editing and stale prompt rejection", test => TestEditVariable(test, "csharp")),
+        ("python-edit-variable", "Native Python local variable editing", test => TestEditVariable(test, "python")),
+        ("cpp-edit-variable", "Native C++ local variable editing", test => TestEditVariable(test, "cpp")),
+        ("cpp-exceptions", "Native C++ thrown-exception filters, continuation and saved selection", test => TestExceptionBreakpoints(test, false, true)),
+        ("completion-documentation-race", "Completion documentation selection races and failure recovery", TestCompletionDocumentationRace),
+        ("clangd-midword", "C++ completion replaces the suffix after the caret", test => TestClangd(test, ".cpp", ".h", midWord: true)),
+        ("missing-sdk", "C# SDK resolution failure reaches Problems and opens global.json", TestMissingSdk),
+        ("nuget-restore", "Offline NuGet failure navigation and recovery into C# debugging", TestNuGetRestore),
+        ("python-environment", "Pyright resolves packages from the project virtual environment", TestPythonEnvironment),
+        ("cpp-pause", "C++ menu and toolbar pause with native LLDB", test => TestDebugPause(test, "cpp")),
+        ("python-pause", "Python menu and toolbar pause with native debugpy", test => TestDebugPause(test, "python")),
+        ("debug-workspace-switch", "Active C# debugging ends when another workspace opens", test => TestDebugPause(test, "csharp", switchWorkspace: true)),
+        ("dotnet-project-terminal", "Owning project terminal and native SDK completion", TestDotnetProjectTerminal),
+        ("variable-pages", "Native debugger collection paging", TestVariablePages),
+        ("watch-object", "Native C# compound Watch context menu, expansion, editing and persistence", TestWatchObject),
+        ("watch-value", "Native C#/Python Watch value assignments and unsupported C++ capability gating", test => { TestWatchValue(test, "csharp"); TestWatchValue(test, "python"); TestWatchValue(test, "cpp"); }),
+        ("function-breakpoints", "Native C#/Python/C++ named function breakpoints, source coexistence and enable/remove lifecycle", test => { TestFunctionBreakpoints(test, "csharp"); TestFunctionBreakpoints(test, "python"); TestFunctionBreakpoints(test, "cpp"); }),
+        ("function-breakpoint-persistence", "Isolated source/function breakpoint persistence and workspace switching", TestFunctionBreakpointPersistence),
+        ("native-folding", "Native C#/C++ folding and Python symbol folds, rendering, edits and undo", test => { TestNativeFolding(test, "csharp"); TestNativeFolding(test, "python"); TestNativeFolding(test, "cpp"); }),
+        ("watch-persistence", "Workspace watch persistence and isolation", TestWatchPersistence),
+        ("debug-pause", "C# menu pause, call stack, continue and toolbar pause", TestDebugPause),
+        ("debug-attach", "Native .NET process selection, attachment, breakpoints, stepping and safe detach", TestDebugAttach),
+        ("debug-modules", "Native loaded modules, symbols, library loads, refresh/filter and session isolation", test => { TestDebugModules(test, "csharp"); TestDebugModules(test, "cpp"); TestDebugModules(test, "python"); }),
+        ("debug-sources", "Native generated-source retrieval, read-only navigation, stepping and session ownership", TestDebuggerSources),
+        ("disassembly", "Native disassembly, instruction stepping and frames without source", test => { TestDisassembly(test, "cpp"); TestDisassembly(test, "csharp"); TestDisassembly(test, "python"); }),
+        ("debug-memory", "Native memory references, hexadecimal/ASCII views, paging and stale-context protection", test => { TestMemoryView(test, "cpp"); TestMemoryView(test, "csharp"); TestMemoryView(test, "python"); }),
+        ("instruction-breakpoints", "Native instruction breakpoints from F9 and the disassembly gutter", TestInstructionBreakpoints),
+        ("launch-profile-environment", "Project URL editing and C# F5 environment parity with the native SDK", test => { TestLaunchProfileEnvironment(test); TestAspNetLaunchProfile(test); }),
+        ("dotnet-task-environment", "Native dotnet run environment options and launch-profile precedence under debugging", TestDotnetRunEnvironment),
+        ("dotnet-target-frameworks", "Native multi-target framework build, task debugging, selection and restart", TestDotnetTargetFrameworks),
+        ("dotnet-runtime-options", "Native task runtime/architecture/OS selection and self-contained debugger launch", TestDotnetRuntimeOptions),
+        ("organize-imports", "Native import organization with safe edits and undo", TestOrganizeImports),
+        ("diagnostic-locations", "Native diagnostic related-source navigation", TestDiagnosticLocations),
+        ("diagnostic-documentation", "Native diagnostic documentation at the caret", TestDiagnosticDocumentation),
+        ("header-source", "Native clangd header/source navigation", TestHeaderSource),
+        ("framework-navigation", "Read-only C# framework source and native navigation within metadata", TestFrameworkNavigation),
+        ("definition-results", "Native multiple definitions, mixed source destinations and guarded selection", test => { TestDefinitionResults(test); TestUnionDefinitionResults(test); }),
+        ("hover-races", "Delayed hover responses cannot overwrite current help", test => languages.TestHoverRaces(test, Path.Combine(testFolder, "hover races"))),
+        ("signature-races", "Delayed signature responses cannot block or overwrite newer requests", test => languages.TestSignatureRaces(test, Path.Combine(testFolder, "signature races"))),
+        ("native-highlights", "Native C++, Python and C# symbol occurrence scopes and access kinds", test => { TestNativeHighlights(test, "cpp"); TestNativeHighlights(test, "python"); TestNativeHighlights(test, "csharp"); }),
+        ("type-definition", "Go to a variable's type through native C++, Python and C# language servers", test => { TestTypeDefinition(test, "cpp"); TestTypeDefinition(test, "python"); TestTypeDefinition(test, "csharp"); }),
+        ("selection-ranges", "Expand and shrink syntax selections through native language servers", test => { TestSelectionRanges(test, "cpp"); TestSelectionRanges(test, "python"); TestSelectionRanges(test, "csharp"); }),
+        ("navigation-races", "Delayed navigation respects caret, edits, workspace and newer requests", test => languages.TestNavigationRaces(test, Path.Combine(testFolder, "navigation races"))),
+        ("python-create-environment", "Create and select a native virtual environment with pip", TestCreatePythonEnvironment),
+        ("python-terminal", "Python terminal resolves python and pip from the workspace environment", TestPythonTerminal),
+        ("python-test-environments", "Python interpreter changes refresh native discovery and retire obsolete results", test => testExplorer.TestPythonEnvironments(test, Path.Combine(testFolder, "python test environments"), explorer.OpenFolder, languages.UsePythonInterpreter)),
         ("npminstall", "a real offline npm install through the language-server Install action", TestNpmInstall),
         ("languages", "the languages the code is coloured in, VS Code's grammars and HIDL's own, on their own in a few seconds", test =>
         {
@@ -259,10 +351,51 @@ internal sealed partial class DawnScene
         ("menus", "every menu twenty rows at most and no two rules in a row, every list a menu opens inside the window, a menu taller than the window scrolling", TestMenus),
         ("effects", "the effects, the caret gliding, a burst on a save and sparks off the caret as it types", TestEffects),
         ("debug", "C# debugged, a breakpoint, F5 to it, the stack and the variables, a step and on to the end", TestDebug),
+        ("breakpoint-history", "Breakpoint positions and settings follow paste, deletion, undo and redo", TestBreakpointHistory),
+        ("debug-cancel", "Stop cancels a real delayed build without a later launch, then debugging can restart", TestDebugCancel),
+        ("python-debug", "Python gutter, F5, locals, stepping, restart and stop with real debugpy", TestPythonDebug),
+        ("native-debug", "C++ compilation, breakpoint, locals, stepping and stop with LLVM", TestNativeDebug),
+        ("cmake-debug", "CMake multi-file project compilation, library breakpoint, locals and stepping", TestCMakeDebug),
+        ("cmake-preset-debug", "CMake preset selection preserves configuration and binary directory when debugging", test => TestCMakeDebug(test, true)),
+        ("cmake-configurations", "CMake multi-configuration target selection, build and remembered debugging", test => TestCMakeDebug(test, true, true)),
+        ("cmake-library-configurations", "Library-only configuration selection updates clangd and Test Explorer", test => TestCMakeConfigure(test, true)),
+        ("cmake-configure", "Configure a library-only CMake project and refresh clangd without debugging", TestCMakeConfigure),
+        ("cmake-switch-preset", "Switch native CMake presets and update compilation and build directories", TestCMakeSwitchPreset),
+        ("clangd-services", "CMake-backed C++ definitions, references, completion and hover", TestClangd),
+        ("clangd-extensions", "C++ services for cxx sources and hxx headers", test => TestClangd(test, ".cxx", ".hxx")),
+        ("cmake-problems", "CMake configure error navigation and successful reconfigure recovery", TestCMakeProblems),
+        ("ctest", "CTest discovery, native build/run, debug results and build diagnostics", test =>
+        {
+            string root = Path.Combine(testFolder, "ctest");
+            testExplorer.TestCTestExplorer(test, root, explorer.OpenFolder);
+            TestCTestBuildProblems(test, root);
+        }),
+        ("dotnet-terminal", "Native SDK and NuGet autocomplete in the terminal, including project frameworks", TestDotnetTerminal),
+        ("python-tests", "Python unittest discovery, execution, results and navigation", test => testExplorer.TestPythonExplorer(test, Path.Combine(testFolder, "python-tests"), explorer.OpenFolder)),
+        ("pytest", "Native pytest discovery, parameter selection, results and debugging", test => testExplorer.TestPytestExplorer(test, Path.Combine(testFolder, "pytest"), explorer.OpenFolder)),
+        ("python-tests-nested", "Nested unittest package discovery, selected execution, navigation and debugging", test => testExplorer.TestPythonExplorer(test, Path.Combine(testFolder, "python-tests-nested"), explorer.OpenFolder, nested: true)),
+        ("repository", "read-only solution explorer qualification against HEX_TEST_SOLUTION", TestRepository),
+        ("test-explorer-toggle", "Test Explorer activity button opens, closes and reopens", TestTestExplorerToggle),
+        ("language-edit-races", "Late language edits cannot overwrite typing or another workspace", test => languages.TestEditRaces(test, Path.Combine(testFolder, "edit-races"))),
+        ("test-configuration", "Test Explorer runs the selected build configuration", test => testExplorer.TestConfiguration(test, Path.Combine(testFolder, "test-configuration"), ChooseConfiguration)),
+        ("test-parallel-frameworks", "Overlapping native framework hosts, isolated outputs, SDK opt-out and cancellation", test => testExplorer.TestParallelFrameworks(test, Path.Combine(testFolder, "parallel-frameworks"), (root, file) => { explorer.OpenFolder(root); Open(file); }, explorer.OpenFolder)),
+        ("test-target-frameworks", "Native multi-target test results, targeted reruns and sequential debug hosts", test =>
+        {
+            void OpenTests(string root, string file) { explorer.OpenFolder(root); Open(file); }
+            testExplorer.TestTargetFrameworks(test, Path.Combine(testFolder, "test-target-frameworks"), OpenTests);
+            testExplorer.TestSingleTargetFrameworkRetry(test, Path.Combine(testFolder, "single-target-retry"), OpenTests);
+        }),
+        ("test-workspace", "Test Explorer replaces discovery and ignores old results when the workspace changes", test => testExplorer.TestWorkspaceSwitch(test, Path.Combine(testFolder, "test-workspaces"), explorer.OpenFolder)),
         ("git", "git in a repository made for it, what changed coloured in the explorer and the tabs, and taken off again by a commit", TestGit),
         ("conflicts", "a real merge conflict settled by a click on its lens and staged from the card, the Accept commands greyed out without one, the words a diff changed and a diff that says nothing is wrong", TestConflicts),
         ("recent", "the commands and files picked last over the rest, a closed file brought back, a save tidying, saving by itself, the glass sliders", TestRecentAndTidy),
         ("scratchpads", "a scratchpad in a language, closed without a question, the empty ones gone, the list by first lines and one moved into the workspace", TestScratchpads),
+        ("test-debug-cancel", "test debug Restart/Stop owns cancellation, attachment and results per attempt", TestTestDebugCancel),
+        ("rename-safety", "real C# semantic rename rejects framework members without text fallback and preserves valid references", TestRenameSafety),
+        ("modal-shortcuts", "dialogs own keyboard input without leaking application shortcuts or chords", TestModalShortcuts),
+        ("save-evaluation", "atomic editor saves preserve evaluated project membership; real additions and removals refresh it", TestSaveEvaluation),
+        ("project-references", "reference picker and edits preserve MSBuild path expressions and verify outcomes", TestProjectReferences),
+        ("solution-switch", "solution switching rebinds open documents without losing unsaved text", TestSolutionSwitch),
         ("semantic", "semantic highlighting, HIDL's names by what they are, C# through csharp-ls in ReSharper's colours when it's on this machine", test =>
         {
             TestSemanticHidl(test);
@@ -275,6 +408,14 @@ internal sealed partial class DawnScene
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
         ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
         ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
+        ("code-surface", "code rendering, compact find and pinned-scope visibility", TestSurface),
+        ("zoom-persistence", "debounced zoom settings and lifecycle flush", TestZoomPersistence),
+        ("document-retention", "twenty document open/close retention cycles", TestDocumentRetention),
+        ("source-retention", "C#/Python/C++ open/edit/close collection with breakpoint and undo histories", TestSourceDocumentRetention),
+        ("document-memory", "thirty-minute edit/save/close session under the normal GC policy; measurements require review", TestDocumentMemory),
+        ("notebook-wrap", "backdrop wrapping during notebook scrolling", TestNotebookWrap),
+        ("notebook-zoom", "centred notebook zoom and viewport resize", TestNotebookZoom),
+        ("notebookhtml", "a notebook exported as HTML from the palette through the save dialog, unsaved edits in it, the notebook left unsaved, SVG kept vector", TestNotebookHtml),
         ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
@@ -310,7 +451,7 @@ internal sealed partial class DawnScene
     private bool AskedSuites(out HashSet<string> asked)
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named.
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts")).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository")).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

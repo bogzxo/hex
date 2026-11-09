@@ -253,7 +253,7 @@ internal sealed partial class HexDesigner
             return;
 
         var keyboard = context.Keyboard;
-        bool far = keyboard.IsDown(Silk.NET.Input.Key.ShiftLeft) || keyboard.IsDown(Silk.NET.Input.Key.ShiftRight);
+        bool far = keyboard.IsDown(Horizon.Input.Key.ShiftLeft) || keyboard.IsDown(Horizon.Input.Key.ShiftRight);
 
         foreach (var selected in moving)
             selected.Position += new Vector2(x, y) * (far ? BIG_NUDGE : 1.0f);

@@ -6,7 +6,7 @@
     and keeps its own version, hence going by the project's name.
   -->
   <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
-    <Version>2.8.2</Version>
+    <Version>2.9.0</Version>
     <!-- What this release is called, said after the number wherever a person reads it (2.8.0 thickboy), empty for none -->
     <VersionName>thickboy</VersionName>
   </PropertyGroup>

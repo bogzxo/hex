@@ -1,6 +1,6 @@
 using Hex.Core.Notebooks;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -72,6 +72,8 @@ internal sealed partial class DawnScene
 
         Add("Notebook/clear", "notebook.clear_outputs", notebook => ClearOutputs(notebook, [notebook.Cell!]), icon: "clear-all", can: Picked);
         Add("Notebook/clear", "notebook.clear_all", notebook => ClearOutputs(notebook, notebook.Model.Cells), icon: "clear-all");
+
+        Add("Notebook/export", "notebook.export_html", ExportNotebookHtml, icon: "file-code");
 
         Add("Notebook/kernel/kernel:run", "notebook.interrupt", InterruptKernel, "I I", "debug-pause", can: notebook => notebook.Kernel is not null);
         Add("Notebook/kernel/kernel:run", "notebook.restart", notebook => RestartKernel(notebook), "0 0", "debug-restart");

@@ -1,4 +1,4 @@
-namespace Hex.Dawn;
+﻿namespace Hex.Dawn;
 
 // Reference counts over declarations, Visual Studio's code lens, "3 references" over a method and "2 references | 2
 // references" over a line that declares two things. HIDL's are worked out here from the file itself (HidlSemantics's
@@ -42,7 +42,8 @@ internal sealed partial class DawnScene
     /// <summary>The counts of one file, what text they're of, and what's still out being asked.</summary>
     private sealed class LensFile
     {
-        public int Version = -1, Generation, InFlight, Missing, Refreshes;
+        public int Version = -1, Generation, InFlight, Missing;
+        public HexLanguages.LensRefreshState Refreshes;
         public long RetryAt;
         public bool Asking, Dirty, Server;
         public List<LensDeclaration> Declarations = [];
@@ -68,7 +69,7 @@ internal sealed partial class DawnScene
         if (file.Dirty && file.Version == version)
             PushLenses(code, file);
 
-        bool refreshed = file.Server && file.Refreshes != languages.SemanticRefreshesOf(document);
+        bool refreshed = file.Server && file.Refreshes != languages.LensRefreshesOf(document);
         if (file.Version != version || refreshed)
         {
             long now = System.Environment.TickCount64;
@@ -113,11 +114,11 @@ internal sealed partial class DawnScene
     private void AskLensDeclarations(HexDocument of, CodeEditor editor, LensFile file, int version)
     {
         int generation = ++file.Generation;
-        int refreshes = languages.SemanticRefreshesOf(of);
+        var refreshes = languages.LensRefreshesOf(of);
         void Take(List<LensDeclaration> made, bool server)
         {
             file.Asking = false;
-            if (file.Generation == generation)
+            if (file.Generation == generation && (!server || refreshes == languages.LensRefreshesOf(of)))
                 TakeLensDeclarations(editor, file, version, refreshes, made, server);
         }
 
@@ -254,7 +255,7 @@ internal sealed partial class DawnScene
     /// What a file declares, in, the counts there were carried over to the same names meanwhile (by name and which one of
     /// that name it is), so they stay up while the new ones are asked for.
     /// </summary>
-    private void TakeLensDeclarations(CodeEditor editor, LensFile file, int version, int refreshes, List<LensDeclaration> made, bool server)
+    private void TakeLensDeclarations(CodeEditor editor, LensFile file, int version, HexLanguages.LensRefreshState refreshes, List<LensDeclaration> made, bool server)
     {
         // Typed into since, it's asked again once the typing stops
         if (editor.Document.Version != version)
@@ -321,6 +322,7 @@ internal sealed partial class DawnScene
     private void AskLensCount(HexDocument of, LensFile file, LensDeclaration declared)
     {
         int generation = file.Generation;
+        var refreshes = languages.LensRefreshesOf(of);
         declared.Asking = true;
         file.InFlight++;
 
@@ -328,7 +330,7 @@ internal sealed partial class DawnScene
         {
             file.InFlight--;
             declared.Asking = false;
-            if (file.Generation != generation || declared.Count != -1)
+            if (file.Generation != generation || declared.Count != -1 || refreshes != languages.LensRefreshesOf(of))
                 return;
 
             declared.Count = count;

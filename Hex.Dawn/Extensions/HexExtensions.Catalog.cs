@@ -51,10 +51,10 @@ internal sealed partial class HexExtensions
     internal IReadOnlyList<CatalogEntry> Catalog => catalog;
 
     /// <summary>Where the catalog is synced to, a folder of Hex's (the self test's own while it runs).</summary>
-    internal string CatalogFolder { get; set; } = Path.Combine(AppContext.BaseDirectory, "extension_catalog");
+    internal string CatalogFolder { get; set; } = Path.Combine(Hex.Core.HexHost.ProgramFolder, "extension_catalog");
 
     /// <summary>The extensions folder next to Hex, the one installs go into (the self test's own while it runs).</summary>
-    internal string OwnFolder { get; set; } = Path.Combine(AppContext.BaseDirectory, OWN_EXTENSIONS);
+    internal string OwnFolder { get; set; } = Path.Combine(Hex.Core.HexHost.ProgramFolder, OWN_EXTENSIONS);
 
     private HexSettings Kept => context.Settings.Values;
 

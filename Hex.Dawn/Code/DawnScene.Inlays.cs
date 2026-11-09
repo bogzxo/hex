@@ -15,6 +15,8 @@ internal sealed partial class DawnScene
     private int inlaysVersionSeen = -1;
     private long inlaysChangedAt;
     private bool inlaysWorking;
+    private (object? Server, int Refresh) inlaysSource;
+    private int inlaysGeneration;
 
     /// <summary>Every tick, the hints of the file on screen worked out again when its text changed and the typing stopped.</summary>
     private void UpdateInlays()
@@ -23,7 +25,8 @@ internal sealed partial class DawnScene
             return;
 
         int version = code.Document.Version;
-        if (inlaysFor == (document, version))
+        var source = languages.InlaySourceOf(document);
+        if (inlaysFor == (document, version) && inlaysSource == source)
             return;
 
         // A file just shown at once, a change once the typing stops for a moment
@@ -42,6 +45,7 @@ internal sealed partial class DawnScene
         }
 
         inlaysFor = (document, version);
+        inlaysSource = source;
         AskInlays(document, code, version);
     }
 
@@ -49,10 +53,13 @@ internal sealed partial class DawnScene
     // it's asked and not on every tick that has nothing to ask
     private void AskInlays(HexDocument of, CodeEditor editor, int version)
     {
+        int generation = inlaysGeneration;
+        var source = inlaysSource;
         void Take(IReadOnlyList<UICodeInlay> found)
         {
+            if (generation != inlaysGeneration) return;
             inlaysWorking = false;
-            if (settings.InlayHints && editor.Document.Version == version)
+            if (settings.InlayHints && editor.Document.Version == version && languages.InlaySourceOf(of) == source)
                 editor.InlayHints = found;
         }
 
@@ -69,6 +76,8 @@ internal sealed partial class DawnScene
     /// <summary>The hints let go of in every file, inlay hints turned off, or on again to be worked out afresh.</summary>
     private void ForgetInlays()
     {
+        inlaysGeneration++;
+        inlaysWorking = false;
         foreach (HexDocument open in documents)
             open.Editor.InlayHints = [];
         inlaysFor = (null, -1);

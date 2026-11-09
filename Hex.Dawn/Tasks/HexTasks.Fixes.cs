@@ -30,18 +30,35 @@ internal sealed partial class HexTasks
         return command[..at] + " -i" + command[at..];
     }
 
-    /// <summary>The task of the same file a task runs first, null when it names none or none of that name.</summary>
-    private HexTask? DependencyOf(HexTask task)
+    /// <summary>
+    /// The tasks of the same file a task runs first, the one it depends on, the one that one depends on and so on, in the
+    /// order they run. The run task depended on the build and the build on build_solution, and F5 only ever ran the build.
+    /// </summary>
+    internal List<HexTask> DependenciesOf(HexTask task)
     {
-        if (task.DependsOn.Length == 0 || task.DependsOn == task.Name || TasksFileIn(task.Root) is not { } file)
-            return null;
+        if (task.DependsOn.Length == 0 || TasksFileIn(task.Root) is not { } file)
+            return [];
 
-        return TasksOf(file, task.Root).FirstOrDefault(other => other.Name == task.DependsOn);
+        List<HexTask> tasks = TasksOf(file, task.Root);
+        return ChainOf(task, name => tasks.Find(other => other.Name == name));
     }
 
     /// <summary>
-    /// A task failed, what it wrote looked at for a fix its tasks.hor can take. The task or the one it depends on,
-    /// whichever compiles the D, gets -i on a card with a button that puts it in and runs the task again.
+    /// What a task depends on all the way down, the deepest first, by a lookup of the tasks by name. A name it has seen
+    /// already ends it there, so a loop of tasks that depend on each other runs each of them once and not for ever.
+    /// </summary>
+    internal static List<HexTask> ChainOf(HexTask task, Func<string, HexTask?> named)
+    {
+        var chain = new List<HexTask>();
+        var seen = new HashSet<string>(StringComparer.Ordinal) { task.Name };
+        for (HexTask at = task; at.DependsOn.Length > 0 && seen.Add(at.DependsOn) && named(at.DependsOn) is { } first; at = first)
+            chain.Insert(0, first);
+        return chain;
+    }
+
+    /// <summary>
+    /// A task failed, what it wrote looked at for a fix its tasks.hor can take. The task or the nearest it depends on
+    /// that compiles the D gets -i on a card with a button that puts it in and runs the task again.
     /// </summary>
     private void OfferFix(HexTask task, string said)
     {
@@ -49,7 +66,7 @@ internal sealed partial class HexTasks
             return;
 
         HexTask? compiles = WithImports(task.Command) is not null ? task
-            : DependencyOf(task) is { } first && WithImports(first.Command) is not null ? first : null;
+            : DependenciesOf(task).LastOrDefault(first => WithImports(first.Command) is not null);
         if (compiles is null || TasksFileIn(compiles.Root) is not { } file)
             return;
 

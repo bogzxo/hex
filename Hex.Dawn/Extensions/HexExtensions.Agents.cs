@@ -46,11 +46,11 @@ internal sealed partial class HexExtensions
         ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
         ("mcp_server", Natives.Function("mcp_server", _ => Natives.Object(
-            ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"))),
+            ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
             ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder })]))))),
         ("agents", Natives.Function("agents", _ => new ListValue([.. HexAgentProfiles.All.Select(profile => (IRuntimeValue)new StringValue(profile.Name))]))),
         ("workspace", Natives.Function("workspace", _ => new ListValue([.. context.Workspace.Folders.Select(folder => (IRuntimeValue)new StringValue(folder))]))),
-        ("executable", new StringValue(System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"))),
+        ("executable", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
         ("home", new StringValue(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile))),
         ("json_set", Natives.Function("json_set", args =>
         {

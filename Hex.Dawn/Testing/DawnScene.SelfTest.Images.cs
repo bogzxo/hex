@@ -11,7 +11,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
             before = File.ReadAllBytes(picture);
             Open(picture);
         });

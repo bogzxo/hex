@@ -40,6 +40,10 @@ internal sealed partial class HexExplorer
         if (!entry.IsFolder)
             shown.Add(context.Strings.Said("explorer_files.open"), () => context.Documents.Open(entry.Path), icon: "go-to-file");
 
+        // A folder of a project in the Solution view has Solution Explorer's Add first
+        if (entry.IsFolder)
+            AddMenuOf?.Invoke(shown, entry.Path);
+
         shown.Add(context.Strings.Said("explorer_files.new_file"), () => NewFileIn(folder), icon: "new-file");
         shown.Add(context.Strings.Said("explorer_files.new_folder"), () => NewFolderIn(folder), icon: "new-folder");
         shown.AddSeparator();
@@ -83,6 +87,9 @@ internal sealed partial class HexExplorer
 
         return shown;
     }
+
+    /// <summary>The Add menu a folder's row has in the Solution view put into its menu, the scene's.</summary>
+    internal Action<Menu, string>? AddMenuOf { get; set; }
 
     /// <summary>The Properties panel brought up for a row (and the rows selected with it), the scene's.</summary>
     internal Action<string>? PropertiesOf { get; set; }

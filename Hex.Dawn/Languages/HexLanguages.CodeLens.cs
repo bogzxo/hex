@@ -1,4 +1,4 @@
-namespace Hex.Dawn;
+﻿namespace Hex.Dawn;
 
 // The reference counts over the declarations of a file of another language, asked of its server. A server that does code
 // lenses (csharp-ls) says where they go for the whole file and works a count out only when that one's resolved. Any other
@@ -7,6 +7,10 @@ namespace Hex.Dawn;
 // whoever's counting what's still out never waits on one for good.
 internal sealed partial class HexLanguages
 {
+    internal readonly record struct LensRefreshState(LanguageServer? Server, int Semantics, int Lenses);
+    internal LensRefreshState LensRefreshesOf(HexDocument of) => linters.TryGetValue(of, out var server)
+        ? new(server, server.SemanticRefreshes, server.CodeLensRefreshes) : default;
+
     /// <summary>Whether a document's server says code lenses, which are then what its counts come from.</summary>
     internal bool DoesLenses(HexDocument of) => CanServe(of, "codeLensProvider");
 

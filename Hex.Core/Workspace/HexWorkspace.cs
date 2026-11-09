@@ -1,5 +1,6 @@
-
+﻿
 using Horizon.HIDL;
+using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;
 
 namespace Hex.Core;
@@ -51,6 +52,22 @@ internal sealed class HexWorkspace
 
     /// <summary>What F5 and the Run button run, picked beside the button, null for the file on screen.</summary>
     public HexRunTarget? RunTarget { get; set; }
+
+    /// <summary>Whether the explorer shows the solution rather than the folders, null for the solution when there's one only.</summary>
+    public bool? SolutionView { get; set; }
+
+    /// <summary>The solution the Solution view shows, a .sln or .slnx, null for the one at the top of the folders.</summary>
+    public string? Solution { get; set; }
+
+    /// <summary>What builds and runs build, Debug or Release (or what else the solution has).</summary>
+    public string Configuration { get; set; } = DEBUG;
+
+    /// <summary>The launch profile picked for each project that has one picked, by the project's file, what F5 and Ctrl+F5 start it with.</summary>
+    public Dictionary<string, string> LaunchProfiles { get; } = new(PlatformPaths.Comparer);
+
+    public List<string> Watches { get; } = [];
+
+    public const string DEBUG = "Debug";
 
     /// <summary>Adds a folder, unless it is in already. False for one that is.</summary>
     public bool Add(string folder)
@@ -110,6 +127,21 @@ internal sealed class HexWorkspace
         OpenFiles.AddRange(Paths(values, "open").Select(path => WorkspacePaths.Read(path, relativeTo)));
         Terminal = values.TryGetValue("terminal", out var terminal) && terminal is ObjectValue session ? session : null;
         RunTarget = HexRunTarget.From(values.GetValueOrDefault("run_target"), relativeTo);
+        SolutionView = values.GetValueOrDefault("solution_view") is BooleanValue view ? view.Value : null;
+        Solution = values.GetValueOrDefault("solution") is StringValue { Value.Length: > 0 } solution ? WorkspacePaths.Read(solution.Value, relativeTo) : null;
+        Configuration = values.GetValueOrDefault("configuration") is StringValue { Value.Length: > 0 } configuration ? configuration.Value : DEBUG;
+
+        Watches.Clear();
+        Watches.AddRange(Paths(values, "watches").Select(expression => expression.Trim()).Where(expression => expression.Length > 0).Distinct(StringComparer.Ordinal));
+        LaunchProfiles.Clear();
+        if (values.GetValueOrDefault("launch_profiles") is ListValue profiles)
+        {
+            foreach (IRuntimeValue item in profiles.Items)
+            {
+                if (item is ObjectValue { Properties: var said } && said.GetValueOrDefault("project") is StringValue { Value.Length: > 0 } project && said.GetValueOrDefault("profile") is StringValue { Value.Length: > 0 } profile)
+                    LaunchProfiles[WorkspacePaths.Read(project.Value, relativeTo)] = profile.Value;
+            }
+        }
     }
 
     private static IEnumerable<string> Paths(Dictionary<string, IRuntimeValue> values, string key)
@@ -139,10 +171,22 @@ internal sealed class HexWorkspace
             .Add("folders", Paths(Folders, relativeTo))
             .Add("expanded", Paths([.. Expanded.Order(StringComparer.OrdinalIgnoreCase)], relativeTo))
             .Add("open", Paths(OpenFiles, relativeTo));
+        if (Watches.Count > 0) workspace.Add("watches", new ListValue([.. Watches.Select(expression => (IRuntimeValue)new StringValue(expression))]));
         if (RunTarget is { } target)
             workspace.Add("run_target", target.Said(relativeTo));
         if (Terminal is { } session)
             workspace.Add("terminal", session);
+        if (SolutionView is { } view)
+            workspace.Add("solution_view", view);
+        if (Solution is { } solution)
+            workspace.Add("solution", WorkspacePaths.Write(solution, relativeTo));
+        if (Configuration != DEBUG)
+            workspace.Add("configuration", Configuration);
+        if (LaunchProfiles.Count > 0)
+        {
+            workspace.Add("launch_profiles", new ListValue([.. LaunchProfiles.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(pair => (IRuntimeValue)Natives.Object(("project", new StringValue(WorkspacePaths.Write(pair.Key, relativeTo))), ("profile", new StringValue(pair.Value))))]));
+        }
 
         return new HIDLDocument()
             .Comment("A workspace of Hex.Dawn, the folders it has open. Open it with File, Open workspace.")

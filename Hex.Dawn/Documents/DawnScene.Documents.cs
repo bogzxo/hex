@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
@@ -6,7 +6,7 @@ using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -102,10 +102,10 @@ internal sealed partial class DawnScene
     private const char NOTHING_SHOWN = '\u2400';
 
     /// <summary>
-    /// Opens a layout file in a tab of its own, and checks that writing it back out and reading that gives the
-    /// same layout again: if it doesn't, saving would change it.
+    /// Opens a file in a tab of its own, a layout in the designer with its code kept as it was written (see
+    /// HexDocument.Source), so saving it with nothing changed leaves the file as it was.
     /// </summary>
-    /// <returns>Whether it opened and writes back the same.</returns>
+    /// <returns>Whether it opened, a layout that doesn't build is open as its code and isn't.</returns>
     public bool Open(string path) => Open(path, left: null);
 
     /// <param name="left">
@@ -127,9 +127,12 @@ internal sealed partial class DawnScene
             return !explorer.workspace.IsEmpty;
         }
 
+        // A solution is its projects in the Solution view, the way Visual Studio opens one. Its text is on its row's menu
+        if (Hex.Core.Projects.DotnetSolutionTree.IsSolution(path))
+            return OpenSolution(path);
+
         // Somebody who opens the same file twice wants to see it, not have it twice
-        string full = Path.GetFullPath(path);
-        if (documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path) == full) is { } already)
+        if (OpenDocument(path) is { } already)
         {
             Show(already);
             Say(Said("documents.open_already", ("name", already.Name)));
@@ -183,37 +186,47 @@ internal sealed partial class DawnScene
         // languages loaded. They are next to the layouts, a localisation folder somewhere up the path
         UseLanguagesNear(path);
 
-        var (success, message) = target.Load(source, path);
+        // The code is always \n, the file's own line endings are put back as it's saved
+        target.CrLf = target.SavedCrLf = source.Contains("\r\n", StringComparison.Ordinal);
+        var (success, message) = target.Load(source.Replace("\r\n", "\n"), path);
         Show(target);
 
+        // A layout that doesn't build is opened as the code it is, to be put right there. It was an empty layout with no
+        // file, its code nothing of what was in the file
         if (!success)
         {
+            Console.WriteLine($"[Hex] '{path}' didn't build as a layout, opened as its code: {message}");
             target.Path = null;
-            Console.WriteLine($"[Hex] '{path}' didn't open: {message}");
-            Say(message, error: true);
+            stage.RemoveModule(target.Module);
+            documents.Remove(target);
+
+            // It's open, but not as the layout it says it is, which is what whoever asked (the checks) is told
+            OpenText(path, source);
+            if (!documents.Contains(document))
+                Show(documents.Count > 0 ? documents[^1] : NewDocument());
+            Say(Said("documents.layout_not_built", ("name", Path.GetFileName(path)), ("message", message)), error: true);
             return false;
         }
 
         Remember(path);
         extensions.Raise("on_open", new StringValue(Path.GetFullPath(path)));
         target.DiskText = source;
+        target.DiskEncoding = Hex.Core.DocumentFile.EncodingOf(path);
         target.SavedCode = target.GenerateCode();
         target.CodeEdited = false;
         SetCode(target, target.SavedCode, fresh: true);
 
-        bool faithful = CheckRoundTrip(target);
+        // Code Hex didn't write is kept as it is, what Hex can't write back (a func, a statement after a declaration) stays
+        // in it and the designer edits its changes into it, see HexDocument.Source
         int count = target.Walk().Count();
+        Console.WriteLine($"[Hex] Opened '{path}': {count} components, {target.PreviewCount} stand-in items, {(target.KeepsCode ? "its code kept as written" : "written by Hex")}.");
 
-        Console.WriteLine($"[Hex] Opened '{path}': {count} components, {target.PreviewCount} stand-in items, round trip {(faithful ? "ok" : "DIFFERS")}.");
-
-        if (!faithful)
-            Say(Said("documents.opened_differs", ("name", target.Name)), error: true);
-        else if (message.Length > 0)
+        if (message.Length > 0)
             Say(message, error: true);
         else
             Say(Said("documents.opened", ("name", target.Name), ("count", count.ToString())));
 
-        return faithful;
+        return true;
     }
 
     /// <summary>
@@ -290,7 +303,7 @@ internal sealed partial class DawnScene
     private void Save()
     {
         // A picture or a diff is looked at, there's nothing of Hex's in it to write
-        if (document.Picture is not null || document.DiffOf is not null)
+        if (document.Picture is not null || document.DiffOf is not null || document.Editor.ReadOnly)
             return;
 
         // A file of code that has had #define layout typed into it is a layout the next time it is opened, which it is
@@ -331,6 +344,7 @@ internal sealed partial class DawnScene
     private void SaveFormatted()
     {
         HexDocument saving = document;
+        if (saving.Editor.ReadOnly) return;
         if (!settings.FormatOnSave || !saving.IsText || saving.Path is null)
         {
             Save();
@@ -356,6 +370,7 @@ internal sealed partial class DawnScene
 
     private void SaveAs()
     {
+        if (document.Editor.ReadOnly) return;
         // A file of code keeps its own name and kind, a layout is a .hor. A D file was offered as app.hor and saved so
         HexDocument saved = document;
         string? kind = saved.IsText && saved.Path is { } own && Path.GetExtension(own) is { Length: > 0 } extension ? extension : null;
@@ -418,6 +433,7 @@ internal sealed partial class DawnScene
 
     private void SaveTo(string path)
     {
+        if (document.Editor.ReadOnly) return;
         // Saving the editor over itself with something broken would be the end of it, that is only ever saved as a copy
         if (SameDirectory(path, EDITOR_LAYOUT))
             path = Path.Combine(Path.GetFullPath(options.Workspace), document.Name + "_edited.hor");
@@ -428,7 +444,8 @@ internal sealed partial class DawnScene
 
         try
         {
-            // The code typed into a layout by hand goes into it first, what is saved is the layout
+            // The code typed into a layout by hand goes into it first, what is saved is the layout. Code that doesn't
+            // build is saved as it was typed, what somebody typed never goes for a save
             if (document.CodeEdited)
                 ApplyCode();
 
@@ -438,11 +455,17 @@ internal sealed partial class DawnScene
             if (document.IsText && !savingQuietly && !IsNotebook(document) && Tidied(document.Editor.Text) is { } tidy)
                 document.Editor.Document.Replace(tidy);
 
-            string written = document.GenerateCode();
+            string written = document.CodeEdited ? document.Editor.Text : document.GenerateCode();
+            SayTurnedDown(document);
 
+            // Nothing changed since the file was read is the file as it is, the same bytes and not the text written out again
+            // (a mark at the start, line endings that are a mix of both)
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            string onDisk = document.CrLf ? written.Replace("\n", "\r\n") : written;
-            File.WriteAllText(path, onDisk);
+            string onDisk = Hex.Core.DocumentFile.WithLineEndings(written, document.DiskText, document.CrLf, document.SavedCrLf);
+            if (Untouched(document, path, written))
+                onDisk = document.DiskText!;
+            else
+                Hex.Core.DocumentFile.Write(path, onDisk, document.DiskEncoding);
             UILayout.Forget(path);
 
             document.Path = path;
@@ -533,6 +556,7 @@ internal sealed partial class DawnScene
     {
         if (lensSeen.Of == gone) lensSeen = (null, -1);
         if (inlaysFor.Of == gone) inlaysFor = (null, -1);
+        if (foldingFor.Of == gone || foldingSeen.Of == gone) ForgetNativeFolding();
         if (semanticsFor.Of == gone) semanticsFor = (null, -1, 0);
         if (ownSemanticsFor.Of == gone) ownSemanticsFor = (null, -1);
         if (conflictsFor.Of == gone) conflictsFor = (null, -1);
@@ -554,7 +578,7 @@ internal sealed partial class DawnScene
         localisationFound.Remove(gone);
         agentHintVersions.Remove(gone);
 
-        // Big files leave big holes, the settle collect hands them back to the system instead of keeping them for later
+        // Give the runtime a chance to reclaim closed documents without forcing compaction during the next edit.
         settleIn = 2.0f;
     }
 
@@ -576,7 +600,7 @@ internal sealed partial class DawnScene
         // and was 60 ms an open, so what was found for a folder is kept until something changes in the workspace
         string from = Path.GetDirectoryName(Path.GetFullPath(path)) ?? path;
         if (!languagesNear.TryGetValue(from, out string? folder))
-            languagesNear[from] = folder = Horizon.Content.Localisation.FindNear(path);
+            languagesNear[from] = folder = LanguagesNear(path);
 
         if (folder is null || folder == Horizon.Content.Localisation.Folder)
             return;
@@ -588,6 +612,20 @@ internal sealed partial class DawnScene
         string language = languages.Contains(Horizon.Content.Localisation.DEFAULT_LANGUAGE) ? Horizon.Content.Localisation.DEFAULT_LANGUAGE : languages[0];
         if (Horizon.Content.Localisation.Load(folder, language) && announce)
             Say(Said("documents.languages_loaded", ("language", language), ("folder", folder)));
+    }
+
+    // The languages' folder near a layout, none when a folder on the way up can't be listed. On a tablet the app's own
+    // folder is inside /data/user/0, which an app may go through but not list
+    private static string? LanguagesNear(string path)
+    {
+        try
+        {
+            return Horizon.Content.Localisation.FindNear(path);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The File menu's files, Edit's undo and redo, and Ctrl+Tab through what is open, all going while typing.</summary>
@@ -607,11 +645,12 @@ internal sealed partial class DawnScene
 
         // A folder right under a file, the way they're opened one after the other, not down with the workspaces
         commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "root-folder-opened", UIKeyUse.BoundWhileTyping);
+        AddHostedCommands();
         recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
-        commands.Add("File/save", Said("documents.save"), SaveFormatted, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/save", Said("documents.save_as"), SaveAs, icon: "save-as");
+        commands.Add("File/save", Said("documents.save"), SaveFormatted, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.Editor.ReadOnly;
+        commands.Add("File/save", Said("documents.save_as"), SaveAs, icon: "save-as").IsEnabled = () => !document.Editor.ReadOnly;
         commands.Add("File/save", Said("documents.save_all"), SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
         commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 

@@ -38,7 +38,7 @@ public static class HexText
         read = true;
         try
         {
-            strings = Localisation.ReadFile(Path.Combine(PlatformPaths.Program, FILE));
+            strings = Localisation.ReadFile(Path.Combine(Hex.Core.HexHost.ProgramFolder, FILE));
             return null;
         }
         catch (Exception e)

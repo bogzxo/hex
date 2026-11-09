@@ -154,6 +154,10 @@ internal sealed partial class HexGit
             items.Add(Section(repository, context.Strings.Said("git.staged_changes"), staged, SectionKind.Staged));
         if (changes.Count > 0)
             items.Add(Section(repository, context.Strings.Said("git.changes"), changes, SectionKind.Changes));
+
+        // Narrowed down to nothing it says so, rather than three empty sections nobody can tell from a side still reading
+        if (changesFilter.Length > 0 && !conflicts.Concat(staged).Concat(changes).Any(file => Shown(repository, file.Path, file.State)))
+            items.Add(Note(context.Strings.Said("git.no_changes_match", ("filter", changesFilter))));
         return count;
     }
 
@@ -170,9 +174,12 @@ internal sealed partial class HexGit
     {
         bool stagedSide = kind == SectionKind.Staged;
         string[] paths = [.. files.Select(file => file.Path)];
+
+        // What the filter lets through, with how many of how many on the section. Its buttons are still for all of them
+        List<(string Path, GitFileState State)> shown = changesFilter.Length == 0 ? files : [.. files.Where(file => Shown(repository, file.Path, file.State))];
         var section = new UITreeItem(title, stagedSide ? "pass" : "diff")
         {
-            Badge = files.Count.ToString(),
+            Badge = shown.Count == files.Count ? files.Count.ToString() : $"{shown.Count}/{files.Count}",
             Expandable = true,
             Expanded = true,
             Children = [],
@@ -180,7 +187,7 @@ internal sealed partial class HexGit
             Tag = new SideTag(Menu: _ => SectionMenu(repository, paths, stagedSide), Key: key => SectionKey(repository, paths, stagedSide, key))
         };
 
-        foreach (var (path, state) in files)
+        foreach (var (path, state) in shown)
         {
             if (state.IsRepository)
             {
@@ -208,6 +215,10 @@ internal sealed partial class HexGit
 
         return section;
     }
+
+    // Whether the filter over the side lets a file of a repository through
+    private bool Shown(Repository repository, string path, GitFileState state) =>
+        Matches(changesFilter, Path.GetRelativePath(repository.Git.Root, path), state.From is { } was ? Path.GetFileName(was) : null);
 
     /// <summary>The colour of a change, the explorer's, given by the scene that knows the skin.</summary>
     public Func<GitChange, Vector4?>? ColourOf { get; set; }
@@ -349,16 +360,25 @@ internal sealed partial class HexGit
         StageFiles(repository, [path], stage);
     }
 
-    /// <summary>The changes to the file on screen thrown away, asking first, from the Git menu.</summary>
+    /// <summary>
+    /// The changes to the file on screen thrown away, asking first, from the Git menu. A diff on screen is its file's,
+    /// the menu on a "(changes)" tab did nothing at all because the tab is of no file of its own.
+    /// </summary>
     private void DiscardCurrent()
     {
-        if (context.Documents.Current.Path is not { } path || RepositoryOf(path) is not { Status: { } status } repository)
+        HexDocument current = context.Documents.Current;
+        if ((current.Path ?? current.DiffOf) is not { } path || RepositoryOf(path) is not { Status: { } status } repository)
             return;
 
         GitFileState state = status.StateOf(path);
         if (state.Unstaged && state.Change != GitChange.Conflicted)
             DiscardFile(repository, path, state);
+        else
+            context.Notices.Say(context.Strings.Said("git.nothing_to_discard", ("name", Path.GetFileName(path))));
     }
+
+    /// <summary>Some files' changes were thrown away, a diff of what isn't staged in them has nothing left to show.</summary>
+    public event Action<string[]>? Discarded;
 
     /// <summary>Every change of a repository staged, or everything staged taken out of the stage, the Changes sections' buttons from the Git menu.</summary>
     private void StageEverything(Repository? repository, bool stage)
@@ -401,7 +421,7 @@ internal sealed partial class HexGit
                 foreach (string path in fresh)
                     HexTrash.Discard(path);
                 return known.Length > 0 ? repository.Git.Discard(known) : null;
-            });
+            }, then: () => Discarded?.Invoke(paths));
         });
     }
 

@@ -58,8 +58,8 @@ internal sealed partial class DawnScene
 
         if (!HasChanges(open))
         {
-            TakeFromDisk(open, text);
-            Say(Said("disk_changes.read_again", ("name", open.Name)));
+            if (TakeFromDisk(open, text))
+                Say(Said("disk_changes.read_again", ("name", open.Name)));
             return;
         }
 
@@ -91,7 +91,7 @@ internal sealed partial class DawnScene
         : open.Modified || open.CodeEdited || open.GenerateCode() != open.SavedCode;
 
     /// <summary>A document made what its file says on the disk, as a step of its undo, the caret kept where it can be.</summary>
-    private void TakeFromDisk(HexDocument open, string text)
+    private bool TakeFromDisk(HexDocument open, string text)
     {
         if (open.IsText)
         {
@@ -100,12 +100,13 @@ internal sealed partial class DawnScene
         }
         else
         {
-            var (success, message) = open.Load(text, open.Path, keepHistory: true);
+            var (success, message) = open.Load(text.Replace("\r\n", "\n"), open.Path, keepHistory: true);
             if (!success)
             {
                 Say(Said("disk_changes.does_not_build", ("name", open.Name), ("message", message)), error: true);
-                open.DiskText = text;
-                return;
+                // Keep the last accepted disk snapshot so saving still asks before overwriting
+                // the external edit that could not be loaded.
+                return false;
             }
 
             open.SavedCode = open.GenerateCode();
@@ -115,10 +116,12 @@ internal sealed partial class DawnScene
 
         open.CrLf = open.SavedCrLf = text.Contains("\r\n", StringComparison.Ordinal);
         open.DiskText = text;
+        open.DiskEncoding = Hex.Core.DocumentFile.EncodingOf(open.Path!);
         open.Modified = false;
         tabsDirty = true;
         if (open == document)
             treeDirty = inspectorDirty = codeDirty = true;
+        return true;
     }
 
     /// <summary>A file with changes in Hex that changed on the disk too, a card that stays until it's answered.</summary>
@@ -160,7 +163,8 @@ internal sealed partial class DawnScene
         HexDocument? copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), PlatformPaths.Comparison));
         if (copied is not null)
         {
-            TakeFromDisk(copied, text);
+            if (!TakeFromDisk(copied, text))
+                return;
         }
         else
         {

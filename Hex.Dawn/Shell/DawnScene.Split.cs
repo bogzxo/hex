@@ -1,6 +1,6 @@
 using System.Numerics;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.Rendering;
 using Horizon.UI.Components;

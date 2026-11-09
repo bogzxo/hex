@@ -45,7 +45,7 @@ internal sealed partial class HexTasks
         new("other", "", "")
     ];
 
-    private const float SETUP_WIDTH = 640.0f, SETUP_CAPTION = 96.0f, SETUP_FIELD = 28.0f;
+    private const float SETUP_WIDTH = 640.0f, SETUP_CAPTION = 132.0f, SETUP_FIELD = 28.0f;
 
     // The window while it's up, and what's in it
     private WindowPanel? setupWindow;
@@ -60,7 +60,7 @@ internal sealed partial class HexTasks
 
     /* What a test reads off the window and fills it with, the way the UI does */
 
-    internal string SetupKind => setupKind?.Value ?? string.Empty;
+    internal string SetupPresetKey => setupKind is { Index: >= 0 } selected && selected.Index < Presets.Length ? Presets[selected.Index].Key : string.Empty;
     internal string SetupBuild => setupBuild?.Text ?? string.Empty;
     internal string SetupRunLine => setupRun?.Text ?? string.Empty;
 
@@ -308,7 +308,7 @@ internal sealed partial class HexTasks
     }
 
     /// <summary>A kind's lines with the file's name in them, for a shell of a profile (pwsh, cmd, git_bash).</summary>
-    internal static (string Build, string Run) Fill(RunPreset preset, string root, string? file, string shell)
+    internal static (string Build, string Run) Fill(RunPreset preset, string root, string? file, string shell, string? workspaceRoot = null)
     {
         // From the folder it runs in, the file's own for a file's program
         string from = FolderFor(preset, root, file) is { Length: > 0 } folder ? Path.GetFullPath(Path.Combine(root, folder)) : root;
@@ -321,6 +321,10 @@ internal sealed partial class HexTasks
             relative = relative.Replace('\\', '/');
 
         string Filled(string line) => line.Replace("{file}", relative).Replace("{exe}", exe).Replace("{here}", here);
+        if (preset.Key == "python")
+            return (Filled(preset.Build), PythonRun(from, workspaceRoot ?? root, relative, shell));
+        if (preset.Key is "c" or "cpp")
+            return NativeFileCommands(preset.Key == "cpp", relative, exe, shell);
         return (Filled(preset.Build), Filled(preset.Run));
     }
 
@@ -330,7 +334,7 @@ internal sealed partial class HexTasks
         if (setupBuild is null || setupRun is null || setupKind is null || setupKind.Index < 0 || setupKind.Index >= Presets.Length)
             return;
 
-        var (build, run) = Fill(Presets[setupKind.Index], setupRoot, setupFile, context.Terminals.UsualProfileId);
+        var (build, run) = Fill(Presets[setupKind.Index], setupRoot, setupFile, context.Terminals.UsualProfileId, RootFor(setupFile));
         setupBuild.Text = build;
         setupRun.Text = run;
         if (setupFolder is not null)
@@ -408,7 +412,7 @@ internal sealed partial class HexTasks
             File.WriteAllText(file, new HIDLDocument()
                 .Comment("The tasks of this folder, each a command line Dawn runs in a terminal of its own. Run Task in the Run menu")
                 .Comment("picks one, Ctrl+Shift+B runs the build task and F5 on a file that isn't HIDL the run task, after the one it")
-                .Comment("depends on. Set Up F5 in the Run menu writes the build and run ones again. What a compiler says in one goes in")
+                .Comment("depends on. Configure Build and Run in the Run menu updates the build and run tasks. What a compiler says in one goes in")
                 .Comment("the Problems panel.")
                 .Let("tasks", tasks)
                 .Write());

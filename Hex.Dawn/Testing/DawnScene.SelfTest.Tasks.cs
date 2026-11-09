@@ -24,7 +24,10 @@ internal sealed partial class DawnScene
         // A task that says what a compiler would, written without the shell's echo of it matching (the error is in a file)
         test.Run(() =>
         {
-            File.WriteAllText(Path.Combine(folder, "errors.txt"), "C:\\hex\\Program.cs(12,5): error CS1002: ; expected\n");
+            // A file that's there, a problem in a file that isn't is dropped as a piece of a wrapped line
+            string program = Path.Combine(folder, "Program.cs");
+            File.WriteAllText(program, "class Program { }\n");
+            File.WriteAllText(Path.Combine(folder, "errors.txt"), $"{program}(12,5): error CS1002: ; expected\n");
             File.WriteAllText(file, "let tasks = {\n    say: { command: \"cat errors.txt\", group: \"build\" }\n};\n");
             said = tasks.TasksOf(file, folder).Single();
             ClearTerminalProblems();
@@ -76,7 +79,7 @@ internal sealed partial class DawnScene
         test.Run(RunWithoutDebugging);
         test.Settle(0.3f);
         test.Check("tasks: Ctrl+F5 on a D file with no run task sets F5 up, the program guessed and its lines filled in", () =>
-            tasks.SetupWindow is { Visible: true } && tasks.SetupKind.StartsWith("D, this file", StringComparison.Ordinal)
+            tasks.SetupWindow is { Visible: true } && (tasks.SetupPresetKey is "d_dmd" or "d_ldc")
             && tasks.SetupBuild.Contains("app.d\"") && tasks.SetupBuild.Contains("-of=app") && tasks.SetupRunLine.Contains("app"));
         test.Run(() => Shot("run-setup"));
         test.Settle(0.2f);
@@ -88,7 +91,8 @@ internal sealed partial class DawnScene
             tasks.FillSetup("echo built", "echo ran", inDusk: true);
             tasks.PressSetup(run: true);
         });
-        test.Wait();
+        test.Check("tasks: Save and Run starts closing the setup dialog", () => tasks.SetupWindow is null or { Leaving: true });
+        test.WaitFor(() => tasks.SetupWindow is null, 1.0f);
 
         // Where it went, the workspace folder's tasks.hor when another part of the test left one there and next to the
         // file when not, a lone file's F5 is set up beside it

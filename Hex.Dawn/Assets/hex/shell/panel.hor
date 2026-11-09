@@ -5,7 +5,7 @@
 #define layout
 
 let bottom = compositor.tabs({
-    size: vec(840, 180),
+    size: vec(840, 280),
     tabs: ["@panel.problems", "@panel.output", "@panel.console"],
     text_scale: 0.14,
     header_align: "left",

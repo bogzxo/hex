@@ -18,10 +18,10 @@ internal sealed partial class HexDebugging
     internal static bool IsD(string? path) => path is not null && Path.GetExtension(path).ToLowerInvariant() is ".d" or ".di";
 
     /// <summary>Whether a file is one there's a debugger for here, C# with netcoredbg, D with lldb-dap.</summary>
-    internal bool CanDebug(string? path) => (IsCSharp(path) && Netcoredbg() is not null) || (IsD(path) && LldbDap() is not null);
+    internal bool CanDebug(string? path) => !IsDebuggerSourcePath(path) && ((IsCSharp(path) && Netcoredbg() is not null) || ((IsD(path) || IsNativeSource(path)) && LldbDap() is not null) || (IsPython(path) && PythonAdapter() is not null));
 
     /// <summary>Whether any D file has a breakpoint, what has F5 debug a D file rather than run it.</summary>
-    internal bool DBreakpoints() => breakpoints.Any(pair => IsD(pair.Key) && pair.Value.Count > 0);
+    internal bool DBreakpoints() => breakpoints.Any(pair => IsD(pair.Key) && DebugBreakpointsOf(pair.Key).Count > 0);
 
     /// <summary>Where lldb-dap is, the PATH first then where LLVM puts itself, null when it's nowhere.</summary>
     internal static string? LldbDap()
@@ -59,7 +59,7 @@ internal sealed partial class HexDebugging
         context.Panels.ShowSide(HexSide.Debug);
         context.Notices.Say(context.Strings.Said("debugging.building", ("project", HexLanguages.DubProjectOf(entry) is { } dub ? Path.GetFileName(dub) : Path.GetFileName(entry))));
 
-        var breakpointsNow = breakpoints.Where(pair => pair.Value.Count > 0).ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<int>)pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var breakpointsNow = BreakpointsNow();
         _ = Task.Run(() => BuildAndLaunchD(entry, debugger, breakpointsNow));
     }
 
@@ -155,7 +155,7 @@ internal sealed partial class HexDebugging
         return null;
     }
 
-    private async Task BuildAndLaunchD(string file, string debugger, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow)
+    private async Task BuildAndLaunchD(string file, string debugger, Dictionary<string, IReadOnlyCollection<DebugBreakpoint>> breakpointsNow)
     {
         var (program, folder, built, said) = await BuildD(file);
         if (!ReportBuild(said, folder, built, Path.GetFileName(file), file))

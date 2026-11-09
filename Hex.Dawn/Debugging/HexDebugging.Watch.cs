@@ -1,20 +1,24 @@
-namespace Hex.Dawn;
+﻿namespace Hex.Dawn;
 
 // What it's stopped with looked at by the expression, VS Code's watch, its debug console and its data tips. Watches are
 // expressions evaluated every time it stops, in the frame looked at, in a section of the Debug side of their own. Evaluate
-// Expression (Shift+F9, Visual Studio's QuickWatch key) asks for one and says what it came to, the word at the caret to
-// start with. A name the pointer rests on while it's stopped says its value in the hover, before what the language server
-// says of it.
+// Expression (Shift+F9, Visual Studio's QuickWatch key) asks for one, the word at the caret to start with, and what it
+// came to goes in the Immediate section of the Debug side, opened out like a variable (HexDebugging.Immediate). A name
+// the pointer rests on while it's stopped says its value in a data tip (HexDebugging.DataTips). C# goes through
+// HexDebugEvaluator on the way to netcoredbg, which knows names the way the file does.
 internal sealed partial class HexDebugging
 {
-    // The expressions watched, in the order they were added, kept for every session while Hex runs
+    // Expressions are kept in order with the workspace and restored when it changes.
     private readonly List<string> watches = [];
+    private IReadOnlyList<string>? watchWorkspace;
 
     // How many times it's stopped, what a data tip or a watch belongs to
     private int stops;
 
     private void AddWatchCommands()
     {
+        watchWorkspace = context.Workspace.WatchExpressions;
+        watches.AddRange(watchWorkspace);
         UICommands commands = context.Commands;
         commands.Add("Run/debug", context.Strings.Said("debugging.add_watch"), AddWatch, icon: "eye");
         commands.Add("Run/debug", context.Strings.Said("debugging.evaluate"), EvaluateExpression, "Shift+F9", "debug-console", UIKeyUse.BoundWhileTyping);
@@ -27,20 +31,62 @@ internal sealed partial class HexDebugging
         context.Windows.Prompt(context.Strings.Said("debugging.add_watch_title"), context.Strings.Said("debugging.add_watch_text"), ExpressionAtCaret(),
             context.Strings.Said("debugging.add_button"), string.Empty, typed =>
             {
-                string expression = typed.Trim();
-                if (expression.Length == 0 || watches.Contains(expression))
-                    return;
+                WatchExpression(typed);
+            });
+    }
 
-                watches.Add(expression);
+    internal void WatchExpression(string typed)
+    {
+        string expression = typed.Trim();
+        if (expression.Length == 0 || watches.Contains(expression)) return;
+        watches.Add(expression);
+        context.Workspace.KeepWatchExpressions(watches);
+        variables.ForgetWatches();
+        context.Panels.ShowSide(HexSide.Debug);
+        context.Panels.RefreshSide(HexSide.Debug);
+    }
+
+    private void WatchMenu(string expression, DebugVariable? value = null, Func<bool>? current = null)
+    {
+        if (!watches.Contains(expression)) return;
+        var menu = new Menu("watch");
+        menu.Add(context.Strings.Said("debugging.edit_watch"), () => EditWatch(expression), icon: "edit");
+        if (DebugStopped && debugging is { CanSetExpression: true } && value is { ReadOnly: false } editable && current?.Invoke() == true)
+            menu.Add(context.Strings.Said("debugging.edit_value"), () => EditWatchValue(expression, editable, current), icon: "edit");
+        menu.Add(context.Strings.Said("debugging.remove_watch"), () => RemoveWatch(expression), icon: "close");
+        context.Windows.Menu(menu);
+    }
+
+    private void EditWatch(string expression)
+    {
+        var workspace = context.Workspace.WatchExpressions;
+        context.Windows.Prompt(context.Strings.Said("debugging.edit_watch"), context.Strings.Said("debugging.add_watch_text"), expression,
+            context.Strings.Said("debugging.set_value"), string.Empty, typed =>
+            {
+                if (!ReferenceEquals(workspace, context.Workspace.WatchExpressions)) return;
+                string replacement = typed.Trim();
+                int index = watches.IndexOf(expression);
+                if (index < 0 || replacement.Length == 0 || replacement == expression || watches.Contains(replacement)) return;
+                watches[index] = replacement;
+                context.Workspace.KeepWatchExpressions(watches);
                 variables.ForgetWatches();
-                context.Panels.ShowSide(HexSide.Debug);
                 context.Panels.RefreshSide(HexSide.Debug);
             });
+    }
+
+    private void RestoreWatches()
+    {
+        watches.Clear();
+        watchWorkspace = context.Workspace.WatchExpressions;
+        watches.AddRange(watchWorkspace);
+        variables.ForgetWatches();
+        context.Panels.RefreshSide(HexSide.Debug);
     }
 
     private void RemoveWatch(string expression)
     {
         watches.Remove(expression);
+        context.Workspace.KeepWatchExpressions(watches);
         variables.ForgetWatches();
         context.Panels.RefreshSide(HexSide.Debug);
     }
@@ -54,31 +100,25 @@ internal sealed partial class HexDebugging
             return;
         }
 
-        int frame = stoppedFrames[stoppedFrame].Id;
-        context.Windows.Prompt(context.Strings.Said("debugging.evaluate_title"), context.Strings.Said("debugging.evaluate_text"), ExpressionAtCaret(),
-            context.Strings.Said("debugging.evaluate_button"), string.Empty, typed =>
+        int stop = stops, frame = stoppedFrames[stoppedFrame].Id;
+        bool Current() => ReferenceEquals(debugging, session) && DebugStopped && stops == stop && stoppedFrames.Count > stoppedFrame && stoppedFrames[stoppedFrame].Id == frame;
+        void Submit(string typed) { if (Current()) EvaluateIntoImmediate(typed.Trim()); }
+        if (!session.CanComplete)
+        {
+            context.Windows.Prompt(context.Strings.Said("debugging.evaluate_title"), context.Strings.Said("debugging.evaluate_text"), ExpressionAtCaret(),
+                context.Strings.Said("debugging.evaluate_button"), string.Empty, Submit);
+            return;
+        }
+        context.Windows.PromptExpression(context.Strings.Said("debugging.evaluate_title"), context.Strings.Said("debugging.evaluate_text"), ExpressionAtCaret(),
+            context.Strings.Said("debugging.evaluate_button"), stoppedFrames[stoppedFrame].File ?? "expression.py", box =>
             {
-                string expression = typed.Trim();
-                if (expression.Length == 0)
-                    return;
-
-                _ = Task.Run(async () =>
-                {
-                    // As a watch, lldb's repl says "(int) $1 = 0" for 0
-                    DebugVariable? value = await session.TryEvaluate(expression, frame);
-                    debugWork.Enqueue(() =>
-                    {
-                        if (value is not { } said)
-                        {
-                            context.Notices.Say(context.Strings.Said("debugging.could_not_evaluate", ("expression", expression)), error: true);
-                            return;
-                        }
-
-                        // What's said along the bottom goes in the output as well
-                        context.Notices.Say(context.Strings.Said("debugging.evaluated", ("expression", expression), ("value", said.Value)));
-                    });
-                });
-            });
+                var weak = new WeakReference<CodeEditor>(box);
+                bool Active() => Current() && weak.TryGetTarget(out var target) && target.IsFocused;
+                var completion = new HexDebugCompletions((text, column) => session.Completions(text, column, frame), Active, debugWork.Enqueue,
+                    context.Strings.Said("debugging.asking"));
+                box.CompletionSource = completion.Complete;
+                box.CompletionAvailable = Active;
+            }, Submit);
     }
 
     /// <summary>The Watch section of the Debug side, what each expression came to while it's stopped, the expressions otherwise.</summary>
@@ -94,20 +134,24 @@ internal sealed partial class HexDebugging
         if (DebugStopped && stoppedFrames.Count > 0)
         {
             DebugSession session = debugging!;
+            string? file = stoppedFrames[stoppedFrame].File;
             List<UITreeItem>? watchesShown = variables.Watches(session, stoppedFrames[stoppedFrame].Id, watches,
-                (expression, frame) => session.TryEvaluate(expression, frame), session.Variables);
+                (expression, frame) => Evaluate(session, expression, frame, file), session.Variables);
             if (watchesShown is null)
             {
                 section.Children.Add(NoteItem(context.Strings.Said("debugging.asking")));
                 return section;
             }
 
-            // Each watch's row taken away by its menu, the expression it was asked for being its first
+            // Keep the value's expansion behavior while giving every watch the same Edit/Remove menu.
             for (int i = 0; i < watchesShown.Count && i < watches.Count; i++)
             {
                 string expression = watches[i];
                 UITreeItem row = watchesShown[i];
-                row.Tag = row.Tag is SideTag tag ? tag with { Menu = _ => RemoveWatch(expression) } : new SideTag(Menu: _ => RemoveWatch(expression));
+                SideTag tag = row.Tag as SideTag ?? new SideTag();
+                DebugVariable? value = tag.DebugValue;
+                Func<bool>? current = tag.DebugCurrent;
+                row.Tag = tag with { Menu = _ => WatchMenu(expression, value, current) };
                 section.Children.Add(row);
             }
 
@@ -115,55 +159,21 @@ internal sealed partial class HexDebugging
         }
 
         foreach (string expression in watches)
-            section.Children.Add(new UITreeItem(expression, "symbol-variable") { Color = context.Panels.Dim, Tag = new SideTag(Menu: _ => RemoveWatch(expression)) });
+            section.Children.Add(new UITreeItem(expression, "symbol-variable") { Color = context.Panels.Dim, Tag = new SideTag(Menu: _ => WatchMenu(expression)) });
         return section;
     }
 
-    // The last data tip said and the one being asked, by the expression, the frame and the stop
-    private (string Expression, int Frame, int Stop, string? Said) tipped;
-    private (string? Expression, int Frame, int Stop) tipping;
-
     /// <summary>
-    /// A data tip, what the name under the pointer comes to while it's stopped, before the language server's word on it.
-    /// Null while it's asked and for anything the debugger can't say, the server's hover is shown then.
+    /// An expression evaluated in a frame of a file, or why it couldn't be. C# goes through the session's evaluator, which
+    /// knows names the way the file does, works out what netcoredbg can't (an array's Length among them) and refuses what
+    /// it would get wrong.
     /// </summary>
-    private string? DataTip(HexDocument of, CodeEditor editor, UITextPosition at)
+    private async Task<DebugEvaluation> Evaluate(DebugSession session, string expression, int frame, string? file, string context = "watch")
     {
-        if (!DebugStopped || debugging is not { } session || stoppedFrames.Count == 0 || (!IsCSharp(of.Path) && !IsD(of.Path)) || at.Line >= editor.Document.LineCount)
-            return null;
-
-        string expression = ExpressionAt(editor.Document.LineAt(at.Line), at.Column);
-        if (expression.Length == 0)
-            return null;
-
-        int frame = stoppedFrames[stoppedFrame].Id;
-        if (tipped.Said is not null && (tipped.Expression, tipped.Frame, tipped.Stop) == (expression, frame, stops))
-            return tipped.Said.Length > 0 ? tipped.Said : null;
-
-        if (tipping != (expression, frame, stops))
-        {
-            tipping = (expression, frame, stops);
-            int stop = stops;
-            _ = Task.Run(async () =>
-            {
-                DebugVariable? value = await session.TryEvaluate(expression, frame, "hover");
-                debugWork.Enqueue(() =>
-                {
-                    // A function comes to its address, which says less than the server's word on what it does
-                    bool tells = value is { } said && said.Type?.Contains('(') != true;
-                    tipped = (expression, frame, stop, tells ? TipOf(value!.Value) : string.Empty);
-                    if (tells)
-                        editor.AskAgain();
-                });
-            });
-        }
-
-        return null;
+        if (debuggingKind != DebugSession.CORECLR || evaluator is not { } through)
+            return await session.EvaluateSaying(expression, frame, context);
+        return await through.Evaluate(expression, frame, ScopeOf(file), context);
     }
-
-    // A value as a data tip says it, the expression and what it is with its type under it
-    private static string TipOf(DebugVariable value) =>
-        value.Type is { Length: > 0 } type ? $"**{value.Name}** = {value.Value}\n\n{type}" : $"**{value.Name}** = {value.Value}";
 
     // The selection, or the expression at the caret, of the file on screen
     private string ExpressionAtCaret()

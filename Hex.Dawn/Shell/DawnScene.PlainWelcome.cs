@@ -25,6 +25,10 @@ internal sealed partial class DawnScene
     // Folders that are never where somebody's layouts are
     private static readonly string[] notLayoutFolders = ["bin", "obj", "node_modules", "target", "dist", "build", "out", "vendor"];
 
+    // The .hor files a folder of code has that aren't layouts, its tasks and an extension's description. The engine's
+    // repository has a tasks.hor at its top, and opening it landed on the designer with an empty layout
+    private static readonly string[] notLayoutFiles = [HexTasks.TASKS_FILE, "extension.hor"];
+
     /// <summary>Whether this start is on code, no self test, no checks and no layout near the top of any folder that's open.</summary>
     private bool WantsPlainWelcome() =>
         !options.SelfTest && options.Check.Length == 0 && !options.Browse && !HasLayoutsNear(explorer.workspace.Folders);
@@ -42,7 +46,7 @@ internal sealed partial class DawnScene
             {
                 if (!Directory.Exists(folder))
                     continue;
-                if (Directory.EnumerateFiles(folder, "*.hor", shallow).Any())
+                if (Directory.EnumerateFiles(folder, "*.hor", shallow).Any(IsLayoutFile))
                     return true;
 
                 int looked = 0;
@@ -51,7 +55,7 @@ internal sealed partial class DawnScene
                     string name = Path.GetFileName(under);
                     if (name.StartsWith('.') || notLayoutFolders.Contains(name, StringComparer.OrdinalIgnoreCase))
                         continue;
-                    if (Directory.EnumerateFiles(under, "*.hor", shallow).Any())
+                    if (Directory.EnumerateFiles(under, "*.hor", shallow).Any(IsLayoutFile))
                         return true;
                     if (++looked >= LAYOUT_LOOK_FOLDERS)
                         break;
@@ -65,6 +69,9 @@ internal sealed partial class DawnScene
 
         return false;
     }
+
+    // Whether a .hor could be a layout, anything but the files a folder of code keeps for Hex
+    private static bool IsLayoutFile(string path) => !notLayoutFiles.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Whether the plain welcome is up over the empty layout, which then has no tab and nothing in the status bar.</summary>
     internal bool PlainStart => plainShown;

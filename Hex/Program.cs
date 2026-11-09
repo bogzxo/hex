@@ -22,7 +22,9 @@ internal static partial class Program
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
-        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
+
+        // Hex is a desktop program, its windows, keys and clipboard are the desktop's
+        Horizon.Platform.Desktop.DesktopPlatform.Install();
 
         // The old exe and dlls a build of Hex over itself moved aside go, see HexSelfBuild
         Hex.Core.Projects.HexSelfBuild.CleanUpSoon();
@@ -47,6 +49,9 @@ internal static partial class Program
             return Hex.Core.McpBridge.Run(args, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"));
 
         HexLog.Initialize(AppContext.BaseDirectory);
+        // Trace only after selecting Hex's logger. Tracing earlier creates the default logger,
+        // which holds debug.log open and prevents Hex's single-file logger from writing it.
+        Horizon.Core.Diagnostics.StartupTrace.Mark("main");
 
 #if DEBUG
         // A Debug Hex's console for its log, made here now Windows doesn't hand one out by itself (app.manifest)
@@ -68,6 +73,9 @@ internal static partial class Program
 
         // Either mode can swap to the other in its own window (Ctrl+Alt+Shift+D), each made the first time it's wanted
         DawnProgram.Other = DuskProgram.Scene;
+
+        // The native self test posts keys to the desktop's own window, which only Hex.exe knows the platform of
+        DawnProgram.NativeWindow = engine => engine.WindowManager.Host is Horizon.Platform.Desktop.DesktopHost desktop ? desktop.Window.Win32Handle : 0;
         DuskProgram.Other = DawnProgram.Scene;
 
         if (mode == HexMode.Dusk)

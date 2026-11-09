@@ -1,9 +1,21 @@
-using Hex.Core;
+﻿using Hex.Core;
 
 namespace Hex.Tests;
 
 public sealed class HexWorkspaceTests
 {
+    [Fact]
+    public void WatchExpressionsRoundTripInOrderAndLegacyWorkspacesClearThem()
+    {
+        var workspace = new HexWorkspace();
+        workspace.Watches.AddRange(["items[0].Name", "value + 1", "lookup[\"key\"]"]);
+        var restored = new HexWorkspace();
+        restored.Read(workspace.Write(Path.GetTempPath()), Path.GetTempPath());
+        Assert.Equal(workspace.Watches, restored.Watches);
+        restored.Read("let workspace = { folders: [] };", Path.GetTempPath());
+        Assert.Empty(restored.Watches);
+    }
+
     [Fact]
     public void TheRootRemainsAWholePathThroughSaveAndRestore()
     {

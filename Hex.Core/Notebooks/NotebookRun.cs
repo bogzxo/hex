@@ -16,6 +16,10 @@ internal sealed record NotebookInput(NotebookCell Cell, string Prompt, bool Pass
 internal sealed class NotebookRun
 {
     private readonly Dictionary<string, NotebookCell> sent = [];
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<NotebookCell, ExecutionOutcome> outcomes = new();
+    private sealed record ExecutionOutcome(string Status);
+
+    public bool Succeeded(NotebookCell cell) => !IsQueued(cell) && outcomes.TryGetValue(cell, out var outcome) && outcome.Status == "ok";
     private readonly Dictionary<string, List<JsonObject>> displays = [];
     private readonly HashSet<NotebookCell> clearing = [];
     private readonly HashSet<string> replied = [], idle = [];
@@ -37,6 +41,7 @@ internal sealed class NotebookRun
             replied.Remove(old);
             idle.Remove(old);
         }
+        outcomes.Remove(cell);
         sent[requestId] = cell;
         Queued.Remove(cell);
         Queued.Add(cell);
@@ -52,6 +57,7 @@ internal sealed class NotebookRun
     public void Forget()
     {
         sent.Clear();
+        outcomes.Clear();
         Queued.Clear();
         clearing.Clear();
         displays.Clear();
@@ -137,6 +143,7 @@ internal sealed class NotebookRun
                 return cell;
 
             case "execute_reply":
+                outcomes.AddOrUpdate(cell, new(content["status"]?.GetValue<string>() ?? "unknown"));
                 if (Count(content) is { } count)
                     cell.ExecutionCount = count;
                 if (Input?.Cell == cell)

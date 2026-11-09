@@ -65,11 +65,11 @@ internal sealed partial class HexExtensions
     /// </summary>
     internal void Find()
     {
-        var folders = new List<(string, bool)> { (Path.Combine(AppContext.BaseDirectory, BUILT_IN_EXTENSIONS), true), (OwnFolder, false) };
+        var folders = new List<(string, bool)> { (Path.Combine(Hex.Core.HexHost.ProgramFolder, BUILT_IN_EXTENSIONS), true), (OwnFolder, false) };
 
         // The self test has the ones that moved out to the catalog as if they came with Hex, out of the hex-extensions
         // submodule, so every part of it finds them there from the start the way it always did
-        if (context.Options.SelfTest && FindUp(AppContext.BaseDirectory, CATALOG_SUBMODULE) is { } over)
+        if (context.Options.SelfTest && FindUp(Hex.Core.HexHost.ProgramFolder, CATALOG_SUBMODULE) is { } over)
             folders.Add((Path.Combine(over, CATALOG_SUBMODULE), true));
 
         foreach (var (full, builtIn) in folders)

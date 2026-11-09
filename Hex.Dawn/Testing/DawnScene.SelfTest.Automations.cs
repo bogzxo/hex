@@ -27,8 +27,12 @@ internal sealed partial class DawnScene
     {
         string folder = Path.Combine(testFolder, "automations");
         string file = Path.Combine(folder, HexTasks.TASKS_FILE), note = Path.Combine(folder, "note.txt"), wrote = Path.Combine(folder, "wrote.txt");
+        string nested = Path.Combine(folder, "nested"), nestedNote = Path.Combine(nested, "note.txt"), nestedFile = Path.Combine(nested, HexTasks.TASKS_FILE);
+        string extraRoot = Path.Combine(testFolder, $"automations-workspace-root-{Guid.NewGuid():N}"), extraFile = Path.Combine(extraRoot, HexTasks.TASKS_FILE);
         string writeKey = string.Empty, foreverKey = string.Empty;
         int tabsBefore = 0;
+        bool automationListReused = false;
+        bool addedWorkspaceFolder = false, addedExtraRoot = false;
 
         test.Run(() =>
         {
@@ -44,6 +48,12 @@ internal sealed partial class DawnScene
             AllCommands() is var all && all.Any(command => command.Text == "Automation: Write it") && all.Any(command => command.Text == "Automation: Echo it")
             && all.Any(command => command.Text == "Automation: Wait forever"));
         test.Check("automations: and Run Automation is in the Terminal menu", () => AllCommands().Any(command => command.Text.Contains("Run Automation")));
+        test.Run(() =>
+        {
+            List<HexAutomation> known = tasks.Automations();
+            automationListReused = ReferenceEquals(known, tasks.Automations());
+        });
+        test.Check("automations: unchanged task files reuse the discovered list", () => automationListReused);
 
         // Picked from the palette, it runs off the editor's thread and its hex calls come back to it
         test.Run(() =>
@@ -88,6 +98,69 @@ internal sealed partial class DawnScene
             if (terminalPanel.Current is { Title: "Echo it" } tab)
                 terminalPanel.CloseTab(tab);
             CloseNow();
+        });
+        test.Settle(0.3f);
+
+        test.Run(() =>
+        {
+            Open(note);
+            tasks.Automations(); // Warm the current document's sources before changing the file.
+            File.WriteAllText(file, File.ReadAllText(file).Replace("title: \"Write it\"", "title: \"Write updated\"", StringComparison.Ordinal));
+        });
+        test.Settle(1.2f);
+        test.Check("automations: editing tasks.hor refreshes its automation titles", () =>
+            tasks.Automations().Any(automation => automation.Name == "write_it" && automation.Title == "Write updated"));
+
+        test.Run(() =>
+        {
+            Directory.CreateDirectory(nested);
+            Directory.CreateDirectory(extraRoot);
+            File.WriteAllText(nestedNote, "a file below the workspace task file\n");
+            File.WriteAllText(extraFile, "let automations = { extra: { title: \"Extra root\", command: \"echo extra\" } };");
+            addedWorkspaceFolder = !explorer.workspace.Folders.Contains(folder, PlatformPaths.Comparer);
+            if (addedWorkspaceFolder)
+                explorer.workspace.Folders.Add(folder);
+            addedExtraRoot = !explorer.workspace.Folders.Contains(extraRoot, PlatformPaths.Comparer);
+            if (addedExtraRoot)
+                explorer.workspace.Folders.Add(extraRoot);
+            Open(nestedNote);
+        });
+        test.Settle(0.3f);
+        test.Check("automations: the workspace root task file is kept with a nested document", () =>
+            tasks.Automations().Count(automation => automation.File == file) == 3
+            && tasks.Automations().Any(automation => automation.File == extraFile));
+
+        test.Run(() => File.WriteAllText(nestedFile, "let automations = { nested: { title: \"Nested\", command: \"echo nested\" } };"));
+        test.Check("automations: a nearer tasks.hor is found without dropping the workspace root file", () =>
+            tasks.Automations().Count(automation => automation.File == nestedFile) == 1
+            && tasks.Automations().Count(automation => automation.File == file) == 3
+            && tasks.Automations().Any(automation => automation.File == extraFile));
+
+        test.Run(() => File.Delete(nestedFile));
+        test.Check("automations: deleting a nearer tasks.hor restores the workspace root file", () =>
+            tasks.Automations().All(automation => automation.File != nestedFile)
+            && tasks.Automations().Count(automation => automation.File == file) == 3
+            && tasks.Automations().Any(automation => automation.File == extraFile));
+
+        test.Run(() =>
+        {
+            explorer.workspace.Folders.Remove(extraRoot);
+        });
+        test.Check("automations: changing workspace roots rebuilds the discovered sources", () =>
+            tasks.Automations().Count(automation => automation.File == file) == 3
+            && tasks.Automations().All(automation => automation.File != extraFile));
+
+        test.Run(() =>
+        {
+            if (addedWorkspaceFolder)
+                explorer.workspace.Folders.Remove(folder);
+            if (addedExtraRoot)
+                explorer.workspace.Folders.Remove(extraRoot);
+            Open(note);
+            if (Directory.Exists(nested))
+                Directory.Delete(nested, recursive: true);
+            if (Directory.Exists(extraRoot))
+                Directory.Delete(extraRoot, recursive: true);
         });
         test.Settle(0.3f);
 

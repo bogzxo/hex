@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using Horizon.Engine;
 using Horizon.HIDL.Runtime;
@@ -32,10 +32,9 @@ internal sealed partial class DawnScene : Scene
     // How big the editor can draw itself. Text is at its sharpest at the whole ones.
     private static readonly float[] Scales = [0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f];
 
-    // How long (in seconds) after it comes up the editor takes the garbage of starting out, the pictures the skins
-    // were cut from, the fonts being built, the workspace being read, and gives the memory back to the machine (an
-    // aggressive collection decommits what it can). Left to itself the collector only got round to it after a
-    // while, and the editor sat at twice its weight until then
+    // Ask the runtime to consider reclaiming startup garbage after the initial load. This is a nonblocking,
+    // optimized request: forcing a compacting collection here paused typing, and again after closing a document.
+    // The runtime decides whether collection is worthwhile; normal collections remain responsible for heap growth.
     private const float SETTLE_SECONDS = 3.0f;
     private float settleIn = SETTLE_SECONDS;
 
@@ -168,9 +167,11 @@ internal sealed partial class DawnScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+        BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
         codeEditing = new HexCodeEditing(Context);
+        WireDeclarations();
         explorer = new HexExplorer(Context);
         git = new HexGit(Context);
 
@@ -186,7 +187,14 @@ internal sealed partial class DawnScene : Scene
         terminalFiles = new HexTerminalFiles(Context);
         extensions.TerminalApi = terminalFiles.Api();
         languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
+        explorer.FoldersChanged += languages.WorkspaceChanged;
         codeEditing.languages = languages;
+
+        // A folder that opens with projects nobody restored has them restored, the way Visual Studio does
+        explorer.FoldersChanged += languages.RestoreWhereNeeded;
+
+        // A folder with a solution offers Visual Studio's keys, once (DawnScene.Keys.VisualStudioOffer)
+        explorer.FoldersChanged += OfferVisualStudioKeys;
         BuildStatusBar();
         BuildPanel();
         codeEditing.BuildFindBar();
@@ -208,11 +216,21 @@ internal sealed partial class DawnScene : Scene
         AddFindCommands();
         AddCodeCommands();
         debugger = new HexDebugging(Context);
+        debugger.NativeProjectConfigured = languages.CMakeConfigured;
+        explorer.FoldersChanged += debugger.WorkspaceChanged;
+        testExplorer = new HexTestExplorer(Context, debugger);
+        debugger.NativeBuildChanged = testExplorer.NativeBuildChanged;
+        debugger.NativeBuildReconfigured = testExplorer.NativeBuildReconfigured;
+        languages.PythonInterpreterChanged = testExplorer.PythonInterpreterChanged;
+        explorer.FoldersChanged += testExplorer.WorkspaceChanged;
         BuildDebugBar();
         AddHelpCommands();
         tasks = new HexTasks(Context) { RestartInto = RestartInto, Extensions = extensions };
+        debugger.Tasks = tasks;
+        debugger.InstallsItself = !options.SelfTest;
         BuildProperties();
         languages.StartChecks();
+        languages.RestoreWhereNeeded();
         BuildEffects();
         BuildModes();
         designer.AddDesignerCommands();
@@ -379,8 +397,11 @@ internal sealed partial class DawnScene : Scene
             RunChecks();
 
         if (settleIn > 0.0f && (settleIn -= dt) <= 0.0f)
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
+        Profile.Mark("collection");
 
+        UpdateZoomSettings(dt);
+        UpdateShortcutHints();
         UpdateWindow();
         Profile.Mark("window");
         UpdateDesigner(dt);
@@ -388,6 +409,7 @@ internal sealed partial class DawnScene : Scene
         RebuildMarked();
         Profile.Mark("lists");
         UpdateWork(dt);
+        UpdateVisualStudioOffer(dt);
         Profile.Mark("work");
 
         UpdateExtensionUI(dt);
@@ -431,6 +453,8 @@ internal sealed partial class DawnScene : Scene
     {
         UpdateDialog();
         UpdateClosing();
+        UpdateHosted();
+        UpdateRenderScale();
         Hex.Shell.HexModes.Update();
         ColourChrome();
         PlaceCanvas();
@@ -524,6 +548,7 @@ internal sealed partial class DawnScene : Scene
         else
         {
             string written = document.GenerateCode();
+            SayTurnedDown(document);
 
             // A layout's code is written again out of the layout, unless it was edited by hand and not put back yet
             if (!document.CodeEdited)

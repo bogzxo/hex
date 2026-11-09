@@ -176,7 +176,7 @@ internal sealed partial class HexGit
     }
 
     // The folders under some folders with a .git in them, built and git's own folders left out
-    private static List<string> FindDown(string[] roots)
+    internal static List<string> FindDown(string[] roots)
     {
         var found = new List<string>();
         var pending = new Stack<(string Folder, int Depth)>();
@@ -197,7 +197,7 @@ internal sealed partial class HexGit
                     continue;
 
                 string dot = Path.Combine(child, ".git");
-                if (Directory.Exists(dot) || File.Exists(dot))
+                if (Path.Exists(dot))
                     found.Add(child);
                 if (depth + 1 < NESTED_DEPTH)
                     pending.Push((child, depth + 1));

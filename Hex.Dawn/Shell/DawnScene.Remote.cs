@@ -19,7 +19,8 @@ internal sealed partial class DawnScene
     private void StartRemote()
     {
         // The self test leaves the pipe alone, a Hex somebody has open is the one Dusk means
-        if (options.SelfTest)
+        // and a tablet has no other Hex or terminal to hear from
+        if (options.SelfTest || !HexHost.Pipes)
             return;
 
         remoteStop = new CancellationTokenSource();

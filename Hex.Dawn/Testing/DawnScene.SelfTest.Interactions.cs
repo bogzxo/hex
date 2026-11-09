@@ -87,7 +87,6 @@ internal sealed partial class DawnScene
         {
             var stroke = HexKeyStroke.Parse("Escape") ?? throw new InvalidOperationException("Escape stroke missing");
             Engine.Input.Keyboard.Tap(stroke.Keys);
-            UIKeyboard.Press(stroke.Key, stroke.Control, stroke.Shift, stroke.Alt, stroke.Super);
         });
         test.Check("interaction: Escape cancels the held theme row while its exit is visible", () => !shown.IsOpen && shown.Parent is not null && !themeList.IsPressed);
         test.Release(() => themeRow);

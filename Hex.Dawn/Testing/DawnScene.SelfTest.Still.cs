@@ -16,7 +16,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             Directory.CreateDirectory(folder);
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "localisation", "en-gb.hor"), file, overwrite: true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "localisation", "en-gb.hor"), file, overwrite: true);
             Open(file);
             code.Focus();
             code.GoTo(14, code.Document.LineAt(14).Length);

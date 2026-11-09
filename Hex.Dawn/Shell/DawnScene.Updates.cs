@@ -10,11 +10,18 @@ internal sealed partial class DawnScene
     private bool checkingHexUpdate;
 
     private static void ReadInstallerStrings() => InstallText.Use(Horizon.Content.Localisation.ReadFile(
-        Path.Combine(AppContext.BaseDirectory, "Assets/installer/localisation/en-gb.hor")));
+        Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets/installer/localisation/en-gb.hor")));
 
     private void CheckForHexUpdates()
     {
         if (checkingHexUpdate || options.SelfTest) return;
+
+        // Hex itself is a download that would have to be run, an APK is updated by installing another one
+        if (Hex.Core.HexHost.NoDownloads("A new Hex") is { } why)
+        {
+            Note(why + " Install the new APK instead.", error: true);
+            return;
+        }
         ReadInstallerStrings();
         checkingHexUpdate = true;
         ReleaseAsset? release = null;
@@ -42,7 +49,7 @@ internal sealed partial class DawnScene
 
     private void PrepareHexUpdate(ReleaseAsset release)
     {
-        string root = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+        string root = Path.TrimEndingDirectorySeparator(Hex.Core.HexHost.ProgramFolder);
         PreparedInstallerUpdate? installer = null;
         StartWork("hex-update-prepare", InstallText.Get("updates.preparing"), async context =>
         {

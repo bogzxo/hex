@@ -1,4 +1,4 @@
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.HIDL.Runtime;
 using Horizon.UI.Scripting;

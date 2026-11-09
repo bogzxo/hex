@@ -63,7 +63,11 @@ internal sealed class HexFolders : IDisposable
                 var watcher = new FileSystemWatcher(root)
                 {
                     IncludeSubdirectories = true,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+
+                    // The most Windows allows, a build writes its bin and obj folders all at once and the 8 KB it comes
+                    // with ran over, a restore's assets among what was lost
+                    InternalBufferSize = 64 * 1024
                 };
                 watcher.Created += (_, e) =>
                 {
@@ -104,8 +108,9 @@ internal sealed class HexFolders : IDisposable
             return;
 
         // Anything in a folder files_exclude or search_exclude leaves out (a build's, git's, node_modules) changes all
-        // the time and means nothing to a server
-        if (HexSearch.Excluded().InSkippedFolder(HexExcludes.Relative(root, path)))
+        // the time and means nothing to a server. Except a project's assets in obj, written as its packages are
+        // restored, which has a server that loads projects start again (HexLanguages.Restore)
+        if (!IsAssets(path) && HexSearch.Excluded().InSkippedFolder(HexExcludes.Relative(root, path)))
             return;
 
         // A folder's own writes (its time changing) are nothing
@@ -114,6 +119,9 @@ internal sealed class HexFolders : IDisposable
 
         files.Enqueue((path, change));
     }
+
+    // Whether a file is a project's assets, what a restore writes in its obj folder
+    private static bool IsAssets(string path) => Path.GetFileName(path).Equals(HexLanguages.ASSETS, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>What happened to files since the last time this was asked, each file once with what happened last. On the editor's thread.</summary>
     public IReadOnlyList<(string Path, LanguageServerFileChange Change)> TakeFileChanges()

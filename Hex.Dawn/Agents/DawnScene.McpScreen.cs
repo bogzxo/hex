@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 using Horizon.Graphics;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -258,11 +258,12 @@ internal sealed partial class DawnScene
 
         foreach (HexKeyStroke stroke in strokes)
         {
-            // The key and what it types land together, both before the next tick, the way a real press does. The
+            // The key and what it types land together on the next tick, the way a real press does. The
             // program's shortcuts hear it first, and one that moves the keyboard (B in a notebook giving a new cell
             // its editor) throws away what it typed. Typed a tick later, the b went into the new cell
             Engine.Input.Keyboard.Tap(stroke.Keys);
-            UIKeyboard.Press(stroke.Key, stroke.Control, stroke.Shift, stroke.Alt, stroke.Super);
+            if (!stroke.Control && !stroke.Alt && !stroke.Super && UIKeyboard.CharacterOf(stroke.Key, stroke.Shift) is { } character)
+                Engine.Input.Post(Horizon.Input.InputEvent.Typed(character.ToString()));
             yield return null;
             yield return null;
         }

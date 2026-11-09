@@ -3,7 +3,7 @@ using Hex.Shell;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -28,6 +28,7 @@ internal sealed partial class DawnScene
         {
             if (mode == HexMode.Dawn)
             {
+                FlushZoomSettings();
                 LetGo();
 
                 // The editor stops ticking in Dusk, an agent's call that swapped (a click on the toggle) is answered now or

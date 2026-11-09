@@ -22,6 +22,23 @@ internal sealed partial class DawnScene
         Pick("File", () => "Settings...");
         test.Settle(0.4f);
         test.Run(() => Shot("settings-first-open"));
+        ScrollPanel? middlePanel = null;
+        float middleOffset = 0;
+        test.Run(() =>
+        {
+            middlePanel = Descendants(SettingsPage!).OfType<ScrollPanel>()
+                .Where(panel => panel.MaxOffset > 100 && panel.IsShownInHierarchy)
+                .OrderByDescending(panel => panel.Bounds.Width).FirstOrDefault();
+            middleOffset = middlePanel?.Offset ?? 0;
+        });
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Hover(() => chrome.ToWorld(middlePanel!.Bounds.Center - new Vector2(0, 70)));
+        test.Settle(0.5f);
+        test.Check("settings: middle click autoscroll moves the settings panel", () => middlePanel is not null && middlePanel.Offset > middleOffset);
+        test.Run(() => Shot("settings-middle-scroll"));
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Check("settings: second middle click stops autoscroll", () => compositor.AutoScrollTarget is null);
+        test.Run(() => { if (middlePanel is not null) middlePanel.Offset = middleOffset; });
         test.Check("nav: other parts folded on first open", () =>
             SettingsPage is { } page && !Horizon.UI.Components.SettingsPage.IsPartCollapsed("Editor")
             && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Terminal") && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Appearance")
@@ -335,7 +352,7 @@ internal sealed partial class DawnScene
         Enter("backdrop_wrap", Values.Bool(true));
 
         // A picture of its own, and the usual one back by the row's button
-        string picture = Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        string picture = Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
         Enter("backdrop_image", new StringValue(picture));
         test.Wait();
         test.Check("settings: a picture of its own is the backdrop from then on", () => settings.BackdropImage == Path.GetFullPath(picture) && code.Backdrop is not null);
@@ -413,7 +430,7 @@ internal sealed partial class DawnScene
         void PressCtrlShiftG() => test.Run(() =>
         {
             bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
-            commands.Keys.Update(key => key == Silk.NET.Input.Key.G, control: true, shift: true, alt: false, typing);
+            commands.Keys.Update(key => key == Horizon.Input.Key.G, control: true, shift: true, alt: false, typing);
         });
 
         string noGroup = Said("designer_selection.no_group");

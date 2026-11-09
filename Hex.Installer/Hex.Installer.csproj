@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Hex.Installation\Hex.Installation.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Platform.Desktop\Horizon.Platform.Desktop.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.UI\Horizon.UI.csproj" />
     <None Include="..\Hex.Shell\Assets\hex_icon.png" Link="Assets\hex_icon.png" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\installer\**\*.hor" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

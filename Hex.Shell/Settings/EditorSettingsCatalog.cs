@@ -22,14 +22,14 @@ public static class EditorSettingsCatalog
     /// of their own under the editor, they were rows at the end of its code and the zoom and the debugger sat together.
     /// </summary>
     public const string PROFILES = "Appearance · Profiles", THEME = "Appearance · Theme", GLASS = "Appearance · Glass", EFFECTS = "Appearance · Effects",
-        MOTION = "Appearance · Motion", BACKDROP = "Appearance · Backdrop", TEXT = "Editor · Text", CODE = "Editor · Code", FILES = "Editor · Files",
+        MOTION = "Appearance · Motion", BACKDROP = "Appearance · Backdrop", RENDERING = "Appearance · Rendering", TEXT = "Editor · Text", CODE = "Editor · Code", FILES = "Editor · Files",
         GIT = "Editor · Git", RUN = "Editor · Run and debug", DESIGNER = "Editor · Designer", SEARCH = "Editor · Search";
 
     /// <summary>
     /// The sections in the order they're shown inside their parts, the editor's text first and the profiles first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP];
+    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP, RENDERING];
 
     /// <summary>
     /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
@@ -58,6 +58,7 @@ public static class EditorSettingsCatalog
         new("caret_fast_rate", HexText.Get("settings_text.caret_fast_rate_title"), UIFormKind.Number, HexText.Get("settings_text.caret_fast_rate_help"), TEXT, Least: 30.0f, Most: 200.0f, Step: 5.0f, Slider: true, Unit: "/s"),
         new("sticky_scroll", HexText.Get("settings_text.sticky_scroll_title"), UIFormKind.Flag, HexText.Get("settings_text.sticky_scroll_help"), TEXT),
         new("format_on_save", HexText.Get("settings_text.format_on_save_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_save_help"), FILES),
+        new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), TEXT),
         Patterns("files_exclude"),
         Patterns("search_exclude"),
         new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH)
@@ -71,6 +72,14 @@ public static class EditorSettingsCatalog
     private static UISetting Patterns(string key) =>
         new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.List, HexText.Get($"settings_text.{key}_help"), SEARCH,
             KeyPlaceholder: HexText.Get($"settings_text.{key}_placeholder"), ValuePlaceholder: HexText.Get("settings_text.add_pattern"));
+
+    /// <summary>
+    /// The row that says what the render scale came to, the scale, the pixels the frame is drawn with and the window's,
+    /// and what blows it up. Read only and Dawn's alone, it asks the running engine (Dusk keeps the same file and
+    /// hasn't one to ask).
+    /// </summary>
+    public static readonly UISetting RenderNow = new("render_scale_now", HexText.Get("settings_catalog.render_scale_now_title"), UIFormKind.Text,
+        HexText.Get("settings_catalog.render_scale_now_help"), RENDERING, ReadOnly: true);
 
     /// <summary>The buttons of the picture's row, which one is which.</summary>
     public const int CHOOSE_PICTURE = 0, USUAL_PICTURE = 1;
@@ -98,6 +107,12 @@ public static class EditorSettingsCatalog
         new("effect_spotlight", HexText.Get("settings_catalog.effect_spotlight_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_spotlight_help"), EFFECTS),
         new("effect_ripples", HexText.Get("settings_catalog.effect_ripples_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_ripples_help"), EFFECTS),
         new("effect_trail", HexText.Get("settings_catalog.effect_trail_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_trail_help"), EFFECTS),
+
+        Choice("render_scale", RENDERING, ["auto", "native", "manual"]),
+        new("render_scale_percent", HexText.Get("settings_catalog.render_scale_percent_title"), UIFormKind.Number, HexText.Get("settings_catalog.render_scale_percent_help"), RENDERING, Least: 25.0f, Most: 100.0f, Step: 5.0f, Slider: true, Unit: "%"),
+        Choice("render_composition", RENDERING, ["native_ui", "whole_frame"]),
+        Choice("render_upscaler", RENDERING, ["cas", "fsr1", "gsr1", "bilinear", "nearest"]),
+        new("render_sharpness", HexText.Get("settings_catalog.render_sharpness_title"), UIFormKind.Number, HexText.Get("settings_catalog.render_sharpness_help"), RENDERING, Least: 0.0f, Most: 1.0f, Step: 0.05f, Slider: true),
 
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
@@ -129,6 +144,7 @@ public static class EditorSettingsCatalog
         new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
         Choice("csharp_colors", CODE, ["resharper", "visual_studio", "skin"]),
+        new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), CODE),
 
         new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
         new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
@@ -206,7 +222,7 @@ public static class EditorSettingsCatalog
     /// </summary>
     private static string[] CodeFonts()
     {
-        string fonts = Path.Combine(Horizon.Core.Platform.PlatformPaths.Program, "Assets", "fonts");
+        string fonts = Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts");
         if (!Directory.Exists(fonts))
             return ["hack"];
 
@@ -221,6 +237,11 @@ public static class EditorSettingsCatalog
     /// <summary>New-install and reset values. Flat surfaces and no decorative motion, the interface moving at its usual speed.</summary>
     public static readonly IReadOnlyDictionary<string, IRuntimeValue> Usual = new Dictionary<string, IRuntimeValue>(StringComparer.Ordinal)
     {
+        ["render_scale"] = new StringValue("auto"),
+        ["render_scale_percent"] = new NumberValue(75.0f),
+        ["render_composition"] = new StringValue("native_ui"),
+        ["render_upscaler"] = new StringValue("cas"),
+        ["render_sharpness"] = new NumberValue(0.0f),
         ["effects"] = new StringValue("none"),
         ["effect_glass"] = Values.Bool(false),
         ["effect_sparks"] = Values.Bool(false),
@@ -264,6 +285,7 @@ public static class EditorSettingsCatalog
         ["caret_fast_rate"] = new NumberValue(80.0f),
         ["sticky_scroll"] = Values.Bool(true),
         ["format_on_save"] = Values.Bool(false),
+        ["format_on_type"] = Values.Bool(true),
         ["code_zoom"] = new NumberValue(1.0f),
         ["code_font"] = new StringValue("hack"),
         ["wrap_code"] = Values.Bool(false),
@@ -273,6 +295,7 @@ public static class EditorSettingsCatalog
         ["code_lens_references"] = Values.Bool(true),
         ["semantic_highlighting"] = Values.Bool(true),
         ["csharp_colors"] = new StringValue("resharper"),
+        ["visual_studio_keys"] = Values.Bool(false),
         ["git_autofetch"] = Values.Bool(true),
         ["git_autofetch_interval"] = new NumberValue(3.0f),
         ["git_pull_mode"] = new StringValue("default"),
