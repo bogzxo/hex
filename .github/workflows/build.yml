@@ -41,11 +41,11 @@ jobs:
           # The extensions (bogzxo/hex-extensions at hex-extensions)
           submodules: recursive
 
-      # The engine as it is on its development right now, and the language inside of it
+      # The engine tested for this release, and the language inside of it
       - uses: actions/checkout@v4
         with:
           repository: bogzxo/horizon
-          ref: development
+          ref: 0bcb94162f6012ed81fd3a8ddf8fe7cdb88155ec
           path: horizon
           submodules: recursive
 
@@ -85,6 +85,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          foreach ($exe in @('publish/Hex/Hex.exe', 'publish/Hex.Setup/Hex.Installer.exe')) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path $exe))
+            $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+            $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 24 + 68)
+            if ($subsystem -ne 2) { throw "$exe must use the Windows GUI subsystem, not open a console." }
+          }
           $files = @(Get-ChildItem -LiteralPath publish/Hex.Setup -Recurse -File)
           if ($files.Count -ne 1 -or $files[0].Name -ne 'Hex.Installer.exe') { throw 'Windows setup must publish as one EXE.' }
           # Invalid arguments exit before graphics or any installation, exercising extraction and failure cleanup.
@@ -150,7 +156,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # RELEASE_NOTES.md is what the release says, GitHub's list of what changed goes under it
+      # RELEASE_NOTES.md is what the release says
       - uses: actions/checkout@v4
         with:
           sparse-checkout: RELEASE_NOTES.md
@@ -173,4 +179,4 @@ jobs:
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md --generate-notes $prerelease
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md $prerelease

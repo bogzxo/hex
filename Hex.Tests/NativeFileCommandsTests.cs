@@ -11,7 +11,7 @@ public sealed class NativeFileCommandsTests
     {
         var commands = HexTasks.NativeFileCommands(cpp, "hello world.cpp", "hello world.exe", "pwsh", name => name == expected ? "C:/Program Files/LLVM/bin/" + name + ".exe" : null);
         Assert.Equal($"& 'C:/Program Files/LLVM/bin/{expected}.exe' -g 'hello world.cpp' -o 'hello world.exe'", commands.Build);
-        Assert.Equal("& '.\\hello world.exe'", commands.Run);
+        Assert.Equal(OperatingSystem.IsWindows() ? "& '.\\hello world.exe'" : "& './hello world.exe'", commands.Run);
     }
 
     [Fact]
@@ -19,7 +19,7 @@ public sealed class NativeFileCommandsTests
     {
         var commands = HexTasks.NativeFileCommands(true, "a'$b.cpp", "a'$b.exe", "pwsh", name => name);
         Assert.Equal("& 'g++' -g 'a''$b.cpp' -o 'a''$b.exe'", commands.Build);
-        Assert.Equal("& '.\\a''$b.exe'", commands.Run);
+        Assert.Equal(OperatingSystem.IsWindows() ? "& '.\\a''$b.exe'" : "& './a''$b.exe'", commands.Run);
     }
 
     [Fact]

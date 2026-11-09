@@ -86,9 +86,12 @@ internal sealed partial class DawnScene
         if (HexModes.Together)
             HexModes.Scale = scale;
 
-        // Except the title bar, which is the window's and the size of the system's whatever the editor is drawn at, its menus with it
-        menu.TextScale = MENU_TEXT / scale;
-        Hex.Shell.HexModeSwitch.SetScale(modeToggle, scale);
+        // Desktop chrome follows the native window. On a phone or tablet the bar belongs to the app and follows its zoom.
+        bool nativeChrome = (Engine.WindowManager.Features & Horizon.Platform.PlatformFeatures.Window) != 0;
+        ((TitleBar)top).PixelSized = nativeChrome;
+        float chromeScale = nativeChrome ? scale : 1.0f;
+        menu.TextScale = MENU_TEXT / chromeScale;
+        Hex.Shell.HexModeSwitch.SetScale(modeToggle, chromeScale);
 
         if (!remember || options.SelfTest)
             return;
