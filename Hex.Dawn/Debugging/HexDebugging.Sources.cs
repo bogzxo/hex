@@ -14,7 +14,7 @@ internal sealed partial class HexDebugging
     private readonly Dictionary<string, DebugSource> debuggerSourceBindings = new(PlatformPaths.Comparer);
 
     private bool CanUseBreakpointCommands() => !context.Documents.Current.InDesigner && context.Documents.Current.IsText
-        && !IsMemoryPath(context.Documents.Current.Path) && !IsDebuggerSourcePath(context.Documents.Current.Path);
+        && !IsMemoryPath(context.Documents.Current.Path) && (!IsDebuggerSourcePath(context.Documents.Current.Path) || CanToggleSourceBreakpointHere());
 
     private bool IsCurrentDebuggerSource(HexDocument document) => document.Path is {} path && DebugStopped && debugging is {} session
         && debuggerSourceBindings.TryGetValue(path, out var source) && session.OwnsSource(source)
@@ -79,10 +79,10 @@ internal sealed partial class HexDebugging
                         if (context.Documents.Find(cache) is {} view)
                         {
                             view.Editor.ReadOnly = true;
-                            view.Editor.OnGutterPressed = null;
                             view.Editor.ExecutionLine = frame.Line;
                             view.Name = context.Strings.Said("debugging.source_snapshot", ("name", DebuggerSourceName(source)));
                             debuggerSourceBindings[cache] = source;
+                            BindSourceBreakpoints(view, session, source);
                             showingDisassembly = showingMemory = false;
                         }
                     }
@@ -96,6 +96,7 @@ internal sealed partial class HexDebugging
 
     private void ClearDebuggerSources()
     {
+        ClearSourceBreakpointViews();
         debuggerSourceRequest++;
         sourceSession = null;
         sourceSessionFolder = "";

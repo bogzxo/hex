@@ -231,6 +231,7 @@ internal sealed partial class HexSettings
 
     /// <summary>Where netcoredbg is, empty to look for it (DawnScene.Debugging).</summary>
     public string DebuggerPath = string.Empty;
+    public bool DebugJustMyCode = true;
     public readonly Dictionary<string, bool> ExceptionBreakpoints = new(StringComparer.Ordinal);
 
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
@@ -458,6 +459,7 @@ internal sealed partial class HexSettings
         AutoSave = Flag(values, "auto_save", AutoSave);
         AutoSaveDelay = Math.Clamp(Number(values, "auto_save_delay", AutoSaveDelay), 0.25f, 60.0f);
         RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
+        DebugJustMyCode = Flag(values, "debug_just_my_code", DebugJustMyCode);
         if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
         if (values.GetValueOrDefault("exception_breakpoints") is ObjectValue exceptionFilters)
         {
@@ -743,6 +745,7 @@ internal sealed partial class HexSettings
             .Add("auto_save_delay", AutoSaveDelay)
             .Add("run_to_terminal", RunToTerminal)
             .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
+            .Add("debug_just_my_code", DebugJustMyCode)
             .Add("exception_breakpoints", ExceptionBreakpointsObject())
             .Add("language_server_paths", Named(ServerPaths, paths: true))
             .Add("files_associations", Named(FileAssociations))

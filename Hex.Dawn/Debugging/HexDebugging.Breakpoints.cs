@@ -177,6 +177,8 @@ internal sealed partial class HexDebugging
     {
         if (!CanChangeAllBreakpoints()) return;
         EnableAllDataBreakpoints(on);
+        if (debugging is {} sourceSession && sourceSession.SourceBreakpointSets.Count > 0)
+            ChangeSourceBreakpoints(sourceSession, () => sourceSession.EnableSourceBreakpoints(on));
         if (debugging is {} instructionSession && instructionSession.InstructionBreakpoints.Count > 0)
             ChangeInstructionBreakpoints(instructionSession, () => instructionSession.EnableInstructionBreakpoints(on));
         foreach (string name in functionBreakpoints.Keys.ToArray()) functionBreakpoints[name] = on;
@@ -196,6 +198,8 @@ internal sealed partial class HexDebugging
     {
         if (!CanChangeAllBreakpoints()) return;
         DeleteAllDataBreakpoints();
+        if (debugging is {} sourceSession && sourceSession.SourceBreakpointSets.Count > 0)
+            ChangeSourceBreakpoints(sourceSession, sourceSession.DeleteSourceBreakpoints);
         if (debugging is {} instructionSession && instructionSession.InstructionBreakpoints.Count > 0)
             ChangeInstructionBreakpoints(instructionSession, instructionSession.ClearInstructionBreakpoints);
         functionBreakpoints.Clear();
@@ -213,6 +217,7 @@ internal sealed partial class HexDebugging
     internal void ToggleBreakpointEnabledHere()
     {
         HexDocument shown = context.Documents.Current;
+        if (IsDebuggerSourcePath(shown.Path)) { ToggleSourceBreakpoint(shown, shown.Editor.Document.Caret.Line, enableOnly: true); return; }
         if (IsDisassemblyPath(shown.Path)) { ToggleInstruction(shown, shown.Editor.Document.Caret.Line, enableOnly: true); return; }
         if (!shown.IsText || (!SupportsDebugging(shown.Path)))
             return;
@@ -372,6 +377,7 @@ internal sealed partial class HexDebugging
         AddFunctionBreakpointRows(points);
         AddDataBreakpointRows(points);
         AddInstructionBreakpointRows(points);
+        AddSourceReferenceBreakpointRows(points);
         if (points.Children.Count == 0)
             points.Children.Add(NoteItem(context.Strings.Said("debugging.breakpoints_hint")));
         return points;

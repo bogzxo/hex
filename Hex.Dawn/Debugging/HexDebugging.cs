@@ -78,6 +78,14 @@ internal sealed partial class HexDebugging
             .IsVisible = () => debugging?.TerminatesDebuggeeOnStop == false;
         commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging && restart is not null;
         commands.Add("Run/debug", context.Strings.Said("debugging.attach"), AttachToProcess, icon: "plug").IsEnabled = () => !Debugging;
+        var justMyCode = commands.Add("Run/debug", context.Strings.Said("debugging.just_my_code"), () =>
+        {
+            if (Debugging) return;
+            context.Settings.Values.DebugJustMyCode = !context.Settings.Values.DebugJustMyCode;
+            context.Settings.Save();
+        }, icon: "code");
+        justMyCode.IsChecked = () => context.Settings.Values.DebugJustMyCode;
+        justMyCode.IsEnabled = () => !Debugging;
         commands.Add("Run/debug", context.Strings.Said("debugging.select_framework"), SelectDebugFramework, icon: "debug-alt")
             .IsVisible = () => !Debugging && Tasks?.ChosenRun()?.Task is null && (IsCSharp(context.Documents.Current.Path)
                 || Tasks?.ChosenRun()?.Project?.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) == true);
@@ -85,7 +93,7 @@ internal sealed partial class HexDebugging
         commands.Add("Run/debug", context.Strings.Said("debugging.add_function_breakpoint"), AddFunctionBreakpoint, icon: "debug-breakpoint-function")
             .IsEnabled = () => !building;
         commands.Add("Run/debug", context.Strings.Said("debugging.enable_disable_breakpoint"), ToggleBreakpointEnabledHere, "Ctrl+F9", "circle", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
-        commands.Add("Run/debug", context.Strings.Said("debugging.breakpoint_settings"), BreakpointSettingsHere, icon: "debug-breakpoint-conditional").IsVisible = () => CanUseBreakpointCommands() && !IsDisassemblyPath(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.breakpoint_settings"), BreakpointSettingsHere, icon: "debug-breakpoint-conditional").IsVisible = () => CanUseBreakpointCommands() && !IsDisassemblyPath(context.Documents.Current.Path) && !IsDebuggerSourcePath(context.Documents.Current.Path);
         commands.Add("Run/debug", context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg, icon: "cloud-download").IsVisible = () => NetcoredbgAsset() is not null && Netcoredbg() is null;
         AddWatchCommands();
         commands.Add("Run/debug", context.Strings.Said("debugging.exception_settings"), ExceptionSettings, icon: "debug-breakpoint")
@@ -222,6 +230,7 @@ internal sealed partial class HexDebugging
     internal void ToggleBreakpointHere()
     {
         HexDocument shown = context.Documents.Current;
+        if (IsDebuggerSourcePath(shown.Path)) { ToggleSourceBreakpoint(shown, shown.Editor.Document.Caret.Line); return; }
         if (IsDisassemblyPath(shown.Path)) { ToggleInstruction(shown, shown.Editor.Document.Caret.Line); return; }
         if (!shown.IsText || (!SupportsDebugging(shown.Path)))
         {
@@ -736,6 +745,7 @@ internal sealed partial class HexDebugging
         }
         using var stop = cancel.Register(session.Stop);
         var exceptionPreferences = new Dictionary<string, bool>(context.Settings.Values.ExceptionBreakpoints, StringComparer.Ordinal);
+        session.JustMyCode = context.Settings.Values.DebugJustMyCode;
         session.BreakOnException = filter => exceptionPreferences.GetValueOrDefault(kind + "/" + filter.Id, filter.Default);
         session.InitialFunctionBreakpoints = Volatile.Read(ref activeFunctionBreakpoints);
 
@@ -870,6 +880,7 @@ internal sealed partial class HexDebugging
             {
                 case DebugEventKind.BreakpointsChanged:
                     RefreshInstructionMarks();
+                    RefreshSourceBreakpointMarks();
                     context.Panels.RefreshSide(HexSide.Debug);
                     break;
                 case DebugEventKind.Stopped:

@@ -1,4 +1,4 @@
-// Everything Hex says, in English, by where it says it. Hex's layouts name these with an @, "@toolbar.save", and the code
+﻿// Everything Hex says, in English, by where it says it. Hex's layouts name these with an @, "@toolbar.save", and the code
 // asks for the rest by the same keys. Change anything here and Hex shows it the next time it starts (the windows of
 // the Help menu read it again every time they open). A text written as a list is its lines, which is how the pages of
 // help are written, markdown and all (# a heading, - a bullet, `code`, **bold**, and $(name) for an icon). A name in
@@ -1007,6 +1007,11 @@ let strings = {
         detach: "Detach from Process",
         source_snapshot: "{name} [Debugger source snapshot]",
         source_unnamed: "Source {reference}",
+        just_my_code: "Just My Code (C# / Python)",
+        source_breakpoint_verified: "Verified",
+        source_breakpoint_unverified: "The debugger has not verified this breakpoint.",
+        source_breakpoint_failed: "Could not set source breakpoint: {why}",
+        source_breakpoint_session: "Debugger source · this session only",
         source_failed: "Could not retrieve debugger source: {why}",
         source_cannot_run: "This is a read-only debugger source snapshot. Run the original program or select a project to debug.",
         modules: "Loaded Modules",

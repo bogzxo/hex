@@ -2,7 +2,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class HexDebugging
 {
-    private bool CanChangeAllBreakpoints() => debugging is not { } session || session.DataBreakpoints.Count == 0 && session.InstructionBreakpoints.Count == 0 || DebugStopped;
+    private bool CanChangeAllBreakpoints() => debugging is not { } session || session.DataBreakpoints.Count == 0 && session.InstructionBreakpoints.Count == 0 && !session.HasSourceBreakpointSets || DebugStopped;
     internal void AddDataBreakpointAction(Menu menu, SideTag tag)
     {
         if (!DebugStopped || debugging is not { CanSetDataBreakpoints: true } session || tag.DebugContainer <= 0

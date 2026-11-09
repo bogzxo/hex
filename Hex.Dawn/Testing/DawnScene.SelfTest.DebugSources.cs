@@ -42,8 +42,8 @@ internal sealed partial class DawnScene
         test.Run(() => { firstSnapshot = document.Path ?? ""; reference = debugger.stoppedFrames.FirstOrDefault().Source?.Reference ?? 0; });
         test.Check("Debugger source: snapshot has Python syntax and no language-server document", () => HexDebugging.IsDebuggerSourcePath(document.Path)
             && ReferenceEquals(code.Highlighter, CodeLanguages.ForFile("generated.py")) && languages.LinterOf(document) is null);
-        test.Check("Debugger source: unavailable file operations do not send snapshot paths to the debugger", () => code.OnGutterPressed is null
-            && !Has("debugging.toggle_breakpoint") && !Has("debugging.run_to_cursor") && !Has("debugging.set_next_statement")
+        test.Check("Debugger source: session breakpoint bindings do not enable file-only actions", () => code.OnGutterPressed is not null
+            && Has("debugging.toggle_breakpoint") && !Has("debugging.run_to_cursor") && !Has("debugging.set_next_statement")
             && debugger.breakpoints.Keys.All(path => !HexDebugging.IsDebuggerSourcePath(path)));
         test.Run(() =>
         {
