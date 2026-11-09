@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Threading.Channels;
 
 using Hex.Dawn;
@@ -65,50 +65,58 @@ public sealed class HexDebugVariablesTests
         using var incoming = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
         using var clientIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, incoming.ClientSafePipeHandle);
         using var session = DebugSession.Over(clientIn, outgoing);
-        var view = new View();
-        Task<IReadOnlyList<DebugVariable>> Values(int _) => Task.FromResult<IReadOnlyList<DebugVariable>>([new("items", "250 items", "array", 20) { IndexedVariables = 250, NamedVariables = 0 }]);
-        view.Variables.Rows(session, 1, Locals, Values);
-        await view.Apply();
-        var root = Assert.Single(view.Variables.Rows(session, 1, Locals, Values));
-        Assert.IsType<SideTag>(root.Tag).Expanding!(root);
-        async Task Page(int start, int count, bool error = false)
+        try
         {
-            var request = await Task.Run(() =>
-            {
-                var header = new System.Text.StringBuilder();
-                while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal)) header.Append((char)adapterIn.ReadByte());
-                int length = int.Parse(header.ToString().Split('\r')[0][15..]);
-                byte[] bytes = new byte[length]; adapterIn.ReadExactly(bytes);
-                return System.Text.Json.Nodes.JsonNode.Parse(bytes)!.AsObject();
-            }).WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal("variables", request["command"]!.GetValue<string>());
-            Assert.Equal(start, request["arguments"]!["start"]!.GetValue<int>());
-            Assert.Equal(100, request["arguments"]!["count"]!.GetValue<int>());
-            Assert.Equal("indexed", request["arguments"]!["filter"]!.GetValue<string>());
-            var values = new System.Text.Json.Nodes.JsonArray();
-            for (int n = start; n < start + count; n++) values.Add(new System.Text.Json.Nodes.JsonObject { ["name"] = n.ToString(), ["value"] = n.ToString(), ["variablesReference"] = 0 });
-            var response = new System.Text.Json.Nodes.JsonObject { ["seq"] = 1, ["type"] = "response", ["request_seq"] = request["seq"]!.GetValue<int>(), ["command"] = "variables", ["success"] = !error, ["message"] = "paging failed",
-                ["body"] = new System.Text.Json.Nodes.JsonObject { ["variables"] = values } };
-            byte[] body = System.Text.Encoding.UTF8.GetBytes(response.ToJsonString());
-            incoming.Write(System.Text.Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n")); incoming.Write(body); incoming.Flush();
+            var view = new View();
+            Task<IReadOnlyList<DebugVariable>> Values(int _) => Task.FromResult<IReadOnlyList<DebugVariable>>([new("items", "250 items", "array", 20) { IndexedVariables = 250, NamedVariables = 0 }]);
+            view.Variables.Rows(session, 1, Locals, Values);
             await view.Apply();
+            var root = Assert.Single(view.Variables.Rows(session, 1, Locals, Values));
+            Assert.IsType<SideTag>(root.Tag).Expanding!(root);
+            async Task Page(int start, int count, bool error = false)
+            {
+                var request = await Task.Run(() =>
+                {
+                    var header = new System.Text.StringBuilder();
+                    while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal)) header.Append((char)adapterIn.ReadByte());
+                    int length = int.Parse(header.ToString().Split('\r')[0][15..]);
+                    byte[] bytes = new byte[length]; adapterIn.ReadExactly(bytes);
+                    return System.Text.Json.Nodes.JsonNode.Parse(bytes)!.AsObject();
+                }).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal("variables", request["command"]!.GetValue<string>());
+                Assert.Equal(start, request["arguments"]!["start"]!.GetValue<int>());
+                Assert.Equal(100, request["arguments"]!["count"]!.GetValue<int>());
+                Assert.Equal("indexed", request["arguments"]!["filter"]!.GetValue<string>());
+                var values = new System.Text.Json.Nodes.JsonArray();
+                for (int n = start; n < start + count; n++) values.Add(new System.Text.Json.Nodes.JsonObject { ["name"] = n.ToString(), ["value"] = n.ToString(), ["variablesReference"] = 0 });
+                var response = new System.Text.Json.Nodes.JsonObject { ["seq"] = 1, ["type"] = "response", ["request_seq"] = request["seq"]!.GetValue<int>(), ["command"] = "variables", ["success"] = !error, ["message"] = "paging failed",
+                    ["body"] = new System.Text.Json.Nodes.JsonObject { ["variables"] = values } };
+                byte[] body = System.Text.Encoding.UTF8.GetBytes(response.ToJsonString());
+                incoming.Write(System.Text.Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n")); incoming.Write(body); incoming.Flush();
+                await view.Apply();
+            }
+            await Page(0, 100);
+            Assert.Equal(101, root.Children!.Count);
+            var more = Assert.IsType<SideTag>(root.Children[^1].Tag);
+            more.Pressed!(); await Page(100, 0, error: true);
+            Assert.Equal(102, root.Children.Count);
+            Assert.Contains(root.Children, row => row.Text.Contains("paging failed"));
+            Assert.Equal("debugging.retry_variables", root.Children[^1].Text);
+            Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(100, 100);
+            Assert.Equal(201, root.Children.Count);
+            Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(200, 50);
+            Assert.Equal(250, root.Children.Count);
+            Assert.Equal("249 = 249", root.Children[^1].Text);
+            int refreshed = view.RowRefreshes;
+            view.Variables.Reset();
+            more.Pressed!();
+            Assert.Equal(refreshed, view.RowRefreshes);
         }
-        await Page(0, 100);
-        Assert.Equal(101, root.Children!.Count);
-        var more = Assert.IsType<SideTag>(root.Children[^1].Tag);
-        more.Pressed!(); await Page(100, 0, error: true);
-        Assert.Equal(102, root.Children.Count);
-        Assert.Contains(root.Children, row => row.Text.Contains("paging failed"));
-        Assert.Equal("debugging.retry_variables", root.Children[^1].Text);
-        Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(100, 100);
-        Assert.Equal(201, root.Children.Count);
-        Assert.IsType<SideTag>(root.Children[^1].Tag).Pressed!(); await Page(200, 50);
-        Assert.Equal(250, root.Children.Count);
-        Assert.Equal("249 = 249", root.Children[^1].Text);
-        int refreshed = view.RowRefreshes;
-        view.Variables.Reset();
-        more.Pressed!();
-        Assert.Equal(refreshed, view.RowRefreshes);
+        finally
+        {
+            // A Unix pipe waits for its active read: close the fake adapter writer before disposing clientIn.
+            incoming.Dispose();
+        }
     }
 
     [Fact]
