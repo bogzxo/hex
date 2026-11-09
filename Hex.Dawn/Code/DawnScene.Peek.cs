@@ -99,6 +99,7 @@ internal sealed partial class DawnScene
 
         // Over the code it's about, nothing dimmed, it's read next to what was being written
         dialog.Dims = false;
+        dialog.DismissOnOutsidePress = true;
 
         // Tab goes on round the dialog's buttons and out of the code again, it went in and stayed there for good
         var box = dialog.Body.Add(new CodeEditor

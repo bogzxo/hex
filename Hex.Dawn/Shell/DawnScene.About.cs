@@ -39,7 +39,7 @@ internal sealed partial class DawnScene
         column.Add(new Label { Text = "**Hex**", Markdown = true, TextScale = text * ABOUT_NAME, Size = new Vector2(inner, 0.0f) });
         column.Add(new Label
         {
-            Text = Said("about.version", ("version", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?")),
+            Text = Said("about.version", ("version", HexAbout.Label)),
             Size = new Vector2(inner, 0.0f)
         });
         column.Add(new Label

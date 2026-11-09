@@ -5,13 +5,13 @@ namespace Hex.Dawn;
 
 // The little things every editor has and nobody notices until they aren't there. The commands used last over the rest of
 // the palette and the files opened last over the rest of quick open (thinner and a colour of their own, ListBox.Lead),
-// the files closed last brought back with Ctrl+Shift+T, a scratchpad on Ctrl+N, the path of the file on screen copied, the trailing spaces and
+// the files closed last brought back with Ctrl+Shift+T, the path of the file on screen copied, the trailing spaces and
 // the last newline seen to on a save, and a file of code saved by itself a moment after typing stops.
 internal sealed partial class DawnScene
 {
     // How many closed files are remembered for Ctrl+Shift+T, and the files the recent lists are kept in (the settings folder)
     private const int MAX_CLOSED = 20;
-    private const string RECENT_COMMANDS_FILE = "hex_recent_commands.txt", RECENT_OPENED_FILE = "hex_recent_opened.txt", SCRATCH_FOLDER = "scratch";
+    private const string RECENT_COMMANDS_FILE = "hex_recent_commands.txt", RECENT_OPENED_FILE = "hex_recent_opened.txt";
 
     // Testing itself it keeps them in memory, it'd be the palette of whoever ran it otherwise
     private UIRecentList? recentCommands, recentOpened;
@@ -74,33 +74,6 @@ internal sealed partial class DawnScene
         Say(Said("designer_editing.copied_one", ("name", copied)));
     }
 
-    /* Scratchpads */
-
-    /// <summary>
-    /// Ctrl+N, an empty file of text to put something down in, made in the scratch folder of the settings folder next to
-    /// the exe (testing itself, in the test's folder) and opened, saved like any other file and there the next time.
-    /// They're numbered, the next number after the last one there is.
-    /// </summary>
-    private void NewScratchpad()
-    {
-        string folder = options.SelfTest ? Path.Combine(testFolder, "scratch") : Path.Combine(TerminalFiles.UserFolder, SCRATCH_FOLDER);
-        try
-        {
-            Directory.CreateDirectory(folder);
-            int number = 1;
-            while (File.Exists(Path.Combine(folder, $"scratch {number}.txt")))
-                number++;
-
-            string path = Path.Combine(folder, $"scratch {number}.txt");
-            File.WriteAllText(path, string.Empty);
-            OpenAt(path, 0, 0);
-        }
-        catch (Exception e)
-        {
-            Say(Said("conveniences.no_scratchpad", ("reason", e.Message)), error: true);
-        }
-    }
-
     /* Saving */
 
     /// <summary>
@@ -121,10 +94,13 @@ internal sealed partial class DawnScene
         return tidy == text ? null : tidy;
     }
 
-    /// <summary>Every tick, a file of code saved by itself once it has stood still long enough, when the settings say so.</summary>
+    /// <summary>
+    /// Every tick, a file of code saved by itself once it has stood still long enough, when the settings say so. A
+    /// scratchpad always is, whatever they say (DawnScene.Scratchpads).
+    /// </summary>
     private void UpdateAutoSave(float dt)
     {
-        if (!settings.AutoSave || !document.IsText || document.Path is not { } path || compositor.Focus is not CodeEditor typedIn)
+        if (!(settings.AutoSave || IsScratchpad(document)) || !document.IsText || document.Path is not { } path || compositor.Focus is not CodeEditor typedIn)
         {
             autoSaveIn = null;
             return;

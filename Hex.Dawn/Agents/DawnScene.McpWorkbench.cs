@@ -27,6 +27,7 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_terminal_read", "Read the terminal",
             "Read the text of the terminal in the panel under the editor (the focused one, or a task's tab).",
             McpSchema.Object([
+                ("tab", McpSchema.String("The tab, its number from 1 or part of its title, the current one by default.")),
                 ("lines", McpSchema.Integer("The last this many lines, 60 by default.")),
                 ("scrollback", McpSchema.Flag("Include what has scrolled off the top."))]), ReadOnly: true),
             TerminalRead),
@@ -35,6 +36,7 @@ internal sealed partial class DawnScene
             "Send a line to the terminal in the panel (opening it with a shell if none is up) and give back what it shows after a moment.",
             McpSchema.Object([
                 ("text", McpSchema.String("What to send.")),
+                ("tab", McpSchema.String("The tab, its number from 1 or part of its title, the current one by default.")),
                 ("enter", McpSchema.Flag("Press Enter after it, true by default.")),
                 ("wait", McpSchema.Number("Seconds to wait before reading the screen, 1 by default."))], "text")),
             TerminalSend, Timeout: 60.0f),
@@ -82,7 +84,7 @@ internal sealed partial class DawnScene
     ];
 
     /// <summary>Every tool, in the order tools/list says them.</summary>
-    internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools()];
+    internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(), .. HarnessTools(), .. TerminalTools()];
 
     /// <summary>A command as a line, its menu, its name and its keys.</summary>
     private static string McpCommandLine(UIChoice choice) =>
@@ -138,13 +140,14 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> TerminalRead(JsonObject arguments)
     {
-        if (terminalPanel.FocusedView is not { } view)
+        TerminalTab? tab = McpTab(arguments.String("tab"));
+        if (tab?.FocusedView is not { } view)
         {
-            yield return McpToolResult.Error("No terminal is open in the panel. hex_terminal_send opens one.");
+            yield return McpToolResult.Error(arguments.String("tab") is { } named ? $"There's no tab {named}. hex_terminal list says them." : "No terminal is open in the panel. hex_terminal_send opens one.");
             yield break;
         }
 
-        string title = terminalPanel.Current?.Title ?? "terminal";
+        string title = tab.Title;
         yield return McpToolResult.Text($"The terminal \"{title}\" ({(view.Process is { IsRunning: true } ? "running" : "ended")}):\n"
             + McpTerminalText(view, Math.Clamp(arguments.Integer("lines") ?? 60, 1, 5000), arguments.Flag("scrollback")));
     }
@@ -159,9 +162,10 @@ internal sealed partial class DawnScene
         while (System.Environment.TickCount64 < giveUp && terminalPanel.FocusedView is not { Process.IsRunning: true })
             yield return null;
 
-        if (terminalPanel.FocusedView is not { } view)
+        TerminalTab? tab = McpTab(arguments.String("tab"));
+        if (tab?.FocusedView is not { } view)
         {
-            yield return McpToolResult.Error("No terminal came up in the panel.");
+            yield return McpToolResult.Error(arguments.String("tab") is { } named ? $"There's no tab {named}. hex_terminal list says them." : "No terminal came up in the panel.");
             yield break;
         }
 
@@ -171,7 +175,7 @@ internal sealed partial class DawnScene
         while (System.Environment.TickCount64 < until)
             yield return null;
 
-        yield return McpToolResult.Text($"Sent it to \"{terminalPanel.Current?.Title ?? "terminal"}\". It shows:\n{McpTerminalText(view, 40, scrollback: false)}");
+        yield return McpToolResult.Text($"Sent it to \"{tab.Title}\". It shows:\n{McpTerminalText(view, 40, scrollback: false)}");
     }
 
     private IEnumerable<McpToolResult?> RunTask(JsonObject arguments)
@@ -379,7 +383,7 @@ internal sealed partial class DawnScene
             return McpToolResult.Error("Say which suites, \"list\" lists them.");
 
         bool list = suites is ["list"];
-        var start = new ProcessStartInfo(System.Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Hex.exe"))
+        var start = new ProcessStartInfo(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))
         {
             UseShellExecute = false,
             CreateNoWindow = true,

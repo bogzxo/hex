@@ -1,12 +1,24 @@
-using System.Numerics;
+﻿using System.Numerics;
+
+using Hex.Core.Projects;
 
 using Horizon.UI;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-/// <summary>What a row of the side tree does, pressed, opened, filled in as it opens, its right click and the keys it takes.</summary>
-internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null, Func<char, bool>? Key = null);
+/// <summary>
+/// What a row of the side tree does, pressed, opened, filled in as it opens, its right click and the keys it takes. A row
+/// with an id is the same row when its view's rows are made again, it stays selected and the view stays where it was
+/// scrolled to (DawnScene.SidePlaces).
+/// </summary>
+internal sealed record SideTag(Action? Pressed = null, Action<Vector2>? Menu = null, Action<UITreeItem>? Toggled = null, Action<UITreeItem>? Expanding = null, Func<char, bool>? Key = null, string? Id = null)
+{
+    public string? DebugExpression { get; init; }
+    public Func<bool>? DebugCurrent { get; init; }
+    public DebugVariable? DebugValue { get; init; }
+    public int DebugContainer { get; init; }
+}
 
 internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int Depth, bool IsRoot);
 
@@ -15,6 +27,23 @@ internal readonly record struct ExplorerEntry(string Path, bool IsFolder, int De
 // for any change, a selection that moved included. The designer's components and layers are still rows of their own.
 internal sealed partial class DawnScene
 {
+    private void DebugVariableMenu(UITreeItem item, Vector2 point)
+    {
+        if (item.Tag is not SideTag { DebugCurrent: {} current } tag || (string.IsNullOrEmpty(tag.DebugExpression) && tag.DebugContainer <= 0))
+        {
+            (item.Tag as SideTag)?.Menu?.Invoke(point);
+            return;
+        }
+        if (!debugger.DebugStopped || !current()) return;
+        var menu = new Menu("debug-variable");
+        if (tag.DebugExpression is { Length: > 0 } expression)
+            menu.Add(Said("debugging.add_watch"), () => { if (debugger.DebugStopped && current()) debugger.WatchExpression(expression); }, icon: "eye");
+        if (tag.Menu is {} edit) menu.Add(Said("debugging.edit_value"), () => { if (current()) edit(point); }, icon: "edit");
+        debugger.AddDataBreakpointAction(menu, tag);
+        debugger.AddMemoryAction(menu, tag);
+        Context.Windows.Menu(menu);
+    }
+
     private TreeView sideTree = null!;
 
     // What the folders of the workspace have in them, read once and watched
@@ -50,12 +79,12 @@ internal sealed partial class DawnScene
         sideTree.TabTo = by => by > 0 ? (codeScroll.Visible ? code : null) : ActivityButton(Side);
         sideTree.OnToggled = item => (item.Tag as SideTag)?.Toggled?.Invoke(item);
         sideTree.OnExpanding = item => (item.Tag as SideTag)?.Expanding?.Invoke(item);
-        sideTree.OnItemContextMenu = (item, point) => (item.Tag as SideTag)?.Menu?.Invoke(point);
+        sideTree.OnItemContextMenu = DebugVariableMenu;
         sideTree.OnKey = (item, key) => Side == HexSide.Explorer && ExplorerFileKey(key) || (item.Tag as SideTag)?.Key?.Invoke(key) == true;
         explorer.SelectedPaths = SelectedWith;
         explorer.FoldersChanged += folders.Forget;
         explorer.PastedPaths = paths => pendingExplorerSelection = paths.ToArray();
-        commands.Keys.Add(Silk.NET.Input.Key.V,
+        commands.Keys.Add(Horizon.Input.Key.V,
             () => compositor.Focus == sideTree && Side == HexSide.Explorer && ExplorerFileKey(UIKeyboard.PASTE),
             control: true, whileTyping: true, shift: false, first: true);
 
@@ -84,13 +113,23 @@ internal sealed partial class DawnScene
         explorerFollowedDocument = document.Path;
         treeTitle.Text = Said("side.explorer_of", ("workspace", explorer.workspace.Name));
         explorer.explorerRows.Clear();
+        solutionHeads.Clear();
         explorerMade = 0;
         UseSideTree(true);
         WatchFolders();
 
+        // The Solution view, the solution's projects instead of the folders (DawnScene.Solution)
         var items = new List<UITreeItem>();
-        foreach (string folder in explorer.workspace.Folders)
-            items.Add(FolderItem(new ExplorerEntry(folder, true, 0, true)));
+        if (ShownSolution() is { } solutionFile)
+        {
+            treeTitle.Text = Said("solution.title");
+            items.Add(SolutionItem(solutionFile));
+        }
+        else
+        {
+            foreach (string folder in explorer.workspace.Folders)
+                items.Add(FolderItem(new ExplorerEntry(folder, true, 0, true)));
+        }
 
         if (items.Count == 0)
             items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
@@ -159,6 +198,19 @@ internal sealed partial class DawnScene
             return;
 
         item.Children = [];
+        AddFolderRows(item, folder, project: null);
+
+        // A folder of the workspace with nothing in it says so, with the two ways of putting something in it
+        if (item.Children.Count == 0 && explorer.workspace.Folders.Contains(folder, PlatformPaths.Comparer))
+            AddEmptyFolderNote(item, folder);
+    }
+
+    /// <summary>
+    /// The rows of what's in a folder put under a row, its folders and then its files. A project's own folder in the
+    /// Solution view leaves out its bin, obj and the project file itself, the way Solution Explorer does.
+    /// </summary>
+    private void AddFolderRows(UITreeItem item, string folder, string? project)
+    {
         var (inside, files) = folders.In(folder);
         int depth = 1;
         UITreeItem root = item;
@@ -169,15 +221,18 @@ internal sealed partial class DawnScene
         }
 
         // Only what files.exclude says is gone from the explorer, .github, .env, bin and node_modules all show the way
-        // they do in VS Code. Search.exclude and the .gitignores are quick open's and Find in Files' business
+        // they do in VS Code. Search.exclude and the .gitignores are quick open's and Find in Files' business. Under the
+        // Solution view the top is the solution's folder, its row is the solution file
         HexExcludes excludes = HexExcludes.Of(settings);
-        string top = root.Tooltip ?? folder;
+        string top = root.Tooltip is { Length: > 0 } said ? DotnetSolutionTree.IsSolution(said) ? Path.GetDirectoryName(said)! : said : folder;
         bool Hidden(string path, bool isFolder) => excludes.Hidden(HexExcludes.Relative(top, path), isFolder);
 
         foreach (string directory in inside)
         {
             string name = Path.GetFileName(directory);
             if (name.StartsWith("~syncthing~") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(directory, true))
+                continue;
+            if (project is not null && name is "bin" or "obj")
                 continue;
 
             item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
@@ -188,24 +243,29 @@ internal sealed partial class DawnScene
             string name = Path.GetFileName(file);
             if (name.StartsWith("~syncthing~") || name.Contains(".sync-conflict") || explorerMade >= HexExplorer.MAX_EXPLORER_ROWS || Hidden(file, false))
                 continue;
+            if (project is not null && PlatformPaths.Same(file, project))
+                continue;
 
-            var entry = new ExplorerEntry(file, false, depth, false);
-            var row = item.Add(new UITreeItem(name, HexExplorer.FileIcon(file))
-            {
-                IconColor = explorer.FileIconColor(file),
-                Tooltip = file,
-                Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
-            });
-
-            explorer.explorerRows.Add((file, false, row));
-            explorerMade++;
-            DecorateRow(row, file, false, null);
-            if (explorer.IsCutPath(file)) row.Color = row.IconColor = DimColor;
+            item.Add(FileRow(file, depth));
         }
+    }
 
-        // A folder of the workspace with nothing in it says so, with the two ways of putting something in it
-        if (item.Children.Count == 0 && explorer.workspace.Folders.Contains(folder, PlatformPaths.Comparer))
-            AddEmptyFolderNote(item, folder);
+    /// <summary>A file's row of the explorer, opened when it's pressed, with the explorer's menu.</summary>
+    private UITreeItem FileRow(string file, int depth)
+    {
+        var entry = new ExplorerEntry(file, false, depth, false);
+        var row = new UITreeItem(Path.GetFileName(file), HexExplorer.FileIcon(file))
+        {
+            IconColor = explorer.FileIconColor(file),
+            Tooltip = file,
+            Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
+        };
+
+        explorer.explorerRows.Add((file, false, row));
+        explorerMade++;
+        DecorateRow(row, file, false, null);
+        if (explorer.IsCutPath(file)) row.Color = row.IconColor = DimColor;
+        return row;
     }
 
     /// <summary>The file that is open selected in the explorer, if the explorer has it.</summary>
@@ -364,10 +424,13 @@ internal sealed partial class DawnScene
     {
         designer.treeRows.Clear();
         fileRows.Clear();
+        KeepSidePlace();
         ApplySide();
         ShowExplorerHead(Side);
         PlaceSearchView(Side == HexSide.Search);
         PlaceCommitBox(Side == HexSide.SourceControl);
+        PlaceAgentsView(Side == HexSide.Agents);
+        PlaceSideHeads();
 
         switch (Side)
         {
@@ -380,10 +443,13 @@ internal sealed partial class DawnScene
             case HexSide.Design:
                 designer.RebuildComponentTree();
                 break;
+            case HexSide.Agents:
+                break;
             default:
                 if (!RebuildSideView())
                     RebuildOutline();
                 break;
         }
+        RevealRequestedSideRow();
     }
 }

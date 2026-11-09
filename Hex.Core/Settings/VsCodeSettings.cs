@@ -33,6 +33,7 @@ internal static class VsCodeSettings
         ("editor.insertSpaces", "insert_spaces", Flag),
         ("editor.detectIndentation", "detect_indentation", Flag),
         ("editor.formatOnSave", "format_on_save", Flag),
+        ("editor.formatOnType", "format_on_type", Flag),
         ("editor.minimap.enabled", "minimap", Flag),
         ("editor.inlayHints.enabled", "inlay_hints", Words(("on", true), ("onUnlessPressed", true), ("off", false), ("offUnlessPressed", false))),
         ("editor.codeLens", "code_lens_references", Flag),

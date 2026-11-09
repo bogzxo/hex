@@ -1,7 +1,3 @@
-[submodule "horizon"]
-	path = horizon
-	url = https://github.com/bogzxo/horizon
-	branch = development
 [submodule "hex-extensions"]
 	path = hex-extensions
 	url = https://github.com/bogzxo/hex-extensions

@@ -126,7 +126,7 @@ public sealed class HexAutomationTests
         var (success, message) = runtime.Evaluate(File.ReadAllText(Path.Combine(at, "tasks.hor")));
         Assert.True(success, message);
         List<HexAutomation> read = HexAutomation.Read(Assert.IsType<ObjectValue>(runtime.UserScope.Lookup("automations")), at, Path.Combine(at, "tasks.hor"));
-        Assert.Equal(["Push all", "Push all (dry run)", "Status of every repository"], read.Select(automation => automation.Title));
-        Assert.True(read[0].HasRun && read[1].HasRun && read[2] is { Shell: "bash", IsHidl: false });
+        Assert.Equal(["Pull all", "Push all", "Push all (dry run)", "Status of every repository"], read.Select(automation => automation.Title));
+        Assert.True(read[0] is { Shell: "bash", IsHidl: false } && read[1].HasRun && read[2].HasRun && read[3] is { Shell: "bash", IsHidl: false });
     }
 }

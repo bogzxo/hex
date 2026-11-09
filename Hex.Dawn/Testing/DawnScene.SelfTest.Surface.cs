@@ -73,6 +73,88 @@ internal sealed partial class DawnScene
         SurfaceShot(test, "surface_find.png");
         test.Check("surface: the find bar keeps left of the minimap and the scroll bar", () =>
             codeEditing.FindBarOpen && codeEditing.findBar.Bounds.Max.X <= code.CodeBounds.Max.X - 4.0f && code.FoundCount > 100);
+
+        float findScaleWas = 0, panelHeightWas = 0;
+        bool panelShownWas = false;
+        int panelPageWas = 0;
+        var originalFindBox = codeEditing.findBox;
+        var originalReplaceBox = codeEditing.replaceBox;
+        test.Run(() =>
+        {
+            findScaleWas = compositor.Scale;
+            panelHeightWas = panelWanted;
+            panelShownWas = bottom.Shown;
+            panelPageWas = bottom.Selected;
+            ShowPanel(OUTPUT_PAGE);
+            panelWanted = 400;
+            SetScale(2.0f, remember: false);
+        });
+        test.Settle(0.5f);
+        PressKeys(test, "Ctrl+H");
+        test.Settle(0.3f);
+        test.Check("surface: compact find keeps dismissal with the query, arrows paired and replacement actions beside the field", () =>
+            Near(codeEditing.findBox.Bounds.Center.Y, codeEditing.findClose.Bounds.Center.Y, 1)
+            && Near(codeEditing.findPrevious.Bounds.Center.Y, codeEditing.findNext.Bounds.Center.Y, 1)
+            && Near(codeEditing.replaceBox.Bounds.Center.Y, codeEditing.replaceOne.Bounds.Center.Y, 1)
+            && Near(codeEditing.replaceOne.Bounds.Center.Y, codeEditing.replaceAll.Bounds.Center.Y, 1));
+        test.Check("surface: compact find reserves space above the editing context", () =>
+            code.CodeBounds.Max.Y <= codeEditing.findBar.Bounds.Min.Y - 4);
+        test.Check("surface: a compact find with room for its options uses three tidy lines", () =>
+            codeEditing.findBar.Bounds.Width < 222 || codeEditing.findBar.Bounds.Width >= 616
+            || (Near(codeEditing.findCase.Bounds.Center.Y, codeEditing.findNext.Bounds.Center.Y, 1)
+                && Near(codeEditing.findCount.Bounds.Center.Y, codeEditing.findNext.Bounds.Center.Y, 1)
+                && codeEditing.findBar.Bounds.Height <= 98.5f));
+        test.Check("surface: at 200% Ctrl+H keeps every find and replace control inside the editor and clear of the minimap", () =>
+        {
+            var bar = codeEditing.findBar.Bounds;
+            Horizon.UI.Components.UIComponent[] controls = [codeEditing.findExpand, codeEditing.findBox, codeEditing.findCase,
+                codeEditing.findWord, codeEditing.findRegex, codeEditing.findCount, codeEditing.findPrevious,
+                codeEditing.findNext, codeEditing.findClose, codeEditing.replaceBox, codeEditing.replaceOne, codeEditing.replaceAll];
+            return codeEditing.replaceRow.Visible && bar.Min.X >= codeScroll.Bounds.Min.X
+                && bar.Max.X <= code.CodeBounds.Max.X - 4 && bar.Min.Y >= codeScroll.Bounds.Min.Y
+                && controls.All(control => control.Visible && control.Bounds.Min.X >= bar.Min.X
+                    && control.Bounds.Max.X <= bar.Max.X && control.Bounds.Min.Y >= bar.Min.Y && control.Bounds.Max.Y <= bar.Max.Y);
+        });
+        test.Click(() => chrome.ToWorld(codeEditing.replaceBox.Bounds.Center));
+        test.Run(() => TypeInto(codeEditing.replaceBox, "sum"));
+        PressKeys(test, "Tab");
+        test.Check("surface: wrapped replacement still tabs to the case toggle", () => compositor.Focus == codeEditing.findCase);
+        test.Click(() => chrome.ToWorld(codeEditing.findRegex.Bounds.Center));
+        test.Check("surface: the wrapped regex toggle responds to a pointer", () => codeEditing.findOptions.Regex);
+        test.Click(() => chrome.ToWorld(codeEditing.findNext.Bounds.Center));
+        test.Check("surface: wrapped navigation still selects the query", () => code.Document.SelectedText == "total");
+        test.Click(() => chrome.ToWorld(codeEditing.replaceOne.Bounds.Center));
+        test.Check("surface: the wrapped replace action edits the document", () => code.Text.Contains("sum +=", StringComparison.Ordinal));
+        test.Run(() => code.Document.Undo());
+        test.Run(() => codeEditing.replaceBox.Focus());
+        test.Settle(0.3f);
+        test.Check("surface: the active match stays below pinned scopes at 200%", () =>
+        {
+            var caret = code.Document.Caret;
+            float y = code.PlaceOf(caret).Y;
+            float row = MathF.Abs(y - code.PlaceOf(new(caret.Line + 1, 0)).Y);
+            Console.WriteLine($"[Hex self-test] find visibility: caret={caret}, y={y}, row={row}, bounds={code.CodeBounds}, sticky={code.StickyShown.Count}");
+            return y - row * 0.5f >= code.CodeBounds.Min.Y
+                && y + row * 0.5f <= code.CodeBounds.Max.Y - (code.StickyShown.Count + 1) * row;
+        });
+        SurfaceShot(test, "surface_find_200.png");
+        test.Check("surface: compact find and the bottom panel leave usable editor space", () =>
+            code.CodeBounds.Height >= 7 * MathF.Max(16, code.CaretLineHeight) - 1 &&
+            codeScroll.Bounds.Min.Y >= bottom.Bounds.Max.Y - 1);
+        test.Run(() =>
+        {
+            panelWanted = panelHeightWas;
+            bottom.Select(panelPageWas);
+            bottom.Show(panelShownWas, instantly: true);
+            SetScale(findScaleWas, remember: false);
+        });
+        test.Settle(0.5f);
+        test.Check("surface: returning to the wide layout keeps the same focused find fields", () =>
+            ReferenceEquals(originalFindBox, codeEditing.findBox) && ReferenceEquals(originalReplaceBox, codeEditing.replaceBox)
+            && compositor.Focus == originalReplaceBox && codeEditing.replaceBox.Text == "sum");
+        test.Click(() => chrome.ToWorld(codeEditing.findClose.Bounds.Center));
+        test.Check("surface: the reflowed close action returns focus to code", () => !codeEditing.FindBarOpen && compositor.Focus == code);
+        test.Run(() => codeEditing.findOptions = default);
         test.Run(codeEditing.CloseFindBar);
         test.Wait();
 

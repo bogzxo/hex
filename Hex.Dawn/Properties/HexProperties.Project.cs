@@ -96,6 +96,12 @@ internal sealed partial class HexProperties
                 return;
             }
 
+            if (projectFileShown)
+            {
+                ShowProjectFile(done.Evaluation);
+                return;
+            }
+
             // The project offers kinds of its own (a WPF project's Page), the rows are made with them
             bool newKinds = shownEvaluation is null && !done.Evaluation.ItemTypes.SequenceEqual(DotnetEvaluation.CommonItemTypes);
             ShowEvaluation(done.Evaluation);

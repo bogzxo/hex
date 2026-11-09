@@ -50,7 +50,7 @@ internal sealed partial class HexExplorer
             if (settings.LastWorkspace.Length > 0 && File.Exists(settings.LastWorkspace))
                 last = HexWorkspace.Load(settings.LastWorkspace);
             else if (UntitledWorkspacePath is { } untitled && File.Exists(untitled))
-                last.Read(File.ReadAllText(untitled), AppContext.BaseDirectory);
+                last.Read(File.ReadAllText(untitled), Hex.Core.HexHost.ProgramFolder);
         }
         catch (Exception e)
         {
@@ -166,7 +166,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)) is { Length: > 0 } named ? named : folder), ("count", HexText.Count("folder", workspace.Folders.Count))));
+        context.Notices.Say(context.Strings.Said("explorer_workspace.added", ("folder", WorkspacePaths.FolderName(folder)), ("count", HexText.Count("folder", workspace.Folders.Count))));
     }
 
     /// <summary>A workspace of one folder, the one that was open going away (its file stays where it is).</summary>
@@ -184,7 +184,7 @@ internal sealed partial class HexExplorer
         treeDirty = true;
         FoldersChanged?.Invoke();
         KeepWorkspace();
-        context.Notices.Say(context.Strings.Said("explorer_workspace.removed", ("name", Path.GetFileName(folder))));
+        context.Notices.Say(context.Strings.Said("explorer_workspace.removed", ("name", WorkspacePaths.FolderName(folder))));
     }
 
     internal void OpenWorkspaceFile(string path)

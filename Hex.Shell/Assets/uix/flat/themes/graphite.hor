@@ -1,0 +1,38 @@
+// Hex's quiet workspace palette. Neutral materials keep syntax and focused actions prominent.
+let theme = {
+    title: "Graphite",
+    background: vec(0.075, 0.078, 0.086, 1),
+    surface: vec(0.115, 0.12, 0.132, 1),
+    control_color: vec(0.19, 0.2, 0.22, 1),
+    field_color: vec(0.085, 0.09, 0.10, 1),
+    text_color: vec(0.91, 0.92, 0.94, 1),
+    control_text_color: vec(0.96, 0.97, 0.98, 1),
+    dim_text_color: vec(0.67, 0.69, 0.73, 1),
+    border_color: vec(1, 1, 1, 0.085),
+    hover_color: vec(1, 1, 1, 0.065),
+    accent_color: vec(0.32, 0.63, 1, 1),
+    highlight_color: vec(0.40, 0.69, 1, 1),
+    selection_color: vec(0.25, 0.5, 0.85, 0.28),
+    bar_text_color: vec(1, 1, 1, 1),
+    text_shadow_color: vec(0, 0, 0, 0),
+    corner_radius: 8,
+    popup_radius: 12,
+    row_height: 30,
+    syntax: {
+        name: vec(0.88, 0.9, 0.93, 1),
+        keyword: vec(0.93, 0.54, 0.72, 1),
+        property: vec(0.65, 0.79, 0.96, 1),
+        call: vec(0.83, 0.76, 0.98, 1),
+        text: vec(0.72, 0.83, 0.58, 1),
+        number: vec(0.93, 0.77, 0.57, 1),
+        comment: vec(0.55, 0.59, 0.64, 1),
+        punctuation: vec(0.69, 0.72, 0.77, 1),
+        line_number: vec(0.48, 0.51, 0.57, 1),
+        type: vec(0.57, 0.82, 0.81, 1),
+        declaration: vec(0.69, 0.82, 0.98, 1),
+        operator: vec(0.78, 0.8, 0.84, 1),
+        bracket1: vec(0.65, 0.79, 0.96, 1),
+        bracket2: vec(0.83, 0.76, 0.98, 1),
+        bracket3: vec(0.57, 0.82, 0.81, 1)
+    }
+};

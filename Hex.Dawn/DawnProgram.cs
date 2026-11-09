@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 
 using Horizon.Core;
@@ -6,7 +6,7 @@ using Horizon.Engine;
 
 namespace Hex.Dawn;
 
-public static class DawnProgram
+public static partial class DawnProgram
 {
     private const string ARGUMENT_OPEN = "--open";
     private const string ARGUMENT_WORKSPACE = "--workspace";
@@ -81,6 +81,7 @@ public static class DawnProgram
     private static void Start(string[] args)
     {
         bool selfTest = args.Contains(ARGUMENT_SELF_TEST);
+        bool nativeShortcuts = selfTest && args.Contains("native-shortcuts");
 
         // A workspace or the layouts to check that were named are meant from wherever the editor was started, the
         // rest (its skin, its fonts, the layouts folder nobody named) is next to it
@@ -91,7 +92,7 @@ public static class DawnProgram
         string started = Directory.GetCurrentDirectory();
         var (files, folderNamed) = HexLaunch.Parse(args, started);
         string? folder = ValueOf(args, ARGUMENT_FOLDER) is { } asked && Directory.Exists(Path.Combine(started, asked)) ? Path.GetFullPath(Path.Combine(started, asked)) : folderNamed;
-        Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+        Directory.SetCurrentDirectory(Hex.Core.HexHost.ProgramFolder);
 
         if (selfTest)
         {
@@ -160,13 +161,13 @@ public static class DawnProgram
                 AppId = "hex-dawn",
 
 
-                Mode = selfTest ? RunMode.Game : RunMode.Application,
+                Mode = selfTest && !nativeShortcuts ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
                 Maximized = size is null,
                 VSync = true,
                 FramesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0,
-                UpdatesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0
+                UpdatesPerSecond = selfTest && !options.Watch && !nativeShortcuts ? 240.0 : 120.0
             }
         });
 
@@ -177,7 +178,7 @@ public static class DawnProgram
         var scene = new DawnScene(options);
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
-        // The terminal in the same window, Ctrl+Alt+D, when Hex.exe says how to make it. Never in a self test, which
+        // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Never in a self test, which
         // is the one mode and nothing else
         if (!selfTest && Other is { } other)
             Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dawn, scene, (mode, folder) => mode == Hex.Shell.HexMode.Dawn ? scene : other(folder));
@@ -187,7 +188,7 @@ public static class DawnProgram
         // Pause and the rest of it on its buttons
         if (engine.Debugger is { } debugger)
         {
-            debugger.ToggleKey = Silk.NET.Input.Key.Pause;
+            debugger.ToggleKey = Horizon.Input.Key.Pause;
             debugger.PauseKey = null;
             debugger.StepKey = null;
         }

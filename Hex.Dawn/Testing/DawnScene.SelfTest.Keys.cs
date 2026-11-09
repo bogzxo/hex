@@ -1,6 +1,6 @@
 using System.Numerics;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.UI;
 using Horizon.UI.Components;
@@ -87,8 +87,73 @@ internal sealed partial class DawnScene
         TestKeysConflicts(test, Item);
         TestKeysWhen(test, Item);
         TestKeysTable(test, Item);
+        TestShortcutHints(test);
         test.Run(() => keysWindow?.OnClosed?.Invoke());
         test.Wait();
+    }
+
+    private void TestShortcutHints(HexPointerScript test)
+    {
+        string[] commandKeys = ["menus.toggle_designer_code", "menus.properties", "menus.command_palette"];
+        string[] saved = [];
+        int welcomeCount = 0;
+        List<Panel> testPages = [];
+        test.Run(() => saved = commandKeys.Select(key => Commands()
+            .First(pair => LabelOf(pair.Item) == Said(key).TrimEnd('.')).Item.Shortcut).ToArray());
+        test.Run(() =>
+        {
+            welcomeCount = welcomeSizes.Count;
+            Panel page = MakeWelcome(canvas);
+            page.Visible = false;
+            testPages.Add(page);
+        });
+        test.Run(() =>
+        {
+            foreach (string key in commandKeys)
+                Rebind(Said(key), "Ctrl+Alt+Shift+F11", keepOthers: true);
+        });
+        test.Wait();
+        test.Check("keys: view and properties hints follow rebound shortcuts", () =>
+            new[] { "design_view", "code_view", "table_view", "hide_right" }
+                .All(name => layout.Get<Button>(name).Tooltip.EndsWith("(" + UIShortcutText.Shown(UIKeys.Write(Key.F11, true, true, true)) + ")", StringComparison.Ordinal)));
+        test.Check("keys: welcome command hint uses the rebound command", () =>
+            WithCommandShortcut(Said("welcome.commands"), "menus.command_palette") ==
+                Said("welcome.commands") + " (" + UIShortcutText.Shown(UIKeys.Write(Key.F11, true, true, true)) + ")"
+            && welcomeSizes.All(page => page.CommandsButton.Label == WithCommandShortcut(Said("welcome.commands"), "menus.command_palette")));
+        test.Run(() =>
+        {
+            Panel page = MakeWelcome(canvas);
+            page.Visible = false;
+            testPages.Add(page);
+        });
+        test.Check("keys: a newly created welcome page uses the effective shortcut", () =>
+            welcomeSizes[^1].CommandsButton.Label == Said("welcome.commands") +
+                " (" + UIShortcutText.Shown(UIKeys.Write(Key.F11, true, true, true)) + ")");
+        test.Run(() =>
+        {
+            foreach (string key in commandKeys)
+                Rebind(Said(key), string.Empty);
+        });
+        test.Wait();
+        test.Check("keys: cleared shortcuts disappear from hints", () =>
+            layout.Get<Button>("design_view").Tooltip == Said("toolbar.design_tip")
+            && layout.Get<Button>("hide_right").Tooltip == Said("properties.hide")
+            && WithCommandShortcut(Said("welcome.commands"), "menus.command_palette") == Said("welcome.commands"));
+        test.Run(() =>
+        {
+            for (int i = 0; i < commandKeys.Length; i++)
+                Rebind(Said(commandKeys[i]), saved[i], keepOthers: true);
+        });
+        test.Wait();
+        test.Check("keys: restored shortcuts update hints without repeated idle work", () =>
+            !shortcutHintsDirty && layout.Get<Button>("design_view").Tooltip ==
+                WithCommandShortcut(Said("toolbar.design_tip"), "menus.toggle_designer_code"));
+        test.Run(() =>
+        {
+            foreach (Panel page in testPages)
+                page.Parent?.Remove(page);
+            welcomeSizes.RemoveRange(welcomeCount, welcomeSizes.Count - welcomeCount);
+        });
     }
 
     /// <summary>The window's own conveniences, File beside Settings, the changed ones marked, @modified, record keys, Reset to Default.</summary>

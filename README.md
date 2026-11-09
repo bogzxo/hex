@@ -2,125 +2,153 @@
 
 **This is an IDE. It opens FAST, you write FAST code, and it gets the fuck out of your way, FAST.**
 
-That's entire _fucking_ **POINT**.
-We've been using editors that ship a full chromium browser, a JS runtime, an account system, a
-telemetry pipeline and an upsell, and somewhere in the middle of all that, there's a text box...
+That's the entire fucking point. A native code editor, a proper terminal, and the tools around them.
+No Electron. No Chromium in a trench coat. No account to open a text file.
 
-Hex is the text box, and then everything a working developer actually needs round it, and nothing else.
+**[Download](#get-it) · [The numbers](#fast-as-fuck-with-receipts) · [Features](#lightweight-doesnt-mean-does-fuck-all) · [Appearance](#make-it-look-how-you-want) · [Build](#build-the-bloody-thing)**
 
-No Electron. No Chromium wearing a code editor cloak. No accounts, no sign in to sync, no telemetry, no AI sidebar
-that you didn't ask for, no "try our new assistant _we promise we won't spy_", no marketplace of first party "experiences" waving at you from
-the activity bar. It's a native program that draws its own UI on your GPU and does what you fucking tell it to.
+![Hex Dawn in Graphite, editing C# with the explorer, syntax highlighting and minimap](images/readme/editor.png)
 
-## Fast as fuck, _boy_
-Measured on Hex 2.0.0, the release build, on a Ryzen 5 5600X with an RTX 3060, opening this repository.
-
-- process start to `main` **14 ms**
-- window on screen **~0.4 s**
-- editor up, repository open, first real frame **0.5 s** (461 to 594 ms, 515 ms median)
-- the very first launch, filling the shader cache **2.9 s**, once, ever
-- memory, sat there idle **~128 MB** working set, 20 MB managed heap
-- CPU, sat there idle **~0.5%** of one core
-- garbage made per idle tick **0 bytes**
-- download -> **~35 MB** zip, nothing to install, .NET is packaged
-
-Half a second from double click to typing. Go time your current editor, I'll wait.... Actually I won't, I've already
-opened the file.
-
-It gets there by not doing stupid shit. It's C#, compiled ahead of time to a teeny tiny native binary, so there's no runtime to
-spin up and no JIT warming up while you watch. It draws with Vulkan through the ultra fast Horizon game engine, on a
-render thread of its own. When nothing's happening it does nothing, and when you're typing, a tick costs a few
-milliseconds. Every number here comes out of Hex itself, `HORIZON_LOG_STARTUP=memory` gets you the same on your system.
-
-## Fully featured, not "lightweight"
-"Lightweight" usually means "does fuck all". Hex is light and it does the job.
-
-- **Code.** Any language with a language server, 15 known out of the box and installed with a click (C#, C and C++, Rust,
-  Go, Python, TypeScript, D, Bash, YAML, TOML, JSON, Markdown and the rest). Completion, hovers, go to definition,
-  peek, find references, inlay hints, a minimap, format on save, editorconfig. Semantic highlighting that colours a name
-  by what it actually is, in ReSharper's colours for C#. TODO and FIXME lit up in everything.
-- **Git, inside.** Changes in the gutter with stage and revert on a click, blame on the line you're on, staging, commits,
-  amend, branches, merge, rebase, cherry-pick, stash, tags, word level diffs, merge conflicts you settle with a button,
-  file history and a local history of every save.
-- **A real terminal.** Dusk, both built in, and standalone, ConPTY on Windows and a pty everywhere else, tabs, splits and a
-  drop down. It can be your system's default terminal if you want it to be.
-- **Debugging.** Currently it's just breakpoints, stepping and the Debug side for .NET, through netcoredbg, thanks uncle sammy.
-- **For .NET people.** A properties panel that reads Build Action and Copy to Output Directory from the SDK itself and
-  writes them back into the .csproj without wrecking it, tasks for any solution, and Hex builds and restarts itself.
-- **The usual furniture.** Command palette, quick open, search and replace across files, a settings window that
-  actually finds things, workspace settings, a key bindings table with conflicts and chords, and an importer for your
-  VS Code settings so you can leave without rebuilding your config by hand.
-- **A layout designer and a language.** Hex is the editor of the [Horizon](https://github.com/bogzxo/horizon) engine and
-  of HIDL, its language. A layout opens as a designer with a live canvas, and HIDL files show what they evaluate to as
-  you type.
-- **Everywhere.** Windows, Linux (Wayland or X11) and macOS, all the same program.
-
-## What it doesn't do
-
-**It doesn't FUCKING track you.** No telemetry, no analytics, no crash reports phoning home, no account, no identifiers. Here is
-every single time Hex goes online, to GitHub unless it says otherwise.
-
-- Once a day, new versions of the language servers you've got. Off with one switch in the settings.
-- Once a day, new versions of extensions you installed yourself out of the catalog. Off with another one.
-- The changelog, when you open it.
-- Hex updates, when you choose **Help → Check for Updates**. Setup downloads the release only after you choose Install.
-- An extension, a language server or a debug adapter, when you click install (a server comes through its own
-  installer, npm or dotnet or whatever it says).
-
-That's it. Switch both off and Hex never says a word to anybody unless you ask it to.
-
-**It doesn't push shit at you.** There's no "recommended extensions" nagging, no first party plugins installed behind your
-back, no service to sign up for, no "Hex Pro" or "Hex AI+". The extensions catalog is there if you go looking, and that's where it
-stays. Extensions are HIDL [(Horizon Integrated Development Language)](https://github.com/bogzxo/hidl) you can read in a text editor,
-which is handy, because you're holding one around the tips of your fingers :)
-
-**It doesn't need installing.** Unzip it anywhere and run it. Settings live in a folder next to it, so carry it around
-on a fucking stick if you want.
-
-## Bring your own agent
-
-Hex doesn't ship an AI and it isn't selling you one. What it has is an [MCP](https://modelcontextprotocol.io) server,
-so the agent *you* chose can drive Hex the way you do. Screenshots, the UI tree, clicks, typing, commands, problems,
-definitions, the terminal and the tasks, 27 tools in total.
-
-```
-claude mcp add hex -- C:\path\to\Hex.exe --mcp
-```
-
-It's off until you switch it on. When it's on it listens on a pipe only you can open, only from your machine, only with
-a token Hex writes next to itself, and a repository you cloned can't switch it on for you. While an agent's connected
-the status bar says so. Claude Code, or anything else that speaks MCP over stdio, is set up the same way.
-[docs/agents.md](docs/agents.md) has the details and every tool.
+*Dawn, the editor. Graphite, C#, and room to think. Captured from the local 2.8.0 development build; code at 115%.*
 
 ## Get it
 
-**Hex Setup**, the installer, for
-[Windows x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.zip),
-[Windows ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.zip),
-[Linux x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip),
-[Linux ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip),
-[macOS Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip) and
-[macOS Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip). Unpack it and run it,
-it fetches the newest Hex, gives it shortcuts and a place in the app menu, an uninstaller, and updates from inside Hex
-(Help, Check for Updates). [Hex Setup](docs/installer.md) has what it does on each system.
+Pick your machine. **Setup** handles installation, shortcuts and updates. **Portable** is a ZIP you unpack and run.
+Neither needs a separate .NET installation.
 
-Or grab the portable zip for your system from [Releases](https://github.com/bogzxo/hex/releases), unpack it anywhere
-and run `Hex`.
+| System | Setup | Portable |
+| --- | --- | --- |
+| Windows | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe) | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip) |
+| Linux | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip) | [x64](https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip) · [ARM64](https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip) |
+| macOS | [Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip) · [Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip) | [Apple silicon](https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip) · [Intel](https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip) |
 
-- **Windows** 10 1809 or later.
-- **Linux** with the Vulkan loader and a driver (`libvulkan1` and `mesa-vulkan-drivers` on Debian and Ubuntu).
-  `scripts/install-desktop.sh` gets its name and icon in your dock.
-- **macOS** 11 or later. It isn't signed, so run `xattr -dr com.apple.quarantine Hex` on the unpacked folder first.
+Windows Setup is an EXE; unpack the Linux and macOS Setup ZIPs first.
+[All releases](https://github.com/bogzxo/hex/releases) · [What changed](RELEASE_NOTES.md) · [Installation details](docs/installer.md)
 
-Or build it.
+Windows needs **10 1809 or newer**. Linux needs a Vulkan loader and driver; on Debian/Ubuntu that's
+`libvulkan1` and the appropriate GPU driver, such as `mesa-vulkan-drivers`. macOS needs **11 or newer**.
+The macOS build is unsigned; after downloading from this repository, remove quarantine from the unpacked folder with
+`xattr -dr com.apple.quarantine /path/to/Hex` if macOS blocks it.
 
-```
-git clone --recursive https://github.com/bogzxo/hex
+## Fast as fuck, with receipts
+
+**492 ms to Dawn's first frame. 474 ms to Dusk's. A 45.0 MiB ZIP for both.**
+
+Fresh measurements from the **local 2.8.0 development build**, published with the checked-in
+[`FolderProfile`](Hex/Properties/PublishProfiles/FolderProfile.pubxml): Release, Windows x64, NativeAOT, self-contained.
+Measured on 4 November 2026, Windows 11, Ryzen 5 5600X, RTX 3060, 32 GB RAM.
+
+| Measurement | Dawn — editor | Dusk — terminal |
+| --- | ---: | ---: |
+| Process start → first rendered scene, median | **492 ms** | **474 ms** |
+| First-frame range, 10 launches each | 472–527 ms | 455–484 ms |
+| Idle working set, median | **149.8 MiB** | **114.1 MiB** |
+| Idle CPU, median, as a percentage of one logical core | 4.33% | 12.81% |
+
+![Warm launch timings: Dawn median 492 ms, range 472–527; Dusk median 474 ms, range 455–484](images/readme/startup.svg)
+
+**The first launch of each mode is excluded.** It populates shader caches. These are subsequent launches,
+with Dawn opening this repository and a C# source file, and Dusk opening one shell. First frame means first frame;
+it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or
+language servers. This is one machine, not a race rigged against somebody else's editor.
+
+The local published folder is **101.3 MiB**, zipped to **45.0 MiB** before runtime caches. It includes both modes and
+their assets. Release downloads may differ. [Method, raw samples and reproduction commands](docs/benchmarks.md).
+
+### A game engine underneath. Seriously.
+
+Hex is C# compiled ahead of time to native code. No JIT warming up while you stare at a splash screen.
+The [Horizon engine](https://github.com/bogzxo/horizon) draws the interface through **Vulkan**, with rendering on its
+own thread. On macOS, MoltenVK bridges that to Metal.
+
+Text, panels, scrolling, animation and optional glass effects go through the rendering engine. There's no DOM to
+lay out, no browser to haul around, and no reason a text editor should need either.
+
+## Lightweight doesn't mean “does fuck all”
+
+- **Code.** Language-server completion, hovers, definitions, references, rename, inlay hints and semantic highlighting.
+  Folding, sticky scroll, minimap, format on save and `.editorconfig`. Install supported language servers from inside Hex;
+  their own runtimes and dependencies still apply.
+- **Git.** Gutter changes, stage and revert, blame, commits, branches, stash, history, diffs and merge-conflict controls.
+  Keep the context next to the code instead of juggling windows to find out what you changed.
+- **Find your shit.** Quick Open, command palette, workspace search and replace, searchable settings and configurable
+  keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.
+- **Run and debug.** Workspace tasks and .NET debugging through **netcoredbg**: breakpoints, stepping and the Debug view.
+  Project properties read and write the relevant `.csproj` settings. Debugging other stacks isn't promised here.
+- **Documents that do things.** Jupyter notebooks with real kernels and outputs; native Markdown previews with tables
+  and maths. Kernels are separate tools, not secretly bundled into the download number.
+- **Build interfaces.** A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values
+  beside the source. [Layouts and HIDL](docs/layouts-and-hidl.md).
+
+## Dusk. A whole fucking terminal.
+
+![Hex Dusk in Graphite running PowerShell, showing a directory listing, Git history and ANSI color swatches](images/readme/terminal.png)
+
+*Dusk, the terminal mode. PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.*
+
+Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and
+macOS. Run it on its own with `Hex --dusk`, use the terminal panel inside Dawn, or switch modes from the title bar.
+The editor stays where you left it.
+
+In the development build shown here, **Ctrl+Alt+Shift+D** switches Dawn and Dusk. The shortcut is configurable.
+You can also make Dusk your default terminal where the platform supports it; [the setup details are here](docs/hacking.md#building).
+
+## Make it look how you want
+
+| Light | Sunset |
+| --- | --- |
+| ![The same C# file and editor layout in Hex's Light theme](images/readme/light.png) | ![The same C# file and editor layout in Hex's Sunset theme](images/readme/sunset.png) |
+
+*Same code, different mood. Click either image for the full-size capture.*
+
+Start with quiet Graphite, go light, or pick something warmer. **Settings → Appearance** has themes, skins, saved
+looks, glass, backdrops and motion controls. Change the code size, terminal font, panel widths and keybindings too.
+Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.
+
+## Bring your own agent. Or don't.
+
+Hex doesn't sell you an AI subscription. The optional **Agents** view runs your installed Claude Code or Codex CLI,
+with your own account. Choose the model, thinking level where supported, and permission or sandbox mode; follow the
+conversation, tool calls and file links in the editor. Your provider's usage charges still belong to your provider.
+
+Agents can also connect over MCP. Hex exposes repository maps, symbol search, references, focused code reads,
+screenshots, editor commands and terminal tools, so an agent can ask for one method instead of swallowing the whole
+bloody file. The server is off until enabled; sending from the Agents view enables it. [Agents and MCP](docs/agents.md).
+
+## What it doesn't do
+
+**It doesn't track you.** No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code.
+
+It does make network requests for features that need them: update checks, changelogs, extension and language-server
+downloads, and the services you choose to use. Automatic extension and language-server update checks have switches.
+Git remotes, language servers, extensions, notebook kernels and agent CLIs have their own network behavior.
+“No telemetry” isn't a claim that `git fetch` works by fucking magic.
+
+**It doesn't require an installer.** The portable archive works too. Hex uses a writable `settings` folder beside
+the executable when available, with the platform's application-data folder as a fallback. [Platform details](docs/hacking.md#building).
+
+## Build the bloody thing
+
+Use the SDK in [`global.json`](global.json), currently .NET 11 preview. A standalone checkout needs Horizon's
+`development` branch as well as Hex's extensions; this matches the engine checkout in CI.
+
+```sh
+git clone --branch development --recursive https://github.com/bogzxo/hex.git
+cd hex
+git clone --branch development --recursive https://github.com/bogzxo/horizon.git horizon
 dotnet build Hex/Hex.csproj
 ```
 
-## More
+For the **Windows x64 native build used above**:
 
-- [Layouts, HIDL and the workspace](docs/layouts-and-hidl.md), the designer, HIDL's values and console, and its language server
-- [Agents](docs/agents.md), the MCP server and its tools
-- [Hacking on Hex](docs/hacking.md), finding your way round the code, building on every system, the self test
+```sh
+dotnet publish Hex/Hex.csproj -p:PublishProfile=FolderProfile
+```
+
+NativeAOT publishing also needs the native toolchain: Visual Studio C++ build tools and the Windows SDK on Windows,
+Clang and zlib development files on Linux, or Xcode command-line tools on macOS.
+[Hacking on Hex](docs/hacking.md) covers the source and self-tests. [Benchmarking](docs/benchmarks.md) covers the measurements.
+
+Found a bug? [Open an issue](https://github.com/bogzxo/hex/issues) with your OS, Hex version and steps to reproduce it.
+Want to fix it? Send a focused pull request and say how you tested it. Screenshots help when the thing you changed is
+the thing people look at.

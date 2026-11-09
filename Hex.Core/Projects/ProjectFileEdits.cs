@@ -26,8 +26,7 @@ internal static partial class ProjectFileEdits
     /// </summary>
     public static string SetMetadata(string text, string itemType, string path, string name, string? value)
     {
-        if (ProjectXml.Read(text) is not { } root)
-            throw new FormatException("the project file isn't XML that can be edited");
+        ProjectXmlElement root = Root(text);
 
         if ((FileItem(root, itemType, path, "Update") ?? FileItem(root, itemType, path, "Include")) is not { } item)
             return value is null ? text : AddItem(text, root, itemType, "Update", path, [(name, value)]);
@@ -139,8 +138,18 @@ internal static partial class ProjectFileEdits
 
     /// <summary>Whether two paths of a project are the same file, whichever way the slashes lean, MSBuild doesn't mind case.</summary>
     internal static bool SamePath(string a, string b) =>
-        string.Equals(a.Replace('/', '\\').TrimStart('.', '\\'), b.Replace('/', '\\').TrimStart('.', '\\'), StringComparison.OrdinalIgnoreCase)
-        && !a.Contains('*') && !b.Contains('*');
+        !a.AsSpan().ContainsAny('*', '?') && !b.AsSpan().ContainsAny('*', '?')
+        && ItemPath(a).Equals(ItemPath(b), StringComparison.OrdinalIgnoreCase);
+
+    // A leading ./ is the project folder. The dot in .env and both dots in ../ belong to the path.
+    private static string ItemPath(string path)
+    {
+        string name = path.Replace('\\', '/');
+        int start = 0;
+        while (name.AsSpan(start).StartsWith("./", StringComparison.Ordinal))
+            start += 2;
+        return name[start..];
+    }
 
     // The metadata an item has, its attributes that aren't about which files and its child elements
     private static void Carry(string text, ProjectXmlElement item, List<(string Name, string Value)> into)

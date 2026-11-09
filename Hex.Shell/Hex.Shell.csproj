@@ -14,6 +14,7 @@
 
   <!-- Hex's icon, the one both modes' windows and the exe have, Dusk is Hex too -->
   <ItemGroup>
+    <None Update="Assets\uix\flat\themes\*.hor" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="Assets\hex_icon.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

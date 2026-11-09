@@ -1,4 +1,4 @@
-using Horizon.UI.Components;
+﻿using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 using Horizon.UI.Skinning;
 
@@ -23,15 +23,25 @@ internal sealed partial class HexLanguages
     // The server every open file of another language is in, how long until its last change is sent, and what the server
     // last said about it
     private readonly Dictionary<HexDocument, LanguageServer> linters = [];
+    private readonly Dictionary<HexDocument, string?> lintSolutions = [];
     private readonly Dictionary<HexDocument, float> lintIn = [];
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> lintFound = [];
     private bool serversRead;
+
+    /// <summary>Called as a server says what's wrong with a file, before it's under the code, for what a build said of it to be weighed against.</summary>
+    internal Action<HexDocument, IReadOnlyList<UICodeDiagnostic>>? ServerSaid;
+
+    /// <summary>What a document's server last said is wrong with it, null when it hasn't said.</summary>
+    internal IReadOnlyList<UICodeDiagnostic>? ServerDiagnosticsOf(HexDocument of) => lintFound.GetValueOrDefault(of);
+
+    /// <summary>Whether a document has changes its server hasn't been sent yet, what it says is about older text meanwhile.</summary>
+    internal bool ChangePending(HexDocument of) => lintIn.ContainsKey(of);
 
     // The servers to be started again, a project of theirs having changed, and how long until (a build or a checkout
     // writes many at once, the server goes once they've settled)
     private const float RELOAD_DELAY = 1.5f;
     private readonly Dictionary<HexServerEntry, float> reloadIn = [];
-    private readonly HashSet<string> failed = [];
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<LanguageServer, object> failed = new();
 
     /// <summary>
     /// The languages, taking from the rest of the editor and giving it through the context: the documents opened, typed
@@ -56,6 +66,11 @@ internal sealed partial class HexLanguages
         with.Documents.AddHovers(ServerHover);
         with.Documents.AddSignatures(ServerSignature);
         AddServerCommands();
+        AddHierarchyCommands();
+        with.Commands.Add("Run/check", with.Strings.Said("languages.python_interpreter"), SelectPythonInterpreter, icon: "terminal")
+            .IsVisible = () => HexDebugging.IsPython(context.Documents.Current.Path);
+        with.Commands.Add("Run/check", with.Strings.Said("languages.python_create"), CreatePythonEnvironment, icon: "add")
+            .IsVisible = () => context.Workspace.Roots.Count > 0 || HexDebugging.IsPython(context.Documents.Current.Path);
 
         // What changes on the disk in the folders the servers were started in, for what isn't open in them
         with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory));
@@ -105,8 +120,41 @@ internal sealed partial class HexLanguages
         return folder;
     }
 
+    internal void WorkspaceChanged()
+    {
+        EditWorkspaceChanged();
+        var moved = linters.Where(pair => pair.Key.Path is { } path &&
+            (!PlatformPaths.Same(pair.Value.RootDirectory, ServerRootFor(path))
+                || !PlatformPaths.Comparer.Equals(lintSolutions.GetValueOrDefault(pair.Key), SolutionFor(pair.Key, ServerRootFor(path))))).ToArray();
+        foreach (var (document, _) in moved)
+        {
+            StopLinting(document);
+            context.Documents.DiagnosticsChanged(document);
+        }
+        foreach (var (document, _) in moved)
+            StartLinting(document); // Sends the current unsaved buffer, never a disk reload.
+        foreach (LanguageServer old in moved.Select(pair => pair.Value).Distinct())
+            if (!linters.Values.Contains(old))
+                _ = LanguageServers.Stop(old);
+        if (moved.Length > 0)
+            context.Workspace.Rewatch();
+    }
+
+    private string? SolutionFor(HexDocument document, string root)
+    {
+        if (document.Path is not { } path || LanguageServers.RegistrationFor(ServerPathFor(document, path)) is not { } entry
+            || !entry.Arguments.Any(argument => argument.Contains("{solution}", StringComparison.Ordinal)))
+            return null;
+        string? selected = context.Workspace.Solution;
+        return selected is not null && PlatformPaths.Same(Path.GetDirectoryName(selected)!, root)
+            ? selected : LanguageServers.SolutionIn(root);
+    }
+
     /// <summary>The name of the server linting a document, null for none.</summary>
     internal string? LinterOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.Name : null;
+
+    /// <summary>Whether a document's server is still starting, there and not ready yet and not fallen over, for the status bar's spinner.</summary>
+    internal bool Starting(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) && !server.IsReady && server.Failure is null;
 
     /// <summary>
     /// The program linting a document as somebody knows it, serve-d, csharp-ls, null for none. Its name in
@@ -175,7 +223,6 @@ internal sealed partial class HexLanguages
         foreach (HexDocument of in linters.Where(pair => pair.Value.Name == entry.Name).Select(pair => pair.Key).ToList())
             StopLinting(of);
 
-        failed.Remove(entry.Name);
         return RegisterServer(entry);
     }
 
@@ -185,7 +232,13 @@ internal sealed partial class HexLanguages
     /// </summary>
     private void RestartServer(HexServerEntry entry)
     {
+        // What the server said goes with it, the errors of a server that hadn't its packages stayed under the code until
+        // the new one said something of the same file
+        List<HexDocument> said = [.. linters.Where(pair => pair.Value.Name == entry.Name && lintFound.ContainsKey(pair.Key)).Select(pair => pair.Key)];
         StopServer(entry);
+        foreach (HexDocument of in said)
+            context.Documents.DiagnosticsChanged(of);
+
         foreach (HexDocument of in context.Documents.All.ToList())
         {
             if (of.Path is { } path && !linters.ContainsKey(of)
@@ -201,12 +254,15 @@ internal sealed partial class HexLanguages
         if (of.DiffOf is not null)
             return;
 
+        // Cached library and debugger views are read-only, outside the workspace's language-server documents.
+        if (of.Path is {} cached && (PlatformPaths.IsUnder(cached, DecompiledFolder) || HexDebugging.IsDisassemblyPath(cached) || HexDebugging.IsMemoryPath(cached) || HexDebugging.IsDebuggerSourcePath(cached)))
+        {
+            of.Editor.ReadOnly = true;
+            return;
+        }
+
         CheckSoon(of, 0.0f);
         if (of.Path is not { } path || of.Editor.Highlighter is null || ReferenceEquals(of.Editor.Highlighter, CodeLanguages.Hidl))
-            return;
-
-        // The framework's source decompiled to be read is no project's, a server started for its folder knew nothing
-        if (PlatformPaths.IsUnder(path, DecompiledFolder))
             return;
 
         // A notebook's JSON is nobody's to write by hand (it's shown as its cells, and mostly pictures in base64), the JSON
@@ -219,7 +275,10 @@ internal sealed partial class HexLanguages
 
         string root = ServerRootFor(path);
         string serverPath = ServerPathFor(of, path);
-        if (LanguageServers.For(serverPath, root) is not { } server)
+        var registration = LanguageServers.RegistrationFor(serverPath);
+        if (UsesClangd(registration) && CMakeProject.RootOf(path, context.Workspace.Roots) is { } nativeRoot) root = nativeRoot;
+        string? solution = SolutionFor(of, root);
+        if (LanguageServers.For(serverPath, root, solution, ClangdArguments(registration, root), PythonServerSettings(registration, path, root)) is not { } server)
         {
             SayIfMissing(serverPath);
             return;
@@ -230,6 +289,7 @@ internal sealed partial class HexLanguages
         // What changes in its folder is said to it, and a project changing there starts it again, workspace or not
         context.Workspace.Rewatch();
         linters[of] = server;
+        lintSolutions[of] = solution;
         ServersChanged++;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
@@ -247,6 +307,11 @@ internal sealed partial class HexLanguages
     {
         string bare = CodeLanguages.WithoutBackupSuffix(path);
         if (of.Editor.Highlighter is null)
+            return bare;
+
+        // A server of the file's own extension is the one, whatever it's coloured as. One coloured as markdown went to
+        // marksman instead of the server it was registered with
+        if (LanguageServers.RegistrationFor(bare) is not null)
             return bare;
 
         if (!serversRead)
@@ -274,7 +339,7 @@ internal sealed partial class HexLanguages
     /// <summary>A file of another language was typed into, its server hears a moment after the typing stops.</summary>
     private void LintChanged(HexDocument changed)
     {
-        if (changed.DiffOf is not null)
+        if (changed.DiffOf is not null || changed.Editor.ReadOnly)
             return;
 
         CheckSoon(changed);
@@ -301,13 +366,37 @@ internal sealed partial class HexLanguages
     /// <summary>A file of another language was closed, its server is told and forgets it.</summary>
     private void StopLinting(HexDocument closed)
     {
+        lintSolutions.Remove(closed);
         if (linters.Remove(closed, out LanguageServer? server) && closed.Path is { } path)
+        {
             server.Close(path);
+            server.ForgetSource(path);
+        }
 
         lintIn.Remove(closed);
         lintFound.Remove(closed);
         ForgetCheck(closed);
         ForgetServerCompletions(closed);
+
+        // Nothing kept of it, a closed 60,000 line file stayed alive with its whole editor through the last hover and
+        // the scratch list of what was due
+        dueNow.Remove(closed);
+        if (hovered.Request?.Of == closed)
+            hovered = default;
+        if (hovering?.Of == closed)
+        {
+            hovering = null;
+            hoverRequestNumber++;
+        }
+        if (signed.Request?.Of == closed)
+            signed = default;
+        if (selectionHistory?.Document == closed)
+            selectionHistory = null;
+        if (signing?.Of == closed)
+        {
+            signing = null;
+            signatureRequestNumber++;
+        }
     }
 
     // The documents waiting on a lint or a check, gathered into the same list every tick they're counted down, the
@@ -330,6 +419,8 @@ internal sealed partial class HexLanguages
                 if (linters.TryGetValue(due, out LanguageServer? server) && due.Path is { } path)
                     server.Change(path, due.Editor.Text);
             }
+
+            dueNow.Clear();
         }
 
         if (reloadIn.Count > 0)
@@ -349,8 +440,11 @@ internal sealed partial class HexLanguages
         for (int i = 0; i < servers.Count; i++)
         {
             LanguageServer server = servers[i];
-            if (server.Failure is { } failure && failed.Add(server.Name))
+            if (server.Failure is { } failure && !failed.TryGetValue(server, out _))
+            {
+                failed.Add(server, new object());
                 stoppedNow.Add((server, failure));
+            }
 
             TakeTalk(server);
 
@@ -358,10 +452,11 @@ internal sealed partial class HexLanguages
             {
                 string full = Path.GetFullPath(path);
                 HexDocument? of = context.Documents.Find(full);
-                if (of is null)
+                if (of is null || !linters.TryGetValue(of, out LanguageServer? current) || !ReferenceEquals(current, server))
                     continue;
 
                 lintFound[of] = found;
+                ServerSaid?.Invoke(of, found);
                 context.Documents.DiagnosticsChanged(of);
                 Console.WriteLine($"[Hex] {server.Name} has {found.Count} things to say about {Path.GetFileName(path)}.");
             }
@@ -369,6 +464,7 @@ internal sealed partial class HexLanguages
 
         UpdateChecks(dt);
         UpdateAnswers();
+        UpdateDocumentHighlights();
         ServersStopped();
         AskNext();
         UpdateServerCompletions();

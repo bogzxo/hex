@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
         test.Check("extensions: Hello Dolly is loaded and started, a greeting of its own after Hex in the title bar", () =>
             extensions.All.FirstOrDefault(extension => extension.Id == "hello_dolly") is { Enabled: true, Failed: null, Runtime: { } runtime }
             && runtime.UserScope.Lookup("welcome_greetings") is ListValue greetings && greetings.Items.Any(said => said is StringValue { Value: var text } && text == titleNote)
-            && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexAbout.Version} ({titleNote})", StringComparison.Ordinal));
+            && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexAbout.Label} ({titleNote})", StringComparison.Ordinal));
 
         // The row of the ones switched off says what they're called, a toggle each, and gives the right one's folder to the settings
         string Dolly() => extensions.All.First(extension => extension.Id == "hello_dolly").Name;

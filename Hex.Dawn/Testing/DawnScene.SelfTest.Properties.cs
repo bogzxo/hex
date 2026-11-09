@@ -46,7 +46,7 @@ internal sealed partial class DawnScene
             File.WriteAllText(data, "some data\r\nmore\r\n");
             File.WriteAllText(first, "{}\n");
             File.WriteAllText(second, "{}\n");
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "images", "background_icon.png"), picture, overwrite: true);
             explorer.OpenFolder(folder);
             Open(data);
         });
@@ -108,10 +108,13 @@ internal sealed partial class DawnScene
 
         /* The folder they're in, Copy always for everything in it */
 
-        test.Run(() => properties.Follow([assets]));
+        test.Run(() => sideTree.SelectMany(explorer.explorerRows
+            .Where(row => PlatformPaths.Same(row.Path, assets)).Select(row => row.Row).ToList()));
         test.WaitFor(() => properties.Shown.SequenceEqual([Path.GetFullPath(assets)]) && !properties.ProjectBusy, 30.0f);
         test.Run(() => properties.Page.Enter("copy_to_output", new StringValue(DotnetEvaluation.ALWAYS)));
         test.WaitFor(() => !properties.ProjectBusy && File.ReadAllText(project).Contains("Always"), 60.0f);
+        test.Check("properties: the selected folder stays selected after project refresh", () =>
+            sideTree.SelectedItems.Count == 1 && properties.Shown.SequenceEqual([Path.GetFullPath(assets)]));
         test.Check("properties: a folder's setting goes to every file of the project in it", () =>
             DotnetProjects.Shared.Known(project) is { } known && known.BuildItemOf(first)?.CopyToOutput == DotnetEvaluation.ALWAYS
             && known.BuildItemOf(second)?.CopyToOutput == DotnetEvaluation.ALWAYS && Value("contents").Contains('2'));
@@ -168,6 +171,12 @@ internal sealed partial class DawnScene
         test.Check("properties: a component picked in the designer has its own rows in the panel", () =>
             picked is not null && properties.Shows == HexPropertiesShows.Component && inspectorScroll.Visible && !properties.Page.Visible
             && properties.Filter.Visible && designer.editors.ContainsKey("size"));
+        float originalScale = compositor.Scale;
+        test.Run(() => SetScale(1.25f, remember: false));
+        test.Settle(0.3f);
+        test.Check("properties: the designer toolbar and both sides fit at 125%", () => Fits() && toolbar.Bounds.Max.X <= center.Bounds.Max.X + 1);
+        test.Run(() => SetScale(originalScale, remember: false));
+        test.Wait();
         test.Run(() => properties.Filter.Text = "size");
         test.Run(() => designer.FilterRows(properties.Filter.Text));
         test.Wait();

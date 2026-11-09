@@ -27,6 +27,24 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
     /// <summary>Called once the handshake is done, with who the client is, for the status bar.</summary>
     public Action<string>? Initialized { get; set; }
 
+    /// <summary>What a client is told as it connects by who it is, the instructions it was made with when there's nobody to ask.</summary>
+    public Func<string?, string?>? InstructionsFor { get; init; }
+
+    /// <summary>The resources it has, null for none, the agent harness's log of changes.</summary>
+    public McpResources? Resources { get; init; }
+
+    /// <summary>How a message goes to the client unasked, a notification, set by the session it's talking over.</summary>
+    public Action<JsonNode>? Notify { get; set; }
+
+    /// <summary>
+    /// Who the client of the call going on is, for a tool that answers clients differently (the harness by their
+    /// profile). Set around a call and seen by whatever runs inside it, on any thread it goes to.
+    /// </summary>
+    public static readonly AsyncLocal<string?> CallingClient = new();
+
+    // The resources this client asked to be told about, what stops telling it when it goes
+    private readonly ConcurrentDictionary<string, IDisposable> subscribed = new();
+
     /// <summary>
     /// Answers a message, or a batch of them (an array, which 2025-03-26 allowed), null when there's nothing to say back.
     /// Something that isn't JSON-RPC at all gets JSON-RPC's error for it.
@@ -95,7 +113,12 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
                 "ping" => McpProtocol.Result(id, new JsonObject()),
                 "tools/list" => McpProtocol.Result(id, ListTools()),
                 "tools/call" => await CallTool(id, parameters),
-                _ => McpProtocol.Error(id, McpProtocol.METHOD_NOT_FOUND, $"Hex has no {method}, it does tools (tools/list, tools/call) and ping.")
+                "resources/list" when Resources is not null => McpProtocol.Result(id, Resources.List()),
+                "resources/templates/list" when Resources is not null => McpProtocol.Result(id, new JsonObject { ["resourceTemplates"] = new JsonArray() }),
+                "resources/read" when Resources is not null => ReadResource(id, parameters),
+                "resources/subscribe" when Resources is not null => Subscribe(id, parameters, true),
+                "resources/unsubscribe" when Resources is not null => Subscribe(id, parameters, false),
+                _ => McpProtocol.Error(id, McpProtocol.METHOD_NOT_FOUND, $"Hex has no {method}, it does tools (tools/list, tools/call){(Resources is null ? string.Empty : ", resources")} and ping.")
             };
         }
         catch (Exception e)
@@ -135,12 +158,14 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
         var answer = new JsonObject
         {
             ["protocolVersion"] = Version,
-            ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
+            ["capabilities"] = Resources is null
+                ? new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } }
+                : new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false }, ["resources"] = new JsonObject { ["subscribe"] = true, ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = name, ["version"] = version }
         };
 
-        if (instructions is not null)
-            answer["instructions"] = instructions;
+        if ((InstructionsFor is not null ? InstructionsFor(Client) : instructions) is { } said)
+            answer["instructions"] = said;
         return answer;
     }
 
@@ -164,6 +189,7 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
         string key = id.ToJsonString();
         using var cancel = new CancellationTokenSource();
         running[key] = cancel;
+        CallingClient.Value = Client;
         try
         {
             McpToolResult result = await tools.Call(called, (JsonObject)arguments.DeepClone(), cancel.Token);
@@ -182,4 +208,73 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
             running.TryRemove(key, out _);
         }
     }
+
+    private JsonObject ReadResource(JsonNode id, JsonObject parameters)
+    {
+        string uri = parameters["uri"]?.ToString() ?? string.Empty;
+        if (Resources!.Read(uri) is not { } text)
+            return McpProtocol.Error(id, McpProtocol.INVALID_PARAMS, $"There's no resource {uri}, resources/list has them.");
+
+        return McpProtocol.Result(id, new JsonObject
+        {
+            ["contents"] = new JsonArray(new JsonObject { ["uri"] = uri, ["mimeType"] = "text/plain", ["text"] = text })
+        });
+    }
+
+    // Telling the client when a resource changes, from now on or no more
+    private JsonObject Subscribe(JsonNode id, JsonObject parameters, bool on)
+    {
+        string uri = parameters["uri"]?.ToString() ?? string.Empty;
+        if (on)
+        {
+            if (Resources!.Read(uri) is null)
+                return McpProtocol.Error(id, McpProtocol.INVALID_PARAMS, $"There's no resource {uri}, resources/list has them.");
+
+            if (!subscribed.ContainsKey(uri) && Resources.Subscribe(uri, () => Notify?.Invoke(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = "notifications/resources/updated",
+                ["params"] = new JsonObject { ["uri"] = uri }
+            })) is { } watching && !subscribed.TryAdd(uri, watching))
+                watching.Dispose();
+        }
+        else if (subscribed.TryRemove(uri, out IDisposable? watching))
+        {
+            watching.Dispose();
+        }
+
+        return McpProtocol.Result(id, new JsonObject());
+    }
+
+    /// <summary>Stops telling the client about anything, as it goes.</summary>
+    public void Forget()
+    {
+        foreach (string uri in subscribed.Keys)
+        {
+            if (subscribed.TryRemove(uri, out IDisposable? watching))
+                watching.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// Resources a server has, read as text and watched. <see cref="Subscribe"/> hands back what stops the watching, null when
+/// there's nothing of that name to watch.
+/// </summary>
+internal sealed class McpResources(IReadOnlyList<(string Uri, string Name, string Description)> listed, Func<string, string?> read, Func<string, Action, IDisposable?> subscribe)
+{
+    public JsonObject List() => new()
+    {
+        ["resources"] = new JsonArray([.. listed.Select(each => (JsonNode)new JsonObject
+        {
+            ["uri"] = each.Uri,
+            ["name"] = each.Name,
+            ["description"] = each.Description,
+            ["mimeType"] = "text/plain"
+        })])
+    };
+
+    public string? Read(string uri) => read(uri);
+
+    public IDisposable? Subscribe(string uri, Action changed) => subscribe(uri, changed);
 }

@@ -7,6 +7,14 @@ internal sealed partial class DawnScene
     private void TestNotebookFile(HexPointerScript test)
     {
         string source = Environment.GetEnvironmentVariable("HEX_NOTEBOOK_TEST_FILE") ?? string.Empty;
+
+        // A real notebook of somebody's, only when one's named, the way the D and C# parts go without their compilers
+        if (!File.Exists(source))
+        {
+            test.Run(() => Console.WriteLine("[Hex self-test] HEX_NOTEBOOK_TEST_FILE isn't a notebook on this machine, the real notebook part is left out"));
+            return;
+        }
+
         string file = Path.Combine(testFolder, "real-notebook.ipynb");
         test.Run(() => { File.Copy(source, file, true); Open(file); });
         test.Wait();
@@ -35,20 +43,20 @@ internal sealed partial class DawnScene
         }
         float originalZoom = settings.CodeZoom;
         float originalText = 0, originalFormula = 0;
-        Horizon.Graphics.Texture? originalTexture = null;
+        NotebookPicture? originalPicture = null;
         test.Run(() =>
         {
             originalText = cellViews[1].Editor.TextScale;
             var formula = markdownPictures.Values.SelectMany(pictures => pictures).First(picture => picture.Reflow is null && picture.MathInk);
             originalFormula = formula.Size.Y;
-            originalTexture = formula.Texture;
+            originalPicture = formula;
             ZoomCode(1.4f);
         });
         test.Wait();
         test.WaitFor(() => notebookRenders.Count == 0, 30);
-        test.Check("real notebook: zoom updates existing source, tables and math without losing textures", () =>
+        test.Check("real notebook: zoom updates existing source, tables and math with valid dense textures", () =>
             cellViews[1].Editor.TextScale > originalText
-            && markdownPictures.Values.SelectMany(pictures => pictures).Any(picture => ReferenceEquals(picture.Texture, originalTexture) && picture.Size.Y > originalFormula)
+            && markdownPictures.Values.SelectMany(pictures => pictures).Any(picture => ReferenceEquals(picture, originalPicture) && picture.Texture is { IsValid: true } && picture.Size.Y > originalFormula)
             && Descendants(cellViews[0].Written!).OfType<Horizon.UI.Components.Label>().Where(label => label.Markdown).Any(label => label.TextScale > 0.16f));
         test.Run(() => notebookScroll.ScrollToTop(cellViews[0].Card));
         test.Settle(0.2f);

@@ -54,6 +54,7 @@ internal sealed partial class HexCodeEditing
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.cut"), () => { UIClipboard.Copy(editor.Document.SelectedText); editor.Document.Insert(string.Empty); }, "Ctrl+X", "diff-removed").IsEnabled = () => hasSelection && !editor.ReadOnly;
         shown.Add(context.Strings.Said("code_hints.copy"), () => UIClipboard.Copy(editor.Document.SelectedText), "Ctrl+C", "copy").IsEnabled = () => hasSelection;
+        shown.Add(context.Strings.Said("code_hints.paste"), () => { editor.Focus(); UIClipboard.Paste(); }, "Ctrl+V", "clippy").IsEnabled = () => !editor.ReadOnly;
         shown.Add(context.Strings.Said("code_hints.select_all"), () => editor.Document.SelectAll(), "Ctrl+A", "selection");
         shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.toggle_comment"), () => editor.Document.ToggleComment(), "Ctrl+/", "comment");
@@ -68,16 +69,23 @@ internal sealed partial class HexCodeEditing
     }
 
     /// <summary>
-    /// F2, a name renamed everywhere it is in the file as a word of its own, one step to undo. When other files of the
-    /// workspace have it too (a key of an included file, the shared moves and a fighter's own), it asks whether to rename
-    /// it in them as well, each opened behind with the rename as one step of its undo and nothing saved.
+    /// F2 asks the language server for a semantic rename. HIDL retains its explicitly word-based prompt, with one
+    /// undo step per document and no implicit saves. Other languages require a ready rename service.
     /// </summary>
     internal void RenameSymbol()
     {
         // A file of a language server's is renamed in the way the server knows the name, everywhere it's that name
         HexDocument asked = document;
-        if (languages?.Rename(asked, (name, renamed) => RenameByWords(asked, name, renamed, codeOnly: true)) == true)
+        if (languages?.Rename(asked) == true)
             return;
+
+        // HIDL's explicitly word-based operation predates language servers. Other languages must not silently
+        // substitute text matching for a semantic rename while their server is absent, starting or unsupported.
+        if (!ReferenceEquals(asked.Editor.Highlighter, CodeLanguages.Hidl))
+        {
+            context.Notices.Say(context.Strings.Said("code_server.rename_unavailable"), error: true);
+            return;
+        }
 
         var (start, end) = code.Document.WordAt(code.Document.Caret);
         if (end <= start)

@@ -1,0 +1,69 @@
+<Project>
+  <!-- The original native executable stays inside the archive; the outer copy alone gets this overlay. -->
+  <UsingTask TaskName="AppendWindowsSetupPayload" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Executable ParameterType="System.String" Required="true" />
+      <Archive ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        using (var archive = File.OpenRead(Archive))
+        using (var executable = new FileStream(Executable, FileMode.Append, FileAccess.Write, FileShare.None))
+        using (var sha = SHA256.Create())
+        {
+            byte[] digest = sha.ComputeHash(archive);
+            archive.Position = 0;
+            archive.CopyTo(executable);
+            executable.Write(digest, 0, digest.Length);
+            byte[] length = BitConverter.GetBytes(archive.Length);
+            if (!BitConverter.IsLittleEndian) Array.Reverse(length);
+            executable.Write(length, 0, length.Length);
+            byte[] magic = Encoding.ASCII.GetBytes("HexSetupBundle01");
+            executable.Write(magic, 0, magic.Length);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <UsingTask TaskName="PruneWindowsSetupPayload" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Directory ParameterType="System.String" Required="true" />
+      <Executable ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string root = Path.GetFullPath(Directory);
+        string executable = Path.GetFullPath(Executable);
+        if (!Path.GetDirectoryName(executable).Equals(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Installer output must be inside its publish directory.");
+        foreach (string file in System.IO.Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            if (!Path.GetFullPath(file).Equals(executable, StringComparison.OrdinalIgnoreCase)) File.Delete(file);
+        foreach (string folder in System.IO.Directory.GetDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length))
+            if (!System.IO.Directory.EnumerateFileSystemEntries(folder).Any()) System.IO.Directory.Delete(folder);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="BundleWindowsSetup" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and $(RuntimeIdentifier.StartsWith('win-')) and '$(BundleWindowsInstaller)' != 'false'">
+    <PropertyGroup>
+      <_SetupArchive>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)setup-payload.zip'))</_SetupArchive>
+      <_SetupExecutable>$([System.IO.Path]::Combine('$(PublishDir)', 'Hex.Installer.exe'))</_SetupExecutable>
+      <_SetupExecutable>$([System.IO.Path]::GetFullPath('$(_SetupExecutable)'))</_SetupExecutable>
+      <_SetupNative>$([System.IO.Path]::GetFullPath('$(NativeBinary)'))</_SetupNative>
+    </PropertyGroup>
+    <Error Condition="'$(_SetupNative)' == '$(_SetupExecutable)'"
+           Text="Use a dedicated publish directory, separate from the native compiler output." />
+    <!-- Publish's incremental copy can leave last time's bundle in place. Always restore a separate raw copy. -->
+    <Delete Files="$(_SetupExecutable)" />
+    <Copy SourceFiles="$(_SetupNative)" DestinationFiles="$(_SetupExecutable)" SkipUnchangedFiles="false" />
+    <ZipDirectory SourceDirectory="$(PublishDir)" DestinationFile="$(_SetupArchive)" Overwrite="true" />
+    <AppendWindowsSetupPayload Executable="$(_SetupExecutable)" Archive="$(_SetupArchive)" />
+    <PruneWindowsSetupPayload Directory="$(PublishDir)" Executable="$(_SetupExecutable)" />
+    <Delete Files="$(_SetupArchive)" />
+    <Message Importance="high" Text="Self-extracting Windows installer: $(_SetupExecutable)" />
+  </Target>
+</Project>

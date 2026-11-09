@@ -30,9 +30,9 @@ internal sealed partial class HexTasks
     /// </summary>
     private void RunMindingSelf(HexTask task, Action run)
     {
-        var lines = new List<(string Command, string Folder)> { (task.Command, task.WorkingFolder()) };
-        if (DependencyOf(task) is { } first)
-            lines.Insert(0, (first.Command, first.WorkingFolder()));
+        var lines = new List<(string Command, string Folder)>();
+        foreach (HexTask step in DependenciesOf(task).Append(task))
+            lines.Add((step.Command, step.WorkingFolder()));
 
         string running = HexSelfBuild.RunningFolder;
         bool mayWrite = false, surely = false;

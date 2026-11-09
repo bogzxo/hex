@@ -139,7 +139,7 @@ internal sealed class InstallerScene : Scene
         changes.Enqueue(() =>
         {
             release = latest;
-            version.Text = InstallText.Get("version.release", ("version", latest.Version), ("platform", InstallPaths.Rid));
+            version.Text = InstallText.Get("version.release", ("version", latest.Shown), ("platform", InstallPaths.Rid));
             status.Text = InstallText.Get("status.install_ready");
             detail.Text = InstallText.Get("detail.features");
             primary.Label = InstallText.Get("actions.install");
@@ -167,7 +167,7 @@ internal sealed class InstallerScene : Scene
         Work(async token =>
         {
             if (options.Uninstall) { Report(new(InstallText.Get("status.removing"), .4f)); InstallTransaction.Uninstall(installRoot); }
-            else await InstallTransaction.Install(release!, installRoot, Report, token, choices);
+            else await InstallTransaction.Install(release!, installRoot, Report, token, choices, options.Package);
         }, then: () =>
         {
             completed = true;

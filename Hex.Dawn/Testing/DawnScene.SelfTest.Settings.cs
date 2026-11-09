@@ -22,6 +22,23 @@ internal sealed partial class DawnScene
         Pick("File", () => "Settings...");
         test.Settle(0.4f);
         test.Run(() => Shot("settings-first-open"));
+        ScrollPanel? middlePanel = null;
+        float middleOffset = 0;
+        test.Run(() =>
+        {
+            middlePanel = Descendants(SettingsPage!).OfType<ScrollPanel>()
+                .Where(panel => panel.MaxOffset > 100 && panel.IsShownInHierarchy)
+                .OrderByDescending(panel => panel.Bounds.Width).FirstOrDefault();
+            middleOffset = middlePanel?.Offset ?? 0;
+        });
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Hover(() => chrome.ToWorld(middlePanel!.Bounds.Center - new Vector2(0, 70)));
+        test.Settle(0.5f);
+        test.Check("settings: middle click autoscroll moves the settings panel", () => middlePanel is not null && middlePanel.Offset > middleOffset);
+        test.Run(() => Shot("settings-middle-scroll"));
+        test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
+        test.Check("settings: second middle click stops autoscroll", () => compositor.AutoScrollTarget is null);
+        test.Run(() => { if (middlePanel is not null) middlePanel.Offset = middleOffset; });
         test.Check("nav: other parts folded on first open", () =>
             SettingsPage is { } page && !Horizon.UI.Components.SettingsPage.IsPartCollapsed("Editor")
             && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Terminal") && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Appearance")
@@ -31,7 +48,7 @@ internal sealed partial class DawnScene
             SettingsWindow is { Visible: true } window && window.Parent == chrome.Root && SettingsPage is { } page
             && page.Settings.Any(setting => setting.Key == "editor_skin") && page.Settings.Any(setting => setting.Key == "scrollback")
             && page.Settings.Any(setting => setting.Key == "backdrop_image") && page.Settings.Any(setting => setting.Key == "layout_skin")
-            && Value("editor_skin") is StringValue { Value: "Horizon" });
+            && Value("editor_skin") is StringValue { Value: "Graphite" });
         test.Check("settings: in order, how Hex looks first with both modes' themes in it, then the editor, the terminal and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(Hex.Shell.EditorSettingsCatalog.Parts)
             && SettingsPage.Settings.Where(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));
@@ -276,10 +293,10 @@ internal sealed partial class DawnScene
             settings.EditorTheme != "horizon" && settings.EditorSkin == "flat" && compositor.Skin?.Theme == settings.EditorTheme && next!.Replace(' ', '_').EndsWith(settings.EditorTheme, StringComparison.OrdinalIgnoreCase));
         test.Check("settings: the editor can wear any skin there is, the row has every one of them", () =>
             SettingsPage!.Settings.First(setting => setting.Key == "editor_skin").Choices is { } listed && listed.Length > UISkins.Available.Count && listed.Any(text => text.Contains("Dead Revolver")));
-        // The lists of the sides are the panel's colour, see through on glass, and the code's box the panel itself
+        // Lists sit on the panel, and the document has the quieter field tone. Square skins stay flush.
         test.Check("settings: boxes, background and all", () =>
             compositor.Skin is { } worn && treeScroll.Color is { } box && box with { W = 1.0f } == worn.PanelColor with { W = 1.0f }
-            && codeScroll.Color == worn.PanelColor with { W = 1.0f });
+            && codeScroll.Color == (Square(worn) ? worn.PanelColor : worn.FieldColor) with { W = 1.0f });
         test.Run(() => UseEditorTheme("light", save: false));
 
         // The skin swaps on the thread that draws, waited on rather than given a fixed time
@@ -335,7 +352,7 @@ internal sealed partial class DawnScene
         Enter("backdrop_wrap", Values.Bool(true));
 
         // A picture of its own, and the usual one back by the row's button
-        string picture = Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+        string picture = Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
         Enter("backdrop_image", new StringValue(picture));
         test.Wait();
         test.Check("settings: a picture of its own is the backdrop from then on", () => settings.BackdropImage == Path.GetFullPath(picture) && code.Backdrop is not null);
@@ -378,7 +395,7 @@ internal sealed partial class DawnScene
         Vector2 closeAt = Vector2.Zero;
         test.Run(() => closeAt = chrome.ToWorld(SettingsWindow!.CloseBounds.Center));
         test.Click(() => closeAt);
-        test.Wait();
+        test.WaitFor(() => SettingsWindow is null, 2.0f);
         test.Check("settings: the x closes them", () => SettingsWindow is null && !chrome.Root.Children.OfType<WindowPanel>().Any());
         TestSideKeys(test);
 
@@ -413,7 +430,7 @@ internal sealed partial class DawnScene
         void PressCtrlShiftG() => test.Run(() =>
         {
             bool typing = compositor.Focus is not (null or TreeView) || stage.Focus is not null;
-            commands.Keys.Update(key => key == Silk.NET.Input.Key.G, control: true, shift: true, alt: false, typing);
+            commands.Keys.Update(key => key == Horizon.Input.Key.G, control: true, shift: true, alt: false, typing);
         });
 
         string noGroup = Said("designer_selection.no_group");
@@ -458,9 +475,12 @@ internal sealed partial class DawnScene
     // The side bar slides away and back, the middle widening and narrowing with it, rather than popping
     private void TestSlidingSides(HexPointerScript test)
     {
-        float wide = 0.0f, during = 0.0f, after = 0.0f, time = left.SlideTime;
+        float wide = 0.0f, during = 0.0f, after = 0.0f, time = left.SlideTime, animation = settings.UiAnimation;
         test.Run(() =>
         {
+            // The self test starts with the UI holding still, which has nothing slide at all
+            settings.UiAnimation = 1.0f;
+            ApplyEffects();
             left.SlideTime = UIComponent.DEFAULT_SLIDE_TIME;
             wide = center.Bounds.Width;
             ToggleSideBar();
@@ -477,6 +497,11 @@ internal sealed partial class DawnScene
         test.Run(ToggleSideBar);
         test.Settle(UIComponent.DEFAULT_SLIDE_TIME * 1.5f);
         test.Check("slide: and comes back the way it went", () => left.Visible && left.Shown && !left.Sliding && Near(center.Bounds.Width, wide, 2));
-        test.Run(() => left.SlideTime = time);
+        test.Run(() =>
+        {
+            left.SlideTime = time;
+            settings.UiAnimation = animation;
+            ApplyEffects();
+        });
     }
 }

@@ -14,7 +14,8 @@ namespace Hex.Shell;
 internal sealed record HexLook(string Name, IReadOnlyDictionary<string, IRuntimeValue> Values, bool BuiltIn = false);
 
 /// <summary>
-/// Hex's looks, the profiles of how it's drawn. Four come with it, Fluid Glass (clear glass that bends what is behind
+/// Hex's looks, the profiles of how it's drawn. Five come with it: Graphite (neutral surfaces and restrained motion),
+/// Fluid Glass (clear glass that bends what is behind
 /// it at its rim), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (the default, solid
 /// panels, nothing glows or glides) and Visual Studio (that editor's dark theme, square and flat, see
 /// HexLooks.VisualStudio), and the user saves their own from whatever the settings are at. The user's are kept in the
@@ -102,15 +103,25 @@ internal static partial class HexLooks
         ["effect_ripples"] = Values.Bool(false),
         ["effect_trail"] = Values.Bool(false),
         ["effect_motion"] = Values.Bool(false),
-        ["ui_animation"] = new NumberValue(0.0f),
+        ["ui_animation"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f)
     }, BuiltIn: true);
 
     /// <summary>Visual Studio dark, see HexLooks.VisualStudio.</summary>
     public static readonly HexLook VisualStudio = MakeVisualStudio();
 
+    /// <summary>The quiet neutral workspace, with shared colours in Dawn and Dusk.</summary>
+    public static readonly HexLook Graphite = new("Graphite", new Dictionary<string, IRuntimeValue>(Flat.Values, StringComparer.Ordinal)
+    {
+        [EDITOR_SKIN] = new StringValue("flat"),
+        [EDITOR_THEME] = new StringValue("graphite"),
+        [TERMINAL_THEME] = new StringValue("graphite"),
+        ["effect_motion"] = Values.Bool(true),
+        ["ui_animation"] = new NumberValue(1.0f)
+    }, BuiltIn: true);
+
     /// <summary>The ones that come with Hex, in the order they're shown.</summary>
-    public static readonly HexLook[] BuiltIn = [Fluid, Frosted, Flat, VisualStudio];
+    public static readonly HexLook[] BuiltIn = [Graphite, Fluid, Frosted, Flat, VisualStudio];
 
     /// <summary>Hex's own and then the user's, in the order they were saved.</summary>
     public static List<HexLook> All(HexSettings settings) =>
@@ -256,6 +267,7 @@ internal static partial class HexLooks
         "caret_glide" => new NumberValue(settings.CaretGlide),
         CODE_FONT => new StringValue(settings.CodeFont),
         CSHARP_COLORS => new StringValue(settings.CSharpColors),
+        VISUAL_STUDIO_KEYS => Values.Bool(settings.VisualStudioKeys),
         EDITOR_SKIN => new StringValue(settings.EditorSkin),
         EDITOR_THEME => new StringValue(settings.EditorTheme),
         TERMINAL_THEME => new StringValue(terminalTheme),
@@ -283,6 +295,7 @@ internal static partial class HexLooks
             case ("caret_glide", NumberValue glide): settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f); break;
             case (CODE_FONT, StringValue font): settings.CodeFont = font.Value; break;
             case (CSHARP_COLORS, StringValue { Value: "resharper" or "visual_studio" or "skin" } colors): settings.CSharpColors = colors.Value; break;
+            case (VISUAL_STUDIO_KEYS, BooleanValue on): settings.VisualStudioKeys = on.Value; break;
             case (EDITOR_SKIN, StringValue { Value.Length: > 0 } skin): settings.EditorSkin = skin.Value; break;
             case (EDITOR_THEME, StringValue theme): settings.EditorTheme = theme.Value; break;
         }

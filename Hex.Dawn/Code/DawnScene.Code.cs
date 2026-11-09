@@ -11,7 +11,7 @@ using Horizon.UI;
 using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 
@@ -58,13 +58,16 @@ internal sealed partial class DawnScene
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
+        editor.OverloadCounter = Said("code.overload_counter", ("index", "{0}"), ("count", "{1}"));
         ShowBackdrop(editor);
         // The code on the middle card's own colour, one surface with the tabs over it and the terminal under it. It was a
         // charcoal of its own written in here, a third colour in the one card
         editor.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.14f, 0.2f, 1.0f);
         editor.OnChanged = () => CodeChanged(prepared);
+        editor.OnTyped = character => languages.FormatTyped(prepared, character);
         editor.OnTab = () => extensions.Tab(prepared);
         editor.CompletionSource = codeEditing.Completions;
+        editor.CompletionTrigger = character => languages.TriggersCompletion(prepared, character);
         editor.OnChecked = _ => CodeChecked(prepared);
         editor.HoverSource = codeEditing.HoverHint;
         editor.OnSwatchPressed = codeEditing.PickSwatch;
@@ -241,6 +244,7 @@ internal sealed partial class DawnScene
             FallbackDirectory = browseDirectory,
             CrLf = source.Contains("\r\n", StringComparison.Ordinal),
             SavedCrLf = source.Contains("\r\n", StringComparison.Ordinal),
+            DiskEncoding = Hex.Core.DocumentFile.EncodingOf(path),
             DiskText = source
         };
 
@@ -285,12 +289,11 @@ internal sealed partial class DawnScene
     /// <summary>Opens a file and puts the caret somewhere in it, for whatever lists places in files.</summary>
     private void OpenAt(string path, int line, int column)
     {
-        string full = Path.GetFullPath(path);
-        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path) == full);
+        HexDocument? open = OpenDocument(path);
 
         if (open is null)
         {
-            if (!Open(path) && !documents.Any(other => other.Path is not null && Path.GetFullPath(other.Path) == full))
+            if (!Open(path) && OpenDocument(path) is null)
                 return;
         }
         else
@@ -357,6 +360,10 @@ internal sealed partial class DawnScene
         commands.Add("Edit/comment", Said("code.toggle_comment"), () => code.Document.ToggleComment(), "Ctrl+/", "comment").IsVisible = inCode;
         commands.Add("Edit/comment", Said("code.toggle_block_comment"), () => code.Document.ToggleBlockComment(), "Shift+Alt+A", "comment-discussion").IsVisible = inCode;
 
+        // Visual Studio's, which comment whatever the lines are and take it off the ones that are, rather than turning it over
+        commands.Add("Edit/comment", Said("code.comment_selection"), () => code.Document.CommentSelection(), "Ctrl+K Ctrl+C", "comment", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+        commands.Add("Edit/comment", Said("code.uncomment_selection"), () => code.Document.UncommentSelection(), "Ctrl+K Ctrl+U", "comment-unresolved", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
+
         commands.ShowMenuWhen("Selection", inCode);
         commands.Add("Selection/select", Said("designer_selection.select_all"), () => code.Document.SelectAll(), "Ctrl+A", "selection");
         commands.Add("Selection/select", Said("code.select_line"), () => code.Document.ExpandLineSelection(), "Ctrl+L", "horizontal-rule");
@@ -371,6 +378,10 @@ internal sealed partial class DawnScene
         commands.Add("Selection/carets", Said("code.add_cursor_above"), () => code.Document.AddCaretVertically(-1), "Ctrl+Alt+Up", "arrow-small-up");
         commands.Add("Selection/carets", Said("code.add_cursor_below"), () => code.Document.AddCaretVertically(1), "Ctrl+Alt+Down", "arrow-small-down");
         commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Shift+Alt+I", "newline");
+        // Ctrl+Shift+Space the editor's own key, the box over a call back after Escape took it away. Going to the other
+        // bracket is VS Code's Ctrl+Shift+\ and Visual Studio's Ctrl+]
+        commands.Add("Run/check", Said("code.parameter_info"), () => { code.Focus(); code.ShowSignature(); }, "Ctrl+Shift+Space", "symbol-parameter").IsVisible = inCode;
+        commands.Add("Go/symbols", Said("code.go_to_bracket"), () => code.GoToMatchingBracket(), "Ctrl+Shift+\\", "bracket", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Selection/carets", Said("code.single_cursor"), () => code.Document.CollapseCarets(), "Esc", "circle-small-filled").IsEnabled = () => code.Document.HasExtraCarets;
         Menu folding = commands.AddMenu("View/editor", Said("code.folding"), "fold");
         folding.Add(Said("code.fold"), () => code.FoldAtCaret(), "Ctrl+Shift+[", "fold-up");
@@ -380,6 +391,9 @@ internal sealed partial class DawnScene
         folding.Add(Said("code.fold_level_2"), () => code.FoldAll(2));
         folding.Add(Said("code.fold_level_3"), () => code.FoldAll(3));
         folding.Add(Said("code.unfold_all"), () => code.UnfoldAll(), icon: "expand-all");
+        folding.AddSeparator();
+        folding.Add(Said("code.collapse_to_definitions"), CollapseToDefinitions, icon: "fold");
+        folding.Add(Said("code.toggle_all_outlining"), ToggleAllOutlining, icon: "unfold");
 
         // Their keys are bound with the designer's, which zooms the canvas with the same ones
         commands.Add("View/appearance/look:zoom", Said("designer_selection.zoom_in"), () => ZoomCode(CODE_ZOOM_STEP), "Ctrl+=", "zoom-in").IsVisible = () => inCode() || NotebookShown;
@@ -395,8 +409,17 @@ internal sealed partial class DawnScene
         commands.Add("Go/problems", Said("code.next_problem"), () => StepProblem(1), "F8", "arrow-down", UIKeyUse.BoundWhileTyping);
         commands.Add("Go/problems", Said("code.previous_problem"), () => StepProblem(-1), "Shift+F8", "arrow-up", UIKeyUse.BoundWhileTyping);
 
-        // F2 renames, a name in the code, or what is selected in the designer by its name in the properties
-        commands.Bind(Key.F2, () => { if (compositor.Focus is CodeEditor) codeEditing.RenameSymbol(); else if (LayoutTools) RenameSelected(); }, whileTyping: true);
+        // F2 renames, a name in the code, the file or folder picked in the explorer, or what is selected in the designer by
+        // its name in the properties
+        commands.Bind(Key.F2, () =>
+        {
+            if (compositor.Focus is CodeEditor)
+                codeEditing.RenameSymbol();
+            else if (compositor.Focus == sideTree && Side == HexSide.Explorer)
+                RenameInExplorer();
+            else if (LayoutTools)
+                RenameSelected();
+        }, whileTyping: true);
 
         // A file of code is run with F5 (see RunOrPlay), and with control a function of it is called tick after tick
         commands.Add("Run/run", Said("code.run_file"), running.RunCode, "F5", "play").IsVisible = () => !LayoutTools && !debugger.CanDebug(document.Path);
@@ -407,7 +430,8 @@ internal sealed partial class DawnScene
         commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "Ctrl+F8", "check-all", UIKeyUse.BoundWhileTyping);
         commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space", "symbol-keyword").IsVisible = inCode;
 
-        commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", "export", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited;
+        // Not while the commit box has the keys, Ctrl+Enter there commits
+        commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", "export", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited && !CommitBoxTyping;
         commands.Add("Run/apply", Said("code.discard_changes"), RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", Said("code.convert_to_layout"), MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
     }

@@ -52,6 +52,20 @@ let act_git = compositor.button({
     animated: false,
 });
 
+let act_agents = compositor.button({
+    parent: activity,
+    size: vec(38, 38),
+    tooltip: "@activity.agents",
+    hover: "none",
+    hover_amount: 0.1,
+    hover_time: 0.08,
+    icon: "robot",
+    lbl_scale: 0.2,
+    style: "button_flat",
+    indicator: "left",
+    animated: false,
+});
+
 let act_outline = compositor.button({
     parent: activity,
     size: vec(38, 38),
@@ -88,6 +102,20 @@ let act_debug = compositor.button({
     hover_amount: 0.1,
     hover_time: 0.08,
     icon: "debug-alt",
+    lbl_scale: 0.2,
+    style: "button_flat",
+    indicator: "left",
+    animated: false,
+});
+
+let act_tests = compositor.button({
+    parent: activity,
+    size: vec(38, 38),
+    tooltip: "@activity.tests",
+    hover: "none",
+    hover_amount: 0.1,
+    hover_time: 0.08,
+    icon: "beaker",
     lbl_scale: 0.2,
     style: "button_flat",
     indicator: "left",

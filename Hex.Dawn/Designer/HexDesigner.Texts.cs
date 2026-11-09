@@ -4,7 +4,7 @@ using Horizon.Content;
 using Horizon.HIDL.Runtime;
 using Horizon.Rendering;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 namespace Hex.Dawn;
 

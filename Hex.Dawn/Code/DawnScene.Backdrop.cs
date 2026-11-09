@@ -21,15 +21,14 @@ internal sealed partial class DawnScene
     private bool backdropRead;
 
     /// <summary>The picture the settings say, empty for the usual one.</summary>
-    private string BackdropPath => settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(AppContext.BaseDirectory, USUAL_BACKDROP);
+    private string BackdropPath => settings.BackdropImage.Length > 0 ? settings.BackdropImage : Path.Combine(Hex.Core.HexHost.ProgramFolder, USUAL_BACKDROP);
 
     /// <summary>The picture read again as the settings say, and handed to every editor of code.</summary>
     private void ApplyBackdrop()
     {
         backdropPicture = settings.BackdropOn && File.Exists(BackdropPath) ? Texture.Load(BackdropPath, smooth: true) : null;
         MakeBackdropShape();
-        foreach (HexDocument open in documents)
-            ShowBackdrop(open.Editor);
+        ShowBackdropEverywhere();
     }
 
     // The shape the wrapped code runs round, the outline of what is drawn in the picture's file to the pixel
@@ -81,11 +80,20 @@ internal sealed partial class DawnScene
         codeEditing.ApplyCodeFont();
     }
 
-    /// <summary>Every editor of code shown the picture as the settings have it now, its place, size and how faint.</summary>
+    /// <summary>Every editor of code shown the picture as the settings have it now, its place, size and how faint, the notebook view too.</summary>
     private void ShowBackdropEverywhere()
     {
         foreach (HexDocument open in documents)
             ShowBackdrop(open.Editor);
+
+        // The cells have no text area of their own to hold it, the view behind them does, one picture however many there are
+        notebookBackdrop.Picture = backdropPicture;
+        notebookBackdrop.PictureScale = settings.BackdropScale;
+        notebookBackdrop.PictureOffset = new Vector2(settings.BackdropAcross, settings.BackdropUp);
+        notebookBackdrop.PictureStretch = settings.BackdropStretch;
+        notebookBackdrop.PictureOpacity = settings.BackdropOpacity;
+        foreach (NotebookCellView view in cellViews)
+            view.Editor.Color = CellEditorColor;
     }
 
     /// <summary>Asks for a picture with Windows' own dialog, the backdrop from then on.</summary>

@@ -21,13 +21,62 @@ internal sealed partial class HexDocument
     /// <returns>Whether the script ran, and what it had to say if it didn't.</returns>
     public (bool Success, string Message) Load(string code, string? path = null, bool keepHistory = false)
     {
-        Clear();
-        ReadNotes(code);
+        // Execute once, away from the live tree. A parse or runtime failure must not
+        // remove components, start exit animations or discard the editor's selection.
+        var replacement = new UIModule(Module.Compositor)
+        {
+            Enabled = Module.Enabled,
+            Position = Module.Position,
+            Scale = Module.Scale,
+            Viewport = Module.Viewport,
+            Clip = Module.Clip,
+            FrameColor = Module.FrameColor,
+            FrameBackground = Module.FrameBackground,
+            ShowInLayoutDebugger = Module.ShowInLayoutDebugger
+        };
+        var candidate = new HexDocument(Name, replacement)
+        {
+            Path = Path,
+            FallbackDirectory = FallbackDirectory,
+            checking = checking,
+            keepOpened = keepHistory,
+            opened = keepHistory ? opened : null
+        };
+        (bool Success, string Message) result;
+        try
+        {
+            candidate.ReadNotes(code);
+            result = candidate.Build(code, path);
+        }
+        catch (Exception error)
+        {
+            return (false, error.Message);
+        }
+        if (!result.Success)
+            return result;
 
-        var result = Build(code, path);
+        // Detached modules are used by validation callers too. Registered modules
+        // retain their exact compositor slot; no second execution of the script.
+        if (Module.Compositor.Modules.Contains(Module) && !Module.Compositor.ReplaceModule(Module, replacement))
+            return (false, "The layout module was removed before its replacement could be applied.");
+        Module = replacement;
+        names = candidate.names;
+        previews = candidate.previews;
+        notes = candidate.notes;
+        headerNotes = candidate.headerNotes;
+        builtFrom = candidate.builtFrom;
+        source = candidate.source;
+        hexWrote = candidate.hexWrote;
+        sourceName = candidate.sourceName;
+        sourceShapeKey = candidate.sourceShapeKey;
+        sourceShape = candidate.sourceShape;
+        opened = candidate.opened;
+        keepOpened = candidate.keepOpened;
+        renamedSince.Clear();
+        selection.Clear();
 
         // A layout that was just opened has nothing to go back to
-        if (!keepHistory)
+        if (!keepHistory && !checking)
             ResetHistory();
 
         return result;
@@ -61,7 +110,11 @@ internal sealed partial class HexDocument
         foreach (var (component, _) in Walk())
             NameOf(component);
 
-        return (true, RefreshPreviews() ?? string.Empty);
+        // A check of what an edit came to keeps no code, it's only there to be looked at
+        string problem = RefreshPreviews() ?? string.Empty;
+        if (!checking)
+            Adopt(code);
+        return (true, problem);
     }
 
     /// <summary>
@@ -182,8 +235,8 @@ internal sealed partial class HexDocument
     }
 
     /// <summary>
-    /// Writes the layout as the script that builds it. One component after the other, each inside of the one
-    /// before it that it belongs to, with everything about it that isn't how it starts out anyway.
+    /// The layout as the code of it. The code it was opened from when Hex didn't write it, with whatever was changed in the
+    /// designer since edited into it (see HexDocument.Source), and the code Hex writes for it when it did.
     /// </summary>
     public string GenerateCode()
     {
@@ -191,6 +244,15 @@ internal sealed partial class HexDocument
         if (IsText)
             return Editor.Text;
 
+        return source is null ? Regenerate() : Synced();
+    }
+
+    /// <summary>
+    /// Writes the layout as the script that builds it. One component after the other, each inside of the one
+    /// before it that it belongs to, with everything about it that isn't how it starts out anyway.
+    /// </summary>
+    private string Regenerate()
+    {
         var code = new StringBuilder();
         code.Append("// ").Append(Name).AppendLine(", laid out with Hex.");
         code.AppendLine("// Load it with UILayout.Load, every component is there under the name it has here.");
@@ -202,39 +264,56 @@ internal sealed partial class HexDocument
         code.Append('#').Append("define ").AppendLine(Horizon.HIDL.Preprocessing.HIDLPreprocessor.LAYOUT);
         code.Append(GenerateBody());
 
-        return code.ToString();
+        // The lines of the code end in \n whatever the system's are, the file's own are put back as it's saved
+        return code.ToString().Replace("\r\n", "\n");
     }
 
     // The components without the lines on top, which say what the layout is called and nothing about what is in it.
-    private string GenerateBody()
+    // Without the notes it is what the layout is and nothing of how somebody wrote about it, which two layouts are told
+    // apart by
+    private string GenerateBody(bool withNotes = true)
     {
         var code = new StringBuilder();
 
-        if (Design is { } design)
+        if (DesignCall() is { } design)
         {
             code.AppendLine();
-            WriteNotes(code, NOTE_DESIGN);
-            code.Append("compositor.design({ size: ").Append(HIDLWriter.Write(new Vector2Value(design)))
-                .Append(", fit: \"").Append(Fit.ToString().ToLowerInvariant()).AppendLine("\" });");
+            if (withNotes)
+                WriteNotes(code, NOTE_DESIGN);
+            code.AppendLine(design);
         }
 
         foreach (var (component, _) in Walk())
         {
             code.AppendLine();
-            WriteNotes(code, NameOf(component));
-            WriteComponent(code, component);
+            if (withNotes)
+                WriteNotes(code, NameOf(component));
+            WriteComponent(code, component, settableOnly: !withNotes);
         }
 
-        // The layers hidden in the designer are the ones the layout starts with hidden, in the order the layout names them
-        string[] hidden = [.. Module.Layers.Where(Module.IsLayerHidden)];
-        if (hidden.Length > 0)
+        if (HiddenCall() is { } hidden)
         {
             code.AppendLine();
-            WriteNotes(code, NOTE_HIDDEN);
-            code.Append("compositor.hidden_layers(").Append(HIDLWriter.Write(new ListValue([.. hidden.Select(layer => (IRuntimeValue)new StringValue(layer))]))).AppendLine(");");
+            if (withNotes)
+                WriteNotes(code, NOTE_HIDDEN);
+            code.AppendLine(hidden);
         }
 
         return code.ToString();
+    }
+
+    // compositor.design as it's written, null when the layout says nothing about the screen it's made for
+    private string? DesignCall() => Design is { } design
+        ? $"compositor.design({{ size: {HIDLWriter.Write(new Vector2Value(design))}, fit: \"{Fit.ToString().ToLowerInvariant()}\" }});"
+        : null;
+
+    // The layers hidden in the designer are the ones the layout starts with hidden, in the order the layout names them
+    private string? HiddenCall()
+    {
+        string[] hidden = [.. Module.Layers.Where(Module.IsLayerHidden)];
+        return hidden.Length > 0
+            ? "compositor.hidden_layers(" + HIDLWriter.Write(new ListValue([.. hidden.Select(layer => (IRuntimeValue)new StringValue(layer))])) + ");"
+            : null;
     }
 
     // The comments somebody wrote into the file, the ones over the header and the ones over each declaration, kept by
@@ -242,8 +321,8 @@ internal sealed partial class HexDocument
     // written out of the components and never kept, so without these every save threw away whatever the last person
     // had written about the layout. A comment inside a declaration (between its braces) isn't kept, there is nothing
     // of the component it could hang off
-    private readonly Dictionary<string, string[]> notes = new(StringComparer.Ordinal);
-    private readonly List<string> headerNotes = [];
+    private Dictionary<string, string[]> notes = new(StringComparer.Ordinal);
+    private List<string> headerNotes = [];
     private const string NOTE_DESIGN = "design", NOTE_HIDDEN = "hidden_layers";
 
     private static readonly Regex Declaration = new(@"^let\s+([A-Za-z_]\w*)\s*=", RegexOptions.Compiled);
@@ -331,7 +410,8 @@ internal sealed partial class HexDocument
             code.AppendLine(line);
     }
 
-    private void WriteComponent(StringBuilder code, UIComponent component, Func<UIComponent, string>? nameOf = null, UIComponent? top = null)
+    /// <param name="settableOnly">Whether to leave out what a script can't set (what a list measured its rows as), which the code of a layout can't say.</param>
+    private void WriteComponent(StringBuilder code, UIComponent component, Func<UIComponent, string>? nameOf = null, UIComponent? top = null, bool settableOnly = false)
     {
         nameOf ??= NameOf;
 
@@ -342,32 +422,7 @@ internal sealed partial class HexDocument
             return;
         }
 
-        var properties = new List<string>();
-
-        if (component != top && component.Parent is { } parent && parent != Module.Root)
-            properties.Add($"parent: {nameOf(parent)}");
-
-        // Only what was changed is written, against a component of the same kind nobody has touched
-        Dictionary<string, string> usual = UsualOf(kind);
-        bool hasHandlers = false;
-
-        foreach (var (name, value) in ReadProperties(component))
-        {
-            if (value is FunctionValue or AnonymousFunctionValue or NativeFunctionValue)
-            {
-                hasHandlers = true;
-                continue;
-            }
-
-            if (!HIDLWriter.CanWrite(value))
-                continue;
-
-            string written = Written(value);
-            if (usual.TryGetValue(name, out string? untouched) && untouched == written)
-                continue;
-
-            properties.Add($"{name}: {written}");
-        }
+        List<string> properties = [.. PropertiesOf(component, kind, nameOf, top, out bool hasHandlers, settableOnly).Select(property => $"{property.Key}: {property.Value}")];
 
         if (hasHandlers)
             code.AppendLine("// The handlers this component had were functions, which can't be written back out.");
@@ -393,6 +448,44 @@ internal sealed partial class HexDocument
         }
     }
 
+    /// <summary>
+    /// What is written in a component's braces, its parent first and then everything about it that isn't how a component
+    /// of its kind starts out, each value written inside the braces (see Written).
+    /// </summary>
+    private List<KeyValuePair<string, string>> PropertiesOf(UIComponent component, string kind, Func<UIComponent, string> nameOf, UIComponent? top, out bool hasHandlers, bool settableOnly = false)
+    {
+        var properties = new List<KeyValuePair<string, string>>();
+
+        if (component != top && component.Parent is { } parent && parent != Module.Root)
+            properties.Add(new("parent", nameOf(parent)));
+
+        // Only what was changed is written, against a component of the same kind nobody has touched
+        Dictionary<string, string> usual = UsualOf(kind);
+        hasHandlers = false;
+
+        foreach (var (name, value) in ReadProperties(component))
+        {
+            if (value is FunctionValue or AnonymousFunctionValue or NativeFunctionValue)
+            {
+                hasHandlers = true;
+                continue;
+            }
+
+            if (!HIDLWriter.CanWrite(value))
+                continue;
+
+            string written = Written(value);
+            if (usual.TryGetValue(name, out string? untouched) && untouched == written)
+                continue;
+            if (settableOnly && !Settable(kind, name, value, written))
+                continue;
+
+            properties.Add(new(name, written));
+        }
+
+        return properties;
+    }
+
     // A property's value as the layout writes it, inside the braces of the component, so a list over several lines
     // is indented under its key and has a comma after its last item the way the properties do
     private static string Written(IRuntimeValue value)
@@ -400,6 +493,26 @@ internal sealed partial class HexDocument
         var text = new StringBuilder();
         HIDLWriter.WriteInto(text, value, 1, trailingCommas: true);
         return text.ToString();
+    }
+
+    // Whether a property of a kind can be set at all, by kind and name. Found out once, the first time one isn't how it
+    // starts out, by setting that value on a component nobody has touched and reading it back. One that only says what
+    // the component measured (a list's row_height) reads back as it was, and comes and goes as the layout is laid out
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Kind, string Name), bool> settable = new();
+
+    private static bool Settable(string kind, string name, IRuntimeValue value, string written)
+    {
+        if (settable.TryGetValue((kind, name), out bool known))
+            return known;
+
+        // Only one that takes no notice of the value at all is left out, one that makes something else of it (a number
+        // kept inside what it can be) still says something
+        bool can = true;
+        if (UIModule.CreateDetached(kind) is { } untouched && TryRead(untouched, name, out IRuntimeValue was) && Write(untouched, name, value) is null)
+            can = !TryRead(untouched, name, out IRuntimeValue back) || Written(back) == written || Written(back) != Written(was);
+
+        settable[(kind, name)] = can;
+        return can;
     }
 
     // What a component of a kind nobody has touched writes every property as, by kind. It was a new component made and

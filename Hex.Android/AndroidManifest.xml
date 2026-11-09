@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The activity is declared by its [Activity] attribute in HexActivity.cs. Vulkan 1.3 is what the engine's device asks
+  for. No storage permission at all, documents outside the app come through the system's picker (HexDocuments.cs). A
+  keyboard and a mouse are what Hex is used with on a tablet, neither is required so a store doesn't hide it. The
+  icon is Hex's own, the adaptive one in Resources traced from Hex.Shell/Assets/hex_icon.png.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+  <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+  <application android:label="Hex" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:enableOnBackInvokedCallback="true" />
+</manifest>

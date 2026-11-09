@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace Hex.Dawn;
 
@@ -61,6 +61,22 @@ internal sealed partial class DawnScene
         });
         test.Check("lens: csharp-ls's counts are over C#, two for a line declaring two constants", () => On(5) is ["2 references", "2 references"] && On(3) is ["1 reference"]);
         test.Check("lens: a method's count is over its attribute, under its doc comment", () => On(9) is ["1 reference"] && On(10).Length == 0 && On(2).Length == 0);
+
+        HexLanguages.LensRefreshState previous = default;
+        int previousGeneration = 0;
+        test.Run(() =>
+        {
+            previous = languages.LensRefreshesOf(document);
+            previousGeneration = lensFiles[document].Generation;
+            AllCommands().First(command => command.Text.EndsWith(Said("languages.restart_server"), StringComparison.Ordinal)).Picked?.Invoke();
+        });
+        test.WaitFor(() => languages.LensRefreshesOf(document).Server is {} server && server != previous.Server
+            && languages.DoesLenses(document), 60f);
+        test.WaitFor(() => lensFiles.TryGetValue(document, out var current) && current.Generation > previousGeneration
+            && current.Refreshes == languages.LensRefreshesOf(document) && current.Missing == 0, 60f);
+        test.Check("lens: restarted server is recounted without editing the document", () => lensFiles[document].Generation > previousGeneration
+            && lensFiles[document].Refreshes.Server != previous.Server);
+        test.Check("lens: reference counts recover after restart", () => On(5) is ["2 references", "2 references"] && On(7) is ["2 references"] && On(9) is ["1 reference"]);
 
         test.Click(() => code.Module is { } module ? module.ToWorld(code.LensAboveBounds(7, 0).Center) : Vector2.Zero);
         test.WaitFor(() => contextMenu?.Showing is not null, 20.0f);

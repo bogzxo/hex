@@ -26,13 +26,13 @@ internal sealed partial class DawnScene
         foreach (var (skin, theme, text) in all)
             byText.TryAdd(text, (skin, theme));
 
-        bool kept = false;
+        bool kept = false, closed = false;
         string? showing = null;
 
         // The editor in a theme for as long as the list is on it, nothing saved
         void Show(string text)
         {
-            if (text == showing || !byText.TryGetValue(text, out var choice))
+            if (closed || text == showing || !byText.TryGetValue(text, out var choice))
                 return;
 
             showing = text;
@@ -76,6 +76,7 @@ internal sealed partial class DawnScene
         // the pick puts its own on straight after, both before anything's drawn
         dialog.Closed = () =>
         {
+            closed = true;
             if (kept || showing is null)
                 return;
 

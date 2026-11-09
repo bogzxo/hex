@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.HIDL.Library;
 using Horizon.HIDL.Runtime;
@@ -145,8 +145,12 @@ internal sealed partial class HexExtensions
     private void UpdateExtensionChange(float dt)
     {
         HexDocument document = context.Documents.Current;
+        // Nothing to say of the welcome, and nothing kept of the file before it either, a closed file stayed alive in here
         if (document.Path is not { } path || !document.IsText)
+        {
+            changeTold = changeSeen = (null, -1);
             return;
+        }
 
         var now = (document, document.Editor.Document.Version);
         if (now != changeSeen)

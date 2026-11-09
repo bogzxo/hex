@@ -62,7 +62,7 @@ internal sealed partial class DawnScene
 
         IEnumerable<UITreeItem> SideRows(IEnumerable<UITreeItem> rows) => rows.SelectMany(row => new[] { row }.Concat(SideRows(row.Children ?? [])));
         UITreeItem? Merging(string path) => SideRows(sideTree.Items).FirstOrDefault(row =>
-            row.Tooltip is { } tip && PlatformPaths.Same(tip, path) && row.Parent?.Text.StartsWith("Merge Changes", StringComparison.Ordinal) == true);
+            row.Tooltip is { Length: > 0 } tip && path.Replace('\\', '/').EndsWith("/" + tip, StringComparison.Ordinal) && row.Parent?.Text.StartsWith("Merge Changes", StringComparison.Ordinal) == true);
         bool On(string path) => document.Path is { } open && PlatformPaths.Same(open, path);
         Vector2 Lens(int action) => conflicts.Count > 0 && code.Module is { } module ? module.ToWorld(code.LensBounds(conflicts[0].Start, action).Center) : last;
         UINotification? SettledCard() => toasts.Cards.LastOrDefault(card => !card.Closed && card.Text.Contains("is settled", StringComparison.Ordinal));

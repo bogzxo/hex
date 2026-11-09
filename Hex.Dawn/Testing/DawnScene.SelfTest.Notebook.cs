@@ -73,6 +73,13 @@ internal sealed partial class DawnScene
         PressKeys(test, "Enter");
         test.Check("notebook: Enter types into it, and the Enter itself types nothing", () =>
             notebookShown!.Editing && compositor.Focus is NotebookCellEditor && notebookShown.Model.Cells[2].Source == "" && cellViews[2].Editor.Text == "");
+        PressKeys(test, "Enter Enter");
+        for (int i = 0; i < 20; i++)
+            test.Wait();
+        test.Check("notebook: new lines grow the cell, its code stays where it was and not up out of the top of it", () =>
+            cellViews[2].Editor is { } grown && grown.Text == "\n\n"
+            && grown.PlaceOf(new UITextPosition(0, 0)).Y is var first && first > grown.Bounds.Min.Y && first < grown.Bounds.Max.Y
+            && grown.PlaceOf(new UITextPosition(2, 0)).Y is var last && last > grown.Bounds.Min.Y && last < grown.Bounds.Max.Y);
         PressKeys(test, "Escape");
         test.Check("notebook: Escape goes out of the cell back to picking cells", () => !notebookShown!.Editing && compositor.Focus is not NotebookCellEditor);
         test.Wait();

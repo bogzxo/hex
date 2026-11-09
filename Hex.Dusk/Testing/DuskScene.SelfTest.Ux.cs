@@ -6,6 +6,8 @@ internal sealed partial class DuskScene
 {
     private void TestUx(DuskScript test)
     {
+        test.Check("ux: mode switch sits immediately beside the window controls", () =>
+            modeToggle.Parent is { } modes && MathF.Abs(modes.Bounds.Max.X - top.ButtonBounds(0).Min.X) < 1);
         TerminalView View() => panel.FocusedView!;
         test.Run(() =>
         {

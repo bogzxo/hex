@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <!-- AttachConsole for the help, LibraryImport writes unsafe code for it -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
 
     <!-- The exe's icon in Explorer, the windows get their own at run time (WindowIcon) -->
     <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>
@@ -71,6 +71,7 @@
     <ProjectReference Include="..\Hex.Dawn\Hex.Dawn.csproj" />
     <ProjectReference Include="..\Hex.Dusk\Hex.Dusk.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon\Horizon.csproj" />
+    <ProjectReference Include="$(HorizonRoot)Horizon.Platform.Desktop\Horizon.Platform.Desktop.csproj" />
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
   </ItemGroup>
 

@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
         string file = Path.Combine(testFolder, "engineering.ipynb");
         test.Run(() =>
         {
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "hex", "notebooks", "engineering.ipynb"), file, true);
+            File.Copy(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "hex", "notebooks", "engineering.ipynb"), file, true);
             Open(file);
         });
         test.Wait();
@@ -35,17 +35,39 @@ internal sealed partial class DawnScene
         Horizon.Graphics.Texture? mathTexture = null;
         string theme = settings.EditorTheme;
         float scale = compositor.UIScale;
+        float zoom = settings.CodeZoom;
         test.Run(() => { mathTexture = cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single().Texture; UseEditorTheme("light", save: false); });
         test.WaitFor(() => compositor.Skin?.Theme == "light", 3);
         test.Wait();
         test.Check("engineering: math follows light-theme ink without rerasterizing", () =>
             cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { MathInk: true } math
             && math.Tint == compositor.Skin!.TextColor && ReferenceEquals(math.Texture, mathTexture));
-        test.Run(() => { UseEditorTheme(theme, save: false); SetScale(2, remember: false); });
+        // Rebuild from the rendered cache first: these pictures have no placeholder label. Merely zooming the
+        // original picture would retain its hidden status label and miss the crash path.
+        test.Run(() => DrawOutputs(notebookShown!, cellViews[2]));
+        test.Check("engineering: cached math has a texture without a placeholder status", () =>
+            cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { RenderStatus: null } math
+            && ReferenceEquals(math.Texture, mathTexture));
+        test.Run(() => { UseEditorTheme(theme, save: false); SetScale(scale == 2 ? 1 : 2, remember: false); ZoomCode(1.25f); });
+        test.WaitFor(() => notebookRenders.Count == 0
+            && cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { Texture: { IsValid: true }, RenderStatus: null } math
+            && !ReferenceEquals(math.Texture, mathTexture), 30);
+        test.Check("engineering: cached math rerenders at a new scale without a placeholder status", () =>
+            cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { Texture: { IsValid: true }, RenderStatus: null } math
+            && !ReferenceEquals(math.Texture, mathTexture));
+        for (int i = 0; i < 4; i++)
+        {
+            float factor = i % 2 == 0 ? 1 / 1.25f : 1.25f;
+            test.Run(() => ZoomCode(factor));
+            test.WaitFor(() => notebookRenders.Count == 0, 30);
+            test.Check("engineering: repeated zoom keeps cached LaTeX valid", () =>
+                cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { Texture: { IsValid: true }, RenderStatus: null } math
+                && math.Density == PictureDensity(zoomed: true));
+        }
         test.Settle(0.2f);
         test.Check("engineering: narrow equations remain inside cell width", () =>
             cellViews[2].Outputs.Children.OfType<NotebookPicture>().All(picture => picture.Size.X <= cellViews[2].Body.Size.X + 1));
-        test.Run(() => SetScale(scale, remember: false));
+        test.Run(() => { SetScale(scale, remember: false); ZoomCode(zoom / settings.CodeZoom); });
         test.Run(() => { PickCell(notebookShown!, 7, false); Shot("engineering-plot"); });
         test.Wait();
         test.WaitFor(() => !notebookShown!.Changed, 3);
@@ -115,12 +137,12 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             var pictures = cellPictures[cellViews[^1]];
-            canceled = RenderedPicture(System.Text.Json.Nodes.JsonValue.Create("cancel-test")!, () =>
+            canceled = RenderedPicture(System.Text.Json.Nodes.JsonValue.Create("cancel-test")!, density =>
             {
                 started.Set();
                 release.Wait(TimeSpan.FromSeconds(10));
-                return NotebookRender.Svg("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>");
-            }, pictures);
+                return NotebookRender.Svg("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>", density);
+            }, pictures, zoomed: true);
             cellViews[^1].Outputs.Add(canceled!);
         });
         test.WaitFor(() => started.IsSet, 5);

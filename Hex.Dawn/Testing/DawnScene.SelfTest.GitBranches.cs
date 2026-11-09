@@ -165,7 +165,25 @@ internal sealed partial class DawnScene
         test.Run(() => Command("git_branch.merge_command"));
         test.WaitFor(() => Lists(": x   "), 3.0f);
         test.Run(() => Pick(": x   "));
-        test.WaitFor(() => git.OperationAt(file) == GitOperation.Merging && Rows().Any(row => row.Text == Said("git.merging")) && CommitSaid(Rows())?.Text == Said("git.commit_merge"), 6.0f);
+        // A status sampled just before merge can arrive with MERGE_HEAD already present. Wait for the conflict
+        // row and completion notice too, rather than treating that intermediate "Merging / No changes" as settled.
+        bool ConflictReady() => git.OperationAt(file) == GitOperation.Merging
+            && Rows().Any(row => row.Text == Said("git.merging"))
+            && CommitSaid(Rows())?.Text == Said("git.commit_merge")
+            && Rows().FirstOrDefault(row => row.Text == Said("git.merge_changes"))?.Children?.Any(row => row.Badge == "C") == true
+            && toasts.Cards.Any(card => !card.Closed && card.Text.Contains(HexText.Count("conflict", 1), StringComparison.Ordinal));
+        test.WaitFor(ConflictReady, 6.0f);
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            Shot("branch-merge");
+            if (ConflictReady())
+                return;
+            Console.WriteLine($"[Hex self-test] merge diagnostic: operation={git.OperationAt(file)}, commit={CommitSaid(Rows())}, status={GitProcess.Run(repo, ["status", "--porcelain"]).Output.Trim()}");
+            Console.WriteLine($"[Hex self-test] merge diagnostic rows: {string.Join(" | ", Rows().Select(row => $"{row.Text} ({row.Icon}; {row.Badge}) [{string.Join(", ", row.Children?.Select(child => $"{child.Text}:{child.Badge}") ?? [])}]"))}");
+            Console.WriteLine($"[Hex self-test] merge diagnostic cards: {string.Join(" | ", toasts.Cards.Where(card => !card.Closed).Select(card => card.Text))}");
+        });
+        test.Settle(0.2f);
         test.Check("branch ops: a merge that conflicts leaves git merging, the Merging row and the file a C under Merge Changes", () =>
             git.OperationAt(file) == GitOperation.Merging && Rows().Any(row => row.Text == Said("git.merging"))
             && Rows().FirstOrDefault(row => row.Text == Said("git.merge_changes"))?.Children?.Any(row => row.Badge == "C") == true);

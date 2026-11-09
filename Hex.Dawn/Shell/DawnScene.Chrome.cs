@@ -35,13 +35,17 @@ internal sealed partial class DawnScene
         // Close enough to the size it comes at is that size, a few steps in and out land back on it
         if (MathF.Abs(zoom - 1.0f) < 0.02f) zoom = 1.0f;
 
+        if (settings.CodeZoom == zoom) return;
+        if (NotebookShown)
+            ((NotebookScrollPanel)notebookScroll).PreserveCentre(cellViews.Select(cell => (UIComponent)cell.Card));
+
         settings.CodeZoom = zoom;
         foreach (HexDocument open in documents)
             open.Editor.TextScale = CODE_TEXT * zoom;
         foreach (NotebookCellView cell in cellViews)
             cell.Editor.TextScale = CODE_TEXT * zoom;
 
-        SaveSettings();
+        QueueZoomSettings();
         Say(Said("chrome.code_zoom", ("percent", (zoom * 100.0f).ToString("0"))));
     }
 
@@ -79,9 +83,15 @@ internal sealed partial class DawnScene
 
         // The two are one screen as far as anybody looking at it is concerned
         compositor.Scale = stage.Scale = scale;
+        if (HexModes.Together)
+            HexModes.Scale = scale;
 
-        // Except the title bar, which is the window's and the size of the system's whatever the editor is drawn at, its menus with it
-        menu.TextScale = MENU_TEXT / scale;
+        // Desktop chrome follows the native window. On a phone or tablet the bar belongs to the app and follows its zoom.
+        bool nativeChrome = (Engine.WindowManager.Features & Horizon.Platform.PlatformFeatures.Window) != 0;
+        ((TitleBar)top).PixelSized = nativeChrome;
+        float chromeScale = nativeChrome ? scale : 1.0f;
+        menu.TextScale = MENU_TEXT / chromeScale;
+        Hex.Shell.HexModeSwitch.SetScale(modeToggle, chromeScale);
 
         if (!remember || options.SelfTest)
             return;
@@ -170,8 +180,10 @@ internal sealed partial class DawnScene
 
         float width = row.Padding.Total.X, gap = row.Spacing >= 0.0f ? row.Spacing : compositor.Skin?.Spacing ?? 0.0f;
         int shown = 0;
-        foreach (UIComponent child in row.Children)
+        // By index, a foreach over the list as its interface makes an enumerator every tick
+        for (int i = 0; i < row.Children.Count; i++)
         {
+            UIComponent child = row.Children[i];
             if (!child.Visible)
                 continue;
             width += WidthShowing(child);
@@ -227,14 +239,7 @@ internal sealed partial class DawnScene
 
         // Between the title bar with the menus on top and the status bar at the bottom
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
-        float leftWidth = treeScroll.Size.X;
-        float rightWidth = inspectorScroll.Size.X;
-        // A side sliding in or out takes as much of its room as is out, so the middle widens and narrows with it
-        float sides = activity.Bounds.Width
-            + (leftWidth + left.Padding.Total.X) * left.SlideAmount
-            + (rightWidth + right.Padding.Total.X) * right.SlideAmount;
-        // The middle's own padding is the room round its card's contents, inside it
-        float centerWidth = MathF.Max(MIN_CENTER, screen.Width - root.Padding.Total.X - sides - center.Padding.Total.X);
+        var (leftWidth, centerWidth, rightWidth) = ColumnWidths(screen.Width);
 
         // What a column needs for everything in it that isn't given its height here, as it was last laid out. One part
         // given its height a column, a params array and a sum of it made garbage every tick
@@ -264,6 +269,8 @@ internal sealed partial class DawnScene
             treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         if (sideTree.Visible)
             sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
+        if (agentsView.Visible)
+            agentsView.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, agentsView)));
         HoldSideWidth(leftWidth);
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));
         rightHead.Size = new Vector2(rightWidth, 24.0f);
@@ -283,7 +290,13 @@ internal sealed partial class DawnScene
         {
             float others = Spoken(center, shown) - panelBefore;
             float gap = center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f;
-            float most = Math.Clamp(height - others - gap - MIN_FLEXIBLE, MIN_PANEL, MAX_PANEL);
+            // The compact find/replace panel lives in the editor's top padding.
+            // Reserve that band as well as readable text below pinned scopes; an
+            // 80-unit outer editor could otherwise have a negative text height.
+            float editorMinimum = shown == codeScroll
+                ? code.Padding.Total.Y + MathF.Max(MIN_FLEXIBLE, 7 * MathF.Max(16, code.CaretLineHeight))
+                : MIN_FLEXIBLE;
+            float most = Math.Clamp(height - others - gap - editorMinimum, MIN_PANEL, MAX_PANEL);
             bottom.MaxSize = new Vector2(0.0f, most);
             float open = Math.Min(Math.Max(panelWanted, MIN_PANEL), most);
             if (MathF.Abs(bottom.Size.Y - open) > 0.5f)
@@ -300,7 +313,13 @@ internal sealed partial class DawnScene
         // Narrow windows put those contextual controls on a second row instead of squeezing tabs away.
         bool stacked = centerWidth < 560.0f;
         tabRow.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+        if (nameBox.Visible)
+        {
+            float otherTools = WidthShowing(toolbar) - WidthShowing(nameBox);
+            nameBox.Size = nameBox.Size with { X = Math.Clamp(centerWidth - otherTools, 48.0f, 160.0f) };
+        }
         float tabRoom = MathF.Max(MIN_FLEXIBLE, centerWidth - (stacked ? 0.0f : WidthShowing(toolbar)));
+        docTabs.MaxTabWidth = MathF.Max(MIN_FLEXIBLE, MathF.Min(240.0f, tabRoom - allTabs.Size.X));
         bool overflow = docTabs.Tabs.Count > 1 && docTabs.TabsWidth > tabRoom;
         allTabs.Visible = overflow;
         docTabs.Size = docTabs.Size with { X = MathF.Max(MIN_FLEXIBLE, tabRoom - (overflow ? allTabs.Size.X : 0.0f)) };

@@ -8,17 +8,47 @@ internal sealed partial class DawnScene
     private void TestExplorerFiles(HexPointerScript test)
     {
         string folder = Path.Combine(testFolder, "file-workflow"), target = Path.Combine(folder, "destination");
-        string a = Path.Combine(folder, "file-000.txt"), b = Path.Combine(folder, "file-001.txt");
+        string a = Path.Combine(folder, "file-000.txt"), b = Path.Combine(folder, "file-001.txt"), locked = Path.Combine(folder, "locked.txt");
+        FileStream? lockedHandle = null;
         UITreeItem Row(string path) => explorer.explorerRows.First(row => PlatformPaths.Same(row.Path, path)).Row;
         test.Run(() =>
         {
             Directory.CreateDirectory(target);
             for (int i = 0; i < 120; i++) File.WriteAllText(Path.Combine(folder, $"file-{i:000}.txt"), i.ToString());
+            File.WriteAllText(locked, "owned by another process");
             explorer.AddFolder(folder);
             Open(a);
             ShowSide(HexSide.Explorer);
         });
         test.Wait();
+        test.Check("explorer files: the selected file has a visible row before a pointer drag", () =>
+            sideTree.Visible && Row(a) is { } file && sideTree.RowBounds(file) is not null);
+        test.Drag(
+            () => sideTree.RowBounds(Row(a)) is { } from ? chrome.ToWorld(from.Center) : test.Pointer.Position,
+            () => sideTree.RowBounds(Row(b)) is { } to ? chrome.ToWorld(to.Center) : test.Pointer.Position);
+        test.Wait();
+        test.Check("explorer files: holding and moving from one file row to another leaves the tree usable", () =>
+            sideTree.Visible && sideTree.RowBounds(Row(a)) is not null && sideTree.RowBounds(Row(b)) is not null
+            && document.Path is { } opened && PlatformPaths.Same(opened, a));
+
+        test.Run(() => sideTree.Reveal(Row(locked)));
+        test.Wait();
+        test.Check("explorer files: the locked file is in view for the pointer test", () => sideTree.RowBounds(Row(locked)) is not null);
+        test.Run(() => lockedHandle = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None));
+        test.Drag(
+            () => sideTree.RowBounds(Row(locked)) is { } from ? chrome.ToWorld(from.Center) : test.Pointer.Position,
+            () => sideTree.RowBounds(Row(locked)) is { } to ? chrome.ToWorld(to.Center + new System.Numerics.Vector2(24, 0)) : test.Pointer.Position);
+        test.Wait();
+        test.Check("explorer files: dragging a locked file reports the read error and keeps the open document", () =>
+            document.Path is { } opened && PlatformPaths.Same(opened, a) && messageItem.Text.Contains(Path.GetFileName(locked), StringComparison.Ordinal));
+        test.Run(() => { lockedHandle?.Dispose(); lockedHandle = null; });
+        string missing = Path.Combine(folder, "missing.txt");
+        bool missingOpened = true;
+        test.Run(() => missingOpened = Open(missing));
+        test.Check("explorer files: a missing path reports the existing error and keeps the open document", () =>
+            !missingOpened && document.Path is { } opened && PlatformPaths.Same(opened, a)
+            && messageItem.Text.Contains(Said("documents.no_file", ("path", missing)), StringComparison.Ordinal));
+
         test.Run(() => { sideTree.Selected = Row(target); sideTree.ScrollOffset = 500; });
         test.Wait();
         test.Run(RefreshFromDisk);

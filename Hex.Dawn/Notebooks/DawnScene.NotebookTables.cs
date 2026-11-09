@@ -5,6 +5,7 @@ using Hex.Core.Notebooks;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Drawing;
 
 namespace Hex.Dawn;
 
@@ -41,7 +42,7 @@ internal sealed partial class DawnScene
                 {
                     NotebookPicture? image = null;
                     if (bundle["image/svg+xml"] is { } svg)
-                        image = RenderedPicture(svg, () => NotebookRender.Svg(NotebookFile.Text(svg)), pictures);
+                        image = RenderedPicture(svg, density => NotebookRender.Svg(NotebookFile.Text(svg), density), pictures, zoomed: true);
                     foreach (string mime in new[] { "image/png", "image/jpeg", "image/gif" })
                         if (image is null && bundle[mime] is { } data)
                             image = OutputPicture(data, NotebookFile.Text(data), null, pictures);
@@ -89,8 +90,7 @@ internal sealed partial class DawnScene
             string original = string.Concat(paragraph.Select(piece => piece.Math ? "$" + piece.Text + "$" : piece.Text));
             if (paragraph.Any(piece => piece.Math))
             {
-                string latex = string.Concat(paragraph.Select(piece => piece.Math ? "$" + piece.Text + "$" : NotebookMath.MarkdownText(piece.Text)));
-                if (ProseMathPicture(latex, pictures) is { } rendered)
+                if (ProseMathPicture(original, pictures) is { } rendered)
                     into.Add(rendered);
                 else
                     into.Add(MarkdownLabel(original, language));
@@ -105,7 +105,7 @@ internal sealed partial class DawnScene
             {
                 Flush();
                 var key = System.Text.Json.Nodes.JsonValue.Create(piece.Text)!;
-                if (RenderedPicture(key, () => NotebookRender.Math(piece.Text, transparent: true), pictures, mathInk: true) is { } rendered)
+                if (RenderedPicture(key, density => NotebookRender.Math(piece.Text, density, transparent: true), pictures, zoomed: true, mathInk: true) is { } rendered)
                     into.Add(rendered);
                 else
                     into.Add(MarkdownLabel("$$" + piece.Text + "$$", language));
@@ -133,8 +133,15 @@ internal sealed partial class DawnScene
         Anchor = Origin.TopLeft,
         Pivot = Origin.TopLeft,
         TextScale = 0.16f,
-        CodeLanguage = language
+        CodeLanguage = language,
+        Document = true,
+        CodeFont = MarkdownCodeFont
     };
+
+    // The font code in markdown is written in, Hack the way the editor has it, so a block of code keeps its columns
+    private static UIFont? MarkdownCodeFont => markdownCodeFont ??= UIFont.Shared(
+        Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM);
+    private static UIFont? markdownCodeFont;
 
     // Helper method for a table drawn, as tall as its rows and its header up to TABLE_ROWS of them
     private NotebookTablePanel TableView(NotebookTable table)
@@ -226,6 +233,7 @@ internal sealed partial class DawnScene
                     break;
                 case NotebookPicture picture:
                     picture.Reflow?.Invoke(width, zoom);
+                    picture.KeepDense?.Invoke();
                     picture.Size = picture.Natural * MathF.Min(picture.Reflow is null ? zoom : 1, width / MathF.Max(1, picture.Natural.X));
                     break;
                 case NotebookTableView table:

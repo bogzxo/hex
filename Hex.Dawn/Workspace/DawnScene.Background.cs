@@ -22,6 +22,7 @@ internal sealed partial class DawnScene
 
     // Numbers the work of InBackground, which has no key of its own
     private int backgroundNumber;
+    private const string QUIET_BACKGROUND = "background quiet ";
 
     /// <summary>Whether something is being done in the background right now.</summary>
     private bool Working => Volatile.Read(ref workGoing) > 0;
@@ -38,7 +39,8 @@ internal sealed partial class DawnScene
             Say(doing);
 
         T result = default!;
-        this.work.Start($"background {++backgroundNumber}", doing, _ => result = work(), item =>
+        string key = $"{(quiet ? QUIET_BACKGROUND : "background ")}{++backgroundNumber}";
+        this.work.Start(key, doing, _ => result = work(), item =>
         {
             Interlocked.Decrement(ref workGoing);
             if (item.State == WorkState.Succeeded)
@@ -71,8 +73,8 @@ internal sealed partial class DawnScene
             ShowOutput = ShowWorkOutput,
             Failed = text => Note(text, error: true),
 
-            // InBackground's are quick and have no key of their own, they're said in the status bar instead
-            Listed = item => !item.Key.StartsWith("background ", StringComparison.Ordinal)
+            // Automatic discovery stays quiet; explicitly announced background work remains visible.
+            Listed = item => !item.Key.StartsWith(QUIET_BACKGROUND, StringComparison.Ordinal)
         };
         workCards.AddTo(statusBar, chrome, Said("background.work_tip"));
     }

@@ -80,6 +80,8 @@ internal sealed partial class HexLanguages
         {
             string how = entry.Install.Length > 0 ? context.Strings.Said("language_settings.installs_it", ("command", UIRichText.MarkdownLiteral(entry.Install)))
                 : context.Strings.Said("language_settings.download_from_releases");
+            if (MissingNpm(entry.Install))
+                how += " " + NpmHint;
             return Line("dim", $"{context.Strings.Said("language_settings.not_found")}, {how}");
         }
 

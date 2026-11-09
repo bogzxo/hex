@@ -9,8 +9,8 @@ namespace Hex.Dusk;
 internal sealed partial class DuskScene
 {
     private const float SESSION_EVERY = 3.0f;
-    private float sessionDue = -1.0f;
-    private int sessionShape;
+    private float sessionDue = SESSION_EVERY;
+    private TerminalSessions.Snapshot? savedSessionState;
 
     private string SessionFile => TerminalFiles.Sessions(options.SelfTest ? null : AppContext.BaseDirectory);
 
@@ -31,26 +31,15 @@ internal sealed partial class DuskScene
         }
     }
 
-    /// <summary>Every tick, the session written a while after the tabs or their splits changed.</summary>
+    // Compare what the writer keeps, including names and folders even when the splits haven't moved.
     private void UpdateSession(float dt)
     {
-        // A cheap fingerprint of the tabs, their panes and which is open, nothing allocated for it
-        int shape = panel.Tabs.Count * 7919 + panel.CurrentIndex;
-        for (int i = 0; i < panel.Tabs.Count; i++)
-            shape = shape * 31 + (panel.Tabs[i].Tree.Root is { } root ? Shape(root) : 0);
-
-        if (shape != sessionShape)
-        {
-            sessionShape = shape;
-            sessionDue = SESSION_EVERY;
-        }
-
-        if (sessionDue > 0.0f && (sessionDue -= dt) <= 0.0f)
-            SaveSession();
+        sessionDue -= dt;
+        if (sessionDue > 0.0f)
+            return;
+        sessionDue = SESSION_EVERY;
+        SaveSession();
     }
-
-    private static int Shape(SplitNode<TerminalView> node) =>
-        node.IsLeaf ? 1 : 17 + (int)(node.Ratio * 100) + 3 * Shape(node.First!) + 5 * Shape(node.Second!);
 
     private void SaveSession()
     {
@@ -59,7 +48,13 @@ internal sealed partial class DuskScene
 
         try
         {
-            File.WriteAllText(SessionFile, TerminalSessions.Write(panel));
+            if (savedSessionState is not null && TerminalSessions.Matches(panel, savedSessionState))
+                return;
+
+            string session = TerminalSessions.Write(panel);
+            TerminalSessions.Snapshot state = TerminalSessions.Capture(panel);
+            File.WriteAllText(SessionFile, session);
+            savedSessionState = state;
         }
         catch (Exception e)
         {

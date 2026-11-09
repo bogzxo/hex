@@ -7,6 +7,9 @@ namespace Hex.Tests;
 
 public class NotebookRenderingTests
 {
+    // What these were written against, two pixels a unit of the layout
+    private const float Density = 2.0f;
+
     [Theory]
     [InlineData(@"\delta=\frac{FL^3}{3EI}=0.0016\,\mathrm{m}")]
     [InlineData(@"V(t)=V_0\left(1-e^{-t/(RC)}\right)")]
@@ -20,7 +23,7 @@ public class NotebookRenderingTests
     [InlineData(@"\tau=\tfrac{VQ}{It}\le\tau_{web}")]
     public void Engineering_equations_have_visible_ink_and_padding(string latex)
     {
-        ImagePixels image = NotebookRender.Math(latex);
+        ImagePixels image = NotebookRender.Math(latex, Density).Pixels;
         Assert.InRange(image.Width, 20, 4096);
         Assert.InRange(image.Height, 20, 4096);
         int ink = 0;
@@ -33,10 +36,10 @@ public class NotebookRenderingTests
     [Fact]
     public void Inline_prose_and_math_render_together()
     {
-        var image = NotebookRender.Math(@"Beam deflection $\delta=\frac{FL^3}{3EI}$ is in metres.", prose: true);
+        var image = NotebookRender.Math(@"Beam deflection $\delta=\frac{FL^3}{3EI}$ is in metres.", Density, prose: true).Pixels;
         Assert.True(image.Width > 200 && image.Height > 30);
-        Assert.Throws<ArgumentException>(() => NotebookRender.Math(@"\unknownEngineeringMacro{x}"));
-        var transparent = NotebookRender.Math(@"F=ma", transparent: true);
+        Assert.Throws<ArgumentException>(() => NotebookRender.Math(@"\unknownEngineeringMacro{x}", Density));
+        var transparent = NotebookRender.Math(@"F=ma", Density, transparent: true).Pixels;
         Assert.Contains(transparent.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha == 0);
         Assert.Contains(transparent.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha > 200);
     }
@@ -45,13 +48,29 @@ public class NotebookRenderingTests
     public void Prose_math_reflows_and_zoom_changes_typesetting()
     {
         string source = NotebookMath.MarkdownText("**Elastic beam theory** uses `E` and ") + @"$\sigma=\dfrac{My}{I}$";
-        var wide = NotebookRender.Math(source, prose: true, width: 600);
-        var narrow = NotebookRender.Math(source, prose: true, width: 180);
-        var zoomed = NotebookRender.Math(source, prose: true, width: 180, zoom: 1.5f);
+        var wide = NotebookRender.Math(source, Density, prose: true, width: 600).Pixels;
+        var narrow = NotebookRender.Math(source, Density, prose: true, width: 180).Pixels;
+        var zoomed = NotebookRender.Math(source, Density, prose: true, width: 180, zoom: 1.5f).Pixels;
         Assert.True(narrow.Height > wide.Height);
         Assert.True(zoomed.Height > narrow.Height);
         Assert.InRange(narrow.Width, 1, 360);
         Assert.InRange(zoomed.Width, 1, 360);
+    }
+
+    [Fact]
+    public void Native_prose_math_reflows_with_emphasis_code_and_equations()
+    {
+        const string source = "A **bold** paragraph with `code`, *emphasis*, and $\\sigma=\\frac{My}{I}$ in the same line.";
+        var wide = NotebookRender.MarkdownMath(source, Density, width: 600).Pixels;
+        var narrow = NotebookRender.MarkdownMath(source, Density, width: 180).Pixels;
+        var zoomed = NotebookRender.MarkdownMath(source, Density, width: 180, zoom: 1.5f).Pixels;
+        Assert.True(narrow.Height > wide.Height);
+        Assert.True(zoomed.Height > narrow.Height);
+        Assert.InRange(narrow.Width, 1, 360);
+        Assert.Contains(narrow.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha > 200);
+        Assert.Contains(narrow.Pixels.Where((_, index) => index % 4 == 3), alpha => alpha == 0);
+        Assert.Throws<ArgumentException>(() => NotebookRender.MarkdownMath("$\\unknownEngineeringMacro{x}$", Density));
+        Assert.Throws<ArgumentException>(() => NotebookRender.MarkdownMath(new string('x', 32_001), Density));
     }
 
     [Fact]
@@ -78,7 +97,7 @@ public class NotebookRenderingTests
             <path d="M0 60 C20 60 60 40 90 10" fill="none" stroke="green" stroke-width="3"/>
             <text x="0" y="45" font-size="12">Load = 1000 N</text></g></svg>
             """;
-        var image = NotebookRender.Svg(svg);
+        var image = NotebookRender.Svg(svg, Density).Pixels;
         Assert.Equal(400, image.Width);
         Assert.Equal(200, image.Height);
         int At(int x, int y) => (y * image.Width + x) * 4;
@@ -92,7 +111,7 @@ public class NotebookRenderingTests
     [InlineData("not svg")]
     [InlineData("<svg xmlns='http://www.w3.org/2000/svg'><")]
     [InlineData("<html/>")]
-    public void Invalid_svg_is_recoverable(string source) => Assert.ThrowsAny<Exception>(() => NotebookRender.Svg(source));
+    public void Invalid_svg_is_recoverable(string source) => Assert.ThrowsAny<Exception>(() => NotebookRender.Svg(source, Density));
 
     [Fact]
     public void Math_delimiters_preserve_code_escapes_and_unclosed_formulas()
@@ -123,10 +142,10 @@ public class NotebookRenderingTests
             <image href="http://127.0.0.1:1/never-fetch.png" width="20" height="20"/>
             <style>@import url('http://127.0.0.1:1/never-fetch.css');</style>
             </svg>
-            """);
+            """, Density).Pixels;
         Assert.All(image.Pixels.Where((_, index) => index % 4 == 3), alpha => Assert.Equal((byte)0, alpha));
-        Assert.Throws<ArgumentException>(() => NotebookRender.Svg(new string('x', NotebookRender.MaxSource + 1)));
-        Assert.Throws<ArgumentException>(() => NotebookRender.Math(new string('x', 32_001)));
+        Assert.Throws<ArgumentException>(() => NotebookRender.Svg(new string('x', NotebookRender.MaxSource + 1), Density));
+        Assert.Throws<ArgumentException>(() => NotebookRender.Math(new string('x', 32_001), Density));
     }
 
     private static KernelEvent Event(string parent, string type, JsonObject content, string channel = Kernel.IOPUB) =>
@@ -166,5 +185,21 @@ public class NotebookRenderingTests
         Assert.Null(run.Take(update));
         run.Forget();
         Assert.Null(run.Take(update));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_picture_is_the_same_size_whatever_density_it_is_rendered_at(bool svg)
+    {
+        // A pixel of it to a pixel of the screen, as many pixels as the density says and as big in the layout either way
+        NotebookPixels Render(float density) => svg
+            ? NotebookRender.Svg("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='40'><rect width='120' height='40'/></svg>", density)
+            : NotebookRender.Math("E = mc^2", density, transparent: true);
+
+        NotebookPixels plain = Render(1.0f), sharp = Render(2.0f);
+        Assert.Equal(plain.Natural.X, sharp.Natural.X, 1.0f);
+        Assert.Equal(plain.Natural.Y, sharp.Natural.Y, 1.0f);
+        Assert.InRange(sharp.Pixels.Width, plain.Pixels.Width * 2 - 2, plain.Pixels.Width * 2 + 2);
     }
 }

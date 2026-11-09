@@ -20,6 +20,8 @@ internal sealed partial class DawnScene
     private static string RecentPath => HexFiles.Kept(RECENT_FILE);
 
     // The editor testing itself or checking layouts starts out the same every time, and leaves nothing behind
+    private bool testRecent;
+
     private bool KeepsRecent => !options.SelfTest && options.Check.Length == 0;
 
     private List<string> ReadRecent()
@@ -45,7 +47,7 @@ internal sealed partial class DawnScene
         // Quick open's lead keeps every file, testing itself too, only in memory then
         RememberOpened(path);
 
-        if (!KeepsRecent || SameDirectory(path, EDITOR_LAYOUT))
+        if ((!KeepsRecent && !(options.SelfTest && testRecent)) || SameDirectory(path, EDITOR_LAYOUT))
             return;
 
         string full = Path.GetFullPath(path);
@@ -67,6 +69,11 @@ internal sealed partial class DawnScene
     private void WriteRecent()
     {
         FillRecentMenu();
+        foreach (WelcomeSizing sizing in welcomeSizes)
+            FillWelcomeRecent(sizing);
+
+        if (!KeepsRecent)
+            return;
 
         try
         {

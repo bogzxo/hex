@@ -32,7 +32,7 @@ internal sealed partial class DawnScene
     private string? WorkspaceSettingsFolder() => explorer?.workspace is { Folders: [var first, ..] } ? first : null;
 
     // What a folder is called on the switch and in what's said
-    private static string FolderName(string folder) => Path.GetFileName(folder.TrimEnd('\\', '/')) is { Length: > 0 } name ? name : folder;
+    private static string FolderName(string folder) => WorkspacePaths.FolderName(folder);
 
     /// <summary>The switch put over the window's page, on User. Once, as the window is made.</summary>
     private void AddScopeBar(SettingsWindow view)

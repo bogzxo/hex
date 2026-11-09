@@ -28,11 +28,11 @@ internal sealed partial class HexDocument
     // How many steps back there are to take
     private const int MAX_HISTORY = 200;
 
-    private readonly HexNames names = new();
+    private HexNames names = new();
 
     // What stands in for the items a program will make. Built from the templates the containers of the layout
     // name, shown in the canvas and nowhere else. They aren't part of the layout and never get written.
-    private readonly HashSet<UIComponent> previews = [];
+    private HashSet<UIComponent> previews = [];
 
     // What the layout was before each change and what it was before each of those was undone, as the code that
     // builds it. The code is the whole of a layout, so going back is building it again from what it was.
@@ -56,11 +56,13 @@ internal sealed partial class HexDocument
     /// </summary>
     public string? DiskText { get; set; }
 
+    public Encoding DiskEncoding { get; set; } = new UTF8Encoding(false, true);
+
     /// <summary>Where templates are looked for while the layout has no file of its own to be next to.</summary>
     public string FallbackDirectory { get; set; } = string.Empty;
 
     /// <summary>The module the layout lives in, shown in the canvas of the editor.</summary>
-    public UIModule Module { get; }
+    public UIModule Module { get; private set; }
 
     /// <summary>
     /// Whether this is a file of code and not a layout (a data file, a language, a skin), which is edited as the text it
@@ -267,9 +269,14 @@ internal sealed partial class HexDocument
         if (names.Find(name) is { } other && other != component)
             return false;
 
-        // Whatever was written over it in the code goes with it
-        if (names.TryGetName(component, out string was) && notes.Remove(was, out string[]? kept))
-            notes[name] = kept;
+        // Whatever was written over it in the code goes with it, and code that's kept has it called the new name too
+        if (names.TryGetName(component, out string was))
+        {
+            if (notes.Remove(was, out string[]? kept))
+                notes[name] = kept;
+            if (was != name)
+                renamedSince.Add((was, name));
+        }
 
         names.Set(component, name);
         return true;

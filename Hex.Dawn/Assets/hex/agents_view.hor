@@ -1,0 +1,28 @@
+// The Agents view of the side bar, agents run from Hex and talked to like a chat. The agents to pick from and the
+// chats over it with a quiet line about the turn under them, the chat, and at the bottom a card with the box to ask in
+// and, under it inside the same card, the pickers and Send. As tall as the side bar has room for (DawnScene.FitChrome),
+// the rows of the chat made in code (DawnScene.AgentsPanel.Rows), the card's colours the theme's (DawnScene.AgentsPanel).
+#define layout
+
+let agents_view = compositor.panel({ fill: "horizontal", size: vec(0, 400), visible: false });
+
+// The agents, and at the right the chats of this run and a new one
+let agents_head = compositor.panel({ parent: agents_view, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 32) });
+let agents_chips = compositor.stack({ parent: agents_head, anchor: "left", pivot: "left", direction: "horizontal", spacing: 2, clip: true, size: vec(180, 32) });
+let agents_history = compositor.button({ parent: agents_head, anchor: "right", pivot: "right", pos: vec(-34, 0), size: vec(32, 32), icon: "history", style: "button_flat", tooltip: "@agents_panel.chats_tip" });
+let agents_new = compositor.button({ parent: agents_head, anchor: "right", pivot: "right", size: vec(32, 32), icon: "add", style: "button_flat", tooltip: "@agents_panel.new_chat" });
+
+// The model, the tokens, what it cost and how long the turn took, quietly under the head
+let agents_meta = compositor.panel({ parent: agents_view, anchor: "top", pivot: "top", pos: vec(0, -34), size: vec(0, 20), fill: "horizontal", padding: vec(4, 0, 4, 0), clip: true });
+let agents_subtitle = compositor.label({ parent: agents_meta, anchor: "left", pivot: "left", align: "left", text: "", text_scale: 0.115, dim: true });
+
+let agents_body = compositor.panel({ parent: agents_view, fill: "both", padding: vec(4, 58, 4, 108), clip: true });
+let agents_scroll = compositor.scroll({ parent: agents_body, fill: "both", padding: vec(0, 2, 8, 6) });
+let agents_rows = compositor.stack({ parent: agents_scroll, fill: "horizontal", spacing: 8 });
+
+// The card at the bottom, the box over the pickers and Send, Stop in Send's place while it's going
+let agents_compose = compositor.panel({ parent: agents_view, anchor: "bottom", pivot: "bottom", fill: "horizontal", size: vec(0, 96), padding: vec(6, 6, 6, 6) });
+let agents_input = compositor.textbox({ parent: agents_compose, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 40), padding: vec(6, 4, 6, 4), text_scale: 0.15, placeholder: "@agents_panel.input", max_length: 20000 });
+let agents_options = compositor.stack({ parent: agents_compose, anchor: "bottom_left", pivot: "bottom_left", direction: "horizontal", spacing: 0 });
+let agents_send = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "arrow-up", tooltip: "@agents_panel.send" });
+let agents_stop = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "debug-stop", tooltip: "@agents_panel.stop", visible: false });

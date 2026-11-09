@@ -25,6 +25,9 @@ internal sealed partial class DawnScene
     private Label commitPlaceholder = null!;
     private Button commitButton = null!, commitMore = null!;
 
+    // The filter of the changes under the box, Visual Studio's Git Changes has one over its files (HexGit.Filter)
+    private TextBox changesFilter = null!;
+
     // The repository the box is for, by root, so a message typed for one isn't committed to another, and what was typed
     // for the others while it was on this one
     private string? commitBoxFor;
@@ -76,7 +79,11 @@ internal sealed partial class DawnScene
             Minimap = false,
             CheckSyntax = false,
             TextScale = CODE_TEXT,
-            Highlighter = CodeLanguages.ForFile("COMMIT_EDITMSG.md")
+            Highlighter = CodeLanguages.ForFile("COMMIT_EDITMSG.md"),
+
+            // No words of the message offered back as it's typed, the list came up over the box and took Ctrl+Enter for
+            // picking one, so the commit never went in
+            CompletionSource = _ => null
         });
         commitPlaceholder = commitWell.Add(new Label
         {
@@ -117,6 +124,18 @@ internal sealed partial class DawnScene
             return true;
         };
 
+        changesFilter = commitBox.Add(new TextBox
+        {
+            Fill = UIFill.Horizontal,
+            Size = new Vector2(0.0f, BOX_BUTTON),
+            Placeholder = Said("git.filter_changes"),
+            LeadIcon = "filter",
+            MaxLength = 200,
+            TextScale = 0.13f,
+            Tooltip = Said("git.filter_changes_tip")
+        });
+        changesFilter.OnChanged = text => git.FilterChanges(text);
+
         // A tick of its own, so the edge of the box lights while it has the keys the way a text box does
         commitBox.Add(new HexTicker { Visible = false, Ticked = _ => FitCommitBox() });
 
@@ -131,6 +150,9 @@ internal sealed partial class DawnScene
         left.MoveChild(commitBox, tree);
         FitCommitBox();
     }
+
+    /// <summary>Whether the commit's message is being typed, the box has the keys.</summary>
+    private bool CommitBoxTyping => commitBox is not null && commitMessage.IsFocused;
 
     /// <summary>What the box says while nothing's typed, gone as soon as something is.</summary>
     private void ShowCommitPlaceholder() => commitPlaceholder.Visible = commitMessage.Text.Length == 0;

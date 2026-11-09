@@ -1,0 +1,222 @@
+[
+    {
+        "Mode":  "dawn",
+        "Sample":  1,
+        "FirstFrameMs":  495,
+        "MainMs":  12,
+        "IdleWorkingSetBytes":  157063923,
+        "IdlePrivateBytes":  227368744,
+        "IdleCpuOneCorePercent":  3.08,
+        "IdleIntervalMs":  5072.8,
+        "ProcessId":  44020
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  1,
+        "FirstFrameMs":  455,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119664640,
+        "IdlePrivateBytes":  178081792,
+        "IdleCpuOneCorePercent":  9.25,
+        "IdleIntervalMs":  5067.7,
+        "ProcessId":  39132
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  2,
+        "FirstFrameMs":  479,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119869440,
+        "IdlePrivateBytes":  178745344,
+        "IdleCpuOneCorePercent":  12.659,
+        "IdleIntervalMs":  5060.8,
+        "ProcessId":  2952
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  2,
+        "FirstFrameMs":  527,
+        "MainMs":  12,
+        "IdleWorkingSetBytes":  157059827,
+        "IdlePrivateBytes":  227183347,
+        "IdleCpuOneCorePercent":  4.644,
+        "IdleIntervalMs":  5046.9,
+        "ProcessId":  25216
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  3,
+        "FirstFrameMs":  492,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  156854380,
+        "IdlePrivateBytes":  225898280,
+        "IdleCpuOneCorePercent":  5.552,
+        "IdleIntervalMs":  5065.4,
+        "ProcessId":  13372
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  3,
+        "FirstFrameMs":  470,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119721984,
+        "IdlePrivateBytes":  178020352,
+        "IdleCpuOneCorePercent":  13.285,
+        "IdleIntervalMs":  5057.4,
+        "ProcessId":  42720
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  4,
+        "FirstFrameMs":  477,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119541976,
+        "IdlePrivateBytes":  177528832,
+        "IdleCpuOneCorePercent":  1.239,
+        "IdleIntervalMs":  5045.1,
+        "ProcessId":  16124
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  4,
+        "FirstFrameMs":  510,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  156984805,
+        "IdlePrivateBytes":  225952822,
+        "IdleCpuOneCorePercent":  4.011,
+        "IdleIntervalMs":  5064.7,
+        "ProcessId":  23884
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  5,
+        "FirstFrameMs":  488,
+        "MainMs":  13,
+        "IdleWorkingSetBytes":  157150370,
+        "IdlePrivateBytes":  227120829,
+        "IdleCpuOneCorePercent":  3.403,
+        "IdleIntervalMs":  5050.2,
+        "ProcessId":  42804
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  5,
+        "FirstFrameMs":  464,
+        "MainMs":  13,
+        "IdleWorkingSetBytes":  119590912,
+        "IdlePrivateBytes":  176955392,
+        "IdleCpuOneCorePercent":  11.406,
+        "IdleIntervalMs":  5068.6,
+        "ProcessId":  39216
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  6,
+        "FirstFrameMs":  480,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119631872,
+        "IdlePrivateBytes":  176447488,
+        "IdleCpuOneCorePercent":  13.892,
+        "IdleIntervalMs":  5061.3,
+        "ProcessId":  27560
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  6,
+        "FirstFrameMs":  486,
+        "MainMs":  12,
+        "IdleWorkingSetBytes":  157113937,
+        "IdlePrivateBytes":  226335475,
+        "IdleCpuOneCorePercent":  4.017,
+        "IdleIntervalMs":  5056.1,
+        "ProcessId":  10992
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  7,
+        "FirstFrameMs":  504,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  157037191,
+        "IdlePrivateBytes":  227172568,
+        "IdleCpuOneCorePercent":  3.08,
+        "IdleIntervalMs":  5072.4,
+        "ProcessId":  38116
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  7,
+        "FirstFrameMs":  463,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119529472,
+        "IdlePrivateBytes":  177795072,
+        "IdleCpuOneCorePercent":  12.97,
+        "IdleIntervalMs":  5059.7,
+        "ProcessId":  33228
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  8,
+        "FirstFrameMs":  471,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119660544,
+        "IdlePrivateBytes":  177938432,
+        "IdleCpuOneCorePercent":  13.61,
+        "IdleIntervalMs":  5051.4,
+        "ProcessId":  32272
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  8,
+        "FirstFrameMs":  472,
+        "MainMs":  12,
+        "IdleWorkingSetBytes":  157021885,
+        "IdlePrivateBytes":  227192832,
+        "IdleCpuOneCorePercent":  5.258,
+        "IdleIntervalMs":  5052.3,
+        "ProcessId":  8144
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  9,
+        "FirstFrameMs":  487,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  157030723,
+        "IdlePrivateBytes":  226617021,
+        "IdleCpuOneCorePercent":  5.862,
+        "IdleIntervalMs":  5064.2,
+        "ProcessId":  37132
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  9,
+        "FirstFrameMs":  478,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  119423623,
+        "IdlePrivateBytes":  176013312,
+        "IdleCpuOneCorePercent":  10.538,
+        "IdleIntervalMs":  5041.4,
+        "ProcessId":  6416
+    },
+    {
+        "Mode":  "dusk",
+        "Sample":  10,
+        "FirstFrameMs":  484,
+        "MainMs":  12,
+        "IdleWorkingSetBytes":  119771136,
+        "IdlePrivateBytes":  176742400,
+        "IdleCpuOneCorePercent":  13.611,
+        "IdleIntervalMs":  5051,
+        "ProcessId":  29328
+    },
+    {
+        "Mode":  "dawn",
+        "Sample":  10,
+        "FirstFrameMs":  492,
+        "MainMs":  11,
+        "IdleWorkingSetBytes":  156798329,
+        "IdlePrivateBytes":  225821319,
+        "IdleCpuOneCorePercent":  4.945,
+        "IdleIntervalMs":  5055.5,
+        "ProcessId":  22396
+    }
+]

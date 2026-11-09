@@ -1,6 +1,6 @@
 using System.Numerics;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
 
 using Horizon.HIDL;
 using Horizon.HIDL.Runtime;
@@ -68,16 +68,9 @@ internal sealed partial class DawnScene
 
         bool kept = !options.SelfTest && options.Check.Length == 0;
         keysPath = kept ? HexFiles.Kept(KEYS_FILE, was: "keys.hor") : null;
-        if (keysPath is null || !File.Exists(keysPath))
-            return;
 
-        // The file says the whole of it, what came off a key is in it as "", so nothing's taken off of anything here. A key
-        // kept on two commands is still on both next time
-        foreach (var (label, key) in ReadKeys(keysPath))
-        {
-            if (!Rebind(label, key, keepOthers: true))
-                Say(Said("keys_window.nothing_called", ("label", label), ("key", key)), error: true);
-        }
+        // Visual Studio's keys when the setting says, and the file over them (DawnScene.Keys.VisualStudio)
+        ApplyKeyLayer(force: true);
     }
 
     /// <summary>What a keys.hor says, nothing for one that doesn't read.</summary>
@@ -107,8 +100,9 @@ internal sealed partial class DawnScene
 
     private void WriteKeys(string path)
     {
+        // Only what was changed by hand, what Visual Studio's keys did comes back with the setting
         var keys = new HIDLObject();
-        foreach (var (label, key) in rebound)
+        foreach (var (label, key) in HandKeys())
             keys.Add(label, key);
 
         string text = new HIDLDocument()
@@ -126,7 +120,7 @@ internal sealed partial class DawnScene
 
         try
         {
-            if (rebound.Count == 0)
+            if (!HandKeys().Any())
                 File.Delete(keysPath);
             else
                 WriteKeys(keysPath);
@@ -230,6 +224,7 @@ internal sealed partial class DawnScene
         }
 
         MarkReboundKeys();
+        shortcutHintsDirty = true;
 
         // A key on more than one command goes to the first of them that can be picked, this one first
         if (shared)
@@ -271,17 +266,19 @@ internal sealed partial class DawnScene
     private void PickRebound(MenuItem item) => PickFirst([item]);
 
     // The first of the commands on a key its menu would let be picked right now, the menu on the bar as well (the
-    // Layout menu's only there in the designer)
-    private void PickFirst(List<MenuItem> items)
+    // Layout menu's only there in the designer). False when none of them could be
+    private bool PickFirst(List<MenuItem> items)
     {
         foreach (MenuItem item in items)
         {
             if (commands.CanPick(item))
             {
                 item.OnPicked?.Invoke();
-                return;
+                return true;
             }
         }
+
+        return false;
     }
 
     /// <summary>The keys the menus say, the rebound ones on their commands and nothing on what lost its key.</summary>
@@ -424,6 +421,15 @@ internal sealed partial class DawnScene
     /// <summary>Every tick, whatever keys were pressed set off (see <see cref="UICommands"/>).</summary>
     private void UpdateKeys()
     {
+        // Key rebinding owns its prompt. Other modal dialogs keep their text-box keys,
+        // but cannot dispatch commands to the document, debugger or tests behind them.
+        bool capturing = UpdateKeyCapture();
+        if (capturing || HasDialog(compositor) || HasDialog(stage))
+        {
+            commands.Keys.CancelChord();
+            return;
+        }
+
         // A text box of the editor, or one of the layout that is being tried out in the canvas
         // A tree that has the keys for its arrows isn't typing, the editor's shortcuts still go
         // A window that has the keyboard itself (its title bar was clicked) isn't typing either
@@ -434,8 +440,16 @@ internal sealed partial class DawnScene
         // from a terminal are terminal commands (DawnScene.Terminal) and go through it. While the picture behind the code is
         // laid out by hand the keys are the overlay's, Enter and Escape and the arrows, and a menu that's open has the keys
         // to itself, Escape shuts it and nothing else
-        if (!UpdateKeyCapture() && compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed())
+        if (compositor.Focus is not (TerminalView or ArrangeOverlay) && !compositor.KeysToPopup && !SettingsFindPressed())
             commands.Keys.Update(Engine.Input.Keyboard, typing);
+    }
+
+    private static bool HasDialog(UICompositor ui)
+    {
+        foreach (UIModule module in ui.Modules)
+            if (module.Enabled && module.Dialog is not null)
+                return true;
+        return false;
     }
 
     // Ctrl+F while the settings page has the keyboard is the page's own search, the code's find bar stays shut behind it

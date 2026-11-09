@@ -94,15 +94,17 @@ internal sealed partial class DawnScene
             noted.Load(NOTED_LAYOUT);
             written = noted.GenerateCode().ReplaceLineEndings("\n");
         });
-        test.Check("notes: the comments over the header and over each declaration are written back where they were", () =>
-            written.Contains("// The menu of the test, with notes in it that a save has to keep.\n// Two lines of them.\n#define layout\n\n// The screen it was made for\ncompositor.design(")
-            && written.Contains("\n\n// The box everything sits in\nlet box = compositor.stack(")
-            && written.Contains("\n\nlet go = compositor.button(")
-            && !written.Contains("one inside"));
-        test.Check("notes: the two lines of the header are written once", () => written.Split("laid out with Hex.").Length == 2 && !written.Contains("laid out with Horizon.Hex") && written.Split("Load it with UILayout.Load").Length == 2);
-        test.Check("notes: every property over lines has a comma after it, the last one too", () =>
+        // Written by hand (the header of a Hex that went by another name), it is kept as it was, the comment inside the
+        // braces too, which writing it out again threw away
+        test.Check("notes: a layout Hex didn't write comes back as it was written, every comment where it was", () =>
+            noted!.KeepsCode && written == NOTED_LAYOUT);
+        test.Check("notes: every property over lines Hex writes has a comma after it, the last one too", () =>
         {
-            string[] lines = written.Split('\n');
+            var fresh = new HexDocument("fresh", stage.CreateModule());
+            fresh.Module.Enabled = false;
+            fresh.Add("tabs", null);
+            string[] lines = fresh.GenerateCode().ReplaceLineEndings("\n").Split('\n');
+            stage.RemoveModule(fresh.Module);
             int[] closing = [.. Enumerable.Range(1, lines.Length - 1).Where(i => lines[i] == "});")];
             return closing.Length > 0 && closing.All(i => lines[i - 1].EndsWith(','));
         });
@@ -114,9 +116,13 @@ internal sealed partial class DawnScene
             written = noted.GenerateCode().ReplaceLineEndings("\n");
         });
         test.Check("notes: moved and renamed, the notes are still over what they were over", () =>
-            written.Contains("// The box everything sits in\nlet box = compositor.stack(") && written.Contains("let start = compositor.button(") && CheckRoundTrip(noted!));
+            written.Contains("// The box everything sits in\nlet box = compositor.stack(") && written.Contains("let start = compositor.button(")
+            && written.Contains("    parent: box,\n    // one inside a declaration, which goes\n") && !written.Contains("let go") && CheckRoundTrip(noted!));
         test.Run(() => stage.RemoveModule(noted!.Module));
     }
+
+    // Code with its spaces and line breaks taken out, for looking for something the writer may have broken over lines
+    private static string Squeezed(string code) => string.Concat(code.Where(character => !char.IsWhiteSpace(character)));
 
     private void TestOwnLayout(HexPointerScript test)
     {
@@ -134,9 +140,9 @@ internal sealed partial class DawnScene
             document.PreviewCount >= 5 && document.Find("side_bar") is Include side && Descendants(side).OfType<GridPanel>().Any(grid => grid.Children.Count == 19));
 
         // The parts that take turns are on layers, all but the designer's hidden as it opens, and running Hex shows them all
-        string[] startHidden = ["files", "code", "table", "extension", "notebook", "image", "values"];
+        string[] startHidden = ["files", "code", "table", "extension", "notebook", "markdown", "image", "values"];
         test.Check("layers: the editor's views are on layers, the ones that take turns with the designer's hidden", () =>
-            document.Module.Layers.Count == 10 && document.Module.HiddenLayers.Count == startHidden.Length
+            document.Module.Layers.Count == 11 && document.Module.HiddenLayers.Count == startHidden.Length
             && startHidden.All(document.Module.IsLayerHidden) && chrome.HiddenLayers.Count == 0);
 
         // The list of layers is short, the row scrolled to first the way somebody would
@@ -145,7 +151,7 @@ internal sealed partial class DawnScene
         test.Click(At(() => designer.layerRows.GetValueOrDefault("code")));
         test.Wait();
         test.Check("layers: a click on one shows it to work on, and the code says the layout starts with the rest hidden", () =>
-            !document.Module.IsLayerHidden("code") && Code().Contains("compositor.hidden_layers([\"files\", \"table\", \"extension\", \"notebook\", \"image\", \"values\"]);"));
+            !document.Module.IsLayerHidden("code") && Squeezed(Code()).Contains("compositor.hidden_layers([\"files\",\"table\",\"extension\",\"notebook\",\"markdown\",\"image\",\"values\"]);"));
 
         test.Run(() => layersScroll.ScrollIntoView(designer.layerRows["code"]));
         test.Wait();

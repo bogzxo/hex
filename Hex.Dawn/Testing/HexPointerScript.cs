@@ -39,7 +39,8 @@ internal sealed class HexPointerScript
         Action? Action = null,
         Func<bool>? Until = null,
         bool Secondary = false,
-        bool Seconds = false);
+        bool Seconds = false,
+        bool Middle = false);
 
     private readonly Queue<Step> steps = new();
     private Step? current;
@@ -47,7 +48,7 @@ internal sealed class HexPointerScript
     private Vector2 from;
 
     private Vector2 position;
-    private bool down, secondary;
+    private bool down, secondary, middle;
 
     public int Passed { get; private set; }
     public int Failed { get; private set; }
@@ -55,7 +56,22 @@ internal sealed class HexPointerScript
     /// <summary>Whether everything that was queued has played out.</summary>
     public bool IsFinished { get; private set; }
 
-    public UIPointer Pointer => new(position, down, secondary);
+    public UIPointer Pointer => new(position, down, secondary, middle);
+
+    public void MiddleClick(Func<Vector2> target)
+    {
+        Glide(target, false, MOVE_TIME);
+        steps.Enqueue(new Step(target, Duration: PRESS_TIME, Middle: true));
+        Glide(target, false, PRESS_TIME);
+    }
+
+    public void MiddleDrag(Func<Vector2> start, Func<Vector2> end)
+    {
+        Glide(start, false, MOVE_TIME);
+        steps.Enqueue(new Step(start, Duration: 0.1f, Seconds: true, Middle: true));
+        steps.Enqueue(new Step(end, Duration: 0.5f, Seconds: true, Middle: true));
+        Glide(end, false, PRESS_TIME);
+    }
 
     /// <summary>Moves to a target and stays there for a while.</summary>
     public void Hover(Func<Vector2> target)
@@ -70,6 +86,15 @@ internal sealed class HexPointerScript
         Glide(target, true, PRESS_TIME);
         Glide(target, false, PRESS_TIME);
     }
+
+    /// <summary>Starts a press that stays held while subsequent actions or keys run.</summary>
+    public void Press(Func<Vector2> target)
+    {
+        Glide(target, false, MOVE_TIME);
+        Glide(target, true, PRESS_TIME);
+    }
+
+    public void Release(Func<Vector2> target) => Glide(target, false, PRESS_TIME);
 
     /// <summary>Presses at one place, moves to another with the button held and lets go there.</summary>
     /// <summary>A click with the other button, which is what opens a context menu.</summary>
@@ -120,7 +145,13 @@ internal sealed class HexPointerScript
     private void Say(string line)
     {
         if (!Quiet)
-            Console.WriteLine($"[Hex self-test] {line}");
+        {
+            // Keep every Android check in the host's logcat channel and persistent debug.log as well.
+            if (OperatingSystem.IsAndroid())
+                Horizon.Logging.Log.Info($"[Hex self-test] {line}");
+            else
+                Console.WriteLine($"[Hex self-test] {line}");
+        }
     }
 
     /// <summary>Helper method to count a step that threw as a failure and say so, the test going on after it.</summary>
@@ -128,6 +159,8 @@ internal sealed class HexPointerScript
     {
         Failed++;
         Say($"step threw: {e.GetType().Name}: {e.Message}");
+        // Where it threw, in the log rather than the run's output, which a failure on a tablet can only be found by
+        Horizon.Logging.Log.Warning($"[Hex self-test] {what} threw {e}");
         Say($"FAIL: {what} threw");
     }
 
@@ -228,6 +261,7 @@ internal sealed class HexPointerScript
         position = Vector2.Lerp(from, target, progress);
         down = step.Down;
         secondary = step.Secondary;
+        middle = step.Middle;
 
         if (progress >= 1.0f)
             current = null;

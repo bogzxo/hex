@@ -16,8 +16,9 @@ namespace Hex.Dawn;
 // a debugger that talks the Debug Adapter Protocol, the engine's DebugSession), and where it stops the file comes up with
 // the line lit and the Debug side has the stack and the variables. F5 goes on, F10 steps over, F11 in, Shift+F11 out,
 // Shift+F5 stops it, Ctrl+Shift+F5 starts it again. What it writes goes in the output. netcoredbg is looked for where the
-// settings say (debugger_path), next to the exe (netcoredbg/netcoredbg.exe), in the settings folder and on the PATH.
-// Microsoft's own debugger comes with VS Code's C# extension and is only allowed in Microsoft's editors, so not that.
+// settings say (debugger_path), next to the exe (netcoredbg/netcoredbg.exe), in the settings folder and on the PATH, and
+// where it's nowhere the first F5 installs it into the settings folder and goes on. Microsoft's own debugger comes with
+// VS Code's C# extension and is only allowed in Microsoft's editors, so not that.
 internal sealed partial class HexDebugging
 {
     private readonly DawnContext context;
@@ -29,21 +30,92 @@ internal sealed partial class HexDebugging
     public HexDebugging(DawnContext with)
     {
         context = with;
+        variables = new HexDebugVariables(key => context.Strings.Said(key),
+            e => context.Strings.Said("debugging.could_not_ask", ("why", e.Message)), () => context.Panels.Dim,
+            debugWork.Enqueue, () => context.Panels.RefreshSide(HexSide.Debug), () =>
+            {
+                context.Panels.RefreshRows();
+                tipTree?.Refresh();
+            });
         SweepProgramOutputs();
         context.Documents.Opened += PrepareBreakpoints;
+
+        // A closed file's text let go of, this kept every .cs ever opened and all of its editor alive
+        context.Documents.Closed += closed => following.Remove(closed.Editor.Document);
         context.Panels.AddSide(HexSide.Debug, context.Strings.Said("debugging.debug"), DebugSide);
         UICommands commands = context.Commands;
-        commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && (IsCSharp(context.Documents.Current.Path) || IsD(context.Documents.Current.Path));
+        commands.Add("Run/debug", context.Strings.Said("debugging.start_debugging"), DebugOrContinue, "F5", "debug-alt").IsVisible = () => !context.Documents.Current.InDesigner && !DebugStopped && SupportsDebugging(context.Documents.Current.Path);
         commands.Add("Run/debug", context.Strings.Said("debugging.continue"), DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
+        commands.Add("Run/debug", context.Strings.Said("debug_bar.pause"), ContinueOrPause, icon: "debug-pause")
+            .IsVisible = () => debugging is { State: DebugState.Running };
+        var hexLocals = commands.Add("Run/debug", context.Strings.Said("debugging.hexadecimal_locals"), ToggleHexadecimalLocals, icon: "symbol-numeric");
+        hexLocals.IsVisible = () => DebugStopped && debugging?.Can("supportsValueFormattingOptions") == true;
+        hexLocals.IsChecked = () => hexadecimalLocals;
+        commands.Add("Run/debug", context.Strings.Said("debugging.show_current_frame"), ShowCurrentFrame, icon: "debug-stackframe-focused")
+            .IsVisible = CanShowCurrentFrame;
+        commands.Add("Run/debug", context.Strings.Said("debugging.disassembly"), ShowDisassembly, icon: "code")
+            .IsVisible = CanShowDisassembly;
+        commands.Add("Run/debug", context.Strings.Said("debugging.memory"), ShowMemory, icon: "file-binary").IsVisible = CanShowMemory;
+        commands.Add("Run/debug", context.Strings.Said("debugging.modules"), ShowModules, icon: "library").IsVisible = CanShowModules;
+        commands.Add("Run/debug", context.Strings.Said("debugging.modules_refresh"), RefreshModules, icon: "refresh").IsVisible = () => modulesShown && CanShowModules() && debugging?.CanRequestModules == true;
+        commands.Add("Run/debug", context.Strings.Said("debugging.modules_filter"), FilterModules, icon: "filter").IsVisible = () => modulesShown && CanShowModules();
+        commands.Add("Run/debug", context.Strings.Said("debugging.memory_refresh"), RefreshMemory, icon: "refresh").IsVisible = CanPageMemory;
+        commands.Add("Run/debug", context.Strings.Said("debugging.memory_previous"), () => PageMemory(-1), icon: "arrow-left").IsVisible = CanPageMemory;
+        commands.Add("Run/debug", context.Strings.Said("debugging.memory_next"), () => PageMemory(1), icon: "arrow-right").IsVisible = CanPageMemory;
+        commands.Add("Run/debug", context.Strings.Said("debugging.copy_call_stack"), CopyCallStack, icon: "copy")
+            .IsVisible = () => DebugStopped && stoppedFrames.Count > 0;
+        commands.Add("Run/debug", context.Strings.Said("debugging.run_to_cursor"), RunToCursor, "Ctrl+F10", "debug-continue", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped && !IsDebuggerSourcePath(context.Documents.Current.Path);
+        var setNext = commands.Add("Run/debug", context.Strings.Said("debugging.set_next_statement"), SetNextStatement, "Ctrl+Shift+F10", "debug-stackframe-focused", UIKeyUse.BoundWhileTyping);
+        setNext.IsVisible = () => debugging?.CanGoto == true;
+        setNext.IsEnabled = CanSetNextStatement;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_over"), StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_into"), StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debugging.step_out"), StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", context.Strings.Said("debugging.stop_debugging"), StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging;
-        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => !context.Documents.Current.InDesigner && context.Documents.Current.IsText;
+        var stopDebugging = commands.Add("Run/debug", context.Strings.Said("debugging.stop_debugging"), StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping);
+        stopDebugging.IsEnabled = () => Debugging || Tasks?.RunGoing == true;
+        stopDebugging.IsVisible = () => debugging?.TerminatesDebuggeeOnStop != false;
+        commands.Add("Run/debug", context.Strings.Said("debugging.detach"), StopDebugging, "Shift+F5", "debug-disconnect", UIKeyUse.BoundWhileTyping)
+            .IsVisible = () => debugging?.TerminatesDebuggeeOnStop == false;
+        commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging && restart is not null;
+        commands.Add("Run/debug", context.Strings.Said("debugging.attach"), AttachToProcess, icon: "plug").IsEnabled = () => !Debugging;
+        commands.Add("Run/debug", context.Strings.Said("debugging.select_framework"), SelectDebugFramework, icon: "debug-alt")
+            .IsVisible = () => !Debugging && Tasks?.ChosenRun()?.Task is null && (IsCSharp(context.Documents.Current.Path)
+                || Tasks?.ChosenRun()?.Project?.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) == true);
+        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
+        commands.Add("Run/debug", context.Strings.Said("debugging.add_function_breakpoint"), AddFunctionBreakpoint, icon: "debug-breakpoint-function")
+            .IsEnabled = () => !building;
+        commands.Add("Run/debug", context.Strings.Said("debugging.enable_disable_breakpoint"), ToggleBreakpointEnabledHere, "Ctrl+F9", "circle", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
+        commands.Add("Run/debug", context.Strings.Said("debugging.breakpoint_settings"), BreakpointSettingsHere, icon: "debug-breakpoint-conditional").IsVisible = () => CanUseBreakpointCommands() && !IsDisassemblyPath(context.Documents.Current.Path);
         commands.Add("Run/debug", context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg, icon: "cloud-download").IsVisible = () => NetcoredbgAsset() is not null && Netcoredbg() is null;
         AddWatchCommands();
+        commands.Add("Run/debug", context.Strings.Said("debugging.exception_settings"), ExceptionSettings, icon: "debug-breakpoint")
+            .IsVisible = () => debugging?.ExceptionFilters.Count > 0;
+        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_configure"), ConfigureCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_build"), BuildCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_select_preset"), SelectCMakePreset, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_choose_preset"), () =>
+        {
+            if (context.Documents.Current.Path is { } file && CMakeProject.RootOf(file, context.Workspace.Roots) is { } root)
+            {
+                cmakeTargets.Remove(root);
+                StartDebuggingCMake(file, root, preset: string.Empty);
+            }
+        }, icon: "debug-alt").IsVisible = () => !Debugging && IsNativeSource(context.Documents.Current.Path);
+        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_choose_target"), () =>
+        {
+            if (context.Documents.Current.Path is { } file && CMakeProject.RootOf(file, context.Workspace.Roots) is { } root)
+            {
+                cmakeTargets.Remove(root);
+                StartDebuggingCMake(file, root);
+            }
+        }, icon: "debug-alt").IsVisible = () => !Debugging && IsNativeSource(context.Documents.Current.Path);
     }
+
+    /// <summary>The workspace's tasks, whose run tasks Shift+F5 stops when nothing is being debugged.</summary>
+    internal HexTasks? Tasks { get; set; }
+
+    /// <summary>Whether F5 installs netcoredbg when it isn't there, which the self test doesn't want it going off to GitHub for.</summary>
+    internal bool InstallsItself { get; set; } = true;
 
     // The breakpoints, by the file's whole path, the lines counted from 0. An editor of the file is handed the set
     internal readonly Dictionary<string, SortedSet<int>> breakpoints = new(StringComparer.OrdinalIgnoreCase);
@@ -61,12 +133,30 @@ internal sealed partial class HexDebugging
     // Work done off the editor's thread (the build, the launch, the variables asked for) handed back to it
     private readonly ConcurrentQueue<Action> debugWork = new();
     private bool building;
+    private CancellationTokenSource? debugBuild;
+
+    private void CancelDebugBuild()
+    {
+        debugBuildGeneration++;
+        attachingProcess = false;
+        var pending = debugBuild;
+        debugBuild = null;
+        pending?.Cancel();
+    }
+
+    // Both the worker and its queued UI callbacks belong to this attempt.
+    private void PostBuild(CancellationToken cancel, Action action) => debugWork.Enqueue(() =>
+    {
+        if (!cancel.IsCancellationRequested)
+            action();
+    });
 
     /// <summary>Whether a program is being debugged, from the launch to its end.</summary>
-    internal bool Debugging => debugging is { State: not DebugState.Ended } || building;
+    internal bool Debugging => debugging is { State: not DebugState.Ended } || building || testAttempt is not null || ctestDebugRun is not null || pythonTestDebugRun is not null;
 
     /// <summary>Whether it's stopped somewhere, where the steps mean something.</summary>
     internal bool DebugStopped => debugging is { State: DebugState.Stopped };
+    internal bool DebugRunning => debugging is { State: DebugState.Running };
 
     internal static bool IsCSharp(string? path) => path is not null && path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
@@ -75,49 +165,50 @@ internal sealed partial class HexDebugging
     /// <summary>A file's editor shown its breakpoints and given the gutter to put them down with, for a .cs or a .d file.</summary>
     private void PrepareBreakpoints(HexDocument prepared)
     {
-        if (!IsCSharp(prepared.Path) && !IsD(prepared.Path))
+        if (!SupportsDebugging(prepared.Path))
             return;
 
+        ReadKeptBreakpoints();
         string full = Path.GetFullPath(prepared.Path!);
         prepared.Editor.Breakpoints = BreakpointsOf(full);
+        prepared.Editor.BreakpointMarks = MarksOf(full);
         prepared.Editor.OnGutterPressed = line => ToggleBreakpoint(full, line);
+
+        // A right click on the strip of breakpoints is the breakpoint's menu, anywhere else the code's as it was
+        Action<System.Numerics.Vector2>? codeMenu = prepared.Editor.OnContextMenu;
+        prepared.Editor.OnContextMenu = point =>
+        {
+            if (!GutterMenu(prepared, full, point))
+                codeMenu?.Invoke(point);
+        };
 
         // Once for each document, opened again it's the same one
         UITextDocument document = prepared.Editor.Document;
         if (following.Add(document))
-            document.LinesMoved += (at, by) => MoveBreakpoints(full, document, at, by);
+            document.LineChanged += change => MoveBreakpoints(full, change);
     }
 
     // The documents whose breakpoints follow their lines already
     private readonly HashSet<UITextDocument> following = [];
+    private readonly Dictionary<string, HexBreakpointTracking> breakpointTracking = new(PlatformPaths.Comparer);
 
-    /// <summary>
-    /// Lines put in or taken out of a file, its breakpoints moved along with the lines they were on, the way VS Code's
-    /// are. A line opened above one by Enter at its start used to leave the breakpoint on the blank line.
-    /// </summary>
-    private void MoveBreakpoints(string full, UITextDocument document, UITextPosition at, int by)
+    private Dictionary<int, HexBreakpoint> VisibleBreakpoints(string full) =>
+        BreakpointsOf(full).ToDictionary(line => line, line => SettingsOf(full, line));
+
+    private void MoveBreakpoints(string full, UITextLineChange change)
     {
-        if (by == 0 || !breakpoints.TryGetValue(full, out SortedSet<int>? lines) || lines.Count == 0)
-            return;
-
-        // Put in at the start of a line (nothing but its indent before), the line itself went down with the rest
-        bool fromStart = by > 0 && at.Line < document.LineCount && string.IsNullOrWhiteSpace(document.LineAt(at.Line));
-        var moved = new SortedSet<int>();
-        foreach (int line in lines)
+        if (!breakpoints.TryGetValue(full, out SortedSet<int>? lines) || lines.Count == 0)
         {
-            if (by > 0)
-                moved.Add(line > at.Line || (line == at.Line && fromStart) ? line + by : line);
-            else
-                moved.Add(line > at.Line ? line + by : line > at.Line + by ? at.Line + by : line);
-        }
-
-        if (moved.SetEquals(lines))
+            breakpointTracking.Remove(full);
             return;
-
+        }
+        if (!breakpointTracking.TryGetValue(full, out var tracking))
+            breakpointTracking[full] = tracking = new();
+        var moved = tracking.Apply(VisibleBreakpoints(full), change);
+        breakpointSettings[full] = moved.Where(pair => !pair.Value.Plain).ToDictionary();
         lines.Clear();
-        lines.UnionWith(moved);
-        debugging?.SetBreakpoints(full, lines);
-        context.Panels.RefreshSide(HexSide.Debug);
+        lines.UnionWith(moved.Keys);
+        BreakpointsChanged(full);
     }
 
     private SortedSet<int> BreakpointsOf(string full)
@@ -131,7 +222,8 @@ internal sealed partial class HexDebugging
     internal void ToggleBreakpointHere()
     {
         HexDocument shown = context.Documents.Current;
-        if (!shown.IsText || (!IsCSharp(shown.Path) && !IsD(shown.Path)))
+        if (IsDisassemblyPath(shown.Path)) { ToggleInstruction(shown, shown.Editor.Document.Caret.Line); return; }
+        if (!shown.IsText || (!SupportsDebugging(shown.Path)))
         {
             context.Notices.Say(context.Strings.Said("debugging.breakpoints_cs_only"), error: true);
             return;
@@ -146,8 +238,20 @@ internal sealed partial class HexDebugging
         if (!lines.Remove(line))
             lines.Add(line);
 
-        debugging?.SetBreakpoints(full, lines);
-        context.Panels.RefreshSide(HexSide.Debug);
+        BreakpointsChanged(full);
+    }
+
+    /// <summary>The settings of the breakpoint on the caret's line, its menu where the pointer is, one put down first.</summary>
+    internal void BreakpointSettingsHere()
+    {
+        HexDocument shown = context.Documents.Current;
+        if (!shown.IsText || (!SupportsDebugging(shown.Path)))
+        {
+            context.Notices.Say(context.Strings.Said("debugging.breakpoints_cs_only"), error: true);
+            return;
+        }
+
+        BreakpointMenu(Path.GetFullPath(shown.Path!), shown.Editor.Document.Caret.Line);
     }
 
     /* Starting and stopping */
@@ -164,6 +268,25 @@ internal sealed partial class HexDebugging
         if (Debugging)
         {
             context.Notices.Say(context.Strings.Said("debugging.already_running"));
+            return;
+        }
+
+        // A run task picked beside the Run button that's a dotnet run of a project is that project debugged, the way F5 has it
+        if (Tasks?.ChosenRun() is { Task: { } task } && DotnetRunLine.Of(task.Command, task.WorkingFolder()) is { } run)
+        {
+            DebugRun(run, task.WorkingFolder(), go => Tasks.RunFirstThen(task, go));
+            return;
+        }
+
+        if (IsPython(context.Documents.Current.Path))
+        {
+            StartDebuggingPython(context.Documents.Current.Path!);
+            return;
+        }
+
+        if (IsNativeSource(context.Documents.Current.Path))
+        {
+            StartDebuggingNative(context.Documents.Current.Path!);
             return;
         }
 
@@ -200,6 +323,19 @@ internal sealed partial class HexDebugging
             context.Notices.Say(context.Strings.Said("debugging.already_running"));
         else
             StartDebugging(project);
+    }
+
+    /// <summary>
+    /// A run task's dotnet run debugged, its project with the arguments, the configuration and the launch profile it
+    /// says, in the folder the task runs in, once <paramref name="first"/> has done what the task depends on. Said to be
+    /// going already while something is.
+    /// </summary>
+    internal void DebugRun(DotnetRunLine run, string folder, Action<Action> first)
+    {
+        if (Debugging)
+            context.Notices.Say(context.Strings.Said("debugging.already_running"));
+        else
+            first(() => StartDebugging(run.Project, run, folder));
     }
 
     /// <summary>
@@ -259,7 +395,7 @@ internal sealed partial class HexDebugging
         if (context.Settings.Values.DebuggerPath.Length > 0 && File.Exists(context.Settings.Values.DebuggerPath))
             return context.Settings.Values.DebuggerPath;
 
-        foreach (string folder in new[] { AppContext.BaseDirectory, TerminalFiles.UserFolder })
+        foreach (string folder in new[] { Hex.Core.HexHost.ProgramFolder, TerminalFiles.UserFolder })
         {
             string there = Path.Combine(folder, "netcoredbg", exe);
             if (File.Exists(there))
@@ -321,15 +457,50 @@ internal sealed partial class HexDebugging
         return null;
     }
 
+    // Whether an install F5 started by itself didn't go, after which F5 runs C# without the debugger rather than trying again
+    private bool installFailed;
+
+    /// <summary>
+    /// F5 on C# with no netcoredbg anywhere, it's installed first with its card up and then F5 goes on into the debug
+    /// session, the way Visual Studio has its debugger there from the start. It said C# ran without the debugger and
+    /// left the install to a button. True while that's what happens, false when it can't be (no release for this machine,
+    /// the self test, or an install that didn't go), and F5 runs the program without it then.
+    /// </summary>
+    internal bool InstallingFirst(Action then)
+    {
+        if (!InstallsItself || installFailed || NetcoredbgAsset() is null || Netcoredbg() is not null)
+            return false;
+
+        // F5 again while it installs has it go on once, from where the first F5 was
+        if (context.Work.Find("netcoredbg") is { } going)
+        {
+            context.Work.Renew(going);
+            context.Notices.Say(context.Strings.Said("debugging.still_installing"));
+            return true;
+        }
+
+        context.Notices.Say(context.Strings.Said("debugging.installing_first"));
+        InstallNetcoredbg(installed =>
+        {
+            installFailed |= !installed;
+            then();
+        });
+        return true;
+    }
+
     /// <summary>
     /// netcoredbg downloaded from its newest release and unpacked into Hex's own folder of things (where it's looked for
     /// first), on a card while it goes. It said where to get it and left the rest to whoever read that.
     /// </summary>
-    internal void InstallNetcoredbg()
+    internal void InstallNetcoredbg() => InstallNetcoredbg(null);
+
+    /// <summary>The same, and whether it's there now said to whoever asked once it's done.</summary>
+    private void InstallNetcoredbg(Action<bool>? done)
     {
         if (NetcoredbgAsset() is not { } asset)
         {
             context.Windows.OpenInBrowser($"https://github.com/{NETCOREDBG_REPO}/releases");
+            done?.Invoke(false);
             return;
         }
 
@@ -347,11 +518,13 @@ internal sealed partial class HexDebugging
             File.Delete(download);
         }, item =>
         {
-            if (item.State == WorkState.Succeeded && Netcoredbg() is { } there)
+            string? there = item.State == WorkState.Succeeded ? Netcoredbg() : null;
+            if (there is not null)
                 context.Notices.Say(context.Strings.Said("debugging.netcoredbg_installed", ("path", there)));
             else
                 foreach (string said in item.Output)
                     context.Notices.Note(said, error: true);
+            done?.Invoke(there is not null);
         });
     }
 
@@ -370,29 +543,76 @@ internal sealed partial class HexDebugging
         System.Formats.Tar.TarFile.ExtractToDirectory(unzipped, into, overwriteFiles: true);
     }
 
-    /// <summary>Builds a project, then runs what it made under the debugger with the breakpoints there are, off the editor's thread.</summary>
-    private void StartDebugging(string project)
+    /// <summary>
+    /// Builds a project, then runs what it made under the debugger with the breakpoints there are, off the editor's
+    /// thread. A run task's dotnet run says the arguments, the configuration, the profile and the folder, null for the
+    /// project's own (the launch profile picked, the configuration beside the Run button).
+    /// </summary>
+    private void StartDebugging(string project, DotnetRunLine? run = null, string? runFolder = null)
     {
         if (Netcoredbg() is not { } debugger)
         {
-            context.Notices.Say(NoDebugger, error: true);
+            if (!InstallingFirst(() => StartDebugging(project, run, runFolder)))
+                context.Notices.Say(NoDebugger, error: true);
             return;
         }
 
         SaveAllCode();
+        CancelDebugBuild();
+        var attempt = new CancellationTokenSource();
+        debugBuild = attempt;
         building = true;
+        conditionFailures.Clear();
         debuggedProject = project;
-        restart = () => StartDebugging(project);
+        restart = () => StartDebugging(project, run, runFolder);
         context.Notices.Note(context.Strings.Said("debugging.building_to_debug", ("project", Path.GetFileName(project))));
         context.Panels.ShowOutput();
         context.Panels.ShowSide(HexSide.Debug);
         context.Notices.Say(context.Strings.Said("debugging.building", ("project", Path.GetFileName(project))));
 
-        var breakpointsNow = breakpoints.Where(pair => pair.Value.Count > 0).ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<int>)pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
-        _ = Task.Run(() => BuildAndLaunch(project, debugger, breakpointsNow));
+        var breakpointsNow = BreakpointsNow();
+        string? profile = run?.Profile ?? context.Workspace.LaunchProfileOf(project);
+        string configuration = run?.Configuration ?? context.Workspace.Configuration;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                string? framework = run?.Framework;
+                if (framework is null)
+                {
+                    var choice = await DebugFramework(project, configuration, run?.RuntimeOptions, attempt.Token);
+                    framework = choice.Selected;
+                    if (framework is null && choice.Offered.Count > 1)
+                    {
+                        ChooseDebugFramework(project, configuration, run, runFolder, choice.Offered, attempt.Token);
+                        return;
+                    }
+                }
+                await BuildAndLaunch(project, debugger, breakpointsNow, profile, configuration, run, runFolder, framework, attempt.Token);
+            }
+            catch (OperationCanceledException) when (attempt.IsCancellationRequested) { }
+            catch (Exception e)
+            {
+                PostBuild(attempt.Token, () =>
+                {
+                    building = false;
+                    context.Notices.Say(context.Strings.Said("debugging.launch_failed", ("why", e.Message)), error: true);
+                });
+            }
+            finally
+            {
+                debugWork.Enqueue(() =>
+                {
+                    if (ReferenceEquals(debugBuild, attempt))
+                        debugBuild = null;
+                    attempt.Dispose();
+                });
+            }
+        });
     }
 
-    private async Task BuildAndLaunch(string project, string debugger, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow)
+    private async Task BuildAndLaunch(string project, string debugger, Dictionary<string, IReadOnlyCollection<DebugBreakpoint>> breakpointsNow, string? picked,
+        string configuration, DotnetRunLine? run, string? runFolder, string? framework, CancellationToken cancel)
     {
         string folder = Path.GetDirectoryName(project)!;
 
@@ -400,7 +620,9 @@ internal sealed partial class HexDebugging
         List<string> moved = [];
         try
         {
-            if ((await HexSelfBuild.OutputFoldersOf($"dotnet build \"{project}\"", folder, DotnetProjects.Shared)).Any(HexSelfBuild.IsRunningFolder))
+            var (_, output) = await DotnetCli.Run(folder, DotnetDebugTarget.PropertyArguments(project, configuration, framework, "OutDir,TargetPath", run?.RuntimeOptions), TimeSpan.FromMinutes(2), cancel);
+            var target = DotnetEvaluation.Parse(project, output);
+            if (target.OutputFolder.Length > 0 && HexSelfBuild.IsRunningFolder(target.OutputFolder))
                 moved = HexSelfBuild.MoveAside(HexSelfBuild.RunningFolder);
         }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException)
@@ -408,26 +630,49 @@ internal sealed partial class HexDebugging
             // Not knowing where it builds to, it builds and says what went wrong if it was over Hex
         }
 
-        var (built, buildSaid) = await Dotnet(folder, "build", project, "-c", "Debug", "-nologo", "-v", "q");
-        HexSelfBuild.PutBack(moved);
-        if (!ReportBuild(buildSaid, folder, built, Path.GetFileName(project)))
+        int built;
+        string buildSaid;
+        try
+        {
+            cancel.ThrowIfCancellationRequested();
+            (built, buildSaid) = await DotnetCli.Run(folder,
+                DotnetDebugTarget.BuildArguments(project, configuration, framework, run?.RuntimeOptions), TimeSpan.FromMinutes(30), cancel);
+        }
+        finally
+        {
+            HexSelfBuild.PutBack(moved);
+        }
+        cancel.ThrowIfCancellationRequested();
+        if (!ReportBuild(buildSaid, folder, built, Path.GetFileName(project), project, cancel))
             return;
 
-        var (_, target) = await Dotnet(folder, "msbuild", project, "-getProperty:TargetPath", "-p:Configuration=Debug", "-nologo");
-        string program = target.Trim();
-        if (!File.Exists(program))
+        var (_, targetPath) = await DotnetCli.Run(folder, DotnetDebugTarget.PropertyArguments(project, configuration, framework, "TargetPath,RuntimeIdentifier,RunCommand,RunArguments", run?.RuntimeOptions), TimeSpan.FromMinutes(2), cancel);
+        var evaluated = DotnetEvaluation.Parse(project, targetPath);
+        string assembly = evaluated.TargetPath;
+        if (!File.Exists(assembly))
         {
-            debugWork.Enqueue(() =>
+            PostBuild(cancel, () =>
             {
                 building = false;
-                context.Notices.Say(context.Strings.Said("debugging.no_program", ("project", Path.GetFileName(project)), ("program", program)), error: true);
+                context.Notices.Say(context.Strings.Said("debugging.no_program", ("project", Path.GetFileName(project)), ("program", assembly)), error: true);
             });
             return;
         }
 
-        // With what its launchSettings.json says, and --window for a Hex so it doesn't hand itself to this one
-        List<string> arguments = DotnetLaunch.ArgumentsFor(project, program, HexSelfBuild.RunningExe);
-        await LaunchUnder(DebugSession.Start(debugger, ["--interpreter=vscode"]), program, folder, breakpointsNow, DebugSession.CORECLR, arguments: arguments);
+        // With what the launch profile picked says, the one Ctrl+F5 runs it with, and --window for a Hex so it doesn't hand
+        // itself to this one
+        // A task's dotnet run hands the program what's after its --, runs it in the task's folder, and has no profile with
+        // --no-launch-profile, the way dotnet run itself would
+        DotnetLaunchProfile? profile = run is { NoProfile: true } ? null : DotnetLaunch.For(project, picked);
+        var launchTarget = DotnetDebugTarget.LaunchTarget(evaluated, run?.RuntimeOptions);
+        string program = launchTarget.Program == "dotnet" ? LanguageServerProgram.Locate("dotnet") ?? launchTarget.Program : launchTarget.Program;
+        List<string> applicationArguments = run?.Arguments is { } given ? [.. given] : DotnetLaunch.ArgumentsFor(assembly, profile, HexSelfBuild.RunningExe);
+        List<string> arguments = [.. launchTarget.PrefixArguments, .. applicationArguments];
+        string runIn = runFolder ?? profile?.WorkingFolder(project) ?? folder;
+        var environment = run is not null ? run.RuntimeEnvironment(profile) : profile?.RuntimeEnvironment();
+        cancel.ThrowIfCancellationRequested();
+        await StartUnder(DebugSession.Start(debugger, ["--interpreter=vscode"]), Path.GetFileName(assembly), DebugSession.CORECLR,
+            started => started.Launch(program, arguments, runIn, breakpointsNow, DebugSession.CORECLR, environment: environment), cancel);
     }
 
     /// <summary>
@@ -435,36 +680,19 @@ internal sealed partial class HexDebugging
     /// the code the way a build task's is (they were lines in the output nobody looked at), and a build that failed said
     /// so. Whether it built.
     /// </summary>
-    private bool ReportBuild(string said, string folder, int built, string name, string? builtFile = null)
+    private bool ReportBuild(string said, string folder, int built, string name, string? builtFile = null, CancellationToken cancel = default)
     {
         foreach (string line in said.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            debugWork.Enqueue(() => context.Notices.Note(line.TrimEnd('\r')));
+            PostBuild(cancel, () => context.Notices.Note(line.TrimEnd('\r')));
 
-        var problems = new List<TerminalProblem>();
-        var reader = new TerminalProblemReader(TerminalProblemMatcher.Shipped, problems.Add);
-        reader.Feed(said.ReplaceLineEndings("\n") + "\n\n\n");
-        // A link that failed says where in no file, its errors are put on the file that was built instead, the way Visual
-        // Studio lists a linker's errors. "entry point must be defined" was only ever in the output
-        if (built != 0 && builtFile is not null && !problems.Any(problem => !problem.Warning))
-        {
-            foreach (string line in LinkErrorsIn(said))
-                problems.Add(new TerminalProblem(builtFile, 1, 1, line, false, "link"));
-        }
-
+        var problems = HexBuildProblems.Read(said, built, builtFile);
         bool listed = problems.Any(problem => !problem.Warning);
-        debugWork.Enqueue(() =>
-        {
-            context.Terminals.ClearProblems();
-            foreach (TerminalProblem problem in problems)
-                context.Terminals.AddProblem(Path.IsPathRooted(problem.File) ? problem.File : Path.Combine(folder, problem.File), problem.Line, problem.Column, problem.Message, problem.Warning);
-            if (built != 0 && listed)
-                context.Panels.ShowProblems();
-        });
+        PostBuild(cancel, () => HexBuildProblems.Show(context, problems, folder, built != 0));
 
         if (built == 0)
             return true;
 
-        debugWork.Enqueue(() =>
+        PostBuild(cancel, () =>
         {
             building = false;
             context.Panels.RefreshSide(HexSide.Debug);
@@ -473,19 +701,27 @@ internal sealed partial class HexDebugging
         return false;
     }
 
-    // A linker's errors as dmd and MSVC's link say them
-    private static readonly System.Text.RegularExpressions.Regex LinkError = new(@"^(?:Error: .+|.*\berror LNK\d+: .+)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    // Build failures without a source location: linker symbols and compiler driver
+    // options/toolchain setup. Keep the tool prefix so ordinary output is not an error.
+    private static readonly System.Text.RegularExpressions.Regex LinkError = new(@"^(?:Error: .+|.*\berror LNK\d+: .+|(?:clang(?:\+\+|-cl)?|gcc|g\+\+|cc|c\+\+|ld(?:\.lld|\.gold)?|lld(?:-link)?|collect2)(?:-\d+(?:\.\d+)*)?(?:\.exe)?: (?:fatal )?error: .+)$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>The first few lines of what a build said that are a linker's errors, each once.</summary>
     internal static IEnumerable<string> LinkErrorsIn(string said) =>
         said.Split('\n').Select(line => line.Trim()).Where(line => LinkError.IsMatch(line)).Distinct().Take(5);
 
     /// <summary>A program launched under a debugger that was started (null for one that wasn't), with the breakpoints there are.</summary>
-    private async Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<int>> breakpointsNow, string kind, string? output = null, IReadOnlyList<string>? arguments = null)
+    private Task LaunchUnder(DebugSession? session, string program, string folder, Dictionary<string, IReadOnlyCollection<DebugBreakpoint>> breakpointsNow, string kind, string? output = null, IReadOnlyList<string>? arguments = null) =>
+        StartUnder(session, Path.GetFileName(program), kind, started => started.Launch(program, arguments ?? [], folder, breakpointsNow, kind, output));
+
+    /// <summary>
+    /// A debug session that was started (null for one that wasn't) made the one there is, and set going by a launch or
+    /// an attach, what it's debugging said once it goes.
+    /// </summary>
+    private async Task StartUnder(DebugSession? session, string what, string kind, Func<DebugSession, Task<bool>> start, CancellationToken cancel = default)
     {
         if (session is null)
         {
-            debugWork.Enqueue(() =>
+            PostBuild(cancel, () =>
             {
                 building = false;
                 context.Notices.Say(context.Strings.Said("debugging.debugger_did_not_start"), error: true);
@@ -493,52 +729,75 @@ internal sealed partial class HexDebugging
             return;
         }
 
-        debugWork.Enqueue(() => (debugging, endedByException, debuggingKind) = (session, false, kind));
-        bool launched = await session.Launch(program, arguments ?? [], folder, breakpointsNow, kind, output);
-        debugWork.Enqueue(() =>
+        if (cancel.IsCancellationRequested)
+        {
+            session.Dispose();
+            return;
+        }
+        using var stop = cancel.Register(session.Stop);
+        var exceptionPreferences = new Dictionary<string, bool>(context.Settings.Values.ExceptionBreakpoints, StringComparer.Ordinal);
+        session.BreakOnException = filter => exceptionPreferences.GetValueOrDefault(kind + "/" + filter.Id, filter.Default);
+        session.InitialFunctionBreakpoints = Volatile.Read(ref activeFunctionBreakpoints);
+
+        // A condition and a tracepoint's expressions go the same way as a watch's, the names of the file they're in known.
+        // Set before the launch, the breakpoints it's given are sent without their conditions then, Hex checks them
+        HexDebugEvaluator? through = kind == DebugSession.CORECLR ? new HexDebugEvaluator(session.EvaluateSaying, context.Strings.Said, session.Variables) : null;
+        if (through is not null)
+            session.Evaluates = (expression, frame) => through.Evaluate(expression, frame.Id, ScopeOf(frame.File));
+
+        PostBuild(cancel, () =>
+        {
+            (debugging, endedByException, debuggingKind, stoppingByHand) = (session, false, kind, false);
+            evaluator = through;
+        });
+        bool launched = !cancel.IsCancellationRequested && await start(session);
+        if (cancel.IsCancellationRequested)
+        {
+            session.Dispose();
+            return;
+        }
+        PostBuild(cancel, () =>
         {
             building = false;
             if (launched)
             {
-                context.Notices.Say(context.Strings.Said("debugging.debugging", ("program", Path.GetFileName(program))));
+                context.Notices.Say(context.Strings.Said("debugging.debugging", ("program", what)));
                 context.Panels.ShowSide(HexSide.Debug);
             }
             else
             {
-                context.Notices.Say(context.Strings.Said("debugging.launch_failed", ("why", $"{session.Failed}")), error: true);
+                context.Notices.Say(context.Strings.Said(session.TerminatesDebuggeeOnStop ? "debugging.launch_failed" : "debugging.attach_failed", ("why", $"{session.Failed}")), error: true);
             }
         });
-    }
-
-    // dotnet with some arguments in a folder, its exit code and what it wrote
-    private static async Task<(int Exit, string Said)> Dotnet(string folder, params string[] arguments)
-    {
-        try
-        {
-            var start = new ProcessStartInfo("dotnet") { WorkingDirectory = folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-            foreach (string argument in arguments)
-                start.ArgumentList.Add(argument);
-            using Process process = Process.Start(start)!;
-            Task<string> output = process.StandardOutput.ReadToEndAsync();
-            Task<string> errors = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            return (process.ExitCode, await output + await errors);
-        }
-        catch (Exception e)
-        {
-            return (-1, e.Message);
-        }
     }
 
     // Every file of code with changes saved, the build reads them off the disk
     private void SaveAllCode() => context.Documents.SaveAll(open => open.IsText && open.Path is not null && (open.Modified || open.CodeEdited));
 
-    /// <summary>Shift+F5, the program and the debugger ended.</summary>
+    /// <summary>
+    /// Shift+F5, the program and the debugger ended. With nothing being debugged it's a program run without the debugger
+    /// that's stopped (Ctrl+F5, a run task), or a test run waiting for its debugger, the way Visual Studio's Stop is.
+    /// </summary>
     internal void StopDebugging()
     {
+        FinishCTestDebug(ctestDebugRun);
+        if (debugBuild is not null)
+        {
+            CancelDebugBuild();
+            building = false;
+            context.Panels.RefreshSide(HexSide.Debug);
+            context.Notices.Say(context.Strings.Said("debugging.stopping"));
+        }
+        bool stoppedTest = StopTestRun();
         if (debugging is null)
+        {
+            FinishPythonTestDebug(pythonTestDebugRun);
+            if (!stoppedTest)
+                Tasks?.StopRuns();
             return;
+        }
 
+        stoppingByHand = true;
         debugging.Stop();
         context.Notices.Say(context.Strings.Said("debugging.stopping"));
     }
@@ -549,13 +808,15 @@ internal sealed partial class HexDebugging
         if (restart is not { } again)
             return;
 
+        // A test run being debugged is ended with its host, or the new one would run beside it
+        CancelTestRun(finish: false);
         EndDebugging();
         again();
     }
 
-    internal void StepOver() => debugging?.StepOver();
+    internal void StepOver() { if (InstructionStepping) debugging?.StepInstructionOver(); else debugging?.StepOver(); }
 
-    internal void StepIn() => debugging?.StepIn();
+    internal void StepIn() { if (InstructionStepping) debugging?.StepInstructionIn(); else debugging?.StepIn(); }
 
     internal void StepOut() => debugging?.StepOut();
 
@@ -595,9 +856,11 @@ internal sealed partial class HexDebugging
     {
         while (debugWork.TryDequeue(out Action? work))
             work();
+        UpdateModuleView();
 
         // What the program wrote, while it goes and for a moment after
         ReadProgramOutput();
+        KeepTip();
         if (debugging is null)
             return;
 
@@ -605,10 +868,17 @@ internal sealed partial class HexDebugging
         {
             switch (happened.Kind)
             {
+                case DebugEventKind.BreakpointsChanged:
+                    RefreshInstructionMarks();
+                    context.Panels.RefreshSide(HexSide.Debug);
+                    break;
                 case DebugEventKind.Stopped:
                     Stopped(happened);
                     break;
                 case DebugEventKind.Continued:
+                    if (!tipPinned)
+                        CloseTip();
+                    variables.Reset();
                     dStoppedOn = null;
                     ClearExecutionLine();
                     stoppedFrames = [];
@@ -624,13 +894,9 @@ internal sealed partial class HexDebugging
                         context.Notices.Note(line.TrimEnd('\r'));
                     break;
                 case DebugEventKind.Ended:
-                    // netcoredbg says 0 for a program its unhandled exception ended, it's said what ended it instead
-                    string ended = Path.GetFileNameWithoutExtension(debuggedProject);
-                    context.Notices.Say(endedByException && happened.ExitCode <= 0
-                        ? context.Strings.Said("debugging.ended_exception", ("project", ended))
-                        : happened.ExitCode >= 0
-                            ? context.Strings.Said("debugging.ended_code", ("project", ended), ("code", happened.ExitCode.ToString()))
-                            : context.Strings.Said("debugging.ended", ("project", ended)));
+                    SayEnded(happened);
+                    FinishCTestDebug(ctestDebugRun, !stoppingByHand && !endedByException && happened.Text.Length == 0
+                        ? ctestDebugRun?.Test?.DebugResult(happened.ExitCode, ctestDebugRun.Time.Elapsed.TotalSeconds) : null);
                     EndDebugging();
                     return;
             }
@@ -639,10 +905,16 @@ internal sealed partial class HexDebugging
 
     private void Stopped(DebugEvent happened)
     {
+        if (GoOnFromHostStop(happened))
+            return;
+
+        variables.Reset();
         stoppedFrames = happened.Frames;
         stoppedFrame = 0;
         stops++;
+        LoadThreads();
         frameNames.Clear();
+        showingDisassembly &= IsDisassemblyPath(context.Documents.Current.Path);
         // The reason alone for the usual stops, lldb's text after it said it again ("step, step in")
         string why = happened.Text;
         int comma = why.IndexOf(", ", StringComparison.Ordinal);
@@ -650,12 +922,20 @@ internal sealed partial class HexDebugging
         if (reason is "breakpoint" or "step" or "pause" or "entry" or "goto" or "function breakpoint" or "data breakpoint")
             why = reason;
         if (why.StartsWith("exception", StringComparison.Ordinal))
-            endedByException = true;
+        {
+            endedByException = happened.Exception?.Unhandled ?? true;
+            stoppedOn = happened.Exception;
+            SayException(happened.Exception);
+        }
+        else
+        {
+            stoppedOn = null;
+        }
         string? dWhat = DExceptionOf(stoppedFrames);
         dStoppedOn = dWhat;
 
         // The frame of the program's own code nearest the top, the debugger's steps into the framework go past that
-        for (int i = 0; i < stoppedFrames.Count; i++)
+        for (int i = 0; !showingDisassembly && i < stoppedFrames.Count; i++)
         {
             if (OwnCode(stoppedFrames[i]))
             {
@@ -665,13 +945,27 @@ internal sealed partial class HexDebugging
         }
 
         ShowFrame(stoppedFrame);
-        // A step says only where it got to, there's no news in having stepped. A D exception says what kind it was
-        string said = why == "step" ? "debugging.stepped_to" : dWhat is not null ? "debugging.d_stopped" : "debugging.stopped_at";
-        context.Notices.Say(stoppedFrames.Count > 0 && stoppedFrames[stoppedFrame].File is { } at
-            ? context.Strings.Said(said, ("why", why), ("what", dWhat ?? string.Empty), ("file", Path.GetFileName(at)), ("line", (stoppedFrames[stoppedFrame].Line + 1).ToString()))
-            : context.Strings.Said("debugging.stopped", ("why", dWhat ?? why)));
+        // A step says only where it got to, there's no news in having stepped. A D exception says what kind it was, and a
+        // .NET one its type and message
+        string said = why == "step" ? "debugging.stepped_to" : dWhat is not null ? "debugging.d_stopped" : stoppedOn is not null ? "debugging.exception_at" : "debugging.stopped_at";
+        string what = dWhat ?? (stoppedOn is { } thrown ? $"{thrown.Type}, {thrown.Message}" : string.Empty);
+        if (happened.ConditionFailed is { } failed)
+            context.Notices.Say(ConditionFailed(failed), error: true);
+        else
+            context.Notices.Say(stoppedFrames.Count > 0 && stoppedFrames[stoppedFrame].File is { } at
+                ? context.Strings.Said(said, ("why", why), ("what", what), ("file", Path.GetFileName(at)), ("line", (stoppedFrames[stoppedFrame].Line + 1).ToString()))
+                : context.Strings.Said("debugging.stopped", ("why", what.Length > 0 ? what : why)), error: stoppedOn is not null);
         context.Panels.ShowSide(HexSide.Debug);
         context.Redraw();
+    }
+
+    private bool CanShowCurrentFrame() => DebugStopped && stoppedFrame >= 0 && stoppedFrame < stoppedFrames.Count
+        && (stoppedFrames[stoppedFrame].Source is {} source && debugging?.OwnsSource(source) == true
+            || stoppedFrames[stoppedFrame].File is {} file && File.Exists(file));
+
+    private void ShowCurrentFrame()
+    {
+        if (CanShowCurrentFrame()) { showingDisassembly = showingMemory = false; ShowFrame(stoppedFrame); }
     }
 
     /// <summary>A frame of the stack looked at, its file open at its line, lit.</summary>
@@ -680,16 +974,31 @@ internal sealed partial class HexDebugging
         if (index < 0 || index >= stoppedFrames.Count)
             return;
 
+        disassemblyRequest++;
+        memoryRequest++;
+        debuggerSourceRequest++;
+        memoryAsking = false;
+        RetireFrameTips();
+        variables.Reset();
         stoppedFrame = index;
         DebugFrame frame = stoppedFrames[index];
         ClearExecutionLine();
-        if (frame.File is not { } file || !File.Exists(file))
-            return;
-
-        context.Documents.OpenAt(file, frame.Line, frame.Column);
-        if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
-            shown.Editor.ExecutionLine = frame.Line;
-        variablesShown = null;
+        if (showingMemory && IsCurrentMemoryView() && memoryInput is not null && CanShowMemory())
+            ReadMemoryView(memoryInput, memoryOffset, stops == memoryReferenceStop ? memoryReference : null);
+        else if (CanShowDisassembly() && showingDisassembly && IsDisassemblyPath(context.Documents.Current.Path))
+            ShowDisassembly();
+        else if (frame.Source is {} source && debugging?.OwnsSource(source) == true)
+            ShowDebuggerSource(frame, source);
+        else if (CanShowDisassembly() && (frame.File is null || !File.Exists(frame.File)))
+            ShowDisassembly();
+        else if (frame.File is { } file && File.Exists(file))
+        {
+            showingDisassembly = false;
+            context.Documents.OpenAt(file, frame.Line, frame.Column);
+            if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
+                shown.Editor.ExecutionLine = frame.Line;
+        }
+        RefreshPinnedTip();
         context.Panels.RefreshSide(HexSide.Debug);
     }
 
@@ -699,36 +1008,62 @@ internal sealed partial class HexDebugging
             open.Editor.ExecutionLine = -1;
     }
 
-    internal void EndDebugging()
+    internal void EndDebugging() => EndDebugging(terminate: false);
+
+    private void EndDebugging(bool terminate)
     {
+        var pythonTests = pythonTestDebugRun;
+        FinishPythonTestDebug(pythonTests, cleanup: false);
+        FinishCTestDebug(ctestDebugRun);
+        CancelDebugBuild();
+        CloseTip();
+        variables.Reset();
+        evaluator = null;
+        stoppedOn = null;
+        scopes.Clear();
+        globalUsings.Clear();
         ForgetProgramOutput();
         DebugSession? ending = debugging;
+        ClearInstructionView();
+        ClearMemoryView();
+        ClearModuleView();
+        ClearDebuggerSources();
         debugging = null;
+        showingDisassembly = false;
+        disassemblyRequest++;
         building = false;
         stoppedFrames = [];
-        variablesShown = null;
         ClearExecutionLine();
         context.Panels.RefreshSide(HexSide.Debug);
-        if (ending is not null)
-            _ = Task.Run(ending.Dispose);
+        if (ending is not null || pythonTests is not null)
+            _ = Task.Run(async () =>
+            {
+                try { if (terminate && ending is not null) await ending.StopAsync().ConfigureAwait(false); }
+                finally { ending?.Dispose(); DeletePythonTestFiles(pythonTests); }
+            });
     }
 
     /* The Debug side, the stack, the variables and the breakpoints */
 
     // The variables of the frame looked at, asked for once a stop and kept, null while they're coming
-    private List<UITreeItem>? variablesShown;
-    private int variablesFor = -1;
+    private readonly HexDebugVariables variables;
 
     private List<UITreeItem> DebugSide()
     {
         var items = new List<UITreeItem>();
 
         if (building)
-            items.Add(NoteItem(context.Strings.Said("debugging.building_side", ("project", Path.GetFileName(debuggedProject)))));
+            items.Add(NoteItem(attachingProcess ? context.Strings.Said("debugging.attaching", ("process", debuggedProject))
+                : context.Strings.Said("debugging.building_side", ("project", Path.GetFileName(debuggedProject)))));
         else if (debugging is null)
             items.Add(NoteItem(context.Strings.Said("debugging.nothing_running")));
         else if (!DebugStopped)
             items.Add(NoteItem(context.Strings.Said("debugging.running", ("project", Path.GetFileNameWithoutExtension(debuggedProject)))));
+
+        if (DebugStopped && stoppedOn is { } thrown)
+            items.Add(ExceptionSection(thrown));
+
+        if (DebugStopped && threads.Count > 0) items.Add(ThreadSection());
 
         if (DebugStopped && stoppedFrames.Count > 0)
         {
@@ -762,42 +1097,23 @@ internal sealed partial class HexDebugging
 
             items.Add(stack);
 
-            var variables = new UITreeItem(context.Strings.Said("debugging.variables"), "symbol-variable") { Expandable = true, Expanded = true };
-            if (variablesShown is null || variablesFor != stoppedFrame)
+            DebugSession frameSession = debugging!;
+            bool formatHex = hexadecimalLocals;
+            var locals = new UITreeItem(context.Strings.Said("debugging.variables"), "symbol-variable")
             {
-                variables.Children = [NoteItem(context.Strings.Said("debugging.asking"))];
-                AskVariables(stoppedFrames[stoppedFrame].Id, stoppedFrame);
-            }
-            else
-            {
-                variables.Children = variablesShown;
-            }
-
-            items.Add(variables);
+                Expandable = true, Expanded = true,
+                Children = variables.Rows(debugging!, stoppedFrames[stoppedFrame].Id, frameSession.Scopes, reference => frameSession.Variables(reference, formatHex), frameSession.CanSetVariable ? EditVariable : null, formatHex)
+            };
+            items.Add(locals);
         }
 
         if (watches.Count > 0 || DebugStopped)
             items.Add(WatchSection());
+        if (ImmediateSection() is { } evaluated)
+            items.Add(evaluated);
 
-        var points = new UITreeItem(context.Strings.Said("debugging.breakpoints"), "debug-breakpoint") { Expandable = true, Expanded = true, Children = [] };
-        foreach (var (file, lines) in breakpoints.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            foreach (int line in lines)
-            {
-                string at = file;
-                int on = line;
-                points.Children.Add(new UITreeItem($"{Path.GetFileName(file)}:{line + 1}", "debug-breakpoint")
-                {
-                    IconColor = context.Panels.Error,
-                    Detail = context.Workspace.Relative(file),
-                    Tag = new SideTag(Pressed: () => context.Documents.OpenAt(at, on, 0), Menu: _ => ToggleBreakpoint(at, on))
-                });
-            }
-        }
-
-        if (points.Children.Count == 0)
-            points.Children.Add(NoteItem(context.Strings.Said("debugging.breakpoints_hint")));
-        items.Add(points);
+        items.Add(BreakpointsSection());
+        if (modulesShown && debugging is { State: not DebugState.Ended }) items.Add(ModulesSection());
         return items;
     }
 
@@ -809,7 +1125,8 @@ internal sealed partial class HexDebugging
     /// entrypoint.d is on the disk too, with the compiler, and it isn't anybody's code to step through.
     /// </summary>
     private bool OwnCode(DebugFrame frame) =>
-        frame.File is { } file && File.Exists(file)
+        frame.Source is {} source && debugging?.OwnsSource(source) == true && source.PresentationHint != "deemphasize"
+        || frame.File is { } file && File.Exists(file)
         && (context.Workspace.Roots.Any(root => Path.GetFullPath(file).StartsWith(Path.GetFullPath(root).TrimEnd('\\', '/') + Path.DirectorySeparatorChar, PlatformPaths.Comparison))
             || context.Documents.All.Any(open => open.Path is { } path && PlatformPaths.Same(path, file)));
 
@@ -817,11 +1134,17 @@ internal sealed partial class HexDebugging
     private UITreeItem FrameItem(int index)
     {
         DebugFrame frame = stoppedFrames[index];
+        var session = debugging;
+        int stop = stops;
         return new UITreeItem(FrameName(frame), index == stoppedFrame ? "debug-stackframe-focused" : "debug-stackframe-dot")
         {
-            Detail = frame.File is { } file && OwnCode(frame) ? $"{Path.GetFileName(file)}:{frame.Line + 1}" : string.Empty,
+            Detail = OwnCode(frame) && frame.Source is {} source ? $"{DebuggerSourceName(source)}:{frame.Line + 1}"
+                : frame.File is { } file && OwnCode(frame) ? $"{Path.GetFileName(file)}:{frame.Line + 1}" : string.Empty,
             Color = OwnCode(frame) ? null : context.Panels.Dim,
-            Tag = new SideTag(Pressed: () => ShowFrame(index))
+            Tag = new SideTag(Pressed: () =>
+            {
+                if (DebugStopped && ReferenceEquals(debugging, session) && stops == stop) ShowFrame(index);
+            })
         };
     }
 
@@ -834,7 +1157,7 @@ internal sealed partial class HexDebugging
     /// </summary>
     private string FrameName(DebugFrame frame)
     {
-        if (!frame.Name.StartsWith("0x", StringComparison.Ordinal) || !OwnCode(frame))
+        if (!frame.Name.StartsWith("0x", StringComparison.Ordinal) || !OwnCode(frame) || frame.Source is not null)
             return frame.Name;
         if (frameNames.TryGetValue(frame.Id, out string? named))
             return named;
@@ -868,95 +1191,4 @@ internal sealed partial class HexDebugging
     // Whether what it stopped on last was an exception, what ended the program when the debugger says it ended well
     private bool endedByException;
 
-    // The scopes of a frame and the variables of each, off the editor's thread, handed back as rows
-    private void AskVariables(int frameId, int frameIndex)
-    {
-        if (debugging is not { } session)
-            return;
-
-        variablesFor = frameIndex;
-        variablesShown = null;
-        _ = Task.Run(async () =>
-        {
-            var rows = new List<UITreeItem>();
-            try
-            {
-                // The first scope's variables as they are (the locals), the rest folded under their names. lldb-dap says
-                // every global of the program and the registers too, and flat they buried the locals under __imp_ rows
-                IReadOnlyList<DebugScope> scopes = await session.Scopes(frameId);
-                for (int i = 0; i < scopes.Count; i++)
-                {
-                    if (i > 0)
-                    {
-                        rows.Add(Expanding(new UITreeItem(scopes[i].Name, "symbol-namespace") { Expandable = true }, session, scopes[i].Reference));
-                        continue;
-                    }
-
-                    // Not the compiler's own (dmd's __r103 and __key104 for a foreach), nobody wrote those
-                    foreach (DebugVariable variable in await session.Variables(scopes[i].Reference))
-                    {
-                        if (!variable.Name.StartsWith("__", StringComparison.Ordinal))
-                            rows.Add(VariableItem(session, variable));
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                rows.Add(new UITreeItem(context.Strings.Said("debugging.could_not_ask", ("why", e.Message))) { Color = context.Panels.Dim });
-            }
-
-            debugWork.Enqueue(() =>
-            {
-                if (variablesFor != frameIndex)
-                    return;
-                variablesShown = rows.Count > 0 ? rows : [new UITreeItem(context.Strings.Said("debugging.nothing_in_scope")) { Color = context.Panels.Dim }];
-                context.Panels.RefreshSide(HexSide.Debug);
-            });
-        });
-    }
-
-    // A variable a row, what's inside it asked for as it's opened
-    private UITreeItem VariableItem(DebugSession session, DebugVariable variable)
-    {
-        var item = new UITreeItem($"{variable.Name} = {variable.Value}", "symbol-variable")
-        {
-            Detail = variable.Type ?? string.Empty,
-            Tooltip = $"{variable.Name} = {variable.Value}",
-            Expandable = variable.Reference > 0
-        };
-
-        return variable.Reference > 0 ? Expanding(item, session, variable.Reference) : item;
-    }
-
-    // A row whose children are the variables of a reference (a variable's, a scope's), asked for as it's opened
-    private UITreeItem Expanding(UITreeItem item, DebugSession session, int reference)
-    {
-        item.Tag = new SideTag(Expanding: opened =>
-        {
-            if (opened.Children is not null)
-                return;
-            opened.Children = [new UITreeItem(context.Strings.Said("debugging.asking")) { Color = context.Panels.Dim }];
-            _ = Task.Run(async () =>
-            {
-                var inside = new List<UITreeItem>();
-                try
-                {
-                    foreach (DebugVariable child in await session.Variables(reference))
-                        inside.Add(VariableItem(session, child));
-                }
-                catch (Exception)
-                {
-                    // gone on since, nothing to show
-                }
-
-                debugWork.Enqueue(() =>
-                {
-                    opened.Children = inside;
-                    context.Panels.RefreshRows();
-                });
-            });
-        });
-
-        return item;
-    }
 }

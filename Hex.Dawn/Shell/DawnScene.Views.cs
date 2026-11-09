@@ -93,6 +93,7 @@ internal sealed partial class DawnScene
     /// </summary>
     internal bool Runnable(HexDocument shown)
     {
+        if (HexDebugging.IsDebuggerSourcePath(shown.Path)) return debugger.DebugStopped;
         if (!shown.IsText || debugger.DebugStopped)
             return true;
         if (shown.Picture is not null || shown.Path is not { } path)
@@ -252,6 +253,9 @@ internal sealed partial class DawnScene
         if (closeQuestion is { IsOpen: true })
             return;
 
+        // Scratchpads are kept without a question, only real files are asked about
+        KeepScratchpads();
+
         var unsaved = documents.Where(open => open.Modified || open.CodeEdited).ToList();
         if (unsaved.Count == 0)
         {
@@ -267,7 +271,7 @@ internal sealed partial class DawnScene
             unsaved.Count == 1 ? Said("views.unsaved_one", ("names", names)) : Said("views.unsaved_many", ("count", unsaved.Count.ToString()), ("names", names)),
             new DialogChoice(Said("views.save_all"), () => SaveAllAndQuit(unsaved)),
             new DialogChoice(Said("documents.dont_save"), QuitNow, Risky: true),
-            new DialogChoice(Said("keys.leave_it"), () => restartInto = null));
+            new DialogChoice(Said("keys.leave_it"), AbandonRestart));
     }
 
     private void SaveAllAndQuit(List<HexDocument> unsaved)
@@ -277,6 +281,7 @@ internal sealed partial class DawnScene
             // Never saved anywhere, there is no file to put it in without asking where
             if (open.Path is null)
             {
+                AbandonRestart();
                 Show(open);
                 Say(Said("views.never_saved", ("name", open.Name)), error: true);
                 return;
@@ -286,7 +291,7 @@ internal sealed partial class DawnScene
             Save();
             if (open.Modified || open.CodeEdited)
             {
-                restartInto = null;
+                AbandonRestart();
                 return;
             }
         }

@@ -97,7 +97,9 @@ internal sealed partial class DawnScene
             return;
 
         HexDocument of = document;
-        string? path = of.Path;
+
+        // A diff is in the language of the file it's the changes of, it said Auto Detect (Plain Text) having no file
+        string? path = of.Path ?? of.DiffOf;
         string now = CodeLanguages.LanguageIdOf(of.Editor.Highlighter);
         string Marked(string text, bool current) => current ? Said("language_mode.current", ("row", text)) : text;
 
@@ -146,7 +148,7 @@ internal sealed partial class DawnScene
         }
         else
         {
-            language = languageId is null ? CodeLanguages.ForFile(of.Name) : CodeLanguages.ForLanguageId(languageId);
+            language = languageId is null ? CodeLanguages.ForFile(of.DiffOf ?? of.Name) : CodeLanguages.ForLanguageId(languageId);
         }
 
         UseLanguage(of, language);

@@ -252,7 +252,9 @@ internal sealed partial class HexRunning
                 warning.Warning ? context.Panels.Warning : context.Panels.Error, () => GoToCode(warning.Line, warning.Column)));
         }
 
-        if (shown.Error is { } problem && !shown.ErrorAt.Span.IsKnown)
+        // A run that failed with no place said is the file not parsing, already there as the syntax errors above. It was a
+        // row more than Problems had, the same error again without a line
+        if (shown.Error is { } problem && !shown.ErrorAt.Span.IsKnown && code.SyntaxErrors.Count == 0)
             items.Add(ProblemItem(problem, "error", context.Panels.Error, null));
 
         items.Add(new UITreeItem(context.Strings.Said("values.summary", ("count", shown.Declared.Count.ToString()), ("time", shown.Milliseconds.ToString("0.0"))), "info")

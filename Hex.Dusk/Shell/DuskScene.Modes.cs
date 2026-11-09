@@ -5,7 +5,7 @@ using Horizon.UI.Components;
 
 namespace Hex.Dusk;
 
-// Dusk and Dawn in the one window, Ctrl+Alt+D (the dawn_mode command of the window plugin, the toggle on the title bar)
+// Dusk and Dawn in the one window, Ctrl+Alt+Shift+D (the dawn_mode command of the window plugin, the toggle on the title bar)
 // swaps to the editor and back, see Hex.Shell.HexModes. The shells keep running while the editor is up, their output
 // waits for the pane to be drawn again, and the tabs, splits and scrollback are as they were left.
 internal sealed partial class DuskScene
@@ -44,6 +44,10 @@ internal sealed partial class DuskScene
             panel.FocusedView?.Focus();
         ReadEffects();
         ReadBackdrop();
+
+        // The editor was made bigger or smaller meanwhile, the terminal follows so the swap doesn't jump
+        if (Hex.Shell.HexModes.Scale is { } shared && shared != compositor.Scale)
+            SetScale(shared);
         Engine.WindowManager.RequestFrames();
     }
 }

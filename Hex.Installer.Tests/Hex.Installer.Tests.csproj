@@ -17,6 +17,7 @@
     <Using Include="Xunit" />
     <Compile Include="..\Hex.Installer\InstallerLayout.cs" Link="InstallerLayout.cs" />
     <Compile Include="..\Hex.Installer\InstallerDestination.cs" Link="InstallerDestination.cs" />
+    <Compile Include="..\Hex.Installer\SetupOptions.cs" Link="SetupOptions.cs" />
     <None Include="..\Hex.Installer\Assets\installer\**\*.hor" Link="Assets\installer\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Hex.Installer\*.cs;..\Hex.Installation\*.cs;..\Hex.Dawn\Shell\DawnScene.Updates.cs" Link="TestSources\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

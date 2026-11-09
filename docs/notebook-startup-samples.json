@@ -1,0 +1,162 @@
+[
+  {
+    "Build": "current",
+    "Sample": 1,
+    "FirstFrameMs": 1535,
+    "FirstFrameWorkingSetMB": 165,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 1,
+    "FirstFrameMs": 1550,
+    "FirstFrameWorkingSetMB": 162,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 2,
+    "FirstFrameMs": 1581,
+    "FirstFrameWorkingSetMB": 162,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 2,
+    "FirstFrameMs": 1521,
+    "FirstFrameWorkingSetMB": 165,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 3,
+    "FirstFrameMs": 1562,
+    "FirstFrameWorkingSetMB": 165,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 3,
+    "FirstFrameMs": 1480,
+    "FirstFrameWorkingSetMB": 163,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 4,
+    "FirstFrameMs": 1484,
+    "FirstFrameWorkingSetMB": 163,
+    "FirstFramePrivateMB": 197,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 4,
+    "FirstFrameMs": 1527,
+    "FirstFrameWorkingSetMB": 165,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 5,
+    "FirstFrameMs": 1532,
+    "FirstFrameWorkingSetMB": 165,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 5,
+    "FirstFrameMs": 1502,
+    "FirstFrameWorkingSetMB": 163,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 6,
+    "FirstFrameMs": 1500,
+    "FirstFrameWorkingSetMB": 164,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 6,
+    "FirstFrameMs": 1541,
+    "FirstFrameWorkingSetMB": 166,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 7,
+    "FirstFrameMs": 1519,
+    "FirstFrameWorkingSetMB": 166,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 7,
+    "FirstFrameMs": 1540,
+    "FirstFrameWorkingSetMB": 163,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 8,
+    "FirstFrameMs": 1578,
+    "FirstFrameWorkingSetMB": 163,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 8,
+    "FirstFrameMs": 1535,
+    "FirstFrameWorkingSetMB": 167,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 9,
+    "FirstFrameMs": 1506,
+    "FirstFrameWorkingSetMB": 166,
+    "FirstFramePrivateMB": 200,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 9,
+    "FirstFrameMs": 1476,
+    "FirstFrameWorkingSetMB": 164,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "baseline",
+    "Sample": 10,
+    "FirstFrameMs": 1530,
+    "FirstFrameWorkingSetMB": 164,
+    "FirstFramePrivateMB": 198,
+    "FirstFrameHeapMB": 18
+  },
+  {
+    "Build": "current",
+    "Sample": 10,
+    "FirstFrameMs": 1481,
+    "FirstFrameWorkingSetMB": 166,
+    "FirstFramePrivateMB": 199,
+    "FirstFrameHeapMB": 18
+  }
+]

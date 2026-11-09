@@ -18,8 +18,9 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> NotebookTools() =>
     [
         new(new McpTool("hex_notebook", "Notebook cells",
-            "Read the Jupyter notebook on screen as its cells, each with its number (1 is the first), kind, run count, source and outputs (text, errors, pictures as their size). Open one first with hex_open.",
+            "Read the Jupyter notebook on screen as its cells, each with its number (1 is the first), kind, run count, source and outputs (text, errors, pictures as their size). Say path, or open one first with hex_open.",
             McpSchema.Object([
+                ("path", McpSchema.String("The notebook, inside the workspace or whole, opened first. The one on screen without it.")),
                 ("cells", McpSchema.String("Which cells, \"all\" (the default), \"3\", \"2,5\" or \"2-4\".")),
                 ("outputs", McpSchema.Flag("Include the outputs, true by default."))]), ReadOnly: true),
             NotebookCells),
@@ -27,6 +28,7 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_notebook_edit", "Edit notebook",
             "Change the notebook on screen. set writes a cell's source, insert puts a new cell before the numbered one (past the end to add it last), delete takes one out, kind makes one code, markdown or raw.",
             McpSchema.Object([
+                ("path", McpSchema.String("The notebook, inside the workspace or whole, opened first. The one on screen without it.")),
                 ("action", McpSchema.OneOf("What to do.", "set", "insert", "delete", "kind")),
                 ("cell", McpSchema.Integer("The cell, 1 is the first.")),
                 ("source", McpSchema.String("The source, for set and insert.")),
@@ -36,14 +38,17 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_notebook_run", "Run notebook cells",
             "Run cells of the notebook on screen in its kernel (started if it isn't up) and wait for them, then say what each came to. A cell that errors stops the ones after it, as in Jupyter.",
             McpSchema.Object([
+                ("path", McpSchema.String("The notebook, inside the workspace or whole, opened first. The one on screen without it.")),
                 ("cells", McpSchema.String("Which cells, \"all\", \"3\", \"2,5\" or \"2-4\".")),
                 ("timeout", McpSchema.Number("Seconds to wait at the most, 120 by default."))], "cells")),
             NotebookRun, MCP_RUN_PATIENCE + 5.0f),
 
         new(new McpTool("hex_notebook_kernel", "Notebook kernel",
             "Interrupt what the notebook's kernel is running, restart it (what it knew is gone), or shut it down.",
-            McpSchema.Object([("action", McpSchema.OneOf("What to do.", "interrupt", "restart", "shutdown"))], "action")),
+            McpSchema.Object([("action", McpSchema.OneOf("What to do.", "interrupt", "restart", "shutdown")),
+                ("path", McpSchema.String("The notebook, inside the workspace or whole, opened first. The one on screen without it.")),], "action")),
             NotebookKernel),
+        .. NotebookFileTools()
     ];
 
     // Helper method for the notebook on screen, or why there isn't one
@@ -123,6 +128,13 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> NotebookCells(JsonObject arguments)
     {
+        foreach (McpToolResult? opening in McpNotebookAt(arguments))
+        {
+            yield return opening;
+            if (opening is not null)
+                yield break;
+        }
+
         if (McpNotebook(out string? why) is not { } notebook)
         {
             yield return McpToolResult.Error(why!);
@@ -138,6 +150,13 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> NotebookEdit(JsonObject arguments)
     {
+        foreach (McpToolResult? opening in McpNotebookAt(arguments))
+        {
+            yield return opening;
+            if (opening is not null)
+                yield break;
+        }
+
         if (McpNotebook(out string? why) is not { } notebook)
         {
             yield return McpToolResult.Error(why!);
@@ -192,6 +211,13 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> NotebookRun(JsonObject arguments)
     {
+        foreach (McpToolResult? opening in McpNotebookAt(arguments))
+        {
+            yield return opening;
+            if (opening is not null)
+                yield break;
+        }
+
         if (McpNotebook(out string? why) is not { } notebook)
         {
             yield return McpToolResult.Error(why!);
@@ -227,6 +253,13 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> NotebookKernel(JsonObject arguments)
     {
+        foreach (McpToolResult? opening in McpNotebookAt(arguments))
+        {
+            yield return opening;
+            if (opening is not null)
+                yield break;
+        }
+
         if (McpNotebook(out string? why) is not { } notebook)
         {
             yield return McpToolResult.Error(why!);

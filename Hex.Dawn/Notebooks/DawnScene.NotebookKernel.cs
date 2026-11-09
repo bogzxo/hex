@@ -119,6 +119,7 @@ internal sealed partial class DawnScene
     /// <summary>The kernel stopped and let go of, what was running and waiting forgotten.</summary>
     private void StopKernel(HexNotebook notebook)
     {
+        CancelHtmlExecution(notebook, Said("notebook.html_incomplete"));
         Kernel? kernel = notebook.Kernel;
         notebook.Kernel = null;
         notebook.Starting = false;
@@ -146,8 +147,9 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What's running stopped, the kernel and what it knows stay.</summary>
-    private static void InterruptKernel(HexNotebook notebook)
+    private void InterruptKernel(HexNotebook notebook)
     {
+        CancelHtmlExecution(notebook, Said("notebook.html_incomplete"));
         notebook.Waiting.Clear();
         notebook.Kernel?.Interrupt();
     }

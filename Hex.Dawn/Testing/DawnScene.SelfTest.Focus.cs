@@ -23,7 +23,8 @@ internal sealed partial class DawnScene
             test.Run(() =>
             {
                 Engine.Input.Keyboard.Tap(stroke.Keys);
-                UIKeyboard.Press(stroke.Key, stroke.Control, stroke.Shift, stroke.Alt, stroke.Super);
+                if (!stroke.Control && !stroke.Alt && !stroke.Super && UIKeyboard.CharacterOf(stroke.Key, stroke.Shift) is { } character)
+                    Engine.Input.Post(Horizon.Input.InputEvent.Typed(character.ToString()));
             });
             test.Wait();
         }
@@ -45,6 +46,11 @@ internal sealed partial class DawnScene
 
     private void TestWindowsGiveKeysBack(HexPointerScript test)
     {
+        // Window.Close gives the keyboard back as it starts leaving; the owner lets the window go on OnClosed.
+        // A few updates after Escape can still be inside that animation. Wait for both before opening the next one.
+        void Dismissed(Func<bool> closed) => test.WaitFor(() => closed() && CodeHasKeys, 1.0f);
+        var dismissal = new System.Diagnostics.Stopwatch();
+
         // The settings, Escape out of the search with nothing in it shuts them
         test.Run(() =>
         {
@@ -53,7 +59,10 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Check("focus: the settings open with the keyboard in their search", () => SettingsWindow is not null && compositor.Focus == SettingsPage?.Search);
+        test.Run(dismissal.Restart);
         PressKeys(test, "Escape");
+        Dismissed(() => SettingsWindow is null);
+        test.Run(() => Console.WriteLine($"[Hex self-test] settings Escape through dismissal and keyboard return took {dismissal.Elapsed.TotalMilliseconds:0} ms"));
         test.Check("focus: Escape shuts the settings and the code has the keyboard again", () => SettingsWindow is null && CodeHasKeys);
 
         // A click on the title bar takes the keyboard off the search, and Escape still shuts the window
@@ -62,17 +71,20 @@ internal sealed partial class DawnScene
         test.Click(() => chrome.ToWorld(SettingsWindow is { } window ? window.TitleBounds.Center with { X = window.TitleBounds.Center.X - 40.0f } : default));
         test.Check("focus: a click on the settings' title bar leaves the keyboard with the window, not on nothing", () => compositor.Focus is WindowPanel);
         PressKeys(test, "Escape");
+        Dismissed(() => SettingsWindow is null);
         test.Check("focus: and Escape shuts them from there, the code given the keyboard back", () => SettingsWindow is null && CodeHasKeys);
 
         // The keys window and Set Up F5
         test.Run(OpenKeysWindow);
         test.Settle(0.3f);
         PressKeys(test, "Escape");
+        Dismissed(() => keysWindow is null);
         test.Check("focus: Escape shuts Keyboard Shortcuts and gives the code the keyboard back", () => keysWindow is null && CodeHasKeys);
         test.Run(() => tasks.SetUpRun(dataFile));
         test.Settle(0.3f);
         test.Check("focus: Set Up F5 opens with the keyboard in it", () => tasks.SetupWindow is { } window && compositor.Focus is { } focus && window.Holds(focus));
         PressKeys(test, "Escape");
+        Dismissed(() => tasks.SetupWindow is null);
         test.Check("focus: Escape shuts Set Up F5 and gives the code the keyboard back", () => tasks.SetupWindow is null && CodeHasKeys);
 
         // A menu of the bar opened with a click leaves the keyboard where it was, Escape shuts it

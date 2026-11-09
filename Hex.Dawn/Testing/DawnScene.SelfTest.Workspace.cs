@@ -242,7 +242,7 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("help: the changelog goes down to 0.0.1, and says which Hex this is", () =>
             help is { Title: "Release Notes" } && Descendants(help).OfType<Label>().Any(label =>
-                label.Text.Contains("## 0.0.1") && label.Text.Contains($"This is Hex {HexAbout.Version}")));
+                label.Text.Contains("## 0.0.1") && label.Text.Contains($"This is Hex {HexAbout.Label}")));
 
         test.Run(() =>
         {

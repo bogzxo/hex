@@ -20,6 +20,7 @@ internal sealed partial class DawnScene
         newFileButton.OnPressed = () => explorer.NewFileIn(ExplorerTarget());
         newFolderButton.OnPressed = () => explorer.NewFolderIn(ExplorerTarget());
         collapseButton.OnPressed = CollapseExplorer;
+        WireSolution();
         sideTree.OnEmptyContextMenu = point =>
         {
             if (Side == HexSide.Explorer && !explorer.workspace.IsEmpty)
@@ -31,7 +32,7 @@ internal sealed partial class DawnScene
     private void ShowExplorerHead(HexSide side)
     {
         bool workspace = side == HexSide.Explorer && !explorer.workspace.IsEmpty;
-        newFileButton.Visible = newFolderButton.Visible = collapseButton.Visible = workspace;
+        newFileButton.Visible = newFolderButton.Visible = collapseButton.Visible = switchViewButton.Visible = workspace;
     }
 
     /// <summary>The menu of the explorer's empty space, what its buttons do.</summary>
@@ -57,6 +58,10 @@ internal sealed partial class DawnScene
                 if (row == picked)
                     return isFolder ? path : Path.GetDirectoryName(path) ?? path;
             }
+
+            // The solution's row or a project's, its folder
+            if (solutionHeads.TryGetValue(picked, out string? folder))
+                return folder;
         }
 
         return explorer.workspace.Folders.Count > 0 ? explorer.workspace.Folders[0] : browseDirectory;

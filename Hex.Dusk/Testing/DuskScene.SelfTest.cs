@@ -3,7 +3,9 @@ using System.Numerics;
 using Horizon.UI;
 using Horizon.UI.Components;
 
-using Key = Silk.NET.Input.Key;
+using Key = Horizon.Input.Key;
+
+using Hex.Shell;
 
 namespace Hex.Dusk;
 
@@ -39,6 +41,9 @@ internal sealed partial class DuskScene
     /// <summary>The parts of the self test, in the order they run.</summary>
     private (string Name, string About, Action<DuskScript> Run)[] SelfTestSuites =>
     [
+        ("graphite", "the shared Graphite profile, terminal palette and readable neutral chrome", TestGraphite),
+        ("bell", "terminal cursor movement and visual bell", TestBell),
+        ("interactions", "palette dismissal, single-click results, empty queries and focus restoration", TestInteractions),
         ("ux", "inline search and returning from scrollback to live output", TestUx),
         ("symbols", "triangle and arrow glyphs on the terminal cell grid", TestSymbols),
         ("start", "the first tab, its shell, the window fitted round it", TestStart),
@@ -180,7 +185,7 @@ internal sealed partial class DuskScene
         test.Check("the core, themes and profiles plugins started", () => host.Plugins.Count(plugin => plugin.Enabled && plugin.Failed is null && plugin.Runtime is not null) >= 3);
         test.Check("the plugins registered the commands", () => host.Commands.Contains("new_tab") && host.Commands.Contains("split_right") && host.Commands.Contains("theme_next") && host.Commands.Count > 25);
         test.Check("keys.hor put new_tab on Ctrl+Shift+T", () => KeyOf("new_tab") == "Ctrl+Shift+T" && KeyOf("palette") == "Ctrl+Shift+P");
-        test.Check("the window plugin puts the swap to Dawn on Ctrl+Alt+D", () => KeyOf("dawn_mode") == "Ctrl+Alt+D");
+        test.Check("the window plugin puts the swap to Dawn on Ctrl+Alt+Shift+D", () => UIKeys.Read(KeyOf("dawn_mode")) == UIKeys.Read("Ctrl+Alt+Shift+D"));
         test.Check("the menus say the keys", () => menu.Menus[0].Items.First(item => item.Label == "New tab").Shortcut == "Ctrl+Shift+T");
         test.Check("a profile a shell, the machine's in it", () => OperatingSystem.IsWindows()
             ? panel.Profiles.Count >= 2 && panel.Profiles.Exists(profile => profile.Id == "cmd")
@@ -325,7 +330,7 @@ internal sealed partial class DuskScene
 
     private void TestPalette(DuskScript test)
     {
-        test.Run(() => Run("palette"));
+        test.Run(() => { panel.FocusedView?.Focus(); Run("palette"); });
         test.Wait();
         test.Run(() => Shot("palette"));
         // A title once, Close pane is on two keys and the palette lists it the one time. Not Tab 1 to Tab 9, their keys are enough.
@@ -333,6 +338,13 @@ internal sealed partial class DuskScene
         test.Check("the command palette comes up with every command, and every look", () => chrome.Dialog is { IsOpen: true }
             && Descendants(chrome.Dialog).OfType<ListBox>().First().Items.Length == host.Commands.All.Where(command => !IsTabNumber(command.Name)).Select(command => command.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count()
                 + Hex.Shell.HexLooks.All(new Hex.Core.HexSettings(host.Settings.Path)).Count + 1);
+        test.Check("menu commands share their semantic icons and keep their shortcuts", () =>
+        {
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            return list.Items.Select(id => list.Choice!(id)).Any(choice => choice?.Text == "New tab" && choice.Icon == "add" && choice.Keys == KeyOf("new_tab"))
+                && CommandIcon("split_right") == "split-horizontal" && CommandIcon("split_down") == "split-vertical"
+                && CommandIcon("rename_tab") == "edit" && CommandIcon("extension_test_action") == "extensions";
+        });
         test.Check("a few letters narrow it down", () =>
         {
             var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();
@@ -343,7 +355,42 @@ internal sealed partial class DuskScene
         });
         test.Run(() => chrome.Dialog?.Cancel());
         test.Wait();
-        test.Check("and goes away", () => chrome.Dialog is null);
+        test.Check("and goes away with terminal focus restored", () => chrome.Dialog is null && compositor.Focus == panel.FocusedView);
+
+        bool picked = false;
+        object owner = new();
+        test.Run(() =>
+        {
+            host.Commands.Register("palette_test_first", "Palette test first", () => { }, owner: owner);
+            host.Commands.Register("palette_test_second", "Palette test second", () => picked = true, owner: owner);
+            Run("palette");
+        });
+        test.Wait();
+        test.Check("unknown extension commands have an icon and keyboard navigation selects a row", () =>
+        {
+            var box = Descendants(chrome.Dialog!).OfType<TextBox>().First();
+            box.Text = "Palette test";
+            box.OnChanged?.Invoke(box.Text);
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            box.OnKey?.Invoke(UIKeyboard.DOWN);
+            bool moved = list.Index == 1;
+            box.OnKey?.Invoke(UIKeyboard.UP);
+            bool returned = list.Index == 0;
+            box.OnKey?.Invoke(UIKeyboard.DOWN);
+            return moved && returned && list.Index == 1 && list.Items.Length == 2 && list.Choice!(list.Value)?.Icon == "extensions";
+        });
+        test.Run(() => Descendants(chrome.Dialog!).OfType<TextBox>().First().OnSubmitted?.Invoke("Palette test"));
+        test.Wait();
+        test.Check("Enter executes the selection and restores terminal focus", () => picked && chrome.Dialog is null && compositor.Focus == panel.FocusedView);
+        test.Run(() => Run("palette"));
+        test.Wait();
+        test.Check("the selected command returns as a recent", () =>
+        {
+            var list = Descendants(chrome.Dialog!).OfType<ListBox>().First();
+            return list.Lead > 0 && list.Choice!(list.Items[0])?.Text == "Palette test second";
+        });
+        test.Run(() => { chrome.Dialog?.Cancel(); host.Commands.Unregister(owner); });
+        test.Wait();
     }
 
     private void TestThemes(DuskScript test)
@@ -403,7 +450,7 @@ internal sealed partial class DuskScene
         TerminalView? innermost = null;
         test.Run(() => innermost = panel.FocusedView);
         test.Check("a new split is the active pane", () => Shape() == "[o|[o/F]]");
-        test.Run(() => KeyPressed(Press(Silk.NET.Input.Key.W)));
+        test.Run(() => KeyPressed(Press(Horizon.Input.Key.W)));
         test.Settle(settle);
         test.Check("Ctrl+Shift+W closes the active pane and not the tab", () => panel.Tabs.Count == 1 && panel.Current?.Tree.Count == 2 && panel.TabOf(innermost!) is null);
         test.Check("and the keyboard goes to the innermost pane left", () => Shape() == "[o|F]");
@@ -580,7 +627,7 @@ internal sealed partial class DuskScene
         // Off, the arrows go to the shell
         test.Run(() => settings.History = false);
         test.Run(() => panel.FocusedView?.Send("\u001b"));
-        test.Check("with the history off, Up is the shell's", () => !KeyPressed(new UIKeyPress(Silk.NET.Input.Key.Up, false, false, false, false)));
+        test.Check("with the history off, Up is the shell's", () => !KeyPressed(new UIKeyPress(Horizon.Input.Key.Up, false, false, false, false)));
         test.Run(() => settings.History = true);
     }
 
@@ -611,7 +658,11 @@ internal sealed partial class DuskScene
     private void Shot(string name)
     {
         if (System.Environment.GetEnvironmentVariable("DUSK_SELFTEST_SHOTS") is { Length: > 0 } folder)
+        {
             Engine.CaptureScreenshot(Path.Combine(folder, name + ".png"));
+            Engine.WindowManager.RequestFrames(0.2);
+            Engine.WindowManager.Wake();
+        }
     }
 
     /// <summary>Everything inside of a component, all the way down.</summary>

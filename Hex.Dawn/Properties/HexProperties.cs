@@ -76,6 +76,7 @@ internal sealed partial class HexProperties
         {
             ShowNav = false,
             CollapsibleSections = true,
+            CompactRows = true,
             CopyValues = true,
             Opaque = false,
             Title = string.Empty,
@@ -129,6 +130,13 @@ internal sealed partial class HexProperties
                 context.Window.RefreshRight();
             }
         });
+
+        context.Documents.Closed += closed =>
+        {
+            if (!ReferenceEquals(shownDocument, closed)) return;
+            shownDocument = null;
+            rowsStale = true;
+        };
 
         Dotnet.Changed += project => projectsChanged = true;
     }

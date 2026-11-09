@@ -37,8 +37,8 @@ public class NotebookEngineeringTests
         int count = 0;
         foreach (var bundle in bundles)
         {
-            ImagePixels? image = bundle["image/svg+xml"] is { } svg ? NotebookRender.Svg(NotebookFile.Text(svg))
-                : bundle["text/latex"] is { } latex ? NotebookRender.Math(NotebookFile.Text(latex)) : null;
+            ImagePixels? image = bundle["image/svg+xml"] is { } svg ? NotebookRender.Svg(NotebookFile.Text(svg), 2.0f).Pixels
+                : bundle["text/latex"] is { } latex ? NotebookRender.Math(NotebookFile.Text(latex), 2.0f).Pixels : null;
             if (image is { } pixels)
                 ImageFile.SavePng(Path.Combine(folder, $"output-{count++}.png"), pixels.Pixels, pixels.Width, pixels.Height);
         }

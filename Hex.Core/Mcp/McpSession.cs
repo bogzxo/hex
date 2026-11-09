@@ -32,6 +32,7 @@ internal sealed class McpSession : IDisposable
         this.input = input;
         this.output = output;
         Server = server;
+        server.Notify = Send;
     }
 
     /// <summary>Starts reading, once <see cref="Closed"/> is set, so a client that's gone at once still says so.</summary>
@@ -127,6 +128,7 @@ internal sealed class McpSession : IDisposable
             return;
 
         closed = true;
+        Server.Forget();
         Closed?.Invoke(this);
         done.Set();
     }

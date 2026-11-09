@@ -22,7 +22,7 @@ let top = compositor.title_bar({
     parent: root,
     icon: "layout",
     title: "@window.title",
-    height: 34,
+    height: 40,
     spacing: 6,
 });
 
@@ -158,4 +158,4 @@ let toasts = compositor.notifications({
     text_scale: 0.14,
 });
 
-compositor.hidden_layers(["files", "code", "table", "extension", "notebook", "image", "values"]);
+compositor.hidden_layers(["files", "code", "table", "extension", "notebook", "markdown", "image", "values"]);

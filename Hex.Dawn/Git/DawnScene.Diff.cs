@@ -15,6 +15,7 @@ internal sealed partial class DawnScene
     {
         git.ShowChange = (repository, path, staged) => ShowGitDiff(repository, path, staged);
         git.ShowChangeAt = (repository, path, line) => ShowGitDiff(repository, path, staged: false, line);
+        git.Discarded += CloseChangesOf;
         commands.Add("Git/menus/changes:open", Said("diff.open_changes"), OpenChangesHere, icon: "diff");
         commands.Add("File/path", Said("diff.compare_saved"), CompareWithSaved, icon: "diff");
         commands.Add("Go/places", Said("diff.next_change"), () => GoToChange(1), "Alt+F5", "triangle-down", UIKeyUse.BoundWhileTyping);
@@ -55,6 +56,21 @@ internal sealed partial class DawnScene
             string after = staged ? repository.Staged(path) ?? string.Empty : editorText ?? (File.Exists(path) ? File.ReadAllText(path) : string.Empty);
             return GitDiffText.Of(before, after);
         }, diff => OpenDiff(path, staged ? "staged" : "changes", Said(staged ? "diff.title_staged" : "diff.title", ("name", Path.GetFileName(path))), diff, line));
+    }
+
+    /// <summary>
+    /// The diffs of what isn't staged in some files closed, their changes were thrown away and there's nothing left in
+    /// them. One left open said the changes were still there. The tab that was on screen stays on screen when it isn't one.
+    /// </summary>
+    private void CloseChangesOf(string[] paths)
+    {
+        HexDocument was = document;
+        List<HexDocument> stale = [.. documents.Where(open => open.DiffOf is { } of && open.DiffKind == "changes" && paths.Any(path => PlatformPaths.Same(path, of)))];
+        foreach (HexDocument diff in stale)
+            CloseDocument(diff);
+
+        if (stale.Count > 0 && !stale.Contains(was) && documents.Contains(was))
+            Show(was);
     }
 
     /// <summary>What isn't saved of the file on screen against what's on the disk, in a diff.</summary>

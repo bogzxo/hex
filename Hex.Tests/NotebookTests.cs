@@ -144,6 +144,28 @@ public class NotebookTests
         Assert.Equal("12", cell.Outputs[1]["data"]!["text/plain"]!.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData("ok", true)]
+    [InlineData("error", false)]
+    [InlineData("aborted", false)]
+    public void Execution_success_requires_a_success_reply_and_idle_and_is_reset_on_rerun(string status, bool success)
+    {
+        var run = new NotebookRun();
+        var cell = new NotebookCell { Kind = CellKind.Code };
+        KernelEvent Event(string type, JsonObject content) => new(Kernel.IOPUB,
+            new JupyterMessage { Header = new JsonObject { ["msg_type"] = type },
+                ParentHeader = new JsonObject { ["msg_id"] = "run" }, Content = content });
+        run.Sent(cell, "run");
+        run.Take(Event("execute_reply", new JsonObject { ["status"] = status }));
+        Assert.False(run.Succeeded(cell));
+        run.Take(Event("status", new JsonObject { ["execution_state"] = "idle" }));
+        Assert.Equal(success, run.Succeeded(cell));
+        run.Sent(cell, "again");
+        Assert.False(run.Succeeded(cell));
+        run.Forget();
+        Assert.False(run.Succeeded(cell));
+    }
+
     [Fact]
     public void A_traceback_s_escapes_come_off_and_its_colours_are_where_they_were()
     {

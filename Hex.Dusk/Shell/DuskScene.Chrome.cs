@@ -21,9 +21,12 @@ internal sealed partial class DuskScene
     {
         scale = Scales.MinBy(known => MathF.Abs(known - scale));
         compositor.Scale = scale;
+        if (HexModes.Together)
+            HexModes.Scale = scale;
 
         // The title bar is the window's and the size of the system's whatever the rest is drawn at
         menu.TextScale = MENU_TEXT / scale;
+        HexModeSwitch.SetScale(modeToggle, scale);
         settings.Scale = scale;
     }
 
@@ -47,8 +50,8 @@ internal sealed partial class DuskScene
     private void BuildPanel()
     {
         panel.WorkingDirectory = options.StartIn;
-        // Every pane says what it is along its top, one on its own too, the text started lower the moment a tab was split
-        panel.PaneTitlesAlways = true;
+        // A single terminal is already named by its tab. Split panes keep their own identity headers.
+        panel.PaneTitlesAlways = false;
         panel.OnChanged += PanelChanged;
         panel.OnTabMenu = ShowTabMenu;
     }
@@ -92,8 +95,8 @@ internal sealed partial class DuskScene
         titleShown = panel.Current?.Title;
         string title = titleShown ?? HexText.Get("dusk_chrome.name");
         top.Title = panel.Tabs.Count > 0
-            ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VERSION))
-            : HexText.Get("dusk_chrome.title", ("version", VERSION));
+            ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VersionLabel))
+            : HexText.Get("dusk_chrome.title", ("version", VersionLabel));
         Engine.WindowManager.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.window_title_tab", ("title", title))
             : HexText.Get("dusk_chrome.name");
@@ -164,7 +167,7 @@ internal sealed partial class DuskScene
         Item(help, HexText.Get("dusk_chrome.keyboard_shortcuts"), "keys", "keyboard");
         Item(help, HexText.Get("dusk_chrome.plugins"), "plugins", "extensions");
         help.AddSeparator();
-        help.Add(HexText.Get("dusk_chrome.about"), () => Notify(HexText.Get("dusk_chrome.about_text", ("version", VERSION))), icon: "info");
+        help.Add(HexText.Get("dusk_chrome.about"), () => Notify(HexText.Get("dusk_chrome.about_text", ("version", VersionLabel))), icon: "info");
 
         RefreshMenuKeys();
     }

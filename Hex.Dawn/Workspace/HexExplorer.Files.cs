@@ -40,6 +40,10 @@ internal sealed partial class HexExplorer
         if (!entry.IsFolder)
             shown.Add(context.Strings.Said("explorer_files.open"), () => context.Documents.Open(entry.Path), icon: "go-to-file");
 
+        // A folder of a project in the Solution view has Solution Explorer's Add first
+        if (entry.IsFolder)
+            AddMenuOf?.Invoke(shown, entry.Path);
+
         shown.Add(context.Strings.Said("explorer_files.new_file"), () => NewFileIn(folder), icon: "new-file");
         shown.Add(context.Strings.Said("explorer_files.new_folder"), () => NewFolderIn(folder), icon: "new-folder");
         shown.AddSeparator();
@@ -52,9 +56,9 @@ internal sealed partial class HexExplorer
         shown.Add(context.Strings.Said("explorer_files.move_to"), () => MoveToFolder(SelectedPaths?.Invoke(entry.Path) ?? [entry.Path]), icon: "folder-opened").IsEnabled = () => !entry.IsRoot;
         shown.Add(context.Strings.Said("explorer_files.duplicate"), () => Duplicate(entry.Path), icon: "clone").IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
-        shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path), icon: "edit").IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.rename_menu"), () => RenamePath(entry.Path), "F2", "edit").IsEnabled = () => !entry.IsRoot;
         shown.Add(context.Strings.Said("explorer_files.reveal"), () => RevealInExplorer(entry.Path), icon: "link-external");
-        shown.Add(context.Strings.Said("explorer_files.delete_menu"), () => DeletePath(entry.Path), icon: "trash").IsEnabled = () => !entry.IsRoot;
+        shown.Add(context.Strings.Said("explorer_files.delete_menu"), () => DeletePath(entry.Path), "Del", "trash").IsEnabled = () => !entry.IsRoot;
         shown.AddSeparator();
         shown.Add(context.Strings.Said("explorer_files.copy_path"), () =>
         {
@@ -83,6 +87,9 @@ internal sealed partial class HexExplorer
 
         return shown;
     }
+
+    /// <summary>The Add menu a folder's row has in the Solution view put into its menu, the scene's.</summary>
+    internal Action<Menu, string>? AddMenuOf { get; set; }
 
     /// <summary>The Properties panel brought up for a row (and the rows selected with it), the scene's.</summary>
     internal Action<string>? PropertiesOf { get; set; }
@@ -156,19 +163,23 @@ internal sealed partial class HexExplorer
         string extension = GuessExtension(folder);
         context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", ShownFolder(folder)), ("extension", extension)), "new" + extension, context.Strings.Said("explorer_files.make"), string.Empty, name =>
         {
+            // A path down from the folder ("util/Tool.cs") makes the folders on the way, the way VS Code does
             name = name.Trim();
-            if (!IsPlainName(name))
+            string[] parts = name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0 || !parts.All(IsPlainName))
             {
                 context.Notices.Say(context.Strings.Said("explorer_files.bad_file_name", ("name", name)), error: true);
                 return;
             }
 
-            if (Path.GetExtension(name).Length == 0)
-                name += extension;
+            if (Path.GetExtension(parts[^1]).Length == 0)
+                parts[^1] += extension;
 
-            lastMadeExtension = Path.GetExtension(name).ToLowerInvariant();
-            MakeFile(Path.Combine(folder, name));
-        });
+            lastMadeExtension = Path.GetExtension(parts[^1]).ToLowerInvariant();
+            for (int down = 0; down < parts.Length; down++)
+                workspace.Expanded.Add(Path.GetFullPath(Path.Combine([folder, .. parts[..down]])));
+            MakeFile(Path.Combine([folder, .. parts]));
+        }, (0, "new".Length));
     }
 
     /// <summary>
@@ -212,6 +223,7 @@ internal sealed partial class HexExplorer
 
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             File.WriteAllText(path, string.Empty);
         }
         catch (Exception e)
@@ -248,10 +260,13 @@ internal sealed partial class HexExplorer
         });
     }
 
-    private void RenamePath(string path)
+    internal void RenamePath(string path)
     {
         string old = Path.GetFileName(path.TrimEnd('\\', '/'));
-        context.Windows.Prompt(context.Strings.Said("explorer_files.rename"), context.Strings.Said("explorer_files.rename_text", ("old", old)), old, context.Strings.Said("explorer_files.rename"), string.Empty, name => RenameTo(path, name));
+
+        // Just the name picked out, not its extension, the way VS Code does. A folder or a dotfile (.gitignore) has all of it
+        int named = !Directory.Exists(path) && old.LastIndexOf('.') is > 0 and int dot ? dot : old.Length;
+        context.Windows.Prompt(context.Strings.Said("explorer_files.rename"), context.Strings.Said("explorer_files.rename_text", ("old", old)), old, context.Strings.Said("explorer_files.rename"), string.Empty, name => RenameTo(path, name), (0, named));
     }
 
     /// <summary>
@@ -404,7 +419,7 @@ internal sealed partial class HexExplorer
         return string.Empty;
     }
 
-    private void DeletePath(string path)
+    internal void DeletePath(string path)
     {
         string name = Path.GetFileName(path.TrimEnd('\\', '/'));
         bool folder = Directory.Exists(path);

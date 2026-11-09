@@ -120,5 +120,12 @@ internal sealed partial class DawnScene
         test.Wait();
     }
 
-    private UINotification? DiskCard() => toasts.Cards.FirstOrDefault(card => !card.Closed && card.Text.Contains("changed on the disk", StringComparison.Ordinal));
+    private UINotification? DiskCard()
+    {
+        string expected = Said("disk_changes.changed_both", ("name", Path.GetFileName(document.Path!)));
+        // Notification cards sentence-case their first character, including a leading filename.
+        if (expected.Length > 0 && char.IsLower(expected[0]))
+            expected = char.ToUpperInvariant(expected[0]) + expected[1..];
+        return toasts.Cards.FirstOrDefault(card => !card.Closed && card.Text == expected);
+    }
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The white H of Hex's icon (Hex.Shell/Assets/hex_icon.png), where it is in the picture, inside the 66 dp a launcher
+  never cuts into. Also the themed icon's monochrome layer, which the launcher colours itself.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <path android:fillColor="#FFFFFF" android:pathData="M40.08,33.36 L44.88,33.36 L44.88,72.24 L40.08,72.24 Z" />
+  <path android:fillColor="#FFFFFF" android:pathData="M63.12,33.36 L67.92,33.36 L67.92,72.24 L63.12,72.24 Z" />
+  <path android:fillColor="#FFFFFF" android:pathData="M44.88,49.68 L63.12,49.68 L63.12,54 L44.88,54 Z" />
+</vector>

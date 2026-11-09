@@ -5,7 +5,7 @@ using Horizon.Engine;
 namespace Hex.Shell;
 
 /// <summary>
-/// Dawn and Dusk in the one window, swapped with Ctrl+Alt+D (or the toggle on the title bar, the View menu, the
+/// Dawn and Dusk in the one window, swapped with Ctrl+Alt+Shift+D (or the toggle on the title bar, the View menu, the
 /// palette). Hex.exe hands this the way to make each mode's scene (<see cref="Host"/>), and a swap sets the other one,
 /// made the first time it's asked for and kept from then on, so the editor's files and the terminal's shells are where
 /// they were left when it comes back (both scenes are <see cref="Scene.Persistent"/> while this hosts them). Nothing
@@ -22,6 +22,12 @@ public static class HexModes
     /// <summary>Whether both modes live in the one window, which is what makes their scenes persistent.</summary>
     public static bool Together => make is not null;
 
+    /// <summary>
+    /// How big the modes are drawn while they share the window, whichever set it last, null until one has. Each takes it
+    /// up as it comes back on screen, Dawn sized itself by the window and Dusk by its own setting and the two didn't match.
+    /// </summary>
+    public static float? Scale { get; set; }
+
     /// <summary>Called on the scene that is about to be left for the other mode, to let go of the keyboard and the pointer.</summary>
     public static event Action<HexMode>? Leaving;
 
@@ -37,6 +43,9 @@ public static class HexModes
     // thread asked for, made on the next update of the scene on screen (see Update)
     private static readonly Dictionary<HexMode, Func<bool>> closing = [];
     private static volatile bool swapWanted;
+
+    // The mode a swap was asked for to bring up, -1 for whichever is the other, so a swap made by hand in between isn't undone
+    private static volatile int bringing = -1;
 
     /// <summary>
     /// What a mode says when the window is to close, true to let it, false having asked its question (unsaved files,
@@ -68,6 +77,20 @@ public static class HexModes
         return true;
     }
 
+    /// <summary>
+    /// Asks for a mode to be put on screen on the next update of the scene that is, from any thread. Nothing when it's
+    /// on screen already or the modes aren't in the one window.
+    /// </summary>
+    public static void Bring(HexMode mode)
+    {
+        if (make is null || Current == mode)
+            return;
+
+        bringing = (int)mode;
+        swapWanted = true;
+        GameEngine.Instance?.WindowManager?.Wake();
+    }
+
     /// <summary>Every update of the scene on screen, a swap the window's thread asked for, made on the thread a swap is made on.</summary>
     public static void Update()
     {
@@ -75,7 +98,10 @@ public static class HexModes
             return;
 
         swapWanted = false;
-        Swap();
+        int wanted = bringing;
+        bringing = -1;
+        if (wanted < 0 || wanted != (int)Current)
+            Swap();
     }
 
     /// <summary>

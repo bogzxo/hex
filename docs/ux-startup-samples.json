@@ -1,0 +1,482 @@
+[
+    {
+        "Build":  "current",
+        "Sample":  1,
+        "FirstFrameMs":  1512,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  1,
+        "FirstFrameMs":  1511,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  2,
+        "FirstFrameMs":  1503,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  2,
+        "FirstFrameMs":  1509,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  3,
+        "FirstFrameMs":  1480,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  3,
+        "FirstFrameMs":  1497,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  4,
+        "FirstFrameMs":  1480,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  4,
+        "FirstFrameMs":  1495,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  5,
+        "FirstFrameMs":  1490,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  5,
+        "FirstFrameMs":  1491,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  6,
+        "FirstFrameMs":  1500,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  6,
+        "FirstFrameMs":  1515,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  7,
+        "FirstFrameMs":  1490,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  7,
+        "FirstFrameMs":  1520,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  8,
+        "FirstFrameMs":  1489,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  8,
+        "FirstFrameMs":  1496,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  9,
+        "FirstFrameMs":  1502,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  9,
+        "FirstFrameMs":  1490,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  10,
+        "FirstFrameMs":  1508,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  10,
+        "FirstFrameMs":  1498,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  11,
+        "FirstFrameMs":  1495,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  11,
+        "FirstFrameMs":  1498,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  12,
+        "FirstFrameMs":  1485,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  12,
+        "FirstFrameMs":  1486,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  13,
+        "FirstFrameMs":  1508,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  13,
+        "FirstFrameMs":  1511,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  200,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  14,
+        "FirstFrameMs":  1511,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  14,
+        "FirstFrameMs":  1503,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  201,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  15,
+        "FirstFrameMs":  1500,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  15,
+        "FirstFrameMs":  1490,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  16,
+        "FirstFrameMs":  1477,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  200,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  16,
+        "FirstFrameMs":  1482,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  17,
+        "FirstFrameMs":  1488,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  17,
+        "FirstFrameMs":  1491,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  18,
+        "FirstFrameMs":  1498,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  18,
+        "FirstFrameMs":  1493,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  19,
+        "FirstFrameMs":  1491,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  19,
+        "FirstFrameMs":  1491,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  20,
+        "FirstFrameMs":  1490,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  20,
+        "FirstFrameMs":  1488,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  21,
+        "FirstFrameMs":  1604,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  21,
+        "FirstFrameMs":  1526,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  22,
+        "FirstFrameMs":  1496,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  22,
+        "FirstFrameMs":  1498,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  23,
+        "FirstFrameMs":  1491,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  23,
+        "FirstFrameMs":  1510,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  200,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  24,
+        "FirstFrameMs":  1508,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  24,
+        "FirstFrameMs":  1498,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  25,
+        "FirstFrameMs":  1489,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  25,
+        "FirstFrameMs":  1512,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  26,
+        "FirstFrameMs":  1501,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  26,
+        "FirstFrameMs":  1466,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  27,
+        "FirstFrameMs":  1481,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  27,
+        "FirstFrameMs":  1502,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  28,
+        "FirstFrameMs":  1506,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  28,
+        "FirstFrameMs":  1487,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  29,
+        "FirstFrameMs":  1488,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  29,
+        "FirstFrameMs":  1506,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  198,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "baseline",
+        "Sample":  30,
+        "FirstFrameMs":  1469,
+        "FirstFrameWorkingSetMB":  164,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    },
+    {
+        "Build":  "current",
+        "Sample":  30,
+        "FirstFrameMs":  1505,
+        "FirstFrameWorkingSetMB":  163,
+        "FirstFramePrivateMB":  199,
+        "FirstFrameHeapMB":  18
+    }
+]
