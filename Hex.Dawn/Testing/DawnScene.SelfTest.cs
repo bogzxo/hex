@@ -129,6 +129,7 @@ internal sealed partial class DawnScene
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
+        ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),

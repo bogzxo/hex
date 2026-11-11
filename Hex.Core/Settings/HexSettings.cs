@@ -47,6 +47,9 @@ internal sealed partial class HexSettings
     /// <summary>Shared mouse-wheel scrolling distance throughout Dawn and Dusk, relative to the default.</summary>
     public float ScrollSpeed = 1.0f;
 
+    /// <summary>Middle-mouse scrolling speed throughout Dawn and Dusk, relative to the default.</summary>
+    public float MiddleScrollSpeed = 1.0f;
+
     /// <summary>Whether what is selected in the canvas can be dragged bigger by its edges.</summary>
     public bool CanvasHandles = true;
 
@@ -382,6 +385,7 @@ internal sealed partial class HexSettings
         Snap = Number(values, "snap", Snap);
         CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
         ScrollSpeed = ScrollSpeedOf(Number(values, "scroll_speed", ScrollSpeed));
+        MiddleScrollSpeed = ScrollSpeedOf(Number(values, "middle_scroll_speed", MiddleScrollSpeed));
         if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
         if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
         BackdropOn = Flag(values, "backdrop", BackdropOn);
@@ -675,6 +679,7 @@ internal sealed partial class HexSettings
             .Add("snap", Snap)
             .Add("code_zoom", CodeZoom)
             .Add("scroll_speed", ScrollSpeed)
+            .Add("middle_scroll_speed", MiddleScrollSpeed)
             .Add("canvas_handles", CanvasHandles)
             .Add("reopen_last", ReopenLast)
             .Add("backdrop", BackdropOn)

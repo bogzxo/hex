@@ -1,43 +1,24 @@
-# Hex 2.9.0 smallman
+# Hex 2.9.1 smallman
 
-A smaller gap between writing something and getting it to run. C#, Python and C++ have more of their own tools
-inside Hex now, from setting up a language server to building a project, running its tests and stopping in the
-debugger. The terminal knows its way around dotnet too.
+Better scrolling and clearer answers in Agents, with a few more of the editor's details brought into line.
 
-## code
+## agents
 
-- language server setup says when npm is missing, with a way to get it before trying to install a server that needs it
-- C#, Python and C++ use more of what their native language servers provide: completion documentation, signature
-  help and overloads, related diagnostics, folding, formatting and navigation
-- go to definitions with more than one result, follow references and call or type hierarchies, and open framework
-  metadata and native headers without treating them as files to save
-- rename and code actions check that their edits still belong to the file and workspace they were asked for
-- Python environments can be created and selected in Hex, and the editor, terminal, tests and debugger follow the choice
+- replies and thinking use the document renderer for headings, lists, links and code blocks
+- Markdown tables have proper columns, alignment and wrapping, including in a narrow sidebar
+- file references stay clickable without rewriting links or the contents of code blocks
 
-## projects and tests
+## scrolling
 
-- .NET solutions, project references and NuGet packages have their own project commands, with launch profiles,
-  arguments, environment variables and target frameworks carried through to running and debugging
-- the terminal completes dotnet commands, SDK options, project names and NuGet commands, and compiler errors lead
-  back to their files through Problems
-- Test Explorer runs .NET, Python unittest and pytest, and CMake tests, keeps results with the project and target
-  framework they came from, and can retry the failed variants
-- cancelling or restarting tests and debug builds no longer lets an old request start something after it was stopped
+- middle-mouse scrolling moves lists, file trees and tables continuously instead of jumping through wheel notches
+- middle-mouse scroll speed has its own setting under Appearance · Motion, from 0.25× to 5×, shared by Dawn and Dusk
+- rapid scrolling no longer lets the overscroll animation cover a strip of content at the viewport's edge
+- long words and inline code wrap within narrow Markdown table cells
 
-## debugging
+## editor
 
-- Pause works for a running C# program, including when the runtime first stops in its own helper code
-- attach to a running .NET process from a picker or by PID, and detach without ending the program it belongs to
-- inspect loaded modules, browse disassembly and memory, and use function, instruction and data breakpoints where
-  the debugger supports them
-- watches and variables have richer completion, editing, hexadecimal values and paging for larger results
-- source supplied by the debugger opens as a read-only snapshot, with stepping and navigation kept in the same session
+- C# language-server settings enable analyzer diagnostics, including code-style and naming suggestions where the server supports them
+- empty diagnostic messages stay out of the visible list while their code actions remain available
+- Dawn and Dusk use a grayscale Hex logo in the title bar, tinted by the current theme
 
-## fixed
-
-- breakpoint shortcuts no longer share a key with the extensions' sort-lines command
-- read-only debugger and generated source stays out of file-only commands and save dialogs
-- notebook wrapping, canvas resizing and output handling behave more consistently while moving through a document
-- editor navigation, dialogs and large files have had another round of fixes
-
-**Full Changelog**: https://github.com/bogzxo/hex/compare/v2.8.8...v2.9.0
+**Full Changelog**: https://github.com/bogzxo/hex/compare/v2.9.0...v2.9.1

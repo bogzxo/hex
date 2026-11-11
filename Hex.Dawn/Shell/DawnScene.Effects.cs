@@ -76,6 +76,7 @@ internal sealed partial class DawnScene
         // a layout being designed moves the way the game it is for will have it
         compositor.AnimationSpeed = settings.UiAnimation;
         compositor.ScrollSpeed = settings.ScrollSpeed;
+        compositor.MiddleScrollSpeed = settings.MiddleScrollSpeed;
         ApplyTerminalMotion();
 
         if (!EffectsOn)

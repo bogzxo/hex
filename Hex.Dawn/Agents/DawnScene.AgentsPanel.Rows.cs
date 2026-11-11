@@ -315,14 +315,10 @@ internal sealed partial class DawnScene
                 return Bubble(entry, skin);
 
             case HexAgentEntryKind.Text:
-                {
-                Label said = Text(WithPlaces(entry.Text), 0.17f, markdown: true);
-                said.OnLink = OpenAgentLink;
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(6, 8, 8, 10) }.With(said);
-            }
+                return AgentMarkdown(entry.Text, thinking: false);
 
             case HexAgentEntryKind.Thinking:
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(10, 3, 10, 6) }.With(Text(entry.Text, 0.13f, dim: true, markdown: true).Also(label => label.OnLink = OpenAgentLink));
+                return AgentMarkdown(entry.Text, thinking: true);
 
             case HexAgentEntryKind.Note:
                 return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(UIRichText.Literal(entry.Text), 0.125f, dim: true));
@@ -338,6 +334,26 @@ internal sealed partial class DawnScene
             default:
                 return ToolRow(chat, entry, skin);
         }
+    }
+
+    private UIComponent AgentMarkdown(string text, bool thinking)
+    {
+        var padding = thinking ? new UIEdges(10, 3, 10, 6) : new UIEdges(6, 8, 8, 10);
+        var panel = new Panel { Fill = UIFill.Horizontal, Padding = padding };
+        var written = panel.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+        // Replies are documents, including their tables and code blocks, rather than one compact label.
+        WriteMarkdown(written, WithPlaces(text), string.Empty);
+        foreach (var child in Descendants(written))
+        {
+            if (child is Label label)
+            {
+                label.OnLink = OpenAgentLink;
+                label.Dim = thinking;
+            }
+            else if (child is NotebookTablePanel table) table.Strip.Visible = false;
+        }
+        FitWritten(written, MathF.Max(32, AgentsWidth() - padding.Total.X), keepWidth: true);
+        return panel;
     }
 
     // What was asked, a raised bubble at the right, as wide as its longest line and no wider than most of the room

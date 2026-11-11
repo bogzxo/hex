@@ -372,6 +372,7 @@ internal sealed partial class DawnScene
             "glass_bend" => new NumberValue(hex.settings.GlassBend),
             "ui_animation" => new NumberValue(hex.settings.UiAnimation),
             "scroll_speed" => new NumberValue(hex.settings.ScrollSpeed),
+            "middle_scroll_speed" => new NumberValue(hex.settings.MiddleScrollSpeed),
             "caret_glide" => new NumberValue(hex.settings.CaretGlide),
             "trim_whitespace" => Values.Bool(hex.settings.TrimWhitespace),
             "final_newline" => Values.Bool(hex.settings.FinalNewline),
@@ -629,6 +630,10 @@ internal sealed partial class DawnScene
                 case ("scroll_speed", NumberValue scroll):
                     settings.ScrollSpeed = HexSettings.ScrollSpeedOf(scroll.Value);
                     hex.compositor.ScrollSpeed = settings.ScrollSpeed;
+                    break;
+                case ("middle_scroll_speed", NumberValue middleScroll):
+                    settings.MiddleScrollSpeed = HexSettings.ScrollSpeedOf(middleScroll.Value);
+                    hex.compositor.MiddleScrollSpeed = settings.MiddleScrollSpeed;
                     break;
                 case ("caret_glide", NumberValue glide):
                     settings.CaretGlide = Math.Clamp(glide.Value, 0.0f, 0.3f);

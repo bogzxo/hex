@@ -148,6 +148,7 @@ internal sealed partial class DawnScene
         ["glass_bend"] = (0.0f, 24.0f),
         ["ui_animation"] = (0.0f, 3.0f),
         ["scroll_speed"] = (0.25f, 5.0f),
+        ["middle_scroll_speed"] = (0.25f, 5.0f),
         ["caret_glide"] = (0.0f, 0.3f),
         ["caret_fast_after"] = (0.0f, 3.0f),
         ["caret_fast_rate"] = (30.0f, 200.0f),

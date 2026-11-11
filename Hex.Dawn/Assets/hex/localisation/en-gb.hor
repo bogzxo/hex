@@ -2176,6 +2176,8 @@ let strings = {
         render_fallback_settings: "Rendering settings",
         render_scale_now_help: "What the render scale came to on this screen, the share of each side, the pixels the frame is drawn with and the window's.",
         scroll_speed_title: "Scroll speed",
+        middle_scroll_speed_title: "Middle-mouse scroll speed",
+        middle_scroll_speed_help: "Speed when holding the middle mouse button or using click-to-autoscroll across Hex. Move farther from the starting point to scroll faster. 1× is the default; mouse-wheel speed is separate.",
         scroll_speed_help: "Mouse-wheel distance across Hex: code, notebooks, previews, terminals, panels, lists and menus. 1× is the default. Zoom and value-editing gestures keep their normal steps.",
         effects_title: "Effects",
         effects_help: "None of them, subtle (the lights switched on under this, and a burst of sparks for a save or a long command that went well when the sparks are on) or all (sparks off the caret as you type as well). The glass and the caret's glide have switches of their own.",

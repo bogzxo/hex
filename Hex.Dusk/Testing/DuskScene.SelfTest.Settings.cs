@@ -50,6 +50,11 @@ internal sealed partial class DuskScene
         test.Check("settings: universal scroll speed is shared and live in Dusk", () =>
             SettingsPage!.Settings.Any(setting => setting.Key == "scroll_speed") && (host.Settings.Path is null || compositor.ScrollSpeed == 2));
         test.Run(() => SettingsPage!.Enter("scroll_speed", new NumberValue(scrollSpeed)));
+        float middleSpeed = compositor.MiddleScrollSpeed;
+        test.Run(() => SettingsPage!.Enter("middle_scroll_speed", new NumberValue(0.5f)));
+        test.Check("settings: middle-mouse scroll speed is shared and live in Dusk", () =>
+            SettingsPage!.Settings.Any(setting => setting.Key == "middle_scroll_speed") && (host.Settings.Path is null || compositor.MiddleScrollSpeed == 0.5f));
+        test.Run(() => SettingsPage!.Enter("middle_scroll_speed", new NumberValue(middleSpeed)));
         test.Run(() =>
         {
             SettingsPage!.Reset("tab_size");

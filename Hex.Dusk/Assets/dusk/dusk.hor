@@ -12,7 +12,7 @@ let root = compositor.stack({
 
 let top = compositor.title_bar({
     parent: root,
-    icon: "terminal",
+    icon_file: "Assets/hex_icon_gray.png",
     title: "Dusk",
     height: 40,
     spacing: 0
