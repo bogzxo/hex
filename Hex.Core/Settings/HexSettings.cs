@@ -24,7 +24,14 @@ internal sealed partial class HexSettings
     public static readonly float[] Grids = [0.0f, 2.0f, 4.0f, 8.0f, 16.0f];
 
     /// <summary>Which skin the editor itself is drawn in (the flat one unless somebody fancies otherwise) and in which of its themes.</summary>
-    public string EditorSkin = "flat", EditorTheme = "graphite";
+    public string EditorSkin = USUAL_SKIN, EditorTheme = USUAL_THEME;
+
+    /// <summary>
+    /// What Hex comes in: the flat skin in Solstice for the editor and Solstice's own theme of Dusk for the terminal,
+    /// which is the Solstice look (HexLooks). The one place they're said, the settings window's reset and whether a row
+    /// reads as changed go by these too.
+    /// </summary>
+    public const string USUAL_SKIN = "flat", USUAL_THEME = "solstice", USUAL_TERMINAL_THEME = "solstice_dusk", USUAL_LOOK = "Solstice";
 
     /// <summary>How wide the lists on the left and the properties on the right were dragged, 0 for as their layout has them.</summary>
     public float LeftWidth, RightWidth;
@@ -36,7 +43,7 @@ internal sealed partial class HexSettings
     public bool SideBarHidden, PanelHidden, PropertiesHidden;
 
     /// <summary>Whether the panel under the editor was folded down to its tabs by its chevron.</summary>
-    public bool PanelCollapsed;
+    public bool PanelCollapsed = true;
 
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
@@ -110,7 +117,7 @@ internal sealed partial class HexSettings
     public bool EffectCaretGlow, EffectSpotlight, EffectRipples, EffectTrail;
 
     /// <summary>The look picked last in the settings by its name (one of Hex's three or one of the user's), empty for none.</summary>
-    public string Look = "Flat";
+    public string Look = USUAL_LOOK;
 
     /// <summary>
     /// The looks the user saved, in the order they were made, each the visual settings it sets by their keys in this section
@@ -372,143 +379,8 @@ internal sealed partial class HexSettings
     /// </summary>
     private void Apply(Dictionary<string, IRuntimeValue> values)
     {
-        if (values.TryGetValue("editor_skin", out var skin) && skin is StringValue skinned) EditorSkin = skinned.Value;
-        if (values.TryGetValue("editor_theme", out var theme) && theme is StringValue themed) EditorTheme = themed.Value;
-        LeftWidth = Number(values, "left_width", LeftWidth);
-        RightWidth = Number(values, "right_width", RightWidth);
-        LayersHeight = Number(values, "layers_height", LayersHeight);
-        PanelHeight = Number(values, "panel_height", PanelHeight);
-        SideBarHidden = Flag(values, "side_bar_hidden", SideBarHidden);
-        PanelHidden = Flag(values, "panel_hidden", PanelHidden);
-        PropertiesHidden = Flag(values, "properties_hidden", PropertiesHidden);
-        PanelCollapsed = Flag(values, "panel_collapsed", PanelCollapsed);
-        Snap = Number(values, "snap", Snap);
-        CodeZoom = Math.Clamp(Number(values, "code_zoom", CodeZoom), 0.5f, 3.0f);
-        ScrollSpeed = ScrollSpeedOf(Number(values, "scroll_speed", ScrollSpeed));
-        MiddleScrollSpeed = ScrollSpeedOf(Number(values, "middle_scroll_speed", MiddleScrollSpeed));
-        if (values.TryGetValue("canvas_handles", out var handles) && handles is BooleanValue handled) CanvasHandles = handled.Value;
-        if (values.TryGetValue("reopen_last", out var reopen) && reopen is BooleanValue reopened) ReopenLast = reopened.Value;
-        BackdropOn = Flag(values, "backdrop", BackdropOn);
-        BackdropWrap = Flag(values, "backdrop_wrap", BackdropWrap);
-        BackdropTerminal = Flag(values, "backdrop_terminal", BackdropTerminal);
-        TerminalBackdropScale = Math.Clamp(Number(values, "terminal_backdrop_scale", TerminalBackdropScale), 0.05f, 1.5f);
-        TerminalBackdropAcross = Math.Clamp(Number(values, "terminal_backdrop_across", TerminalBackdropAcross), -0.5f, 1.0f);
-        TerminalBackdropUp = Math.Clamp(Number(values, "terminal_backdrop_up", TerminalBackdropUp), -0.5f, 1.0f);
-        TerminalBackdropStretch = Math.Clamp(Number(values, "terminal_backdrop_stretch", TerminalBackdropStretch), LEAST_STRETCH, MOST_STRETCH);
-        BackdropWrapMargin = Math.Clamp(Number(values, "backdrop_wrap_margin", BackdropWrapMargin), 0.0f, 80.0f);
-        WrapFlow = Math.Clamp(Number(values, "wrap_flow", WrapFlow), 0.0f, 60.0f);
-        WrapCode = Flag(values, "wrap_code", WrapCode);
-        GitBlame = Flag(values, "git_blame", GitBlame);
-        Minimap = Flag(values, "minimap", Minimap);
-        InlayHints = Flag(values, "inlay_hints", InlayHints);
-        CodeLensReferences = Flag(values, "code_lens_references", CodeLensReferences);
-        SemanticHighlighting = Flag(values, "semantic_highlighting", SemanticHighlighting);
-        // A file from before there were Visual Studio's keys, in the Visual Studio look, has them as the look has now
-        bool lookOfVisualStudio = values.TryGetValue("look", out var lookNamed) && lookNamed is StringValue { Value: "Visual Studio" };
-        VisualStudioKeys = Flag(values, "visual_studio_keys", VisualStudioKeys || lookOfVisualStudio);
-        VisualStudioKeysChosen = Flag(values, "visual_studio_keys_chosen", VisualStudioKeysChosen);
-        if (values.TryGetValue("csharp_colors", out var csharp) && csharp is StringValue { Value: "resharper" or "visual_studio" or "skin" } colored) CSharpColors = colored.Value;
-        McpServer = Flag(values, "mcp_server", McpServer);
-        GitAutoFetch = Flag(values, "git_autofetch", GitAutoFetch);
-        GitAutoFetchInterval = Math.Clamp(Number(values, "git_autofetch_interval", GitAutoFetchInterval), 1.0f, 60.0f);
-        if (values.TryGetValue("git_pull_mode", out var pull) && pull is StringValue { Value: "default" or "merge" or "rebase" or "ff_only" } pulled) GitPullMode = pulled.Value;
-        GitConfirmSync = Flag(values, "git_confirm_sync", GitConfirmSync);
-        if (values.TryGetValue("git_smart_commit", out var smart) && smart is StringValue { Value: "ask" or "always" or "never" } smartly) GitSmartCommit = smartly.Value;
-        GitSubjectLength = (int)Math.Clamp(Number(values, "git_subject_length", GitSubjectLength), 20.0f, 100.0f);
-        GitLineLength = (int)Math.Clamp(Number(values, "git_line_length", GitLineLength), 40.0f, 120.0f);
-        if (values.TryGetValue("render_scale", out var scaled) && scaled is StringValue { Value: "auto" or "native" or "manual" } scaling) RenderScale = scaling.Value;
-        if (values.TryGetValue("render_upscaler", out var upscaled) && upscaled is StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler) RenderUpscaler = upscaler.Value;
-        if (values.TryGetValue("render_composition", out var composed) && composed is StringValue { Value: "native_ui" or "whole_frame" } composition) RenderComposition = composition.Value;
-        RenderScalePercent = Math.Clamp(Number(values, "render_scale_percent", RenderScalePercent), 25.0f, 100.0f);
-        RenderSharpness = Math.Clamp(Number(values, "render_sharpness", RenderSharpness), 0.0f, 1.0f);
-        if (values.TryGetValue("effects", out var effects) && effects is StringValue { Value: "none" or "subtle" or "all" } effected) Effects = effected.Value;
-        EffectSparks = Flag(values, "effect_sparks", EffectSparks);
-        EffectMotion = Flag(values, "effect_motion", EffectMotion);
-        EffectGlass = Flag(values, "effect_glass", EffectGlass);
-        EffectCaretGlow = Flag(values, "effect_caret_glow", EffectCaretGlow);
-        EffectSpotlight = Flag(values, "effect_spotlight", EffectSpotlight);
-        EffectRipples = Flag(values, "effect_ripples", EffectRipples);
-        EffectTrail = Flag(values, "effect_trail", EffectTrail);
-        GlassBlur = Math.Clamp(Number(values, "glass_blur", GlassBlur), 0.0f, 64.0f);
-        GlassClarity = Math.Clamp(Number(values, "glass_clarity", GlassClarity), 0.0f, 1.0f);
-        GlassRim = Math.Clamp(Number(values, "glass_rim", GlassRim), 0.0f, 1.0f);
-        GlassBend = Math.Clamp(Number(values, "glass_bend", GlassBend), 0.0f, 24.0f);
-        UiAnimation = Math.Clamp(Number(values, "ui_animation", UiAnimation), 0.0f, 3.0f);
-        CaretGlide = Math.Clamp(Number(values, "caret_glide", CaretGlide), 0.0f, 0.3f);
-        if (values.TryGetValue("look", out var look) && look is StringValue looked) Look = looked.Value;
-        if (values.TryGetValue("looks", out var looks) && looks is ObjectValue saved)
-        {
-            foreach (var (name, its) in saved.Properties)
-            {
-                if (its is ObjectValue set)
-                    Looks.Add((name, new Dictionary<string, IRuntimeValue>(set.Properties, StringComparer.Ordinal)));
-            }
-        }
-        TabSize = (int)Math.Clamp(Number(values, "tab_size", TabSize), 1.0f, 16.0f);
-        InsertSpaces = Flag(values, "insert_spaces", InsertSpaces);
-        DetectIndentation = Flag(values, "detect_indentation", DetectIndentation);
-        LineNumbers = Flag(values, "line_numbers", LineNumbers);
-        IndentGuides = Flag(values, "indent_guides", IndentGuides);
-        UseEditorConfig = Flag(values, "editorconfig", UseEditorConfig);
-        if (values.TryGetValue("rulers", out var rulers) && rulers is StringValue rulersSaid) Rulers = ParseRulers(rulersSaid.Value);
-        if (values.TryGetValue("render_whitespace", out var whitespace) && whitespace is StringValue { Value: "none" or "selection" or "boundary" or "all" } whitespaced) RenderWhitespace = whitespaced.Value;
-        if (values.TryGetValue("cursor_style", out var cursor) && cursor is StringValue { Value: "line" or "block" or "underline" } cursored) CursorStyle = cursored.Value;
-        CaretFastAfter = Math.Clamp(Number(values, "caret_fast_after", CaretFastAfter), 0.0f, 3.0f);
-        CaretFastRate = Math.Clamp(Number(values, "caret_fast_rate", CaretFastRate), 30.0f, 200.0f);
-        StickyScroll = Flag(values, "sticky_scroll", StickyScroll);
-        FormatOnSave = Flag(values, "format_on_save", FormatOnSave);
-        FormatOnType = Flag(values, "format_on_type", FormatOnType);
-        TrimWhitespace = Flag(values, "trim_whitespace", TrimWhitespace);
-        FinalNewline = Flag(values, "final_newline", FinalNewline);
-        AutoSave = Flag(values, "auto_save", AutoSave);
-        AutoSaveDelay = Math.Clamp(Number(values, "auto_save_delay", AutoSaveDelay), 0.25f, 60.0f);
-        RunToTerminal = Flag(values, "run_to_terminal", RunToTerminal);
-        DebugJustMyCode = Flag(values, "debug_just_my_code", DebugJustMyCode);
-        if (values.TryGetValue("debugger_path", out var debuggerAt) && debuggerAt is StringValue debuggerNamed) DebuggerPath = debuggerNamed.Value;
-        if (values.GetValueOrDefault("exception_breakpoints") is ObjectValue exceptionFilters)
-        {
-            ExceptionBreakpoints.Clear();
-            foreach (var (name, value) in exceptionFilters.Properties)
-                if (value is BooleanValue enabled) ExceptionBreakpoints[name] = enabled.Value;
-        }
-        if (values.TryGetValue("git_account", out var account) && account is StringValue accountNamed) GitAccount = accountNamed.Value.Trim();
-        Names(values, "language_server_paths", ServerPaths);
-        if (values.ContainsKey("files_associations"))
-        {
-            FileAssociations.Clear();
-            Names(values, "files_associations", FileAssociations);
-        }
-        if (values.GetValueOrDefault("files_exclude") is ListValue filesExclude) FilesExclude = Patterns(filesExclude);
-        if (values.GetValueOrDefault("search_exclude") is ListValue searchExclude) SearchExclude = Patterns(searchExclude);
-        SearchUseIgnoreFiles = Flag(values, "search_use_ignore_files", SearchUseIgnoreFiles);
-        ReadLanguageOverrides(values);
-        ReadAddedServers(values);
-        Names(values, "language_server_latest", ServerLatest);
-        Names(values, "language_server_skipped", ServerSkipped);
-        ServerUpdates = Flag(values, "language_server_updates", ServerUpdates);
-        if (values.TryGetValue("language_servers_checked", out var checkedAt) && checkedAt is StringValue checkedWhen) ServersChecked = checkedWhen.Value;
-        if (values.TryGetValue("code_font", out var font) && font is StringValue fontNamed) CodeFont = fontNamed.Value;
-        if (values.TryGetValue("backdrop_image", out var picture) && picture is StringValue pictured) BackdropImage = pictured.Value;
-        BackdropScale = Math.Clamp(Number(values, "backdrop_scale", BackdropScale), 0.05f, 1.5f);
-        BackdropAcross = Math.Clamp(Number(values, "backdrop_across", BackdropAcross), -0.5f, 1.0f);
-        BackdropUp = Math.Clamp(Number(values, "backdrop_up", BackdropUp), -0.5f, 1.0f);
-        BackdropStretch = Math.Clamp(Number(values, "backdrop_stretch", BackdropStretch), LEAST_STRETCH, MOST_STRETCH);
-        BackdropOpacity = Math.Clamp(Number(values, "backdrop_opacity", BackdropOpacity), 0.0f, 1.0f);
-        if (values.TryGetValue("last_workspace", out var last) && last is StringValue lastWorkspace) LastWorkspace = lastWorkspace.Value;
-        if (values.TryGetValue("disabled_extensions", out var disabled) && disabled is ListValue off)
-        {
-            foreach (IRuntimeValue name in off.Items)
-                if (name is StringValue { Value: { } named }) DisabledExtensions.Add(named);
-        }
-
-        if (values.TryGetValue("extension_catalog", out var catalog) && catalog is StringValue { Value.Length: > 0 } catalogNamed) ExtensionCatalog = catalogNamed.Value;
-        ExtensionUpdates = Flag(values, "extension_updates", ExtensionUpdates);
-        if (values.TryGetValue("extensions_checked", out var catalogLooked) && catalogLooked is StringValue catalogLookedWhen) ExtensionsChecked = catalogLookedWhen.Value;
-        if (values.TryGetValue("catalog_extensions", out var installed) && installed is ListValue fromCatalog)
-        {
-            foreach (IRuntimeValue name in fromCatalog.Items)
-                if (name is StringValue { Value: { } named }) CatalogExtensions.Add(named);
-        }
+        foreach (HexSettingRow row in Rows)
+            row.Read(this, values);
     }
 
     internal static float ScrollSpeedOf(float value) => float.IsFinite(value) ? Math.Clamp(value, 0.25f, 5) : 1;
@@ -637,13 +509,22 @@ internal sealed partial class HexSettings
                 settings.Add(key, own);
         }
 
+        // What the file had that is no setting of this Hex's is written back as it was: a newer Hex's setting, or a key
+        // somebody mistyped and would rather find again than have vanish. Only what the rows write was written, so one
+        // save by an older Hex dropped every setting a newer one had added
+        foreach (var (key, value) in userValues.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (!IsKnown(key))
+                settings.Add(key, value);
+        }
+
         // the editor's and the extensions' sections of Hex's one settings file, the terminal's kept as it is
         string text = Horizon.UI.Components.SettingsSections.Write(path, (Horizon.UI.Components.SettingsSections.EDITOR, settings),
             (Horizon.UI.Components.SettingsSections.EXTENSIONS, extensions));
 
         try
         {
-            File.WriteAllText(path, text);
+            DocumentFile.Write(path, text, new System.Text.UTF8Encoding(false));
             return null;
         }
         catch (Exception e)
@@ -655,127 +536,9 @@ internal sealed partial class HexSettings
     /// <summary>Every one of the editor's settings as it is now by its key, in the order the file has them.</summary>
     public Dictionary<string, IRuntimeValue> EditorValues()
     {
-        // the user's looks in the order they were made, each the values it sets
-        var looks = new HIDLObject();
-        foreach (var (name, values) in Looks)
-        {
-            var its = new HIDLObject();
-            foreach (var (key, value) in values)
-                its.Add(key, value);
-            looks.Add(name, its);
-        }
-
-        return new HIDLObject()
-            .Add("editor_skin", EditorSkin)
-            .Add("editor_theme", EditorTheme)
-            .Add("left_width", LeftWidth)
-            .Add("right_width", RightWidth)
-            .Add("layers_height", LayersHeight)
-            .Add("panel_height", PanelHeight)
-            .Add("side_bar_hidden", SideBarHidden)
-            .Add("panel_hidden", PanelHidden)
-            .Add("properties_hidden", PropertiesHidden)
-            .Add("panel_collapsed", PanelCollapsed)
-            .Add("snap", Snap)
-            .Add("code_zoom", CodeZoom)
-            .Add("scroll_speed", ScrollSpeed)
-            .Add("middle_scroll_speed", MiddleScrollSpeed)
-            .Add("canvas_handles", CanvasHandles)
-            .Add("reopen_last", ReopenLast)
-            .Add("backdrop", BackdropOn)
-            .Add("backdrop_wrap", BackdropWrap)
-            .Add("backdrop_terminal", BackdropTerminal)
-            .Add("terminal_backdrop_scale", TerminalBackdropScale)
-            .Add("terminal_backdrop_across", TerminalBackdropAcross)
-            .Add("terminal_backdrop_up", TerminalBackdropUp)
-            .Add("terminal_backdrop_stretch", TerminalBackdropStretch)
-            .Add("backdrop_wrap_margin", BackdropWrapMargin)
-            .Add("wrap_flow", WrapFlow)
-            .Add("wrap_code", WrapCode)
-            .Add("git_blame", GitBlame)
-            .Add("minimap", Minimap)
-            .Add("inlay_hints", InlayHints)
-            .Add("code_lens_references", CodeLensReferences)
-            .Add("semantic_highlighting", SemanticHighlighting)
-            .Add("visual_studio_keys", VisualStudioKeys)
-            .Add("visual_studio_keys_chosen", VisualStudioKeysChosen)
-            .Add("csharp_colors", CSharpColors)
-            .Add("mcp_server", McpServer)
-            .Add("git_autofetch", GitAutoFetch)
-            .Add("git_autofetch_interval", GitAutoFetchInterval)
-            .Add("git_pull_mode", GitPullMode)
-            .Add("git_account", GitAccount)
-            .Add("git_confirm_sync", GitConfirmSync)
-            .Add("git_smart_commit", GitSmartCommit)
-            .Add("git_subject_length", GitSubjectLength)
-            .Add("git_line_length", GitLineLength)
-            .Add("render_scale", RenderScale)
-            .Add("render_scale_percent", RenderScalePercent)
-            .Add("render_upscaler", RenderUpscaler)
-            .Add("render_sharpness", RenderSharpness)
-            .Add("render_composition", RenderComposition)
-            .Add("effects", Effects)
-            .Add("effect_sparks", EffectSparks)
-            .Add("effect_motion", EffectMotion)
-            .Add("effect_glass", EffectGlass)
-            .Add("effect_caret_glow", EffectCaretGlow)
-            .Add("effect_spotlight", EffectSpotlight)
-            .Add("effect_ripples", EffectRipples)
-            .Add("effect_trail", EffectTrail)
-            .Add("glass_blur", GlassBlur)
-            .Add("glass_clarity", GlassClarity)
-            .Add("glass_rim", GlassRim)
-            .Add("glass_bend", GlassBend)
-            .Add("ui_animation", UiAnimation)
-            .Add("caret_glide", CaretGlide)
-            .Add("look", Look)
-            .Add("looks", looks)
-            .Add("tab_size", TabSize)
-            .Add("insert_spaces", InsertSpaces)
-            .Add("detect_indentation", DetectIndentation)
-            .Add("line_numbers", LineNumbers)
-            .Add("indent_guides", IndentGuides)
-            .Add("editorconfig", UseEditorConfig)
-            .Add("rulers", RulersText(Rulers))
-            .Add("render_whitespace", RenderWhitespace)
-            .Add("cursor_style", CursorStyle)
-            .Add("caret_fast_after", CaretFastAfter)
-            .Add("caret_fast_rate", CaretFastRate)
-            .Add("sticky_scroll", StickyScroll)
-            .Add("format_on_save", FormatOnSave)
-            .Add("format_on_type", FormatOnType)
-            .Add("trim_whitespace", TrimWhitespace)
-            .Add("final_newline", FinalNewline)
-            .Add("auto_save", AutoSave)
-            .Add("auto_save_delay", AutoSaveDelay)
-            .Add("run_to_terminal", RunToTerminal)
-            .Add("debugger_path", DebuggerPath.Replace('\\', '/'))
-            .Add("debug_just_my_code", DebugJustMyCode)
-            .Add("exception_breakpoints", ExceptionBreakpointsObject())
-            .Add("language_server_paths", Named(ServerPaths, paths: true))
-            .Add("files_associations", Named(FileAssociations))
-            .Add("files_exclude", Horizon.HIDL.Library.Natives.List(FilesExclude))
-            .Add("search_exclude", Horizon.HIDL.Library.Natives.List(SearchExclude))
-            .Add("search_use_ignore_files", SearchUseIgnoreFiles)
-            .Add(LANGUAGE_OVERRIDES, LanguageOverridesObject())
-            .Add("language_servers_added", AddedServersObject())
-            .Add("language_server_updates", ServerUpdates)
-            .Add("language_servers_checked", ServersChecked)
-            .Add("language_server_latest", Named(ServerLatest))
-            .Add("language_server_skipped", Named(ServerSkipped))
-            .Add("code_font", CodeFont)
-            .Add("backdrop_image", BackdropImage.Replace('\\', '/'))
-            .Add("backdrop_scale", BackdropScale)
-            .Add("backdrop_across", BackdropAcross)
-            .Add("backdrop_up", BackdropUp)
-            .Add("backdrop_stretch", BackdropStretch)
-            .Add("backdrop_opacity", BackdropOpacity)
-            .Add("last_workspace", LastWorkspace.Replace('\\', '/'))
-            .Add("disabled_extensions", Horizon.HIDL.Library.Natives.List(DisabledExtensions.Order(StringComparer.OrdinalIgnoreCase)))
-            .Add("extension_catalog", ExtensionCatalog.Replace('\\', '/'))
-            .Add("extension_updates", ExtensionUpdates)
-            .Add("extensions_checked", ExtensionsChecked)
-            .Add("catalog_extensions", Horizon.HIDL.Library.Natives.List(CatalogExtensions.Order(StringComparer.OrdinalIgnoreCase)))
-            .ToValue().Properties;
+        var written = new HIDLObject();
+        foreach (HexSettingRow row in Rows)
+            row.Write(this, written);
+        return written.ToValue().Properties;
     }
 }

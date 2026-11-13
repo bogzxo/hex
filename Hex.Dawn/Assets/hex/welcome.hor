@@ -7,14 +7,15 @@ let welcome = compositor.panel({
     color: vec(0.065, 0.07, 0.092, 1),
 });
 
-// Scroll on short windows; keep the working column centered horizontally on wide ones.
-let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(32, 48, 32, 32) });
+// Scroll on short windows. The working column starts at the left where the eye does, it isn't centred, so the page
+// reads from the same edge as the code that replaces it.
+let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(56, 48, 32, 32) });
 let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
 let page = compositor.stack({
     parent: welcome_body,
-    anchor: "top",
-    pivot: "top",
-    size: vec(640, 0),
+    anchor: "top_left",
+    pivot: "top_left",
+    size: vec(760, 0),
     spacing: 28,
 });
 
@@ -35,12 +36,51 @@ let icon = compositor.image({
     size: vec(56, 56),
 });
 
-let title = compositor.label({
+// The name over what this release is called, the two as one block beside the icon
+let wordmark = compositor.stack({
     parent: brand,
     anchor: "left",
     pivot: "left",
+    spacing: 2,
+});
+
+let title = compositor.label({
+    parent: wordmark,
+    anchor: "left",
+    pivot: "left",
     text: "@welcome.title",
-    text_scale: 0.5,
+    text_scale: 0.46,
+    bold: true,
+    align: "left",
+});
+
+// Solstice in the weight of a heading and 3.0.0 after it, small and dim: the name is what a person says, the number is
+// what a bug report needs
+let release = compositor.stack({
+    parent: wordmark,
+    anchor: "left",
+    pivot: "left",
+    spacing: 8,
+    direction: "horizontal",
+});
+
+let release_name = compositor.label({
+    parent: release,
+    anchor: "bottom_left",
+    pivot: "bottom_left",
+    text: "Solstice",
+    text_scale: 0.19,
+    bold: true,
+    align: "left",
+});
+
+let release_number = compositor.label({
+    parent: release,
+    anchor: "bottom_left",
+    pivot: "bottom_left",
+    text: "3.0.0",
+    text_scale: 0.14,
+    dim: true,
     align: "left",
 });
 
@@ -114,7 +154,7 @@ let open_folder = compositor.button({
     icon: "folder-opened",
     label: "@welcome.open_folder",
     style: "button",
-    primary: false,
+    primary: true,
     lbl_scale: 0.16,
     hover: "none",
     hover_amount: 4,
@@ -140,6 +180,34 @@ let recent_column = compositor.stack({
     pivot: "top",
     spacing: 4,
 });
+
+// What the release that's running brought, a line each with a button under it that goes to the thing, put in by the
+// editor (HexWhatsNew). First in the column so it's seen without scrolling, and away when there's nothing to say.
+let news_column = compositor.stack({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 6,
+});
+
+let news_title = compositor.label({
+    parent: news_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.news",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let news = compositor.stack({
+    parent: news_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 8,
+});
+
+let news_gap = compositor.spacer({ parent: news_column, size: vec(0, 10) });
 
 let recent_title = compositor.label({
     parent: recent_column,

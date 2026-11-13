@@ -15,11 +15,10 @@ internal sealed partial class DuskScene
 {
     // How big the menus in the title bar are written, at a scale of one
     private const float MENU_TEXT = 0.14f;
-    private static readonly float[] Scales = [0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f];
 
     private void SetScale(float scale)
     {
-        scale = Scales.MinBy(known => MathF.Abs(known - scale));
+        scale = Hex.Shell.HexFrame.NearestScale(scale);
         compositor.Scale = scale;
         if (HexModes.Together)
             HexModes.Scale = scale;
@@ -97,6 +96,9 @@ internal sealed partial class DuskScene
         top.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.title_tab", ("title", title), ("version", VersionLabel))
             : HexText.Get("dusk_chrome.title", ("version", VersionLabel));
+
+        // With a tab the bar says the tab and then, quietly, whose window it is. With none it says Dusk alone
+        top.Caption = panel.Tabs.Count > 0 ? HexText.Get("dusk_chrome.caption") : string.Empty;
         Engine.WindowManager.Title = panel.Tabs.Count > 0
             ? HexText.Get("dusk_chrome.window_title_tab", ("title", title))
             : HexText.Get("dusk_chrome.name");

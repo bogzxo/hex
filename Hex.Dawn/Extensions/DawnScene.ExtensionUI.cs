@@ -92,7 +92,7 @@ internal sealed partial class DawnScene : IExtensionScreens
             if (File.Exists(typed.Trim()))
                 picked(typed.Trim());
             else
-                context.Notices.Say(Said("context.no_file", ("path", typed)), error: true);
+                Context.Notices.Say(Said("context.no_file", ("path", typed)), error: true);
         });
     }
 

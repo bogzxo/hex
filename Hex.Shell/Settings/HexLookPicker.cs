@@ -34,6 +34,45 @@ internal interface IHexLookOwner
 /// </summary>
 internal sealed class HexLookPicker : StackPanel
 {
+    // How wide the cards' panel is in the settings' window
+    private const float PANEL_WIDTH = 640.0f;
+
+    /// <summary>
+    /// The picker put in a settings window under Profiles for whoever owns the settings, told when any row of the window
+    /// changes them: any row can make the settings another look or none, and the cards say which after every change.
+    /// </summary>
+    public static HexLookPicker AddTo(SettingsWindow view, IHexLookOwner owner)
+    {
+        var picker = new HexLookPicker(owner, PANEL_WIDTH);
+        view.SetPanel(EditorSettingsCatalog.PROFILES, picker);
+
+        var changed = view.Page.OnChanged;
+        view.Page.OnChanged = (key, value) =>
+        {
+            changed?.Invoke(key, value);
+            picker.Refresh();
+        };
+        var reset = view.Page.OnReset;
+        view.Page.OnReset = key =>
+        {
+            reset?.Invoke(key);
+            picker.Refresh();
+        };
+        return picker;
+    }
+
+    /// <summary>
+    /// A look put on from outside the settings (the palette, a menu), the same as a click on its card: its values into
+    /// the owner's settings, kept and put in force by the owner, and the cards told when they're up.
+    /// </summary>
+    public static void Pick(IHexLookOwner owner, HexLook look, HexLookPicker? shown)
+    {
+        HexSettings settings = owner.ReadSettings();
+        HexLooks.Apply(look, settings);
+        owner.Keep(settings, look);
+        shown?.Refresh();
+    }
+
     private readonly IHexLookOwner owner;
     private readonly LookCards cards;
     private readonly Button update, delete;

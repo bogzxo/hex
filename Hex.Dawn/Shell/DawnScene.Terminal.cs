@@ -31,7 +31,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
     private void BuildTerminal()
     {
         terminalPanel = layout.Get<TerminalPanel>("terminal");
-        HexTerminalStatus.AddLive(statusBar, terminalPanel, () => bottom.Shown && bottom.Selected == CONSOLE_PAGE);
+        HexTerminalStatus.AddLive(statusBar, terminalPanel, () => PanelOpen && bottom.Selected == CONSOLE_PAGE);
         terminals = new TerminalHost(terminalPanel, new TerminalHostOptions
         {
             Name = "hex",
@@ -118,7 +118,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
     /// <summary>F6, the terminal page brought up with the keyboard in it, or the editor back when it is up.</summary>
     private void ToggleTerminalPage()
     {
-        if (bottom.Shown && bottom.Selected == CONSOLE_PAGE && compositor.Focus is TerminalView)
+        if (PanelOpen && bottom.Selected == CONSOLE_PAGE && compositor.Focus is TerminalView)
         {
             FocusEditor();
             return;
@@ -131,9 +131,9 @@ internal sealed partial class DawnScene : ITerminalHostUi
     /// <summary>Ctrl+`, the panel up on the terminal with the keyboard in it, or away when a terminal has the keyboard.</summary>
     private void ToggleTerminalFocus()
     {
-        if (compositor.Focus is TerminalView && bottom.Shown)
+        if (compositor.Focus is TerminalView && PanelOpen)
         {
-            TogglePanel();
+            CollapsePanel(true);
             FocusEditor();
             return;
         }
@@ -197,7 +197,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
 
         // The page looked at with nothing in it opens the tabs the workspace kept, or a shell, nothing is started before
         // somebody wants one
-        if (terminalPanel.Tabs.Count == 0 && bottom.Shown && bottom.Selected == CONSOLE_PAGE && terminalFontSet && !options.SelfTest)
+        if (terminalPanel.Tabs.Count == 0 && PanelOpen && bottom.Selected == CONSOLE_PAGE && terminalFontSet && !options.SelfTest)
             OpenTerminals();
 
         UpdateTerminalSession(dt);

@@ -17,11 +17,11 @@ internal sealed partial class DawnScene
     {
         /* Extensions. Hello Dolly comes with Hex and puts a greeting in the title bar as it starts */
 
-        string TitleNow() => ((TitleBar)top).Title;
+        string TitleNow() => ((TitleBar)top).Caption;
         test.Check("extensions: Hello Dolly is loaded and started, a greeting of its own after Hex in the title bar", () =>
             extensions.All.FirstOrDefault(extension => extension.Id == "hello_dolly") is { Enabled: true, Failed: null, Runtime: { } runtime }
             && runtime.UserScope.Lookup("welcome_greetings") is ListValue greetings && greetings.Items.Any(said => said is StringValue { Value: var text } && text == titleNote)
-            && titleNote.Length > 0 && TitleNow().Contains($"Hex {HexAbout.Label} ({titleNote})", StringComparison.Ordinal));
+            && titleNote.Length > 0 && TitleNow().EndsWith(titleNote, StringComparison.Ordinal) && TitleNow().Contains("Hex3", StringComparison.Ordinal));
 
         // The row of the ones switched off says what they're called, a toggle each, and gives the right one's folder to the settings
         string Dolly() => extensions.All.First(extension => extension.Id == "hello_dolly").Name;
@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([new StringValue(Dolly())])));
         test.Wait();
         test.Check("extensions: switched off on its page of the settings, its greeting goes and it stays off", () =>
-            titleNote.Length == 0 && !TitleNow().Contains('(') && settings.DisabledExtensions.Contains("hello_dolly")
+            titleNote.Length == 0 && TitleNow() == Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name)).Trim() && settings.DisabledExtensions.Contains("hello_dolly")
             && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: false }
             && SettingsPage!.IsModified?.Invoke("disabled_extensions") == true);
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([])));
@@ -73,7 +73,7 @@ internal sealed partial class DawnScene
             extensions.Commands().First(command => command.Text == DollyCommand()).Picked();
         });
         test.Wait();
-        test.Check("extensions: and picked, there is a greeting again", () => titleNote.Length > 0 && TitleNow().Contains($"({titleNote})", StringComparison.Ordinal));
+        test.Check("extensions: and picked, there is a greeting again", () => titleNote.Length > 0 && TitleNow().EndsWith(titleNote, StringComparison.Ordinal) && TitleNow().Contains("Hex3", StringComparison.Ordinal));
 
         // Quick open with a > in front is the commands, the way VS Code's is
         test.Run(QuickOpen);

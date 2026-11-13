@@ -569,7 +569,6 @@ internal sealed partial class DawnScene
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
         if (peeking?.From == gone) peeking = null;
-        if (panelJudgedFor == gone) panelJudgedFor = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
         if (ReferenceEquals(definesOf.Text, gone.Editor.Text))

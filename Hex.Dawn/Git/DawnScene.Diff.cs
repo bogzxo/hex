@@ -79,7 +79,17 @@ internal sealed partial class DawnScene
         if (document.Path is not { } path || !document.IsText || document.Picture is not null || document.DiffOf is not null)
             return;
 
-        string disk = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        string disk;
+        try
+        {
+            disk = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Say(Said("diff.unreadable", ("name", Path.GetFileName(path)), ("reason", e.Message)), error: true);
+            return;
+        }
+
         OpenDiff(path, "saved", Said("diff.title_saved", ("name", Path.GetFileName(path))), GitDiffText.Of(disk, code.Text), code.Document.Caret.Line);
     }
 

@@ -15,9 +15,13 @@ namespace Hex.Dawn;
 // the one other shape, every card flush and square on a window of the cards' own tone.
 internal sealed partial class DawnScene
 {
-    // The module under the editor's that the field of light is in, and the field
-    private UIModule glowModule = null!;
-    private GlowField glow = null!;
+    // What Dawn's window has in common with Dusk's: the field of light under everything, the lights and sparks over
+    // everything, the bars dressed for the skin, the line under the title bar (Hex.Shell's HexFrame)
+    private HexFrame frame = null!;
+
+    // The field of light and the module it's in, the frame's
+    private UIModule glowModule => frame.GlowModule;
+    private GlowField glow => frame.Glow;
 
     // How far in from its column a card is drawn (twice that is the gap between two), and how round it is
     private const float CARD_INSET = 4.0f, CARD_RADIUS = 12.0f;
@@ -36,13 +40,7 @@ internal sealed partial class DawnScene
     internal static bool Square(Horizon.UI.Skinning.UISkin skin) => skin.CornerRadius <= 0.0f;
 
     /// <summary>The field of light, a module of the editor's compositor under the editor's own, with a hole where the canvas is.</summary>
-    private void BuildGlow()
-    {
-        glowModule = compositor.CreateModule();
-        glowModule.ShowInLayoutDebugger = false;
-        glowModule.Interactive = false;
-        glow = glowModule.Root.Add(new GlowField { Fill = UIFill.Both, Hole = () => CanvasHole(glowModule) });
-    }
+    private void BuildGlow() => frame = new HexFrame(compositor, CanvasHole);
 
     /// <summary>
     /// Where the canvas is in a module of the editor's compositor, the layouts being designed are seen through there and
@@ -63,27 +61,20 @@ internal sealed partial class DawnScene
     /// </summary>
     private void DressChrome()
     {
-        if (compositor.Skin is not { } skin || glow is null || statusBar is null)
+        if (compositor.Skin is not { } skin || frame is null || statusBar is null)
             return;
 
+        // The window and the bars along its edges, the same as Dusk's: its tone, the field of light under a veil of it on
+        // glass, the title bar, the activity bar and the status bar the one surface. And what shape the skin makes it
         bool glassy = Glassy;
-        Vector4 card = skin.PanelColor with { W = 1.0f };
-        bool square = Square(skin);
-        float inset = square ? 0.0f : CARD_INSET, radius = square ? 0.0f : CARD_RADIUS;
-        Vector4 window = square ? card : skin.FieldColor with { W = 1.0f };
+        HexFrameShape shape = frame.Dress(skin, glassy, settings.GlassClarity, statusBar, modeToggle, top, activity);
+        Vector4 card = shape.Card;
+        bool square = shape.Square;
+
+        // A flush look (Solstice) has the cards against each other like a square one, on the window's own darker tone
+        bool flush = shape.Flush;
+        float inset = flush ? 0.0f : CARD_INSET, radius = flush ? 0.0f : CARD_RADIUS;
         Vector4 none = card with { W = 0.0f };
-
-        // The window, the field of light under a veil of its tone on glass, the tone alone without
-        glow.Visible = true;
-        glow.UseSkin(skin);
-        // How much of the window's tone is over the field of light, less for clearer glass (HexGlass.Veil)
-        glow.Veil = glassy ? window with { W = HexGlass.Veil(settings.GlassClarity) } : window;
-
-        // The bars along the edges are the window, nothing of their own, and the status bar has no line between it and
-        // what's over it, they're one surface
-        activity.Color = top.Color = statusBar.Color = none;
-        top.Glass = activity.Glass = statusBar.Glass = null;
-        statusBar.Hairline = false;
 
         // The cards. The sides on glass over the window, or solid, the middle solid always with the canvas a window
         // through it. A hairline of the skin's edge round each, the way glass has an edge
@@ -115,7 +106,7 @@ internal sealed partial class DawnScene
 
         // The terminals of the panel under the editor round cornered like Dusk's, inside the card
         if (terminalPanel is not null)
-            terminalPanel.PaneRadius = square ? 0.0f : TERMINAL_RADIUS;
+            terminalPanel.PaneRadius = flush ? 0.0f : TERMINAL_RADIUS;
 
         // What shows round the canvas's well where its corners are round is the card, and the well is the skin's field, the
         // same hue a shade under it
@@ -123,7 +114,7 @@ internal sealed partial class DawnScene
         if (backdrop.Root.Children.FirstOrDefault() is Panel well)
         {
             well.Color = skin.FieldColor with { W = 1.0f };
-            well.Radius = square ? 0.0f : WELL_RADIUS;
+            well.Radius = flush ? 0.0f : WELL_RADIUS;
         }
 
         // The find bar and the debug bar are popups over the code like the palette and the menus, the same stuff and the

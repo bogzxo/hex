@@ -68,7 +68,7 @@ internal sealed partial class DawnScene
             SettingsSet),
 
         new(new McpTool("hex_wait_for", "Wait for",
-            "Wait until something is true, Hex idle, a file open, a dialog up or gone, some text on screen or gone, a status bar message, problems listed (for a file), a task finished, with a timeout.",
+            "Wait until something is true, Hex idle, a file open, a dialogue up or gone, some text on screen or gone, a status bar message, problems listed (for a file), a task finished, with a timeout.",
             McpSchema.Object([
                 ("condition", McpSchema.OneOf("What to wait for.", "idle", "file_open", "dialog", "no_dialog", "text", "text_gone", "status", "problems", "task_done")),
                 ("value", McpSchema.String("The file, text or message, for the ones that need it (a file for problems is optional).")),
@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
             yield return null;
 
         string said = saidAt != saidBefore && messageItem.Text.Length > 0 ? $" Hex said \"{Plain(messageItem.Text)}\"." : string.Empty;
-        string dialog = chrome.Dialog is { IsOpen: true } ? " A dialog is up, hex_ui_tree shows it." : string.Empty;
+        string dialog = chrome.Dialog is { IsOpen: true } ? " A dialogue is up, hex_ui_tree shows it." : string.Empty;
         yield return McpToolResult.Text($"Ran {McpCommandLine(chosen)}.{said}{dialog}");
     }
 
@@ -155,7 +155,7 @@ internal sealed partial class DawnScene
     private IEnumerable<McpToolResult?> TerminalSend(JsonObject arguments)
     {
         // The page brought up, which starts a shell the first time, waited for until the shell's there
-        if (!bottom.Shown || bottom.Selected != CONSOLE_PAGE || terminalPanel.FocusedView is null)
+        if (!PanelOpen || bottom.Selected != CONSOLE_PAGE || terminalPanel.FocusedView is null)
             ShowPanel(CONSOLE_PAGE);
 
         long giveUp = System.Environment.TickCount64 + 15_000;

@@ -9,10 +9,13 @@ internal sealed partial class DawnScene
     {
         chrome.Dialog?.Close();
 
-        // The test's own files that were typed into, closed without asking, whatever was typed in them is the test's
+        // The test's own files that were typed into, closed without asking, whatever was typed in them is the test's. A
+        // layout with no file that a suite added to as well: left open and changed it put "Unsaved Changes" up in the
+        // next suite the moment that one closed its tabs, and every check after it was of the dialog and not of Hex
         foreach (HexDocument open in documents.ToList())
         {
-            if (open.Modified && open.Path is { } path && PlatformPaths.IsUnder(path, testFolder))
+            bool ours = open.Path is { } path ? PlatformPaths.IsUnder(path, testFolder) : documents.Count > 1;
+            if ((open.Modified || open.CodeEdited) && ours)
             {
                 Show(open);
                 CloseNow();

@@ -23,6 +23,9 @@ internal static partial class Program
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
 
+        // A terminal nobody picked a theme for is Solstice's own of Dusk, before any settings are read
+        Horizon.UI.Components.TerminalSettings.UsualTheme = Hex.Core.HexSettings.USUAL_TERMINAL_THEME;
+
         // Hex is a desktop program, its windows, keys and clipboard are the desktop's
         Horizon.Platform.Desktop.DesktopPlatform.Install();
 

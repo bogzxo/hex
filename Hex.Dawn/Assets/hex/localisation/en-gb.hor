@@ -7,7 +7,7 @@
 let strings = {
     // The window itself, its title bar
     window: {
-        title: "Hex"
+        title: "Hex3"
     },
 
     // The buttons at the right end of the tabs, and what each says when the pointer rests on it
@@ -46,7 +46,7 @@ let strings = {
         design: "Toolbox: components and layers",
         debug: "Debugger: call stack, variables and breakpoints",
         tests: "Test Explorer: discover, run and debug workspace tests",
-        extensions: "Extensions: manage installed extensions and browse the catalog",
+        extensions: "Extensions: manage installed extensions and browse the catalogue",
         extensions_command: "Extensions",
         settings: "Settings"
     },
@@ -133,8 +133,8 @@ let strings = {
 
     // What Hex opens on when nothing is open
     welcome: {
-        title: "Hex",
-        subtitle: "A clear space for your next idea.\nOpen a project, pick up where you left off, or start something new.",
+        title: "Hex[color:accent]3[/color]",
+        subtitle: "Open a folder or a file, or pick up where you left off.",
         start: "Start",
         new_file: "New File",
         new_layout: "New Layout",
@@ -146,7 +146,25 @@ let strings = {
         language: "HIDL Reference",
         changes: "Release Notes",
         recent: "Recent",
-        no_recent: "Open a folder or file to start. Recent files will appear here."
+        no_recent: "Open a folder or file to start. Recent files will appear here.",
+        news: "New in {version}",
+        news_tip_setting: "Show this in Settings",
+        news_tip_side: "Show this in the side bar",
+        news_tip_problems: "Show the Problems panel"
+    },
+
+    // What a release brought, a line each on the welcome page and what the button beside it says (HexWhatsNew)
+    whats_new: {
+        solstice: "Solstice is the new default look: flush panes and an accent for each mode, orange in Dawn and violet in Dusk. Solstice Day is its light version.",
+        go_profiles: "Choose a look",
+        horizon_line: "A line under the title bar fills as far as a download, an install or an update check has got, runs full while a build or the tests do, and turns red when one fails.",
+        go_tasks: "Open Problems",
+        agents_markdown: "Agent replies show headings, lists, links, code blocks and tables as formatted text.",
+        go_agents: "Open Agents",
+        middle_scroll: "Middle-mouse scrolling moves lists, trees and tables smoothly, at a speed you set.",
+        go_motion: "Set scroll speed",
+        csharp_analyzers: "C# analysers report code-style and naming suggestions where the language server supports them.",
+        go_problems: "Open Problems"
     },
 
     // The column on the right
@@ -350,7 +368,7 @@ let strings = {
         nothing_to_replace: "No matches to replace. Run a search first."
     },
 
-    // The dialogs that pick one of a list as it is typed into (Ctrl+P, the command palette)
+    // The dialogues that pick one of a list as it is typed into (Ctrl+P, the command palette)
     choose: {
         placeholder: "Type to filter"
     },
@@ -447,7 +465,7 @@ let strings = {
         extensions: {
             page: [
                 "## Extensions",
-                "HIDL scripts that extend Hex. Each is a folder containing an `extension.hor`. Built-in extensions live in `Assets/hex/extensions`; your own go in an `extensions` folder next to the executable, and so do the ones installed from the catalog on Extensions, Available. An extension starts as soon as it is enabled and is stopped when disabled."
+                "HIDL scripts that extend Hex. Each is a folder containing an `extension.hor`. Built-in extensions live in `Assets/hex/extensions`; your own go in an `extensions` folder next to the executable, and so do the ones installed from the catalogue on Extensions, Available. An extension starts as soon as it is enabled and is stopped when disabled."
             ]
         }
     },
@@ -463,18 +481,18 @@ let strings = {
         open: "Extensions"
     },
 
-    // The extensions that can be installed, out of the catalog on GitHub, on Extensions, Available and in the cards
+    // The extensions that can be installed, out of the catalogue on GitHub, on Extensions, Available and in the cards
     extension_catalog: {
         look: "Check for extensions",
-        look_help: "Once a day as Hex starts, sync the catalog of extensions and put up a card when one you installed from it has a newer version.",
+        look_help: "Once a day as Hex starts, sync the catalogue of extensions and put up a card when one you installed from it has a newer version.",
         check_now: "Check now",
-        source: "Catalog",
+        source: "Catalogue",
         source_help: "Where extensions are installed from. A GitHub repository (owner/name, its main branch) or a folder on this machine with a folder for each extension.",
-        reading: "Reading the extension catalog",
-        syncing: "Syncing the extension catalog",
-        up_to_date: "The catalog has {count} extensions, and everything installed from it is up to date",
+        reading: "Reading the extension catalogue",
+        syncing: "Syncing the extension catalogue",
+        up_to_date: "The catalogue has {count} extensions, and everything installed from it is up to date",
         updates: "Updates are out for {count} of your extensions",
-        failed: "The extension catalog ({source}) couldn't be synced: {why}",
+        failed: "The extension catalogue ({source}) couldn't be synced: {why}",
         newer_out: "{name} {version} is out, you have {installed}",
         update: "Update",
         install: "Install",
@@ -502,7 +520,7 @@ let strings = {
         title: "Release Notes",
         header: [
             "# Release Notes",
-            "Newest first. This is Hex {version}."
+            "Newest first. This is Hex3, version {version}."
         ],
         asking: "_Asking [{repo}](https://github.com/{repo}/releases) what changed..._",
         from_github: "From the releases on [{repo}](https://github.com/{repo}/releases).",
@@ -530,7 +548,7 @@ let strings = {
             "- Panels slide in and out, and buttons respond to the pointer",
             "- A layout declares which layers start hidden, and layers hidden in the designer are saved. Hex's own views are layers, so every one of them can be edited in Hex",
             "- Double-click selects a word; drag to extend the selection word by word",
-            "- Open Folder uses the system dialog",
+            "- Open Folder uses the system dialogue",
             "- The version is shown in the title bar",
             "- Opening a file is 60 ms faster, selection in the designer is three times faster, and the move editor costs nothing when idle",
             "- Syntax colouring waits until typing pauses, so large files no longer stutter",
@@ -763,7 +781,7 @@ let strings = {
     },
 
     about: {
-        title: "About Hex",
+        title: "About Hex3",
         version: "Version {version}",
         runs_on: "Horizon {engine}  ·  .NET {dotnet}",
         tagline: "The layout editor for Horizon and the IDE for HIDL, drawn by Horizon's own UI on Vulkan.",
@@ -833,8 +851,8 @@ let strings = {
         diagnostic_documentation: "Open Diagnostic Documentation",
         switch_header_source: "Switch Header/Source",
         no_header_source: "No corresponding header or source file was found.",
-        organize_imports: "Organize Imports",
-        no_organize_imports: "The language server has no import organization action for this file.",
+        organize_imports: "Organise Imports",
+        no_organize_imports: "The language server has no import organisation action for this file.",
         expand_selection: "Expand Selection",
         shrink_selection: "Shrink Selection",
         no_type_definition: "No type definition was found for {word}.",
@@ -1035,7 +1053,7 @@ let strings = {
         module_symbols: "Symbols",
         module_symbol_file: "Symbol file",
         module_version: "Version",
-        module_optimized: "Optimized",
+        module_optimized: "Optimised",
         module_user_code: "User code",
         module_address: "Address range",
         module_timestamp: "Timestamp",
@@ -1437,8 +1455,8 @@ let strings = {
         files_of: "Files in {directory}",
         layout_title: "Save as Layout?",
         save_it: "Save",
-        dialog_open: "Another dialog is already open.",
-        dialog_failed: "Could not open the dialog: {message}",
+        dialog_open: "Another dialogue is already open.",
+        dialog_failed: "Could not open the dialogue: {message}",
         saved: "Saved {path}",
         save_failed: "Could not save {path}: {error}",
         save_as_button: "Save As...",
@@ -1703,11 +1721,11 @@ let strings = {
     tabs: {
         all: "Open Editors",
         never_saved: "{name} (not yet saved)",
-        title: "{name}  -  Hex {version}",
-        title_changed: "{name} *  -  Hex {version}",
-        title_note: "{name}  -  Hex {version} ({note})",
-        title_changed_note: "{name} *  -  Hex {version} ({note})",
-        window_title: "{name} - Hex {version}",
+        title: "{name}",
+        title_changed: "{name} *",
+        caption: "·  Hex3 {codename}",
+        caption_note: "·  Hex3 {codename}  ·  {note}",
+        window_title: "{name} - Hex3",
         welcome: "Welcome",
         welcome_of: "Welcome  -  {workspace}",
         close: "Close",
@@ -2028,8 +2046,9 @@ let strings = {
     dusk_chrome: {
         palette_hint: "↑↓ to select · Enter or click to run · Esc or click outside to close",
         name: "Dusk",
-        title_tab: "{title}  -  Dusk {version}",
-        title: "Dusk {version}",
+        title_tab: "{title}",
+        title: "Dusk",
+        caption: "·  Dusk",
         window_title_tab: "{title} - Dusk",
         move_left: "Move left",
         move_right: "Move right",
@@ -2182,7 +2201,7 @@ let strings = {
         effects_title: "Effects",
         effects_help: "None of them, subtle (the lights switched on under this, and a burst of sparks for a save or a long command that went well when the sparks are on) or all (sparks off the caret as you type as well). The glass and the caret's glide have switches of their own.",
         effect_glass_title: "Glass",
-        effect_glass_help: "Blur and refraction behind dialogs, menus, palettes and side panels. Optional GPU work; Flat keeps these surfaces solid.",
+        effect_glass_help: "Blur and refraction behind dialogues, menus, palettes and side panels. Optional GPU work; Flat keeps these surfaces solid.",
         effect_sparks_title: "Sparks",
         effect_sparks_help: "Whether the effects that are on throw sparks, on a save, a long command that went well and as you type.",
         effect_motion_title: "Smooth caret",
@@ -2556,6 +2575,7 @@ let strings = {
 
     // Diffs, a file's changes in a tab of their own
     diff: {
+        unreadable: "{name} couldn't be read to compare it: {reason}",
         open_changes: "Open Changes",
         compare_saved: "Compare with Saved",
         next_change: "Next Change",
@@ -2759,7 +2779,7 @@ let strings = {
         branches_command: "Switch Branch...",
         not_installed: "git isn't on this machine (or not on the PATH), install it and start Hex again",
         no_repository: "No git repository in the workspace. Make one of the folder that's open, or clone one",
-        init_button: "Initialize Repository",
+        init_button: "Initialise Repository",
         clone_button: "Clone Repository...",
         initialised: "{folder} is a git repository now",
         clone_title: "Clone Repository",
@@ -3357,8 +3377,8 @@ let strings = {
 
     // The settings' own commands in the File menu, picking a theme from a list as it shows each and the file itself in a tab
     settings_looks: {
-        color_theme: "Color Theme...",
-        color_theme_title: "Color Theme",
+        color_theme: "Colour Theme...",
+        color_theme_title: "Colour Theme",
         color_theme_hint: "↑↓ to preview · Enter or click to keep · Esc or click outside to restore",
         open_file: "Open User Settings File",
         no_file: "There's no settings file to open, {path} couldn't be written"

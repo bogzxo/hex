@@ -1,0 +1,44 @@
+// Solstice, Hex's own look. A plum slate where most dark editors are a blue grey, the neutrals leaning the way of the
+// accent, and one accent a mode: this is Dawn's, the orange of Hex's icon, and solstice_dusk has Dusk's violet over the
+// same ground. The accent says where you are and what is running and nothing else, a warning is its own yellow so it
+// is never taken for it. Hex draws a Solstice window flush, its panes against each other with no gaps and no round
+// (HexLooks.Flush), the controls in them still round.
+let theme = {
+    title: "Solstice",
+    background: vec(0.094, 0.090, 0.122, 1),
+    surface: vec(0.125, 0.122, 0.165, 1),
+    control_color: vec(0.173, 0.165, 0.220, 1),
+    text_color: vec(0.925, 0.914, 0.949, 1),
+    control_text_color: vec(0.96, 0.95, 0.98, 1),
+    dim_text_color: vec(0.651, 0.627, 0.710, 1),
+    border_color: vec(1, 1, 1, 0.08),
+    hover_color: vec(1, 1, 1, 0.06),
+    accent_color: vec(1.0, 0.604, 0.239, 1),
+    highlight_color: vec(1.0, 0.66, 0.34, 1),
+    selection_color: vec(1.0, 0.604, 0.239, 0.24),
+    error_color: vec(1.0, 0.435, 0.49, 1),
+    warning_color: vec(0.949, 0.831, 0.361, 1),
+    success_color: vec(0.482, 0.831, 0.627, 1),
+    bar_text_color: vec(1, 1, 1, 1),
+    text_shadow_color: vec(0, 0, 0, 0),
+    corner_radius: 6,
+    popup_radius: 12,
+    row_height: 28,
+    syntax: {
+        name: vec(0.90, 0.89, 0.93, 1),
+        keyword: vec(0.949, 0.561, 0.710, 1),
+        property: vec(0.725, 0.831, 0.941, 1),
+        call: vec(0.773, 0.722, 1.0, 1),
+        text: vec(0.914, 0.784, 0.561, 1),
+        number: vec(1.0, 0.682, 0.522, 1),
+        comment: vec(0.522, 0.498, 0.592, 1),
+        punctuation: vec(0.70, 0.68, 0.76, 1),
+        line_number: vec(0.44, 0.42, 0.50, 1),
+        type: vec(0.549, 0.796, 0.918, 1),
+        declaration: vec(0.80, 0.86, 0.96, 1),
+        operator: vec(0.78, 0.76, 0.84, 1),
+        bracket1: vec(0.725, 0.831, 0.941, 1),
+        bracket2: vec(0.773, 0.722, 1.0, 1),
+        bracket3: vec(0.549, 0.796, 0.918, 1)
+    }
+};

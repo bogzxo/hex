@@ -32,7 +32,11 @@ internal sealed partial class HexExtensions
 
     /// <summary>An extension made elsewhere put among the rest, and taken out, for the self test's own.</summary>
     internal void Add(HexExtension extension) => all.Add(extension);
-    internal bool Remove(HexExtension extension) => all.Remove(extension);
+    internal bool Remove(HexExtension extension)
+    {
+        StopWatching(extension);
+        return all.Remove(extension);
+    }
 
     /// <summary>The extensions, what is on screen of them the scene's (<paramref name="on"/>), the rest through the context.</summary>
     public HexExtensions(DawnContext with, IExtensionScreens on)

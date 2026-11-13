@@ -29,8 +29,8 @@ internal sealed partial class DawnScene : Scene
     private const string SKIN_FILE = "hex_skin.txt";
 
 
-    // How big the editor can draw itself. Text is at its sharpest at the whole ones.
-    private static readonly float[] Scales = [0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f];
+    // How big the editor can draw itself, the same sizes as Dusk (HexFrame)
+    private static float[] Scales => HexFrame.Scales;
 
     // Ask the runtime to consider reclaiming startup garbage after the initial load. This is a nonblocking,
     // optimized request: forcing a compacting collection here paused typing, and again after closing a document.
@@ -319,6 +319,9 @@ internal sealed partial class DawnScene : Scene
         // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
         BuildMcp();
 
+        // Every part is made by now, what each tick does is put in order
+        DeclareTicks();
+
         if (options.SelfTest)
             StartSelfTest();
         else if (options.Check.Length == 0)
@@ -408,27 +411,14 @@ internal sealed partial class DawnScene : Scene
         Profile.Mark("designer");
         RebuildMarked();
         Profile.Mark("lists");
-        UpdateWork(dt);
-        UpdateVisualStudioOffer(dt);
+
+        // The three stretches of the tick that are lists of steps, see DeclareTicks. Each step is timed by its own name
+        // with the profile on, the mark after each list is for what little is left over
+        workTicks.Run(dt);
         Profile.Mark("work");
-
-        UpdateExtensionUI(dt);
-                UpdateEffects();
-        UpdateAutoSave(dt);
-        debugger.Update();
-        UpdateDebugBar();
-        ApplyAskedView();
-        Profile.Mark("extensions");
-
-        running.UpdateTable();
-        UpdateNotebooks(dt);
-        UpdateMarkdownPreview(dt);
-        UpdateTerminal(dt);
-        UpdateRemote();
-        UpdateMcp(dt);
-        running.UpdateConsole();
-        running.RunAskedConsole();
-        UpdatePanel(dt);
+        lateTicks.Run(dt);
+        Profile.Mark("late");
+        panelTicks.Run(dt);
         Profile.Mark("panel");
 
         UpdateStatusBar();
@@ -502,35 +492,71 @@ internal sealed partial class DawnScene : Scene
             codeDirty = codeShown = false;
     }
 
-    /// <summary>What was done on other threads taken in, the folders of the workspace and the values of the file on screen.</summary>
-    private void UpdateWork(float dt)
-    {
-        TakeFinishedWork();
-        UpdateWelcome();
-        UpdateDiskChanges();
-        UpdateSettingsFile();
-        UpdateBackups(dt);
-        codeEditing.UpdateFindBar();
-        UpdatePlaces();
-        UpdateBackdrop();
-        UpdateSplit();
-        UpdateRunningItem();
+    // The stretches of the tick that are lists of steps, made once the parts are (DeclareTicks)
+    private HexTicks workTicks = null!, lateTicks = null!, panelTicks = null!;
 
-        // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
+    /// <summary>The steps of the tick by name in the order they run, for the tests and for whoever wants to read the order.</summary>
+    internal IEnumerable<string> TickNames => workTicks.Names.Concat(lateTicks.Names).Concat(panelTicks.Names);
+
+    /// <summary>
+    /// What the editor does every tick, in order, said once. The order is the order of these lines and nothing else's:
+    /// the editor's own steps and the parts' (<see cref="IHexPart"/>) in the one list. Three lists, for the three
+    /// stretches of the tick that the components' own update and the fitting of the window come between.
+    /// </summary>
+    private void DeclareTicks()
+    {
+        // What was done on other threads taken in, the folders of the workspace and the values of the file on screen
+        workTicks = new HexTicks("work", Profile)
+            .Add("finished", TakeFinishedWork)
+            .Add("horizon", UpdateHorizon)
+            .Add("welcome", UpdateWelcome)
+            .Add("disk", UpdateDiskChanges)
+            .Add("settings_file", UpdateSettingsFile)
+            .Add("backups", UpdateBackups)
+            .Add("find_bar", codeEditing.UpdateFindBar)
+            .Add("places", UpdatePlaces)
+            .Add("backdrop", UpdateBackdrop)
+            .Add("split", UpdateSplit)
+            .Add("running_item", UpdateRunningItem)
+            .Add("folders", TakeFolderChanges)
+            .Add("values", running.UpdateValues)
+            .Add(properties)
+            .Add("peek", UpdatePeek)
+            .Add("file_changes", UpdateFileChanges)
+            .Add(languages)
+            .Add(git)
+            .Add(tasks)
+            .Add("value_box", running.UpdateValueBox)
+            .Add("visual_studio_offer", UpdateVisualStudioOffer);
+
+        lateTicks = new HexTicks("late", Profile)
+            .Add("extension_ui", UpdateExtensionUI)
+            .Add("effects", UpdateEffects)
+            .Add("auto_save", UpdateAutoSave)
+            .Add(debugger)
+            .Add("debug_bar", UpdateDebugBar)
+            .Add("asked_view", ApplyAskedView);
+
+        panelTicks = new HexTicks("panel", Profile)
+            .Add("table", running.UpdateTable)
+            .Add("notebooks", UpdateNotebooks)
+            .Add("markdown", UpdateMarkdownPreview)
+            .Add("terminal", UpdateTerminal)
+            .Add("remote", UpdateRemote)
+            .Add("mcp", UpdateMcp)
+            .Add("console", running.UpdateConsole)
+            .Add("asked_console", running.RunAskedConsole)
+            .Add("panel", UpdatePanel);
+    }
+
+    // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
+    private void TakeFolderChanges()
+    {
         if (folders.TakeChanges())
         {
             languagesNear.Clear();
             treeDirty |= Side == HexSide.Explorer;
         }
-
-        running.UpdateValues(dt);
-        properties.Update();
-        UpdatePeek(dt);
-        UpdateFileChanges();
-        languages.Update(dt);
-        git.Update(dt);
-        tasks.Update(dt);
-        running.UpdateValueBox();
     }
 
     /// <summary>

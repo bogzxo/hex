@@ -31,6 +31,21 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("welcome: with nothing open the welcome is over the empty layout, with what to start with", () =>
             welcome is { Visible: true } page && page.Parent == canvas && Descendants(page).OfType<Button>().Any(button => button.Label == "@welcome.new_layout"));
+        test.Check("welcome: what's new lists every line of this version, each with a button that goes somewhere", () =>
+            welcome is { } page && HexWhatsNew.For(Hex.Shell.HexVersion.Number) is { Count: > 0 } items
+            && Descendants(page).OfType<Button>().Count(button => items.Any(item => button.Label == Said("whats_new." + item.Go))) == items.Count
+            && HexWhatsNew.All.All(item => !Said("whats_new." + item.Text).Contains("whats_new.", StringComparison.Ordinal)
+                && item.Place switch
+                {
+                    HexNewsPlace.Setting => EditorSettingsCatalog.Settings.Any(row => row.Key == item.Target),
+                    HexNewsPlace.Settings => EditorSettingsCatalog.Sections.Contains(item.Target),
+                    _ => true
+                }));
+        test.Run(() => GoToNews(HexWhatsNew.For("2.9.1").First(item => item.Place == HexNewsPlace.Setting)));
+        test.Settle(0.3f);
+        test.Check("welcome: a line about a setting opens the settings on it", () => SettingsPage is not null);
+        test.Run(CloseSettings);
+        test.Settle(0.3f);
         test.Run(() => welcomeWanted = false);
         test.Wait();
         test.Check("welcome: and gone once it isn't wanted", () => welcome is not { Visible: true });

@@ -1,0 +1,9 @@
+// Solstice as Dusk wears it, the same ground with the accent gone from Dawn's orange to violet, so which mode a window
+// is in is read off the one colour that moves. The Solstice look picks it for the terminal.
+let theme = {
+    title: "Solstice Dusk",
+    base: "solstice",
+    accent_color: vec(0.663, 0.608, 1.0, 1),
+    highlight_color: vec(0.72, 0.67, 1.0, 1),
+    selection_color: vec(0.663, 0.608, 1.0, 0.26)
+};

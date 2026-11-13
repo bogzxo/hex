@@ -18,26 +18,49 @@ namespace Hex.Dusk;
 // long as nothing under it changed, a laptop on its battery pays for neither.
 internal sealed partial class DuskScene
 {
+    // The editor's section of the settings as it was last read, which is both modes': the effects, the glass and the
+    // motion all come out of it, the way Dawn has them straight from its own. Seven copies of what's in it were kept
+    // here, each to be remembered whenever one more of them was wanted
+    private HexSettings shared = new(null);
+
     // The same glass as Dawn's popups, as thick as the sliders of the effects say
-    private UIGlass popupGlass = HexGlass.Popup(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
+    private UIGlass popupGlass => HexFrame.PopupGlass(shared);
 
     // Dawn's sides' glass out of the same sliders, Dusk has no side panels but shows it in the glass's preview
-    private UIGlass sideGlass = HexGlass.Side(HexGlass.BLUR, HexGlass.CLARITY, HexGlass.RIM, HexGlass.BEND);
+    private UIGlass sideGlass => HexFrame.SideGlass(shared);
 
     // How long a command has to have run for it going well to be worth a burst, in seconds. Every ls throwing sparks
     // is the power mode's problem, not a feature
     private const float BURST_AFTER = 2.0f;
 
-    private UIModule effectsModule = null!;
-    private Sparks sparks = null!;
-    private Lights lights = null!;
-    private readonly HexLightEffects lightEffects = new();
+    // The lights and the sparks and the module over everything that they're in, the frame's (HexFrame)
+    private UIModule effectsModule => frame.EffectsModule;
+    private Sparks sparks => frame.Sparks;
 
-    private string effects = "none";
-    private bool effectSparks, effectGlass = true;
+    private string effects
+    {
+        get => shared.Effects;
+        set => shared.Effects = value;
+    }
+
+    private bool effectSparks
+    {
+        get => shared.EffectSparks;
+        set => shared.EffectSparks = value;
+    }
+
+    private bool effectGlass
+    {
+        get => shared.EffectGlass;
+        set => shared.EffectGlass = value;
+    }
 
     // How quickly Dusk's own UI moves, the motion's ui_animation, Dawn's too
-    private float uiAnimation = 1.0f;
+    private float uiAnimation
+    {
+        get => shared.UiAnimation;
+        set => shared.UiAnimation = value;
+    }
 
     // The pane sparks were thrown off last and where its cursor was, and how many commands had finished in each pane
     private TerminalView? sparkedIn;
@@ -45,19 +68,12 @@ internal sealed partial class DuskScene
     private TerminalView? finishedIn;
     private int finishedSeen;
 
-    private bool EffectsOn => effects is "subtle" or "all";
+    private bool EffectsOn => HexFrame.EffectsOn(shared);
 
     private void BuildEffects()
     {
-        effectsModule = compositor.CreateModule();
-        effectsModule.ShowInLayoutDebugger = false;
-        effectsModule.Interactive = false;
-        // the light under, the sparks over it
-        lights = effectsModule.Root.Add(new Lights());
-        sparks = effectsModule.Root.Add(new Sparks());
-
-        // Nothing behind Dusk's UI but the window, the terminals are the UI
-        compositor.GlassKeepsPicture = true;
+        // Nothing behind Dusk's UI but the window, the terminals are the UI, so the picture under the glass is kept
+        frame.BuildEffects();
         ReadEffects();
     }
 
@@ -65,42 +81,25 @@ internal sealed partial class DuskScene
     private void ReadEffects()
     {
         // The settings can change before there's anything to put them in force on
-        if (sparks is null)
+        if (frame?.Sparks is null)
             return;
 
         // Read as Dawn reads them, the editor's section is both modes'
-        HexSettings settings = new(host.Settings.Path);
-        effects = settings.Effects;
-        effectSparks = settings.EffectSparks;
-        effectGlass = settings.EffectGlass;
-        uiAnimation = settings.UiAnimation;
-        compositor.ScrollSpeed = settings.ScrollSpeed;
-        compositor.MiddleScrollSpeed = settings.MiddleScrollSpeed;
-        popupGlass = HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-        sideGlass = HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-        veil = HexGlass.Veil(settings.GlassClarity);
-        lightEffects.CaretGlow = settings.EffectCaretGlow;
-        lightEffects.Spotlight = settings.EffectSpotlight;
-        lightEffects.Ripples = settings.EffectRipples;
-        lightEffects.Trail = settings.EffectTrail;
+        shared = new HexSettings(host.Settings.Path);
         ApplyEffects();
     }
 
     /// <summary>The effects as they are now, put in force.</summary>
     private void ApplyEffects()
     {
-        compositor.PopupGlass = effectGlass ? popupGlass : null;
+        // The popups' glass, how quickly the UI moves and scrolls, which lights are on and nothing left flying that is
+        // switched off: what Dawn does the same way, the frame's. The terminal's animations off is nothing moving, the
+        // menus and the buttons as well as the splits and the cursor
+        frame.ApplyEffects(shared, host.Settings.Animations ? uiAnimation : 0.0f);
 
         // The bars on glass over the field of light, or solid, see DuskScene.Materials
         DressChrome();
-
-        // The terminal's animations off is nothing moving, the menus and the buttons as well as the splits and the cursor
-        compositor.AnimationSpeed = host.Settings.Animations ? uiAnimation : 0.0f;
         HexMotion.Apply(panel, host.Settings, uiAnimation);
-        if (!EffectsOn || !effectSparks)
-            sparks.Clear();
-        if (!EffectsOn)
-            lights.Clear();
     }
 
     /// <summary>Every tick, sparks off the cursor as it moves along a prompt, and a burst for a long command that went well.</summary>
@@ -110,8 +109,7 @@ internal sealed partial class DuskScene
         if (EffectsOn)
         {
             Vector2? cursor = panel.FocusedView is { } focused && compositor.Focus == focused ? effectsModule.ToLocal(chrome.ToWorld(focused.CursorPoint)) : null;
-            lightEffects.Update(lights, sparks, effectsModule.ToLocal(compositor.Pointer.Position), compositor.Pointer.Down, cursor,
-                compositor.Skin?.AccentColor ?? Vector4.One, compositor.Skin?.TextColor ?? Vector4.One);
+            frame.UpdateLights(cursor);
         }
 
         if (!EffectsOn || !effectSparks || panel.FocusedView is not { } view)

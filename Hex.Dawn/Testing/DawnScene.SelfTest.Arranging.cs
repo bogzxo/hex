@@ -312,12 +312,23 @@ internal sealed partial class DawnScene
         test.Check("resize: and writes back the same", () => CheckRoundTrip(document));
 
         float listWide = 0;
-        test.Run(() => listWide = treeScroll.Size.X);
-        test.Hover(InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)));
-        test.Check("panels: the edge between the lists and the canvas lights up under the pointer", () => treeScroll.ActiveGrip == UIResize.Right);
+        // The lists are held on the line between the side bar and the middle, which is the side's edge and not the list's.
+        // Lit from the side's own half of the strip and dragged from the half that is over the middle (HexSplitter)
+        float listEdge = 0;
+        test.Run(() =>
+        {
+            listWide = treeScroll.Size.X;
+            listEdge = left.Bounds.Max.X;
+        });
+        test.Hover(InChrome(() => new Vector2(listEdge - 2, treeScroll.Bounds.Center.Y)));
+        test.Check("panels: the edge between the lists and the canvas lights up under the pointer", () =>
+            Splitters.Left is { Lit: true, Target: { } held } && held == treeScroll && Splitters.Right is { Lit: false });
+        test.Hover(InChrome(() => new Vector2(listEdge + 3, treeScroll.Bounds.Center.Y)));
+        test.Check("panels: from either side of the line, and it is the one handle there, the list has none of its own", () =>
+            Splitters.Left is { Lit: true } && treeScroll.Resizable == UIResize.None && treeScroll.ActiveGrip == UIResize.None);
         test.Drag(
-            InChrome(() => new Vector2(treeScroll.Bounds.Max.X + 4, treeScroll.Bounds.Center.Y)),
-            InChrome(() => new Vector2(treeScroll.Bounds.Min.X + listWide + 4 + 70, treeScroll.Bounds.Center.Y)));
+            InChrome(() => new Vector2(listEdge + 2, treeScroll.Bounds.Center.Y)),
+            InChrome(() => new Vector2(listEdge + 2 + 70, treeScroll.Bounds.Center.Y)));
         test.Wait();
         test.Check("panels: dragging it makes the lists wider and the canvas make do", () =>
             Near(treeScroll.Size.X, listWide + 70, 2) && Near(settings.LeftWidth, treeScroll.Size.X) && Fits() && !treeScroll.IsResizing);
@@ -335,8 +346,12 @@ internal sealed partial class DawnScene
         {
             propertiesWide = inspectorScroll.Size.X;
             editorWide = designer.editors["name"].Bounds.Width;
-            propertiesEdge = new Vector2(inspectorScroll.Bounds.Min.X - 4, inspectorScroll.Bounds.Center.Y);
+            propertiesEdge = new Vector2(right.Bounds.Min.X, inspectorScroll.Bounds.Center.Y);
         });
+        // The pointer rests on the line before it is pressed, as a hand does. Pressed the tick it arrives, the editor has
+        // not yet seen the handle under it and the canvas beside it takes the press
+        test.Hover(InChrome(() => propertiesEdge));
+        test.Wait();
         test.Drag(InChrome(() => propertiesEdge), InChrome(() => propertiesEdge - new Vector2(90, 0)));
         test.Wait();
         test.Check("panels: dragging the properties wider makes what is in them wider with them", () =>

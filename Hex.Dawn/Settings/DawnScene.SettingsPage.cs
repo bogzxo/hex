@@ -387,7 +387,7 @@ internal sealed partial class DawnScene
 
         public bool IsModified(string key) => hex.ScopedModified(key) ?? key switch
         {
-            "editor_skin" => hex.settings.EditorSkin != "flat" || hex.settings.EditorTheme != "horizon",
+            "editor_skin" => hex.settings.EditorSkin != HexSettings.USUAL_SKIN || hex.settings.EditorTheme != HexSettings.USUAL_THEME,
             // Only a size somebody picked and that's kept for next time, a window that's another size than the last run's
             // isn't a change of anybody's
             "size" => hex.scalePicked || (!hex.options.SelfTest && File.Exists(ScalePath)),
@@ -696,7 +696,7 @@ internal sealed partial class DawnScene
             switch (key)
             {
                 case "editor_skin":
-                    hex.UseEditorSkin("flat", "horizon", save: true);
+                    hex.UseEditorSkin(HexSettings.USUAL_SKIN, HexSettings.USUAL_THEME, save: true);
                     return;
                 case "disabled_extensions":
                     Set(key, new ListValue([]));

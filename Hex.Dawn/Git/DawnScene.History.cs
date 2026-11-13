@@ -80,7 +80,17 @@ internal sealed partial class DawnScene
             if (!documents.Contains(of) || !File.Exists(version.Copy))
                 return;
 
-            string old = File.ReadAllText(version.Copy);
+            string old;
+            try
+            {
+                old = File.ReadAllText(version.Copy);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Say(Said("diff.unreadable", ("name", Path.GetFileName(path)), ("reason", e.Message)), error: true);
+                return;
+            }
+
             if (answer == compare)
             {
                 Show(of);

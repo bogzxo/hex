@@ -21,19 +21,19 @@ internal sealed partial class DawnScene
 
     // How the glass looks, as thick as the four sliders of the effects say. The popups keep most of their colour so the
     // text on them reads, the sides a quieter glass out of the same (HexGlass), there's nothing on most of them but the tree
-    private UIGlass PopupGlass => HexGlass.Popup(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
-    private UIGlass SideGlass => HexGlass.Side(settings.GlassBlur, settings.GlassClarity, settings.GlassRim, settings.GlassBend);
+    private UIGlass PopupGlass => HexFrame.PopupGlass(settings);
+    private UIGlass SideGlass => HexFrame.SideGlass(settings);
 
-    private UIModule effectsModule = null!;
-    private Sparks sparks = null!;
-    private Lights lights = null!;
-    private readonly HexLightEffects lightEffects = new();
+    // The lights and the sparks and the module over everything that they're in, the frame's (HexFrame)
+    private UIModule effectsModule => frame.EffectsModule;
+    private Sparks sparks => frame.Sparks;
+    private Lights lights => frame.Lights;
 
     // the version of the code that was last thrown sparks off, so a tick that typed nothing throws none
     private int sparkedVersion = -1;
     private CodeEditor? sparkedIn;
 
-    private bool EffectsOn => settings.Effects is "subtle" or "all";
+    private bool EffectsOn => HexFrame.EffectsOn(settings);
 
     /// <summary>Whether the caret glides, its own switch whatever the effects are.</summary>
     private bool Motion => settings.EffectMotion;
@@ -49,16 +49,9 @@ internal sealed partial class DawnScene
 
     private void BuildEffects()
     {
-        effectsModule = compositor.CreateModule();
-        effectsModule.ShowInLayoutDebugger = false;
-        effectsModule.Interactive = false;
-        // the light under, the sparks over it
-        lights = effectsModule.Root.Add(new Lights());
-        sparks = effectsModule.Root.Add(new Sparks());
-
         // What is behind the editor is the stage, which only changes when the editor does (the canvas is a hole in it),
-        // so the picture of it with its glass is kept the way it is without
-        compositor.GlassKeepsPicture = true;
+        // so the picture of it with its glass is kept the way it is without (the frame says so)
+        frame.BuildEffects();
         ApplyEffects();
     }
 
@@ -72,25 +65,11 @@ internal sealed partial class DawnScene
                 open.Editor.TweenOpacity(1, 0).Complete();
         }
 
-        // Everything else of Dawn's that moves, the hovers and the drawers, as quick as the motion says. Not the stage,
-        // a layout being designed moves the way the game it is for will have it
-        compositor.AnimationSpeed = settings.UiAnimation;
-        compositor.ScrollSpeed = settings.ScrollSpeed;
-        compositor.MiddleScrollSpeed = settings.MiddleScrollSpeed;
+        // Everything else of Dawn's that moves, the hovers and the drawers, as quick as the motion says, the popups'
+        // glass, which lights are on and nothing left flying that is switched off: what Dusk does the same way, the
+        // frame's. Not the stage, a layout being designed moves the way the game it is for will have it
+        frame.ApplyEffects(settings, settings.UiAnimation);
         ApplyTerminalMotion();
-
-        if (!EffectsOn)
-        {
-            sparks.Clear();
-            lights.Clear();
-        }
-
-        lightEffects.CaretGlow = settings.EffectCaretGlow;
-        lightEffects.Spotlight = settings.EffectSpotlight;
-        lightEffects.Ripples = settings.EffectRipples;
-        lightEffects.Trail = settings.EffectTrail;
-
-        compositor.PopupGlass = Glassy ? PopupGlass : null;
 
         // The frame on glass over its field of light, or solid, see DawnScene.Materials
         DressChrome();
@@ -103,8 +82,7 @@ internal sealed partial class DawnScene
         if (EffectsOn)
         {
             Vector2? caret = document.IsText || document.View == HexView.Code ? compositor.Focus == code ? code.CaretPoint : null : null;
-            lightEffects.Update(lights, sparks, effectsModule.ToLocal(compositor.Pointer.Position), compositor.Pointer.Down, caret,
-                compositor.Skin?.AccentColor ?? Vector4.One, compositor.Skin?.TextColor ?? Vector4.One);
+            frame.UpdateLights(caret);
         }
 
         if (!TypingSparks || !document.IsText || compositor.Focus != code)

@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
                 yield break;
             }
 
-            if (!bottom.Shown || bottom.Selected != CONSOLE_PAGE)
+            if (!PanelOpen || bottom.Selected != CONSOLE_PAGE)
                 ShowPanel(CONSOLE_PAGE);
             TerminalTab made = terminalPanel.NewTab(profile, arguments.String("folder") is { } folder ? McpPath(folder) : null);
             long giveUp = System.Environment.TickCount64 + 15_000;

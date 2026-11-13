@@ -105,9 +105,12 @@ internal sealed partial class DawnScene
             : document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
         bool changed = !plainShown && (document.Modified || document.CodeEdited);
         string version = HexAbout.Label;
-        ((TitleBar)top).Title = titleNote.Length > 0
-            ? Said(changed ? "tabs.title_changed_note" : "tabs.title_note", ("name", name), ("version", version), ("note", titleNote))
-            : Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name), ("version", version));
+        // What's open, and after it, smaller and quieter, whose window it is: Hex3, what the release is called, and
+        // the line an extension put there (Hello Dolly's)
+        ((TitleBar)top).Title = Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name));
+        ((TitleBar)top).Caption = titleNote.Length > 0
+            ? Said("tabs.caption_note", ("codename", Hex.Shell.HexVersion.Name), ("note", titleNote)).Trim()
+            : Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name)).Trim();
         Engine.WindowManager.Title = Said("tabs.window_title", ("name", name), ("version", version));
     }
 

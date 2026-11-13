@@ -82,7 +82,7 @@ lay out, no browser to haul around, and no reason a text editor should need eith
 
 ## Dusk. A whole fucking terminal.
 
-![Hex Dusk in Graphite running PowerShell, showing a directory listing, Git history and ANSI color swatches](images/readme/terminal.png)
+![Hex Dusk in Graphite running PowerShell, showing a directory listing, Git history and ANSI colour swatches](images/readme/terminal.png)
 
 *Dusk, the terminal mode. PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.*
 
@@ -101,7 +101,7 @@ You can also make Dusk your default terminal where the platform supports it; [th
 
 *Same code, different mood. Click either image for the full-size capture.*
 
-Start with quiet Graphite, go light, or pick something warmer. **Settings → Appearance** has themes, skins, saved
+Hex3 comes in Solstice: flush panes and an accent for each mode. Go light with Solstice Day, back to quiet Graphite, or pick something warmer. **Settings → Appearance** has themes, skins, saved
 looks, glass, backdrops and motion controls. Change the code size, terminal font, panel widths and keybindings too.
 Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.
 

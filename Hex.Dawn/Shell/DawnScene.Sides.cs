@@ -87,6 +87,10 @@ internal sealed partial class DawnScene
 
             SaveSettings();
         };
+
+        // Dragged by the side's own handle on the line between the side and the middle (HexSplitter), which sizes it the
+        // way a grip of its own would. With one of its own as well there were two handles to a line
+        panel.Resizable = UIResize.None;
     }
 
     /// <summary>Puts the left side away after a drag past its least, as wide again as it was kept when it comes back.</summary>
@@ -109,13 +113,58 @@ internal sealed partial class DawnScene
             ToggleProperties();
     }
 
+    // How wide the strip is that the pointer takes hold of an edge in, half of it to each side of the line
+    private const float GRIP_HOLD = 10.0f;
+
+    // The handles of the two sides, each the only one on its line (HexSplitter)
+    private Hex.Shell.HexSplitter? leftSplitter, rightSplitter;
+
+    /// <summary>The handles of the sides for the tests, the left's and the right's.</summary>
+    internal (Hex.Shell.HexSplitter? Left, Hex.Shell.HexSplitter? Right) Splitters => (leftSplitter, rightSplitter);
+
+    /// <summary>
+    /// Every tick, the handle of each side laid exactly on the line between the side and the middle, for whichever list
+    /// of that side is showing. One handle a line: the lists have no grips of their own, several of them at one line was
+    /// handles lighting over each other as the pointer went across.
+    /// </summary>
+    private void CentreGrips()
+    {
+        leftSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter());
+        rightSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter());
+
+        UIRect window = chrome.Root.Bounds;
+        Vector4 accent = compositor.Skin?.AccentColor ?? Vector4.One;
+        bool ready = compositor.Skin is not null && !window.IsEmpty;
+
+        leftSplitter.Place(ready && left.Shown ? ShownGrip(leftGrips) : null, UIResize.Right,
+            new Vector2(left.Bounds.Max.X - window.Min.X, window.Max.Y - left.Bounds.Max.Y), GRIP_HOLD, left.Bounds.Height, accent);
+        rightSplitter.Place(ready && right.Shown ? ShownGrip(rightGrips) : null, UIResize.Left,
+            new Vector2(right.Bounds.Min.X - window.Min.X, window.Max.Y - right.Bounds.Max.Y), GRIP_HOLD, right.Bounds.Height, accent);
+    }
+
+    // The list of a side that is showing, which is the one a drag of the side's edge sizes: the widest of them when
+    // several are (the properties and a page inside them), a drag is counted from how wide what's held was. Null with none
+    private static UIComponent? ShownGrip(List<UIComponent> grips)
+    {
+        UIComponent? widest = null;
+        for (int i = 0; i < grips.Count; i++)
+        {
+            if (grips[i].IsShownInHierarchy && !grips[i].Bounds.IsEmpty && (widest is null || grips[i].Bounds.Width > widest.Bounds.Width))
+                widest = grips[i];
+        }
+
+        return widest;
+    }
+
     private void Grip(UIComponent panel, UIResize edge, Vector2 least, Vector2 most, Action<Vector2> keep)
     {
         panel.Resizable = edge;
         panel.MinSize = least;
         panel.MaxSize = most;
-        panel.GripSize = 2.0f;
-        panel.GripReach = 8.0f;
+
+        // Half the strip to each side of the edge, so it's held on the line between this and what's next to it
+        panel.GripSize = GRIP_HOLD * 0.5f;
+        panel.GripReach = GRIP_HOLD * 0.5f;
         panel.OnResized = keep;
         panel.OnResizeEnded = _ => SaveSettings();
     }

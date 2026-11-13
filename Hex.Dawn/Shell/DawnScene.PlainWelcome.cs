@@ -144,7 +144,9 @@ internal sealed partial class DawnScene
         if (outlineFoldedForWelcome)
         {
             outlineFoldedForWelcome = false;
-            if (Side == HexSide.Outline && !settings.SideBarHidden)
+            // Whatever the side shows now: the welcome folded it and the welcome going unfolds it. Only for the outline,
+            // F7 on the welcome (the designer's side by then) left the side bar away with nothing saying it was
+            if (!settings.SideBarHidden)
                 left.Show(true);
         }
         FoldValuesFor(document);

@@ -26,6 +26,7 @@ internal sealed partial class DawnScene
             start = made.Get<StackPanel>("start"), recent = made.Get<StackPanel>("recent_column");
         private readonly Label subtitle = made.Get<Label>("subtitle");
         public readonly StackPanel List = made.Get<StackPanel>("recent");
+        private readonly StackPanel news = made.Get<StackPanel>("news");
         public readonly Button CommandsButton = made.Get<Button>("commands");
         public void Invalidate() => width = 0;
         private float width;
@@ -35,7 +36,7 @@ internal sealed partial class DawnScene
         {
             if (!page.Visible || page.Bounds.Width <= 0.0f)
                 return;
-            float wanted = Math.Clamp(page.Bounds.Width - 64.0f, 160.0f, 640.0f);
+            float wanted = Math.Clamp(page.Bounds.Width - 104.0f, 160.0f, 760.0f);
             if (wanted == width && measuredWith == skin)
                 return;
             width = wanted;
@@ -59,6 +60,21 @@ internal sealed partial class DawnScene
                     hint.Size = hint.Size with { X = column };
                 else if (row is Button link)
                     FitFile(link, column, skin);
+            }
+
+            // What's new, each line wrapped to its column with its button under it
+            foreach (StackPanel line in news.Children.OfType<StackPanel>())
+            {
+                foreach (UIComponent part in line.Children)
+                {
+                    if (part is Label said)
+                        said.Size = said.Size with { X = column };
+                    else if (part is Button go)
+                    {
+                        go.Size = new Vector2(column, 30);
+                        go.Align = Origin.Left;
+                    }
+                }
             }
         }
 
@@ -164,10 +180,72 @@ internal sealed partial class DawnScene
         made.Get<Button>("changes").OnPressed = ShowChangelog;
         made.Get<Label>("subtitle").Text = Said("welcome.subtitle", ("version", HexAbout.Label));
 
+        // What the release is called and its number under the name, the name away for a release that has none
+        made.Get<Label>("release_name").Text = Hex.Shell.HexVersion.Name;
+        made.Get<Label>("release_name").Visible = Hex.Shell.HexVersion.Name.Length > 0;
+        made.Get<Label>("release_number").Text = Hex.Shell.HexVersion.Number;
+
+        FillWelcomeNews(made);
         var sizing = new WelcomeSizing(page, made);
         welcomeSizes.Add(sizing);
         FillWelcomeRecent(sizing);
         return page;
+    }
+
+    /// <summary>
+    /// What the release that's running brought, a line each and a button under it that goes to the thing, the setting,
+    /// the view of the side or the panel. The section is away for a version with nothing listed (HexWhatsNew).
+    /// </summary>
+    private void FillWelcomeNews(UILayout made)
+    {
+        IReadOnlyList<HexNewsItem> items = HexWhatsNew.For(Hex.Shell.HexVersion.Number);
+        made.Get<StackPanel>("news_column").Visible = items.Count > 0;
+        made.Get<Label>("news_title").Text = Said("welcome.news", ("version", HexAbout.Label));
+        StackPanel list = made.Get<StackPanel>("news");
+        foreach (HexNewsItem item in items)
+        {
+            var line = list.Add(new StackPanel { Spacing = 2.0f, Anchor = Origin.Left, Pivot = Origin.Left });
+            line.Add(new Label
+            {
+                Text = Said("whats_new." + item.Text), TextScale = 0.15f, Wrap = true, Dim = true,
+                Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(300, 0)
+            });
+            line.Add(new Button
+            {
+                Label = Said("whats_new." + item.Go), Icon = item.Icon, Style = "button_flat", LabelScale = 0.15f, Animated = false,
+                Anchor = Origin.Left, Pivot = Origin.Left,
+                Tooltip = Said(item.Place switch
+                {
+                    HexNewsPlace.Side => "welcome.news_tip_side",
+                    HexNewsPlace.Problems => "welcome.news_tip_problems",
+                    _ => "welcome.news_tip_setting"
+                }),
+                OnPressed = () => GoToNews(item)
+            });
+        }
+    }
+
+    /// <summary>Goes to where something new is, its setting's row, its section of the settings, its view of the side or the panel.</summary>
+    internal void GoToNews(HexNewsItem item)
+    {
+        switch (item.Place)
+        {
+            case HexNewsPlace.Setting:
+                OpenSettings(null);
+                settingsView?.Reveal(item.Target);
+                break;
+            case HexNewsPlace.Settings:
+                OpenSettings(item.Target);
+                break;
+            case HexNewsPlace.Side:
+                // Showing the view that's already up would put the side bar away
+                if (Side != item.Side || !left.Shown)
+                    ShowSide(item.Side);
+                break;
+            case HexNewsPlace.Problems:
+                ShowPanel(PROBLEMS_PAGE);
+                break;
+        }
     }
 
     // Both pages live for the session, including while hidden behind a document or the other view.
@@ -217,7 +295,9 @@ internal sealed partial class DawnScene
             Hover = like.Hover,
             HoverAmount = like.HoverAmount,
             HoverTime = like.HoverTime,
-            Animated = false,
+
+            // Gives under the pointer and when pressed like the ones it sits among. It was the one still button of the list
+            Animated = like.Animated,
             OnPressed = NewFileFromWelcome,
         };
 

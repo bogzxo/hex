@@ -245,7 +245,7 @@ internal sealed partial class HexSettings
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(at)!);
-            File.WriteAllText(at, SettingsSections.Write(at, (SettingsSections.EDITOR, editor)));
+            DocumentFile.Write(at, SettingsSections.Write(at, (SettingsSections.EDITOR, editor)), new System.Text.UTF8Encoding(false));
             return null;
         }
         catch (Exception e)

@@ -175,7 +175,7 @@ internal sealed partial class DawnScene
         // F11 still goes quiet when nothing is being debugged, see BuildQuiet
         commands.Add("View/appearance/look:screen", Said("menus.zen_mode"), ToggleQuiet, "Ctrl+K Z", "screen-full", UIKeyUse.BoundWhileTyping).IsChecked = () => Quiet;
         commands.Add("View/appearance/look:parts", Said("menus.side_bar"), ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
-        commands.Add("View/appearance/look:parts", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => bottom.Shown;
+        commands.Add("View/appearance/look:parts", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => PanelOpen;
         commands.Add("View/appearance/look:parts", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
 
         commands.Add("View/editor", Said("menus.word_wrap"), ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;

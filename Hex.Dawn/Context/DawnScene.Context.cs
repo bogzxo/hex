@@ -406,7 +406,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     void IPanels.ShowOutput() => ShowPanel(OUTPUT_PAGE);
     void IPanels.ShowProblems() => ShowPanel(PROBLEMS_PAGE);
     void IPanels.ShowTerminals() => ShowPanel(CONSOLE_PAGE);
-    bool IPanels.TerminalsShown => bottom.Shown && bottom.Selected == CONSOLE_PAGE;
+    bool IPanels.TerminalsShown => PanelOpen && bottom.Selected == CONSOLE_PAGE;
     Vector4 IPanels.Warning => WarningColor;
     void IPanels.RefreshProblems() => problemsDirty = true;
     void IPanels.AddProblems(Func<IReadOnlyList<HexProblem>> source) => problemSources.Add(source);

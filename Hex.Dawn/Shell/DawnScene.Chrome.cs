@@ -79,7 +79,7 @@ internal sealed partial class DawnScene
     /// <param name="remember">Whether this is what the editor starts with from now on.</param>
     private void SetScale(float scale, bool remember)
     {
-        scale = Scales.MinBy(known => MathF.Abs(known - scale));
+        scale = HexFrame.NearestScale(scale);
 
         // The two are one screen as far as anybody looking at it is concerned
         compositor.Scale = stage.Scale = scale;
@@ -393,6 +393,7 @@ internal sealed partial class DawnScene
         }
 
         designer.PlaceCanvas();
+        CentreGrips();
     }
 
     /// <summary>Helper method to say something where a list has nothing in it, out of hint.hor.</summary>

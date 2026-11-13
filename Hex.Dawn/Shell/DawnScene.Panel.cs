@@ -64,17 +64,15 @@ internal sealed partial class DawnScene
     // Whether the panel is folded down to its tabs, how it could be dragged before it was, and whether it's been folded
     // or opened since Hex came up (the first time is at once, the window opens with it as it was left)
     private bool panelFolded, panelFoldSettled;
-    private UIResize panelResize;
 
-    // Whether it was opened by hand while there's nothing wrong, it stays open then rather than folding itself again
-    private bool panelOpenedByHand;
+    // The edge the panel is dragged by while it's open, its top. Folded it has none
+    private const UIResize PANEL_EDGE = UIResize.Top;
 
-    // Whether there was nothing wrong as the file on screen came up, which file that was and until when it's still looked
-    // at (see UpdatePanel)
-    private bool panelNothingWrong = true;
-    private HexDocument? panelJudgedFor;
-    private long panelJudgedUntil;
-    private const long PANEL_JUDGED_MS = 1500;
+    /// <summary>
+    /// Whether the panel is up with a page showing, not folded down to its titles and not put away by Zen Mode. What
+    /// is in it (a terminal, the problems) only has work to do while this is so.
+    /// </summary>
+    internal bool PanelOpen => bottom.Shown && !settings.PanelCollapsed;
 
     // How much of the middle the panel took the last time the editor was fitted round it, see FitChrome
     private float panelTaken;
@@ -121,15 +119,25 @@ internal sealed partial class DawnScene
 
         // A height kept from before that has room for no more than a row or two is taken for broken, the panel comes up
         // as tall as it's laid out (eight rows of problems) and not four rows high with the rest to scroll through
-        bottom.Show(!settings.PanelHidden, instantly: true);
+        // The titles are always there: the panel is open under them or folded down to them, and never gone (Zen Mode
+        // aside). A panel put away altogether by an older Hex comes back folded, which is what "away" is now
+        if (settings.PanelHidden)
+        {
+            settings.PanelHidden = false;
+            settings.PanelCollapsed = true;
+        }
+
+        bottom.Show(true, instantly: true);
+        bottom.FoldOnSelectedTab = true;
         if (settings.PanelHeight >= MIN_KEPT_PANEL)
             bottom.Size = bottom.Size with { Y = Math.Clamp(settings.PanelHeight, MIN_PANEL, MAX_PANEL) };
         panelWanted = bottom.Size.Y;
 
         bottom.MinSize = new Vector2(0.0f, MIN_PANEL);
         bottom.MaxSize = new Vector2(0.0f, MAX_PANEL);
-        bottom.GripSize = 2.0f;
-        bottom.GripReach = 8.0f;
+        // Held on the line between the editor and the panel, half the strip to each side of it
+        bottom.GripSize = GRIP_HOLD * 0.5f;
+        bottom.GripReach = GRIP_HOLD * 0.5f;
         bottom.OnResized = size => settings.PanelHeight = panelWanted = size.Y;
         bottom.OnResizeEnded = _ => SaveSettings();
         bottom.OnFold = CollapsePanel;
@@ -143,8 +151,10 @@ internal sealed partial class DawnScene
     /// </summary>
     private void CollapsePanel(bool fold)
     {
+        if (settings.PanelCollapsed == fold)
+            return;
+
         settings.PanelCollapsed = fold;
-        panelOpenedByHand = !fold;
         SaveSettings();
     }
 
@@ -157,13 +167,11 @@ internal sealed partial class DawnScene
     private void FoldPanel(bool fold)
     {
         panelFolded = fold;
-        if (fold)
-        {
-            panelResize = bottom.Resizable;
-            bottom.Resizable = UIResize.None;
-        }
-        else
-            bottom.Resizable = panelResize;
+
+        // Open it's dragged by its top, folded by nothing. This kept whatever the panel had as it folded and put that
+        // back as it opened, and the first call of a session is an opening: it put back the nothing it started with, and
+        // the panel couldn't be dragged until it had been folded and opened by hand
+        bottom.Resizable = fold ? UIResize.None : PANEL_EDGE;
 
         bottom.Fold(fold, instantly: !panelFoldSettled);
         panelFoldSettled = true;
@@ -177,19 +185,31 @@ internal sealed partial class DawnScene
         ? bottom.FoldedFrom(bottom.Size.Y) * bottom.SlideAmount + (center.Spacing >= 0.0f ? center.Spacing : compositor.Skin?.Spacing ?? 0.0f)
         : 0.0f;
 
+    /// <summary>
+    /// Ctrl+J and View, Panel: the panel folded down to its titles, or opened from them. It used to take the whole panel
+    /// away, titles and all, and then there was nothing left on screen to bring it back with.
+    /// </summary>
     private void TogglePanel()
     {
-        bottom.ToggleShown();
-        settings.PanelHidden = !bottom.Shown;
-        SaveSettings();
+        // Out of Zen Mode's way first, and open: somebody asking for the panel wants to see it
+        if (!bottom.Shown)
+        {
+            bottom.Show(true);
+            CollapsePanel(false);
+            return;
+        }
+
+        CollapsePanel(!settings.PanelCollapsed);
     }
 
     /// <summary>Brings the panel up on one of its pages.</summary>
     private void ShowPanel(int page)
     {
         if (!bottom.Shown)
-            TogglePanel();
+            bottom.Show(true);
 
+        // Asked for by name (a task's output, the problems, the terminal), it's opened as well as turned to the page
+        CollapsePanel(false);
         bottom.Select(page);
     }
 
@@ -226,21 +246,11 @@ internal sealed partial class DawnScene
             }
         }
 
-        // Whether there's nothing wrong, as a file comes up and for a moment after (what's wrong with it takes a moment to
-        // be found), and then left be. Followed as it went, a mistake typed opened the panel and the code jumped up out of
-        // the way, and putting it right folded it and the code jumped back down
-        long judgedAt = System.Environment.TickCount64;
-        if (panelJudgedFor != document)
-        {
-            panelJudgedFor = document;
-            panelJudgedUntil = judgedAt + PANEL_JUDGED_MS;
-        }
-
-        if (judgedAt < panelJudgedUntil)
-            panelNothingWrong = problemList.Count == 0;
-
-        // Folded by hand, or by itself with nothing wrong on the page showing unless it was opened by hand since
-        bool fold = settings.PanelCollapsed || (bottom.Selected == PROBLEMS_PAGE && panelNothingWrong && !panelOpenedByHand);
+        // Folded or open as it was left by hand: its chevron, the title of the page that's up, Ctrl+J, or something
+        // asking for one of its pages. It used to fold itself as well, whenever a file came up with nothing wrong, and
+        // open again for a file with something: the code jumped up and down as tabs were switched, and a panel somebody
+        // had just opened was gone again a file later
+        bool fold = settings.PanelCollapsed;
         if (fold != panelFolded || !panelFoldSettled)
             FoldPanel(fold);
 
