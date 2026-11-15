@@ -31,7 +31,7 @@ internal sealed partial class HexGit
             Edge = accent,
             IconColor = accent,
             Actions = HeadingActions(repository),
-            Tag = new SideTag(Pressed: () => MakeActive(repository), Menu: _ => HeadingMenu(repository), Toggled: row =>
+            Tag = new SideTag(Pressed: () => MakeActive(repository), Menu: _ => HeadingMenu(repository), Id: SideId(repository, "heading"), Toggled: row =>
             {
                 if (row.Expanded) closedHeadings.Remove(root);
                 else closedHeadings.Add(root);

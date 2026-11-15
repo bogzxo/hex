@@ -7,9 +7,9 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The settings window's User | Workspace switch over its page, VS Code's two tabs. User is every setting, kept in the
-// user's file. Workspace is only what a folder can have its own way, kept in the folder's .hex\settings.hor (see
-// HexSettings.Workspace), a row there changed when the folder's file sets it. The sources ask here which one a change
-// goes to, so the rows themselves don't have to know.
+// user settings. Workspace is only the keys with workspace scope, kept in the folder's .hex\settings.hor (see
+// HexSettings.Workspace), a row there modified when the workspace overrides it. The sources ask here which scope a
+// change goes to, so the rows themselves don't have to know.
 internal sealed partial class DawnScene
 {
     // Whether the window shows the folder's settings rather than the user's
@@ -28,7 +28,7 @@ internal sealed partial class DawnScene
     /// <summary>Whether the window is on the folder's settings, and a folder is open to have some.</summary>
     internal bool InWorkspaceScope => workspaceScope && settings.WorkspacePath is not null;
 
-    /// <summary>The folder whose own settings are in force, the explorer's first, null while none is open.</summary>
+    /// <summary>The folder whose workspace settings apply, the explorer's first, null while none is open.</summary>
     private string? WorkspaceSettingsFolder() => explorer?.workspace is { Folders: [var first, ..] } ? first : null;
 
     // What a folder is called on the switch and in what's said
@@ -99,8 +99,8 @@ internal sealed partial class DawnScene
     internal string? ScopeLineShown => scopeLine is { Visible: true } line ? line.Text : null;
 
     /// <summary>
-    /// What a row says after its key about the other scope. On User a setting the folder's file sets is set by the
-    /// workspace, its value there isn't the one shown. On Workspace a setting the folder leaves alone that the user has
+    /// What a row says after its key about the other scope. On User a setting the workspace overrides says so, the
+    /// value in effect isn't the one shown. On Workspace a setting the folder leaves alone that the user has
     /// changed is modified in User as well. Null for the rest.
     /// </summary>
     private string? ScopeNote(string key)
@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
         return Said("settings_page.also_in_user_tip", ("value", WrittenValue(settings.UserValue(key))));
     }
 
-    // Whether the user's own value of a setting isn't what it comes as
+    // Whether the user value of a setting differs from its default value
     private bool UserModified(string key) => !SettingValues.Same(settings.UserValue(key), HexSettings.Usual.GetValueOrDefault(key));
 
     // A value the way the settings file writes it, empty for none or one it can't write
@@ -192,8 +192,8 @@ internal sealed partial class DawnScene
     /* Which file a row's change goes to */
 
     /// <summary>
-    /// What a row shows. On the folder's settings what its file sets, what's in force otherwise. On the user's a setting
-    /// the folder covers shows what the user has.
+    /// What a row shows. On Workspace the workspace value, the effective value otherwise. On User a setting the workspace
+    /// overrides shows the user value.
     /// </summary>
     private IRuntimeValue? ScopedValue(string key, IRuntimeValue? effective)
     {
@@ -204,14 +204,14 @@ internal sealed partial class DawnScene
         return settings.IsOverridden(key) ? settings.UserValue(key) : effective;
     }
 
-    /// <summary>Whether a row shows changed on the folder's settings, set in its file. Null on the user's, the source's own say.</summary>
+    /// <summary>Whether a row shows modified on Workspace, set in the workspace settings. Null on User, where the source decides.</summary>
     private bool? ScopedModified(string key) =>
         InWorkspaceScope && HexSettings.IsWorkspaceKey(key) ? settings.IsOverridden(key) : null;
 
     /// <summary>
-    /// A row changed, taken by the scope when it's the folder's business. On the folder's settings it's written to the
-    /// folder's file and put in force with <paramref name="apply"/>. On the user's, a setting the folder covers is kept
-    /// for the user's file and the folder's stays in force, which is said. False is the source's to do as ever.
+    /// A row changed, handled here when the key has workspace scope. On Workspace it's written to the workspace settings
+    /// and applied with <paramref name="apply"/>. On User, a setting the workspace overrides is saved to the user
+    /// settings and the workspace value stays in effect, which is said. False leaves it to the source as usual.
     /// </summary>
     private bool SetInScope(string key, IRuntimeValue value, Action<string, IRuntimeValue> apply)
     {
@@ -237,9 +237,9 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// A row's reset, taken by the scope when it's the folder's business. On the folder's settings it comes out of the
-    /// folder's file and the user's is put back in force. On the user's, a setting the folder covers goes back to what it
-    /// comes as for the user's file only. False is the source's to do as ever.
+    /// A row's reset, handled here when the key has workspace scope. On Workspace the key is removed from the workspace
+    /// settings and the user value applies again. On User, a setting the workspace overrides is reset to its default value
+    /// in the user settings only. False leaves it to the source as usual.
     /// </summary>
     private bool ResetInScope(string key, Action<string, IRuntimeValue> apply)
     {

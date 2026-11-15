@@ -120,6 +120,8 @@ internal sealed partial class HexExtensions
     /// <summary>Loads an extension (unless it was already) and calls its on_start, or says why that didn't work and leaves it be.</summary>
     internal void Start(HexExtension extension, bool loaded = false)
     {
+        // Started again it says its projects again, one it no longer says is gone
+        Hex.Core.Projects.ProjectTemplates.Forget(extension.Id);
         if ((loaded ? extension.Failed is null : Load(extension)) && extension.Raise("on_start", HexOf(extension)))
         {
             Console.WriteLine($"[Hex] Started the extension '{extension.Name}'.");
@@ -193,6 +195,7 @@ internal sealed partial class HexExtensions
         {
             screens.ForgetTitleNote(extension);
             ForgetAgents(extension);
+            Hex.Core.Projects.ProjectTemplates.Forget(extension.Id);
         }
     }
 }

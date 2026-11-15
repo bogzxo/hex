@@ -305,14 +305,14 @@ internal sealed partial class DawnScene
         Reveal("color");
         test.Check("colour: a colour has a picker and its four numbers", () =>
             designer.editors["color"] is StackPanel { Children: [ColorPicker, StackPanel { Children.Count: 4 }] });
-        test.Click(In(() => Picker().AlphaBounds, 0.5f, 0.97f));
+        test.Click(In(() => Picker().AlphaBounds, 0.97f, 0.5f));
         test.Drag(In(() => Picker().ShadeBounds, 0.3f, 0.4f), In(() => Picker().ShadeBounds, 0.95f, 0.95f));
         test.Wait();
-        test.Check("colour: dragging through the square picks a shade, the strip how solid it is", () =>
+        test.Check("colour: dragging through the square picks a shade, the slider how solid it is", () =>
             ((Label)label!).Color is { X: > 0.8f, Y: < 0.2f, Z: < 0.2f, W: > 0.9f } && Code().Contains("color: vec("));
-        test.Click(In(() => Picker().HueBounds, 0.5f, 0.34f));
+        test.Click(In(() => Picker().HueBounds, 0.34f, 0.5f));
         test.Wait();
-        test.Check("colour: the other strip picks the hue", () => ((Label)label!).Color is { X: < 0.2f, Y: > 0.8f, W: > 0.9f });
+        test.Check("colour: the hue slider picks the hue", () => ((Label)label!).Color is { X: < 0.2f, Y: > 0.8f, W: > 0.9f });
         test.Check("colour: and the numbers follow", () =>
             ((StackPanel)designer.editors["color"]).Children[1].Children[1] is NumberBox green && Near(green.Value, ((Label)label!).Color!.Value.Y, 0.002f));
     }

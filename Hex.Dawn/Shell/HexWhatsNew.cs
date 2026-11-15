@@ -15,7 +15,10 @@ internal enum HexNewsPlace
     Side,
 
     // The Problems page of the panel under the editor
-    Problems
+    Problems,
+
+    // The New Project window
+    NewProject
 }
 
 /// <summary>
@@ -45,7 +48,8 @@ internal static class HexWhatsNew
         ["3.0.0"] =
         [
             new("solstice", "go_profiles", "color-mode", HexNewsPlace.Settings, EditorSettingsCatalog.PROFILES),
-            new("horizon_line", "go_tasks", "warning", HexNewsPlace.Problems)
+            new("horizon_line", "go_tasks", "warning", HexNewsPlace.Problems),
+            new("new_project", "go_new_project", "new-folder", HexNewsPlace.NewProject)
         ],
         ["2.9.1"] =
         [

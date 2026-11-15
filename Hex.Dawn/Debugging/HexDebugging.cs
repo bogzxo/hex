@@ -902,9 +902,13 @@ internal sealed partial class HexDebugging
                     if (debuggingKind != DebugSession.CORECLR && happened.Text.AsSpan(0, Math.Max(0, tab)).SequenceEqual("console"))
                         break;
                     foreach (string line in happened.Text[(tab + 1)..].TrimEnd('\r', '\n').Split('\n'))
+                    {
                         context.Notices.Note(line.TrimEnd('\r'));
+                        NoteAgentOutput(line.TrimEnd('\r'));
+                    }
                     break;
                 case DebugEventKind.Ended:
+                    AgentExitCode = happened.ExitCode;
                     SayEnded(happened);
                     FinishCTestDebug(ctestDebugRun, !stoppingByHand && !endedByException && happened.Text.Length == 0
                         ? ctestDebugRun?.Test?.DebugResult(happened.ExitCode, ctestDebugRun.Time.Elapsed.TotalSeconds) : null);
@@ -960,6 +964,7 @@ internal sealed partial class HexDebugging
         // .NET one its type and message
         string said = why == "step" ? "debugging.stepped_to" : dWhat is not null ? "debugging.d_stopped" : stoppedOn is not null ? "debugging.exception_at" : "debugging.stopped_at";
         string what = dWhat ?? (stoppedOn is { } thrown ? $"{thrown.Type}, {thrown.Message}" : string.Empty);
+        AgentStopReason = what.Length > 0 ? $"{why}: {what}" : why;
         if (happened.ConditionFailed is { } failed)
             context.Notices.Say(ConditionFailed(failed), error: true);
         else

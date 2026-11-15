@@ -4,8 +4,8 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The settings extensions describe in their extension object (a title, what it does, its kind and its default each) as
-// rows of the settings like every other one, help under the name, a reset while one isn't what the extension says it
-// comes as, and found by the search. They used to be a template of their own with the help in a tooltip and nothing to
+// rows of the settings like every other one, help under the name, a reset while one differs from its default value,
+// and found by the search. They used to be a template of their own with the help in a tooltip and nothing to
 // put one back.
 internal sealed partial class DawnScene
 {
@@ -69,7 +69,7 @@ internal sealed partial class DawnScene
                 return null;
 
             // What the file has made to fit, a number written past its ends shown at the end it's kept to, a choice that
-            // isn't one shown as what the extension says it comes as
+            // isn't one shown as its default value
             IRuntimeValue now = hex.extensions.SettingOf(row.Extension, row.Setting.Key);
             return row.Setting.Kind switch
             {

@@ -121,7 +121,8 @@ internal sealed partial class HexGit
             {
                 Color = context.Panels.Warning,
                 IconColor = context.Panels.Warning,
-                Tooltip = context.Strings.Said("git.merging_tip")
+                Tooltip = context.Strings.Said("git.merging_tip"),
+                Tag = new SideTag(Id: SideId(repository, "merging"))
             });
         }
 
@@ -135,7 +136,7 @@ internal sealed partial class HexGit
                 Color = ready ? null : context.Panels.Dim,
                 Tooltip = context.Strings.Said("git.commit_tip"),
                 Actions = [new UITreeAction("ellipsis", context.Strings.Said("git.commit_more"), () => CommitMenu(repository))],
-                Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository))
+                Tag = new SideTag(Pressed: () => AskCommit(repository), Menu: _ => CommitMenu(repository), Id: SideId(repository, "commit"))
             });
         }
 
@@ -169,6 +170,13 @@ internal sealed partial class HexGit
     // Which of the three a section is, what a merge left in conflict, what's staged and what isn't
     private enum SectionKind { Conflicts, Staged, Changes }
 
+    // The sections that were closed, by repository and which section. The side is made again every time git says
+    // something, and a section made open every time came open again under the pointer a moment after it was closed
+    private readonly HashSet<string> closedSections = new(PlatformPaths.Comparer);
+
+    // What a row of the side is known by when it's made again, so it keeps its selection and the side its scroll
+    private static string SideId(Repository repository, string what) => $"git:{repository.Git.Root}:{what}";
+
     // A section of files, how many there are at its right end, its buttons and its right click every file of it at once
     private UITreeItem Section(Repository repository, string title, List<(string Path, GitFileState State)> files, SectionKind kind)
     {
@@ -177,14 +185,19 @@ internal sealed partial class HexGit
 
         // What the filter lets through, with how many of how many on the section. Its buttons are still for all of them
         List<(string Path, GitFileState State)> shown = changesFilter.Length == 0 ? files : [.. files.Where(file => Shown(repository, file.Path, file.State))];
+        string id = SideId(repository, kind.ToString());
         var section = new UITreeItem(title, stagedSide ? "pass" : "diff")
         {
             Badge = shown.Count == files.Count ? files.Count.ToString() : $"{shown.Count}/{files.Count}",
             Expandable = true,
-            Expanded = true,
+            Expanded = !closedSections.Contains(id),
             Children = [],
             Actions = SectionActions(repository, paths, kind),
-            Tag = new SideTag(Menu: _ => SectionMenu(repository, paths, stagedSide), Key: key => SectionKey(repository, paths, stagedSide, key))
+            Tag = new SideTag(Menu: _ => SectionMenu(repository, paths, stagedSide), Key: key => SectionKey(repository, paths, stagedSide, key), Id: id, Toggled: row =>
+            {
+                if (row.Expanded) closedSections.Remove(id);
+                else closedSections.Add(id);
+            })
         };
 
         foreach (var (path, state) in shown)
@@ -209,7 +222,7 @@ internal sealed partial class HexGit
                 Tooltip = Path.GetRelativePath(repository.Git.Root, path).Replace('\\', '/'),
                 Actions = FileActions(repository, path, state, kind),
                 Tag = new SideTag(Pressed: () => OpenChange(repository, path, stagedSide), Menu: _ => FileMenu(repository, path, state, stagedSide),
-                    Key: key => FileKey(repository, path, state, stagedSide, key))
+                    Key: key => FileKey(repository, path, state, stagedSide, key), Id: $"{id}:{path}")
             });
         }
 

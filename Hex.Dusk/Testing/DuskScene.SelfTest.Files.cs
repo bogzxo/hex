@@ -44,7 +44,8 @@ internal sealed partial class DuskScene
             host.SaveSettings();
         });
 
-        // open_settings asks the Hex that is running, over its pipe, which the test plays the part of on a pipe of its own
+        // open_settings puts Dusk's own settings window up, and asks no Hex over its pipe to open settings.hor any more. The
+        // test plays the part of a Hex on a pipe of its own to hear that it isn't asked
         string? heard = null;
         test.Run(() =>
         {
@@ -61,8 +62,9 @@ internal sealed partial class DuskScene
         });
         test.Settle(0.2f);
         test.Run(() => Run("open_settings"));
-        test.WaitFor(() => heard is not null, 3.0f);
-        test.Check("open_settings asks the Hex that is running to open settings.hor", () => heard == $"open|{Path.GetFullPath(settingsFile)}|0");
+        test.Settle(0.5f);
+        test.Check("open_settings puts the settings window up rather than opening settings.hor", () => SettingsPage is not null && heard is null);
+        test.Run(CloseSettings);
         test.Run(() => Environment.SetEnvironmentVariable("DUSK_HEX_PIPE", "dusk-selftest-nobody-" + Environment.ProcessId));
 
         // A plugin put in the user's folder starts, and starts again when it changes

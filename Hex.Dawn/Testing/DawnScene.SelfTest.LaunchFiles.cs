@@ -104,7 +104,8 @@ internal sealed partial class DawnScene
     private void TestPlainStart(HexPointerScript test, string goFile)
     {
         // A button of the layout says its text by key, "@welcome.open_file", the one made in code says it
-        bool Says(Button button, string key) => button.Label == Said(key) || button.Label == "@" + key;
+        // The palette's button has its keys after its name, so a label that starts with the text says it
+        bool Says(Button button, string key) => button.Label.StartsWith(Said(key), StringComparison.Ordinal) || button.Label == "@" + key;
         int IndexIn(UIComponent list, string key) => list.Children.ToList().FindIndex(child => child is Button { } button && Says(button, key));
         test.Run(() =>
         {
@@ -116,12 +117,16 @@ internal sealed partial class DawnScene
         test.Check("launch: started on code the empty layout has no tab, and the status bar says nothing of HIDL or where the caret is", () =>
             PlainStart && documents.Count == 1 && docTabs.Tabs.Count == 0
             && languageItem.IsVisible?.Invoke() == false && caretItem.IsVisible?.Invoke() == false);
-        test.Check("launch: its Start list leads with Open Folder and Open File, then New File, the palette and New Layout", () =>
+        // Keyboard Shortcuts went to the Help column with Solstice's welcome, New Layout is the Start list's last
+        test.Check("launch: its Start list leads with Open Folder and Open File, then New File, New Project, the palette and New Layout last", () =>
             plainPage is not null && Descendant<Button>(plainPage, button => Says(button, "welcome.new_file"))?.Parent is { } start
+            && IndexIn(start, "welcome.open_folder") == start.Children.ToList().FindIndex(child => child is Button)
             && IndexIn(start, "welcome.open_folder") < IndexIn(start, "welcome.open_file")
             && IndexIn(start, "welcome.open_file") < IndexIn(start, "welcome.new_file")
+            && IndexIn(start, "welcome.new_file") + 1 == IndexIn(start, "new_project.welcome")
+            && IndexIn(start, "new_project.welcome") < IndexIn(start, "welcome.commands")
             && IndexIn(start, "welcome.commands") < IndexIn(start, "welcome.new_layout")
-            && IndexIn(start, "welcome.new_layout") < IndexIn(start, "welcome.keys"));
+            && IndexIn(start, "welcome.new_layout") == start.Children.Count - 1);
 
         test.Run(() => Open(goFile));
         test.Settle(0.3f);

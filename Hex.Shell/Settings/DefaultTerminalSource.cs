@@ -25,7 +25,7 @@ public sealed class DefaultTerminalSource(Action<string>? problem = null) : ISet
 
     public IRuntimeValue? Get(string key) => key == KEY ? Values.Bool(HexDefaultTerminal.Installed) : null;
 
-    // What the system has is no setting of the file, so there is nothing it comes as for it to differ from
+    // The system's choice isn't a key in the file, so there is no default value for it to differ from
     public bool IsModified(string key) => false;
 
     public void Set(string key, IRuntimeValue value)

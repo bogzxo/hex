@@ -33,7 +33,8 @@ internal sealed partial class DawnScene
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([new StringValue(Dolly())])));
         test.Wait();
         test.Check("extensions: switched off on its page of the settings, its greeting goes and it stays off", () =>
-            titleNote.Length == 0 && TitleNow() == Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name)).Trim() && settings.DisabledExtensions.Contains("hello_dolly")
+            titleNote.Length == 0 && TitleNow() == Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name),
+                ("build", Hex.Shell.HexVersion.Build is { Length: > 0 } number ? Said("tabs.build", ("number", number)) : string.Empty)).Trim() && settings.DisabledExtensions.Contains("hello_dolly")
             && extensions.All.First(extension => extension.Id == "hello_dolly") is { Enabled: false }
             && SettingsPage!.IsModified?.Invoke("disabled_extensions") == true);
         test.Run(() => SettingsPage!.Enter("disabled_extensions", new ListValue([])));

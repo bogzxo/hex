@@ -101,6 +101,13 @@ let servers = {
         version: ["version"],
         reload: ["go.mod", "go.work"]
     },
+    java: {
+        command: "jdtls", args: [], language: "java", extensions: [".java"],
+        about: "Java, Eclipse's JDT language server, Maven and Gradle projects included. Wants a JDK 21 or later on the PATH. Its download has the jdtls launcher in its bin folder, put that on the PATH or set it here (jdtls.bat on Windows, which wants Python too).",
+        install: { macos: "brew install jdtls" },
+        update: { macos: "brew upgrade jdtls" },
+        repo: "eclipse-jdtls/eclipse.jdt.ls"
+    },
     rust: {
         command: "rust-analyzer", args: [], language: "rust", extensions: [".rs"],
         about: "Rust, rust-analyzer, with cargo for the project. Comes with rustup as a component of the toolchain.",

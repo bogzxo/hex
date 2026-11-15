@@ -218,11 +218,20 @@ internal sealed partial class DawnScene
                 {
                     HexNewsPlace.Side => "welcome.news_tip_side",
                     HexNewsPlace.Problems => "welcome.news_tip_problems",
+                    HexNewsPlace.NewProject => "new_project.title",
                     _ => "welcome.news_tip_setting"
                 }),
                 OnPressed = () => GoToNews(item)
             });
         }
+
+        // The whole of what changed, every release's notes, a link under the lines
+        list.Add(new Label
+        {
+            Text = Said("welcome.news_all"), Markdown = true, TextScale = 0.15f,
+            Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left,
+            OnLink = _ => ShowChangelog()
+        });
     }
 
     /// <summary>Goes to where something new is, its setting's row, its section of the settings, its view of the side or the panel.</summary>
@@ -244,6 +253,9 @@ internal sealed partial class DawnScene
                 break;
             case HexNewsPlace.Problems:
                 ShowPanel(PROBLEMS_PAGE);
+                break;
+            case HexNewsPlace.NewProject:
+                ShowNewProject();
                 break;
         }
     }
@@ -277,7 +289,7 @@ internal sealed partial class DawnScene
     /// <summary>
     /// A New File put in the Start list, made like Open File beside it. On the plain welcome it goes first and New Layout
     /// goes to the bottom, somebody who writes Go wants a file before a layout, on the designer's welcome it sits after
-    /// New Layout.
+    /// New Layout. New Project goes in under it.
     /// </summary>
     private void PutNewFile(bool plain, Button newLayout, Button like, Button last)
     {
@@ -306,6 +318,23 @@ internal sealed partial class DawnScene
         start.Insert(plain ? IndexOf(newLayout) : IndexOf(newLayout) + 1, newFile);
         if (plain)
             start.MoveChild(newLayout, IndexOf(last));
+
+        // New Project right under New File, a whole folder of a language to start from rather than one file
+        var newProject = new Button
+        {
+            Label = Said("new_project.welcome"),
+            Icon = "new-folder",
+            Style = like.Style,
+            LabelScale = like.LabelScale,
+            Anchor = like.Anchor,
+            Pivot = like.Pivot,
+            Hover = like.Hover,
+            HoverAmount = like.HoverAmount,
+            HoverTime = like.HoverTime,
+            Animated = like.Animated,
+            OnPressed = ShowNewProject,
+        };
+        start.Insert(IndexOf(newFile) + 1, newProject);
     }
 
     /// <summary>The welcome's New File, asked for by name in the first folder of the workspace, a scratchpad with none open.</summary>

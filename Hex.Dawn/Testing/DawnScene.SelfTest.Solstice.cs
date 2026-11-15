@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
             && left.Radius == 0.0f && left.Inset == 0.0f && center.Radius == 0.0f && center.Inset == 0.0f
             && codeScroll.Color == skin.FieldColor with { W = 1.0f });
         test.Check("solstice: Dawn's accent is the orange, and a warning isn't taken for it", () =>
-            compositor.Skin is { } skin && skin.Palette.Accent.X > 0.9f && skin.Palette.Accent.Z < 0.4f && skin.Palette.Warning != skin.Palette.Accent);
+            compositor.Skin is { } skin && skin.Palette.Accent.X > skin.Palette.Accent.Y && skin.Palette.Accent.Y > skin.Palette.Accent.Z && skin.Palette.Accent.Z < 0.4f && skin.Palette.Warning != skin.Palette.Accent);
 
         // Whatever an earlier suite left open is closed, the welcome is only over the empty layout Hex started with
         test.Run(() =>

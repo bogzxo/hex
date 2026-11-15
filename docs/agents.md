@@ -83,6 +83,17 @@ they declare. A client can subscribe to `hex://harness/changes` and is told when
 command in one and waits until it's done, handing back what it printed and its exit code, and `terminal_read` and
 `terminal_send` take a tab. The notebook tools take a `path` and open the notebook first, and `notebook_new` makes one.
 
+The debugger is there too, what F9, F5, the steps and the Debug view are to somebody at Hex. `debug_breakpoint` puts a
+breakpoint on a line of a file (a condition if you like, or `remove`) without the file being open, and
+`debug_breakpoints` lists them. `debug_start` builds and starts a program under the debugger (a `project`, or what F5
+would pick) and `debug_step` continues, steps over, in or out, or pauses. Both wait until it stops, ends or
+`wait_seconds` pass and say where it is, why it stopped, the top of the stack and what it wrote since last asked, so
+there's nothing to poll. `debug_state` says the same any time, `debug_variables` lists a frame's variables by scope
+(objects opened `depth` levels down), `debug_evaluate` evaluates an expression in a frame the way the debug console does,
+and `debug_stop` ends it and says its exit code. `debug_screenshot` is a PNG of the debugged program's own window,
+drawn by itself while it runs, even behind other windows. Stopped at a breakpoint it can't draw itself, so the screen is
+copied where it is, with `raise` bringing it to the front for a moment first. Windows only for now.
+
 Every call runs on Hex's own thread a tick at a time, so a click is a move, a press and a let go like a hand's, and an
 idle Hex wakes for it at once. Points are window pixels, the same in a screenshot as in a click. Moving the real mouse
 takes the pointer back from the agent. The server is `Hex.Core/Mcp` (the protocol, the pipe, the bridge) and

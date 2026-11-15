@@ -4,7 +4,7 @@
 
 let plugin = {
     name: "Themes",
-    description: "A command for every theme, the next one round, and the animations on and off.",
+    description: "A unique command for every theme installed, and the animation options.",
     version: "0.1.0",
     author: "bogz"
 };

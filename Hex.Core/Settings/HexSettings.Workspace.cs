@@ -4,17 +4,17 @@ using Horizon.UI.Components;
 
 namespace Hex.Core;
 
-// The folder that's open with settings of its own, VS Code's workspace settings. A .hex\settings.hor in the first folder
-// of the explorer, the same settings object as the user's file with only an editor section, and only the keys somebody
-// set for that folder in it. They go over the user's while the folder is open, and the user's file never gets them, a
-// setting the folder covers is still written there as the user had it. How code is typed and drawn, git and running
-// can be a folder's, how Hex looks, its extensions, its language servers and its panels stay the user's.
+// Workspace settings, as in VS Code. A .hex\settings.hor in the first folder of the explorer, the same settings object as
+// the user settings with only an editor section, holding only the keys somebody set for that folder. They override the
+// user settings while the folder is open and are never written into them, an overridden key keeps its user value there.
+// How code is typed and drawn, git and running have workspace scope. How Hex looks, its extensions, its language
+// servers and its panels are user settings only.
 internal sealed partial class HexSettings
 {
-    /// <summary>The folder a project's own settings are kept in, and the file in it.</summary>
+    /// <summary>The folder a project's workspace settings are kept in, and the file in it.</summary>
     public const string WORKSPACE_FOLDER = ".hex", WORKSPACE_FILE = "settings.hor";
 
-    // The settings a folder can have its own way
+    // The keys with workspace scope
     private static readonly HashSet<string> WorkspaceKeys = new(StringComparer.Ordinal)
     {
         "tab_size", "insert_spaces", "detect_indentation", "line_numbers", "indent_guides", "editorconfig",
@@ -29,21 +29,21 @@ internal sealed partial class HexSettings
 
     /// <summary>
     /// The key the languages files of the folder were set to by hand are kept under (Change Language Mode), only ever in
-    /// the folder's own file, by their path in the folder.
+    /// the workspace settings, by their path in the folder.
     /// </summary>
     public const string LANGUAGE_OVERRIDES = "language_overrides";
 
     /// <summary>The language each file was set to by hand, by its full path, the folder's.</summary>
     public readonly Dictionary<string, string> LanguageOverrides = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>How many times <see cref="LanguageOverrides"/> changed, for whoever puts them in force to know to look again.</summary>
+    /// <summary>How many times <see cref="LanguageOverrides"/> changed, for whoever applies them to know to look again.</summary>
     public int LanguageOverridesChanged { get; private set; }
 
     // The folder a workspace file is for, the one over its .hex
     private string? WorkspaceFolder => WorkspacePath is { } at ? Path.GetDirectoryName(Path.GetDirectoryName(at)) : null;
 
     /// <summary>
-    /// A file's language set by hand, null to let it be worked out again, and the folder's file written with it when a
+    /// A file's language set by hand, null to let it be worked out again, and the workspace settings written with it when a
     /// folder is open. Says what went wrong, null when fine.
     /// </summary>
     public string? SetLanguageOverride(string fullPath, string? languageId)
@@ -105,30 +105,30 @@ internal sealed partial class HexSettings
     // A setting the folder sets is written to the user's file from here, and goes back to this when the folder lets go
     private Dictionary<string, IRuntimeValue> userValues = new(StringComparer.Ordinal);
 
-    // Everything at what it comes as, made the first time it's asked for
+    // Every default value, made the first time it's asked for
     private static Dictionary<string, IRuntimeValue>? usual;
 
     private readonly Dictionary<string, IRuntimeValue> workspaceValues = new(StringComparer.Ordinal);
 
-    /// <summary>The folder's settings file, null while no folder is open. It needn't be there.</summary>
+    /// <summary>The workspace settings file, null while no folder is open. It needn't exist.</summary>
     public string? WorkspacePath { get; private set; }
 
-    /// <summary>What the folder's file sets, by key, only the keys somebody set there.</summary>
+    /// <summary>The workspace values by key, only the keys somebody set there.</summary>
     public IReadOnlyDictionary<string, IRuntimeValue> WorkspaceValues => workspaceValues;
 
-    /// <summary>Whether a folder can have a setting its own way.</summary>
+    /// <summary>Whether a key has workspace scope.</summary>
     public static bool IsWorkspaceKey(string key) => WorkspaceKeys.Contains(key);
 
-    /// <summary>Where a folder keeps its own settings.</summary>
+    /// <summary>Where a folder keeps its workspace settings.</summary>
     public static string WorkspacePathOf(string folder) => Path.Combine(folder, WORKSPACE_FOLDER, WORKSPACE_FILE);
 
-    /// <summary>Whether the folder's file sets a setting, which is then the folder's and not the user's.</summary>
+    /// <summary>Whether the workspace settings override a key.</summary>
     public bool IsOverridden(string key) => workspaceValues.ContainsKey(key);
 
-    /// <summary>Every setting at what it comes as, by key.</summary>
+    /// <summary>Every setting's default value, by key.</summary>
     public static IReadOnlyDictionary<string, IRuntimeValue> Usual => usual ??= new HexSettings(null).EditorValues();
 
-    // Whether a value is what a setting comes as, by how it's written
+    // Whether a value is a setting's default value, by how it's written
     private static bool IsUsual(string key, IRuntimeValue value)
     {
         if (!Usual.TryGetValue(key, out IRuntimeValue? comes))
@@ -143,13 +143,13 @@ internal sealed partial class HexSettings
         }
     }
 
-    /// <summary>What the user has a setting at, whatever the folder says, what it comes as when the user never changed it.</summary>
+    /// <summary>A setting's user value, whatever the workspace says, the default value when the user never changed it.</summary>
     public IRuntimeValue? UserValue(string key) =>
         IsOverridden(key) ? userValues.GetValueOrDefault(key) ?? Usual.GetValueOrDefault(key) : EditorValues().GetValueOrDefault(key);
 
     /// <summary>
-    /// The user's own value of a setting the folder covers, kept for the user's file while the folder's stays in force.
-    /// Null is the user's back at what it comes as. Saving is the caller's.
+    /// The user value of a setting the workspace overrides, kept for the user settings while the workspace value stays in
+    /// effect. Null resets the user value to its default. Saving is the caller's.
     /// </summary>
     public void SetUser(string key, IRuntimeValue? value)
     {
@@ -160,9 +160,9 @@ internal sealed partial class HexSettings
     }
 
     /// <summary>
-    /// The folder's settings read from a folder, null for none, the last folder's let go of first. Says what went wrong
-    /// when its file doesn't read, null when it does or isn't there. One that doesn't read changes nothing when it's the
-    /// file that's in force already, a new folder's starts with nothing of its own.
+    /// Loads a folder's workspace settings, null for none, dropping the last folder's first. Says what went wrong when
+    /// the file is invalid, null when it's valid or missing. An invalid file changes nothing when it's the one already
+    /// loaded, and a new folder's starts with no overrides.
     /// </summary>
     public string? LoadWorkspace(string? folder)
     {
@@ -207,8 +207,8 @@ internal sealed partial class HexSettings
     }
 
     /// <summary>
-    /// A setting set for the folder and written to its file, what the user had kept. The setting itself is the caller's
-    /// to put in force, the way a row would, so whatever else it changes changes too. Says what went wrong, null when fine.
+    /// A setting set in the workspace settings and saved, the user value kept. The caller applies the setting itself,
+    /// the way a row would, so whatever else it changes changes too. Says what went wrong, null when fine.
     /// </summary>
     public string? SetWorkspace(string key, IRuntimeValue value)
     {
@@ -222,13 +222,13 @@ internal sealed partial class HexSettings
     }
 
     /// <summary>
-    /// A setting the folder's file sets taken out of it, the user's again. The user's value (UserValue, asked before this)
-    /// is the caller's to put back in force. Says what went wrong, null when fine.
+    /// Removes a workspace override so the user value applies again. The caller applies the user value (UserValue, asked
+    /// before this). Says what went wrong, null when fine.
     /// </summary>
     public string? RemoveWorkspace(string key) => workspaceValues.Remove(key) ? SaveWorkspace() : null;
 
     /// <summary>
-    /// The folder's file written, with what it sets and nothing else, made with its folder when it isn't there. Says
+    /// Writes the workspace settings file with its overrides and nothing else, creating its folder when it doesn't exist. Says
     /// what went wrong, null when fine.
     /// </summary>
     public string? SaveWorkspace()
@@ -240,7 +240,7 @@ internal sealed partial class HexSettings
         foreach (var (key, value) in workspaceValues)
             editor.Add(key, value);
         if (editor.Count == 0)
-            editor.Note("tab_size: 2, the editor's settings this folder has its own way, over the user's");
+            editor.Note("tab_size: 2, workspace editor settings that override the user settings");
 
         try
         {

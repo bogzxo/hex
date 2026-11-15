@@ -75,4 +75,7 @@
     <ProjectReference Include="$(HorizonRoot)Horizon.HIDL\Horizon.HIDL.csproj" />
   </ItemGroup>
 
+  <!-- The build number in the title bar, one more every build, see HexBuildNumber.targets -->
+  <Import Project="HexBuildNumber.targets" />
+
 </Project>

@@ -8,9 +8,11 @@ let welcome = compositor.panel({
 });
 
 // Scroll on short windows. The working column starts at the left where the eye does, it isn't centred, so the page
-// reads from the same edge as the code that replaces it.
-let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(56, 48, 32, 32) });
+// reads from the same edge as the code that replaces it. The room over and under the page is spacers scrolled with it
+// rather than the scroll's padding, which it clips inside of: scrolled, the page went 48 pixels under the pane's top.
+let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(56, 0, 32, 0) });
 let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
+let welcome_top = compositor.spacer({ parent: welcome_body, size: vec(0, 48) });
 let page = compositor.stack({
     parent: welcome_body,
     anchor: "top_left",
@@ -18,6 +20,7 @@ let page = compositor.stack({
     size: vec(760, 0),
     spacing: 28,
 });
+let welcome_bottom = compositor.spacer({ parent: welcome_body, size: vec(0, 32) });
 
 // The icon beside the name, the way an app's welcome window has it
 let brand = compositor.stack({

@@ -5,8 +5,8 @@ using Horizon.UI.Components;
 
 namespace Hex.Dusk;
 
-// The settings (Ctrl+,), Hex's one window of them, the terminal's section put in force as it changes and the editor's
-// written to the file for Dawn to take in (its effects and its picture are Dusk's too and put in force here). The same
+// The Settings window (Ctrl+,), the same one for all of Hex. The terminal section is applied as it changes and the
+// editor section written to the file for Dawn to reload (its effects and its picture are Dusk's too and applied here). The same
 // window Dawn shows, one search over all of it.
 internal sealed partial class DuskScene
 {
@@ -30,7 +30,7 @@ internal sealed partial class DuskScene
             return;
         }
 
-        // The editor's section, written for Dawn, the effects and the picture of it put in force here as they change
+        // The editor section, written for Dawn, its effects and picture applied here as they change
         var editor = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Settings, EditorSettingsCatalog.Usual);
         editor.Pressed = (key, which) => SettingPressed(editor, key, which);
         editor.Changed = () =>
@@ -39,7 +39,7 @@ internal sealed partial class DuskScene
             ReadBackdrop();
         };
 
-        // Editor · Text as well, the tab size and the rest Dawn puts in force on its files, written into the same section.
+        // Editor · Text as well, the tab size and the rest Dawn applies to its files, written into the same section.
         // Each source keeps the keys of the section it doesn't have, so the two write side by side
         var text = new FileSectionSource(host.Settings.Path, SettingsSections.EDITOR, EditorSettingsCatalog.Text, EditorSettingsCatalog.Usual);
 
@@ -52,8 +52,6 @@ internal sealed partial class DuskScene
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = effectGlass ? HexGlass.Window(popupGlass) : null;
 
-        // The file the window writes, opened Dusk's way, in the Hex that's running or the system's editor
-        settingsView.AddTitleAction("json", HexText.Get("settings_window.open_file"), () => Run("open_settings"));
         chrome.Root.Add(settingsView.Window);
 
         // The glass under its sliders, as they make it while they're dragged

@@ -9,6 +9,7 @@ Hex3 is a project-health release: a new default look, a steadier base, and fewer
 - a line under the title bar fills as far as a download, an install or an update check has got, runs full while a build or the tests do, and turns red when one fails
 - C# keeps ReSharper's colours in Solstice
 - the title bar says what is open, then Hex3 and the release's name, then an extension's note, parted by dots, the last two smaller and quieter
+- New Project (File, Ctrl+Shift+N) makes a C#, Horizon game, Python, Java, C++, Rust, Go, TypeScript or D project, says whether its language server is installed, and lists the templates extensions add with `hex.project_template`
 - Welcome starts at the left, shows the release by name and number, and lists what is new with a button to each thing
 
 ## the panel under the editor

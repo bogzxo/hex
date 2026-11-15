@@ -7,7 +7,7 @@
 let strings = {
     // The window itself, its title bar
     window: {
-        title: "Hex3"
+        title: "Hex333"
     },
 
     // The buttons at the right end of the tabs, and what each says when the pointer rests on it
@@ -150,14 +150,72 @@ let strings = {
         news: "New in {version}",
         news_tip_setting: "Show this in Settings",
         news_tip_side: "Show this in the side bar",
-        news_tip_problems: "Show the Problems panel"
+        news_tip_problems: "Show the Problems panel",
+        news_all: "[All release notes](changelog)"
+    },
+
+    // New Project, the kinds of project down the left and their name, place and language server on the right (DawnScene.NewProject)
+    new_project: {
+        command: "New Project...",
+        welcome: "New Project...",
+        title: "New Project",
+        name: "Project name",
+        name_hint: "MyProject",
+        location: "Location",
+        browse: "Browse...",
+        search: "Search templates",
+        no_match: "No template matches the search.",
+        from_extension: "Added by the {extension} extension.",
+        venv: "Create a virtual environment (.venv)",
+        git: "Initialise a git repository",
+        create: "Create",
+        cancel: "Cancel",
+        creates: "Creates {folder}",
+        creating: "Creating {name}...",
+        created: "Created {name} in {folder}.",
+        failed: "Could not create {name}. {why}",
+        name_empty: "Enter a name for the project.",
+        name_start: "The name has to start with a letter.",
+        name_characters: "Use letters, digits, dashes, underscores and dots in the name.",
+        name_long: "The name can be 64 characters at most.",
+        no_location: "Enter a full path for the location.",
+        taken: "{folder} already exists and isn't empty.",
+        no_tool: "{tool} isn't on the PATH, and this project is made with it.",
+        server_found: "Language server: {command} is installed. Completion and diagnostics start when the project opens.",
+        server_missing: "Language server: {command} isn't installed. The project is created anyway, install it for completion and diagnostics.",
+        install_server: "Install {command}",
+        get_server: "Get {command}",
+        kind_csharp_console: "C# Console App",
+        kind_csharp_classlib: "C# Class Library",
+        kind_csharp_xunit: "C# xUnit Test Project",
+        kind_csharp_horizon: "C# Horizon Game",
+        kind_python: "Python Application",
+        kind_java_maven: "Java (Maven)",
+        kind_cpp_cmake: "C++ (CMake)",
+        kind_rust: "Rust (Cargo)",
+        kind_go: "Go Module",
+        kind_typescript: "TypeScript (Node.js)",
+        kind_d_dub: "D (dub)",
+        about_csharp_console: "A command-line program on .NET, made by the SDK's own template with a solution around it. Needs the .NET SDK.",
+        about_csharp_classlib: "A .NET library to reference from other projects, made by the SDK's template with a solution around it. Needs the .NET SDK.",
+        about_csharp_horizon: "A game on the Horizon engine whose first scene says “Goodbye, sunshine!”. It builds against a Horizon checkout on this machine, or clones the engine into external/horizon.",
+        about_csharp_xunit: "A .NET test project with xUnit, ready to run from the Testing view. Needs the .NET SDK.",
+        about_python: "A package in a src layout with pyproject.toml, a __main__ to run and pyright pointed at the project's .venv.",
+        about_java_maven: "A Maven project for Java 21 with an App class in a package named after the project. jdtls reads the pom.xml.",
+        about_cpp_cmake: "A C++20 executable with CMakeLists.txt. It exports compile_commands.json, which is what clangd reads the flags from.",
+        about_rust: "A Cargo binary crate with src/main.rs, what cargo new makes. rust-analyzer reads the Cargo.toml.",
+        about_go: "A Go module with a main package. gopls reads the go.mod.",
+        about_typescript: "A Node.js program in TypeScript with a tsconfig.json and npm scripts to build and start it.",
+        about_d_dub: "A dub executable with source/app.d. serve-d reads the dub.json."
     },
 
     // What a release brought, a line each on the welcome page and what the button beside it says (HexWhatsNew)
     whats_new: {
-        solstice: "Solstice is the new default look: flush panes and an accent for each mode, orange in Dawn and violet in Dusk. Solstice Day is its light version.",
+        solstice: "Solstice is a new fresh default look: flush panes and accents for each mode, orange in Dawn and violet in Dusk, and a light varient for certain people.",
         go_profiles: "Choose a look",
-        horizon_line: "A line under the title bar fills as far as a download, an install or an update check has got, runs full while a build or the tests do, and turns red when one fails.",
+        new_project: "New Project makes a C#, Horizon game, Python, Java, C++, Rust, Go, TypeScript or D project, says whether its language server is installed, and extensions can add their own templates.",
+        go_new_project: "New project",
+        horizon_line: "A neat progress bar tucked between the menustrip and editor, it shows download, install/update, builds or the tests progress, and turns red when one fails.",
         go_tasks: "Open Problems",
         agents_markdown: "Agent replies show headings, lists, links, code blocks and tables as formatted text.",
         go_agents: "Open Agents",
@@ -328,6 +386,7 @@ let strings = {
         too_many: "... More items are available. Collapse other items to display them.",
         not_hidl: "This file cannot be evaluated as HIDL.",
         layout: "This file is a layout. Its values are components; use Design view to edit them.",
+        dusk: "This file belongs to Dusk and only runs in the terminal, with dusk passed in. It is checked against Dusk's API instead.",
         copy_path: "Copy Path",
         copy_value: "Copy Value as HIDL",
         in_console: "Evaluate in Console",
@@ -459,7 +518,7 @@ let strings = {
             ],
             reopen: "Reopen last layout on start",
             reopen_tip: "Whether Hex starts with the layout that was open last",
-            note: "Settings are kept in `hex_settings.hor` next to the executable. The last open workspace is restored on start."
+            note: "Settings are kept in `settings.hor` in the settings folder next to the executable. The last open workspace is restored on start."
         },
 
         extensions: {
@@ -966,7 +1025,14 @@ let strings = {
         skipped_in_designer: "; skipped {skipped} (open in the designer; rename there)",
         renamed_everywhere: "Renamed {name} to {renamed}: {places} in {files}. Changes are unsaved{left}",
         colour: "Colour",
-        colour_text: "Colour value at this position in the code",
+        colour_text: "The colour written on line {line}. The old one is beside the new, press it to go back.",
+        colour_text_key: "{key} on line {line}. The old colour is beside the new, press it to go back.",
+        colour_red: "Red, 0 to 255",
+        colour_green: "Green, 0 to 255",
+        colour_blue: "Blue, 0 to 255",
+        colour_alpha: "Opacity, 0 to 100 percent",
+        colour_alpha_short: "A %",
+        colour_in_file: "In this file",
         use_it: "Apply",
         colour_is: "Colour set to {written}"
     },
@@ -1723,8 +1789,9 @@ let strings = {
         never_saved: "{name} (not yet saved)",
         title: "{name}",
         title_changed: "{name} *",
-        caption: "·  Hex3 {codename}",
-        caption_note: "·  Hex3 {codename}  ·  {note}",
+        caption: "·  Hex3 {codename}{build}",
+        caption_note: "·  Hex3 {codename}{build}  ·  {note}",
+        build: "  build {number}",
         window_title: "{name} - Hex3",
         welcome: "Welcome",
         welcome_of: "Welcome  -  {workspace}",
@@ -2059,7 +2126,7 @@ let strings = {
         close_pane: "Close pane",
         close_whole_tab: "Close the whole tab",
         rename_tab: "Rename tab",
-        settings_file: "Settings file",
+        settings_file: "Settings...",
         keys_file: "Keys file",
         quit: "Quit",
         command_palette: "Command palette",
@@ -2481,8 +2548,8 @@ let strings = {
         between: "Between {least} and {most}",
         nothing_to_pick: "nothing to pick from",
         reset_all_title: "Reset all settings?",
-        reset_all_text_one: "{count} setting goes back to what it comes as.",
-        reset_all_text_many: "{count} settings go back to what they come as.",
+        reset_all_text_one: "{count} setting is reset to its default value.",
+        reset_all_text_many: "{count} settings are reset to their default values.",
         reset_all_text_workspace_one: "{count} setting comes out of {name}'s settings, yours are in force again.",
         reset_all_text_workspace_many: "{count} settings come out of {name}'s settings, yours are in force again.",
         reset_all_yes: "Reset all",
@@ -2494,7 +2561,7 @@ let strings = {
         also_in_user: "Also modified in User",
         also_in_user_tip: "Your settings have it as {value}, this folder doesn't set it",
         workspace_only: "Only settings a folder can have are shown",
-        workspace_no_file: "{path} isn't there yet, it's made the first time a setting is changed here",
+        workspace_no_file: "{path} doesn't exist yet, it's created the first time a setting is changed here",
         open_file: "Open Settings File"
     },
     extension_settings: {
@@ -2506,10 +2573,10 @@ let strings = {
     settings_problems: {
         skeleton: "let settings = { editor: { tab_size: 4 } };",
         no_settings: "it has to declare settings with an editor section, like {skeleton}",
-        doesnt_read: "the settings don't read and are left as they were: {error}",
+        doesnt_read: "the settings are invalid and keep their current values: {error}",
         unknown: "the {section} section has no setting called {key}",
         did_you_mean: "the {section} section has no setting called {key}, did you mean {near}?",
-        user_only: "only the user settings can set {key}, the folder's file can't",
+        user_only: "{key} is a user setting only, workspace settings can't override it",
         wants_flag: "{key} wants on or off, true or false",
         wants_number: "{key} wants a number",
         wants_text: "{key} wants a text in quotes",
@@ -2553,7 +2620,7 @@ let strings = {
         row: "{id} {value} -> {title} {hex}",
         not_in_hex: "{id} {value}, not in Hex yet",
         cant_take: "{id} {value}, {title} can't take that",
-        user_only: "{id}, {title} is only ever the user's, not a folder's",
+        user_only: "{id}, {title} is a user setting only, not a workspace one",
         empty: "there's nothing in the file",
         import: "Import {count} settings",
         import_one: "Import 1 setting",
@@ -3246,7 +3313,7 @@ let strings = {
         clear: "Clear Recently Opened"
     },
 
-    // The settings window and the settings file kept as one, the buttons on its title bar and the file read as it's saved
+    // The settings window and the settings file kept in sync, the buttons on its title bar and the file reloaded on save
     settings_window: {
         open: "Settings...",
         open_file: "Open settings file",
@@ -3255,8 +3322,8 @@ let strings = {
         preview_themes: "Preview themes...",
         keys_about: "Every key Hex answers to is in a window of its own, the keyboard shortcuts (keybindings). Search them by name or by key, give one another key, and see which ones clash.",
         keys_button: "Open Keyboard Shortcuts",
-        read_again: "settings read again from {name}",
-        broken: "The settings file {name} doesn't read, the settings are left as they were: {error}",
+        read_again: "settings reloaded from {name}",
+        broken: "The settings file {name} is invalid, the settings keep their current values: {error}",
         no_watch: "{name} can't be watched, a change made outside Hex wants a restart: {reason}",
         add_item: "Add Item",
         pair_key: "Item",
@@ -3268,15 +3335,15 @@ let strings = {
         pairs_want_text: "{key} wants a text in quotes for every pattern, {pattern} isn't one",
     },
 
-    // The settings window's User | Workspace switch, the folder's own settings in its .hex\settings.hor over the user's
+    // The settings window's User | Workspace switch, the workspace settings in the folder's .hex\settings.hor override the user settings
     settings_scope: {
         user: "User",
-        user_tip: "Every setting, kept in your settings file for every folder",
+        user_tip: "Every setting, kept in your user settings for every folder",
         workspace: "Workspace ({name})",
         workspace_none: "Workspace",
-        workspace_tip: "The settings this folder has its own way, kept in {path} and over yours while it's open",
-        no_folder: "Open a folder to give it settings of its own",
-        overridden: "{key} is kept in your settings, {name} has its own and that's the one in force here",
+        workspace_tip: "Settings for this folder only, kept in {path}, which override your user settings while it's open",
+        no_folder: "Open a folder to give it workspace settings",
+        overridden: "{key} is saved in your user settings, but {name} overrides it in its workspace settings",
         open_workspace_file: "Open Workspace Settings File"
     },
 

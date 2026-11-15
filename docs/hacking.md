@@ -21,7 +21,7 @@ a comment at its top.
   which the extensions' `hex.edit` and friends are.
 - `Extensions/` loading extensions and everything `hex` is to them, their views, panels and windows.
 - `Workspace/` the folders open, the explorer, the trash, and the work done on other threads over all of the files.
-- `Settings/` `hex_settings.hor`, the settings window and the skin Hex is drawn in.
+- `Settings/` `settings.hor`, the Settings window, workspace settings and the skin Hex is drawn in.
 - `Platform/` and `Dialogs/` (in `Hex.Shell`) opening, saving and picking a folder, Hex's own dialog on every system.
 - `Testing/` the self test, a file per part of Hex, and `--check`.
 

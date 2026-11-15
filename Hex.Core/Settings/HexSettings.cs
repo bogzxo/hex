@@ -9,12 +9,12 @@ namespace Hex.Core;
 
 /// <summary>
 /// What the editor is set to and keeps from one run to the next, the look of itself, how its panels were dragged
-/// and how it helps with lining things up. Kept as the editor section of settings.hor in the settings folder next to the
-/// executable, a file anybody can read (hex_settings.hor next to the exe is the old file of its own, read when that has none).
-/// The settings dialog (File, Settings) is where they are changed, the panels save their own sizes as they are let
-/// go of. A file that is missing or makes no sense is everything at what it comes as. Only what isn't what it comes as
-/// is written, so the file says what somebody changed. The folder that's open can have settings of its own over these,
-/// see HexSettings.Workspace.
+/// and how it helps with lining things up. Kept as the editor section of the user settings, settings.hor in the settings
+/// folder next to the executable (hex_settings.hor next to the exe is the legacy file, read when that has none). The
+/// Settings window (File, Settings) is where they are changed, the panels save their own sizes as they are let go of.
+/// A missing or invalid file means every setting has its default value. Only values that differ from their default are
+/// written, so the file shows what somebody changed. Workspace settings of the open folder override these, see
+/// HexSettings.Workspace.
 /// </summary>
 internal sealed partial class HexSettings
 {
@@ -254,13 +254,13 @@ internal sealed partial class HexSettings
     public readonly Dictionary<string, string> FileAssociations = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// What files.exclude comes as in VS Code, the folders of other version controls and the litter of file browsers,
+    /// The default value of files.exclude in VS Code, the folders of other version controls and the litter of file browsers,
     /// gone from the explorer and from everything else.
     /// </summary>
     public static readonly string[] UsualFilesExclude = ["**/.git", "**/.svn", "**/.hg", "**/CVS", "**/.DS_Store", "**/Thumbs.db", "**/.vs"];
 
     /// <summary>
-    /// What search.exclude comes as, what gets built and what package managers fetch, still in the explorer but not in
+    /// The default value of search.exclude, what gets built and what package managers fetch, still in the explorer but not in
     /// quick open, Find in Files or the watcher. Old builds kept on purpose too.
     /// </summary>
     public static readonly string[] UsualSearchExclude = ["**/node_modules", "**/bin", "**/obj", "**/venv", "**/.venv", "**/__pycache__", "**/target",
@@ -374,8 +374,8 @@ internal sealed partial class HexSettings
     }
 
     /// <summary>
-    /// The editor's settings put in force from a section of them, the keys it has and nothing else. Once for the user's
-    /// file, then again for the folder's own over it.
+    /// Applies the editor settings from a section, the keys it has and nothing else. Once for the user settings, then
+    /// again for the workspace settings over them.
     /// </summary>
     private void Apply(Dictionary<string, IRuntimeValue> values)
     {
@@ -495,8 +495,8 @@ internal sealed partial class HexSettings
             extensions.Add(id, its);
         }
 
-        // Only what isn't what it comes as. A setting the folder's own file covers is written as the user had it, the
-        // folder's value is the folder's and never ends up in here
+        // Only values that differ from their default. A setting the workspace overrides is written with the user value,
+        // the workspace value never ends up in here
         var settings = new HIDLObject();
         foreach (var (key, value) in EditorValues())
         {

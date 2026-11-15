@@ -105,12 +105,13 @@ internal sealed partial class DawnScene
             : document.IsText && document.Path is { } file ? Path.GetFileName(file) : document.Name;
         bool changed = !plainShown && (document.Modified || document.CodeEdited);
         string version = HexAbout.Label;
-        // What's open, and after it, smaller and quieter, whose window it is: Hex3, what the release is called, and
-        // the line an extension put there (Hello Dolly's)
+        // What's open, and after it, smaller and quieter, whose window it is. Hex3, what the release is called, which
+        // build of it this is, and the line an extension put there (Hello Dolly's) last so it's the first cut short
         ((TitleBar)top).Title = Said(changed ? "tabs.title_changed" : "tabs.title", ("name", name));
+        string build = Hex.Shell.HexVersion.Build is { Length: > 0 } number ? Said("tabs.build", ("number", number)) : string.Empty;
         ((TitleBar)top).Caption = titleNote.Length > 0
-            ? Said("tabs.caption_note", ("codename", Hex.Shell.HexVersion.Name), ("note", titleNote)).Trim()
-            : Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name)).Trim();
+            ? Said("tabs.caption_note", ("codename", Hex.Shell.HexVersion.Name), ("build", build), ("note", titleNote)).Trim()
+            : Said("tabs.caption", ("codename", Hex.Shell.HexVersion.Name), ("build", build)).Trim();
         Engine.WindowManager.Title = Said("tabs.window_title", ("name", name), ("version", version));
     }
 

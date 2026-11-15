@@ -342,6 +342,7 @@ internal sealed partial class DawnScene
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
+        ("newproject", "New Project, a kind picked, a bad name and a taken folder refused, a Go module and a Java project made, opened and their servers named", TestNewProject),
         ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away, pictures", test =>
         {
             TestPictures(test);

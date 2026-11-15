@@ -26,7 +26,7 @@ What is typed is completed (Ctrl+Space, or as it is typed), a component's proper
 text keys after an @, the names of the whole workspace anywhere else. F12 goes to where something is declared,
 Shift+F12 finds everywhere it is used. Every key is in Help, Keyboard Shortcuts, a list typed into to narrow it
 down, enter on a command to press a new key for it and delete to take its key off, kept in `keys.hor` next to
-`hex_settings.hor`, and the command palette and every chooser go up and down with the arrows.
+`settings.hor`, and the command palette and every chooser go up and down with the arrows.
 
 HIDL is a language of values first, so the right side of a file of code is what it comes to (Values), run a moment after
 it was last typed into on a thread of its own, the way the game that reads it would see it, as a tree. A click on a

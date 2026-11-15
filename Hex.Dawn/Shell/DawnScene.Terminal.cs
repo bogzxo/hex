@@ -331,6 +331,20 @@ internal sealed partial class DawnScene : ITerminalHostUi
         }
     }
 
+    /// <summary>
+    /// The terminal's settings asked for (open_settings, a plugin's or a key's), Hex's own settings window at the terminal's
+    /// rows. settings.hor was opened to edit before the window had them.
+    /// </summary>
+    bool ITerminalHostUi.ShowSettings()
+    {
+        OpenSettings(TerminalSettingsGroup);
+        return true;
+    }
+
+    /// <summary>The group of the settings window the terminal's own rows start at, its theme being under how Hex looks.</summary>
+    internal static string TerminalSettingsGroup =>
+        "Terminal · " + TerminalSettingsForm.Group(Array.Find(TerminalSettings.Described, setting => setting.Key != "theme")!.Key);
+
     /// <summary>A file a terminal asks to have opened, in Hex itself, at its line (1 for the first).</summary>
     bool ITerminalHostUi.OpenFile(string path, int line)
     {

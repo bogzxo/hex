@@ -201,13 +201,137 @@ internal sealed partial class HexCodeEditing
 
     /* Swatches */
 
-    /// <summary>A swatch of a colour written in the code was clicked, a colour picker for another, written back as a vec.</summary>
+    // The most colours of the file offered under the picker, and how big each is across
+    private const int SWATCH_CHOICES = 14;
+    private const float SWATCH_CHIP = 22.0f, SWATCH_FIELD = 30.0f;
+
+    /// <summary>
+    /// A swatch of a colour written in the code was clicked, a picker for another colour, written back as a vec. The
+    /// picker with what it was beside what it's becoming, the colour as hex and as red, green, blue and alpha to type, and
+    /// the other colours the file has already to pick from. Enter in any of the boxes applies it.
+    /// </summary>
     internal void PickSwatch(HidlSwatch swatch)
     {
         ColorPicker picker = null!;
-        UIDialog shown = UIDialog.Show(chrome, context.Strings.Said("code_hints.colour"), context.Strings.Said("code_hints.colour_text"), new DialogChoice(context.Strings.Said("code_hints.use_it"), () => WriteSwatch(swatch, picker.Color)), new DialogChoice(context.Strings.Said("keys.leave_it")));
+        UIDialog shown = null!;
+        void Apply()
+        {
+            WriteSwatch(swatch, picker.Color);
+            shown.Close();
+        }
+
+        shown = UIDialog.Show(chrome, context.Strings.Said("code_hints.colour"), SwatchMessage(swatch),
+            new DialogChoice(context.Strings.Said("code_hints.use_it"), () => WriteSwatch(swatch, picker.Color)), new DialogChoice(context.Strings.Said("keys.leave_it")));
         picker = layout.Instantiate("colour_dialog.hor", shown.Body).Get<ColorPicker>("picker");
+        picker.Original = swatch.Color;
         picker.Color = swatch.Color;
+
+        // The colour typed, as hex and as its four parts, each kept in step with the picker and with each other
+        bool syncing = false;
+        var hex = new TextBox { Size = new Vector2(112.0f, SWATCH_FIELD), MaxLength = 9, OnSubmitted = _ => Apply() };
+        NumberBox Part(string tip) => new() { Size = new Vector2(52.0f, SWATCH_FIELD), Tooltip = tip, OnSubmitted = _ => Apply() };
+        NumberBox red = Part(context.Strings.Said("code_hints.colour_red")), green = Part(context.Strings.Said("code_hints.colour_green")),
+            blue = Part(context.Strings.Said("code_hints.colour_blue")), opacity = Part(context.Strings.Said("code_hints.colour_alpha"));
+
+        void Show(Vector4 colour, UIComponent? typedIn)
+        {
+            syncing = true;
+            if (typedIn != hex) hex.Text = ColorPicker.ToHex(colour);
+            if (typedIn != red) red.Value = MathF.Round(colour.X * 255.0f);
+            if (typedIn != green) green.Value = MathF.Round(colour.Y * 255.0f);
+            if (typedIn != blue) blue.Value = MathF.Round(colour.Z * 255.0f);
+            if (typedIn != opacity) opacity.Value = MathF.Round(colour.W * 100.0f);
+            syncing = false;
+        }
+
+        void Typed(Vector4 colour, UIComponent from)
+        {
+            if (syncing)
+                return;
+            picker.Color = Vector4.Clamp(colour, Vector4.Zero, Vector4.One);
+            Show(picker.Color, from);
+        }
+
+        picker.OnChanged = colour => Show(colour, picker);
+        hex.OnChanged = typed =>
+        {
+            if (ColorPicker.FromHex(typed) is { } colour)
+                Typed(colour, hex);
+        };
+        red.OnValueChanged = value => Typed(picker.Color with { X = value / 255.0f }, red);
+        green.OnValueChanged = value => Typed(picker.Color with { Y = value / 255.0f }, green);
+        blue.OnValueChanged = value => Typed(picker.Color with { Z = value / 255.0f }, blue);
+        opacity.OnValueChanged = value => Typed(picker.Color with { W = value / 100.0f }, opacity);
+        Show(picker.Color, null);
+
+        // Each box with what it is over it, small and quiet
+        var fields = shown.Body.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Anchor = Origin.Left, Pivot = Origin.Left });
+        foreach (var (caption, box) in new (string, UIComponent)[] { ("Hex", hex), ("R", red), ("G", green), ("B", blue), (context.Strings.Said("code_hints.colour_alpha_short"), opacity) })
+        {
+            var column = fields.Add(new StackPanel { Spacing = 3.0f, Anchor = Origin.Bottom, Pivot = Origin.Bottom });
+            column.Add(new Label { Text = caption, TextScale = 0.12f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+            column.Add(box);
+        }
+
+        // The colours the file has already, one press to take one
+        var others = code.Swatches.Where(other => other != swatch).Select(other => other.Color).Distinct().Take(SWATCH_CHOICES).ToList();
+        if (others.Count > 0)
+        {
+            shown.Body.Add(new Label { Text = context.Strings.Said("code_hints.colour_in_file"), TextScale = 0.12f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+            var chips = shown.Body.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Anchor = Origin.Left, Pivot = Origin.Left });
+            foreach (Vector4 other in others)
+            {
+                Vector4 taken = other;
+                chips.Add(new SwatchChip(taken, () =>
+                {
+                    picker.Color = taken;
+                    picker.Changed();
+                }) { Size = new Vector2(SWATCH_CHIP), Tooltip = ColorPicker.ToHex(taken) });
+            }
+        }
+    }
+
+    // What the dialog says of the colour, the key it's the value of and the line, or the line alone
+    private string SwatchMessage(HidlSwatch swatch)
+    {
+        string line = code.Document.LineAt(swatch.Line);
+        string before = line[..Math.Min(swatch.Column, line.Length)];
+        Match key = Regex.Match(before, @"([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*$");
+        string where = (swatch.Line + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return key.Success
+            ? context.Strings.Said("code_hints.colour_text_key", ("key", key.Groups[1].Value), ("line", where))
+            : context.Strings.Said("code_hints.colour_text", ("line", where));
+    }
+
+    /// <summary>A colour to press, a little rounded square of it, over a checkerboard when it isn't opaque.</summary>
+    private sealed class SwatchChip(Vector4 colour, Action pressed) : UIComponent
+    {
+        private const float ROUND = 4.0f;
+
+        protected override bool HitTestVisible => true;
+
+        protected override Vector2 Measure(Horizon.UI.Skinning.UISkin skin) => new(SWATCH_CHIP);
+
+        protected override void Paint(Horizon.UI.Drawing.UIDrawList list)
+        {
+            if (colour.W < 1.0f)
+            {
+                list.RoundRect(Bounds, ROUND, new Vector4(0.8f, 0.8f, 0.8f, 1.0f));
+                list.Rect(new UIRect(Bounds.Min, Bounds.Center), new Vector4(0.55f, 0.55f, 0.55f, 1.0f));
+                list.Rect(new UIRect(Bounds.Center, Bounds.Max), new Vector4(0.55f, 0.55f, 0.55f, 1.0f));
+            }
+
+            list.RoundRect(Bounds, ROUND, colour);
+            var skin = list.Skin;
+            Vector4 edge = IsHovered ? skin.TextColor : skin.BorderColor.W > 0.0f ? skin.BorderColor : skin.TextColor * new Vector4(1, 1, 1, 0.25f);
+            list.RoundOutline(Bounds, ROUND, IsHovered ? 2.0f : 1.0f, edge);
+        }
+
+        protected override void OnPointerUp(Vector2 point)
+        {
+            if (Bounds.Contains(point))
+                pressed();
+        }
     }
 
     private void WriteSwatch(HidlSwatch swatch, Vector4 color)

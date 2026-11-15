@@ -136,8 +136,8 @@ internal sealed partial class DawnScene
     private const string EDITOR_PART = "Editor";
 
     /// <summary>
-    /// Reset all settings off the window's funnel or a part's right click, asked first with how many it puts back. On the
-    /// folder's settings it's only what the folder's file sets, a reset there goes through the scope like any other.
+    /// Reset all settings off the window's funnel or a part's right click, asked first with how many it resets. On
+    /// Workspace it's only the workspace overrides, each reset going through the scope like any other.
     /// </summary>
     private void AskResetAllSettings()
     {
@@ -284,7 +284,7 @@ internal sealed partial class DawnScene
         return $"{choice.Skin.Title}, {char.ToUpperInvariant(named[0])}{named[1..]}";
     }
 
-    /// <summary>The editor's section, read from and put in force on the editor itself.</summary>
+    /// <summary>The editor section, read from and applied to the editor itself.</summary>
     private sealed class EditorSource(DawnScene hex) : ISettingsSource
     {
         public string Section => SettingsSections.EDITOR;
@@ -303,13 +303,13 @@ internal sealed partial class DawnScene
                 [.. hex.ExtensionNames()])
         ];
 
-        /// <summary>What a setting comes as, for the row to say.</summary>
+        /// <summary>A setting's default value, for the row to show.</summary>
         public IRuntimeValue? Default(string key) => EditorSettingsCatalog.Usual.GetValueOrDefault(key);
 
-        // What a row shows, the folder's or the user's by the window's switch (DawnScene.SettingsScope)
+        // What a row shows, the workspace or user value by the window's switch (DawnScene.SettingsScope)
         public IRuntimeValue? Get(string key) => hex.ScopedValue(key, InForce(key));
 
-        // What a setting is in force at, the folder's over the user's
+        // A setting's effective value, the workspace value over the user value
         private IRuntimeValue? InForce(string key) => key switch
         {
             "editor_skin" => new StringValue(EditorSkins().Find(choice => choice.Skin.Name == hex.settings.EditorSkin && (choice.Theme ?? string.Empty) == hex.settings.EditorTheme).Text ?? string.Empty),
@@ -402,7 +402,7 @@ internal sealed partial class DawnScene
                 Apply(key, value);
         }
 
-        // A setting put in force and kept, the way its row changing it does
+        // A setting applied and saved, the way changing its row does
         private void Apply(string key, IRuntimeValue value)
         {
             HexSettings settings = hex.settings;

@@ -34,7 +34,7 @@ public sealed class WindowsSource : ISettingsSource
 
     public IRuntimeValue? Get(string key) => Find(key) is { } row ? Values.Bool(row.Installed()) : null;
 
-    // What Windows has is no setting of the file, a tick there is no change from anything it comes as
+    // What Windows has isn't a key in the file, so a tick there never differs from a default value
     public bool IsModified(string key) => false;
 
     public void Set(string key, IRuntimeValue value)

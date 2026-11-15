@@ -33,7 +33,14 @@ internal sealed class HexSplitter : Panel
         Anchor = Origin.TopLeft;
         Pivot = Origin.TopLeft;
         Visible = false;
-        line = Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Visible = false });
+        line = Add(new Line { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Visible = false });
+    }
+
+    // The lit line, drawn and never pointed at. A panel with a colour takes the pointer, and this one lit took it off the
+    // handle, which put the line out and gave the pointer back, lit and put out again every tick while it was on the line
+    private sealed class Line : Panel
+    {
+        protected override bool HitTestVisible => false;
     }
 
     // There to be pressed whenever there's an edge under it, with nothing drawn of its own
