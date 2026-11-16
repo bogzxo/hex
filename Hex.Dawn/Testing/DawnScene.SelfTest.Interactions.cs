@@ -148,5 +148,9 @@ internal sealed partial class DawnScene
         PressKeys(test, "Escape");
         test.Check("interaction: cancelling confirmation does not run its action", () => !shown.IsOpen && picked == 2 && compositor.Focus == code);
         test.Run(() => chrome.Root.Remove(behind));
+
+        // Nothing of this suite's left open for the next, whose welcome is only over the empty layout
+        test.Run(() => CloseAll());
+        test.Settle(0.2f);
     }
 }

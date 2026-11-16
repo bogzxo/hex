@@ -115,6 +115,11 @@ internal sealed partial class DawnScene
 
         plainShown = plain;
 
+        // The tab row and the breadcrumbs have nothing to say over the welcome, and their empty band was where the welcome
+        // was cut off as it scrolled, the top of the page gone a tab's height under the middle's top. They go while it's up,
+        // the welcome has the whole of the middle, and come back with a file unless F11 has them away
+        tabRow.Visible = crumbs.Visible = !plain && !Quiet;
+
         // The empty layout's tab goes while the welcome is over it, and comes back with the designer. The outline says
         // there's no file under it
         tabsDirty = true;
@@ -144,7 +149,9 @@ internal sealed partial class DawnScene
         if (outlineFoldedForWelcome)
         {
             outlineFoldedForWelcome = false;
-            if (Side == HexSide.Outline && !settings.SideBarHidden)
+            // Whatever the side shows now: the welcome folded it and the welcome going unfolds it. Only for the outline,
+            // F7 on the welcome (the designer's side by then) left the side bar away with nothing saying it was
+            if (!settings.SideBarHidden)
                 left.Show(true);
         }
         FoldValuesFor(document);

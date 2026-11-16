@@ -14,15 +14,21 @@ using Horizon.UI.Components;
 namespace Hex.Dawn;
 
 // The extensions that can be installed, out of a catalog on GitHub (bogzxo/hex-extensions, or another repository or a
-// folder the settings say). Once a day as Hex starts, and whenever Check now is pressed, the catalog is synced into a
-// folder of Hex's (HexExtensionCatalog), and what's in it is listed on Extensions, Available, with Install on the ones
-// that aren't here and Update on the ones installed out of it that are behind. One that's behind gets a card as well.
+// folder the settings say) and any more sources added after it (a GitHub repository, a git URL or a folder, see
+// HexExtensions.Sources). Once a day as Hex starts, and whenever Check now is pressed, every source is synced into a
+// folder of its own under Hex's (HexExtensionCatalog), and what's in them is listed together on Extensions, Available
+// and in the Extensions window, with Install on the ones that aren't here and Update on the ones installed out of it
+// that are behind. One that's behind gets a card as well. Two sources with an extension by the same name, the one higher
+// up the list is the one that's offered.
 // An install is a copy into the extensions folder next to Hex, the extension started straight away, an update the same
 // copy over it and the extension read again. All of it is work of the scheduler's, each known by a key so a press twice
 // is the one install.
 internal sealed partial class HexExtensions
 {
     internal const string AVAILABLE = "Extensions · Available";
+
+    // Where extensions come from, the catalogue of the settings and the rest, see HexExtensions.Sources
+    internal const string SOURCES = "Extensions · Sources";
 
     // The keys of the catalog's work
     private const string CATALOG_WORK = "extensions:catalog", INSTALL_WORK = "extensions:install:";
@@ -33,12 +39,13 @@ internal sealed partial class HexExtensions
     private const float CATALOG_WIDTH = 640.0f, CATALOG_BUTTON_WIDTH = 96.0f, CATALOG_BUTTON_HEIGHT = 28.0f;
 
     /// <summary>An extension of the catalog, what its extension object says it is and where the synced copy of it is.</summary>
-    internal sealed record CatalogEntry(string Id, string Name, string Description, string Version, string Author, string Folder);
+    internal sealed record CatalogEntry(string Id, string Name, string Description, string Version, string Author, string Folder, string Source = "");
 
     private List<CatalogEntry> catalog = [];
 
-    // Why the last sync didn't go, null when it did or there hasn't been one
+    // Why the last sync didn't go, null when it did or there hasn't been one, and why each source didn't by itself
     private string? catalogProblem;
+    private readonly Dictionary<string, string> sourceProblems = new(StringComparer.OrdinalIgnoreCase);
 
     // The updates a card was put up for this run, by the extension and the version
     private readonly HashSet<string> catalogOffered = new(StringComparer.OrdinalIgnoreCase);
@@ -69,10 +76,16 @@ internal sealed partial class HexExtensions
         bool look = Kept.ExtensionUpdates && !context.Options.SelfTest && context.Options.Check.Length == 0;
 
         string folder = CatalogFolder;
-        context.Work.InBackground(context.Strings.Said("extension_catalog.reading"), () => ReadCatalog(folder), read =>
+        string[] sources = [.. Kept.AllExtensionSources()];
+
+        // A source that was never synced (just added, or from before each had a folder of its own) is synced now rather
+        // than tomorrow
+        due = due || sources.Any(source => !Directory.Exists(SourceFolder(folder, source)));
+        context.Work.InBackground(context.Strings.Said("extension_catalog.reading"), () => ReadAll(sources, folder), read =>
         {
             catalog = read;
             FillCatalogRows();
+            CatalogChanged();
             if (look && due)
                 SyncCatalog(asked: false);
             else if (look)
@@ -86,19 +99,44 @@ internal sealed partial class HexExtensions
     /// </summary>
     internal WorkItem SyncCatalog(bool asked)
     {
-        string source = Kept.ExtensionCatalog, into = CatalogFolder;
+        string[] sources = [.. Kept.AllExtensionSources()];
+        string source = string.Join(", ", sources), into = CatalogFolder;
+        bool hadSome = catalog.Count > 0;
         List<CatalogEntry>? read = null;
+        var problems = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         return context.Work.Start(CATALOG_WORK, context.Strings.Said("extension_catalog.syncing"), async work =>
         {
-            work.Report(0.0f, source);
-            await HexExtensionCatalog.Sync(source, into, work.Token).ConfigureAwait(false);
-            read = ReadCatalog(into);
+            for (int i = 0; i < sources.Length; i++)
+            {
+                work.Report(i / (float)sources.Length, sources[i]);
+                try
+                {
+                    await HexExtensionCatalog.Sync(sources[i], SourceFolder(into, sources[i]), work.Token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    problems[sources[i]] = e.Message;
+                }
+            }
+
+            // Every source failing keeps what was listed (GitHub down, the network gone), one of several failing keeps
+            // its last sync and the rest are what they are now
+            if (problems.Count < sources.Length || !hadSome)
+                read = ReadAll(sources, into);
+            if (problems.Count > 0)
+                throw new IOException(string.Join("; ", problems.Select(problem => $"{problem.Key}, {problem.Value}")));
         }, done =>
         {
+            sourceProblems.Clear();
+            foreach (var (from, why) in problems)
+                sourceProblems[from] = why;
+
+            if (read is not null)
+                catalog = read;
+
             if (done.State == WorkState.Succeeded && read is not null)
             {
-                catalog = read;
                 catalogProblem = null;
                 Kept.ExtensionsChecked = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
                 context.Settings.Save();
@@ -118,7 +156,45 @@ internal sealed partial class HexExtensions
             }
 
             FillCatalogRows();
+            CatalogChanged();
         }, seen: asked);
+    }
+
+    /// <summary>Where a source is synced to, a folder of its own under the catalog's.</summary>
+    private static string SourceFolder(string catalogFolder, string source) =>
+        Path.Combine(catalogFolder, "sources", HexExtensionCatalog.FolderNameOf(source));
+
+    /// <summary>Why a source didn't sync the last time, null when it did or hasn't been tried.</summary>
+    internal string? ProblemOf(string source) => sourceProblems.GetValueOrDefault(source);
+
+    /// <summary>Whether the catalog is being synced right now.</summary>
+    internal bool Syncing => context.Work.Find(CATALOG_WORK) is not null;
+
+    /// <summary>
+    /// Every source's synced extensions read and put together in the order of the sources, the first one with an
+    /// extension's name being where it comes from unless a later one has a newer version of it (a folder of the
+    /// extensions being worked on next to the published ones), then sorted by name. Off the editor's thread.
+    /// </summary>
+    private static List<CatalogEntry> ReadAll(IReadOnlyList<string> sources, string catalogFolder)
+    {
+        var read = new List<CatalogEntry>();
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (string source in sources)
+        {
+            foreach (CatalogEntry entry in ReadCatalog(SourceFolder(catalogFolder, source), source))
+            {
+                if (!seen.TryGetValue(entry.Id, out int at))
+                {
+                    seen[entry.Id] = read.Count;
+                    read.Add(entry);
+                }
+                else if (HexExtensionCatalog.IsNewer(entry.Version, read[at].Version))
+                    read[at] = entry;
+            }
+        }
+
+        read.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return read;
     }
 
     /// <summary>
@@ -126,14 +202,14 @@ internal sealed partial class HexExtensions
     /// an extension's to find out (not its on_start), with nothing to touch as hex, and one that doesn't run is listed by
     /// its folder.
     /// </summary>
-    private static List<CatalogEntry> ReadCatalog(string folder)
+    private static List<CatalogEntry> ReadCatalog(string folder, string source)
     {
         var read = new List<CatalogEntry>();
         foreach (string inside in HexExtensionCatalog.Extensions(folder))
         {
             var probe = new HexExtension(inside, builtIn: false);
             probe.Load(Natives.Object(), _ => { });
-            read.Add(new CatalogEntry(probe.Id, probe.Name, probe.Description, probe.Version, probe.Author, inside));
+            read.Add(new CatalogEntry(probe.Id, probe.Name, probe.Description, probe.Version, probe.Author, inside, source));
         }
 
         return read;
@@ -193,6 +269,7 @@ internal sealed partial class HexExtensions
                 if (done.State == WorkState.Failed)
                     context.Notices.Notify(context.Strings.Said("extension_catalog.install_failed", ("name", entry.Name), ("why", done.Error ?? "?")), error: true);
                 FillCatalogRows();
+                CatalogChanged();
                 return;
             }
 
@@ -216,9 +293,11 @@ internal sealed partial class HexExtensions
             WatchFolders();
             context.Notices.Say(context.Strings.Said(update ? "extension_catalog.updated" : "extension_catalog.installed", ("name", entry.Name), ("version", entry.Version)));
             FillCatalogRows();
+            CatalogChanged();
         }, cancellable: false);
 
         FillCatalogRows();
+        CatalogChanged();
         return going;
     }
 
@@ -233,7 +312,7 @@ internal sealed partial class HexExtensions
         [
             new("extension_updates", HexText.Get("extension_catalog.look"), UIFormKind.Flag, HexText.Get("extension_catalog.look_help"), AVAILABLE,
                 Buttons: [HexText.Get("extension_catalog.check_now")]),
-            new("extension_catalog", HexText.Get("extension_catalog.source"), UIFormKind.Text, HexText.Get("extension_catalog.source_help"), AVAILABLE,
+            new("extension_catalog", HexText.Get("extension_catalog.source"), UIFormKind.Text, HexText.Get("extension_catalog.source_help"), SOURCES,
                 Placeholder: "bogzxo/hex-extensions")
         ];
 

@@ -101,6 +101,9 @@ internal sealed partial class HexRunning
     private HexDocument? valuesOf;
     private (HexDocument? Document, int Version) valuesAsked = (null, -1);
 
+    // Whether the file last asked about is one of Dusk's, which isn't run here
+    private bool valuesDusk;
+
     // How long since the code last changed, and which version that was
     private (HexDocument? Document, int Version) valuesSeen = (null, -1);
     private float valuesQuiet;
@@ -120,7 +123,8 @@ internal sealed partial class HexRunning
     /// </summary>
     internal void UpdateValues(float dt)
     {
-        if (evaluation.TakeFinished() is { } done)
+        // A run still going when the file turned out to be Dusk's is of no use when it comes in
+        if (evaluation.TakeFinished() is { } done && !valuesDusk)
         {
             // What went wrong says the name it most likely meant, when it named one a letter or two off
             if (done.Error is { } failed && valuesAsked.Document is { } asked)
@@ -169,6 +173,23 @@ internal sealed partial class HexRunning
         if (valuesQuiet >= VALUES_AFTER && valuesAsked != now)
         {
             valuesAsked = now;
+
+            // A file of Dusk's only runs in the terminal, here it would only trip over dusk. on its first use. Whatever the
+            // last run said is dropped, so neither its values nor its error hang about
+            valuesDusk = HidlAnalysis.IsDusk(code.Text);
+            if (valuesDusk)
+            {
+                bool hadTable = HasTable;
+                values = null;
+                valuesOf = document;
+                context.Documents.DiagnosticsChanged(document);
+                if (HasTable != hadTable)
+                    window.ShowViewButtons();
+                if (!LayoutTools)
+                    window.RefreshRight();
+                return;
+            }
+
             evaluation.Run(code.Text, document.Path is { } path ? Path.GetFullPath(path) : null, FolderOf(document), OpenTexts());
         }
     }
@@ -236,7 +257,9 @@ internal sealed partial class HexRunning
 
         if (!tree)
         {
-            window.Hint(inspector, !ShowsValues ? document.IsText ? context.Strings.Said("values.not_hidl") : context.Strings.Said("values.layout") : context.Strings.Said("values.running")).Wrap = true;
+            string hint = !ShowsValues ? document.IsText ? context.Strings.Said("values.not_hidl") : context.Strings.Said("values.layout")
+                : valuesDusk && valuesAsked.Document == document ? context.Strings.Said("values.dusk") : context.Strings.Said("values.running");
+            window.Hint(inspector, hint).Wrap = true;
             return;
         }
 

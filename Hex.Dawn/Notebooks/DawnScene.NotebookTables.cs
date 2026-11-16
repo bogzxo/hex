@@ -182,6 +182,8 @@ internal sealed partial class DawnScene
                 });
                 string source = rows[r][c];
                 WriteMathMarkdown(cells[c], r == 0 ? "**" + source + "**" : source, language, pictures);
+                foreach (var label in Descendants(cells[c]).OfType<Label>())
+                    label.Align = table.Align[c] switch { 'r' => Origin.TopRight, 'c' => Origin.Top, _ => Origin.TopLeft };
             }
             grid.Cells.Add(cells);
         }
@@ -195,7 +197,13 @@ internal sealed partial class DawnScene
         return TableWithTools(export, grid);
     }
 
-    internal static void FitNotebookMarkdownCell(StackPanel cell, float width, float zoom) => FitWritten(cell, width, zoom, keepWidth: true);
+    internal static void FitNotebookMarkdownCell(StackPanel cell, float width, float zoom)
+    {
+        FitWritten(cell, width, zoom, keepWidth: true);
+        // The cell's padding was already removed by its grid; document margins must not take it away again.
+        foreach (var label in cell.Children.OfType<Label>())
+            label.Size = label.Size with { X = width };
+    }
 
     // Helper method for a DataFrame (or any HTML with a table in it) as a table with what pandas said under it, its
     // shape, null when there's no table to read out of it

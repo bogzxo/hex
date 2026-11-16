@@ -234,4 +234,15 @@ public sealed class HexAgentSystemsTests : IDisposable
         runtime.Invoke(commands["Connect Codex to Hex"], hex);
         Assert.Equal("[mcp_servers.hex]\ncommand = 'C:\\Hex\\Hex.exe'\nargs = [\"--mcp-connect\"]\n", written["config.toml"]);
     }
+
+    [Fact]
+    public void A_number_hex_put_in_the_arguments_itself_reads_back_like_one_off_the_wire()
+    {
+        // The chat an agent's call came from goes in as an int, which wouldn't come out as a double, and every agent
+        // looked like it was started from outside
+        var arguments = new JsonObject { [HexMcpCaller.CALLER] = 7, ["timeout"] = JsonNode.Parse("2.5") };
+        Assert.Equal(7, arguments.Integer(HexMcpCaller.CALLER));
+        Assert.Equal(2.5, arguments.Number("timeout"));
+        Assert.Null(arguments.Integer("missing"));
+    }
 }

@@ -29,7 +29,8 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             width = agentsView.Bounds.Width;
-            grip = chrome.ToWorld(new Vector2(agentsView.Bounds.Max.X, agentsView.Bounds.Center.Y));
+            // The side is dragged by its splitter on the line between it and the middle, from the half over the middle
+            grip = chrome.ToWorld(new Vector2(left.Bounds.Max.X + 2, agentsView.Bounds.Center.Y));
         });
         test.Drag(() => grip, () => grip + new Vector2(80, 0));
         test.Settle(0.2f);
@@ -154,6 +155,39 @@ internal sealed partial class DawnScene
         test.Check("agents layout: opening a tool exposes its result", () =>
             tool?.Open == true && Descendants(agentsRows).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));
         Capture("agents-transcript");
+
+        // A long chat dragged wider is fitted to the width as it goes and not made again. Made again on every step it
+        // stuttered, and made again only once the drag stopped it jumped
+        UIComponent[] rowsBefore = [];
+        float bubbleBefore = 0;
+        Vector2 splitter = default;
+        Panel Bubble() => Descendants(agentsRows).OfType<Panel>().First(panel => panel.Radius == 10 && panel.Anchor == Horizon.Rendering.Origin.Right);
+        test.Run(() =>
+        {
+            settings.LeftWidth = 300;
+            ApplyPanelSizes();
+            for (int round = 0; round < 30; round++)
+            {
+                agentChat!.Ask($"Question {round}, long enough that its bubble is as wide as the side lets it be and then a little more besides.");
+                agentChat.Tool($"t{round}", "mcp__hex__hex_search", $$"""{"query":"LoadSettings {{round}} and some more of what it was asked for"}""");
+                agentChat.ToolDone($"t{round}", true, "Found it.");
+                agentChat.Say($"Answer {round}, **some markdown** and a line long enough to wrap in a narrow side bar once or twice over.");
+            }
+            agentChat!.Done();
+        });
+        test.Settle(0.5f);
+        test.Run(() =>
+        {
+            rowsBefore = [.. agentsRows.Children];
+            bubbleBefore = Bubble().Size.X;
+            splitter = chrome.ToWorld(new Vector2(left.Bounds.Max.X + 2, agentsView.Bounds.Center.Y));
+        });
+        test.Drag(() => splitter, () => splitter + new Vector2(140, 0));
+        test.Settle(0.1f);
+        test.Check("agents layout: a long chat dragged wider keeps its rows and fits them to the new width", () =>
+            agentsRows.Children.Count == rowsBefore.Length && agentsRows.Children.Zip(rowsBefore).All(pair => ReferenceEquals(pair.First, pair.Second))
+            && Bubble().Size.X > bubbleBefore + 60 && Bubble().Bounds.Max.X <= agentsView.Bounds.Max.X + 1);
+
         test.Run(() =>
         {
             ClearAgentChat();

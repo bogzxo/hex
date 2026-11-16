@@ -27,16 +27,19 @@ internal static partial class HexOutline
         // The breadcrumbs ask on every move of the caret, the values on every click, the outline on every change. An
         // editor hands out the same string until its text changes, so the last one is kept, nobody changes the list
         string extension = path is null ? ".hor" : Path.GetExtension(path).ToLowerInvariant();
-        if (ReferenceEquals(text, outlinedText) && extension == outlinedAs && outlined is not null)
-            return outlined;
+        if (kept is { } last && ReferenceEquals(text, last.Text) && extension == last.Extension)
+            return last.Entries;
 
-        outlinedText = text;
-        outlinedAs = extension;
-        return outlined = extension == ".hor" ? OutlineOf(text) : OutlineOfOther(text, extension);
+        List<OutlineEntry> entries = extension == ".hor" ? OutlineOf(text) : OutlineOfOther(text, extension);
+        kept = new Kept(text, extension, entries);
+        return entries;
     }
 
-    private static string? outlinedText, outlinedAs;
-    private static List<OutlineEntry>? outlined;
+    // The last outline made and what it was made of, in one object behind one field. The editor's thread, the outline's
+    // work in the background and the HIDL server's thread all ask, and three fields written one after another let one of
+    // them read the text of one file with the outline of another
+    private sealed record Kept(string Text, string Extension, List<OutlineEntry> Entries);
+    private static volatile Kept? kept;
 
     private static List<OutlineEntry> OutlineOf(string text)
     {

@@ -11,7 +11,7 @@ namespace Hex.Dawn;
 // than over it, the shape of what is drawn in the picture worked out once from its file (UIWrapShape).
 internal sealed partial class DawnScene
 {
-    public const string USUAL_BACKDROP = "Assets/hex/images/background_icon.png";
+    public const string USUAL_BACKDROP = HexFrame.USUAL_BACKDROP;
 
     private Texture? backdropPicture;
     private UIWrapShape? backdropShape;

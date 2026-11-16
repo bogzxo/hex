@@ -405,15 +405,22 @@ internal static class HidlAnalysis
     public static bool IsLayout(string text) => Horizon.HIDL.Preprocessing.HIDLPreprocessor.Read(text).ContainsKey("layout");
 
     /// <summary>
+    /// Whether a file is one of Dusk's (#define dusk), a plugin or keys file that only runs in the terminal with its dusk
+    /// object handed in. Run on its own it falls over at the first dusk. it says, so it isn't run, the terminal's own
+    /// checks (HexTerminalFiles) look it over instead.
+    /// </summary>
+    public static bool IsDusk(string text) => Horizon.HIDL.Preprocessing.HIDLPreprocessor.Read(text).ContainsKey("dusk");
+
+    /// <summary>
     /// Everything wrong with a file, what the parser didn't like, and when it parses (and isn't a layout) where running it
-    /// went wrong or the lints of what it came to, as the editor underlines them. Runs the file, so off the editor's
+    /// went wrong or the lints of what it came to, as the editor underlines them. A file of Dusk's isn't run either. Runs the file, so off the editor's
     /// thread. <paramref name="open"/> is the text of files that are open and maybe not saved, by their full path, which
     /// an include reads before the disk.
     /// </summary>
     public static List<UICodeDiagnostic> Check(string text, string? path, IReadOnlyDictionary<string, string> open, HexSaid said)
     {
         List<UICodeDiagnostic> found = SyntaxErrors(text);
-        if (found.Count > 0 || IsLayout(text))
+        if (found.Count > 0 || IsLayout(text) || IsDusk(text))
             return found;
 
         string? file = path is null ? null : Path.GetFullPath(path);

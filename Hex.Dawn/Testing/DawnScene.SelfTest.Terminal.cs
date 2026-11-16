@@ -54,10 +54,10 @@ internal sealed partial class DawnScene
 
         test.Run(() => terminals.KeyPressed(new UIKeyPress(Key.J, true, false, false, false)));
         test.Wait();
-        test.Check("terminal: Ctrl+J from a terminal puts the panel away", () => !bottom.Shown);
+        test.Check("terminal: Ctrl+J from a terminal folds the panel down to its titles, which stay", () => bottom.Shown && !PanelOpen);
         test.Run(() => ToggleTerminalFocus());
         test.Wait();
-        test.Check("terminal: Ctrl+` brings it back with the keyboard in the terminal", () => bottom.Shown && compositor.Focus is TerminalView);
+        test.Check("terminal: Ctrl+` brings it back with the keyboard in the terminal", () => PanelOpen && compositor.Focus is TerminalView);
 
         test.Check("terminal: the palette has the terminal's commands", () => AllCommands().Any(command => command.Text.StartsWith("Terminal: Split Right")));
 

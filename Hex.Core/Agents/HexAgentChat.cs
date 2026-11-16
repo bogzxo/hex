@@ -27,6 +27,12 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     /// <summary>Whether its row is opened to say all of it.</summary>
     public bool Open { get; set; }
 
+    /// <summary>Something asked while the agent was working, sent to it and waiting for it to take it in.</summary>
+    public bool Queued { get; set; }
+
+    /// <summary>Something asked while the agent was working that it never took in, the turn ending first.</summary>
+    public bool Unheard { get; set; }
+
     public int Version { get; set; }
 
     /// <summary>How long a tool took, or has been going, in seconds.</summary>
@@ -59,6 +65,59 @@ internal sealed class HexAgentChat(int id, string agent)
     public string? Session { get; set; }
 
     public bool Running { get; private set; }
+
+    /// <summary>The chat whose agent started this one (hex_agent_spawn), null for one somebody started in the panel.</summary>
+    public int? Parent { get; init; }
+
+    /// <summary>How many agents up it was started from, 0 for one somebody started.</summary>
+    public int Depth { get; init; }
+
+    /// <summary>What it was called by the agent that started it, shown in place of what it was asked when there is one.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>The agent's options for this chat alone (the model it was started with), over its extension's settings.</summary>
+    public Dictionary<string, string> Options { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Whether its last turn was stopped rather than finishing.</summary>
+    public bool Stopped { get; set; }
+
+    /// <summary>Whether something went wrong in the last turn, an error row since the last thing asked.</summary>
+    public bool Failed
+    {
+        get
+        {
+            for (int i = entries.Count - 1; i >= 0 && entries[i].Kind != HexAgentEntryKind.User; i--)
+            {
+                if (entries[i].Kind == HexAgentEntryKind.Error)
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>The version of it somebody last had on screen, it's unread while it's moved on since and isn't running.</summary>
+    public int Seen { get; set; }
+
+    /// <summary>Whether it finished a turn since it was last on screen.</summary>
+    public bool Unread => !Running && Version != Seen && entries.Count > 0;
+
+    /// <summary>What it's called in a list, its name, or what it was asked.</summary>
+    public string Shown => Name is { Length: > 0 } name ? name : Title;
+
+    /// <summary>
+    /// What the agent said in its last turn, its text rows since the last thing asked joined, the most recent kept when
+    /// it's longer than <paramref name="most"/>. Empty when it hasn't said anything yet.
+    /// </summary>
+    public string LastReply(int most = 8000)
+    {
+        int from = entries.Count;
+        while (from > 0 && entries[from - 1].Kind != HexAgentEntryKind.User)
+            from--;
+
+        string said = string.Join("\n\n", entries.Skip(from).Where(entry => entry.Kind is HexAgentEntryKind.Text or HexAgentEntryKind.Error).Select(entry => entry.Text));
+        return said.Length > most ? "…" + said[^most..] : said;
+    }
 
     public long InputTokens { get; set; }
     public long OutputTokens { get; set; }
@@ -99,9 +158,31 @@ internal sealed class HexAgentChat(int id, string agent)
         }
 
         Running = true;
+        Stopped = false;
         turnStarted = Environment.TickCount64;
         TurnSeconds = 0;
         return Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation });
+    }
+
+    /// <summary>
+    /// Something asked while the turn is going on, for an agent that's steered (more said to it as it works). Queued
+    /// until the agent says it took it in, see <see cref="Taken"/>, the turn going on as it was.
+    /// </summary>
+    public HexAgentEntry Steer(string prompt, string? askedText = null, string? contextLocation = null) =>
+        Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation, Queued = true });
+
+    /// <summary>Whether something asked is still waiting for the agent to take it in.</summary>
+    public bool HasQueued => entries.Any(entry => entry.Queued);
+
+    /// <summary>The first thing still queued taken in by the agent, false when there's nothing queued.</summary>
+    public bool Taken()
+    {
+        if (entries.FirstOrDefault(entry => entry.Queued) is not { } taken)
+            return false;
+
+        taken.Queued = false;
+        Touch(taken);
+        return true;
     }
 
     /// <summary>What the agent said, a row of its own.</summary>
@@ -161,6 +242,13 @@ internal sealed class HexAgentChat(int id, string agent)
             tool.Output ??= "the agent stopped before it said how this went";
             tool.Ended = Environment.TickCount64;
             tool.Version++;
+        }
+
+        foreach (HexAgentEntry asked in entries.Where(entry => entry.Queued))
+        {
+            asked.Queued = false;
+            asked.Unheard = true;
+            asked.Version++;
         }
 
         Version++;

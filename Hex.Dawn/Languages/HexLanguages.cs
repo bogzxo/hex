@@ -254,6 +254,9 @@ internal sealed partial class HexLanguages
         if (of.DiffOf is not null)
             return;
 
+        // Where it is now, so a move of it is noticed (FollowMovedFiles)
+        knownAt[of] = of.Path;
+
         // Cached library and debugger views are read-only, outside the workspace's language-server documents.
         if (of.Path is {} cached && (PlatformPaths.IsUnder(cached, DecompiledFolder) || HexDebugging.IsDisassemblyPath(cached) || HexDebugging.IsMemoryPath(cached) || HexDebugging.IsDebuggerSourcePath(cached)))
         {
@@ -367,7 +370,11 @@ internal sealed partial class HexLanguages
     private void StopLinting(HexDocument closed)
     {
         lintSolutions.Remove(closed);
-        if (linters.Remove(closed, out LanguageServer? server) && closed.Path is { } path)
+
+        // By the path the server was told of it under, which after Save As or a rename isn't the one it has now: closing
+        // the new path left the old one open at the server for good
+        knownAt.Remove(closed, out string? known);
+        if (linters.Remove(closed, out LanguageServer? server) && (known ?? closed.Path) is { } path)
         {
             server.Close(path);
             server.ForgetSource(path);
@@ -403,9 +410,45 @@ internal sealed partial class HexLanguages
     // waits change as they're gone through
     private readonly List<HexDocument> dueNow = [];
 
+    // Where every open document was when its server (or nobody) was told of it, null for one with no file
+    private readonly Dictionary<HexDocument, string?> knownAt = [];
+    private readonly List<HexDocument> movedNow = [];
+
+    /// <summary>Where the servers have a document as being, for the tests. Null for one they know nothing of or with no file.</summary>
+    internal string? KnownPath(HexDocument of) => knownAt.GetValueOrDefault(of);
+
+    /// <summary>
+    /// A document whose file is somewhere else than it was (Save As, a rename or a move in the explorer, its folder
+    /// renamed, its file deleted) is closed at its server under the old path and opened under the new one, by whichever
+    /// server the new name is for. Nothing told the servers: after Save As the old file stayed open there, every change
+    /// was sent for a path the server had never been given and dropped, and the problems under the code stopped.
+    /// </summary>
+    private void FollowMovedFiles()
+    {
+        foreach (var (open, was) in knownAt)
+        {
+            if (!string.Equals(open.Path, was, StringComparison.Ordinal))
+                movedNow.Add(open);
+        }
+
+        if (movedNow.Count == 0)
+            return;
+
+        foreach (HexDocument moved in movedNow)
+        {
+            StopLinting(moved);
+            StartLinting(moved);
+        }
+
+        movedNow.Clear();
+    }
+
     /// <summary>Every tick, the changes that are due go to their servers and what the servers said is taken in.</summary>
     internal void Update(float dt)
     {
+        if (knownAt.Count > 0)
+            FollowMovedFiles();
+
         if (lintIn.Count > 0)
         {
             dueNow.Clear();

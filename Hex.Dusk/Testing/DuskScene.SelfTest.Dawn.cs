@@ -13,6 +13,10 @@ internal sealed partial class DuskScene
         TerminalView View() => panel.FocusedView!;
         string folder = Path.Combine(Path.GetTempPath(), "dusk-dawn-selftest");
 
+        // A pipe nobody listens on: without it the test told whichever Hex the person running it had open to open its
+        // file, and then found a Dawn where it expected to be told there was none
+        System.Environment.SetEnvironmentVariable("DUSK_HEX_PIPE", "dusk-selftest-nobody-" + System.Environment.ProcessId);
+
         test.Run(() =>
         {
             if (Directory.Exists(folder))

@@ -18,7 +18,7 @@ namespace Hex.Dusk;
 internal sealed partial class DuskScene
 {
     // The picture that comes with Hex, the one Dawn shows unless told otherwise
-    private const string USUAL_BACKDROP = "Assets/hex/images/background_icon.png";
+    private const string USUAL_BACKDROP = Hex.Shell.HexFrame.USUAL_BACKDROP;
 
     // The picture loaded, and the file it was loaded from, so a change of anything else doesn't read it again
     private Texture? backdropPicture;

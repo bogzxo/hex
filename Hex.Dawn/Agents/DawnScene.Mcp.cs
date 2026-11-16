@@ -132,11 +132,12 @@ internal sealed partial class DawnScene
 
     private static void ForgetMcpFile(object? sender, EventArgs e) => McpDiscovery.Remove(System.Environment.ProcessId);
 
-    /// <summary>A server for one client, its tools the editor's.</summary>
-    private McpServer MakeMcpServer()
+    /// <summary>A server for one client, its tools the editor's, those about agents told which chat it's for when it's one's.</summary>
+    private McpServer MakeMcpServer(string? tag)
     {
         string usual = Said("mcp.instructions");
-        return new(mcpTools!, "hex", HexAbout.Version, usual)
+        IMcpTools tools = int.TryParse(tag, out int chat) ? new HexMcpCaller(mcpTools!, chat) : mcpTools!;
+        return new(tools, "hex", HexAbout.Version, usual)
         {
             // An agent system an extension said (hex.agent) has its own said after Hex's, picked by who the client is
             InstructionsFor = client => HexAgentProfiles.InstructionsFor(client, usual),
@@ -300,6 +301,20 @@ internal sealed class HexMcpCall(string name, IEnumerator<McpToolResult?> run, f
 internal sealed record HexMcpTool(McpTool Meta, Func<JsonObject, IEnumerable<McpToolResult?>>? Run, float Timeout = 30.0f,
     Func<JsonObject, CancellationToken, Task<McpToolResult>>? RunAway = null);
 
+/// <summary>
+/// The tools as the agent of a chat of the Agents panel sees them, the tools about agents told which chat is calling
+/// (in the arguments, as <see cref="CALLER"/>), so the agents it starts are its own. Whatever a client says there is
+/// put right first.
+/// </summary>
+internal sealed class HexMcpCaller(HexMcpTools tools, int chat) : IMcpTools
+{
+    public const string CALLER = "_hex_caller";
+
+    public IReadOnlyList<McpTool> Tools => tools.Tools;
+
+    public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel) => tools.CallAs(name, arguments, cancel, chat);
+}
+
 /// <summary>The editor's tools as a client sees them, every call queued for the editor's thread (DawnScene.Mcp).</summary>
 internal sealed class HexMcpTools : IMcpTools
 {
@@ -316,8 +331,15 @@ internal sealed class HexMcpTools : IMcpTools
         Tools = [.. all.Select(tool => tool.Meta)];
     }
 
-    public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel)
+    public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel) => CallAs(name, arguments, cancel, null);
+
+    /// <summary>A call, from the agent of a chat when there's one (see <see cref="HexMcpCaller"/>).</summary>
+    public Task<McpToolResult> CallAs(string name, JsonObject arguments, CancellationToken cancel, int? caller)
     {
+        arguments.Remove(HexMcpCaller.CALLER);
+        if (caller is { } chat && name.StartsWith("hex_agent", StringComparison.Ordinal))
+            arguments[HexMcpCaller.CALLER] = chat;
+
         if (!byName.TryGetValue(name, out HexMcpTool? tool))
             return Task.FromResult(McpToolResult.Error($"There's no tool called {name}."));
 

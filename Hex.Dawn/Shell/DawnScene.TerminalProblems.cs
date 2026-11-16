@@ -193,6 +193,7 @@ internal sealed partial class DawnScene
 
         Action<int, string> finished = taskWatches[at].Finished;
         taskWatches.RemoveAt(at);
+        NoteTaskEnded(code);
         finished(code, view.Screen.LastOutput());
         view.Feed($"\r\n\u001b[2m{Said("terminal_page.task_ended", ("code", code.ToString()))}\u001b[0m\r\n");
         return true;
@@ -214,6 +215,7 @@ internal sealed partial class DawnScene
             else if (view.Screen.Finished > before && view.Screen.AtPrompt)
             {
                 taskWatches.RemoveAt(i);
+                NoteTaskEnded(view.Screen.LastExit);
                 finished(view.Screen.LastExit, view.Screen.LastOutput());
             }
         }

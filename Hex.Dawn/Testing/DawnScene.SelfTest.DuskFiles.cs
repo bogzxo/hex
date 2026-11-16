@@ -60,22 +60,19 @@ internal sealed partial class DawnScene
         test.Run(() => code.Document.Undo());
         test.Run(() => ShowDiagnostics(document));
 
-        // The form, a view of the file
-        test.Check("dusk files: settings.hor has the form as a view", () => ViewsFor(document).Any(kind => kind.Id == "dusk_settings.form"));
-        test.Run(() => SwitchToExtensionView("dusk_settings.form"));
+        // The terminal's settings are rows of the settings window, the file has no form of its own any more
+        test.Check("dusk files: settings.hor has no form as a view", () => !ViewsFor(document).Any(kind => kind.Id == "dusk_settings.form"));
+        test.Run(() => terminals.OpenSettings());
         test.Wait();
         test.Settle(0.2f);
-        test.Check("dusk files: the form has a row a setting", () =>
-            Descendants(extensionViews).OfType<FormPanel>().FirstOrDefault() is { } form && form.Fields.Count == TerminalSettings.Described.Length);
-        test.Run(() => Descendants(extensionViews).OfType<FormPanel>().First().Enter("text_scale", new NumberValue(0.25f)));
+        test.Check("dusk files: open_settings puts the settings window up and not the file", () =>
+            SettingsWindow is not null && !documents.Any(open => open.Path is { } path && Path.GetFullPath(path) == Path.GetFullPath(terminals.Settings.Path ?? string.Empty) && open != document));
+        test.Run(() => new TerminalSettingsSource(terminals).Set("text_scale", new NumberValue(0.25f)));
         test.Wait();
-        test.Check("dusk files: a value entered in the form is written into the file where it is", () =>
-            documents.Find(open => open.Path is { } path && Path.GetFullPath(path) == Path.GetFullPath(settingsFile)) is { } open && open.Editor.Text.Contains("text_scale: 0.25"));
-        test.Run(() => SwitchView(HexView.Code));
+        test.Check("dusk files: a terminal row set in the window is taken in and written to the file", () =>
+            Math.Abs(terminals.Settings.TextScale - 0.25f) < 0.001f && terminals.Settings.Path is { } kept && File.ReadAllText(kept).Contains("text_scale: 0.25"));
+        test.Run(CloseSettings);
         test.Wait();
-        test.Run(() => SaveAll());
-        test.WaitFor(() => Math.Abs(terminals.Settings.TextScale - 0.25f) < 0.001f, 3.0f);
-        test.Check("dusk files: saved, the terminal takes it in", () => Math.Abs(terminals.Settings.TextScale - 0.25f) < 0.001f);
 
         // Put back, the terminal's text was half as big again as the code's for every suite after this one
         test.Run(() =>

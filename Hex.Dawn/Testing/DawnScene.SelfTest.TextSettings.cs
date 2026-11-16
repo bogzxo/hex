@@ -242,6 +242,7 @@ internal sealed partial class DawnScene
                 TabSize = 3,
                 InsertSpaces = false,
                 DetectIndentation = false,
+                FormatOnType = false,
                 LineNumbers = false,
                 IndentGuides = false,
                 UseEditorConfig = false,

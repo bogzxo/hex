@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    Hex's build number, one more every time the exe is built, shown after the codename in the title bar. The count is
+    kept in .hex-build at the top of the repository, which git leaves alone (it would be a change every build) and the
+    workspace's sync carries between machines. A checkout without one starts from where the count was reckoned to be
+    when it was first kept, about twenty builds for each of the 221 commits there were by then.
+
+    The number goes in a build.txt beside the exe rather than into an assembly, a number compiled in would have every
+    project after it built again each time for nothing. An IDE's design time builds (Visual Studio and Rider run them
+    all the time to read the project) don't count.
+  -->
+  <PropertyGroup>
+    <HexBuildFile>$(MSBuildThisFileDirectory)..\.hex-build</HexBuildFile>
+    <HexBuildFirst>4420</HexBuildFirst>
+  </PropertyGroup>
+
+  <Target Name="CountHexBuild" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <HexBuildWas Condition="Exists('$(HexBuildFile)')">$([System.IO.File]::ReadAllText('$(HexBuildFile)').Trim())</HexBuildWas>
+      <HexBuildWas Condition="'$(HexBuildWas)' == ''">$([MSBuild]::Subtract($(HexBuildFirst), 1))</HexBuildWas>
+      <HexBuild>$([MSBuild]::Add($(HexBuildWas), 1))</HexBuild>
+      <!-- Said here and not with the rest, the SDK hasn't said where obj is yet when the project file is read -->
+      <HexBuildOut>$(IntermediateOutputPath)build.txt</HexBuildOut>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(HexBuildFile)" Lines="$(HexBuild)" Overwrite="true" />
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(HexBuildOut)" Lines="$(HexBuild)" Overwrite="true" />
+    <Message Importance="high" Text="Hex build $(HexBuild)" />
+
+    <ItemGroup>
+      <None Include="$(HexBuildOut)" Link="build.txt" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+    </ItemGroup>
+  </Target>
+</Project>

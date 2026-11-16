@@ -16,6 +16,19 @@ internal static class HexModeSwitch
             button.LabelScale = 0.14f / scale;
     }
 
+    /// <summary>
+    /// The selector dressed for a skin. In a flush look (Solstice) the mode that's on is filled with the accent, which is
+    /// the mode's own colour there, orange in Dawn and violet in Dusk. Every other look keeps the quiet pill.
+    /// </summary>
+    public static void Dress(Button? destination, Horizon.UI.Skinning.UISkin skin)
+    {
+        if (destination?.Parent is not StackPanel row)
+            return;
+        bool accent = skin.CornerRadius > 0.0f && HexLooks.Flush(skin);
+        foreach (Button button in row.Children.OfType<Button>())
+            button.Primary = accent && button.Selected;
+    }
+
     public static bool RestoreFocus(UICompositor compositor, UIComponent? previous)
     {
         if (previous is null || previous.Module?.Compositor != compositor || !previous.IsShownInHierarchy || !previous.EnabledInHierarchy)

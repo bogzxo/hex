@@ -42,6 +42,7 @@ internal sealed partial class DuskScene
     private (string Name, string About, Action<DuskScript> Run)[] SelfTestSuites =>
     [
         ("graphite", "the shared Graphite profile, terminal palette and readable neutral chrome", TestGraphite),
+        ("solstice", "the Solstice looks, Dusk's violet accent and flush panes", TestSolstice),
         ("bell", "terminal cursor movement and visual bell", TestBell),
         ("interactions", "palette dismissal, single-click results, empty queries and focus restoration", TestInteractions),
         ("ux", "inline search and returning from scrollback to live output", TestUx),
@@ -176,7 +177,7 @@ internal sealed partial class DuskScene
         test.Check("starts with one tab of the usual shell", () => panel.Tabs.Count == 1 && panel.FocusedView?.Process is { IsRunning: true });
         test.Check("the shell wrote a prompt", () => panel.FocusedView?.Screen.Text().Trim().Length > 0);
         test.Check("the panel is fitted between the bars", () => Math.Abs(panel.Bounds.Height - (chrome.Root.Bounds.Height - top.Bounds.Height - statusBar.Bounds.Height)) < 3.0f);
-        test.Check("the window says which tab", () => top.Title.Contains("Dusk"));
+        test.Check("the window says which tab, and after it that it's Dusk's", () => top.Title.Length > 0 && top.Caption.Contains("Dusk"));
         test.Check("the terminal has the keyboard", () => compositor.Focus == panel.FocusedView);
     }
 

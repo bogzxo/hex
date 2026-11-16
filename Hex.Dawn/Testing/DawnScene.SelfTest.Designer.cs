@@ -31,6 +31,21 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("welcome: with nothing open the welcome is over the empty layout, with what to start with", () =>
             welcome is { Visible: true } page && page.Parent == canvas && Descendants(page).OfType<Button>().Any(button => button.Label == "@welcome.new_layout"));
+        test.Check("welcome: what's new lists every line of this version, each with a button that goes somewhere", () =>
+            welcome is { } page && HexWhatsNew.For(Hex.Shell.HexVersion.Number) is { Count: > 0 } items
+            && Descendants(page).OfType<Button>().Count(button => items.Any(item => button.Label == Said("whats_new." + item.Go))) == items.Count
+            && HexWhatsNew.All.All(item => !Said("whats_new." + item.Text).Contains("whats_new.", StringComparison.Ordinal)
+                && item.Place switch
+                {
+                    HexNewsPlace.Setting => EditorSettingsCatalog.Settings.Any(row => row.Key == item.Target),
+                    HexNewsPlace.Settings => EditorSettingsCatalog.Sections.Contains(item.Target),
+                    _ => true
+                }));
+        test.Run(() => GoToNews(HexWhatsNew.For("2.9.1").First(item => item.Place == HexNewsPlace.Setting)));
+        test.Settle(0.3f);
+        test.Check("welcome: a line about a setting opens the settings on it", () => SettingsPage is not null);
+        test.Run(CloseSettings);
+        test.Settle(0.3f);
         test.Run(() => welcomeWanted = false);
         test.Wait();
         test.Check("welcome: and gone once it isn't wanted", () => welcome is not { Visible: true });
@@ -290,14 +305,14 @@ internal sealed partial class DawnScene
         Reveal("color");
         test.Check("colour: a colour has a picker and its four numbers", () =>
             designer.editors["color"] is StackPanel { Children: [ColorPicker, StackPanel { Children.Count: 4 }] });
-        test.Click(In(() => Picker().AlphaBounds, 0.5f, 0.97f));
+        test.Click(In(() => Picker().AlphaBounds, 0.97f, 0.5f));
         test.Drag(In(() => Picker().ShadeBounds, 0.3f, 0.4f), In(() => Picker().ShadeBounds, 0.95f, 0.95f));
         test.Wait();
-        test.Check("colour: dragging through the square picks a shade, the strip how solid it is", () =>
+        test.Check("colour: dragging through the square picks a shade, the slider how solid it is", () =>
             ((Label)label!).Color is { X: > 0.8f, Y: < 0.2f, Z: < 0.2f, W: > 0.9f } && Code().Contains("color: vec("));
-        test.Click(In(() => Picker().HueBounds, 0.5f, 0.34f));
+        test.Click(In(() => Picker().HueBounds, 0.34f, 0.5f));
         test.Wait();
-        test.Check("colour: the other strip picks the hue", () => ((Label)label!).Color is { X: < 0.2f, Y: > 0.8f, W: > 0.9f });
+        test.Check("colour: the hue slider picks the hue", () => ((Label)label!).Color is { X: < 0.2f, Y: > 0.8f, W: > 0.9f });
         test.Check("colour: and the numbers follow", () =>
             ((StackPanel)designer.editors["color"]).Children[1].Children[1] is NumberBox green && Near(green.Value, ((Label)label!).Color!.Value.Y, 0.002f));
     }

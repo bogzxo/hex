@@ -9,13 +9,13 @@ namespace Hex.Dawn;
 
 // What the editor is set to (HexSettings), read as it starts and saved as it changes. The window it's set in is
 // SettingsPage, its skin is in EditorSkin (and picked from a list in ThemePick), the edges of its panels in Sides. The
-// file itself opens in a tab too and is read again as it's saved, see SettingsFile. The folder that's open can have
-// settings of its own over the user's, read again here whenever it's another folder, see SettingsScope.
+// file itself opens in a tab too and is read again as it's saved, see SettingsFile. The open folder can have
+// workspace settings that override the user settings, reloaded here whenever the folder changes, see SettingsScope.
 internal sealed partial class DawnScene
 {
     private HexSettings settings = null!;
     /// <summary>
-    /// Helper method to read the settings and put them in force, the theme of the editor, the sizes its panels were
+    /// Helper method to load the settings and apply them, the theme of the editor, the sizes its panels were
     /// left at, and to give the panels the edges they are dragged by. Once, as the editor is made.
     /// </summary>
     private void LoadSettings()
@@ -75,9 +75,9 @@ internal sealed partial class DawnScene
     private string? workspaceSettingsFolder;
 
     /// <summary>
-    /// The folder's settings read for the folder that's open now, the last one's let go of, and everything they change
-    /// put in force as the settings file being saved does, the open files indented again and the window's rows showing
-    /// it. A folder's file that doesn't read says so on a card the way the user's does, and is false.
+    /// Loads the workspace settings of the folder that's open now, drops the last folder's, and applies everything they
+    /// change the way a reload on save does, the open files indented again and the window's rows updated. Invalid
+    /// workspace settings are reported on a card the way invalid user settings are, and it returns false.
     /// </summary>
     private bool ReloadWorkspaceSettings()
     {
@@ -120,6 +120,6 @@ internal sealed partial class DawnScene
         ReloadWorkspaceSettings();
     }
 
-    // What the folder's file is called where it's said, the folder with it
+    // The workspace settings file's name as messages show it, with its folder
     private static string WorkspaceFileName(string folder) => Path.Combine(FolderName(folder), HexSettings.WORKSPACE_FOLDER, HexSettings.WORKSPACE_FILE);
 }

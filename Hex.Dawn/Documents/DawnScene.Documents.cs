@@ -569,7 +569,6 @@ internal sealed partial class DawnScene
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
         if (peeking?.From == gone) peeking = null;
-        if (panelJudgedFor == gone) panelJudgedFor = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
         if (ReferenceEquals(definesOf.Text, gone.Editor.Text))
@@ -639,6 +638,7 @@ internal sealed partial class DawnScene
         var move = commands.Add("File/new/scratch", Said("scratchpads.move_command"), MoveScratchpadIntoWorkspace, icon: "go-to-file");
         move.IsEnabled = () => IsScratchpad(document);
         move.PaletteOnly = true;
+        commands.Add("File/new", Said("new_project.command"), ShowNewProject, "Ctrl+Shift+N", "new-folder", UIKeyUse.BoundWhileTyping);
         commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
         commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
         commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);

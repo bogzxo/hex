@@ -21,8 +21,47 @@ internal static partial class HexExtensionCatalog
     /// <summary>Whether a source is a GitHub repository (owner/name) rather than a folder.</summary>
     public static bool IsRepo(string source) => !Directory.Exists(source) && RepoName().IsMatch(source.Trim());
 
-    /// <summary>The page of a source, its repository on GitHub, null for a folder.</summary>
-    public static string? PageOf(string source) => IsRepo(source) ? $"https://github.com/{source.Trim()}" : null;
+    /// <summary>
+    /// Whether a source is a git repository by its URL (https, ssh or git@host:path, cloned with the git on the PATH),
+    /// rather than a GitHub owner/name or a folder.
+    /// </summary>
+    public static bool IsGit(string source)
+    {
+        string tidy = source.Trim();
+        if (Directory.Exists(tidy)) return false;
+        return tidy.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || tidy.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || tidy.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase) || tidy.StartsWith("git://", StringComparison.OrdinalIgnoreCase)
+            || tidy.StartsWith("git@", StringComparison.OrdinalIgnoreCase) || tidy.EndsWith(".git", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>What sort of source it is, for the list of them, GitHub, git or a folder.</summary>
+    public static HexExtensionSourceKind KindOf(string source) =>
+        IsGit(source) ? HexExtensionSourceKind.Git : IsRepo(source) ? HexExtensionSourceKind.GitHub : HexExtensionSourceKind.Folder;
+
+    /// <summary>Whether a source could be one at all, a folder that's there, owner/name or a git URL.</summary>
+    public static bool IsSource(string source) => Directory.Exists(source.Trim()) || IsRepo(source) || IsGit(source);
+
+    /// <summary>The page of a source, its repository on GitHub or the web page of a git URL, null for a folder or ssh.</summary>
+    public static string? PageOf(string source)
+    {
+        string tidy = source.Trim();
+        if (IsRepo(tidy)) return $"https://github.com/{tidy}";
+        if (IsGit(tidy) && tidy.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return tidy.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? tidy[..^4] : tidy;
+        return null;
+    }
+
+    /// <summary>A name for a source's own folder among the synced ones, its letters and digits and a hash so two never meet.</summary>
+    public static string FolderNameOf(string source)
+    {
+        string tidy = source.Trim().Replace('\\', '/').TrimEnd('/');
+        string readable = new([.. tidy.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-')]);
+        readable = readable.Trim('-');
+        if (readable.Length > 40) readable = readable[^40..].TrimStart('-');
+        uint hash = 2166136261;
+        foreach (char c in tidy.ToLowerInvariant()) hash = (hash ^ c) * 16777619;
+        return $"{readable}-{hash:x8}";
+    }
 
     /// <summary>
     /// The catalog brought up to date in <paramref name="into"/>, a folder an extension and nothing else. What was there is
@@ -41,6 +80,10 @@ internal static partial class HexExtensionCatalog
             if (Directory.Exists(source))
             {
                 CopyExtensions(source, staging);
+            }
+            else if (IsGit(source))
+            {
+                await CloneInto(source, staging, cancel).ConfigureAwait(false);
             }
             else if (RepoName().IsMatch(source))
             {
@@ -64,7 +107,7 @@ internal static partial class HexExtensionCatalog
             }
             else
             {
-                throw new IOException($"{source} is neither a folder nor a repository on GitHub (owner/name)");
+                throw new IOException($"{source} is neither a folder, a repository on GitHub (owner/name) nor a git URL");
             }
 
             if (Directory.Exists(into))
@@ -126,10 +169,66 @@ internal static partial class HexExtensionCatalog
         return tidy.Contains('.') ? tidy : tidy + ".0";
     }
 
+    // A git repository cloned shallow into a folder of its own and its extensions copied over, the clone thrown away after.
+    // git does the asking for a password itself, an ssh key or the credential manager, and a clone that can't stops it
+    private static async Task CloneInto(string url, string staging, CancellationToken cancel)
+    {
+        string clone = Path.Combine(Path.GetTempPath(), $"hex-extensions-{Guid.NewGuid():N}");
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (string argument in (string[])["clone", "--depth", "1", "--quiet", url.Trim(), clone])
+                start.ArgumentList.Add(argument);
+            start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+
+            using var git = System.Diagnostics.Process.Start(start) ?? throw new IOException("git couldn't be started, is it installed and on the PATH?");
+            Task<string> said = git.StandardError.ReadToEndAsync(cancel);
+            await git.StandardOutput.ReadToEndAsync(cancel).ConfigureAwait(false);
+            await git.WaitForExitAsync(cancel).ConfigureAwait(false);
+            if (git.ExitCode != 0)
+                throw new IOException($"git couldn't clone {url.Trim()}: {(await said.ConfigureAwait(false)).Trim()}");
+
+            CopyExtensions(clone, staging);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            throw new IOException("git isn't installed or isn't on the PATH, a git URL needs it");
+        }
+        finally
+        {
+            if (Directory.Exists(clone))
+            {
+                // git makes its pack files read only, which Directory.Delete won't take out
+                foreach (string file in Directory.GetFiles(clone, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, FileAttributes.Normal);
+                Directory.Delete(clone, recursive: true);
+            }
+        }
+    }
+
     // Every folder with an extension.hor copied over, nothing else of the repository (its README, its tests)
     private static void CopyExtensions(string from, string to)
     {
         foreach (string folder in Extensions(from))
             Install(folder, Path.Combine(to, Path.GetFileName(folder)));
     }
+}
+
+/// <summary>What a place extensions come from is.</summary>
+internal enum HexExtensionSourceKind
+{
+    /// <summary>A repository on GitHub, owner/name, its main branch downloaded as a zip.</summary>
+    GitHub,
+
+    /// <summary>A git repository by its URL, cloned with git.</summary>
+    Git,
+
+    /// <summary>A folder on this machine.</summary>
+    Folder
 }

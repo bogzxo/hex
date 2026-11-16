@@ -31,31 +31,10 @@ internal sealed partial class DuskScene : IHexLookOwner
     /// <summary>A look put on from the palette, the same as a click on its card in the settings.</summary>
     private void PickLook(HexLook look)
     {
-        HexSettings settings = new(host.Settings.Path);
-        HexLooks.Apply(look, settings);
-        ((IHexLookOwner)this).Keep(settings, look);
-        lookPicker?.Refresh();
+        HexLookPicker.Pick(this, look, lookPicker);
         Say(HexText.Get("looks.picked", ("name", look.Name)));
     }
 
     /// <summary>The picker put in the settings' window, told when a row of it changes the settings under it.</summary>
-    private void AddLookPicker(SettingsWindow view)
-    {
-        lookPicker = new HexLookPicker(this, 640.0f);
-        view.SetPanel(EditorSettingsCatalog.PROFILES, lookPicker);
-
-        // Any row can make the settings another look or none of them, the cards say which after every change
-        var changed = view.Page.OnChanged;
-        view.Page.OnChanged = (key, value) =>
-        {
-            changed?.Invoke(key, value);
-            lookPicker?.Refresh();
-        };
-        var reset = view.Page.OnReset;
-        view.Page.OnReset = key =>
-        {
-            reset?.Invoke(key);
-            lookPicker?.Refresh();
-        };
-    }
+    private void AddLookPicker(SettingsWindow view) => lookPicker = HexLookPicker.AddTo(view, this);
 }

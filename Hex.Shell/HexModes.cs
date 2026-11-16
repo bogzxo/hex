@@ -134,9 +134,14 @@ public static class HexModes
             return Start(to, folder);
 
         Leaving?.Invoke(Current);
-        if (!made.TryGetValue(to, out Scene? scene))
+        bool fresh = !made.TryGetValue(to, out Scene? scene);
+        if (fresh)
             made[to] = scene = make(to, folder);
 
+        // Making a mode leaves the garbage of setting it up, taken under the cover as the engine does for any scene. Going
+        // back to one that's already there makes none, and the same blocking, compacting collection on every swap was a
+        // pause for nothing each time Ctrl+Alt+Shift+D was pressed
+        scenes.CollectAfterChange = fresh;
         Current = to;
         scenes.SetScene(scene, null);
         return true;

@@ -1,0 +1,37 @@
+// The Extensions window, Ctrl+Shift+X or the activity bar's button. Three tabs over one list, what's installed (switched
+// on and off, updated and uninstalled), what can be installed out of every source (searched as it's typed), and the
+// sources themselves (GitHub repositories, git URLs and folders, added and taken away). The cards of the list are made
+// in code, see DawnScene.ExtensionsWindow.
+#define layout
+
+let window = compositor.window({
+    size: vec(940, 660),
+    z: 10,
+    padding: vec(0, 0, 0, 0),
+    intro: "pop",
+    intro_time: 0.18,
+    min_size: vec(640, 420),
+    title: "@extensions_window.title",
+    icon: "extensions",
+});
+
+let extensions_frame = compositor.panel({ parent: window, fill: "both", padding: vec(16, 12, 16, 14), color: vec(0, 0, 0, 0) });
+
+// The cards
+let extensions_body = compositor.panel({ parent: extensions_frame, fill: "both", padding: vec(0, 68, 0, 0), color: vec(0, 0, 0, 0), clip: true });
+let extensions_scroll = compositor.scroll({ parent: extensions_body, fill: "both", padding: vec(0, 2, 10, 6) });
+let extensions_list = compositor.stack({ parent: extensions_scroll, fill: "horizontal", spacing: 10 });
+
+// The tabs at the left, the search box and Sync at the right. Made after the list so they're over it, the list's panel
+// took the clicks meant for them otherwise
+let extensions_head = compositor.panel({ parent: extensions_frame, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 34), color: vec(0, 0, 0, 0) });
+let extensions_tabs = compositor.stack({ parent: extensions_head, anchor: "left", pivot: "left", direction: "horizontal", spacing: 4 });
+let extensions_tab_installed = compositor.button({ parent: extensions_tabs, size: vec(128, 32), icon: "extensions", label: "@extensions_window.installed", style: "button_flat" });
+let extensions_tab_browse = compositor.button({ parent: extensions_tabs, size: vec(128, 32), icon: "cloud-download", label: "@extensions_window.browse", style: "button_flat" });
+let extensions_tab_sources = compositor.button({ parent: extensions_tabs, size: vec(128, 32), icon: "repo", label: "@extensions_window.sources", style: "button_flat" });
+let extensions_sync = compositor.button({ parent: extensions_head, anchor: "right", pivot: "right", size: vec(32, 32), icon: "refresh", style: "button_flat", tooltip: "@extensions_window.sync" });
+let extensions_search = compositor.textbox({ parent: extensions_head, anchor: "right", pivot: "right", pos: vec(-40, 0), size: vec(300, 32), padding: vec(10, 4, 10, 4), text_scale: 0.135, placeholder: "@extensions_window.search", max_length: 200 });
+
+// How many there are and what's going on, quietly under the head
+let extensions_status = compositor.panel({ parent: extensions_frame, anchor: "top", pivot: "top", pos: vec(0, -40), fill: "horizontal", size: vec(0, 22), color: vec(0, 0, 0, 0), clip: true });
+let extensions_said = compositor.label({ parent: extensions_status, anchor: "left", pivot: "left", align: "left", text: "", text_scale: 0.12, dim: true, markdown: true });

@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 // Somebody's VS Code settings brought over in one go, the user's settings.json into Hex's user settings and a folder's
 // .vscode\settings.json into the folder's own. What's going to change is shown first, a row each with a switch, what Hex
 // hasn't got listed dim under them. Each is set the way its row in the settings window would set it, through the same
-// sources, so whatever a row does when it changes (the open files, the folder's file) happens here too.
+// sources, so whatever a row does when it changes (the open files, the workspace settings) happens here too.
 internal sealed partial class DawnScene
 {
     // The most of the preview's list shown before it scrolls
@@ -158,8 +158,8 @@ internal sealed partial class DawnScene
     private static string ImportLabel(int count) =>
         count == 1 ? Said("settings_import.import_one") : Said("settings_import.import", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
-    // The settings ticked set, each through its source the way its row would. Into the folder's file when it's the
-    // folder's, the window's switch put over there for as long as it takes
+    // The settings ticked set, each through its source the way its row would. Into the workspace settings when
+    // importing for the workspace, the window's switch put on Workspace for as long as it takes
     private VsCodeImported? ApplyImport(List<ImportRow> rows, List<ImportRow> ticked, bool workspace)
     {
         if (workspace && !OnWorkspaceSettings())
@@ -188,7 +188,7 @@ internal sealed partial class DawnScene
         return new VsCodeImported(ticked.Count, left);
     }
 
-    // The folder's settings file the one in force, the first folder's, false with nothing open to have one
+    // Switches to the workspace settings of the first folder, false with no folder open
     private bool OnWorkspaceSettings()
     {
         if (WorkspaceSettingsFolder() is not { } folder)

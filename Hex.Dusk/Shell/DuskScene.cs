@@ -245,8 +245,10 @@ internal sealed partial class DuskScene : Scene
         if (viewport != camera.ViewSize && viewport.X > 0 && viewport.Y > 0)
             camera.ViewSize = viewport;
 
+        // Once start-up has settled, what it made and dropped is offered back. Not forced and not compacting, the way
+        // Dawn's is: the blocking one stopped the window for as long as it took, in the first seconds of every session
         if (settleIn > 0.0f && (settleIn -= dt) <= 0.0f)
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
 
         StartUp();
         UpdateClosing();
@@ -260,6 +262,10 @@ internal sealed partial class DuskScene : Scene
         UpdateInstance();
         UpdateHandoffs();
         UpdateStatusBar();
+
+        // The horizon under the title bar in a flush look, Dawn's runs with its tasks and Dusk's is the line alone
+        if (compositor.Skin is { } worn && !top.Bounds.IsEmpty)
+            frame.UpdateHorizon(chrome.Root, worn, top.Bounds.Height, chrome.Root.Bounds.Width, Hex.Shell.HexHorizonState.Idle, null);
         host.Update(dt);
         UpdateSession(dt);
 

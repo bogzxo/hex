@@ -48,7 +48,7 @@ internal sealed partial class DawnScene
             SettingsWindow is { Visible: true } window && window.Parent == chrome.Root && SettingsPage is { } page
             && page.Settings.Any(setting => setting.Key == "editor_skin") && page.Settings.Any(setting => setting.Key == "scrollback")
             && page.Settings.Any(setting => setting.Key == "backdrop_image") && page.Settings.Any(setting => setting.Key == "layout_skin")
-            && Value("editor_skin") is StringValue { Value: "Graphite" });
+            && Value("editor_skin") is StringValue { Value: "Solstice" });
         test.Check("settings: in order, how Hex looks first with both modes' themes in it, then the editor, the terminal and the extensions", () =>
             SettingsPage!.Settings.Select(setting => setting.Group.Split(" · ")[0]).Distinct().SequenceEqual(Hex.Shell.EditorSettingsCatalog.Parts)
             && SettingsPage.Settings.Where(setting => setting.Group == Hex.Shell.EditorSettingsCatalog.THEME).Select(setting => setting.Key).SequenceEqual(["editor_skin", "theme"]));

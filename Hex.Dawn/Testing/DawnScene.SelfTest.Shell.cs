@@ -27,6 +27,7 @@ internal sealed partial class DawnScene
             left.Show(true);
         });
         test.Wait();
+        SemanticShot(test, "shell-hex-logo.png");
 
         // Every view, the side bar the width it was dragged to and the middle in what the window has left
         foreach (HexSide side in (HexSide[])[HexSide.Explorer, HexSide.Search, HexSide.Outline, HexSide.SourceControl, HexSide.Debug])

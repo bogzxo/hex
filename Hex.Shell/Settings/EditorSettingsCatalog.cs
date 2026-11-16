@@ -4,10 +4,10 @@ using Horizon.UI.Components;
 namespace Hex.Shell;
 
 /// <summary>
-/// The editor's settings that are a plain value of its section, described once for both modes, Dawn putting them in
-/// force as they change and Dusk the ones that are its too (the effects, the backdrop) and writing the rest for Dawn to
-/// take in. Dawn adds its theme, its size and the designer's skin, which only it knows the choices of. What they come as
-/// is what Dawn's HexSettings starts with.
+/// The editor settings that are a plain value of its section, described once for both modes. Dawn applies them as they
+/// change, and Dusk applies the ones that are its too (the effects, the backdrop) and writes the rest for Dawn to
+/// reload. Dawn adds its theme, its size and the designer's skin, which only it knows the choices of. Their default
+/// values are what Dawn's HexSettings starts with.
 /// <para>
 /// They're in the order the settings window shows them, by what they're about rather than which mode has them. The
 /// editor first, since it's what a developer opens the settings for (its text, tabs and indentation at the very top,
@@ -40,7 +40,7 @@ public static class EditorSettingsCatalog
     /// <summary>
     /// How the code is typed and drawn, tabs, indentation, line numbers and guides, and whether a project's .editorconfig
     /// has the last word, the rulers, the whitespace drawn, the caret's look and sticky scroll, and formatting on save (a
-    /// row of Editor, Files). Dawn's TextSettingsSource has them and puts them in force on every open file, they're not in
+    /// row of Editor, Files). Dawn's TextSettingsSource has them and applies them to every open file, they're not in
     /// <see cref="Settings"/> since those are the editor's own source's.
     /// </summary>
     public static readonly UISetting[] Text = Linked(
@@ -117,6 +117,7 @@ public static class EditorSettingsCatalog
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
         new("scroll_speed", HexText.Get("settings_catalog.scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
+        new("middle_scroll_speed", HexText.Get("settings_catalog.middle_scroll_speed_title"), UIFormKind.Number, HexText.Get("settings_catalog.middle_scroll_speed_help"), MOTION, Least: 0.25f, Most: 5.0f, Step: 0.25f, Slider: true, Unit: "×"),
         new("caret_glide", HexText.Get("settings_catalog.caret_glide_title"), UIFormKind.Number, HexText.Get("settings_catalog.caret_glide_help"), MOTION, Least: 0.0f, Most: 0.3f, Step: 0.005f, Slider: true, Unit: "s"),
 
         new("backdrop", HexText.Get("settings_catalog.backdrop_title"), UIFormKind.Flag, HexText.Get("settings_catalog.backdrop_help"), BACKDROP),
@@ -231,7 +232,7 @@ public static class EditorSettingsCatalog
             .OrderBy(name => name == "hack" ? 0 : 1).ThenBy(name => name, StringComparer.OrdinalIgnoreCase)];
     }
 
-    /// <summary>The number a setting comes as, 0 for one that isn't a number.</summary>
+    /// <summary>A setting's default value as a number, 0 for one that isn't a number.</summary>
     public static float UsualNumber(string key) => Usual.GetValueOrDefault(key) is NumberValue number ? number.Value : 0.0f;
 
     /// <summary>New-install and reset values. Flat surfaces and no decorative motion, the interface moving at its usual speed.</summary>
@@ -256,6 +257,7 @@ public static class EditorSettingsCatalog
         ["glass_bend"] = new NumberValue(HexGlass.BEND),
         ["ui_animation"] = new NumberValue(1.0f),
         ["scroll_speed"] = new NumberValue(1.0f),
+        ["middle_scroll_speed"] = new NumberValue(1.0f),
         ["caret_glide"] = new NumberValue(0.0f),
         ["backdrop"] = Values.Bool(false),
         ["backdrop_terminal"] = Values.Bool(false),

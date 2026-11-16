@@ -32,7 +32,7 @@ internal sealed partial class DawnScene
     // What the view was last drawn from, it's drawn again when any of it moves
     private (int Chat, int Version) agentsDrawn = (-1, -1);
     private (string? Providers, int Width) agentsChipsDrawn;
-    private bool agentsWasRunning;
+    private bool agentsWasRunning, agentsWasSteering;
     private float agentsWait;
 
     private void BuildAgentsPanel()
@@ -67,6 +67,7 @@ internal sealed partial class DawnScene
         agentsNew = made.Get<Button>("agents_new");
         agentsNew.OnPressed = NewAgentChat;
         BuildAgentsOptions(made);
+        BuildAgentsList();
 
         commands.Add("View/agent", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
     }
@@ -95,11 +96,13 @@ internal sealed partial class DawnScene
             return;
 
         agentsView.Visible = shown;
+        // Brought back it's drawn again at once, as it was left. The rows were made again as though the chat had just
+        // been picked and came in one after another, a slow slide from the top every time the view was opened
         if (shown)
         {
             agentsDrawn = (-1, -1);
             agentsChipsDrawn = default;
-            agentRowsFor = default;
+            agentsStill = true;
         }
     }
 
@@ -110,13 +113,8 @@ internal sealed partial class DawnScene
         for (int i = agentChats.Count - 1; i >= 0; i--)
         {
             HexAgentChat chat = agentChats[i];
-            menu.Add(chat.Title.Length > 0 ? chat.Title : Said("agents_panel.new_chat"), () =>
-            {
-                if (agentChat == chat) return;
-                agentChat = chat;
-                agentDraftContext = null;
-                agentsInput.Text = string.Empty;
-            }, icon: chat.Running ? "loading~spin" : "comment").IsChecked = () => chat == agentChat;
+            menu.Add(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), () => OpenAgentChat(chat),
+                icon: chat.Running ? "loading~spin" : "comment").IsChecked = () => chat == agentChat;
         }
 
         if (agentChat is not null)
@@ -150,14 +148,8 @@ internal sealed partial class DawnScene
 
     private void ClearAgentChat()
     {
-        if (agentChat is not { } chat)
-            return;
-
-        StopAgent(chat);
-        agentDraftContext = null;
-        agentsInput.Text = string.Empty;
-        agentChats.Remove(chat);
-        agentChat = agentChats.LastOrDefault();
+        if (agentChat is { } chat)
+            CloseAgentChat(chat);
     }
 
     /// <summary>
@@ -167,22 +159,35 @@ internal sealed partial class DawnScene
     private void UpdateAgentsPanel(float dt)
     {
         TakeAgentLines();
+        PublishAgentStatuses();
+        DrawAgentsActivity();
         if (agentsView is null || !agentsView.Visible || !left.Shown)
             return;
 
-        agentChat?.Tick();
+        // The chat on screen is read as far as it's gone, so it's not marked as finished unseen
+        if (agentChat is { } open)
+        {
+            open.Tick();
+            open.Seen = open.Version;
+        }
         if ((agentsWait -= dt) > 0.0f)
             return;
         agentsWait = 0.1f;
 
-        // Stop pops up in Send's place while the agent works, Send pops back when it's done
+        // Stop pops up in Send's place while the agent works, Send pops back when it's done. An agent that can be told
+        // more as it works keeps Send, Stop beside it
         bool running = agentChat?.Running == true;
-        if (running != agentsWasRunning)
+        bool steering = SteeredRun(agentChat) is not null;
+        if (running != agentsWasRunning || steering != agentsWasSteering)
         {
+            bool started = running != agentsWasRunning;
             agentsWasRunning = running;
+            agentsWasSteering = steering;
             agentsStop.Visible = running;
-            agentsSend.Visible = !running;
-            PopIn(running ? agentsStop : agentsSend);
+            agentsSend.Visible = !running || steering;
+            agentsStop.Position = new Vector2(steering ? -38 : 0, 0);
+            if (started)
+                PopIn(running ? agentsStop : agentsSend);
         }
 
         agentsHistory.Enabled = agentChats.Count > 0;
@@ -190,6 +195,7 @@ internal sealed partial class DawnScene
         bool canCompose = CanComposeAgent();
         agentsSend.Enabled = canCompose && !string.IsNullOrWhiteSpace(agentsInput.Text);
         DrawAgentChips();
+        DrawAgentsList();
         DrawAgentOptions();
         TickRunningTimes();
         DrawAgentsHead();
@@ -199,12 +205,13 @@ internal sealed partial class DawnScene
             ShowTyping(going);
 
         var now = (agentChat?.Id ?? 0, agentChat?.Version ?? -1);
-        if (now != agentsDrawn || agentChat != agentRowsFor.Chat || AgentTranscriptWidth() != agentRowsFor.Width
+        if (now != agentsDrawn || agentChat != agentRowsFor.Chat || (agentChat is { Entries.Count: > 0 } && AgentsNarrow()) != agentRowsFor.Narrow
             || !ReferenceEquals(compositor.Skin, agentRowsFor.Skin) || settings.UiAnimation != agentRowsFor.Motion)
         {
             agentsDrawn = now;
             DrawAgentRows();
         }
+        else FitAgentRows();
     }
 
     // The quiet line under the agents, the model, the tokens, the cost and the time of the turn, and the card at the
@@ -223,6 +230,8 @@ internal sealed partial class DawnScene
 
         // The agent's chip says who, so this is the rest of it, kept short for a side bar
         var parts = new List<string?> { AgentDraftCaption(), agentChat is null && profile is not null ? AgentState(profile) : null };
+        if (agentChat?.Parent is { } parent)
+            parts.Add(Said("agents_panel.started_by", ("name", ChatName(parent))));
         if (agentChat is { } shown && (shown.InputTokens > 0 || shown.Model is not null || shown.Running || shown.TurnSeconds > 0))
         {
             parts.Add(shown.Model?.Replace("claude-", string.Empty));

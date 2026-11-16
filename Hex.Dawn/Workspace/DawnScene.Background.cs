@@ -68,6 +68,14 @@ internal sealed partial class DawnScene
     private void BuildWorkItem()
     {
         work.Woken = Engine.WindowManager.Wake;
+
+        // Work that went wrong turns the line under the title bar red, whether it had a card or not (a check for updates
+        // has none). Said from whichever thread it ended on, so only a time is written
+        work.Ended += item =>
+        {
+            if (item.State == WorkState.Failed && seenWork(item))
+                NoteWorkFailed();
+        };
         workCards = new UIWorkCards(work, layout.Get<Notifications>("toasts"))
         {
             ShowOutput = ShowWorkOutput,

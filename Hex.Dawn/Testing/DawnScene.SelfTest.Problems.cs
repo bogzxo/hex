@@ -19,7 +19,6 @@ internal sealed partial class DawnScene
                 new(2, 0, 1, "Simplify expression", Warning: true, Hint: true)
             ];
             problemsDirty = true;
-            panelOpenedByHand = true;
             settings.PanelCollapsed = false;
             ShowPanel(PROBLEMS_PAGE);
         });

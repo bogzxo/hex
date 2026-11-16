@@ -38,6 +38,8 @@ internal sealed partial class DawnScene
         // Scene disposal runs after updates have stopped, including close before the debounce expires.
         FlushZoomSettings(report: false);
         debugger?.DetachOnClose();
+        extensions?.StopWatching();
+        StopRemote();
         base.DisposeOther();
     }
 }

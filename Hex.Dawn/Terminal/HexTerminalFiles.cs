@@ -116,37 +116,4 @@ internal sealed class HexTerminalFiles
         return TerminalKnowledge.Check(kind, of.Editor.Text)
             .Select(problem => new UICodeDiagnostic(problem.Line, Math.Max(0, problem.Column), Math.Max(1, problem.Length), problem.Message, Warning: problem.Warning));
     }
-
-    /* What an extension is handed about the terminal's files, the settings form (Assets/hex/extensions/dusk_settings) */
-
-    /// <summary>What an extension is handed about the terminal's files.</summary>
-    internal (string, IRuntimeValue)[] Api() =>
-    [
-        ("terminal_settings", Natives.Function("terminal_settings", args => SettingsFormOf(args.Has(0) ? args.Text(0) : context.Documents.Current.Path))),
-        // a field's value as the file writes it, the flags of a list back into a list
-        ("terminal_setting_value", Natives.Function("terminal_setting_value", args => TerminalSettingsForm.ValueOf(args.Text(0), args[1])))
-    ];
-
-    /// <summary>
-    /// The settings of the terminal as a form takes them, the engine's description of them (the same form Dusk's
-    /// settings window is), with what the file says of each as its values.
-    /// </summary>
-    private IRuntimeValue SettingsFormOf(string? file)
-    {
-        string text = file is not null && context.Documents.Find(file) is { } open
-            ? open.Editor.Text
-            : file is not null && File.Exists(file) ? File.ReadAllText(file) : string.Empty;
-
-        Dictionary<string, IRuntimeValue> said;
-        try
-        {
-            said = TerminalSettings.ReadObject(text);
-        }
-        catch (Exception)
-        {
-            said = [];
-        }
-
-        return TerminalSettingsForm.Script(context.Terminals.Host.Plugins.Where(plugin => !plugin.BuiltIn).Select(plugin => plugin.Id), context.Terminals.Host.Panel.Profiles.Select(profile => profile.Id), said);
-    }
 }

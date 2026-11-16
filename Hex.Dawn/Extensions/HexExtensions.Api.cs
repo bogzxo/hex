@@ -22,15 +22,12 @@ internal sealed partial class HexExtensions
             [
                 .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension), .. Prompting(extension),
                 .. Sides(), .. Programs(extension), .. About(extension), .. Edits(extension), .. Problems(extension),
-                .. Watching(extension), .. Caret(), .. Agents(extension), .. TerminalApi
+                .. Watching(extension), .. Timers(extension), .. Caret(), .. Agents(extension), .. Projects(extension)
             ]);
         }
 
         return hex;
     }
-
-    /// <summary>What the hex object has about the terminal's files, the terminal files' to hand over (HexTerminalFiles.Api).</summary>
-    internal (string, IRuntimeValue)[] TerminalApi { get; set; } = [];
 
     /// <summary>The title bar, the status bar, the cards in the corner and the command palette.</summary>
     private (string, IRuntimeValue)[] Talking(HexExtension extension) =>

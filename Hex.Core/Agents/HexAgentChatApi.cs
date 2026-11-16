@@ -11,7 +11,9 @@ namespace Hex.Core;
 internal static class HexAgentChatApi
 {
     /// <param name="wentWrong">Called when the extension says something went wrong, so the run's exit doesn't say it again.</param>
-    public static ObjectValue Of(HexAgentChat chat, string folder, Action? wentWrong = null) => Natives.Object(
+    /// <param name="finished">Called for chat.done in place of ending the turn, for a run that decides when it's over.</param>
+    /// <param name="taken">Called for chat.taken in place of the chat's own, for a run that knows which message that was.</param>
+    public static ObjectValue Of(HexAgentChat chat, string folder, Action? wentWrong = null, Action? finished = null, Action? taken = null) => Natives.Object(
         ("id", new StringValue(chat.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))),
         ("folder", new StringValue(folder)),
         ("session", Natives.Function("session", args =>
@@ -20,6 +22,8 @@ internal static class HexAgentChatApi
                 chat.Session = said.Value;
             return chat.Session is { } session ? new StringValue(session) : Values.Null;
         })),
+        ("option", Natives.Function("option", args =>
+            chat.Options.TryGetValue(args.Text(0, string.Empty), out string? value) ? new StringValue(value) : Values.Null)),
         ("text", Natives.Action("text", args => chat.Say(args.Text(0, string.Empty)))),
         ("thinking", Natives.Action("thinking", args => chat.Think(args.Text(0, string.Empty)))),
         ("note", Natives.Action("note", args => chat.Note(args.Text(0, string.Empty)))),
@@ -43,5 +47,18 @@ internal static class HexAgentChatApi
             if (used.Properties.TryGetValue("model", out IRuntimeValue? model) && model is StringValue { Value.Length: > 0 } named)
                 chat.Model = named.Value;
         })),
-        ("done", Natives.Action("done", _ => chat.Done())));
+        ("taken", Natives.Action("taken", _ =>
+        {
+            if (taken is not null)
+                taken();
+            else
+                chat.Taken();
+        })),
+        ("done", Natives.Action("done", _ =>
+        {
+            if (finished is not null)
+                finished();
+            else
+                chat.Done();
+        })));
 }

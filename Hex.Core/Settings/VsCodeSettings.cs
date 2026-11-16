@@ -166,7 +166,7 @@ internal static class VsCodeSettings
         return new StringValue(HexSettings.RulersText([.. columns]));
     }
 
-    // Hex zooms its code rather than having a size, 14 being what it comes as
+    // Hex zooms its code rather than having a size, 14 being the default value
     private static IRuntimeValue? Zoom(JsonElement value, IReadOnlyCollection<string> fonts) =>
         value.ValueKind == JsonValueKind.Number ? new NumberValue(Math.Clamp((float)value.GetDouble() / 14.0f, 0.5f, 3.0f)) : null;
 

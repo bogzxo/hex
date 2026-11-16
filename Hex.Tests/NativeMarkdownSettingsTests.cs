@@ -43,4 +43,26 @@ public class NativeMarkdownSettingsTests
         Assert.Equal(1, HexSettings.ScrollSpeedOf(float.NaN));
         Assert.Equal(1, HexSettings.ScrollSpeedOf(float.PositiveInfinity));
     }
+
+    [Fact]
+    public void Middle_mouse_speed_persists_independently_of_wheel_speed_and_resets_to_one()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hex-middle-scroll-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "settings.hor");
+        var settings = new HexSettings(path);
+        Assert.Equal(1, settings.MiddleScrollSpeed);
+        settings.MiddleScrollSpeed = 0.5f;
+        settings.ScrollSpeed = 3;
+        Assert.Null(settings.Save());
+        var loaded = new HexSettings(path);
+        Assert.Equal(0.5f, loaded.MiddleScrollSpeed);
+        Assert.Equal(3, loaded.ScrollSpeed);
+        Assert.Equal(1, Assert.IsType<NumberValue>(EditorSettingsCatalog.Usual["middle_scroll_speed"]).Value);
+        loaded.MiddleScrollSpeed = 1;
+        Assert.Null(loaded.Save());
+        loaded = new HexSettings(path);
+        Assert.Equal(1, loaded.MiddleScrollSpeed);
+        Assert.Equal(3, loaded.ScrollSpeed);
+    }
 }

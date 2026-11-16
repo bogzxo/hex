@@ -160,8 +160,15 @@ internal static class McpGate
     public const string YES = "OK", NO = "NO";
 
     /// <summary>Whether the first line of a client is the right token, saying so to it. Reads only that line.</summary>
-    public static bool Admit(TextReader reader, Stream output, string token)
+    public static bool Admit(TextReader reader, Stream output, string token) => Admit(reader, output, token, out _);
+
+    /// <summary>
+    /// The same, and the tag the client said after its token when it said one, the chat of the Agents panel a bridge
+    /// was started for (--agent-chat), so what an agent does through Hex is known to be that chat's.
+    /// </summary>
+    public static bool Admit(TextReader reader, Stream output, string token, out string? tag)
     {
+        tag = null;
         string? line;
         try
         {
@@ -172,8 +179,14 @@ internal static class McpGate
             return false;
         }
 
-        bool right = line is not null && line.StartsWith(HELLO + " ", StringComparison.Ordinal)
-            && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(line[(HELLO.Length + 1)..].Trim()), Encoding.UTF8.GetBytes(token));
+        // The token, and after a space what the client is tagged with, when it is
+        string said = line is not null && line.StartsWith(HELLO + " ", StringComparison.Ordinal) ? line[(HELLO.Length + 1)..].Trim() : string.Empty;
+        int space = said.IndexOf(' ');
+        string given = space < 0 ? said : said[..space];
+        bool right = line is not null && said.Length > 0
+            && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(token));
+        if (right && space >= 0 && said[(space + 1)..].Trim() is { Length: > 0 and <= 64 } tagged)
+            tag = tagged;
 
         try
         {
@@ -189,10 +202,14 @@ internal static class McpGate
     }
 
     /// <summary>The client's side of it, the token said and the answer read. False with the reason when it wasn't let in.</summary>
-    public static bool Knock(Stream stream, string token, out string? why)
+    public static bool Knock(Stream stream, string token, out string? why) => Knock(stream, token, null, out why);
+
+    /// <summary>The same, tagged (see <see cref="Admit(TextReader, Stream, string, out string?)"/>) when there's a tag.</summary>
+    public static bool Knock(Stream stream, string token, string? tag, out string? why)
     {
         why = null;
-        byte[] hello = Encoding.UTF8.GetBytes($"{HELLO} {token}\n");
+        string tagged = tag is { Length: > 0 } ? " " + tag.Replace(" ", string.Empty).Replace("\n", string.Empty) : string.Empty;
+        byte[] hello = Encoding.UTF8.GetBytes($"{HELLO} {token}{tagged}\n");
         stream.Write(hello);
         stream.Flush();
 

@@ -405,5 +405,5 @@ internal sealed partial class DawnScene
 
     // The card that says the settings file doesn't read
     private UINotification? BrokenCard(string file) =>
-        toasts.Cards.LastOrDefault(card => !card.Closed && card.Text.Contains(Path.GetFileName(file), StringComparison.OrdinalIgnoreCase) && card.Text.Contains("left as they were", StringComparison.Ordinal));
+        toasts.Cards.LastOrDefault(card => !card.Closed && card.Text.Contains(Path.GetFileName(file), StringComparison.OrdinalIgnoreCase) && card.Text.Contains("keep their current values", StringComparison.Ordinal));
 }

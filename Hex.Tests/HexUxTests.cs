@@ -30,10 +30,12 @@ public class HexUxTests
     }
 
     [Fact]
-    public void New_settings_match_the_flat_look_and_reset_values()
+    public void New_settings_are_the_solstice_look_and_reset_values()
     {
         var settings = new HexSettings(null);
-        Assert.Equal(HexLooks.FLAT, HexLooks.Current(settings, "")?.Name);
+        Assert.Equal(HexSettings.USUAL_LOOK, HexLooks.Solstice.Name);
+        Assert.Equal(HexLooks.Solstice.Name, HexLooks.Current(settings, HexSettings.USUAL_TERMINAL_THEME)?.Name);
+        Assert.Equal(HexSettings.USUAL_THEME, settings.EditorTheme);
         Assert.False(settings.EffectGlass);
         Assert.False(settings.EffectMotion);
         Assert.Equal(1, settings.UiAnimation);

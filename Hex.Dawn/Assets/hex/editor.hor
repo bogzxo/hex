@@ -20,7 +20,7 @@ let root = compositor.stack({
 // little room between what's in it, Help's pill under the pointer touched the Dusk button
 let top = compositor.title_bar({
     parent: root,
-    icon: "layout",
+    icon_file: "Assets/hex_icon_gray.png",
     title: "@window.title",
     height: 40,
     spacing: 6,

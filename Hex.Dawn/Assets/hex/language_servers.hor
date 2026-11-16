@@ -36,7 +36,9 @@ let servers = {
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
         repo: "razzmatazz/csharp-language-server", version: ["--version"],
-        reload: ["*.csproj", "*.fsproj", "*.sln", "*.slnx", "*.props", "*.targets", "global.json", "project.assets.json"],
+        // Analyzer rules come from the project's .editorconfig and analyzer packages.
+        settings: { csharp: { analyzersEnabled: true } },
+        reload: ["*.csproj", "*.fsproj", "*.sln", "*.slnx", "*.props", "*.targets", "global.json", "project.assets.json", ".editorconfig", "*.globalconfig"],
         needs: ["*.csproj", "*.fsproj", "*.sln", "*.slnx"]
     },
     python: {
@@ -98,6 +100,13 @@ let servers = {
         install: "go install golang.org/x/tools/gopls@latest",
         version: ["version"],
         reload: ["go.mod", "go.work"]
+    },
+    java: {
+        command: "jdtls", args: [], language: "java", extensions: [".java"],
+        about: "Java, Eclipse's JDT language server, Maven and Gradle projects included. Wants a JDK 21 or later on the PATH. Its download has the jdtls launcher in its bin folder, put that on the PATH or set it here (jdtls.bat on Windows, which wants Python too).",
+        install: { macos: "brew install jdtls" },
+        update: { macos: "brew upgrade jdtls" },
+        repo: "eclipse-jdtls/eclipse.jdt.ls"
     },
     rust: {
         command: "rust-analyzer", args: [], language: "rust", extensions: [".rs"],

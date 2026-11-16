@@ -24,7 +24,8 @@ internal sealed partial class DawnScene
     private int agentsRecall;
 
     // A path with a line, Hex.Core/Mcp/McpServer.cs:47, in what an agent says, in backticks or not
-    private static readonly Regex PlaceInText = new(@"`?(?<path>[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)`?", RegexOptions.Compiled);
+    private static readonly Regex PlaceInText = new(@"(?<link>!?\[[^\]\r\n]*\]\((?:[^()\r\n]|\([^()\r\n]*\))*\))|(?<ticks>`+)(?<code>.*?)\k<ticks>|(?<path>(?:[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)", RegexOptions.Compiled);
+    private static readonly Regex CodePlace = new(@"\A(?<path>(?:[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)\z", RegexOptions.Compiled);
 
     private void BuildAgentsOptions(UILayout made)
     {
@@ -187,17 +188,34 @@ internal sealed partial class DawnScene
     /// </summary>
     private string WithPlaces(string text)
     {
-        var parts = text.Split("```");
-        for (int i = 0; i < parts.Length; i += 2)
+        var lines = text.Split('\n');
+        char fence = '\0';
+        int fenceLength = 0;
+        for (int i = 0; i < lines.Length; i++)
         {
-            parts[i] = PlaceInText.Replace(parts[i], match =>
+            ReadOnlySpan<char> trimmed = lines[i].AsSpan().TrimStart();
+            int run = 0;
+            if (trimmed.Length > 0 && trimmed[0] is '`' or '~')
+                while (run < trimmed.Length && trimmed[run] == trimmed[0]) run++;
+            if (run >= 3)
             {
-                string path = match.Groups["path"].Value, line = match.Groups["line"].Value;
+                if (fence == '\0') { fence = trimmed[0]; fenceLength = run; }
+                else if (trimmed[0] == fence && run >= fenceLength && trimmed[run..].Trim().IsEmpty) fence = '\0';
+                continue;
+            }
+            if (fence != '\0') continue;
+
+            lines[i] = PlaceInText.Replace(lines[i], match =>
+            {
+                if (match.Groups["link"].Success) return match.Value;
+                Match place = match.Groups["code"].Success ? CodePlace.Match(match.Groups["code"].Value) : match;
+                if (!place.Success) return match.Value;
+                string path = place.Groups["path"].Value, line = place.Groups["line"].Value;
                 return File.Exists(McpPath(path)) ? $"[{path}:{line}]({path}:{line})" : match.Value;
             });
         }
 
-        return string.Join("```", parts);
+        return string.Join('\n', lines);
     }
 
     /// <summary>The last thing asked of the chat on screen asked again, as it was asked.</summary>

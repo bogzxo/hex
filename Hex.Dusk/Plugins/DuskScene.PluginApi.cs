@@ -90,6 +90,13 @@ internal sealed partial class DuskScene : ITerminalHostUi
     }
 
     /// <summary>A file to edit, in Hex when it can be found (the running one first), in whatever opens it otherwise.</summary>
+    // The terminal's settings asked for, Dusk's settings window, which opens at the terminal's rows
+    bool ITerminalHostUi.ShowSettings()
+    {
+        ShowSettings();
+        return true;
+    }
+
     bool ITerminalHostUi.OpenFile(string path, int line)
     {
         if (HexLauncher.Open(path, line))

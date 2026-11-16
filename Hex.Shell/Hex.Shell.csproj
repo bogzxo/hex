@@ -18,6 +18,7 @@
     <None Update="Assets\hex_icon.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Assets\hex_icon_gray.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The looks are worked on a HexSettings, which is Hex.Core's own, so what does that is the modes' and nobody else's -->

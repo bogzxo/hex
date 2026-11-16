@@ -200,7 +200,7 @@ internal sealed partial class DawnScene
 
         string under = compositor.HoveredComponent is { } over ? $"{McpIdOf(over, 'c')} {over.GetType().Name}" : compositor.Modules.Any(module => module.TooltipText is { Length: > 0 }) ? "the tooltip" : "nothing of Hex's";
         string focus = compositor.Focus is { } focused ? $"{McpIdOf(focused, 'c')} {focused.GetType().Name}" : "nothing";
-        string dialog = chrome.Dialog is { IsOpen: true } up ? $" A dialog is up ({McpIdOf(up, 'c')}), it takes the pointer before anything under it." : string.Empty;
+        string dialog = chrome.Dialog is { IsOpen: true } up ? $" A dialogue is up ({McpIdOf(up, 'c')}), it takes the pointer before anything under it." : string.Empty;
         yield return McpToolResult.Text($"{(twice ? "Double clicked" : right ? "Right clicked" : "Clicked")} {described} at {window.X:0},{window.Y:0}. "
             + $"The pointer is over {under}, the keyboard is on {focus}.{dialog}");
     }
@@ -272,7 +272,7 @@ internal sealed partial class DawnScene
             yield return null;
 
         string focus = compositor.Focus is { } focused ? $"{McpIdOf(focused, 'c')} {focused.GetType().Name}" : "nothing";
-        string dialog = chrome.Dialog is { } up ? $" A dialog is up ({up.GetType().Name})." : string.Empty;
+        string dialog = chrome.Dialog is { } up ? $" A dialogue is up ({up.GetType().Name})." : string.Empty;
         yield return McpToolResult.Text($"Pressed {keys}. The keyboard is on {focus}.{dialog}");
     }
 

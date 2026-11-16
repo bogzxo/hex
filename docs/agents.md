@@ -50,6 +50,40 @@ Open **Agents** from the activity bar to start a chat with a provider. **Explain
 prepare a draft from the selected code or the line at the caret. Review the draft and send it to the provider from
 the sidebar. Use the history button to revisit chats during the editor session.
 
+Once there's more than one chat, a list sits over the chat on screen. Each row says how its chat is doing: a spinner
+while it works, a dot in the accent colour when it finished while you were looking at another, a cross when it failed,
+a square when it was stopped. Its agent, model and time are at the right. Chats an agent started sit under that agent's
+chat, a step in. Click a row to open it, use its cross to close it (along with the chats it started), and right-click
+it to stop it, copy what it said last, or open the chat that started it. The list's head folds it away and counts the
+chats that are working. While any are working, the activity bar's robot breathes, and its tooltip says how many.
+
+An agent that Claude Code or Codex steers can be told more while it works. Send stays beside Stop, and what you send
+waits in a faded bubble marked queued until the agent takes it in.
+
+## Agents starting agents
+
+An agent run from the panel (or any client of Hex's server) can start others in the background, of any agent system
+and model, to scout, research, review or take a part of the work while it carries on. They're chats of the panel under
+the chat that started them, so they can be watched and talked to like any other.
+
+- `hex_agent_list()` lists the agent systems that can be started, with the models and options they offer, and every
+  chat with its id, name, state and which chat started it. It also says which chat you are.
+- `hex_agent_spawn(prompt, name?, agent?, model?, options?)` starts one and returns its id at once. The prompt has to
+  stand on its own, because the new agent doesn't see the conversation that started it. Its last message is what
+  comes back.
+- `hex_agent_wait(ids?, mode?, timeout?)` waits until they finish and hands back what they said. By default it waits
+  for all the running agents you started. `mode: "any"` returns when the first one finishes. A timeout reports which
+  are still running. The wait happens off the editor's thread, so the agents waited for keep using Hex's tools in the
+  meantime.
+- `hex_agent_read(id, full?, most?)` gives a chat's last reply, or with `full` the whole chat.
+- `hex_agent_send(id, text)` starts another turn of a finished chat, or steers a running one that can be steered.
+- `hex_agent_stop(id)` stops a chat and the chats it started.
+
+Two limits apply: agents can start agents only 2 deep, and at most 6 agents started by agents run at once. A chat's
+bridge tells Hex which chat it is (`--agent-chat`, tagged at the pipe's door), which is how Hex knows whose agents are
+whose. An extension passes the chat to `hex.mcp_server(chat)`, and reads the options a chat was started with through
+`chat.option(id)`, which takes priority over its settings.
+
 ## Editor tools
 
 `hex_agent_hint(id, text, line, column?, path?, version?)` displays an annotation anchored to the specified position in
@@ -82,6 +116,17 @@ they declare. A client can subscribe to `hex://harness/changes` and is told when
 `terminal` lists the terminal's tabs and opens, selects, renames, closes or interrupts one, `terminal_run` runs a
 command in one and waits until it's done, handing back what it printed and its exit code, and `terminal_read` and
 `terminal_send` take a tab. The notebook tools take a `path` and open the notebook first, and `notebook_new` makes one.
+
+The debugger is there too, what F9, F5, the steps and the Debug view are to somebody at Hex. `debug_breakpoint` puts a
+breakpoint on a line of a file (a condition if you like, or `remove`) without the file being open, and
+`debug_breakpoints` lists them. `debug_start` builds and starts a program under the debugger (a `project`, or what F5
+would pick) and `debug_step` continues, steps over, in or out, or pauses. Both wait until it stops, ends or
+`wait_seconds` pass and say where it is, why it stopped, the top of the stack and what it wrote since last asked, so
+there's nothing to poll. `debug_state` says the same any time, `debug_variables` lists a frame's variables by scope
+(objects opened `depth` levels down), `debug_evaluate` evaluates an expression in a frame the way the debug console does,
+and `debug_stop` ends it and says its exit code. `debug_screenshot` is a PNG of the debugged program's own window,
+drawn by itself while it runs, even behind other windows. Stopped at a breakpoint it can't draw itself, so the screen is
+copied where it is, with `raise` bringing it to the front for a moment first. Windows only for now.
 
 Every call runs on Hex's own thread a tick at a time, so a click is a move, a press and a let go like a hand's, and an
 idle Hex wakes for it at once. Points are window pixels, the same in a screenshot as in a click. Moving the real mouse

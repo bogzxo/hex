@@ -4,12 +4,11 @@ using Horizon.HIDL.Runtime;
 
 namespace Hex.Dawn;
 
-// What's wrong with a settings file written by hand, the user's and the folder's .hex\settings.hor, said where it stays
-// in sight. A file that doesn't read at its line, a key Hex hasn't got (with the one it probably meant), VS Code's name
-// for a setting written where Hex's goes (with Hex's), a key the folder
-// can't have its own way, a value of the wrong kind, a number past its ends and a choice that isn't one of them, each at
-// its key's line. Underlined in the file while it's open, in Problems either way, worked out again whenever either file
-// is read again or saved, so they go the moment the file is right.
+// Validation of a settings file edited by hand, the user settings and the workspace's .hex\settings.hor, reported where
+// it stays in sight. A parse error at its line, an unknown key (with the one it probably meant), VS Code's name for a
+// setting where Hex's goes (with Hex's), a key that can't be set per workspace, a value of the wrong type, a number out
+// of range and a value that isn't one of its choices, each at its key's line. Underlined in the file while it's open, in
+// Problems either way, and checked again whenever either file is reloaded or saved, so they go the moment it's valid.
 internal sealed partial class DawnScene
 {
     // What's wrong with each settings file, by its full path, only the files with something wrong
@@ -75,7 +74,7 @@ internal sealed partial class DawnScene
             found.Add(new HexProblem(path, line, column, message, true));
         }
 
-        // A section the folder's file can't have, the terminal's and the extensions' are only ever the user's
+        // A section workspace settings can't have, the terminal and extensions sections are user settings only
         if (SettingsSections.IsSectioned(all))
         {
             foreach (var (name, value) in all)
@@ -124,41 +123,11 @@ internal sealed partial class DawnScene
     private static readonly HashSet<string> PairsKeys = [.. EditorSettingsCatalog.Settings.Concat(EditorSettingsCatalog.Text).Where(row => row.Kind == UIFormKind.Pairs).Select(row => row.Key)];
 
     /// <summary>
-    /// The ends HexSettings clamps a number to as it reads the file (HexSettings.Apply), by key. A number of the editor's
-    /// section not here is taken as it is (snap, the panels' sizes), so it's never said to be past an end. Kept in step
-    /// with Apply by the settings self test, which reads a file past every end and sees what it was clamped to.
+    /// The ends HexSettings holds a number to as it reads the file, by key, which are its rows' own (HexSettings.Rows). A
+    /// number of the editor's section not here is taken as it is (snap, the panels' sizes), so it's never said to be
+    /// past an end. It was a table of its own here, a second copy of every pair of ends.
     /// </summary>
-    internal static readonly IReadOnlyDictionary<string, (float Least, float Most)> ClampEnds = new Dictionary<string, (float, float)>(StringComparer.Ordinal)
-    {
-        ["code_zoom"] = (0.5f, 3.0f),
-        ["terminal_backdrop_scale"] = (0.05f, 1.5f),
-        ["terminal_backdrop_across"] = (-0.5f, 1.0f),
-        ["terminal_backdrop_up"] = (-0.5f, 1.0f),
-        ["terminal_backdrop_stretch"] = (HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH),
-        ["backdrop_wrap_margin"] = (0.0f, 80.0f),
-        ["wrap_flow"] = (0.0f, 60.0f),
-        ["git_autofetch_interval"] = (1.0f, 60.0f),
-        ["git_subject_length"] = (20.0f, 100.0f),
-        ["git_line_length"] = (40.0f, 120.0f),
-        ["render_scale_percent"] = (25.0f, 100.0f),
-        ["render_sharpness"] = (0.0f, 1.0f),
-        ["glass_blur"] = (0.0f, 64.0f),
-        ["glass_clarity"] = (0.0f, 1.0f),
-        ["glass_rim"] = (0.0f, 1.0f),
-        ["glass_bend"] = (0.0f, 24.0f),
-        ["ui_animation"] = (0.0f, 3.0f),
-        ["scroll_speed"] = (0.25f, 5.0f),
-        ["caret_glide"] = (0.0f, 0.3f),
-        ["caret_fast_after"] = (0.0f, 3.0f),
-        ["caret_fast_rate"] = (30.0f, 200.0f),
-        ["tab_size"] = (1.0f, 16.0f),
-        ["auto_save_delay"] = (0.25f, 60.0f),
-        ["backdrop_scale"] = (0.05f, 1.5f),
-        ["backdrop_across"] = (-0.5f, 1.0f),
-        ["backdrop_up"] = (-0.5f, 1.0f),
-        ["backdrop_stretch"] = (HexSettings.LEAST_STRETCH, HexSettings.MOST_STRETCH),
-        ["backdrop_opacity"] = (0.0f, 1.0f)
-    };
+    internal static IReadOnlyDictionary<string, (float Least, float Most)> ClampEnds => HexSettings.Ranges;
 
     // What's wrong with one key of the editor's section, null for nothing
     private static string? EditorSettingProblem(string key, IRuntimeValue value, bool folder)
@@ -224,7 +193,7 @@ internal sealed partial class DawnScene
 
         if (value is NumberValue number)
             return Clamped(key, number.Value, info.Least, info.Most);
-        if (info.Choices is { } choices && value is StringValue chosen)
+        if (info.ChoicesNow is { } choices && value is StringValue chosen)
             return NotAChoice(key, chosen.Value, choices);
         return null;
     }

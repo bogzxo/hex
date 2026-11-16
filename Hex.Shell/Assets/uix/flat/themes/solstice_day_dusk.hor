@@ -1,0 +1,8 @@
+// Solstice Day as Dusk wears it, the paper the same and the accent violet.
+let theme = {
+    title: "Solstice Day Dusk",
+    base: "solstice_day",
+    accent_color: vec(0.353, 0.271, 0.820, 1),
+    highlight_color: vec(0.42, 0.34, 0.86, 1),
+    selection_color: vec(0.353, 0.271, 0.820, 0.2)
+};

@@ -105,8 +105,11 @@ internal sealed class HexAgentProcess : IDisposable
         return "\"" + argument.Replace("\"", "\"\"") + "\"";
     }
 
-    /// <summary>The program started, the prompt written to its stdin and closed. Throws when it couldn't be started.</summary>
-    public static HexAgentProcess Start(string found, IReadOnlyList<string> arguments, string folder, string? stdin, IReadOnlyDictionary<string, string>? environment = null)
+    /// <summary>
+    /// The program started, the prompt written to its stdin and closed, or kept open with <paramref name="keepInput"/> for
+    /// more to be said to it with <see cref="Send"/> until <see cref="CloseInput"/>. Throws when it couldn't be started.
+    /// </summary>
+    public static HexAgentProcess Start(string found, IReadOnlyList<string> arguments, string folder, string? stdin, IReadOnlyDictionary<string, string>? environment = null, bool keepInput = false)
     {
         ProcessStartInfo info = StartInfo(found, arguments, folder);
         if (environment is not null)
@@ -126,7 +129,11 @@ internal sealed class HexAgentProcess : IDisposable
         {
             if (stdin is not null)
                 process.StandardInput.Write(stdin);
-            process.StandardInput.Close();
+            if (keepInput)
+                process.StandardInput.Flush();
+            else
+                process.StandardInput.Close();
+            running.inputOpen = keepInput;
         }
         catch (IOException)
         {
@@ -134,6 +141,61 @@ internal sealed class HexAgentProcess : IDisposable
         }
 
         return running;
+    }
+
+    // Whether its stdin is still open for more to be said to it
+    private bool inputOpen;
+    private readonly Lock inputGate = new();
+
+    /// <summary>Whether more can be said to it, its stdin kept open and not closed since.</summary>
+    public bool TakesInput
+    {
+        get
+        {
+            lock (inputGate)
+                return inputOpen;
+        }
+    }
+
+    /// <summary>A line written to its stdin while it runs, false when that's closed or it's gone.</summary>
+    public bool Send(string line)
+    {
+        lock (inputGate)
+        {
+            if (!inputOpen)
+                return false;
+
+            try
+            {
+                process.StandardInput.Write(line.TrimEnd('\r', '\n') + "\n");
+                process.StandardInput.Flush();
+                return true;
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                inputOpen = false;
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Its stdin closed, which tells an agent that reads more from it that nothing else is coming.</summary>
+    public void CloseInput()
+    {
+        lock (inputGate)
+        {
+            if (!inputOpen)
+                return;
+
+            inputOpen = false;
+            try
+            {
+                process.StandardInput.Close();
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+            }
+        }
     }
 
     private void Read(StreamReader from, bool error)

@@ -129,6 +129,7 @@ internal sealed partial class DawnScene
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
+        ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
@@ -236,6 +237,11 @@ internal sealed partial class DawnScene
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("middle-scroll", "middle-click autoscroll and hold-to-scroll without moving the caret", TestMiddleScroll),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
+        ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
+        ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
+        ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
+        ("window-click", "a press on a window of the editor leaves it where it is", TestWindowClick),
+        ("moved-files", "a file moved while it is open, closed at its language server under the old path and opened under the new", TestMovedFiles),
         ("server-startup", "Language server initialization failure recovery", TestServerStartup),
         ("pyright", "the globally installed Python server, diagnostics, completion and hover", TestPyright),
         ("python-stubs", "Python stub diagnostics, hover and consumer type checking", TestPythonStubs),
@@ -336,6 +342,7 @@ internal sealed partial class DawnScene
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
+        ("newproject", "New Project, a kind picked, a bad name and a taken folder refused, a Go module and a Java project made, opened and their servers named", TestNewProject),
         ("anyfile", "Dawn as an editor of any file, the outline of other languages, icons by kind, the values side folding away, pictures", test =>
         {
             TestPictures(test);

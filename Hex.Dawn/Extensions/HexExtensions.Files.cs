@@ -100,11 +100,24 @@ internal sealed partial class HexExtensions
         }
     }
 
-    /// <summary>Stops watching everything, as the editor goes.</summary>
-    private void StopWatching()
+    /// <summary>
+    /// Stops watching everything, as the editor goes: what the extensions asked to have watched and the extensions' own
+    /// folders. Nothing called this and the watchers of both were left to the process ending.
+    /// </summary>
+    internal void StopWatching()
     {
         foreach (var (watcher, _) in watched.Values)
             watcher.Dispose();
         watched.Clear();
+        foreach (FileSystemWatcher watcher in extensionWatchers.Values)
+            watcher.Dispose();
+        extensionWatchers.Clear();
+    }
+
+    /// <summary>An extension that's gone (uninstalled, taken out) is no longer watched.</summary>
+    internal void StopWatching(HexExtension extension)
+    {
+        if (extensionWatchers.Remove(extension, out FileSystemWatcher? watcher))
+            watcher.Dispose();
     }
 }

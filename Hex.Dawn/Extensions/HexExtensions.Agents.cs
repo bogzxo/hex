@@ -45,9 +45,13 @@ internal sealed partial class HexExtensions
         })),
         ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
-        ("mcp_server", Natives.Function("mcp_server", _ => Natives.Object(
+        // Given the chat a run is for, the bridge says which it is, so what the agent does through Hex is known to be its
+        // (the agents it starts are that chat's, and how deep it is)
+        ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(
             ("command", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
-            ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder })]))))),
+            ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder }),
+                .. args.Has(0) && args[0] is ObjectValue chat && chat.Properties.TryGetValue("id", out IRuntimeValue? id) && id is StringValue { Value.Length: > 0 } named
+                    ? new[] { "--agent-chat", named.Value } : []]))))),
         ("agents", Natives.Function("agents", _ => new ListValue([.. HexAgentProfiles.All.Select(profile => (IRuntimeValue)new StringValue(profile.Name))]))),
         ("workspace", Natives.Function("workspace", _ => new ListValue([.. context.Workspace.Folders.Select(folder => (IRuntimeValue)new StringValue(folder))]))),
         ("executable", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),

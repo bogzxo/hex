@@ -14,9 +14,10 @@ namespace Hex.Shell;
 internal sealed record HexLook(string Name, IReadOnlyDictionary<string, IRuntimeValue> Values, bool BuiltIn = false);
 
 /// <summary>
-/// Hex's looks, the profiles of how it's drawn. Five come with it: Graphite (neutral surfaces and restrained motion),
+/// Hex's looks, the profiles of how it's drawn. Seven come with it: Graphite (neutral surfaces and restrained motion),
+/// Solstice and Solstice Day (Hex's own, flush, an accent a mode),
 /// Fluid Glass (clear glass that bends what is behind
-/// it at its rim), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (the default, solid
+/// it at its rim), Frosted Glass (thicker, blurrier, quieter behind a lot of text), Flat (solid
 /// panels, nothing glows or glides) and Visual Studio (that editor's dark theme, square and flat, see
 /// HexLooks.VisualStudio), and the user saves their own from whatever the settings are at. The user's are kept in the
 /// editor's section as looks and the one picked last as look (HexSettings reads and writes both), so Dawn and Dusk pick
@@ -120,8 +121,38 @@ internal static partial class HexLooks
         ["ui_animation"] = new NumberValue(1.0f)
     }, BuiltIn: true);
 
+    /// <summary>
+    /// Hex's own look and the one it comes in, a plum slate drawn flush with an accent a mode, Dawn's orange in the editor
+    /// and Dusk's violet in the terminal (the themes solstice and solstice_dusk). Flat's stillness with those themes and
+    /// C# in ReSharper's colours, so settings nobody touched are this look exactly (HexSettings.USUAL_LOOK).
+    /// </summary>
+    public static readonly HexLook Solstice = new("Solstice", new Dictionary<string, IRuntimeValue>(Flat.Values, StringComparer.Ordinal)
+    {
+        [EDITOR_SKIN] = new StringValue("flat"),
+        [EDITOR_THEME] = new StringValue("solstice"),
+        [TERMINAL_THEME] = new StringValue("solstice_dusk"),
+        [CSHARP_COLORS] = new StringValue("resharper")
+    }, BuiltIn: true);
+
+    /// <summary>Solstice on paper, for a bright room.</summary>
+    public static readonly HexLook SolsticeDay = new("Solstice Day", new Dictionary<string, IRuntimeValue>(Flat.Values, StringComparer.Ordinal)
+    {
+        [EDITOR_SKIN] = new StringValue("flat"),
+        [EDITOR_THEME] = new StringValue("solstice_day"),
+        [TERMINAL_THEME] = new StringValue("solstice_day_dusk"),
+        [CSHARP_COLORS] = new StringValue("resharper")
+    }, BuiltIn: true);
+
     /// <summary>The ones that come with Hex, in the order they're shown.</summary>
-    public static readonly HexLook[] BuiltIn = [Graphite, Fluid, Frosted, Flat, VisualStudio];
+    public static readonly HexLook[] BuiltIn = [Solstice, SolsticeDay, Graphite, Fluid, Frosted, Flat, VisualStudio];
+
+    /// <summary>
+    /// Whether a skin's window is drawn flush, its panes against each other with no gaps between them and no round to
+    /// their corners. A square theme is (Visual Studio's), and so are the Solstice ones, which keep the round of their
+    /// controls and their popups: what's docked is square and what floats is round.
+    /// </summary>
+    public static bool Flush(Horizon.UI.Skinning.UISkin skin) =>
+        skin.CornerRadius <= 0.0f || (skin.Theme is { } theme && theme.StartsWith("solstice", StringComparison.Ordinal));
 
     /// <summary>Hex's own and then the user's, in the order they were saved.</summary>
     public static List<HexLook> All(HexSettings settings) =>
