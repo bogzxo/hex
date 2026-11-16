@@ -48,16 +48,19 @@ internal sealed partial class HexExtensions
         context.Documents.AddDiagnostics(of => of.Path is { } path && extensionFound.ContainsKey(Path.GetFullPath(path)) ? [.. ProblemsOf(path)] : null);
 
         // The catalog of the ones that can be installed, Extensions, Available (HexExtensions.Catalog)
-        context.Settings.AddSource(() => new CatalogSource(this), AVAILABLE, MakeCatalogPanel, FillCatalogRows, ForgetCatalogPanel);
+        // The cards of Installed, Available and Sources are the scene's (DawnScene.ExtensionsWindow), the same as the
+        // Extensions window's, this is only the rows of the catalogue's settings
+        context.Settings.AddSource(() => new CatalogSource(this), AVAILABLE);
     }
 
-    /// <summary>Every tick, the keys of their commands, on_change, their folders read again and the files they watch.</summary>
+    /// <summary>Every tick, the keys of their commands, on_change, their folders read again, the files they watch and their timers.</summary>
     internal void Update(float dt)
     {
         UpdateCommandKeys();
         UpdateExtensionChange(dt);
         UpdateExtensionReloads();
         UpdateWatched();
+        UpdateTimers();
     }
 
     /// <summary>Whether the extension a native of the editor is the C# side of is switched on and started (the designer).</summary>
@@ -122,6 +125,7 @@ internal sealed partial class HexExtensions
     {
         // Started again it says its projects again, one it no longer says is gone
         Hex.Core.Projects.ProjectTemplates.Forget(extension.Id);
+        ForgetTimers(extension);
         if ((loaded ? extension.Failed is null : Load(extension)) && extension.Raise("on_start", HexOf(extension)))
         {
             Console.WriteLine($"[Hex] Started the extension '{extension.Name}'.");

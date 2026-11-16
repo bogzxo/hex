@@ -105,6 +105,7 @@ backdrop_opacity = 1
 last_workspace = "not a choice"
 disabled_extensions = []
 extension_catalog = "not a choice"
+extension_sources = []
 extension_updates = true
 extensions_checked = "not a choice"
 catalog_extensions = []

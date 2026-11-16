@@ -105,6 +105,7 @@ backdrop_opacity = 0.48000002
 last_workspace = "C:/work/hex"
 disabled_extensions = ["alpha", "zeta"]
 extension_catalog = "C:/catalogue"
+extension_sources = []
 extension_updates = false
 extensions_checked = "hex/test"
 catalog_extensions = ["tools"]

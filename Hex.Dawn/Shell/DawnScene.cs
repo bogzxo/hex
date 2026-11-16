@@ -184,6 +184,7 @@ internal sealed partial class DawnScene : Scene
         designer = new HexDesigner(Context);
         running.Ran += path => extensions.Raise("on_run", new StringValue(path));
         extensions = new HexExtensions(Context, this);
+        AddExtensionsSettings();
         terminalFiles = new HexTerminalFiles(Context);
         languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
         explorer.FoldersChanged += languages.WorkspaceChanged;

@@ -6,7 +6,7 @@ namespace Hex.Tests;
 
 /// <summary>
 /// The Emmet extension (emmet in the hex-extensions catalog, checked out as a submodule of Hex), run in a bare HIDL runtime
-/// the way Dawn runs it. Abbreviations written out, where one starts on a line, and Tab and Ctrl+E against a hex object
+/// the way Dawn runs it. Abbreviations written out, where one starts on a line, and Tab and Ctrl+Alt+E against a hex object
 /// that only has what Emmet asks for, a line of text with a caret in it, and writes down what it was told to replace.
 /// </summary>
 public class EmmetTests
@@ -181,7 +181,7 @@ public class EmmetTests
     {
         var (runtime, hex) = Load();
         var (name, function, key) = Assert.Single(hex.Commands);
-        Assert.Equal(("Expand abbreviation", "Ctrl+E"), (name, key));
+        Assert.Equal(("Expand abbreviation", "Ctrl+Alt+E"), (name, key));
 
         hex.File = "notes.txt";
         hex.Line = "widget";

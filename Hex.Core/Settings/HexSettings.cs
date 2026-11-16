@@ -310,6 +310,17 @@ internal sealed partial class HexSettings
     /// <summary>The catalog Hex comes set to, the extensions of its own repository on GitHub.</summary>
     public const string DEFAULT_CATALOG = "bogzxo/hex-extensions";
 
+    /// <summary>
+    /// More places extensions are installed from beside <see cref="ExtensionCatalog"/>, each a GitHub repository
+    /// (owner/name), a git repository by its URL or a folder on this machine. Listed in the order they were added, an
+    /// extension that two of them have comes from the one higher up.
+    /// </summary>
+    public readonly List<string> ExtensionSources = [];
+
+    /// <summary>Every place extensions come from, the catalog first and then the ones added after it.</summary>
+    public IEnumerable<string> AllExtensionSources() =>
+        new[] { ExtensionCatalog }.Concat(ExtensionSources).Where(source => source.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Whether Hex looks at the catalog for new versions of the extensions installed out of it, once a day as it starts.</summary>
     public bool ExtensionUpdates = true;
 

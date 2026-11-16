@@ -105,6 +105,7 @@ backdrop_opacity = 0
 last_workspace = ""
 disabled_extensions = []
 extension_catalog = "bogzxo/hex-extensions"
+extension_sources = []
 extension_updates = true
 extensions_checked = ""
 catalog_extensions = []

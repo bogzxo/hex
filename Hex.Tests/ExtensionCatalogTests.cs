@@ -13,8 +13,71 @@ public class ExtensionCatalogTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(root))
-            Directory.Delete(root, recursive: true);
+        if (!Directory.Exists(root))
+            return;
+
+        // A git repository's objects are read only
+        foreach (string file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Theory]
+    [InlineData("bogzxo/hex-extensions", "GitHub")]
+    [InlineData("https://github.com/bogzxo/hex-extensions.git", "Git")]
+    [InlineData("https://gitlab.com/someone/extensions", "Git")]
+    [InlineData("git@github.com:bogzxo/hex-extensions.git", "Git")]
+    [InlineData("ssh://git@example.com/hex.git", "Git")]
+    public void A_source_is_told_apart_by_how_its_written(string source, string kind)
+    {
+        Assert.Equal(kind, HexExtensionCatalog.KindOf(source).ToString());
+        Assert.True(HexExtensionCatalog.IsSource(source));
+    }
+
+    [Fact]
+    public void A_folder_that_is_there_is_a_folder_source_and_one_that_isnt_is_nothing()
+    {
+        Directory.CreateDirectory(root);
+        Assert.Equal(HexExtensionSourceKind.Folder, HexExtensionCatalog.KindOf(root));
+        Assert.True(HexExtensionCatalog.IsSource(root));
+        Assert.False(HexExtensionCatalog.IsSource("not a folder and not owner/name"));
+    }
+
+    [Fact]
+    public void Every_source_gets_a_folder_name_of_its_own()
+    {
+        string a = HexExtensionCatalog.FolderNameOf("bogzxo/hex-extensions");
+        string b = HexExtensionCatalog.FolderNameOf("https://github.com/bogzxo/hex-extensions.git");
+        Assert.NotEqual(a, b);
+        Assert.Equal(a, HexExtensionCatalog.FolderNameOf("bogzxo/hex-extensions "));
+        Assert.DoesNotContain(a, Path.GetInvalidFileNameChars());
+        Assert.DoesNotContain('/', b);
+    }
+
+    [Fact]
+    public async Task A_git_repository_is_cloned_and_its_extensions_kept()
+    {
+        string repo = Path.Combine(root, "repo");
+        Write("repo/two/extension.hor", "let extension = { name: \"Two\", version: \"2.0.0\" };");
+        Write("repo/README.md", "# not an extension");
+        foreach (string[] command in (string[][])[["init", "--quiet", "--initial-branch=main"], ["-c", "user.name=t", "-c", "user.email=t@t", "add", "."],
+            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "two"]])
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = repo, UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+            foreach (string argument in command) start.ArgumentList.Add(argument);
+            using var git = System.Diagnostics.Process.Start(start)!;
+            await git.WaitForExitAsync();
+            Assert.Equal(0, git.ExitCode);
+        }
+
+        // A file URL is a git URL to Hex, it's how a repository on this machine is cloned rather than read as a folder
+        string url = new Uri(repo).AbsoluteUri + ".git";
+        Directory.Move(repo, repo + ".git");
+        string synced = Path.Combine(root, "synced");
+        await HexExtensionCatalog.Sync(url, synced);
+
+        Assert.Equal(["two"], HexExtensionCatalog.Extensions(synced).Select(Path.GetFileName));
+        Assert.False(File.Exists(Path.Combine(synced, "README.md")));
     }
 
     private string Write(string relative, string text)

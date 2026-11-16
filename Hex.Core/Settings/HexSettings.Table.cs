@@ -241,6 +241,16 @@ internal sealed partial class HexSettings
                 if (values.TryGetValue("extension_catalog", out var catalog) && catalog is StringValue { Value.Length: > 0 } catalogNamed) settings.ExtensionCatalog = catalogNamed.Value;
             },
             (settings, written) => written.Add("extension_catalog", settings.ExtensionCatalog.Replace('\\', '/'))),
+        Special("extension_sources",
+            (settings, values) =>
+            {
+                if (values.TryGetValue("extension_sources", out var sources) && sources is ListValue added)
+                {
+                    foreach (IRuntimeValue source in added.Items)
+                        if (source is StringValue { Value.Length: > 0 } named && !settings.ExtensionSources.Contains(named.Value, StringComparer.OrdinalIgnoreCase)) settings.ExtensionSources.Add(named.Value);
+                }
+            },
+            (settings, written) => written.Add("extension_sources", Horizon.HIDL.Library.Natives.List(settings.ExtensionSources.Select(source => source.Replace('\\', '/'))))),
         Flag("extension_updates", settings => settings.ExtensionUpdates, (settings, value) => settings.ExtensionUpdates = value),
         Text("extensions_checked", settings => settings.ExtensionsChecked, (settings, value) => settings.ExtensionsChecked = value),
         Special("catalog_extensions",
