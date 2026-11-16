@@ -38,7 +38,7 @@ internal sealed partial class DawnScene
             listing is { Token.Length: 64 } && listing.Pipe == McpDiscovery.PipeOf(System.Environment.ProcessId) && File.Exists(Path.Combine(McpDiscovery.Folder, $"{listing.Pid}.json")));
 
         Task<JsonNode?>? batchReply = null;
-        test.Run(() => batchReply = MakeMcpServer().HandleLine("""[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]"""));
+        test.Run(() => batchReply = MakeMcpServer(null).HandleLine("""[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]"""));
         test.WaitFor(() => batchReply?.IsCompleted == true, 5);
         test.Check("mcp: batch JSON serializes with reflection disabled in native builds", () =>
             !System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault

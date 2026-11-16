@@ -124,19 +124,20 @@ internal sealed partial class DawnScene
     // Whether the settings are up on Extensions because the activity bar's button asked for them, which is lit while they are
     private bool extensionsUp;
 
-    /// <summary>The extensions, the settings window on its Extensions, the button lit for as long as that's up.</summary>
+    /// <summary>The extensions, the Extensions window, the button lit for as long as that's up.</summary>
     private void ShowExtensions()
     {
-        OpenSettings(EXTENSIONS);
-        extensionsUp = SettingsWindow is not null;
+        OpenExtensionsWindow();
+        extensionsUp = extensionsWindow is not null;
         sideShown = null;
         ApplySide();
     }
 
-    /// <summary>Every tick, the Extensions button let go of once the window it lit for has closed.</summary>
+    /// <summary>Every tick, the Extensions window kept up to date, and the button let go of once the window has closed.</summary>
     private void FollowExtensions()
     {
-        if (!extensionsUp || SettingsWindow is not null)
+        FollowExtensionsWindow();
+        if (!extensionsUp || extensionsWindow is not null)
             return;
 
         extensionsUp = false;

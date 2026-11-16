@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
 
     // The rows on screen, each with the entry and the version of it it was made from
     private readonly List<(HexAgentEntry Entry, int Version, UIComponent Row)> agentRowsShown = [];
-    private (HexAgentChat? Chat, int Dropped, int Width, object? Skin, float Motion) agentRowsFor;
+    private (HexAgentChat? Chat, int Dropped, bool Narrow, object? Skin, float Motion) agentRowsFor;
     private Panel? agentsTyping;
 
     // The time of every tool that's still running, counted up as it goes without its row being made again
@@ -38,16 +38,59 @@ internal sealed partial class DawnScene
             of.Remove(child);
     }
 
-    /// <summary>
-    /// How wide the rows have, from the side bar's width in steps of a few pixels, never the scroll's own. A scroll bar
-    /// coming and going changed that width, the rows were made again at the new one, came out a different height, the
-    /// bar went the other way, and the chat flickered between the two.
-    /// </summary>
-    private int AgentsWidth() => (int)(agentsView.Size.X / 8.0f) * 8 - 16;
+    // How wide the rows have, from the side bar's width and never the scroll's own, a scroll bar coming and going
+    // changed that and the chat flickered between the two
+    private int AgentsWidth() => Math.Max(32, (int)agentsView.Size.X - 16);
 
-    // Welcome labels fill their parent. Keep their measured wrap widths across a drag.
-    // Only transcript rows use the width to build bubbles and tool disclosures.
-    private int AgentTranscriptWidth() => agentChat is { Entries.Count: > 0 } ? AgentsWidth() : 0;
+    // Whether the rows are laid out narrow, the one thing about the width that makes them all again. Everything else of
+    // the width is the fits' (see FitAgentRows), so a drag of the side bar moves along with the mouse without a row made
+    // again. A long chat used to be rebuilt dozens of times a second and stuttered, then waited for the drag to stop and
+    // jumped
+    private bool AgentsNarrow() => AgentsWidth() < 210;
+
+    // What each row does with a new width, made with the row, and the width they were last fitted to
+    private readonly Dictionary<UIComponent, List<Action<float>>> agentRowFits = [];
+    private List<Action<float>>? agentFitsMaking;
+    private int agentRowsFitted = -1;
+
+    /// <summary>Something of the row being made that follows the width, run now and again whenever the width moves.</summary>
+    private void FollowWidth(Action<float> fit)
+    {
+        fit(AgentsWidth());
+        agentFitsMaking?.Add(fit);
+    }
+
+    // A row made with what of it follows the width kept by it
+    private UIComponent FittedRowOf(HexAgentChat chat, HexAgentEntry entry)
+    {
+        var fits = new List<Action<float>>();
+        agentFitsMaking = fits;
+        try
+        {
+            UIComponent row = RowOf(chat, entry);
+            if (fits.Count > 0)
+                agentRowFits[row] = fits;
+            return row;
+        }
+        finally
+        {
+            agentFitsMaking = null;
+        }
+    }
+
+    // The rows fitted to the width when it moved, a few sizes and lines set and nothing made again
+    private void FitAgentRows()
+    {
+        int width = AgentsWidth();
+        if (width == agentRowsFitted)
+            return;
+        agentRowsFitted = width;
+        foreach (List<Action<float>> fits in agentRowFits.Values)
+        {
+            foreach (Action<float> fit in fits)
+                fit(width);
+        }
+    }
 
     private static int IndexIn(UIComponent parent, UIComponent child)
     {
@@ -92,7 +135,8 @@ internal sealed partial class DawnScene
         agentsMeta.Pivot = Origin.TopLeft;
         agentsMeta.Size = new Vector2(Math.Max(0, width - (compact ? 70 : 0)), 20);
         agentsMeta.Position = new Vector2(0, compact ? -40 : -34);
-        agentsBody.Padding = new UIEdges(4, compact ? 74 : 58, 4, 108);
+        agentsHeadHeight = compact ? 74 : 58;
+        PlaceAgentsList();
         agentsChips.Size = new Vector2(available, 32);
         HexAgentProfile? picked = agents.FirstOrDefault(agent => agent.Id == current);
         string name = picked?.Name ?? Said("agents_panel.none_short");
@@ -174,20 +218,35 @@ internal sealed partial class DawnScene
     private void DrawAgentRows()
     {
         HexAgentChat? chat = agentChat;
-        var key = (chat, chat?.Dropped ?? 0, AgentTranscriptWidth(), (object?)Skin, settings.UiAnimation);
+        var key = (chat, chat?.Dropped ?? 0, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
         bool fresh = key != agentRowsFor;
 
-        // Only another chat comes in moving, rows made again for a new width or theme are just there
-        bool arriving = fresh && chat != agentRowsFor.Chat;
+        // Only another chat comes in moving, rows made again for a new width or theme are just there, and so is all of
+        // it the first time it's drawn after the view was opened again
+        bool still = agentsStill;
+        agentsStill = false;
+        bool arriving = fresh && chat != agentRowsFor.Chat && !still;
         if (fresh)
         {
+            // The dots stay through rows made again for a new width, made again they started their bounce over and
+            // slid in on every step of a drag
+            Panel? typing = chat == agentRowsFor.Chat && ReferenceEquals(Skin, agentRowsFor.Skin) ? agentsTyping : null;
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
-            Empty(agentsRows);
-            agentsTyping = null;
+            agentRowFits.Clear();
+            foreach (UIComponent child in agentsRows.Children.ToArray())
+            {
+                if (child != typing)
+                    agentsRows.Remove(child);
+            }
+
+            agentsTyping = typing;
             if (chat is not { Entries.Count: > 0 })
             {
+                if (typing is not null)
+                    agentsRows.Remove(typing);
+                agentsTyping = null;
                 DrawAgentWelcome();
                 return;
             }
@@ -206,16 +265,17 @@ internal sealed partial class DawnScene
 
                 // Made again in its place, a tool that finished giving a little pop
                 UIComponent was = agentRowsShown[i].Row;
-                UIComponent made = RowOf(chat, entry);
+                UIComponent made = FittedRowOf(chat, entry);
                 agentsRows.Insert(IndexIn(agentsRows, was), made);
                 agentsRows.Remove(was);
+                agentRowFits.Remove(was);
                 agentRowsShown[i] = (entry, entry.Version, made);
                 if (entry.Kind == HexAgentEntryKind.Tool && entry.State != HexAgentToolState.Running)
                     PopRow(made);
                 continue;
             }
 
-            UIComponent row = RowOf(chat, entry);
+            UIComponent row = FittedRowOf(chat, entry);
             agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : IndexIn(agentsRows, agentsTyping), row);
             agentRowsShown.Add((entry, entry.Version, row));
 
@@ -223,12 +283,16 @@ internal sealed partial class DawnScene
             // what was asked from the right where its bubble is
             if (arriving)
                 SlideRowIn(row, Math.Min(i, 8) * 0.025f);
-            else if (!fresh)
+            else if (!fresh && !still)
                 SlideRowIn(row, 0.0f, entry.Kind == HexAgentEntryKind.User ? 16.0f : 0.0f);
         }
 
-        ShowTyping(chat);
+        ShowTyping(chat, still);
+        FitAgentRows();
     }
+
+    // Whether the next rows drawn are just put there, the view having been opened again, see PlaceAgentsView
+    private bool agentsStill;
 
     // When the dots were last wanted and weren't up, they come only once the agent's been quiet a moment
     private long typingWantedSince = -1;
@@ -238,7 +302,7 @@ internal sealed partial class DawnScene
     private const long TYPING_AFTER_MS = 350;
 
     // The bouncing dots at the end while the agent's working and nothing of it is going on a row already
-    private void ShowTyping(HexAgentChat chat)
+    private void ShowTyping(HexAgentChat chat, bool still = false)
     {
         bool quiet = chat.Running && chat.Entries[^1] is not { Kind: HexAgentEntryKind.Tool, State: HexAgentToolState.Running };
         long now = System.Environment.TickCount64;
@@ -251,7 +315,8 @@ internal sealed partial class DawnScene
         {
             agentsTyping = agentsRows.Add(MakeTypingDots());
             BounceDots(agentsTyping);
-            SlideRowIn(agentsTyping);
+            if (!still)
+                SlideRowIn(agentsTyping);
         }
         else if (!wanted && agentsTyping is not null)
         {
@@ -352,7 +417,7 @@ internal sealed partial class DawnScene
             }
             else if (child is NotebookTablePanel table) table.Strip.Visible = false;
         }
-        FitWritten(written, MathF.Max(32, AgentsWidth() - padding.Total.X), keepWidth: true);
+        FollowWidth(width => FitWritten(written, MathF.Max(32, width - padding.Total.X), keepWidth: true));
         return panel;
     }
 
@@ -364,9 +429,13 @@ internal sealed partial class DawnScene
             ? (instruction, entry.ContextLocation) : SplitAsked(entry.Text);
         string shown = UIRichText.Literal(asked);
         string? under = with is null ? null : UIRichText.Literal(Said("agents_panel.with_file", ("where", with)));
+
+        // Asked while the agent worked, it says so until the agent takes it in, or that it never did
+        string? state = entry.Queued ? Said("agents_panel.queued") : entry.Unheard ? Said("agents_panel.unheard") : null;
+        if (state is not null)
+            under = under is null ? UIRichText.Literal(state) : $"{under}  ·  {UIRichText.Literal(state)}";
         const float scale = 0.17f, padding = 36.0f;
-        float room = Math.Max(64.0f, AgentsWidth() - 12.0f);
-        float longest = room;
+        float longest = float.MaxValue;
         if (skin is not null)
         {
             longest = shown.Split('\n').Max(line => skin.Font.MeasureLine(line, scale, UITextStyle.None, default)) + padding;
@@ -379,15 +448,18 @@ internal sealed partial class DawnScene
         {
             Anchor = Origin.Right,
             Pivot = Origin.Right,
-            Size = new Vector2(Math.Clamp(longest, 60.0f, room * AGENTS_BUBBLE), 0),
+            Size = Vector2.Zero,
             Color = skin is null ? raised : Vector4.Lerp(raised, skin.AccentColor with { W = 1 }, 0.08f),
             Radius = 10,
             Padding = new UIEdges(13, 10, 13, 10)
         });
+        FollowWidth(width => bubble.Size = new Vector2(Math.Clamp(longest, 60.0f, Math.Max(64.0f, width - 12.0f) * AGENTS_BUBBLE), 0));
         var stack = bubble.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         stack.Add(Text(shown, scale));
         if (under is not null)
             stack.Add(Text(under, 0.125f, dim: true));
+        if (entry.Queued || entry.Unheard)
+            bubble.Opacity = 0.6f;
         return holder;
     }
 
@@ -407,8 +479,7 @@ internal sealed partial class DawnScene
         };
 
         // The room the name and its input have, the rest of the row's width is the time and the chevron
-        bool compact = AgentsWidth() < 210;
-        int room = Math.Max(4, (int)((AgentsWidth() - (compact ? 46.0f : 132.0f)) / 6.2f));
+        bool compact = AgentsNarrow();
         string preview = ToolPreview(entry.Input);
         string name = ToolTitle(entry.ToolName ?? "tool");
         if (name.StartsWith("hex_", StringComparison.Ordinal)) name = name[4..];
@@ -416,9 +487,8 @@ internal sealed partial class DawnScene
         name = string.IsNullOrWhiteSpace(name) ? "Tool" : char.ToUpperInvariant(name[0]) + name[1..];
         var holder = new Panel { Fill = UIFill.Horizontal, Color = entry.Open ? hover with { W = hover.W * 0.6f } : null, Radius = 6 };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
-        stack.Add(new Button
+        Button head = stack.Add(new Button
         {
-            Label = UIRichText.Literal(OneLine(name, room)),
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },
             Style = "button_flat",
             Align = Origin.Left,
@@ -434,6 +504,12 @@ internal sealed partial class DawnScene
                 entry.Open = !entry.Open;
                 chat.Touch(entry);
             }
+        });
+        FollowWidth(width =>
+        {
+            string fitted = UIRichText.Literal(OneLine(name, Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f))));
+            if (head.Label != fitted)
+                head.Label = fitted;
         });
 
         // How long it took and the chevron that says it opens, at the right of its head
@@ -456,8 +532,16 @@ internal sealed partial class DawnScene
         }
         else right.Add(chevron);
         if (!entry.Open && preview.Length > 0)
-            stack.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(28, 0, 10, 7) }
-                .With(Text(UIRichText.Literal(OneLine(preview, Math.Max(4, (int)((AgentsWidth() - 48) / 7.0f)))), 0.135f, dim: true)));
+        {
+            Label line = Text(string.Empty, 0.135f, dim: true);
+            stack.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(28, 0, 10, 7) }.With(line));
+            FollowWidth(width =>
+            {
+                string fitted = UIRichText.Literal(OneLine(preview, Math.Max(4, (int)((width - 48) / 7.0f))));
+                if (line.Text != fitted)
+                    line.Text = fitted;
+            });
+        }
 
         if (entry.Open)
         {

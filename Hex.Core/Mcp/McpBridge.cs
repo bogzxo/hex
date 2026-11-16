@@ -52,7 +52,10 @@ internal static partial class McpBridge
             return 1;
         }
 
-        if (!McpGate.Knock(pipe, listing.Token, out string? why))
+        // A bridge started for a chat of the Agents panel says which, so what the agent does is known to be that chat's
+        int chatAt = Array.IndexOf(args, "--agent-chat");
+        string? chat = chatAt >= 0 && chatAt + 1 < args.Length ? args[chatAt + 1] : null;
+        if (!McpGate.Knock(pipe, listing.Token, chat, out string? why))
         {
             Say(why ?? "Hex didn't let this in");
             return 1;

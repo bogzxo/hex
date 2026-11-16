@@ -161,7 +161,12 @@ public sealed class HexAgentsPanelTests : IDisposable
                 _ => new StringValue(string.Empty)
             })),
             ("temp", new StringValue(folder)),
-            ("mcp_server", Natives.Function("mcp_server", _ => Natives.Object(("command", new StringValue(@"C:\Hex\Hex.exe")), ("args", Natives.List(["--mcp-connect", "--folder", @"C:\work"]))))),
+            ("home", new StringValue(folder)),
+            ("exists", Natives.Function("exists", args => Values.Bool(File.Exists(args.Text(0)) || Directory.Exists(args.Text(0))))),
+            ("read", Natives.Function("read", args => new StringValue(File.ReadAllText(args.Text(0))))),
+            ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
+            ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(("command", new StringValue(@"C:\Hex\Hex.exe")), ("args", Natives.List(["--mcp-connect", "--folder", @"C:\work",
+                .. args.Has(0) && args[0] is ObjectValue chat ? new[] { "--agent-chat", Values.Text(chat.Properties["id"]) } : []]))))),
             ("json_set", Natives.Function("json_set", args =>
                 HexExtensions.JsonSet(args.Text(0), [.. ((ListValue)args[1]).Items.Select(Values.Text)], args[2]) is { } why ? new StringValue(why) : Values.Null)),
             ("command", Natives.Action("command", _ => { })),
@@ -226,14 +231,155 @@ public sealed class HexAgentsPanelTests : IDisposable
         ObjectValue api = HexAgentChatApi.Of(chat, folder);
 
         string[] first = Arguments(runtime, run, api);
-        Assert.EndsWith("claude-mcp.json", first[5]);
-        Assert.Equal(["-p", "--output-format", "stream-json", "--verbose", "--mcp-config", first[5], "--permission-mode", "acceptEdits", "--allowedTools", "mcp__hex Read"], first);
-        string config = File.ReadAllText(first[5]);
+        Assert.EndsWith("claude-mcp-1.json", first[8]);
+        Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits", "--allowedTools", "mcp__hex Read"], first);
+        string config = File.ReadAllText(first[8]);
         Assert.Contains("--mcp-connect", config);
+        Assert.Contains("\"--agent-chat\"", config);
         Assert.Contains(@"C:\\Hex\\Hex.exe", config);
 
         chat.Session = "abc";
         Assert.Equal(["--resume", "abc"], Arguments(runtime, run, api)[^2..]);
+    }
+
+    [Fact]
+    public void Something_asked_as_the_agent_works_is_queued_until_taken_and_unheard_when_the_turn_ends_first()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("first");
+        HexAgentEntry taken = chat.Steer("also this");
+        HexAgentEntry left = chat.Steer("and this");
+        Assert.True(chat.Running);
+        Assert.True(taken.Queued && left.Queued && chat.HasQueued);
+
+        Assert.True(chat.Taken());
+        Assert.False(taken.Queued);
+        Assert.True(left.Queued);
+
+        chat.Done();
+        Assert.False(chat.HasQueued);
+        Assert.False(taken.Unheard);
+        Assert.True(left.Unheard);
+        Assert.False(chat.Taken());
+    }
+
+    [Fact]
+    public void Claude_code_is_steered_in_stream_json_and_says_what_it_took_in()
+    {
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("go");
+        chat.Steer("and BANANA");
+        int taken = 0, finished = 0;
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, finished: () => finished++, taken: () => taken++);
+
+        IRuntimeValue said = runtime.Invoke(run.Properties["message"], new StringValue("and BANANA"), api);
+        Assert.Equal("""{"type":"user","message":{"role":"user","content":[{"type":"text","text":"and BANANA"}]}}""", HexJson.FromHidl(said)!.ToJsonString());
+
+        Feed(runtime, run, api,
+            """{"type":"user","message":{"role":"user","content":[{"type":"text","text":"go"}]},"session_id":"s","isReplay":true}""",
+            """{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"one","is_error":false}]},"session_id":"s"}""",
+            """{"type":"user","message":{"role":"user","content":[{"type":"text","text":"and BANANA"}]},"session_id":"s","isReplay":true}""",
+            """{"type":"result","subtype":"success","is_error":false,"session_id":"s","usage":{}}""");
+        Assert.Equal(2, taken);
+        Assert.Equal(1, finished);
+    }
+
+    [Fact]
+    public void A_program_kept_open_is_told_more_until_its_input_is_closed()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string script = Path.Combine(folder, "steered.cmd");
+        File.WriteAllText(script, "@echo off\r\nset /p first=\r\necho got %first%\r\nset /p second=\r\necho got %second%\r\n");
+        using HexAgentProcess run = HexAgentProcess.Start(script, [], folder, "one\n", keepInput: true);
+        Assert.True(run.TakesInput);
+        Assert.True(SpinWait.SpinUntil(() => run.Lines.Any(line => line.Line.Trim() == "got one"), 20_000), "the first never came back");
+        Assert.True(run.Send("two"));
+        run.CloseInput();
+        Assert.False(run.TakesInput);
+        Assert.False(run.Send("three"));
+        Assert.True(SpinWait.SpinUntil(() => run.Exited, 20_000), "it never finished");
+        Assert.Contains(run.Lines.ToArray(), line => line.Line.Trim() == "got two");
+    }
+
+    [Fact]
+    public void A_chat_started_with_a_model_runs_with_it_over_the_setting()
+    {
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(4, "claude_code") { Parent = 1, Depth = 1, Name = "scout" };
+        chat.Options["model"] = "haiku";
+        string[] said = Arguments(runtime, run, HexAgentChatApi.Of(chat, folder));
+        Assert.Equal("haiku", said[Array.IndexOf(said, "--model") + 1]);
+        Assert.EndsWith("claude-mcp-4.json", said[8]);
+        Assert.Contains("\"4\"", File.ReadAllText(said[8]));
+        Assert.Equal("scout", chat.Shown);
+
+        var (codex, _, codexRun) = Load("codex");
+        var other = new HexAgentChat(5, "codex");
+        other.Options["model"] = "gpt-5";
+        string[] codexSaid = [.. ((ListValue)codex.Invoke(codexRun.Properties["arguments"], new StringValue("hi"), HexAgentChatApi.Of(other, folder))).Items.Select(Values.Text)];
+        Assert.Equal("gpt-5", codexSaid[Array.IndexOf(codexSaid, "--model") + 1]);
+        Assert.Contains(codexSaid, each => each.Contains("\"--agent-chat\",\"5\""));
+    }
+
+    [Fact]
+    public void A_chats_last_reply_is_what_it_said_since_it_was_last_asked_and_its_unread_until_seen()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("first");
+        chat.Say("old");
+        chat.Done();
+        chat.Ask("second");
+        chat.Tool("t", "Bash", "{}");
+        chat.Say("found it");
+        chat.Say("in Program.cs");
+        Assert.False(chat.Unread);
+        chat.Done();
+        Assert.Equal("found it\n\nin Program.cs", chat.LastReply());
+        Assert.Equal("…Program.cs", chat.LastReply(10));
+        Assert.True(chat.Unread);
+        Assert.False(chat.Failed);
+        chat.Seen = chat.Version;
+        Assert.False(chat.Unread);
+
+        chat.Ask("third");
+        chat.Error("broke");
+        chat.Done();
+        Assert.True(chat.Failed);
+    }
+
+    [Fact]
+    public void A_bridge_tags_itself_with_its_chat_at_the_door()
+    {
+        var wire = new MemoryStream();
+        var answer = new MemoryStream("OK\n"u8.ToArray());
+        Assert.True(McpGate.Knock(new Duplex(answer, wire), "abc123", "7", out _));
+        Assert.Equal("HEX-MCP abc123 7\n", System.Text.Encoding.UTF8.GetString(wire.ToArray()));
+
+        var output = new MemoryStream();
+        Assert.True(McpGate.Admit(new StringReader("HEX-MCP abc123 7\n"), output, "abc123", out string? tag));
+        Assert.Equal("7", tag);
+        Assert.True(McpGate.Admit(new StringReader("HEX-MCP abc123\n"), output, "abc123", out tag));
+        Assert.Null(tag);
+        Assert.False(McpGate.Admit(new StringReader("HEX-MCP wrong 7\n"), output, "abc123", out tag));
+        Assert.Null(tag);
+    }
+
+    // Reads what's said to it from one stream and writes to another, a pipe's two ends
+    private sealed class Duplex(Stream input, Stream output) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => output.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => input.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => output.Write(buffer, offset, count);
     }
 
     [Fact]
@@ -295,7 +441,9 @@ public sealed class HexAgentsPanelTests : IDisposable
         string[] first = Arguments(runtime, run, api);
         Assert.Equal(["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write",
             "-c", "mcp_servers.hex.command=\"C:/Hex/Hex.exe\"",
-            "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\"]", "-"], first);
+            "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\",\"--agent-chat\",\"1\"]",
+            "-c", "mcp_servers.hex.tool_timeout_sec=660", "-c", "mcp_servers.hex.enabled=true",
+            "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\"", "-"], first);
 
         chat.Session = "thread-1";
         Assert.Equal(["resume", "thread-1", "-"], Arguments(runtime, run, api)[^3..]);

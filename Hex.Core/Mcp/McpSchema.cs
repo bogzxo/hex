@@ -94,8 +94,14 @@ internal static class McpArguments
     public static string? String(this JsonObject arguments, string name) =>
         arguments[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
 
+    // A number parsed off the wire is a JsonElement, one Hex put in itself (the caller of an agent's call) is the int it
+    // was, which won't come out as a double, so both are asked for
     public static double? Number(this JsonObject arguments, string name) =>
-        arguments[name] is JsonValue value && value.GetValueKind() == JsonValueKind.Number && value.TryGetValue(out double number) ? number : null;
+        arguments[name] is not JsonValue value || value.GetValueKind() != JsonValueKind.Number ? null
+        : value.TryGetValue(out double number) ? number
+        : value.TryGetValue(out int whole) ? whole
+        : value.TryGetValue(out long big) ? big
+        : null;
 
     public static int? Integer(this JsonObject arguments, string name) => arguments.Number(name) is { } number ? (int)Math.Clamp(number, int.MinValue, int.MaxValue) : null;
 

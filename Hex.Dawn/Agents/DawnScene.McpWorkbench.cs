@@ -84,7 +84,7 @@ internal sealed partial class DawnScene
     ];
 
     /// <summary>Every tool, in the order tools/list says them.</summary>
-    internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(), .. HarnessTools(), .. TerminalTools(), .. DebugTools()];
+    internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(), .. AgentsTools(), .. HarnessTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>A command as a line, its menu, its name and its keys.</summary>
     private static string McpCommandLine(UIChoice choice) =>

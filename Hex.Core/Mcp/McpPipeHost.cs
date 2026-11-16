@@ -17,7 +17,7 @@ internal sealed class McpPipeHost : IDisposable
     // How long a client has to say the token
     private const int ADMIT_MS = 5000;
 
-    private readonly Func<McpServer> makeServer;
+    private readonly Func<string?, McpServer> makeServer;
     private readonly string token;
     private readonly CancellationTokenSource stop = new();
     private readonly List<McpSession> sessions = [];
@@ -30,7 +30,12 @@ internal sealed class McpPipeHost : IDisposable
     public Action? Changed { get; set; }
 
     /// <param name="makeServer">A server for each client, whose tools are the editor's.</param>
-    public McpPipeHost(string pipe, string token, Func<McpServer> makeServer)
+    public McpPipeHost(string pipe, string token, Func<McpServer> makeServer) : this(pipe, token, _ => makeServer())
+    {
+    }
+
+    /// <param name="makeServer">A server for each client by what it was tagged with at the door (McpGate), null for nothing.</param>
+    public McpPipeHost(string pipe, string token, Func<string?, McpServer> makeServer)
     {
         Pipe = pipe;
         this.token = token;
@@ -84,7 +89,8 @@ internal sealed class McpPipeHost : IDisposable
     {
         // A client that opens the pipe and says nothing is shown the door after a while, it was holding a place
         var reader = new StreamReader(pipe, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false);
-        Task<bool> admitted = Task.Run(() => McpGate.Admit(reader, pipe, token));
+        string? tag = null;
+        Task<bool> admitted = Task.Run(() => McpGate.Admit(reader, pipe, token, out tag));
         if (!admitted.Wait(ADMIT_MS) || !admitted.Result)
         {
             pipe.Dispose();
@@ -92,7 +98,7 @@ internal sealed class McpPipeHost : IDisposable
             return;
         }
 
-        McpServer server = makeServer();
+        McpServer server = makeServer(tag);
         server.Initialized = _ => Changed?.Invoke();
         var session = new McpSession(reader, pipe, server);
         session.Closed = _ =>
