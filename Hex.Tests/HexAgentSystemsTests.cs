@@ -121,6 +121,12 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.Equal("make; echo \"__HEX_x_$?_\"", DawnScene.McpMarked("make", "sh", "__HEX_x"));
         Assert.Equal("make & call echo __HEX_x_%^errorlevel%_", DawnScene.McpMarked("make", "cmd", "__HEX_x"));
         Assert.Contains("$LASTEXITCODE", DawnScene.McpMarked("make", "pwsh", "__HEX_x"));
+
+        // Git never pages for an agent, every statement of the line that's git, and a line that said so already as it was
+        Assert.Equal("git --no-pager diff --stat; git --no-pager log -1", DawnScene.McpNoPager("git diff --stat; git log -1"));
+        Assert.Equal("dotnet build && git --no-pager status", DawnScene.McpNoPager("dotnet build && git status"));
+        Assert.Equal("git --no-pager log", DawnScene.McpNoPager("git --no-pager log"));
+        Assert.Equal("echo digit stuff", DawnScene.McpNoPager("echo digit stuff"));
         Assert.Equal("sh", DawnScene.McpShellOf(new Horizon.UI.Components.TerminalProfile("Git Bash", @"C:\Program Files\Git\bin\bash.exe")));
         Assert.Equal("pwsh", DawnScene.McpShellOf(new Horizon.UI.Components.TerminalProfile("PowerShell", "pwsh.exe")));
         Assert.Equal("cmd", DawnScene.McpShellOf(new Horizon.UI.Components.TerminalProfile("Command Prompt", "cmd.exe")));
