@@ -33,6 +33,26 @@ internal static class HexAgentChatApi
                 chat.Touch(asked);
             });
         })),
+        // The agent asking the person a question (Claude Code's AskUserQuestion), a card with its options and a box for an
+        // answer of their own, question(text, options, recommended, seconds, answered). The extension's function is called
+        // with the answer, or null when nobody gave one in time. Returns a function that takes the card back unanswered
+        ("question", Natives.Function("question", args =>
+        {
+            string[] options = args.Has(1) && args[1] is ListValue listed ? [.. listed.Items.Select(Values.Text).Where(text => text.Length > 0)] : [];
+            int? recommended = args.Has(2) && args[2] is NumberValue pick ? (int)pick.Value : null;
+            double seconds = args.Has(3) && args[3] is NumberValue wait ? wait.Value : 300;
+            IRuntimeValue? answered = args.Has(4) ? args[4] : null;
+            HexAgentEntry asked = chat.Question(args.Text(0, "?"), options, recommended, seconds,
+                answer => { if (answered is not null) call?.Invoke(answered, [answer is null ? Values.Null : new StringValue(answer)]); });
+            return Natives.Action("withdraw", _ =>
+            {
+                if (asked.Respond is null)
+                    return;
+                asked.Respond = null;
+                asked.State = HexAgentToolState.Failed;
+                chat.Touch(asked);
+            });
+        })),
         ("id", new StringValue(chat.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))),
         // Something for the agent's stdin, a string as it is or an object as a line of JSON, true when it went
         ("write", Natives.Function("write", args =>

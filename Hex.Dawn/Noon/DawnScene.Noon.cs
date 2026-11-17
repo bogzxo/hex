@@ -357,7 +357,8 @@ internal sealed partial class DawnScene
                 string shown = folder is not null && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) ? Path.GetRelativePath(folder, path) : file;
                 noonContextRows.Add(new Button
                 {
-                    Label = $"{FileIconText(path)} {UIRichText.Literal(OneLine(shown, 40))}", Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
+                    Icon = HexExplorer.FileIcon(path), IconColor = explorer.FileIconColor(path),
+                    Label = UIRichText.Literal(OneLine(shown, 40)), Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
                     Size = new Vector2(0, 20), LabelScale = 0.125f, Animated = false, OnPressed = () =>
                     {
                         ShowFace(HexFace.Dawn);
@@ -432,15 +433,6 @@ internal sealed partial class DawnScene
 
     private static Label ContextText(string text, bool dim) =>
         new() { Text = UIRichText.Literal(text), TextScale = 0.13f, Dim = dim, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left };
-
-    /// <summary>
-    /// A file's icon as the file tree draws it, by its extension and in its colour, as rich text to go in front of its name
-    /// wherever Agentic says a file.
-    /// </summary>
-    private string FileIconText(string path) =>
-        explorer.FileIconColor(path) is { } colour
-            ? $"[color:{HexColour(colour)}]$({HexExplorer.FileIcon(path)})[/color]"
-            : $"$({HexExplorer.FileIcon(path)})";
 
     private void ContextLink(string icon, string text, Action open) =>
         noonContextRows.Add(new Button

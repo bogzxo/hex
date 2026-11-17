@@ -574,7 +574,9 @@ internal sealed partial class DawnScene
         });
         // The file it was given after its name, with the icon of its kind as the file tree has it, when there's room
         string? file = SubagentOf(entry) is null ? FileOf(entry.Input) : null;
-        string fileIcon = file is null ? string.Empty : FileIconText(file);
+        // A button's label is written in one colour, so the file's icon here is the label's, only the button's own icon
+        // takes a colour of its own
+        string fileIcon = file is null ? string.Empty : $"$({HexExplorer.FileIcon(file)})";
         FollowWidth(width =>
         {
             int room = Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f));

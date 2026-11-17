@@ -107,8 +107,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] hex_ask, an agent of the panel asks the person on a card in its chat, its options as buttons (the one it would
       pick marked), a box for an answer of their own, a countdown (300 seconds by default, 3600 at most) after which
       it's told to go on with its recommended option or the one it judges best. Counts as needing the person
-- [ ] Claude Code's own AskUserQuestion tool, which comes through can_use_tool, shown as the same card and answered
-      with updatedInput carrying the answers, so it doesn't need to know of hex_ask
+- [x] Claude Code's own AskUserQuestion tool, which comes through can_use_tool, a card for each question (its
+      "(Recommended)" option marked), answered with updatedInput.answers by question, nobody answering refuses the
+      tool with word to go on with its best pick (claude_code extension)
+- [ ] Multi-select questions (AskUserQuestion's multiSelect) as toggles with one Answer button
 - [ ] Codex's own questions (the app-server's tool/requestUserInput if it has one) on the same card
 
 ## Models and files
@@ -124,7 +126,8 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 ## Order (the person's)
 
 1. The other items here, Claude Code's integration first
-2. Performance of the new agent system (chat paging, rows, the harness)
+2. Performance of the new agent system (chat paging, rows, the harness). First of it, a chat scrolled back into rows
+   loaded from its file and then back down to the latest drops those rows to the file again after a minute there
 3. Last of all, Hex's dev and stable builds, below
 
 ## Dev and stable builds (last)

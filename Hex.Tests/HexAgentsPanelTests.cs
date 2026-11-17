@@ -279,6 +279,25 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Contains(written, line => line.Contains("\"request_id\":\"r2\"", StringComparison.Ordinal)
             && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal) && line.Contains("dotnet test", StringComparison.Ordinal));
 
+        // Its own questions are cards, its answers going back in the input by each question, its recommended one marked
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which way?","header":"Way","multiSelect":false,"options":[{"label":"Rewrite (Recommended)","description":"a"},{"label":"Patch","description":"b"}]},{"question":"Tests?","header":"Tests","multiSelect":false,"options":[{"label":"Yes","description":"c"},{"label":"No","description":"d"}]}]}}}""");
+        HexAgentEntry[] cards = [.. chat.Pending];
+        Assert.Equal(2, cards.Length);
+        Assert.Equal(0, cards[0].Recommended);
+        Assert.True(chat.Reply(cards[0], "Patch"));
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"q1\"", StringComparison.Ordinal));
+        Assert.True(chat.Reply(cards[1], "Only the fast ones"));
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"q1\"", StringComparison.Ordinal) && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal)
+            && line.Contains("\"answers\":{\"Which way?\":\"Patch\",\"Tests?\":\"Only the fast ones\"}", StringComparison.Ordinal));
+
+        // Nobody answering refuses the tool with word to go on, the other card taken back
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"A?","options":[{"label":"x"}]},{"question":"B?","options":[{"label":"y"}]}]}}}""");
+        cards = [.. chat.Pending];
+        Assert.True(chat.Reply(cards[0], null));
+        Assert.Empty(chat.Pending);
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"q2\"", StringComparison.Ordinal) && line.Contains("\"behavior\":\"deny\"", StringComparison.Ordinal)
+            && line.Contains("judge best", StringComparison.Ordinal));
+
         // One it gives up asking is taken back unanswered
         Feed(runtime, run, api, """{"type":"control_request","request_id":"r3","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"a.txt"}}}""",
             """{"type":"control_cancel_request","request_id":"r3"}""");
