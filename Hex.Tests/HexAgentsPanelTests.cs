@@ -112,15 +112,15 @@ public sealed class HexAgentsPanelTests : IDisposable
     [Fact]
     public void Tools_are_named_and_given_icons_by_what_they_do()
     {
-        Assert.Equal("hex_search", DawnScene.ToolTitle("mcp__hex__hex_search"));
-        Assert.Equal("Bash", DawnScene.ToolTitle("Bash"));
-        Assert.Equal("search", DawnScene.ToolIcon("mcp__hex__hex_search"));
-        Assert.Equal("terminal", DawnScene.ToolIcon("command"));
-        Assert.Equal("diff", DawnScene.ToolIcon("Edit"));
-        Assert.Equal("notebook", DawnScene.ToolIcon("mcp__hex__hex_notebook_run"));
-        Assert.Equal("tools", DawnScene.ToolIcon("something_else"));
-        Assert.Equal("a b c", DawnScene.OneLine("a\n  b\tc", 40));
-        Assert.Equal("abcdefg...", DawnScene.OneLine("abcdefghijklmnop", 10));
+        Assert.Equal("hex_search", HexAgentRows.ToolTitle("mcp__hex__hex_search"));
+        Assert.Equal("Bash", HexAgentRows.ToolTitle("Bash"));
+        Assert.Equal("search", HexAgentRows.ToolIcon("mcp__hex__hex_search"));
+        Assert.Equal("terminal", HexAgentRows.ToolIcon("command"));
+        Assert.Equal("diff", HexAgentRows.ToolIcon("Edit"));
+        Assert.Equal("notebook", HexAgentRows.ToolIcon("mcp__hex__hex_notebook_run"));
+        Assert.Equal("tools", HexAgentRows.ToolIcon("something_else"));
+        Assert.Equal("a b c", HexAgentRows.OneLine("a\n  b\tc", 40));
+        Assert.Equal("abcdefg...", HexAgentRows.OneLine("abcdefghijklmnop", 10));
     }
 
     [Theory]
@@ -132,13 +132,13 @@ public sealed class HexAgentsPanelTests : IDisposable
     [InlineData("{\"recursive\":true}", "recursive")]
     [InlineData(null, "")]
     public void Tool_previews_show_useful_arguments_and_tolerate_raw_input(string? input, string expected) =>
-        Assert.Equal(expected, DawnScene.ToolPreview(input));
+        Assert.Equal(expected, HexAgentRows.ToolPreview(input));
 
     [Fact]
     public void Tool_labels_fit_even_when_the_panel_is_narrow()
     {
-        Assert.Equal("..", DawnScene.OneLine("long input", 2));
-        Assert.Equal(".", DawnScene.OneLine("long input", 0));
+        Assert.Equal("..", HexAgentRows.OneLine("long input", 2));
+        Assert.Equal(".", HexAgentRows.OneLine("long input", 0));
     }
 
     /// <summary>A plugin of the catalog loaded against a hex with what an agent system uses, and the run it said.</summary>
@@ -270,8 +270,8 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Equal("hex_symbols StartMcp", task.Progress);
         Assert.Equal(HexAgentToolState.Done, task.State);
         Assert.DoesNotContain(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Text);
-        Assert.Equal(("Subagent · Explore", "Find the server start"), DawnScene.SubagentOf(task));
-        Assert.Null(DawnScene.SubagentOf(new HexAgentEntry(HexAgentEntryKind.Tool, "Read") { ToolName = "Read", Input = "{}" }));
+        Assert.Equal(("Subagent · Explore", "Find the server start"), HexAgentRows.SubagentOf(task));
+        Assert.Null(HexAgentRows.SubagentOf(new HexAgentEntry(HexAgentEntryKind.Tool, "Read") { ToolName = "Read", Input = "{}" }));
     }
 
     [Fact]
@@ -295,9 +295,9 @@ public sealed class HexAgentsPanelTests : IDisposable
     [Fact]
     public void A_note_draws_the_icon_it_starts_with_and_nothing_else_of_its_markup()
     {
-        Assert.Equal("$(mail) " + Horizon.UI.Drawing.UIRichText.Literal("from #3 · finding: a [tag]"), DawnScene.NoteText("$(mail) from #3 · finding: a [tag]"));
-        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("plain [tag]"), DawnScene.NoteText("plain [tag]"));
-        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("$(not an icon) x"), DawnScene.NoteText("$(not an icon) x"));
+        Assert.Equal("$(mail) " + Horizon.UI.Drawing.UIRichText.Literal("from #3 · finding: a [tag]"), HexAgentRows.NoteText("$(mail) from #3 · finding: a [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("plain [tag]"), HexAgentRows.NoteText("plain [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("$(not an icon) x"), HexAgentRows.NoteText("$(not an icon) x"));
     }
 
     [Fact]

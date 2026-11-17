@@ -870,6 +870,8 @@ Steps in order; each is a commit that leaves every existing suite green.
 | 0.6 `IAgents` for parts | `Hex.Dawn/Context/DawnContext.cs`, `DawnScene.Context.cs` | `interface IAgents { IReadOnlyList<HexAgentSession> Sessions; event Action Changed; void Show(int session); }` on `DawnContext.Agents` (grows `Handoff`, `MarksFor` in M3/M4). |
 | 0.7 Proof | new `Hex.Dusk/Testing/DuskScene.SelfTest.Agents.cs`; `Hex.Dawn/Testing/DawnScene.SelfTest.Mcp.cs` | Suite `dusk-agents`: a stand-in agent system (a script played as agent output) keeps adding rows while Dusk is on screen, and a `hex_agent_message` between two tagged clients is delivered without Dawn coming forward. `mcp` suite: `CallingChat` seen by a non-agent tool. |
 
+Progress: 0.1 to 0.4 are built. 0.5 moved the window-free statics into `HexAgentRows` (DawnScene keeps forwarders); `IAgentRowHost` and the instance builders (`RowOf`, `ToolRow`, `Bubble`, `AgentMarkdown`) move with 1.6, when Noon gets a thread of its own and there is a second host, since Noon shows the Agents view itself until then.
+
 Accept: `agents-layout`, `agents-markdown`, `mcp` and the agent unit tests pass unchanged; `hex_agent_*`, `hex_agent_message`, `hex_agent_inbox` results identical to before; `dusk-agents` passes; no new allocation in an idle tick (`garbage`).
 
 ### M1. The Noon face
