@@ -123,6 +123,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [ ] Codex's app-server model/list in place of reading its cache file
 - [x] Files said in Agentic with the icon of their extension as the file tree has it, in Files it touched and after
       the name of a tool row given a file. Left, links to files in what an agent says
+- [x] hex_workspace, an agent lists, adds and removes workspace folders (a project file adds its folder), told of it in
+      the harness rules with hex_ask. The engine (..\horizon) is in this workspace now, so Hex's tools reach it
+- [x] Details' running spinner turns (its row sat on its scroll panel's clip edge, where a moving icon is drawn still)
+- [ ] A moving icon cut by its clip is drawn still (UIDrawList.MovingSymbol), clip the turned quad instead
 - [ ] The harness guard refuses git ls-files and the like aimed outside the workspace (git -C ..\horizon ls-files), it
       should only turn back reads of the workspace's own folders
 
