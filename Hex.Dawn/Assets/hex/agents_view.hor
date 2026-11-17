@@ -16,13 +16,18 @@ let agents_new = compositor.button({ parent: agents_head, anchor: "right", pivot
 let agents_meta = compositor.panel({ parent: agents_view, anchor: "top", pivot: "top", pos: vec(0, -34), size: vec(0, 20), fill: "horizontal", padding: vec(4, 0, 4, 0), clip: true });
 let agents_subtitle = compositor.label({ parent: agents_meta, anchor: "left", pivot: "left", align: "left", text: "", text_scale: 0.115, dim: true });
 
-let agents_body = compositor.panel({ parent: agents_view, fill: "both", padding: vec(4, 58, 4, 108), clip: true });
+let agents_body = compositor.panel({ parent: agents_view, fill: "both", padding: vec(4, 58, 4, 132), clip: true });
 let agents_scroll = compositor.scroll({ parent: agents_body, fill: "both", padding: vec(0, 2, 8, 6) });
 let agents_rows = compositor.stack({ parent: agents_scroll, fill: "horizontal", spacing: 8 });
 
 // The card at the bottom, the box over the pickers and Send, Stop in Send's place while it's going
-let agents_compose = compositor.panel({ parent: agents_view, anchor: "bottom", pivot: "bottom", fill: "horizontal", size: vec(0, 96), padding: vec(6, 6, 6, 6) });
-let agents_input = compositor.textbox({ parent: agents_compose, anchor: "top", pivot: "top", fill: "horizontal", size: vec(0, 40), padding: vec(6, 4, 6, 4), text_scale: 0.15, placeholder: "@agents_panel.input", max_length: 20000 });
+let agents_compose = compositor.panel({ parent: agents_view, anchor: "bottom", pivot: "bottom", pos: vec(0, 24), fill: "horizontal", size: vec(0, 96), padding: vec(6, 6, 6, 6) });
+
+// Under the card, what Hex's harness has saved the agents this run, the tokens they didn't read
+let agents_harness = compositor.button({ parent: agents_view, anchor: "bottom", pivot: "bottom", fill: "horizontal", size: vec(0, 22), style: "button_flat", tooltip: "@agents_panel.harness_tip" });
+// The box itself is made in code (DawnScene.AgentsPanel), an editor of its own lines that grows with them, Enter sends
+// and Shift+Enter starts another line
+let agents_placeholder = compositor.label({ parent: agents_compose, anchor: "top_left", pivot: "top_left", pos: vec(14, -2), text: "@agents_panel.input", text_scale: 0.15, dim: true });
 let agents_options = compositor.stack({ parent: agents_compose, anchor: "bottom_left", pivot: "bottom_left", direction: "horizontal", spacing: 0 });
 let agents_send = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "arrow-up", tooltip: "@agents_panel.send" });
 let agents_stop = compositor.button({ parent: agents_compose, anchor: "bottom_right", pivot: "bottom_right", size: vec(32, 32), icon: "debug-stop", tooltip: "@agents_panel.stop", visible: false });

@@ -18,8 +18,14 @@ internal sealed partial class DawnScene
     private ScrollPanel agentsScroll = null!;
     private Label agentsSubtitle = null!;
     private Panel agentsCompose = null!, agentsMeta = null!, agentsBody = null!;
-    private TextBox agentsInput = null!;
-    private Button agentsStop = null!, agentsSend = null!, agentsHistory = null!, agentsNew = null!;
+    private CodeEditor agentsInput = null!;
+    private Label agentsPlaceholder = null!;
+
+    // The most lines the box grows to before it scrolls, and how tall the card under the chat is now
+    private const int AGENTS_INPUT_LINES = 8;
+    private float agentsComposeTall = 96.0f;
+    private Button agentsStop = null!, agentsSend = null!, agentsHistory = null!, agentsNew = null!, agentsHarness = null!;
+    private (long Calls, long Said) agentsHarnessShown = (-1, -1);
 
     private readonly List<HexAgentChat> agentChats = [];
     private HexAgentChat? agentChat;
@@ -48,17 +54,54 @@ internal sealed partial class DawnScene
         agentsMeta = made.Get<Panel>("agents_meta");
         agentsBody = made.Get<Panel>("agents_body");
         agentsSubtitle = made.Get<Label>("agents_subtitle");
-        agentsInput = made.Get<TextBox>("agents_input");
+        agentsPlaceholder = made.Get<Label>("agents_placeholder");
+        agentsInput = agentsCompose.Add(new CodeEditor
+        {
+            Anchor = Origin.Top,
+            Pivot = Origin.Top,
+            Fill = UIFill.Horizontal,
+            LineNumbers = false,
+            WordWrap = true,
+            StickyScroll = false,
+            IndentGuides = false,
+            Minimap = false,
+            CheckSyntax = false,
+            CaretBand = false,
+            TextScale = 0.15f,
+            FitRows = AGENTS_INPUT_LINES,
+            Padding = new UIEdges(2, 2, 2, 2),
+            Highlighter = CodeLanguages.ForFile("message.md"),
+            Color = System.Numerics.Vector4.Zero,
+
+            // No words offered back as it's typed, the list came up over the box and took Enter
+            CompletionSource = _ => null
+        });
+        agentsCompose.MoveChild(agentsInput, 0);
         agentsStop = made.Get<Button>("agents_stop");
         agentsSend = made.Get<Button>("agents_send");
         agentsHistory = made.Get<Button>("agents_history");
+        agentsHarness = made.Get<Button>("agents_harness");
+        agentsHarness.LabelScale = 0.11f;
+        agentsHarness.Align = Origin.Left;
+        agentsHarness.Animated = false;
+        agentsHarness.OnPressed = ShowHarnessSaved;
 
         // Under the side's head with the rest of the views, where the tree would be
         left.MoveChild(agentsView, IndexIn(left, layout.Get<UIComponent>("side_tree")));
 
-        agentsInput.Bare = true;
-        agentsInput.OnSubmitted = _ => SendToAgent();
-        agentsInput.OnChanged = value => { if (string.IsNullOrWhiteSpace(value)) agentDraftContext = null; };
+        // Enter sends, Shift+Enter is another line
+        agentsInput.OnEnter = () =>
+        {
+            if (Engine.Input.Keyboard.Shift)
+                return false;
+            SendToAgent();
+            return true;
+        };
+        agentsInput.OnChanged = () =>
+        {
+            if (string.IsNullOrWhiteSpace(agentsInput.Text))
+                agentDraftContext = null;
+        };
         agentsSend.OnPressed = SendToAgent;
         agentsSend.Primary = true;
         agentsStop.Danger = true;
@@ -85,6 +128,10 @@ internal sealed partial class DawnScene
     /// <summary>The view in the side bar shown or put away as the side bar's view changes, the tree away while it's up.</summary>
     private void PlaceAgentsView(bool shown)
     {
+        // Noon has it in its middle, the side bar's view changing is nothing to do with it then
+        if (Face == HexFace.Noon)
+            return;
+
         if (shown)
         {
             sideTree.Visible = false;
@@ -161,7 +208,7 @@ internal sealed partial class DawnScene
         TakeAgentLines();
         PublishAgentStatuses();
         DrawAgentsActivity();
-        if (agentsView is null || !agentsView.Visible || !left.Shown)
+        if (agentsView is null || !agentsView.Visible || (!left.Shown && Face != HexFace.Noon))
             return;
 
         // The chat on screen is read as far as it's gone, so it's not marked as finished unseen
@@ -170,6 +217,17 @@ internal sealed partial class DawnScene
             open.Tick();
             open.Seen = open.Version;
         }
+        // The rows and the cards follow the width every tick, a side being dragged moves every frame and the words fitted a
+        // tenth of a second behind it jumped as they caught up. Each does nothing when the width didn't move
+        FitAgentRows();
+        if ((int)agentsView.Size.X != chatRowsFitted)
+        {
+            chatRowsFitted = (int)agentsView.Size.X;
+            foreach (Action<float> refit in chatRowFits)
+                refit(agentsView.Size.X);
+        }
+        FitAgentsCompose();
+
         if ((agentsWait -= dt) > 0.0f)
             return;
         agentsWait = 0.1f;
@@ -199,6 +257,7 @@ internal sealed partial class DawnScene
         DrawAgentOptions();
         TickRunningTimes();
         DrawAgentsHead();
+        DrawHarnessSaved();
 
         // The dots wait out a quiet moment by the clock, not by the chat changing
         if (agentChat is { Running: true } going && agentsDrawn == (going.Id, going.Version) && agentsTyping is null)
@@ -243,6 +302,40 @@ internal sealed partial class DawnScene
         }
 
         agentsSubtitle.Text = UIRichText.Literal(string.Join("  ·  ", parts.Where(part => !string.IsNullOrWhiteSpace(part))));
+        FitAgentsCompose();
+    }
+
+    /// <summary>
+    /// The card at the bottom as tall as the box's lines and the pickers under them, the chat over it making room, and the
+    /// placeholder while the box is empty.
+    /// </summary>
+    private void FitAgentsCompose()
+    {
+        // The skin paints an editor's ground over what it was given, the box is the card's
+        agentsInput.Color = System.Numerics.Vector4.Zero;
+        agentsPlaceholder.Visible = agentsInput.Text.Length == 0;
+        float tall = MathF.Max(96.0f, MathF.Ceiling(agentsInput.Bounds.Height) + 56.0f);
+        if (MathF.Abs(tall - agentsComposeTall) < 0.5f)
+            return;
+        agentsComposeTall = tall;
+        agentsCompose.Size = agentsCompose.Size with { Y = tall };
+        PlaceAgentsList();
+    }
+
+    /// <summary>
+    /// What the harness has saved the agents this run, the tokens of what the plain way (grep, files read whole) would
+    /// have had them read and didn't, and how much of it that was, put right only when it moved.
+    /// </summary>
+    private void DrawHarnessSaved()
+    {
+        var (calls, said, plain) = Harness.Stats.Totals();
+        if ((calls, said) == agentsHarnessShown)
+            return;
+        agentsHarnessShown = (calls, said);
+
+        agentsHarness.Label = calls == 0
+            ? $"$(zap) {Said("agents_panel.harness_none")}"
+            : $"$(zap) {Said("agents_panel.harness_saved", ("tokens", Count((plain - said) / 4)), ("share", plain <= 0 ? "0" : (100.0 * (plain - said) / plain).ToString("0")), ("calls", calls.ToString()))}";
     }
 
     private bool CanComposeAgent() => AgentFor(agentChat) is { } id

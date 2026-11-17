@@ -18,7 +18,12 @@ internal sealed partial class DuskScene
 
     private void BuildModes()
     {
-        modeToggle = HexModeSwitch.Add(top, HexMode.Dusk, SwapMode);
+        modeToggle = HexModeSwitch.Add(top, HexFace.Dusk, face =>
+        {
+            // Noon is the editor's, the editor's brought back showing it
+            HexModes.FaceWanted = face;
+            SwapMode();
+        });
 
         HexModes.Leaving += mode =>
         {

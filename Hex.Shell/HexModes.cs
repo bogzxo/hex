@@ -28,6 +28,12 @@ public static class HexModes
     /// </summary>
     public static float? Scale { get; set; }
 
+    /// <summary>
+    /// The face the editor is to show as it comes back on screen, Noon when it was picked from Dusk, taken (and put back
+    /// to null) by the editor in its OnReturned.
+    /// </summary>
+    public static HexFace? FaceWanted { get; set; }
+
     /// <summary>Called on the scene that is about to be left for the other mode, to let go of the keyboard and the pointer.</summary>
     public static event Action<HexMode>? Leaving;
 

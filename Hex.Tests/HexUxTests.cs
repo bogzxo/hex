@@ -80,23 +80,30 @@ public class HexUxTests
     }
 
     [Theory]
-    [InlineData(HexMode.Dawn)]
-    [InlineData(HexMode.Dusk)]
-    public void Mode_selector_marks_current_and_only_destination_switches(HexMode current)
+    [InlineData(HexFace.Dawn)]
+    [InlineData(HexFace.Noon)]
+    [InlineData(HexFace.Dusk)]
+    public void Face_selector_marks_current_and_the_others_take_you_there(HexFace current)
     {
         var bar = new TitleBar();
-        int switched = 0;
-        Button destination = HexModeSwitch.Add(bar, current, () => switched++);
+        var picked = new List<HexFace>();
+        Button any = HexModeSwitch.Add(bar, current, picked.Add);
         var row = Assert.IsType<StackPanel>(Assert.Single(bar.Children));
+        Assert.Same(row, any.Parent);
         Assert.Equal(Horizon.Rendering.Origin.Right, row.Anchor);
         var buttons = row.Children.Cast<Button>().ToArray();
-        Assert.Equal(new[] { "Dawn", "Dusk" }, buttons.Select(button => button.Label));
+        Assert.Equal(new[] { "Dawn", "Noon", "Dusk" }, buttons.Select(button => button.Label));
         Button active = Assert.Single(buttons, button => button.Selected);
         Assert.Equal(current.ToString(), active.Label);
         Assert.Null(active.OnPressed);
-        Assert.False(destination.Selected);
-        destination.OnPressed!();
-        Assert.Equal(1, switched);
+        foreach (Button other in buttons.Where(button => !button.Selected))
+            other.OnPressed!();
+        Assert.Equal(Enum.GetValues<HexFace>().Where(face => face != current), picked);
+
+        // Dawn and Noon trade places on the same row
+        HexFace next = current == HexFace.Noon ? HexFace.Dawn : HexFace.Noon;
+        HexModeSwitch.Select(any, next, picked.Add);
+        Assert.Equal(next.ToString(), Assert.Single(buttons, button => button.Selected).Label);
     }
 
     [Fact]

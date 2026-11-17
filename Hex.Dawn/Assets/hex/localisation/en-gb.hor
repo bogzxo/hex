@@ -3342,9 +3342,29 @@ let strings = {
         restore_failed: "dotnet restore {name} ended with {code}, what it said is under Output"
     },
 
+    noon: {
+        command: "View: Noon, the agents working on the project",
+        fleet: "Agents",
+        fleet_empty: "No agents yet. Ask one in the middle, and the agents it starts show up here under it.",
+        summary: "{agents} agents · {running} running · ${cost} · {mail} unread",
+        context: "Details",
+        context_empty: "Pick an agent on the left to see what it is, who it works with and what it touched.",
+        agent: "Agent",
+        family: "Works with",
+        started_by: "started by {name}",
+        messages: "Messages ({count})",
+        tools: "Tools · {harness} of {all} through Hex",
+        files: "Files it touched",
+        context_use: "Context",
+        context_of: "{used} of {limit} · {share}%",
+        context_only: "{used} in context",
+        cache: "{read} read from the cache · {share}% of input",
+        turns: "{turns} turns · {calls} tool calls"
+    },
+
     modes: {
         active: "{name} is active",
-        switch: "Switch to {name} (Ctrl+Alt+Shift+D)",
+        switch: "Switch to {name}",
         toggle_tooltip: "Dusk, the terminal, in this window (Ctrl+Alt+Shift+D)",
         command_dusk: "Hex: Dusk, the terminal, in this window",
         no_dusk: "there's no Dusk to swap to"
@@ -3470,6 +3490,11 @@ let strings = {
         unheard: "not taken in, the turn ended first",
         tool_running: "running {seconds}s",
         subagent_steps: "step {count} · {step}",
+        harness_none: "No harness calls yet this session",
+        harness_title: "Harness token savings",
+        harness_about: "Tokens returned by each harness tool this session, against the baseline, the tokens an equivalent grep or full-file read would have returned. Estimated at 4 characters per token. Cache hits were served from the result cache without querying the index again.",
+        harness_saved: "Harness saved ~{tokens} tokens ({share}%) · {calls} calls",
+        harness_tip: "Estimated tokens saved this session by answering agents from Hex's code index instead of grep and full-file reads. Click for the per-tool breakdown.",
         tool_done: "{seconds}s",
         turn_done: "Completed · {seconds}s",
         tool_failed: "failed {seconds}s",

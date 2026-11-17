@@ -32,8 +32,9 @@ internal sealed partial class DawnScene
         agentsOptions = made.Get<StackPanel>("agents_options");
 
         // Up and Down in the box go through what was asked before, Escape stops what's going on
-        commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && RecallAsked(-1), whileTyping: true, first: true);
-        commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && RecallAsked(1), whileTyping: true, first: true);
+        // Only from the box's first line up and its last line down, between its lines they move the caret
+        commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == 0 && RecallAsked(-1), whileTyping: true, first: true);
+        commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
         commands.Keys.Add(Key.Escape, () =>
         {
             if (compositor.Focus != agentsInput || agentChat?.Running != true)
@@ -239,9 +240,41 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What the harness has saved this run, in a card, its last line being the whole of it.</summary>
+    /// <summary>
+    /// What the harness saved this run, a window with a table of it, a tool a row, the tokens each handed back against
+    /// what grep and reading files whole would have, and the total.
+    /// </summary>
     private void ShowHarnessSaved()
     {
-        string described = Harness.Stats.Describe().TrimEnd();
-        Notify(described.Split('\n')[^1]);
+        const float WIDTH = 620.0f, INSET = 18.0f;
+        string? table = Harness.Stats.Table();
+        int rows = table?.Count(c => c == '\n') ?? 0;
+        var window = new WindowPanel(Said("agents_panel.harness_title"))
+        {
+            Icon = "zap",
+            Size = new System.Numerics.Vector2(WIDTH, 120.0f + rows * 30.0f),
+            MinSize = new System.Numerics.Vector2(420.0f, 140.0f)
+        };
+        DressWindow(window);
+        window.OnClosed = () => window.Parent?.Remove(window);
+
+        var column = window.Add(new StackPanel { Spacing = 10.0f, Padding = new UIEdges(INSET, 16.0f), Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal });
+        column.Add(Text(Said("agents_panel.harness_about"), 0.13f, dim: true));
+        if (table is null)
+            column.Add(Text(Said("agents_panel.harness_none"), 0.14f));
+        else
+        {
+            // Written the way an agent's reply is, the table a table of the notebooks' kind
+            var written = column.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            WriteMarkdown(written, table, string.Empty);
+            foreach (UIComponent part in Descendants(written))
+            {
+                if (part is NotebookTablePanel grid)
+                    grid.Strip.Visible = false;
+            }
+            FitWritten(written, WIDTH - INSET * 2.0f, keepWidth: true);
+        }
+        chrome.Root.Add(window);
+        window.TakeKeyboard();
     }
 }

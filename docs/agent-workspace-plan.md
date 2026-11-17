@@ -1,10 +1,23 @@
 # Agent workspace ("Noon"): design and implementation plan
 
-Status: plan, nothing built. Paths are relative to `hex/` unless they start with `horizon/`. Line numbers come from `docs/context/*.md` and the code as read for this plan; re-find with `hex_symbols` before editing. Items marked **verify** were not confirmed in code or against the CLI versions installed.
+Status: plan for the workspace; the agent groundwork of section 0 is built and this plan builds on it. Paths are relative to `hex/` unless they start with `horizon/`. Line numbers come from `docs/context/*.md` and the code as read for this plan; re-find with `hex_symbols` before editing. Items marked **verify** were not confirmed in code or against the CLI versions installed.
 
 Look and feel were taken from the layouts (`Hex.Dawn/Assets/hex/*.hor`, `shell/*.hor`), the Solstice themes (`Hex.Shell/Assets/uix/flat/themes/solstice*.hor`), `Hex.Shell` (`HexLooks`, `HexHorizon`, `HexModeSwitch`), `docs/ux-revamp-plan.md` and the Agents panel code. No Hex MCP server was reachable while this was written, so no screenshots were taken; M1 starts with a screenshot pass to check the mockups against the real window (section 17.9).
 
 Working name of the third tab: **Noon** (Dawn the editor, Noon the agents, Dusk the terminal). The name is an open question (section 16); everything below uses `Noon` / `noon_` as the identifier prefix.
+
+## 0. Already built (commits `b65c6f0`, `cde07cc`, `hex-extensions` `4b2921e`)
+
+Nothing in this section is proposed again. The rest of the plan uses these as they are.
+
+| Built | Where | What the plan does with it |
+| --- | --- | --- |
+| **Harness-first steering.** `HexAgentProfiles.HARNESS_RULES`, one text for every agent system, exposed to extensions as `hex.harness_rules`. Claude Code gets it with `--append-system-prompt`, Codex with `-c developer_instructions='''...'''` (a TOML literal, so the text has no apostrophes). Claude's own `Explore` subagent is redefined through `--agents <temp>/claude-agents-<chat>.json` with the same rules (model haiku). Harness tool descriptions name the shell commands they replace. The shell stays available. Checked live: agents went harness first. | `Hex.Core/Harness/HexAgentProfiles.cs`, `Hex.Dawn/Extensions/HexExtensions.Agents.cs`, `Hex.Dawn/Agents/DawnScene.McpHarness.cs`, `hex-extensions/claude_code` 1.6.0, `codex` 1.5.0 | Hub rules (asking, showing, proposing, plans) are a second constant `HexAgentProfiles.HUB_RULES` / `hex.hub_rules` sent through the same three channels (section 9.3). Same no-apostrophe rule. |
+| **Native subagents folded.** `chat.progress(tool_id, step)`; `HexAgentEntry.Progress` and `Steps`; `HexAgentChat.Progress(id, step)`; the row is "Subagent · <type>" with "step N · latest" (`SubagentOf`). Claude's stream carries `parent_tool_use_id`, read in `heard`; `step_of` shortens a tool call. | `Hex.Core/Agents/HexAgentChat.cs`, `HexAgentChatApi.cs`, `Hex.Dawn/Agents/DawnScene.AgentsPanel.Rows.cs`, `claude_code/extension.hor` | A native subagent is a leaf of the Fleet tree made from that tool entry (kind `Native`), with its step count and latest step. No separate transcript is kept for it (8.1). |
+| **Mailbox and coordinator.** `HexAgentMail(Seq, From, FromName, Kind, Text, Directive)`; per chat `Mail`, `Post`, `MailRead`, `UnreadMail`, `MailSeen` (100 kept). Tools `hex_agent_message(text, to?, kind)` with kinds finding, question, answer, progress, blocked, instruction, and `hex_agent_inbox()`. `hex_agent_send` is an instruction. `Deliver` picks the route: a chat waiting in `hex_agent_wait` (`agentsWaiting`) is woken with it (the `messages` flag, on by default); a running steerable chat (Claude Code) takes it on stdin; a running chat that cannot be steered (Codex) finds it in its inbox; an unread instruction starts the next turn (`AfterAgentTurn`); unread mail is put in front of the next prompt (`UnreadPrompt` in `StartAgent`). Family only (`RootOf`). Both chats get a `$(mail)` note (`NoteText`). The spawn preamble and `HARNESS_RULES` tell agents to coordinate this way. Checked live: a Sonnet coordinator steered a Codex worker mid-run on a Claude scout's finding. | `Hex.Dawn/Agents/DawnScene.McpAgentMail.cs`, `DawnScene.McpAgents.cs`, `DawnScene.AgentsPanel.Run.cs`, `Hex.Core/Agents/HexAgentChat.cs`, `docs/agents.md` | The mail path is the one message bus of the workspace. The user becomes an endpoint of it (questions to the user, answers back), Hex itself a sender (notices), and Noon draws it: mail rows in threads, the family view, mail flow on the Board (sections 5, 6.8, 7.1, 7.9). |
+
+Not built, still in this plan: the Noon face, the hub model and store, questions to the user, code cards, proposals, plans, approvals, touches and conflicts, checkpoints, worktrees, cross-feature integration.
+
 
 ## 1. Goals and non-goals
 
@@ -21,7 +34,7 @@ Non-goals
 - Replacing the side-bar Agents panel. It stays as the compact view of the same sessions (section 11).
 - A new agent runtime. Agent systems stay extensions (`hex-extensions/claude_code`, `codex`) started through `hex.agent`.
 - Remote or cloud agents, multi-user collaboration, Android (no processes or pipes there: `HexHost.NoProcesses`).
-- The fix now landing that makes panel agents prefer harness tools over shell commands and shows spawned subagents more concisely. This plan builds on it (sections 9.3 and 11) and does not redo it.
+- Redoing what section 0 lists as built (harness-first steering, folded native subagents, the mailbox and coordinator tools).
 
 ## 2. What exists and what constrains the design
 
@@ -40,6 +53,8 @@ Non-goals
 | Harness tools run off the editor thread with per-client budgets and memoised answers per generation. | `Hex.Core/Harness/`, `DawnScene.McpHarness.cs` | Per-agent read tracking and stats can hook `Harnessed(...)`. |
 | Agent processes are started in the first workspace folder; `HexAgentProcess.Start(found, arguments, folder, stdin, environment, keepInput)` already takes a folder and environment. | `Hex.Core/Agents/HexAgentProcess.cs:112` | Worktree isolation is a different `folder`. |
 | Limits: agents 2 deep, 6 started by agents at once. | `DawnScene.McpAgents.cs:16` | Kept; shown in the UI; made settings later. |
+| Agents of one family (the chat somebody started and everything under it, `RootOf`) message each other; delivery depends on what the receiver is doing (`Deliver`). Mail is per chat, in memory, 100 kept; notes are the only trace in the UI. | `DawnScene.McpAgentMail.cs`, `HexAgentChat.Mail` | Noon needs a family-wide ordered log of mail for the views and the store; `Deliver` needs a user endpoint. |
+| `agentsWaiting` says which chats sit in `hex_agent_wait`; `AgentStatus` carries the chat and its mail for off-thread reads. | `DawnScene.McpAgents.cs` | The session state "waiting for its agents" and the snapshot already exist in small; the hub snapshot grows from `AgentStatus`. |
 
 ## 3. Key decisions
 
@@ -95,6 +110,7 @@ Hex.Core (`namespace Hex.Core`, all `internal`, JsonNode only, no reflection)
 - `Hex.Core/Agents/Hub/HexSessionSearch.cs` - search across stored sessions.
 - `Hex.Core/Agents/Hub/HexHubSnapshot.cs` - immutable view for off-thread tools.
 - `Hex.Core/Agents/Hub/HexBrief.cs` - compact summary of a session for other agents.
+- `Hex.Core/Agents/Hub/HexMailLog.cs` - every `HexAgentMail` of a family in order with its receiver, for the family view, the Board and the store; endpoints `USER` and `HEX`.
 - `Hex.Core/Harness/HexCodeIndex.Derive.cs` - index for a worktree sharing unchanged files with the main one.
 - `Hex.Core/Harness/HexReadMemory.cs` - per-caller record of what was read at which generation.
 
@@ -142,10 +158,11 @@ Engine (`horizon/`)
 | `Hex.Dawn/Agents/DawnScene.AgentsPanel*.cs` | `agentChats` -> `hub.Sessions`; rows through `HexAgentRows`; "Open in Noon" button and menu entry; question/approval cards in narrow form. |
 | `Hex.Dawn/Agents/DawnScene.AgentsPanel.Run.cs` | `StartAgent` takes the session's folder (worktree) and environment; records turn checkpoints; `HexAgentProcess` wake callback. |
 | `Hex.Dawn/Agents/DawnScene.Mcp.cs` | `HexMcpTool` gains `NeedsEditor = true` and `TakesCaller = false`; `HexMcpTools.CallAs` records the calling chat for every call (`McpServer.CallingChat` AsyncLocal) and injects `_hex_caller` when `TakesCaller` or the name starts `hex_agent`; `QueueMcp` brings Dawn only when `NeedsEditor`; untagged connections get an external session id. |
-| `Hex.Dawn/Agents/DawnScene.McpAgents.cs` | `hex_agent_list` gains `tree`; `hex_agent_spawn` gains `isolation`, `context`, `claims`, `budget`, `role`; `hex_agent_wait` gains `events`; statuses come from `HexHubSnapshot`. |
-| `Hex.Dawn/Agents/DawnScene.McpHarness.cs` | `Harnessed(...)` records reads in `HexTouches` and `HexReadMemory`; resolves paths against the caller's root (worktree); appends advisories (section 7.9). |
+| `Hex.Dawn/Agents/DawnScene.McpAgents.cs` | `hex_agent_list` gains `tree`; `hex_agent_spawn` gains `isolation`, `context`, `claims`, `budget`, `role`; `AgentStatus` is replaced by `HexHubSnapshot` rows (it already carries chat and mail); `hex_agent_wait` keeps waking on mail, which now includes answers from the user and notices from Hex. |
+| `Hex.Dawn/Agents/DawnScene.McpAgentMail.cs` | `Deliver` takes a receiver that may be the user (`HexMailLog.USER`); mail is also appended to `HexMailLog`; `hex_agent_message` gains `re` (the message or question answered) and, for a chat nobody started, defaults `to` to the user; `MAIL_KINDS` gains `notice` (from Hex only). |
+| `Hex.Dawn/Agents/DawnScene.McpHarness.cs` | `Harnessed(...)` records reads in `HexTouches` and `HexReadMemory`; resolves paths against the caller's root (worktree); appends unread notices (section 7.9). |
 | `Hex.Dawn/Agents/DawnScene.McpWorkbench.cs` | `McpToolList()` adds `.. HubTools()`. |
-| `Hex.Core/Agents/HexAgentChat.cs` | Entry kinds `Question, Proposal, Code, Plan, Approval, Subagent`; `HexAgentEntry.Ref` (id of the hub object); usage split into input/cached/output; `ContextUsed`/`ContextLimit`. |
+| `Hex.Core/Agents/HexAgentChat.cs` | Entry kinds `Question, Proposal, Code, Plan, Approval, Mail`; `HexAgentEntry.Ref` (id of the hub object); `HexAgentMail` gains `To` and `Re`; usage split into input/cached/output; `ContextUsed`/`ContextLimit`. `Progress`, `Steps`, `Mail`, `Post`, `MailRead`, `UnreadMail` exist. |
 | `Hex.Core/Agents/HexAgentChatApi.cs` | New chat members for extensions (section 9.1). |
 | `Hex.Core/Agents/HexAgentProcess.cs` | `Woken` callback from reader threads; nothing else. |
 | `Hex.Core/Mcp/McpServer.cs` | `CallingChat` AsyncLocal beside `CallingClient`; session id for untagged clients. |
@@ -250,6 +267,28 @@ internal sealed record HexConflict(string Path, int First, int Second, HexConfli
 internal sealed record HexCheckpoint(int Id, int Session, string Root, string Tree, string Label, long At, HexCheckpointWhy Why);  // TurnStart, BeforeApply, Manual, BeforeRestore
 ```
 
+Mail (exists as `HexAgentMail(Seq, From, FromName, Kind, Text, Directive)`, kept per receiving chat). The plan adds two fields and a log, nothing else:
+
+```csharp
+internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive)
+{
+    public int To { get; init; }          // a chat id, HexMailLog.USER (0) or a family broadcast (-1, later)
+    public long? Re { get; init; }        // the message this answers, or a question id through HexQuestion.Mail
+}
+internal sealed class HexMailLog            // one per family (RootOf), editor thread, republished in HexHubSnapshot
+{
+    public const int USER = 0, HEX = -2;    // endpoints that are not chats: the user, and Hex itself (notices)
+    public IReadOnlyList<HexAgentMail> All; // in Seq order, capped at 2000, older ones in the store
+    public IEnumerable<HexAgentMail> Between(int a, int b);
+    public (int From, int To, int Count, long Last)[] Flows(long since);   // for the Board's arrows
+}
+```
+- A question to the user is a `HexQuestion` plus one mail of kind `question` with `To = USER`; the user's answer is one mail of kind `answer` from `USER` with `Re` set, handed to the existing `Deliver`. So an answer reaches a waiting coordinator through its `hex_agent_wait`, a running Claude Code on its stdin, a running Codex in its inbox, and a finished agent as its next turn, with no new delivery code. `Deliver` treats an answer to a blocking question as a directive (it starts a finished agent).
+- What the user types to a session is mail of kind `instruction` from `USER` (the composer's existing `SendToAgent`/`SteerAgent` path, now also logged), so the family log is the whole conversation between everyone, the user included.
+- Hex's own notes to an agent (a file it read changed, a proposal was decided, budget) are mail of kind `notice` from `HEX` (7.9).
+- `HexSessionState.WaitingAgent` is `agentsWaiting`; `HexSessionKind.Native` is a tool entry for which `SubagentOf` is not null.
+- Coordinator: a session with at least one live child. It is a role read from the tree, not a type.
+
 Store (section 10.4): `<UserFolder>/agents/<hash of workspace roots>/` with `sessions/<id>.jsonl` (one `HexHubEvent` or row per line), `index.json` (one summary per session for the list and for search ranking), `rules.hor` (approval rules and remembered answers, user-only), `layout.hor` (Noon layout). Nothing is written in self-test (`kept == false`).
 
 ## 6. UI
@@ -259,7 +298,7 @@ Store (section 10.4): `<UserFolder>/agents/<hash of workspace roots>/` with `ses
 ```
 [ icon Hex ]  File Edit ... Help                         [ <> Dawn | (o) Noon 2 | >_ Dusk ]   _ [] x
 ```
-- Three `button_flat` buttons in one row, same styling rules as today (`HexModeSwitch.Dress`: the active one filled with the accent in flush looks). Icons: `code`, `hubot`, `terminal`. The badge on Noon is the count of blocking questions and approvals; it pulses once when it goes up (respects `settings.UiAnimation`).
+- Three `button_flat` buttons in one row, same styling rules as today (`HexModeSwitch.Dress`: the active one filled with the accent in flush looks). Icons: `code`, `robot`, `terminal`. The badge on Noon is the count of blocking questions and approvals; it pulses once when it goes up (respects `settings.UiAnimation`).
 - Keys: `Ctrl+Alt+Shift+D` keeps toggling Dawn<->Dusk. New `Ctrl+Alt+Shift+A` goes to Noon, and from Noon back to the face that was up before. `HexModes.Show` is also a palette command per face ("Show Dawn", "Show Noon", "Show Dusk") and a View menu group.
 - Self-test, hosted (Android) and "mode started on its own" keep working: with no `HexModes.Host`, Dawn still has Dawn and Noon faces; Dusk as a program of its own shows Noon greyed with a tooltip, or starts Hex on its folder with `--face noon` (new flag, section 10.7).
 
@@ -366,8 +405,12 @@ let noon_context_rows = compositor.stack({ parent: noon_context, fill: "horizont
 - Totals strip: running count, total cost and tokens of this project today, harness savings, conflicts button (opens Board filtered to conflicts). Limits `2 deep / 6 at once` shown when reached.
 - External sessions (MCP clients Hex did not start, such as a Claude Code in a terminal connected with `--mcp`) are listed under "Connected" with their client name; they have no transcript but do have plan, questions, proposals, touches.
 
+- Families: each chat somebody started is a family root (`RootOf`); its tree is one block with the family's totals on the root row (agents, cost, tokens, unread mail). A root with live children shows the coordinator glyph (`organization`) and its state reads "coordinating 3" while it sits in `hex_agent_wait` (`agentsWaiting`), not "running".
+- Native subagents (a CLI's own, section 0) are leaf rows under their chat, made from the tool entry: `Subagent · Explore`, "step 12 · hex_search Tokenize", spinner until the tool is done. They have no menu beyond "Show in thread".
+- Mail on rows: an envelope with the unread count for mail the agent has not read; a row flashes its envelope once when mail arrives (motion setting respected). Hovering a row dims every row outside its family and draws thin lines to the rows it exchanged mail with in the last minute.
+
 ### 6.5 Thread
-Rows come from `HexAgentRows` (shared with the side panel) plus new cards. Consecutive tool rows of one turn fold into a group ("3 tools · names · time", the concise form the in-progress fix introduces for subagents is reused for groups).
+Rows come from `HexAgentRows` (shared with the side panel) plus new cards. Consecutive tool rows of one turn fold into a group ("3 tools · names · time"), the way a native subagent already folds into one row with its latest step.
 
 | Card | Content | Actions |
 | --- | --- | --- |
@@ -376,7 +419,9 @@ Rows come from `HexAgentRows` (shared with the side panel) plus new cards. Conse
 | Question | Title, parts, options with keys 1..9, "Other" text box, optional code previews per option (shown on focus/hover in a code card beside it), who asks with its breadcrumb. | Answer (`Ctrl+Enter`), Skip, "Let #parent decide", Remember. |
 | Approval | Action, command or paths in a code card, risk colour, matching rule if any. | Allow once (`Y`), Always (`A`), Deny (`N`), Deny with reason. |
 | Plan | The session's plan, changed items highlighted for a moment; one card per session, updated in place, not one per update. | Click an item given to a subagent to jump to it. |
-| Subagent | `#7 scout · codex · running 2m · 31k tok`, its last line; when done its brief. | Open, stop, tell more. |
+| Subagent (native, exists) | "Subagent · <type>", "step N · latest" (`SubagentOf`, `Progress`, `Steps`). In Noon the row expands to the last 20 steps kept on the entry (new: a small ring of step texts). | Expand. |
+| Spawned agent | `#7 scout · codex · running 2m · 31k tok`, its last line; when done its brief. | Open, stop, tell more. |
+| Mail | Replaces the `$(mail)` note row when the hub is there: direction arrow, the other side (`#7 "scout"`, you, Hex), kind as a small tag (finding, question, answer, progress, blocked, instruction, notice), the text, and how it was delivered (taken in, woke the wait, inbox, started a turn). A question shows its answer under it when it comes. | Jump to the other chat at the matching row; reply (a mail from the user); for `blocked` and `question` from a child, "Answer for #3". |
 | Tool | As today (icon, name, preview, time, chevron). Output that is code, a diff, a file list or harness text gets a proper renderer: `path:line` lines are links; file reads become code cards on expand. | Expand, copy, open. |
 | Notice | Checkpoint taken/restored, conflict, budget reached, worktree made/merged. | Jump to the related view. |
 
@@ -422,8 +467,29 @@ All pending questions and approvals of every session, oldest blocking first, the
 - Applying a hunk: checkpoint first (once per proposal), then through the open document when the file is open (an undo step in that editor, `IDocuments.Rewrite`) or `DocumentFile` atomic write otherwise. Later hunks are re-anchored with the same line arithmetic `HexGit.Hunks` uses for staging.
 - Stale proposals (base hash no longer matches): hunks whose context still matches are re-anchored; the rest are marked stale and can only be rejected or sent back ("rebase this", one click, a message to the agent with the new text of the region).
 
-### 6.8 Board
-One horizontal lane per session on a shared time axis: turn spans, tool ticks coloured by kind (harness, editor, terminal, write, shell), waits on the user hatched. Under the lanes, a file matrix: rows are files touched, columns sessions, cells `R`/`W`/`P`(proposed)/`C`(claimed); rows with a conflict are marked and sorted first. Click a cell to open that file's changes by that session. Drawn by one `DrawingPanel` from the hub snapshot (no component per tick mark), so 50 lanes cost one paint.
+### 6.8 Board and family view
+Board: one horizontal lane per session on a shared time axis: turn spans, tool ticks coloured by kind (harness, editor, terminal, write, shell), waits on the user hatched, waits on agents (`hex_agent_wait`) dotted. **Mail flow** is drawn between lanes: an arrow per message from sender to receiver at its time, coloured by kind (instruction in the accent, blocked in the warning colour, the rest dim), bundled when dense; the user and Hex are lanes of their own at the top. Hovering an arrow shows the message, clicking opens it in the thread. Under the lanes, a file matrix: rows are files touched, columns sessions, cells `R`/`W`/`P`(proposed)/`C`(claimed); rows with a conflict are marked and sorted first. Drawn by one `DrawingPanel` from the hub snapshot (no component per mark), so 50 lanes cost one paint.
+
+Family view (the coordinator's desk; the Thread tab shows it when a family root is selected and "Family" is toggled, `Alt+F`):
+```
++- #3 Refactor lexer · coordinating 3 · sonnet -----------------------------------------------------------------+
+| WORKERS                      | MAIL (whole family, newest last)                         | DECISIONS            |
+| ~ #7 scout   codex           | 14:02 #7 -> #3  finding   Tokenize has 14 callers, 3 in  | q7 you: keep overload|
+|   step: hex_refs Tokenize    |                           generated code (Lexer.g.cs:40) | p3 2 of 3 accepted   |
+|   plan 2/3 · 31k tok         | 14:02 #3 -> #8  instruction  skip generated callers       | a4 dotnet test always|
+| ~ #8 impl    codex           |                           (in its inbox, read 14:03)     |----------------------|
+|   writing Tokens.cs          | 14:05 #8 -> #3  blocked   IsText is used by the designer | FINDINGS 5           |
+|   plan 1/4 · 12k tok   ! 1   | 14:05 #3 -> you question  keep the old overload?  [Answer]| Tokenize callers ... |
+| . #9 tests   claude · haiku  | 14:06 you -> #3 answer    keep, mark obsolete            | generated code rule  |
+|   done · brief               | 14:06 #3 -> #8  answer    keep IsText, add IsRaw         |                      |
+|------------------------------+-----------------------------------------------------------+----------------------|
+| [ To: #3 v | instruction v ]  Tell the coordinator, or pick a worker...                          [Stop all][Send]|
++-----------------------------------------------------------------------------------------------------------------+
+```
+- Left: the family's members as cards (latest step or current file, plan progress, tokens, conflicts). Middle: `HexMailLog.All` for the family as one stream, filterable by kind and by member; this is the conversation between agents that today is scattered as notes across chats. Right: decisions the user made in this family (answers, verdicts, approvals) and the family's findings (mail of kind `finding`, newest first, searchable).
+- The composer here sends mail as the user: to the coordinator by default (kind `instruction`, the existing send path), or to any member. Talking to a worker directly also posts a `notice` to the coordinator ("the user told #8: ..."), so the coordinator's picture stays whole.
+- "Stop all" stops the root and with it everything under it (`StopAgent`, exists).
+
 
 ### 6.9 Context (right)
 Sections, each collapsible, state kept per workspace: Plan (items with state glyphs, progress, who has it), Files (touched by this session and its children, kind, conflicts), Usage (input, cached share, output, cost, context meter, turn and total time, harness calls and characters saved for this caller), Pinned code (cards pinned from the thread), Details (system, model, provider, session id, root or worktree and branch, permission mode, checkpoints with restore), Log link.
@@ -445,7 +511,7 @@ Arguments
 | `questions` | array, required | Each `{ id?, text, kind?: "choice"|"multi"|"text"|"confirm", options?: [{ label, about?, recommended?, preview?: {path, symbol?, start_line?, end_line?} }], allow_other?: true, default? }`. `choice` by default when options are given, else `text`. 2..9 options. |
 | `title` | string | Short heading for the card. |
 | `context` | array | Code to show with the question: `{path, symbol?, start_line?, end_line?, note?}`. |
-| `route` | `user` \| `parent` \| `auto` | `auto` (default for spawned agents): the parent agent is offered it first, the user if it declines or does not answer in 60 s. `user` default for top-level sessions. |
+| `route` | `user` \| `parent` \| `auto` | `user` is the default for a chat somebody started. `parent`: the same as `hex_agent_message(kind: "question")` to the parent, which exists; this tool only adds the structure. `auto` (default for spawned agents): the parent first, the user when the parent passes it on or has not answered in 60 s. |
 | `blocking` | boolean | Default true. False: the question is left in the inbox and the call returns at once. |
 | `remember` | string | A key; an earlier answer under the same key in this workspace is returned without asking. |
 | `timeout` | number | Seconds to wait, default 240, max 600. |
@@ -459,12 +525,13 @@ test_project: Other: "put them next to LexerTests in Hex.Tests/Lexing"
 or `q7 is still waiting for the user (asked 240s ago). hex_ask_wait(ids:[7]) waits again; carry on with other work if you can.`
 or `q7 dismissed by the user: "decide yourself".`
 
-Behaviour: the session's state becomes `WaitingUser`; a toast and the badge are raised (section 10.5). When the agent's turn has ended before the answer comes, the answer is delivered as a new turn: `[Answer to q7] keep_overload: ...` through `StartAgent` (resume) or `SteerAgent` when it is steerable and running.
+Behaviour: the question is a `HexQuestion` and one mail of kind `question` to the user in the family's `HexMailLog`; the session's state becomes `WaitingUser`; a toast and the badge are raised (section 10.5). The answer is one mail of kind `answer` from the user handed to the existing `Deliver`, so every route is the built one: it wakes a `hex_agent_wait`, goes in on a steerable agent's stdin, waits in the inbox of one that cannot be steered, is put in front of the next prompt (`UnreadPrompt`), and starts the next turn of an agent that finished while it waited (`AfterAgentTurn`, the answer counted as a directive). The `hex_ask_user` call itself, when still open, returns the answer directly and marks that mail read. A chat nobody started that sends `hex_agent_message(kind: "question" | "blocked")` with no `to` reaches the user the same way, as a free-text question in the Inbox.
 
-### 7.2 `hex_ask_wait`, `hex_ask_answer`, `hex_ask_withdraw`
-- `hex_ask_wait(ids?, timeout?)`: wait for pending questions of the caller; same result lines.
-- `hex_ask_answer(id, answers: [{ part, picked?: [label], text? }], escalate?: true)`: a parent agent answers its child's question, or passes it to the user. Only the parent chain of the asking session may call it.
+### 7.2 `hex_ask_wait`, `hex_ask_withdraw`, and answering for a child
+- `hex_ask_wait(ids?, timeout?)`: wait for pending questions of the caller; same result lines. A coordinator does not need it: `hex_agent_wait` already wakes on mail, and the answer is mail.
 - `hex_ask_withdraw(id)`: the asker no longer needs it.
+- A parent answers its child's question with the tool that exists: `hex_agent_message(to: child, kind: "answer", re: 7, text)`; for a structured question the text may be option labels (`keep_overload: Keep, mark obsolete`), matched to the parts by Hex. Passing it up is `hex_agent_message(kind: "question", re: 7)` to its own parent, or to the user when it has none. No `hex_ask_answer` tool.
+
 
 ### 7.3 `hex_show`
 Show code or text to the user in the caller's thread without spending tokens on it.
@@ -501,12 +568,17 @@ Companions: `hex_proposal_wait(ids?, timeout?)`, `hex_proposal_status(id)`, `hex
 - `hex_request_approval(action, detail, command?, paths?, risk?: "low"|"medium"|"high", timeout?)` -> `a4 allowed once.` / `a4 allowed, and always for "dotnet test *" in this workspace.` / `a4 denied: "not on main"`. Rules are checked first, so a matching rule answers without a card.
 - `hex_permission(tool_name, input, tool_use_id?)`: the shape Claude Code's `--permission-prompt-tool` calls (**verify** against the installed CLI). Returns one text block of JSON: `{"behavior":"allow","updatedInput":{...}}` or `{"behavior":"deny","message":"..."}`. Its schema is hand-built with `additionalProperties: true` (the `McpSchema.Object` builder forbids extras). It maps the CLI tool to an approval (`Bash` -> run + command, `Edit`/`Write` -> write + path, `WebFetch` -> network + url), consults rules, else raises an approval card. A long wait is bounded by `noon_permission_wait` (default 300 s) after which it denies with "no answer; ask again with hex_request_approval".
 
-### 7.7 Fleet tools
-- `hex_agent_list(tree?: true)`: adds per chat tokens, plan progress, pending questions, files written, worktree. Text stays one line per chat.
+### 7.7 Fleet tools (extending what exists)
+`hex_agent_list`, `hex_agent_spawn`, `hex_agent_wait` (wakes on mail, `messages` flag), `hex_agent_read`, `hex_agent_send` (an instruction), `hex_agent_stop`, `hex_agent_message`, `hex_agent_inbox` exist (section 0, `docs/agents.md`). Changes:
+- `hex_agent_list(tree?: true)`: adds per chat tokens, plan progress, pending questions, files written, worktree, and native subagents as indented lines. Text stays one line per chat.
 - `hex_agent_spawn(...)` new arguments: `isolation: "shared"|"worktree"`, `context: [{path, symbol?, start_line?, end_line?}]` (resolved by Hex and put in front of the prompt under a budget, so the child does not search again), `claims: [paths]`, `budget: { cost?, tokens?, seconds? }`, `role`, `background`.
-- `hex_agent_wait(..., events?: ["done","question","proposal","conflict"])`: returns early when a child asks a question routed to the caller or a conflict involves the caller; the report says which.
-- `hex_agent_brief(id, most?)`: structured summary built by Hex with no model call: state, plan, answers the user gave, files written with line counts, proposals and verdicts, last reply (cut). Default 1500 characters. This is what a parent should read instead of `hex_agent_read full`.
-- `hex_session_search(query, most?, agent?, since?)`: ranked lines across stored sessions, `sN rowM: text`, with `hex_agent_read`-style follow-up.
+- `hex_agent_wait`: no new argument. It wakes on mail already; questions routed to the caller, conflicts and decided proposals arrive as mail (kinds `question`, `notice`), so they wake it too.
+- `hex_agent_message`: `re?: <seq or question id>`; `to` defaults to the user for a chat nobody started; kind `notice` is refused to agents.
+- `hex_agent_inbox(peek?: true)`: read without marking read (for a coordinator checking between steps without losing the wake).
+- `hex_agent_brief(id, most?)`: structured summary built by Hex with no model call: state, plan, answers the user gave, findings it sent, files written with line counts, proposals and verdicts, last reply (cut). Default 1500 characters. What a coordinator reads instead of `hex_agent_read full`.
+- `hex_agent_findings(query?, most?)`: the family's mail of kind `finding`, newest first, ranked by the query, each with who found it and the index generation it was sent at (findings whose files changed since are marked stale). This is the shared memory of a family; no separate blackboard.
+- `hex_session_search(query, most?, agent?, since?)`: ranked lines across stored sessions, `sN rowM: text`.
+
 
 ### 7.8 Files, claims, checkpoints
 - `hex_claim(paths, intent: "read"|"write", note?, release?)`: advisory claim. Result lists holders: `Tokens.cs is being written by #8 (tests) since 40s. Claimed anyway; coordinate with hex_agent_send(8, ...) or work in a worktree.` Claims are released when the turn ends.
@@ -514,12 +586,13 @@ Companions: `hex_proposal_wait(ids?, timeout?)`, `hex_proposal_status(id)`, `hex
 - `hex_checkpoint(label?)` -> `c9 taken.`; `hex_checkpoint_list(agent?)`; `hex_checkpoint_restore(id, paths?)` raises an approval (`restore`) unless the user allowed it.
 - `hex_changes_by(agent?, since_checkpoint?)`: per-file line counts of what a session changed since a checkpoint, with `hex_show`-able refs.
 
-### 7.9 Advisories on every tool result
-For a tagged caller, `HexMcpTools.CallAs` appends at most three short advisory lines to the result of any tool, each delivered once: `note: Tokens.cs changed since you read it (by #8, generation 417).`, `note: the user answered q7, hex_ask_wait.`, `note: p3 decided, hex_proposal_wait.`, `note: #7 asks you q9, hex_ask_answer.`, `note: budget 80% used.` This replaces polling and extra turns. Off for clients that set `advisories: false` in their profile.
+### 7.9 Notices from Hex, on the mail path
+Hex tells an agent things as mail of kind `notice` from `HexMailLog.HEX`, posted with `chat.Post` like any other mail, so the built routes carry them: they wake a `hex_agent_wait`, show in `hex_agent_inbox`, and go in front of the next prompt. Notices are never steered onto stdin (they would interrupt) and are never directives. Examples: `Tokens.cs changed since you read it (by #8, generation 417).`, `p3 decided, hex_proposal_wait.`, `2 new errors in Tokens.cs, hex_problems mine:true`, `stopped at Lexer.cs:131, breakpoint`, `budget 80% used.`
+One addition to delivery, for agents that neither wait nor look in their inbox: `HexMcpTools.CallAs` appends up to three unread notices to the result of whatever tool a tagged caller calls next (`note: ...` lines) and marks them read. Off for clients whose profile sets `notices: false`. Notices to External sessions (no chat, no inbox) use only this route.
 
-### 7.10 `hex_notify`, `hex_note`
-- `hex_notify(text, level?: "info"|"done"|"warn")`: a toast and an inbox line; `done` marks the session's work as ready for review.
-- `hex_note_put(key, text)` / `hex_note_get(query?)`: a small per-project blackboard for findings agents share ("where X is declared", "how to run the tests"), stamped with the index generation and the writer; stale notes (their files changed) are marked. Budgeted.
+### 7.10 `hex_notify`
+`hex_notify(text, level?: "info"|"done"|"warn")`: a toast and an Inbox line; it is mail of kind `progress` to the user, so it is in the family log too. `done` marks the session's work as ready for review. (Findings shared between agents are `hex_agent_message(kind: "finding")` and `hex_agent_findings`, 7.7; there is no separate note store.)
+
 
 ### 7.11 Tools that close gaps in other features (section 18)
 | Tool | Arguments | Result |
@@ -530,7 +603,7 @@ For a tagged caller, `HexMcpTools.CallAs` appends at most three short advisory l
 | `hex_problems` (extend) | `since?: <generation>`, `mine?: true` | Only problems that appeared since a generation, or in files the caller wrote. |
 | `hex_run_task` (extend) | `wait_seconds?`, `attach?: true` | A task already running is joined rather than started twice; the result ends with the problems `HexBuildProblems` parsed. |
 | `hex_terminal_run` (extend) | `tab?: "agent"` | Default for tagged callers: the caller's own terminal tab (18.9). |
-| `hex_debug_*` (extend) | - | `hex_debug_start` records the driving session; stops reach it as advisories (18.5). |
+| `hex_debug_*` (extend) | - | `hex_debug_start` records the driving session; stops reach it as notices (18.5). |
 | `hex_notebook_edit` (extend) | - | A proposal on the cell when `noon_review_edits` is `propose` (18.10). |
 | `hex_open` (extend) | `reveal?: false` | A tagged caller opens files without taking the user's focus unless `reveal` (17.6). |
 
@@ -540,12 +613,12 @@ For a tagged caller, `HexMcpTools.CallAs` appends at most three short advisory l
 - Tagged bridges (`--agent-chat N`) map to session `N`. Untagged connections get an External session per connection, named from `initialize`'s client name; closed with the connection, kept in the store.
 - `McpServer.CallingChat` is set for every call. `Harnessed(...)` records `HexTouch(Read)` for `hex_read`, `hex_skim`, `hex_open`, `hex_editor`; write tools (`hex_propose_edit`, notebook edits, editor typing) record `Write`/`Propose`.
 - Edits agents make with their own tools are attributed from the agent's event stream: the extension reports them (`chat.touched`, section 9.1), and the file watcher (`HexFolders.TakeFolderChanges`) confirms the write. A changed file no session claimed within 2 s is attributed to "you".
-- Native subagents (a CLI's own Task tool): the extension reports `chat.subagent(tool_id, name, model?)`; events carrying that parent tool id are routed to a `Native` child session (**verify** that Claude Code's stream-json carries `parent_tool_use_id` in `-p` mode; Codex: none known).
+- Native subagents (a CLI's own Task tool) are already folded into their tool entry (`chat.progress`, section 0). The hub lists such an entry as a `Native` leaf of the tree and attributes what the extension reports for it (`chat.touched` with the parent tool id) to the owning session, marked "via subagent". Codex has none known.
 
 ### 8.2 Conflicts
 `HexTouches` keeps, per path, the live sessions' touches. Rules, evaluated when a touch is added:
-- `BothWrite`: two running sessions wrote or claimed the same path in the same root. Hard conflict: notice in both threads, advisory to both, Fleet `!`.
-- `StaleRead`: a session read lines that another has since written. Advisory to the reader only.
+- `BothWrite`: two running sessions wrote or claimed the same path in the same root. Hard conflict: notice card in both threads, a notice (7.9) to both, Fleet `!`.
+- `StaleRead`: a session read lines that another has since written. A notice to the reader only.
 - `OverlapProposal`: two pending proposals have hunks overlapping in a file. Review shows them together; accepting one re-anchors or stales the other.
 - Sessions in different roots (worktrees) never conflict until merge.
 
@@ -569,7 +642,7 @@ For a tagged caller, `HexMcpTools.CallAs` appends at most three short advisory l
 A background session does not toast on every turn, only raises the badge; it keeps running across face switches and with the window minimised (D3). On Hex exit with agents running the close question lists them (`HexModes.OnClose`): stop them, or (later, open question) leave them and reattach. Their turns are resumable anyway through the stored session id (`--resume`).
 
 ### 8.6 Budgets
-`HexBudgetLimit` per session and per subtree. At 80% an advisory; at 100% the hub stops forwarding new spawns for that subtree and raises an approval (`budget`): raise the limit, let this turn finish, or stop. Cost comes from the extension's `chat.usage`; where a system reports no cost (Codex today) tokens and seconds are the limits.
+`HexBudgetLimit` per session and per subtree. At 80% a notice; at 100% the hub stops forwarding new spawns for that subtree and raises an approval (`budget`): raise the limit, let this turn finish, or stop. Cost comes from the extension's `chat.usage`; where a system reports no cost (Codex today) tokens and seconds are the limits.
 
 ## 9. Agent systems (extensions)
 
@@ -579,8 +652,8 @@ A background session does not toast on every turn, only raises the badge; it kee
 | `chat.touched(path, kind)` | The agent read or wrote a file with its own tool (`kind`: `"read"`, `"write"`). |
 | `chat.edit(tool_id, path, old_text?, new_text?, content?)` | An edit tool call, so the thread shows a diff card instead of raw JSON. |
 | `chat.plan(items)` | The agent's own todo list (`[{ text, state }]`), mapped to the session plan. |
-| `chat.subagent(tool_id, name, model?)` / `chat.subagent_done(tool_id, ok, text)` | A native subagent started/finished. |
-| `chat.for_tool(tool_id)` | Returns a chat object for the native subagent of that tool id, so nested events are routed to its node. |
+| `chat.progress(tool_id, step)` | Exists. A step of a native subagent on its tool's row. The hub keeps the last 20 step texts per entry for the expanded row. |
+| `chat.touched(path, kind, tool_id?)` | With `tool_id`, the touch was made by the native subagent of that tool. |
 | `chat.usage({ input, cached_read, cached_write, output, cost, model, provider, context_used, context_limit })` | Extended; old keys keep working. |
 | `chat.root` | The folder the session runs in (worktree or workspace). |
 | `chat.option(id)` | Unchanged; new ids `isolation`, `background`. |
@@ -588,30 +661,35 @@ A background session does not toast on every turn, only raises the badge; it kee
 
 Each addition is feature-tested by extensions (`chat.plan != null`) as `claude_code` already does for `hex.agent`.
 
-### 9.2 Claude Code (`hex-extensions/claude_code/extension.hor`)
-- `arguments_for`: add `--permission-prompt-tool mcp__hex__hex_permission` when the permission option is "Ask in Hex" (new choice, the default once M5 lands; today's "Ask (refused)" becomes usable), `--disallowedTools AskUserQuestion` (questions go through `hex_ask_user`), `--append-system-prompt <hub lines>` (section 9.3). `--mcp-config` and `--resume` stay. cwd is `chat.root`.
-- `heard`: `tool_use` named `TodoWrite` -> `chat.plan(input.todos)` (no row); `Edit`/`MultiEdit`/`Write`/`NotebookEdit` -> `chat.edit(...)` + `chat.touched(path, "write")`; `Read` -> `chat.touched(path, "read")`; `Task`/`Agent` -> `chat.subagent(...)`; events with `parent_tool_use_id` -> `chat.for_tool(id)`; `result.usage` cache fields passed separately; `system/init` gives model and (where present) context limit.
-- New option `isolation` (shared | worktree) and `background` in `options`.
-- Allowed tools default gains nothing (`mcp__hex` already covers the new tools). Version bump.
+### 9.2 Claude Code (`hex-extensions/claude_code/extension.hor`, 1.6.0 today)
+Exists: `--append-system-prompt hex.harness_rules`, `--agents` with the Explore override, `parent_tool_use_id` -> `chat.progress`, steering by stream-json on stdin, `--mcp-config` per chat, `--resume`.
+- `arguments_for`: the appended system prompt becomes `hex.harness_rules + "\n" + hex.hub_rules` (guarded `hex.hub_rules != null`); the Explore override's prompt gets the read-only part of the hub rules (show by reference, report findings with `hex_agent_message`). Add `--permission-prompt-tool mcp__hex__hex_permission` when the permission option is "Ask in Hex" (new choice, the default once M5 lands), `--disallowedTools AskUserQuestion` (questions go through `hex_ask_user`). cwd is `chat.root`.
+- `heard`: `tool_use` named `TodoWrite` -> `chat.plan(input.todos)` (no row); `Edit`/`MultiEdit`/`Write`/`NotebookEdit` -> `chat.edit(...)` + `chat.touched(path, "write")`; `Read` -> `chat.touched(path, "read")`; the same inside the `parent_tool_use_id` branch with the parent id as `tool_id`, next to the `chat.progress` call that is there; `result.usage` cache fields passed separately; `system/init` gives model and (where present) the context limit.
+- New options `isolation` (shared | worktree) and `background` in `options`.
 - Environment: `MCP_TOOL_TIMEOUT` raised to cover the 600 s waits (**verify** the variable name for the installed version).
+- Version bump.
 
 ### 9.3 Instructions
-The profile `instructions` (delivered at MCP `initialize`) and `mcp.instructions` gain a short block; the in-progress fix owns the harness-first wording, this adds only the hub lines:
+`HexAgentProfiles.HARNESS_RULES` exists and already ends with the coordinating lines (start cheaper agents, `hex_agent_wait` wakes on messages, `hex_agent_send` steers, `hex_agent_message` passes findings on). The plan adds a second constant beside it, `HexAgentProfiles.HUB_RULES`, exposed as `hex.hub_rules` in `HexExtensions.Agents.cs`, sent through the same channels as the harness rules (Claude's `--append-system-prompt` and `--agents`, Codex's `developer_instructions`). No apostrophes in it (Codex takes it as a TOML literal). Draft:
 
 ```
-Ask the user with hex_ask_user (options, a recommended one, code refs) rather than guessing or asking in prose.
-Show code with hex_show (path and symbol or lines) instead of pasting it. Keep a plan with hex_plan_update.
-When the user reviews edits, propose them with hex_propose_edit (anchored old_text/new_text), and act on the verdicts.
-Subagents: give context refs to hex_agent_spawn, read results with hex_agent_brief, wait with hex_agent_wait.
-Lines starting "note:" at the end of a tool result are Hex telling you something changed.
+- asking the user, hex_ask_user with options, a recommended one and code refs, rather than guessing or asking in prose
+- showing code, hex_show with a path and a symbol or lines, rather than pasting it
+- keeping a plan, hex_plan_update as items start and finish
+- changes the user reviews, hex_propose_edit with anchored old_text and new_text, then act on the verdicts
+- starting agents, give them context refs, read hex_agent_brief rather than the whole chat
+- messages of kind notice are Hex telling you something changed, act on them
 ```
-Whether edits go through `hex_propose_edit` or the agent's own edit tool is a per-session setting ("Review edits": always propose | write then review | write freely); the block's third line is included only for the first.
+The fourth line is included only when the session's "Review edits" setting is `propose` (10.6). The spawn preamble in `AgentSpawn` (which already explains messaging) gains one sentence naming `hex_ask_user` with `route: auto`. `mcp.instructions` (for clients Hex did not start) gets the same lines in prose.
 
-### 9.4 Codex (`hex-extensions/codex/extension.hor`)
+### 9.4 Codex (`hex-extensions/codex/extension.hor`, 1.5.0 today)
+Exists: `-c developer_instructions` with the harness rules, MCP config on the line, `tool_timeout_sec=660`. Codex is not steered: mail reaches it through its inbox and `UnreadPrompt`, and an unread instruction starts its next turn (section 0).
+- `arguments_for`: developer instructions become harness rules + hub rules.
 - `heard`: `item.started/completed` of type `todo_list` -> `chat.plan`; `file_change` -> `chat.edit`/`chat.touched`; `command_execution` stays a tool row; token usage with cached input where reported (**verify** item type names against the installed `codex exec --json`).
-- Hub tools work as they are (MCP). `mcp_servers.hex.tool_timeout_sec=660` already covers the waits.
-- Approvals: `codex exec` has no interactive approval channel; the sandbox option stays the guard, and Hex-side approvals apply to Hex tools (`hex_terminal_run`, `hex_propose_edit`, restore, merge). A later step moves Codex to its app-server/MCP-server protocol for steering and approvals (open question).
-- cwd `chat.root`; `--cd` is not needed since the process starts there. Version bump.
+- Because Codex only sees mail between tool calls, notices appended to tool results (7.9) are its fastest route; answers from the user reach a Codex that is still inside `hex_ask_user` directly, and one that moved on at its next tool call or next turn.
+- Approvals: `codex exec` has no interactive approval channel; the sandbox option stays the guard, and Hex-side approvals apply to Hex tools (`hex_terminal_run`, `hex_propose_edit`, restore, merge). Moving Codex to its app-server protocol for live steering and approvals is an open question.
+- cwd `chat.root`. Version bump.
+
 
 ### 9.5 Any other MCP client
 Nothing to install: connecting to Hex's server gives the hub tools; the client appears under "Connected" in the Fleet.
@@ -624,7 +702,7 @@ Same rules as the side panel (`SendToAgent`, `SteerAgent`, queued bubbles). In N
 ### 10.2 Questions
 - Options are picked with `1`..`9`, `Tab` moves between parts, `Ctrl+Enter` answers. `Other` opens a one-line box in place. A multi-part question can be answered partly and left; the draft stays.
 - An option with a `preview` shows its code in a card beside the options when focused, through the card pool.
-- "Let #parent decide" sends it up the tree (`hex_ask_answer` advisory to the parent). "Remember" stores the answer under the question's `remember` key in `rules.hor`.
+- "Let #parent decide" sends it up the tree (mail of kind `question` to the parent, 7.2). "Remember" stores the answer under the question's `remember` key in `rules.hor`.
 - Nothing about answering steals the view: cards sit in the thread where they were asked and in the Inbox; a toast's button opens the Inbox with that card focused, and `Alt+Left` (the existing places history, `Places.cs`) goes back to where the user was.
 
 ### 10.3 Approvals and rules
@@ -676,10 +754,11 @@ All are commands added before `commands.Build(menu)` under `View/noon` and a new
 
 ## 11. Coexistence with the side-bar Agents panel
 - One model: both render `hub.Sessions`. Selection is separate (`agentChat` for the panel, `noonSession` for Noon) so the panel can follow one agent while Noon shows another.
-- The panel stays the quick surface while editing: one thread, the chat list, the composer. It gains: question and approval cards in narrow form (same builders, `narrow` flag), a plan line under the meta line (`4/9 · doing "Split Tokenize"`), a diff summary row per edit ("3 hunks in Tokens.cs · Review") that opens Noon's Review on that file, and an "Open in Noon" button in its head.
+- The panel stays the quick surface while editing: one thread, the chat list, the composer. It keeps what was just built: the folded "Subagent · <type>" row and the `$(mail)` notes (in the panel mail stays a one-line note; the Mail card of 6.5 is Noon's wide form of the same entry). It gains: question and approval cards in narrow form (same builders, `narrow` flag), a plan line under the meta line (`4/9 · doing "Split Tokenize"`), a diff summary row per edit ("3 hunks in Tokens.cs · Review") that opens Noon's Review on that file, an envelope count on chat rows with unread mail, and an "Open in Noon" button in its head (on a family root: "Open family").
 - "Explain/Change with Agent" (`DawnScene.Agent.cs`) keeps targeting the panel; a setting or `Shift` on the command sends the draft to Noon's composer.
 - From Noon, "Open in Dawn" on any code card switches face and opens the file; the panel then shows the same session if the user asked for it.
-- The in-progress fix: its concise subagent rows become the Subagent card and the tool-group row in `HexAgentRows`; its harness-first prompt text is the first paragraph of the instructions block of section 9.3, unchanged. The M0 refactor (rows moved behind `IAgentRowHost`) should land after that fix merges to avoid conflicts in `DawnScene.AgentsPanel.Rows.cs`.
+- The row builders (`RowOf`, `ToolRow`, `SubagentOf`, `NoteText`, `AgentMarkdown`, `Bubble`) move behind `IAgentRowHost` unchanged in M0; both recent commits are in `DawnScene.AgentsPanel.Rows.cs` already, so nothing is waiting to merge.
+
 
 ## 12. Performance
 
@@ -714,9 +793,10 @@ Checks: a `noon-cost` self-test in the style of `typing` ("no stutter allowed"):
 | `HexHubStoreTests.cs` | Append, reload, torn last line ignored, caps, no writes when not kept. |
 | `HexSessionSearchTests.cs` | Ranking, filters, budget. |
 | `HexBriefTests.cs` | Size cap, contents. |
-| `McpTests.cs` (extend) | `CallingChat` for every tool, `_hex_caller` cannot be forged, `hex_permission` accepts unknown properties, advisories appended once. |
+| `McpTests.cs` (extend) | `CallingChat` for every tool, `_hex_caller` cannot be forged, `hex_permission` accepts unknown properties, notices appended once. |
 | `HexAgentSystemsTests.cs` (extend) | Recorded stream-json and `codex exec --json` fixtures -> plan, edits, touches, native subagents, extended usage. |
 | `HexFaceTests.cs` | `HexModes.Show` state machine: face wanted across a scene swap, back-to-last-face, background steps run for the hidden scene. |
+| `HexMailLogTests.cs` | Family log order and cap, `Between`, `Flows`, user and Hex endpoints, `Re` links, an answer counted as a directive; extends the mail cases already in `HexAgentsPanelTests.cs`. |
 | `HexAgentsPanelTests.cs` (extend) | Shared row builders at narrow and wide widths. |
 | Engine: `VirtualStackTests` | Realized range, anchor stability on height correction, stick to end, recycle. |
 
@@ -726,12 +806,12 @@ All drive the workspace through the MCP server with `HexMcpTestClient`, as the `
 | Suite | Steps and checks |
 | --- | --- |
 | `noon` | Click the Noon button in the title bar; `hex_ui_tree` finds `noon_view`; Dawn's `body` hidden; back with the key; face restored after `OnReturned`; layout widths survive a face switch; `hex_screenshot` shot. |
-| `noon-ask` | Tagged client calls `hex_ask_user` (two parts, options, preview); badge shows 1; card in thread and Inbox; click option 2 and Answer; the call returns the expected lines; a second question times out, is answered afterwards, `hex_ask_wait` returns it; parent-routed question answered by the other client with `hex_ask_answer`. |
+| `noon-ask` | Tagged client calls `hex_ask_user` (two parts, options, preview); badge shows 1; card in thread and Inbox; click option 2 and Answer; the call returns the expected lines; a second question times out, is answered afterwards, `hex_ask_wait` returns it; parent-routed question answered by the other client with `hex_agent_message(kind: "answer", re:)`. |
 | `noon-review` | `hex_propose_edit` on a file in `testFolder` with three hunks; accept 1, reject 2 with a comment, edit 3; file content equals the expectation; result text lists the verdicts; undo restores the checkpoint; stale proposal after an outside edit is marked. |
 | `noon-code` | `hex_show` of a symbol renders a `CodeEditor` card with the file's highlighter; "Open in Dawn" switches face and lands on the line. |
 | `noon-fleet` | Stand-in agent spawns two children (`hex_agent_spawn`); tree rows, states, tokens and plan progress shown; stop parent stops children; `hex_agent_brief` text. |
 | `noon-plan` | `hex_plan_update` merge and replace; Context column and the side panel's plan line follow. |
-| `noon-conflict` | Two clients write the same file; conflict notice, Fleet `!`, advisory on the next tool result of both. |
+| `noon-conflict` | Two clients write the same file; conflict notice, Fleet `!`, a notice on the next tool result of both. |
 | `noon-approve` | `hex_request_approval` allow once, always (rule made, second call answered with no card), deny; `hex_permission` JSON shapes. |
 | `noon-checkpoint` | Turn of the stand-in agent writes files; Review shows changes; revert a hunk; restore the turn; modified-in-editor file refuses. Needs git on the machine, quiet skip otherwise. |
 | `noon-worktree` | Spawn with `isolation: worktree`; `hex_read` answers from the worktree; bring changes back as a proposal; discard removes the worktree. |
@@ -744,7 +824,8 @@ All drive the workspace through the MCP server with `HexMcpTestClient`, as the `
 | `noon-handoff` | A Problems row, a failing test row, search results, an explorer selection and an editor selection each fill the composer with the right refs and no pasted code. |
 | `noon-git` | Source Control groups changes by session; discard of one session's group leaves the user's changes; `hex_git commit` raises an approval. |
 | `noon-terminal` | `hex_terminal_run` from a tagged client runs in that session's own named tab, listed in Noon's Details. |
-| `noon-debug` | The session that started the debugger gets the stop as an advisory; the debug bar says who drives; the user stepping takes over. |
+| `noon-debug` | The session that started the debugger gets the stop as a notice; the debug bar says who drives; the user stepping takes over. |
+| `noon-mail` | Two tagged clients of one family exchange `hex_agent_message`; Mail rows show in both threads with the delivery said; the family view lists them in order; a question to the user is answered in the Inbox and wakes the coordinator's `hex_agent_wait`; a notice is appended to the next tool result; the Board draws one arrow per message. |
 | `noon-cost` | Section 12. Not in the default set if it proves slow (add to `AskedSuites` exclusions). |
 | `dusk-noon` (`Hex.Dusk/Testing`) | From Dusk, the Noon button swaps to Dawn in the Noon face; a stand-in agent keeps producing rows while Dusk is on screen. |
 Run from the real `Hex/bin/...` (extensions are found by walking up from the exe). Check names start with the suite name.
@@ -755,15 +836,16 @@ Run from the real `Hex/bin/...` (extensions are found by walking up from the exe
 | --- | --- | --- |
 | Code by reference | `hex_show`, question previews, `@` attachments are refs resolved by Hex | Agents stop echoing code they just read; the user still sees it highlighted. |
 | Anchored proposals | `hex_propose_edit` takes `old_text`/`new_text`, returns verdict lines | No whole-file output; rejected hunks cost one line of feedback instead of a rewrite turn. |
-| Harness first | The in-progress fix; plus per-caller stats shown in Context and Fleet | Visible pressure to keep using it; regressions noticed. |
+| Harness first | Built (`HARNESS_RULES`, section 0). The plan adds per-caller stats in Context and Fleet | Regressions are seen; pressure to keep using it. |
 | Read memory | `HexReadMemory`: a caller re-reading the same range at the same generation gets `unchanged since you read it (generation N)` unless `force` | Removes repeat reads, a large share of long sessions. |
 | Context packs at spawn | `hex_agent_spawn context:` resolved by Hex under a budget | Children start with what the parent found; no second search. |
 | Briefs | `hex_agent_brief` built by Hex, 1500 chars | Parents stop reading child transcripts. |
-| Event waits | `hex_agent_wait events:`, `hex_ask_wait`, `hex_proposal_wait` | One blocked call instead of polling turns. |
-| Advisories | Notes appended to results already being returned | Change awareness with no extra call. |
-| Blackboard | `hex_note_put/get`, generation-stamped | Sibling agents share findings. |
+| Event waits | `hex_agent_wait` wakes on mail (built); answers, questions, decided proposals and conflicts are mail, so they wake it too; `hex_ask_wait`, `hex_proposal_wait` for agents with no children | One blocked call instead of polling turns. |
+| Notices | Mail of kind `notice` from Hex, also appended to results already being returned (7.9) | Change awareness with no extra call. |
+| Shared findings | `hex_agent_message(kind: finding)` (built) + `hex_agent_findings`, stale-marked by index generation | Sibling agents do not rediscover; a coordinator briefs a new worker from findings. |
+| Coordinator pattern | Built: a stronger model coordinates cheaper workers and steers them on each other's findings. The family view makes it watchable and lets the user step in at the right agent | Expensive tokens go to judgement only; the user corrects one worker instead of restarting the family. |
 | Remembered answers and rules | `remember` keys, approval rules | Repeat questions and approvals cost nothing. |
-| Parent-routed questions | `route: auto` | The user is interrupted less; the child is unblocked in seconds. |
+| Parent-routed questions | `route: auto` on the mail path; the parent answers with `hex_agent_message(kind: answer, re:)` | The user is interrupted less; the child is unblocked in seconds. |
 | Plans from native todo tools | `chat.plan` mapping | Plans shown with zero agent tokens. |
 | Model routing | Cost and tokens per subtree visible; `model` per spawn | Cheap models for scouting become the obvious choice. |
 | Budgets | Section 8.6 | Runaway subtrees stop early. |
@@ -773,41 +855,65 @@ Measurement: extend `hex_harness_stats` with per-caller rows and the new counter
 
 ## 15. Milestones
 
-Each milestone ends with its unit tests and self-test suites green, `docs/agents.md` updated for new tools, and no tick over budget in `noon-cost` once that suite exists (M3).
+Each milestone ends with its unit tests and self-test suites green, `docs/agents.md` updated for new tools, and no tick over budget in `noon-cost` once that suite exists (M3). Harness-first steering, folded native subagents and the mailbox with coordinator tools are done (section 0) and are not in any milestone.
 
-**M0. Groundwork (no visible change).** `HexAgentHub` + snapshot wrapping today's chats; `HexAgentRows` extraction; `CallingChat` for every tool, `NeedsEditor`/`TakesCaller`; background steps in `HexModes.Update(dt)`; `HexAgentProcess` wake.
-Accept: all existing agent suites pass unchanged (`agents-layout`, `agents-markdown`, `mcp`, agent unit tests); a stand-in agent keeps producing rows while Dusk is on screen (`dusk-noon` first half); `hex_agent_*` results identical to before.
+### M0. Groundwork (no visible change)
+Steps in order; each is a commit that leaves every existing suite green.
 
-**M1. The Noon face.** `HexFace`, three-button selector in both scenes, `noon.hor`, Fleet, Thread (shared rows), composer, Context (usage, details), layout persistence, keys for navigation, `--face`, engine `VirtualStack`.
-Also: screenshot pass against the mockups first (17.9), Solstice Noon themes, horizon and status item for agents, Welcome row, `IAgents`.
-Accept: `noon`, `noon-fleet`, `noon-keys`, `noon-panel`, `noon-looks` pass; switching faces is one frame; a session started in the panel is usable in Noon and the reverse; shots in all seven built-in looks at 100/150/200% reviewed.
+| Step | Files | Classes and members |
+| --- | --- | --- |
+| 0.1 Caller identity for every tool | `Hex.Core/Mcp/McpServer.cs`; `Hex.Dawn/Agents/DawnScene.Mcp.cs`; `Hex.Tests/McpTests.cs` | `McpServer.CallingChat` (`AsyncLocal<int?>`, set in `CallTool` beside `CallingClient` from the session's tag); `HexMcpTool` gains `bool NeedsEditor = true`, `bool TakesCaller = false`; `HexMcpTools.CallAs` sets `CallingChat` for every call and injects `HexMcpCaller.CALLER` when `TakesCaller` or the name starts `hex_agent` (today's rule kept); `DawnScene.QueueMcp` calls `HexModes.Bring` only when the tool `NeedsEditor`. |
+| 0.2 Agents tick off screen | `Hex.Shell/HexModes.cs`; `Hex.Dawn/Shell/DawnScene.cs`, `DawnScene.Modes.cs`; `Hex.Dusk/Shell/DuskScene.cs`; `Hex.Core/Agents/HexAgentProcess.cs`; `Hex.Dawn/Agents/DawnScene.AgentsPanel.Run.cs` | `HexModes.Update(float dt)` (replaces `Update()`, both callers pass dt) runs `background[mode]` for the mode not on screen; `HexModes.InBackground(HexMode, Action<float>)`; `DawnScene.TickAgentsOffscreen(float)` = `TakeAgentLines` + `PublishAgentStatuses` + `RunMcpCalls` for calls whose tool is not `NeedsEditor`; `HexAgentProcess.Woken` (`Action?`, called by both reader threads after enqueueing), set in `StartAgent` to `Engine.WindowManager.Wake`. Mark `hex_agent_*`, `hex_agent_message`, `hex_agent_inbox` and the harness tools `NeedsEditor: false`. |
+| 0.3 The hub wraps today's chats | new `Hex.Core/Agents/Hub/HexAgentHub.cs`, `HexAgentSession.cs`, `HexHubSnapshot.cs`, `HexAgentHub.Events.cs`; `Hex.Dawn/Agents/DawnScene.AgentsPanel.cs`, `.Chats.cs`, `.Run.cs`, `DawnScene.McpAgents.cs`, `DawnScene.McpAgentMail.cs`; new `Hex.Tests/HexAgentHubTests.cs` | `HexAgentHub { Sessions, Add(chat, kind), Remove, ById, RootOf, Children, Version, Pump(), Snapshot, Post(HexHubCommand) }`; `HexAgentSession` (section 5) holding the existing `HexAgentChat`; `HexHubSnapshot` rows replace `AgentStatus` (same fields plus plan, usage, waiting, native subagents from `SubagentOf`); `DawnScene.agentChats` becomes `hub.Sessions` (a thin `agentChats` view kept for the panel code), `ChatById` -> `hub.ById`, `RootOf` moves to the hub, `agentsWaiting` moves to the hub (`hub.Waiting`), `PublishAgentStatuses` -> `hub.Pump()`. Tool results unchanged byte for byte. |
+| 0.4 The family mail log | new `Hex.Core/Agents/Hub/HexMailLog.cs`; `Hex.Core/Agents/HexAgentChat.cs`; `Hex.Dawn/Agents/DawnScene.McpAgentMail.cs`; new `Hex.Tests/HexMailLogTests.cs` | `HexAgentMail.To`, `.Re` (init properties, defaults keep callers compiling); `HexMailLog` (section 5) owned by the hub per family root; `Deliver(to, from, kind, text, directive)` also appends to the log and records the route taken (`HexMailRoute { Steered, WokeWait, Inbox, StartedTurn, Prompt }`) for the UI; `DawnScene.agentMailMade` moves to `hub.NextMailSeq()`. No user endpoint yet (M2). |
+| 0.5 Shared row builders | new `Hex.Dawn/Agents/HexAgentRows.cs`, `HexAgentRows.Tools.cs`, `IAgentRowHost.cs`; `Hex.Dawn/Agents/DawnScene.AgentsPanel.Rows.cs`; `Hex.Tests/HexAgentsPanelTests.cs` | `interface IAgentRowHost { float Width; bool Narrow; UISkin? Skin; float Motion; string Said(key, ...); void OpenLink(string); void FollowWidth(Action<float>); void Toggle(HexAgentEntry) }`; `HexAgentRows.RowOf`, `ToolRow`, `Bubble`, `AgentMarkdown`, `Text`, and the statics `SubagentOf`, `NoteText`, `ToolPreview`, `ToolTitle`, `ToolIcon`, `OneLine`, `Lines` move there unchanged; `DawnScene` implements `IAgentRowHost` for the panel and keeps `DrawAgentRows`, `FitAgentRows`, `ShowTyping`, chips and welcome. Existing tests call the statics through `HexAgentRows`. |
+| 0.6 `IAgents` for parts | `Hex.Dawn/Context/DawnContext.cs`, `DawnScene.Context.cs` | `interface IAgents { IReadOnlyList<HexAgentSession> Sessions; event Action Changed; void Show(int session); }` on `DawnContext.Agents` (grows `Handoff`, `MarksFor` in M3/M4). |
+| 0.7 Proof | new `Hex.Dusk/Testing/DuskScene.SelfTest.Agents.cs`; `Hex.Dawn/Testing/DawnScene.SelfTest.Mcp.cs` | Suite `dusk-agents`: a stand-in agent system (a script played as agent output) keeps adding rows while Dusk is on screen, and a `hex_agent_message` between two tagged clients is delivered without Dawn coming forward. `mcp` suite: `CallingChat` seen by a non-agent tool. |
 
-**M2. Questions.** `hex_ask_user`, `hex_ask_wait`, `hex_ask_answer`, `hex_ask_withdraw`; question cards in both surfaces; Inbox; badge, toasts, flash; delivery as a new turn; remembered answers; instructions block; `--disallowedTools AskUserQuestion` for Claude Code.
-Accept: `noon-ask` passes; a real Claude Code and a real Codex chat each ask a two-part question and continue with the answer (manual check recorded in a validation doc).
+Accept: `agents-layout`, `agents-markdown`, `mcp` and the agent unit tests pass unchanged; `hex_agent_*`, `hex_agent_message`, `hex_agent_inbox` results identical to before; `dusk-agents` passes; no new allocation in an idle tick (`garbage`).
 
-**M3. Code cards and proposals.** `HexCodeCard`, pool, `hex_show`; `HexProposal`, `hex_propose_edit` family; diff cards; Review for proposals with per-hunk accept/reject/edit/comment; `chat.edit` so agents' own edits show as diffs; `noon-cost`.
-Also: proposals as inline diffs in the file's own tab (18.2), agent marks on tree rows and tabs (18.1).
+### M1. The Noon face
+| Step | Files | Classes and members |
+| --- | --- | --- |
+| 1.0 Screenshot pass (17.9) | none (shots kept beside the plan's validation notes) | Corrects sizes and scales used in 1.3. |
+| 1.1 Faces and the selector | new `Hex.Shell/HexFace.cs`; `Hex.Shell/HexModeSwitch.cs`, `HexModes.cs`; `Hex.Dawn/Shell/DawnScene.Modes.cs`; `Hex.Dusk/Shell/DuskScene.Modes.cs`; `Hex.Dawn/Assets/hex/localisation/en-gb.hor` (`modes.*`, `dusk_modes.*`); new `Hex.Tests/HexFaceTests.cs` | `enum HexFace { Dawn, Noon, Dusk }`, `HexFaces.Icon(face)`, `HexFaces.Mode(face)`; `HexModeSwitch.Add(TitleBar, HexFace current, Action<HexFace> pick)` (three buttons), `HexModeSwitch.Badge(Button row, int count)`; `HexModes.Face`, `HexModes.Show(HexFace)`, `HexModes.FaceWanted`, `HexModes.LastFace`; `DawnScene.ShowFace(HexFace)`, `OnReturned` applies `FaceWanted`; `DuskScene.SwapMode` -> `PickFace(HexFace)`. |
+| 1.2 Noon themes | new `Hex.Shell/Assets/uix/flat/themes/solstice_noon.hor`, `solstice_day_noon.hor`; `Hex.Shell/Settings/HexLooks.cs`; `Hex.Dawn/Settings/DawnScene.EditorSkin.cs` | `HexLooks.NOON_THEME` key and `NoonThemeOf(look)`; `DawnScene.UseFaceTheme(HexFace)` (theme swap, or the subtree accent override if the swap is over a frame). |
+| 1.3 The view and its frame | new `Hex.Dawn/Assets/hex/noon.hor`, `noon_agent_row.hor`; `Hex.Dawn/Assets/hex/editor.hor` (include + hidden layer `noon`); new `Hex.Dawn/Noon/DawnScene.Noon.cs`; `Hex.Dawn/Shell/DawnScene.cs` (ctor `BuildNoon()` before `commands.Build`, `panelTicks.Add("noon", UpdateNoon)`), `DawnScene.Chrome.cs` (`FitChrome` -> `FitNoon`) | `DawnScene.BuildNoon`, `ShowNoon(bool)`, `UpdateNoon(float)`, `FitNoon()`, fields `noonView`, `noonSession`, `noonTab`, `noonDrawn`; splitters via `HexSplitter`; built lazily on first show. |
+| 1.4 Engine list | new `horizon/Horizon.UI/Components/Containers/VirtualStack.cs` + tests | `VirtualStack { ItemCount, KeyOf, EstimateHeight, Make, Recycle, StickToEnd, ItemGrew(i), ScrollTo(i) }` (section 12). |
+| 1.5 Fleet | new `Hex.Dawn/Noon/DawnScene.Noon.Fleet.cs` | `DrawNoonFleet()` from `HexHubSnapshot` by version hash: family blocks (`hub.RootOf`), coordinator glyph, native subagent leaves (`SubagentOf`), envelope counts (`UnreadMail`), "coordinating N" from `hub.Waiting`; `NoonFleetMenu(session)` reusing `ChatMenu` actions; filter and find; totals strip. |
+| 1.6 Thread and composer | new `Hex.Dawn/Noon/DawnScene.Noon.Thread.cs`, `DawnScene.Noon.Compose.cs`; `Hex.Dawn/Agents/HexAgentRows.Cards.cs` | `NoonRowHost : IAgentRowHost`; the thread as a `VirtualStack` over `session.Chat.Entries` with `HexAgentRows.RowOf`; `HexAgentRows.MailRow(entry, route)` (the Mail card of 6.5, from the mail entry kind added here; the panel keeps `NoteText`); composer wired to the existing `SendToAgent`/`SteerAgent`/`StopAgent` with `noonSession` as target (those take the chat as a parameter instead of reading `agentChat`); options from `BuildAgentsOptions` generalised to a host panel. |
+| 1.7 Family view | new `Hex.Dawn/Noon/DawnScene.Noon.Family.cs` | `DrawNoonFamily(root)`: member cards, the `HexMailLog.All` stream as a `VirtualStack` with kind and member filters, findings list (mail of kind `finding`); composer target picker (coordinator or a member). Decisions column is empty until M2/M3. |
+| 1.8 Context, status, horizon, Welcome | new `Hex.Dawn/Noon/DawnScene.Noon.Context.cs`, `DawnScene.NoonMarks.cs`; `Hex.Dawn/Shell/DawnScene.Horizon.cs`, `StatusBar.cs`, `DawnScene.Welcome.cs`, `Assets/hex/welcome.hor` | `DrawNoonContext(session)` (Usage, Details, Mail summary; Plan and Files sections appear in M4); status item "Agents n · ? m"; horizon states for Noon (17.3); Welcome's Agents row. |
+| 1.9 Commands, keys, flag, layout state | new `Hex.Dawn/Noon/DawnScene.Noon.Keys.cs`; `Hex.Dawn/Shell/DawnScene.Menus.cs` (`DeclareMenus`: `Agents`), `KeysWindow.When.cs` (context `noon`); `Hex.Dawn/DawnProgram.cs`, `HexOptions.cs`, `HexLaunch.cs`, `Hex/Program.cs` (`--face`, `HELP`); `Hex.Core/Workspace/HexWorkspace.cs` (last face, selected session) | `AddNoonCommands()` (navigation keys of 10.7 that need no later milestone), `NoonLayout` (widths, collapsed sections, tab) kept through `HexFiles.Kept("noon_layout.hor")`, nothing kept in self-test. |
+| 1.10 Panel link | `Hex.Dawn/Agents/DawnScene.AgentsPanel.cs`, `.Chats.cs`, `Assets/hex/agents_view.hor` | "Open in Noon" / "Open family" button and `ChatMenu` entries; envelope count on chat rows. |
+| 1.11 Suites | new `Hex.Dawn/Testing/DawnScene.SelfTest.Noon.cs`, `.NoonFleet.cs`, `.NoonKeys.cs`, `.NoonPanel.cs`, `.NoonLooks.cs`, `.NoonMail.cs`; `DawnScene.SelfTest.cs` (register); `Hex.Dusk/Testing` (`dusk-noon`) | Suites `noon`, `noon-fleet`, `noon-keys`, `noon-panel`, `noon-looks`, `noon-mail` (without its user-question step until M2), `dusk-noon`. |
+
+Accept: those suites pass; switching faces is one frame; a session started in the panel is usable in Noon and the reverse; a coordinator family started with `hex_agent_spawn` shows as one block with its mail readable in the family view while it runs; shots in all seven built-in looks at 100/150/200% reviewed.
+
+### M2 to M8
+**M2. Questions on the mail path.** User endpoint in `HexMailLog` and `Deliver`; `HexQuestion`, `hex_ask_user`, `hex_ask_wait`, `hex_ask_withdraw`; `hex_agent_message` `re` and default `to` user for roots; answers as mail (woken waits, steering, inbox, next turn, all built routes); question cards in both surfaces; Inbox; badge, toasts, flash; remembered answers; `HUB_RULES` and `hex.hub_rules` in both extensions; `--disallowedTools AskUserQuestion` for Claude Code; Decisions column of the family view.
+Accept: `noon-ask` and the full `noon-mail` pass; a real Claude Code and a real Codex chat each ask a two-part question and continue with the answer; a coordinator in `hex_agent_wait` is woken by the user's answer to its worker's escalated question (manual checks recorded in a validation doc).
+
+**M3. Code cards and proposals.** `HexCodeCard`, pool, `hex_show`; `HexProposal`, `hex_propose_edit` family; diff cards; Review for proposals with per-hunk accept/reject/edit/comment; `chat.edit` so agents' own edits show as diffs; proposals as inline diffs in the file's own tab (18.2); agent marks on tree rows and tabs (18.1); verdicts delivered as notices; `noon-cost`.
 Accept: `noon-code`, `noon-review`, `noon-inline`, `noon-marks`, `noon-cost` pass; a 3-hunk proposal can be decided with the keyboard only, in Noon or in the file's tab.
 
-**M4. Plans, touches, conflicts, Board.** `hex_plan_update/read`, `chat.plan` mapping in both extensions, `HexTouches`, conflicts, advisories, `hex_claim`, `hex_touches`, Board, Files section, native subagent nodes.
-Also: handoffs from Problems, tests, search, explorer, editor, palette (18.2-18.6, 18.11), `hex_tests`, extended `hex_problems`.
-Accept: `noon-plan`, `noon-conflict`, `noon-handoff` pass; Claude Code's own todo list appears as a plan with no tool call from the agent; a failing test reaches an agent in one click with its message, stack and source as refs.
+**M4. Plans, touches, conflicts, Board.** `hex_plan_update/read`, `chat.plan` mapping in both extensions, `HexTouches`, conflicts, notices (7.9) with the tool-result route, `hex_claim`, `hex_touches`, `hex_agent_findings`, Board with mail flow, Files and Plan sections; handoffs from Problems, tests, search, explorer, editor, palette (18.2-18.6, 18.11), `hex_tests`, extended `hex_problems`.
+Accept: `noon-plan`, `noon-conflict`, `noon-handoff` pass; Claude Code's own todo list appears as a plan with no tool call from the agent; a failing test reaches an agent in one click with its message, stack and source as refs; the Board shows every message of a live family as an arrow.
 
-**M5. Approvals and checkpoints.** Rules, `hex_request_approval`, `hex_permission` wired to Claude Code, checkpoints, changes in Review (write-then-review), restore, `hex_checkpoint*`, `hex_changes_by`, budgets.
-Also: Source Control grouping and `hex_git`, local history attribution and `hex_history`, agent terminal tabs, debugger driver and stop advisories (18.5, 18.7-18.9).
+**M5. Approvals and checkpoints.** Rules, `hex_request_approval`, `hex_permission` wired to Claude Code, checkpoints, changes in Review (write-then-review), restore, `hex_checkpoint*`, `hex_changes_by`, budgets; Source Control grouping and `hex_git`, local history attribution and `hex_history`, agent terminal tabs, debugger driver and stop notices (18.5, 18.7-18.9).
 Accept: `noon-approve`, `noon-checkpoint`, `noon-git`, `noon-terminal`, `noon-debug` pass; with permission mode "Ask in Hex" a Claude Code shell command raises a card and runs only after Allow; a whole turn can be undone and redone.
 
-**M6. Store, search, logs, background.** `HexHubStore`, lazy loading, Continue, Search tab, `hex_session_search`, Log view, export, background sessions, `hex_notify`, `hex_agent_brief`, `hex_note_*`, read memory, spawn context packs, close question listing running agents.
-Accept: `noon-store` passes; Hex restarted shows yesterday's sessions and continues one; search over 200 stored sessions answers in under 200 ms off the editor thread.
+**M6. Store, search, logs, background.** `HexHubStore` (sessions and the family mail log), lazy loading, Continue, Search tab, `hex_session_search`, Log view, export, background sessions, `hex_notify`, `hex_agent_brief`, read memory, spawn context packs, close question listing running agents.
+Accept: `noon-store` passes; Hex restarted shows yesterday's sessions with their mail and continues one; search over 200 stored sessions answers in under 200 ms off the editor thread.
 
-**M7. Worktrees.** `HexWorktrees`, `isolation: worktree`, `HexCodeIndex.Derive`, branch diff in Review, bring back / merge / discard.
-Also: notebook proposals, task attach, `hex.noon` extension API, designer and values handoffs (18.10, 18.14, 18.16).
+**M7. Worktrees.** `HexWorktrees`, `isolation: worktree`, `HexCodeIndex.Derive`, branch diff in Review, bring back / merge / discard; notebook proposals, task attach, `hex.noon` extension API, designer and values handoffs (18.10, 18.14, 18.16).
 Accept: `noon-worktree` passes; two writers on the same file in separate worktrees raise no conflict until one is brought back.
 
-**M8. Scale and polish.** 50-session soak, memory retention suite for Noon (as `document-retention`), narrow-width layouts, looks (Fluid/Frosted/Flat/Solstice) pass, localisation review, settings page, docs (`docs/agents.md`, `docs/extensions.md`, a `docs/context/noon.md` map), benchmark scenario.
+**M8. Scale and polish.** 50-session soak, memory retention suite for Noon (as `document-retention`), narrow-width layouts, all looks, localisation review, settings page, docs (`docs/agents.md`, `docs/extensions.md`, a `docs/context/noon.md` map), benchmark scenario (one task: single agent, coordinator family, coordinator family with the hub tools).
 Accept: `noon-cost` at 50 sessions within budget; `garbage` suite still clean with Noon open; docs describe every tool and chat member.
 
-Order notes: M2 and M3 are independent after M1 and can run in parallel in separate workspaces; M4 needs M3's cards; M5 needs M3's Review; M7 needs M5's checkpoints.
+Order notes: M0 steps 0.1, 0.2 and 0.5 are independent of each other; 0.3 before 0.4. In M1, 1.1-1.3 and 1.4 can run in parallel, then 1.5-1.7. M2 and M3 are independent after M1; M4 needs M3's cards; M5 needs M3's Review; M7 needs M5's checkpoints.
+
 
 ## 16. Risks and open questions
 
@@ -819,7 +925,7 @@ Risks
 | Edits written by an agent's own tools race the checkpoint. | Checkpoint at turn start, not per edit; per-edit attribution is only for display. |
 | Checkpoint cost on very large repositories or with huge untracked trees. | Private index is stat-only after the first; honour excludes; time it and skip with a notice past 2 s; setting to turn off. |
 | `VirtualStack` height estimates cause scroll jumps. | Anchor on the first visible item; correct heights only outside the viewport or with anchor compensation; tests on anchor stability. |
-| Rows refactor collides with the fix now landing in `DawnScene.AgentsPanel.Rows.cs`. | M0 starts after it merges. |
+| The mail path now carries questions, answers and notices as well as agent talk; a flood (a chatty worker, many notices) could bury an instruction. | Per-kind caps (notices coalesce per file and per proposal), instructions and answers are never dropped by the 100-message cap (drop oldest progress and notices first), the family view filters by kind. |
 | Hub tools let an agent pester the user. | Rate limit (3 pending blocking questions per session, 10 per project), `route: auto` default for children, do-not-disturb. |
 | Auto-accept and "always" rules widen what an agent can do. | User-only settings, never from `.hex/`; high-risk actions excluded; rules visible and editable. |
 | Worktree paths confuse language servers and the main index. | Worktrees under `.hex/worktrees`, excluded from the main index and from `files_exclude` by default; no language server started for them (harness only). |
@@ -919,7 +1025,7 @@ For each feature: what agents do with it (tools), how agent activity shows in it
 
 ### 18.3 Problems
 - Shows: problems in files a session wrote this turn can be filtered "from #3's changes" (a chip in the Problems head); the count of new errors since the turn started shows on the session's row and as a notice in its thread ("2 new errors in Tokens.cs").
-- Agents use: `hex_problems` with `since` and `mine`; an advisory after a write when new errors appear in what the caller wrote ("note: 2 new errors in Tokens.cs, hex_problems mine:true"), so the agent fixes them without a build and without being asked.
+- Agents use: `hex_problems` with `since` and `mine`; a notice (7.9) after a write when new errors appear in what the caller wrote ("note: 2 new errors in Tokens.cs, hex_problems mine:true"), so the agent fixes them without a build and without being asked.
 - Hands off: Problems row menu "Fix with Agent" (the selected rows: message, code, location as refs); head button "Fix All in File with Agent". `F8` navigation unchanged.
 
 ### 18.4 Test explorer
@@ -929,7 +1035,7 @@ For each feature: what agents do with it (tools), how agent activity shows in it
 
 ### 18.5 Debugger
 - Shows: when a session drives the debugger (`hex_debug_start`), the debug bar says "driven by #3" with "Take Over"; a breakpoint an agent set has a robot overlay on its gutter mark (`CodeBreakpointMark`) and is listed under "Agent breakpoints" in the Debug view, removed when the session ends unless kept.
-- Agents use: the `hex_debug_*` tools. A stop (breakpoint, exception, exit) reaches the driving session as an advisory at once ("note: stopped at Lexer.cs:131, breakpoint, hex_debug_state"), so it does not poll. The user pressing F5/F10/F11 takes the wheel: the agent's next `hex_debug_step` is refused with "the user is stepping".
+- Agents use: the `hex_debug_*` tools. A stop (breakpoint, exception, exit) reaches the driving session as a notice at once ("note: stopped at Lexer.cs:131, breakpoint, hex_debug_state"), so it does not poll. The user pressing F5/F10/F11 takes the wheel: the agent's next `hex_debug_step` is refused with "the user is stepping".
 - Hands off: on any stop, the debug bar and the exception popup offer "Ask Agent Why" (stack frames as refs, the exception text, the top frame's locals under a budget from `HexDebugVariables`); Watch and data-tip menu "Ask Agent About This Value".
 
 ### 18.6 Search

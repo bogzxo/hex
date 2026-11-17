@@ -94,6 +94,9 @@ internal sealed class HexAgentChat(int id, string agent)
     private readonly List<HexAgentMail> mail = [];
     private long mailSeen;
 
+    /// <summary>Something about the chat that isn't a row moved (what it used), so what shows it is drawn again.</summary>
+    public void Moved() => Version++;
+
     /// <summary>The messages other chats' agents sent this one, read or not, on the editor's thread.</summary>
     public IReadOnlyList<HexAgentMail> Mail => mail;
 
@@ -173,6 +176,15 @@ internal sealed class HexAgentChat(int id, string agent)
     public long OutputTokens { get; set; }
     public double Cost { get; set; }
     public string? Model { get; set; }
+
+    /// <summary>How much of its context the agent's last call took, what it was reading when it last spoke, 0 when it didn't say.</summary>
+    public long ContextUsed { get; set; }
+
+    /// <summary>How much context its model has, 0 when nobody said.</summary>
+    public long ContextLimit { get; set; }
+
+    /// <summary>The input tokens read back out of the cache rather than paid for in full, over the whole chat.</summary>
+    public long CacheRead { get; set; }
 
     private long turnStarted;
 

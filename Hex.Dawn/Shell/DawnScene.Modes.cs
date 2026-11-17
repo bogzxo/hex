@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
 
     private void BuildModes()
     {
-        modeToggle = HexModeSwitch.Add((TitleBar)top, HexMode.Dawn, SwapMode);
+        modeToggle = HexModeSwitch.Add((TitleBar)top, HexFace.Dawn, PickFace);
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
         HexModes.Leaving += mode =>
@@ -37,6 +37,15 @@ internal sealed partial class DawnScene
                 agentPointer.Release();
             }
         };
+    }
+
+    /// <summary>A face picked on the title bar, Dusk swapping the scene and Dawn and Noon trading places in this one.</summary>
+    private void PickFace(HexFace face)
+    {
+        if (face == HexFace.Dusk)
+            SwapMode();
+        else
+            ShowFace(face);
     }
 
     /// <summary>To Dusk, in the folder that's open, the window's own when Hex.exe started it.</summary>
@@ -60,7 +69,16 @@ internal sealed partial class DawnScene
     /// <summary>Back from Dusk, the code given the keyboard again if it's what's showing.</summary>
     public override void OnReturned()
     {
-        if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
+        // Noon picked in Dusk comes back as Noon, anything else as the face that was left
+        if (HexModes.FaceWanted is { } wanted)
+        {
+            HexModes.FaceWanted = null;
+            ShowFace(wanted);
+        }
+
+        if (Face == HexFace.Noon)
+            agentsInput.Focus();
+        else if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
             code.Focus();
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
 

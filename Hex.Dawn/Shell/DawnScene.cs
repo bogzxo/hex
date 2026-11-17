@@ -201,6 +201,7 @@ internal sealed partial class DawnScene : Scene
         BuildQuiet();
         BuildTerminal();
         BuildAgentsPanel();
+        BuildNoon();
         StartRemote();
         BuildSideTree();
         BuildExtensionViews();
@@ -544,6 +545,7 @@ internal sealed partial class DawnScene : Scene
             .Add("terminal", UpdateTerminal)
             .Add("remote", UpdateRemote)
             .Add("mcp", UpdateMcp)
+            .Add("noon", UpdateNoon)
             .Add("console", running.UpdateConsole)
             .Add("asked_console", running.RunAskedConsole)
             .Add("panel", UpdatePanel);

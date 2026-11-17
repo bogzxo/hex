@@ -48,6 +48,15 @@ internal static class HexAgentChatApi
                 chat.Cost += dollars.Value;
             if (used.Properties.TryGetValue("model", out IRuntimeValue? model) && model is StringValue { Value.Length: > 0 } named)
                 chat.Model = named.Value;
+
+            // Where its context is, as of its last call, and how much there is of it
+            if (used.Properties.TryGetValue("context", out IRuntimeValue? context) && context is NumberValue { Value: > 0 } taken)
+                chat.ContextUsed = (long)taken.Value;
+            if (used.Properties.TryGetValue("context_limit", out IRuntimeValue? limit) && limit is NumberValue { Value: > 0 } room)
+                chat.ContextLimit = (long)room.Value;
+            if (used.Properties.TryGetValue("cache_read", out IRuntimeValue? cached) && cached is NumberValue cache)
+                chat.CacheRead += (long)cache.Value;
+            chat.Moved();
         })),
         ("taken", Natives.Action("taken", _ =>
         {

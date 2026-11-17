@@ -493,7 +493,9 @@ internal sealed partial class DawnScene
                 ? Said("agents_panel.subagent_steps", ("count", entry.Steps.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("step", entry.Progress ?? subagent.About))
                 : subagent.About;
         }
-        var holder = new Panel { Fill = UIFill.Horizontal, Color = entry.Open ? hover with { W = hover.W * 0.6f } : null, Radius = 6 };
+        // A bubble of its own, a shade over the chat and a little more when it's open, its state a line along the bottom,
+        // blue while it runs, green when it went and red when it failed. A failed one filled red was most of the chat red
+        var holder = new Panel { Fill = UIFill.Horizontal, Color = hover with { W = hover.W * (entry.Open ? 0.75f : 0.45f) }, Radius = 8, Padding = new UIEdges(0, 0, 0, 2) };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
         Button head = stack.Add(new Button
         {
@@ -503,7 +505,6 @@ internal sealed partial class DawnScene
             LabelScale = 0.15f,
             Size = new Vector2(0, 30),
             Fill = UIFill.Horizontal,
-            Danger = entry.State == HexAgentToolState.Failed,
             Animated = false,
             Tooltip = $"{entry.ToolName}, {state}\n{preview}",
             Padding = new UIEdges(4, 0, compact ? 24 : 90, 0),
@@ -567,8 +568,19 @@ internal sealed partial class DawnScene
             }
         }
 
+        // Kept in from the bubble's round corners
+        holder.Add(new Panel { Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Padding = new UIEdges(8, 0, 8, 0), Color = Vector4.Zero })
+            .With(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Radius = 1, Color = ToolStateColour(entry.State, skin) });
         return holder;
     }
+
+    /// <summary>The colour of the line under a tool's bubble, blue while it runs, green when it went, red when it failed.</summary>
+    internal static Vector4 ToolStateColour(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
+    {
+        HexAgentToolState.Running => RUNNING_BLUE with { W = 0.9f },
+        HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.9f },
+        _ => (skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.75f }
+    };
 
     /// <summary>Prefer the useful argument over JSON scaffolding; plain or partial tool input remains readable.</summary>
     internal static string ToolPreview(string? input)
