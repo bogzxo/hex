@@ -18,8 +18,8 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 - [x] Tool calls one after another grouped into one row, folded by default, slim lines when opened (3e32fb9)
 - [x] Scrolling the chat in Agentic works over the margins round the centred column (HexWheelStack)
-- [ ] The terminal glitches while the panels round it are resized (as the agents panel did), make it follow the size on
-      the tick it moves and hold its place
+- [x] The terminal glitches while the panels round it are resized, the shell told the new size only once it holds
+      still for 120 ms (horizon TerminalView)
 - [x] A blue gutter beside tool calls while they run
 - [x] A click anywhere in the message card's writing room lands in the box (the box is two rows at the least)
 - [x] Opening or folding a group of calls keeps it where it is on screen
