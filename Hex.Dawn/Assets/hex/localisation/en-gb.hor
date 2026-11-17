@@ -3364,7 +3364,23 @@ let strings = {
         context_of: "{used} of {limit} · {share}%",
         context_only: "{used} in context",
         cache: "{read} read from the cache · {share}% of input",
-        turns: "{turns} turns · {calls} tool calls"
+        turns: "{turns} turns · {calls} tool calls",
+        limits: "Limits",
+        compacted: "Compacted {count}×",
+        compacted_from: "Compacted {count}× · last {before} to {after}",
+        retries: "{count} calls retried",
+        systems: "Agent systems",
+        systems_tip: "Every agent system Hex can run, whether it's installed, what its chats are using this session and how near it is to its limits",
+        system_missing: "Not installed",
+        system_ready: "Ready",
+        system_working: "{count} working",
+        system_chats: "{chats} chats · {tokens} tokens · ${cost}",
+        system_chats_free: "{chats} chats · {tokens} tokens",
+        system_models: "Models {models}",
+        system_context: "Fullest context {share}% · {chat}",
+        system_compacted: "Compacted {count}× · {retries} retries",
+        system_harness: "Hex saved {tokens} tokens · {share}% in {calls} calls",
+        system_none: "No agent systems yet. Claude Code, Codex and Gemini come as extensions."
     },
 
     modes: {

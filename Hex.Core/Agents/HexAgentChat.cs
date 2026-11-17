@@ -186,6 +186,22 @@ internal sealed class HexAgentChat(int id, string agent)
     /// <summary>The input tokens read back out of the cache rather than paid for in full, over the whole chat.</summary>
     public long CacheRead { get; set; }
 
+    /// <summary>How many times its context was compacted, the agent summing up what went before to make room.</summary>
+    public int Compactions { get; private set; }
+
+    /// <summary>How many tokens the context held before the last compaction and after it, 0 when nobody said.</summary>
+    public long CompactedFrom { get; private set; }
+    public long CompactedTo { get; private set; }
+
+    /// <summary>How many times a call to the model was tried again after it failed, over the whole chat.</summary>
+    public int Retries { get; private set; }
+
+    /// <summary>Where the agent stands against its rate or usage limit, as last said, null while nobody has said.</summary>
+    public HexAgentLimit? Limit { get; private set; }
+
+    // The row saying the agent is trying a call again, put right in place while it keeps trying rather than a row a try
+    private HexAgentEntry? retrying;
+
     private long turnStarted;
 
     /// <summary>How long the last turn took (or the one going on has), in seconds.</summary>
@@ -349,6 +365,55 @@ internal sealed class HexAgentChat(int id, string agent)
         }
 
         Version++;
+    }
+
+    /// <summary>
+    /// The agent's context compacted, what it held before and after in tokens (0 for what it didn't say) and whether it
+    /// did it by itself or was asked. A quiet row says so, since the agent forgets the detail of what went before.
+    /// </summary>
+    public HexAgentEntry Compacted(string trigger, long before, long after)
+    {
+        Compactions++;
+        CompactedFrom = before;
+        CompactedTo = after;
+        if (after > 0)
+            ContextUsed = after;
+        return Note(HexAgentLimits.CompactionNote(trigger, before, after));
+    }
+
+    /// <summary>
+    /// A call to the model tried again, the how manyth try of how many, how long it waits first and why. While it keeps
+    /// trying the same row says the latest try, so a run of retries is one row and not a column of them.
+    /// </summary>
+    public HexAgentEntry Retry(int attempt, int most, double delaySeconds, string why)
+    {
+        Retries++;
+        string said = HexAgentLimits.RetryNote(attempt, most, delaySeconds, why);
+        if (retrying is not null && entries.Count > 0 && ReferenceEquals(entries[^1], retrying))
+        {
+            retrying.Text = said;
+            Touch(retrying);
+            return retrying;
+        }
+
+        return retrying = Note(said);
+    }
+
+    /// <summary>
+    /// Where the agent stands against a limit as it said it. A row only when that comes to something the person watching
+    /// needs to know, close to the limit or over it, or back under it after being over, never for every turn's all clear.
+    /// </summary>
+    public HexAgentEntry? Limited(HexAgentLimit limit)
+    {
+        HexAgentLimit? was = Limit;
+        Limit = limit;
+        Moved();
+        bool worse = limit.State != HexAgentLimitState.Ok && (was is null || was.State < limit.State || was.Kind != limit.Kind);
+        bool better = was is { State: HexAgentLimitState.Hit } && limit.State == HexAgentLimitState.Ok;
+        if (!worse && !better)
+            return null;
+        string said = HexAgentLimits.LimitNote(limit, DateTimeOffset.Now);
+        return limit.State == HexAgentLimitState.Hit ? Error(said) : Note(said);
     }
 
     /// <summary>The time of the turn going on brought up to now, for the panel's footer.</summary>

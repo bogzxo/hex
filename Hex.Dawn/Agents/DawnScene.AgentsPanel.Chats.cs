@@ -23,6 +23,7 @@ internal sealed partial class DawnScene
     private Button agentsActivity = null!;
     private bool agentsListOpen = true;
     private string agentsListDrawn = string.Empty;
+    private Panel agentsSystemsHolder = null!;
 
     // How far down the chat starts under the head, the list's height and what the activity bar's robot says
     private float agentsHeadHeight = 58.0f;
@@ -44,6 +45,9 @@ internal sealed partial class DawnScene
         };
         agentsListScroll = agentsList.Add(new ScrollPanel { Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal, Position = new Vector2(0, -CHATS_HEAD), Fade = 8.0f });
         agentsListRows = agentsListScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 1 });
+        // The agent systems under the chats, folded to a line each until opened, the side bar's room being the chat's
+        agentsSystemsHolder = agentsList.Add(new Panel { Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal, Color = Vector4.Zero });
+        agentsSystems = MakeSystemsPanel(agentsSystemsHolder, open: false);
         agentsActivity = layout.Get<Button>("act_agents");
     }
 
@@ -79,6 +83,16 @@ internal sealed partial class DawnScene
         bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || agentChats.Any(chat => chat.Parent is not null));
         float width = agentsView.Size.X;
 
+        // The systems under the chats in Dawn, Noon has them under its fleet. Their words put right every time, the list
+        // laid out again only when the room they take changed
+        bool systems = Face != HexFace.Noon && agentsSystems is not null && AgentSystems().Length > 0;
+        float systemsTall = 0.0f;
+        if (systems)
+        {
+            DrawSystems(agentsSystems!, width - 8.0f);
+            systemsTall = agentsSystems!.Root.Bounds.IsEmpty ? 0.0f : MathF.Ceiling(agentsSystems.Root.Bounds.Height);
+        }
+
         // Grows with the chats up to half the panel, and never less than the usual most. Only how many rows that is goes in
         // what it's drawn again for, and the width not at all, the cards follow it themselves (UpdateAgentsPanel)
         // The cards are made again only when the chats or how they're doing changed. Their clocks and what they're on are
@@ -87,7 +101,7 @@ internal sealed partial class DawnScene
         foreach (HexAgentChat chat in agentChats)
             chat.Tick();
         int working = agentChats.Count(chat => chat.Running);
-        string said = $"{wanted}{agentsListOpen}{most}{working}|{AgentCardsKey(ChatsInOrder())}";
+        string said = $"{wanted}{agentsListOpen}{most}{working}{systems}{systemsTall}|{AgentCardsKey(ChatsInOrder())}";
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)
@@ -96,7 +110,9 @@ internal sealed partial class DawnScene
         }
         agentsListDrawn = said;
 
-        agentsList.Visible = wanted;
+        agentsList.Visible = wanted || systems;
+        agentsListHead.Visible = wanted;
+        agentsListScroll.Visible = wanted && agentsListOpen;
         float height = 0.0f;
         if (wanted)
         {
@@ -126,6 +142,14 @@ internal sealed partial class DawnScene
             agentsListScroll.Size = new Vector2(0, listed);
             agentsListScroll.Visible = agentsListOpen;
             height = CHATS_HEAD + listed + 6.0f;
+        }
+
+        agentsSystemsHolder.Visible = systems;
+        if (systems)
+        {
+            agentsSystemsHolder.Position = new Vector2(0, -height);
+            agentsSystemsHolder.Size = new Vector2(0, systemsTall);
+            height += systemsTall + 4.0f;
         }
 
         agentsList.Size = new Vector2(0, height);

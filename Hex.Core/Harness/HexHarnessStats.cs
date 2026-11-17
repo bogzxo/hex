@@ -17,6 +17,9 @@ internal sealed class HexHarnessStats
 
     private readonly ConcurrentDictionary<string, Tool> tools = new();
 
+    // The same again by the MCP client that asked, so each agent system can be told what the harness saved it
+    private readonly ConcurrentDictionary<string, Tool> clients = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>A call counted, what it said, what the plain way would have read and whether it came from the kept answers.</summary>
     public void Count(string tool, long said, long plain, bool kept)
     {
@@ -26,6 +29,31 @@ internal sealed class HexHarnessStats
             Interlocked.Increment(ref counted.Kept);
         Interlocked.Add(ref counted.Said, said);
         Interlocked.Add(ref counted.Plain, Math.Max(plain, said));
+
+        if (McpServer.CallingClient.Value is { Length: > 0 } client)
+        {
+            Tool by = clients.GetOrAdd(client, _ => new Tool());
+            Interlocked.Increment(ref by.Calls);
+            Interlocked.Add(ref by.Said, said);
+            Interlocked.Add(ref by.Plain, Math.Max(plain, said));
+        }
+    }
+
+    /// <summary>
+    /// The calls, characters handed back and what the plain way would have read for the clients whose names have one of
+    /// <paramref name="names"/> in them, the way an agent profile's clients match the client that connected.
+    /// </summary>
+    public (long Calls, long Said, long Plain) TotalsFor(IReadOnlyCollection<string> names)
+    {
+        long calls = 0, said = 0, plain = 0;
+        foreach (var (client, tool) in clients)
+        {
+            if (!names.Any(name => client.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            (calls, said, plain) = (calls + Interlocked.Read(ref tool.Calls), said + Interlocked.Read(ref tool.Said), plain + Interlocked.Read(ref tool.Plain));
+        }
+
+        return (calls, said, plain);
     }
 
     /// <summary>Every tool's together, the calls, the characters handed back and what the plain way would have read.</summary>

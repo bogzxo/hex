@@ -63,8 +63,74 @@ internal sealed partial class HexExtensions
             string path = PathFor(extension, args.Text(0));
             string[] keys = args[1] is ListValue named ? [.. named.Items.Select(item => item is StringValue text ? text.Value : item.ToString() ?? string.Empty)] : [args.Text(1)];
             return JsonSet(path, keys, args.Has(2) ? args[2] : Values.Null) is { } why ? new StringValue(why) : Values.Null;
-        }))
+        })),
+        // The whole lines a file has gained since a place in it, for a log an agent system keeps beside its output (Codex's
+        // session file says its limits and compactions where its --json doesn't). { lines, end }, end where to go on from,
+        // and a place below 0 gives no lines and the end, to read only what comes after
+        ("read_lines", Natives.Function("read_lines", args =>
+        {
+            var (lines, end) = ReadLinesFrom(PathFor(extension, args.Text(0)), args.Has(1) && args[1] is NumberValue from ? (long)from.Value : 0);
+            return Natives.Object(("lines", new ListValue([.. lines.Select(line => (IRuntimeValue)new StringValue(line))])), ("end", new NumberValue(end)));
+        })),
+        // A file under a folder by how its name ends, the newest when there are several, null when there's none
+        ("find_file", Natives.Function("find_file", args => FindFile(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null))
     ];
+
+    // The most a read_lines takes at once, a log that grew more than that is read on from where this stopped
+    private const int READ_LINES_MOST = 4 << 20;
+
+    /// <summary>
+    /// The whole lines of a file from a byte offset, as far as the last line ending, and the offset after them. A file
+    /// shorter than the offset was written again, so it's read from its start.
+    /// </summary>
+    internal static (List<string> Lines, long End) ReadLinesFrom(string path, long from)
+    {
+        var lines = new List<string>();
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            // Below 0 is the end, for a reader that wants only what's written from now on
+            if (from < 0)
+                return (lines, stream.Length);
+            if (from > stream.Length)
+                from = 0;
+            stream.Position = from;
+            byte[] buffer = new byte[(int)Math.Min(READ_LINES_MOST, stream.Length - from)];
+            int read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+            if (read == 0)
+                return (lines, from);
+            int last = Array.LastIndexOf(buffer, (byte)'\n', read - 1);
+            if (last < 0)
+                return (lines, from);
+            foreach (string line in System.Text.Encoding.UTF8.GetString(buffer, 0, last + 1).Split('\n'))
+            {
+                if (line.TrimEnd('\r') is { Length: > 0 } whole)
+                    lines.Add(whole);
+            }
+
+            return (lines, from + last + 1);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return (lines, from);
+        }
+    }
+
+    /// <summary>The newest file under a folder whose name ends as said, null when there's none or the folder isn't there.</summary>
+    internal static string? FindFile(string folder, string ending)
+    {
+        if (ending.Length == 0 || !Directory.Exists(folder))
+            return null;
+        try
+        {
+            return new DirectoryInfo(folder).EnumerateFiles("*" + ending, SearchOption.AllDirectories)
+                .OrderByDescending(file => file.LastWriteTimeUtc).FirstOrDefault()?.FullName;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// A key of a JSON file set to a value, the objects on the way made when they aren't there and the rest of the file

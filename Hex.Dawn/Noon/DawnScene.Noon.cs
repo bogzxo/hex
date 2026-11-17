@@ -59,6 +59,8 @@ internal sealed partial class DawnScene
         noonFleetSummary = noonFleet.Add(new Label { Text = string.Empty, TextScale = 0.115f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 6, 6) });
         noonFleetRows = noonFleetScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
+        // The agent systems at the foot of the fleet, what each is and where it stands, the fleet's list making room
+        noonSystems = MakeSystemsPanel(noonFleet, open: true);
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         noonCenter = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0 });
@@ -176,7 +178,8 @@ internal sealed partial class DawnScene
         noonView.Size = new Vector2(width, height);
 
         noonFleet.Size = new Vector2(NOON_FLEET, height);
-        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52));
+        float systems = noonSystems is { Root.Bounds.IsEmpty: false } panel ? MathF.Ceiling(panel.Root.Bounds.Height) + noonFleet.Spacing : 0.0f;
+        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - systems));
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
         float side = MathF.Floor((middle - column) * 0.5f);
@@ -215,6 +218,8 @@ internal sealed partial class DawnScene
 
         foreach (Action<float> refresh in noonCards)
             refresh(width);
+        if (noonSystems is not null)
+            DrawSystems(noonSystems, width);
 
         int running = agentChats.Count(chat => chat.Running);
         double cost = agentChats.Sum(chat => chat.Cost);
@@ -270,6 +275,25 @@ internal sealed partial class DawnScene
             int turns = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User);
             int calls = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.Tool);
             ContextLine("history", Said("noon.turns", ("turns", turns.ToString()), ("calls", calls.ToString())));
+        }
+
+        // What its system said along the way, how often its context was summed up, calls tried again, and how near it is
+        // to the plan's limit
+        if (chat.Compactions > 0 || chat.Retries > 0 || chat.Limit is not null)
+        {
+            ContextSection(Said("noon.limits"));
+            if (chat.Compactions > 0)
+                ContextLine("fold", chat.CompactedFrom > 0
+                    ? Said("noon.compacted_from", ("count", chat.Compactions.ToString()), ("before", HexAgentLimits.Tokens(chat.CompactedFrom)), ("after", chat.CompactedTo > 0 ? HexAgentLimits.Tokens(chat.CompactedTo) : "?"))
+                    : Said("noon.compacted", ("count", chat.Compactions.ToString())));
+            if (chat.Retries > 0)
+                ContextLine("refresh", Said("noon.retries", ("count", chat.Retries.ToString())));
+            if (chat.Limit is { } limit)
+            {
+                ContextLine(LimitIcon(limit), HexAgentLimits.LimitLine(limit, DateTimeOffset.Now));
+                if (limit.Used >= 0)
+                    noonContextRows.Add(ContextBar((float)Math.Clamp(limit.Used, 0.0, 1.0)));
+            }
         }
 
         // Who it works with, a click opens them

@@ -58,6 +58,27 @@ internal static class HexAgentChatApi
                 chat.CacheRead += (long)cache.Value;
             chat.Moved();
         })),
+        // The agent's context compacted, { trigger: "auto" or "manual", before, after } in tokens
+        ("compacted", Natives.Action("compacted", args =>
+        {
+            ObjectValue said = args.Has(0) && args[0] is ObjectValue given ? given : Natives.Object();
+            chat.Compacted(TextOf(said, "trigger") ?? "auto", (long)NumberOf(said, "before", 0), (long)NumberOf(said, "after", 0));
+        })),
+        // A call to the model tried again, { attempt, most, delay } with the delay in seconds, and why
+        ("retry", Natives.Action("retry", args =>
+        {
+            ObjectValue said = args.Has(0) && args[0] is ObjectValue given ? given : Natives.Object();
+            chat.Retry((int)NumberOf(said, "attempt", chat.Retries + 1), (int)NumberOf(said, "most", 0), NumberOf(said, "delay", 0), TextOf(said, "why") ?? string.Empty);
+        })),
+        // Where it stands against a limit, { kind, status, used, resets, message }, used a share from 0 to 1 and resets
+        // the time it starts again in seconds since 1970, as the systems say them
+        ("limit", Natives.Action("limit", args =>
+        {
+            ObjectValue said = args.Object(0);
+            double resets = NumberOf(said, "resets", 0);
+            chat.Limited(new HexAgentLimit(TextOf(said, "kind") ?? string.Empty, HexAgentLimit.StateOf(TextOf(said, "status")),
+                NumberOf(said, "used", -1), resets > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)resets) : null, TextOf(said, "message")));
+        })),
         ("taken", Natives.Action("taken", _ =>
         {
             if (taken is not null)
@@ -72,4 +93,10 @@ internal static class HexAgentChatApi
             else
                 chat.Done();
         })));
+
+    private static string? TextOf(ObjectValue said, string key) =>
+        said.Properties.TryGetValue(key, out IRuntimeValue? value) && value is StringValue { Value.Length: > 0 } text ? text.Value : null;
+
+    private static double NumberOf(ObjectValue said, string key, double otherwise) =>
+        said.Properties.TryGetValue(key, out IRuntimeValue? value) && value is NumberValue number && double.IsFinite(number.Value) ? number.Value : otherwise;
 }

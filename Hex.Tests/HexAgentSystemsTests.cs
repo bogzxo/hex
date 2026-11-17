@@ -190,7 +190,16 @@ public sealed class HexAgentSystemsTests : IDisposable
             ("exists", Natives.Function("exists", args => Values.Bool(existing is not null && args.Text(0).EndsWith(".md")))),
             ("read", Natives.Function("read", _ => new StringValue(existing ?? string.Empty))),
             ("write", Natives.Action("write", args => written[Path.GetFileName(args.Text(0))] = args.Text(1))),
-            ("ask", Natives.Action("ask", args => runtime.Invoke(args.Callable(1), hex, new StringValue("Add it")))));
+            ("ask", Natives.Action("ask", args => runtime.Invoke(args.Callable(1), hex, new StringValue("Add it")))),
+            ("find_file", Natives.Function("find_file", args => HexExtensions.FindFile(args.Text(0), args.Text(1)) is { } found ? new StringValue(found) : Values.Null)),
+            ("read_lines", Natives.Function("read_lines", args =>
+            {
+                var (lines, end) = HexExtensions.ReadLinesFrom(args.Text(0), (long)((NumberValue)args[1]).Value);
+                return Natives.Object(("lines", new ListValue([.. lines.Select(line => (IRuntimeValue)new StringValue(line))])), ("end", new NumberValue(end)));
+            })),
+            ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
+            ("temp", new StringValue(folder)),
+            ("mcp_server", Natives.Function("mcp_server", _ => Natives.Object(("command", new StringValue("Hex.exe")), ("args", Natives.List(["--mcp-connect"]))))));
 
         string extension = Path.Combine(Catalog.Folder, id);
         runtime = new HIDLRuntime { BaseDirectory = extension, Output = null };
@@ -233,6 +242,132 @@ public sealed class HexAgentSystemsTests : IDisposable
 
         runtime.Invoke(commands["Connect Codex to Hex"], hex);
         Assert.Equal("[mcp_servers.hex]\ncommand = 'C:\\Hex\\Hex.exe'\nargs = [\"--mcp-connect\"]\n", written["config.toml"]);
+    }
+
+    /// <summary>The lines given played through an extension's on_event into a chat, as its agent would print them.</summary>
+    private HexAgentChat Play(string id, params string[] lines)
+    {
+        var (runtime, hex, _, _) = Load(id);
+        IRuntimeValue run = Agents(runtime, hex);
+        var chat = new HexAgentChat(1, id);
+        chat.Ask("go");
+        ObjectValue said = HexAgentChatApi.Of(chat, folder);
+        foreach (string line in lines)
+            runtime.Invoke(((ObjectValue)run).Properties["on_event"], said, HexJson.Parse(line)!);
+        return chat;
+    }
+
+    // The run object the extension handed hex.agent, said again to a hex that keeps it
+    private static IRuntimeValue Agents(HIDLRuntime runtime, ObjectValue hex)
+    {
+        IRuntimeValue? run = null;
+        var keeping = Natives.Object([.. hex.Properties.Select(pair => (pair.Key, pair.Value)).Where(pair => pair.Key != "agent"),
+            ("agent", Natives.Action("agent", args => run = args.Object(0).Properties["run"]))]);
+        runtime.Invoke(runtime.UserScope.Variables["say_who"], keeping);
+        return run!;
+    }
+
+    [Fact]
+    public void Claude_codes_compactions_limits_and_retries_reach_the_chat()
+    {
+        HexAgentChat chat = Play("claude_code",
+            """{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":2000,"error_status":529,"error":"overloaded"}""",
+            """{"type":"system","subtype":"api_retry","attempt":2,"max_retries":10,"retry_delay_ms":4000,"error_status":529,"error":"overloaded"}""",
+            """{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":47438,"post_tokens":14064}}""",
+            """{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1794933000,"rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.75,"resetsAt":1794933000,"status":"allowed"},"seven_day":{"utilization":0.32,"resetsAt":1795341600,"status":"allowed"}}}}""",
+            """{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1795341600,"rateLimitType":"seven_day","unifiedWindows":{"five_hour":{"utilization":0.8,"resetsAt":1794933000},"seven_day":{"utilization":1.0,"resetsAt":1795341600}}}}""");
+
+        // Two tries are one row saying the latest, the compaction a row of its own
+        Assert.Equal(2, chat.Retries);
+        Assert.Single(chat.Entries, entry => entry.Text.StartsWith("Retrying, attempt 2 of 10, overloaded (529)", StringComparison.Ordinal));
+        Assert.Equal(1, chat.Compactions);
+        Assert.Equal(47438, chat.CompactedFrom);
+        Assert.Equal(14064, chat.CompactedTo);
+        Assert.Contains(chat.Entries, entry => entry.Text == "Context compacted on request, 47k to 14k tokens");
+
+        // The binding window when it's refused, a row that fails the turn, the all clear before it no row at all
+        Assert.Equal("seven_day", chat.Limit?.Kind);
+        Assert.Equal(HexAgentLimitState.Hit, chat.Limit?.State);
+        Assert.Equal(1.0, chat.Limit?.Used);
+        // HIDL's numbers are single precision, so a time in seconds since 1970 comes through to within a minute or two
+        Assert.InRange((chat.Limit!.Resets!.Value - DateTimeOffset.FromUnixTimeSeconds(1795341600)).Duration(), TimeSpan.Zero, TimeSpan.FromMinutes(2));
+        Assert.True(chat.Failed);
+        Assert.Single(chat.Entries, entry => entry.Text.StartsWith("Limit reached, weekly limit · 100% used", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Claude_codes_todo_list_is_a_checklist_and_a_slash_commands_echo_takes_nothing_queued()
+    {
+        HexAgentChat chat = Play("claude_code",
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"TodoWrite","input":{"todos":[{"content":"Read it","status":"completed"},{"content":"Fix it","status":"in_progress"}]}}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}""");
+        Assert.Contains(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Note && entry.Text == "[x] Read it\n[~] Fix it");
+        Assert.DoesNotContain(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Tool);
+
+        chat.Steer("and this");
+        var (runtime, hex, _, _) = Load("claude_code");
+        runtime.Invoke(((ObjectValue)Agents(runtime, hex)).Properties["on_event"], HexAgentChatApi.Of(chat, folder),
+            HexJson.Parse("""{"type":"user","isReplay":true,"message":{"content":"<local-command-stdout>Compacted </local-command-stdout>"}}""")!);
+        Assert.True(chat.HasQueued);
+    }
+
+    [Fact]
+    public void Codex_reads_its_limits_and_compactions_from_its_session_file_and_says_reconnects_as_retries()
+    {
+        string thread = "01a1ea31-c479-7da1-92b0-97fd13249ad5";
+        string sessions = Path.Combine(folder, ".codex", "sessions", "2026", "11", "17");
+        Directory.CreateDirectory(sessions);
+        string log = Path.Combine(sessions, $"rollout-2026-11-17T17-48-13-{thread}.jsonl");
+        File.WriteAllText(log, """{"type":"session_meta","payload":{"id":"x"}}""" + "\n");
+
+        var (runtime, hex, _, _) = Load("codex");
+        ObjectValue run = (ObjectValue)Agents(runtime, hex);
+        var chat = new HexAgentChat(1, "codex");
+        chat.Ask("go");
+        ObjectValue said = HexAgentChatApi.Of(chat, folder);
+        void Hear(string line) => runtime.Invoke(run.Properties["on_event"], said, HexJson.Parse(line)!);
+
+        Hear($$"""{"type":"thread.started","thread_id":"{{thread}}"}""");
+        File.AppendAllText(log, string.Join("\n",
+            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":449460},"model_context_window":475000},"rate_limits":null}}""",
+            """{"type":"compacted","payload":{"message":""}}""",
+            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":0},"model_context_window":475000},"rate_limits":null}}""",
+            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":61000},"model_context_window":475000},"rate_limits":{"primary":{"used_percent":93.0,"window_minutes":10080,"resets_at":1795286849},"secondary":null,"rate_limit_reached_type":null}}}""") + "\n");
+        Hear("""{"type":"error","message":"Reconnecting... 2/5"}""");
+        Hear("""{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}""");
+
+        Assert.Equal(1, chat.Compactions);
+        Assert.Equal(449460, chat.CompactedFrom);
+        Assert.Equal(61000, chat.CompactedTo);
+        Assert.Equal(61000, chat.ContextUsed);
+        Assert.Equal(475000, chat.ContextLimit);
+        Assert.Equal("seven_day", chat.Limit?.Kind);
+        Assert.Equal(HexAgentLimitState.Warning, chat.Limit?.State);
+        Assert.Equal(1, chat.Retries);
+        Assert.Contains(chat.Entries, entry => entry.Text.StartsWith("Retrying, attempt 2 of 5", StringComparison.Ordinal));
+        Assert.Contains(chat.Entries, entry => entry.Text.StartsWith("Close to the limit, weekly limit · 93% used", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Read_lines_goes_on_from_where_it_got_to_and_leaves_a_line_half_written()
+    {
+        string file = Path.Combine(folder, "log.jsonl");
+        File.WriteAllText(file, "one\ntwo\nthr");
+        var (lines, end) = HexExtensions.ReadLinesFrom(file, 0);
+        Assert.Equal(["one", "two"], lines);
+        File.AppendAllText(file, "ee\n");
+        (lines, end) = HexExtensions.ReadLinesFrom(file, end);
+        Assert.Equal(["three"], lines);
+        Assert.Empty(HexExtensions.ReadLinesFrom(file, end).Lines);
+        Assert.Equal(new FileInfo(file).Length, HexExtensions.ReadLinesFrom(file, -1).End);
+    }
+
+    [Fact]
+    public void A_version_is_the_number_out_of_what_a_program_says()
+    {
+        Assert.Equal("2.1.326", DawnScene.VersionOf("2.1.326 (Claude Code)"));
+        Assert.Equal("0.169.0", DawnScene.VersionOf("codex-cli 0.169.0"));
+        Assert.Equal("1.2.3", DawnScene.VersionOf("v1.2.3"));
     }
 
     [Fact]
