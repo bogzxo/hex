@@ -270,6 +270,21 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void Codex_compacts_its_thread_when_told_to_in_place_of_a_turn()
+    {
+        var (runtime, _, run) = Load("codex");
+        var chat = new HexAgentChat(1, "codex") { Session = "t-9" };
+        var written = new List<string>();
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; });
+        Assert.Equal("/compact", Values.Text(run.Properties["compact"]));
+        Arguments(runtime, run, api);
+        Said(runtime, run, api, "/compact");
+        Feed(runtime, run, api, """{"id":2,"result":{"thread":{"id":"t-9"}}}""");
+        Assert.Contains(written, line => line.Contains("\"method\":\"thread/compact/start\"", StringComparison.Ordinal) && line.Contains("t-9", StringComparison.Ordinal));
+        Assert.DoesNotContain(written, line => line.Contains("turn/start", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_chat_says_the_model_it_runs_over_the_alias_it_was_asked_for()
     {
         var chat = new HexAgentChat(1, "claude_code");
