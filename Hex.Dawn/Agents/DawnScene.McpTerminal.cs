@@ -190,6 +190,15 @@ internal sealed partial class DawnScene
     private IEnumerable<McpToolResult?> TerminalRun(JsonObject arguments)
     {
         string command = (arguments.String("command") ?? string.Empty).Trim();
+
+        // A read or a search of the workspace by the shell, turned back as the agent's own shell is, or an agent kept
+        // off grep and cat by its guard ran them here instead (Codex did, through this very tool)
+        if (HexHarnessGuard.ForCommand(command, [.. explorer.workspace.Folders]) is { } instead)
+        {
+            yield return McpToolResult.Error($"This reads the workspace the long way, Hex answers it from its index, use {instead}. hex_terminal_run is for builds, tests, git and anything outside the workspace.");
+            yield break;
+        }
+
         if (command.Length == 0)
         {
             yield return McpToolResult.Error("Say the command line in command.");

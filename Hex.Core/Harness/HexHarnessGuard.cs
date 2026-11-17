@@ -125,6 +125,9 @@ internal static class HexHarnessGuard
             if (end >= 0)
                 first = first[..end];
             string[] words = Words(first);
+            // A PowerShell variable given what a command says, $files = Get-ChildItem ..., is that command
+            if (words.Length > 2 && words[0].StartsWith('$') && words[1] == "=")
+                words = words[2..];
             if (words.Length == 0)
                 continue;
 

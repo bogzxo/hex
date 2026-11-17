@@ -18,6 +18,9 @@ internal sealed partial class DawnScene
     // The groups opened, by the first call of each, the rest are folded
     private readonly HashSet<HexAgentEntry> toolGroupsOpen = [];
 
+    // The time of each group with a call running in it, by its first call, the label and the calls it adds up
+    private readonly Dictionary<HexAgentEntry, (Label Time, List<HexAgentEntry> Calls)> agentsGroupTimes = [];
+
     // A row pressed open or shut and where its top was on screen then, held there for a few ticks while it's made again
     private (HexAgentEntry Entry, float Top, int Ticks)? agentRowHeld;
 
@@ -152,7 +155,12 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
         var right = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : $"{seconds:0.0}s", TextScale = 0.115f, Dim = failed == 0 });
+        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : $"{seconds:0.0}s", TextScale = 0.115f, Dim = failed == 0 });
+        // Its time goes on with the call running in it, a few times a second (TickRunningTimes)
+        if (running is not null && failed == 0)
+            agentsGroupTimes[first] = (time, calls);
+        else
+            agentsGroupTimes.Remove(first);
         right.Add(new Label { Text = open ? "$(chevron-down)" : "$(chevron-right)", TextScale = 0.12f, Dim = true });
 
         if (open)

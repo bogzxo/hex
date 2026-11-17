@@ -252,6 +252,7 @@ internal sealed partial class DawnScene
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
+            agentsGroupTimes.Clear();
             agentRowFits.Clear();
             foreach (UIComponent child in agentsRows.Children.ToArray())
             {
@@ -661,6 +662,14 @@ internal sealed partial class DawnScene
         {
             if (entry.State == HexAgentToolState.Running)
                 label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0")));
+        }
+
+        // A group's time, all of its calls together, going on while one of them runs
+        foreach (var (time, calls) in agentsGroupTimes.Values)
+        {
+            string said = $"{calls.Sum(call => call.Seconds):0.0}s";
+            if (time.Text != said)
+                time.Text = said;
         }
     }
 

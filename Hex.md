@@ -48,14 +48,14 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 ## Agent systems
 
 - [x] Claude Code's 5-hour session limit shown, every window of rate_limit_event's unifiedWindows reported (to confirm live)
-- [ ] Codex on the app-server protocol, so its limits and stats match Claude Code's and grep is refused through its
+- [x] Codex on the app-server protocol (d986fc4, run live: turns, rows, its weekly limit), so its limits and stats match Claude Code's and grep is refused through its
       approvals (research in chats #2 and #3 of the session that started this list)
 - [ ] Claude Code through --permission-prompt-tool or its control protocol, approvals asked in Hex
 - [ ] Gemini through the Antigravity provider, so a Google subscription (Google AI Pro and the like) is what it runs on.
       Find out how Antigravity is driven from outside (its CLI or agent protocol, how it signs in, what it prints) and
       what the user installs, then make it an agent system of Hex's in hex-extensions (the Gemini CLI extension there
       is the starting point, kept as an alternative)
-- [ ] Codex can't be held to Hex's tools by a hook, only by its instructions, until it's on the app-server
+- [x] Codex held to Hex's tools through its approvals, and hex_terminal_run itself refuses a read of the workspace (Codex went round the guard through it)
 
 ## Plan milestones (docs/agent-workspace-plan.md)
 

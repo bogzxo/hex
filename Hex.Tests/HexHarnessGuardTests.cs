@@ -70,6 +70,7 @@ public sealed class HexHarnessGuardTests
         Assert.Contains("hex_search", Bash($"cd {elsewhere} && cd {FOLDER} && grep -rn Foo ."));
         Assert.Null(Bash("echo 'a && grep x y' | wc -l"));
         Assert.Null(Bash("git log --oneline -5 && git diff --stat"));
+        Assert.Contains("hex_files", Bash($"$files = Get-ChildItem -LiteralPath '{Path.Combine(FOLDER, "Hex.Core")}' -File; $files.Count"));
     }
 
     [Fact]
