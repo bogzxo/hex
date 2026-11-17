@@ -36,13 +36,29 @@ internal sealed partial class DawnScene
             row = up;
         // Held for a few frames more than it takes, a busy frame laying it out a step late
         agentRowHeld = (entry, row.Bounds.Max.Y, 8);
+
+        // At the chat's end the scroll sticks there, and what opened pushed it to the new end before the hold pulled it
+        // back, a jump up and down. It doesn't stick while the row's held
+        if (agentsStickHeld is null)
+            agentsStickHeld = agentsScroll.StickToEnd;
+        agentsScroll.StickToEnd = false;
     }
+
+    // Whether the chat stuck to its end before a row was held, put back once the hold is over
+    private bool? agentsStickHeld;
 
     /// <summary>Every tick, the held row put back where its top was, by scrolling the chat the difference.</summary>
     private void KeepHeldRow()
     {
         if (agentRowHeld is not { Ticks: > 0 } held)
+        {
+            if (agentsStickHeld is { } stuck)
+            {
+                agentsScroll.StickToEnd = stuck;
+                agentsStickHeld = null;
+            }
             return;
+        }
         agentRowHeld = held with { Ticks = held.Ticks - 1 };
 
         // The row it's in now, or the group's that it belongs to

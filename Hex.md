@@ -151,7 +151,8 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
       bottom) and a line at the foot of Agentic's Agents column
 - [x] Agentic's side columns, cards and systems panel a step bigger in text
 - [x] Tool groups and a call's details open and fold in place (no row made again), so the chat no longer jumps up and
-      back, and the last group of a chat scrolls its lines into sight
+      back, and the last group of a chat scrolls its lines into sight. At the chat's end too, the scroll not sticking
+      to its end while the row is held (it pushed the offset down and the hold pulled it back)
 - [x] The agent systems panels ease their height both ways (a clipping holder), the column above them following, in
       Agentic and in Dawn, the Dawn list no longer making its cards again as the height moves. To confirm live
 - [x] A moving icon its clip only nicks (three quarters inside or more) is drawn whole and turning, in the engine (UIDrawList.MovingSymbol), clip the turned quad instead
@@ -162,8 +163,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 ## Order (the person's)
 
 1. The other items here, Claude Code's integration first
-2. Performance of the new agent system (chat paging, rows, the harness). First of it, a chat scrolled back into rows
-   loaded from its file and then back down to the latest drops those rows to the file again after a minute there
+2. Performance of the new agent system (chat paging, rows, the harness). Done: rows read back go to the file again
+   after a minute at the latest, Details no longer made again every second for its clock (a line put right in place),
+   a call's file worked out once. Next to look at: a chat's version moving with every streamed line makes Details and
+   the cards' keys change, the hub's snapshot (Pump) every tick, UnreadMail allocating
 3. Last of all, Hex's dev and stable builds, below
 
 ## Dev and stable builds (last)

@@ -255,10 +255,20 @@ internal sealed partial class DawnScene
             return;
 
         HexAgentChat? chat = agentChat;
-        string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{(int)chat.TurnSeconds}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}"
+        // Not the clock, which ticks in its own line in place, Details made again every second went through every tool
+        // call of the chat each time for its tools and files
+        string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}"
             + $":{hub.MailOf(chat).All.Count}:{noonTalkShown}:{noonFilesAll}";
         if (said == noonContextDrawn)
+        {
+            if (chat is not null && noonClock is not null)
+            {
+                string clock = ClockLine(chat);
+                if (noonClock.Text != clock)
+                    noonClock.Text = clock;
+            }
             return;
+        }
         noonContextDrawn = said;
 
         ClearRows(noonContextRows);
@@ -272,8 +282,8 @@ internal sealed partial class DawnScene
         ContextSection(Said("noon.agent"));
         string? model = HexAgentModels.Of(chat);
         ContextLine("robot", $"{HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == chat.Agent)?.Name ?? chat.Agent}{(model is null ? string.Empty : " · " + model)}");
-        // Whole seconds while it runs, Details is drawn again once a second and tenths stood still between, the tenths once it's done
-        ContextLine(chat.Running ? "loading~spin" : "pass", chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds:0}s" : $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s");
+        noonClock = ContextLine(chat.Running ? "loading~spin" : "pass", string.Empty);
+        noonClock.Text = ClockLine(chat);
         if (chat.InputTokens + chat.OutputTokens > 0)
             ContextLine("graph", $"{Count(chat.InputTokens)} in · {Count(chat.OutputTokens)} out" + (chat.Cost > 0 ? $" · ${chat.Cost.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty));
 
@@ -367,7 +377,7 @@ internal sealed partial class DawnScene
                 continue;
             string tool = ToolTitle(entry.ToolName ?? "tool");
             tools[tool] = tools.GetValueOrDefault(tool) + 1;
-            if (files.Count < FILES_KEPT && FileOf(entry.Input) is { } file && !files.Contains(file))
+            if (files.Count < FILES_KEPT && FileOfCall(entry) is { } file && !files.Contains(file))
                 files.Add(file);
         }
 
@@ -416,6 +426,13 @@ internal sealed partial class DawnScene
     // Whether Details shows every file it keeps, or the first few
     private bool noonFilesAll;
 
+    // The file each call was given, worked out once, its input never changing, rather than its JSON read again each time
+    // Details is made
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<HexAgentEntry, System.Runtime.CompilerServices.StrongBox<string?>> callFiles = [];
+
+    private static string? FileOfCall(HexAgentEntry call) =>
+        callFiles.GetValue(call, each => new System.Runtime.CompilerServices.StrongBox<string?>(FileOf(each.Input))).Value;
+
     // The file a tool was given, from the arguments that name one
     private static string? FileOf(string? input)
     {
@@ -447,8 +464,15 @@ internal sealed partial class DawnScene
         noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 8, 0, 0), Color = Vector4.Zero })
             .With(new Label { Text = UIRichText.Literal(title), TextScale = 0.135f, Bold = true, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
 
-    private void ContextLine(string icon, string text, bool wrap = false) =>
+    private Label ContextLine(string icon, string text, bool wrap = false) =>
         noonContextRows.Add(new Label { Text = $"$({icon}) {UIRichText.Literal(text)}", TextScale = 0.135f, Align = Origin.Left, Wrap = wrap, Fill = UIFill.Horizontal });
+
+    // The line of Details with the turn's clock, put right in place a few times a second
+    private Label? noonClock;
+
+    // How the agent is and how long its turn has gone, whole seconds while it runs and the tenths once it's done
+    private string ClockLine(HexAgentChat chat) =>
+        $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds:0}s" : $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s")}";
 
     // A bar of how full the context is, the accent until it's getting full, amber past three quarters and red near the end
     private Panel ContextBar(float share, float? across = null)
