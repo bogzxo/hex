@@ -274,29 +274,45 @@ internal sealed partial class DawnScene
         for (int i = 0; i < chat.Entries.Count; i++)
         {
             HexAgentEntry entry = chat.Entries[i];
+
+            // A call after the first of a group is drawn by the group's first row, its own place in the list kept by a row
+            // of nothing so the rows still go one to an entry. The first row goes by what the whole group is
+            bool member = InToolGroup(chat, i);
+            int version = member ? entry.Version : Groupable(entry) ? ToolGroupKey(chat, i) : entry.Version;
             if (i < agentRowsShown.Count)
             {
-                if (agentRowsShown[i].Version == entry.Version)
+                if (agentRowsShown[i].Version == version)
                     continue;
+
+                // A call that's become part of a group, or one that's left one, is made again as what it is now
+                bool wasMember = agentRowsShown[i].Row is Panel { Visible: false, Children.Count: 0 };
+                if (member && wasMember)
+                {
+                    agentRowsShown[i] = (entry, version, agentRowsShown[i].Row);
+                    continue;
+                }
 
                 // Made again in its place, a tool that finished giving a little pop
                 UIComponent was = agentRowsShown[i].Row;
-                UIComponent made = FittedRowOf(chat, entry);
+                UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
                 agentsRows.Insert(IndexIn(agentsRows, was), made);
                 agentsRows.Remove(was);
                 agentRowFits.Remove(was);
-                agentRowsShown[i] = (entry, entry.Version, made);
-                if (entry.Kind == HexAgentEntryKind.Tool && entry.State != HexAgentToolState.Running)
+                agentRowsShown[i] = (entry, version, made);
+                // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
+                if (entry.Kind == HexAgentEntryKind.Tool && !Groupable(entry) && entry.State != HexAgentToolState.Running)
                     PopRow(made);
                 continue;
             }
 
-            UIComponent row = FittedRowOf(chat, entry);
+            UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
             agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : IndexIn(agentsRows, agentsTyping), row);
-            agentRowsShown.Add((entry, entry.Version, row));
+            agentRowsShown.Add((entry, version, row));
 
             // A whole chat brought up comes in quickly a few rows at a time, a row that just came slides in on its own,
             // what was asked from the right where its bubble is
+            if (member)
+                continue;
             if (arriving)
                 SlideRowIn(row, Math.Min(i, 8) * 0.025f);
             else if (!fresh && !still)
@@ -413,7 +429,7 @@ internal sealed partial class DawnScene
             }
 
             default:
-                return ToolRow(chat, entry, skin);
+                return Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
         }
     }
 

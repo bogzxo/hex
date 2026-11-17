@@ -44,6 +44,10 @@ internal sealed partial class DawnScene
     private bool agentsWasRunning, agentsWasSteering;
     private float agentsWait;
 
+    // Where the chat was read to as its width last moved, at its end or a share of the way down, and for how many more ticks
+    private (bool AtEnd, float Share, int Ticks)? agentScrollHeld;
+    private int agentScrollHeldWidth = -1;
+
     // The width the panel's parts were last drawn at and the room the systems took then, a change of either drawing them now
     private int agentsWidthDrawn = -1;
     private float agentsSystemsTallDrawn = -1.0f;
@@ -236,6 +240,36 @@ internal sealed partial class DawnScene
             open.Tick();
             open.Seen = open.Version;
         }
+        // The place the chat is read to is held while its width moves, the rows growing and shrinking as their words wrap
+        // anew. At its end it stays at its end, elsewhere at the same share of the way down. Held by its pixels it looked
+        // scrolled with every step of the drag and snapped back once the drag let go. Kept a few ticks, the rows' heights
+        // are known only once they're laid out
+        // The panel's own width, not the text's, which also moves as a scroll bar comes or goes going between chats, where
+        // the place each chat was read to is put back instead (RestoreAgentScroll)
+        // Only while a side's edge is being dragged, the view moving between the side bar and Agentic's middle, or a chat
+        // made again, being new places rather than a drag
+        int panelWidth = (int)agentsView.Size.X;
+        bool resized = panelWidth != agentScrollHeldWidth && (SideIsResizing(leftGrips) || SideIsResizing(rightGrips));
+        agentScrollHeldWidth = panelWidth;
+        if (agentScrollWanted is not null || agentChat != agentRowsFor.Chat)
+            agentScrollHeld = null;
+        else if (resized && agentsScroll.MaxOffset > 0)
+        {
+            // Taken as the width starts to move, then kept for as long as it goes on moving
+            agentScrollHeld = agentScrollHeld is { Ticks: > 0 } holding
+                ? holding with { Ticks = 4 }
+                : (agentsScroll.Offset >= agentsScroll.MaxOffset - 1.0f, agentsScroll.Offset / agentsScroll.MaxOffset, 4);
+        }
+
+        if (agentScrollHeld is { Ticks: > 0 } held && agentsScroll.MaxOffset > 0)
+        {
+            if (held.AtEnd)
+                agentsScroll.ScrollToEnd();
+            else
+                agentsScroll.Offset = MathF.Round(held.Share * agentsScroll.MaxOffset);
+            agentScrollHeld = held with { Ticks = held.Ticks - 1 };
+        }
+
         // The rows and the cards follow the width every tick, a side being dragged moves every frame and the words fitted a
         // tenth of a second behind it jumped as they caught up. Each does nothing when the width didn't move
         FitAgentRows();

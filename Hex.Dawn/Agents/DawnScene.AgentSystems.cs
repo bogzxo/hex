@@ -30,6 +30,18 @@ internal sealed partial class DawnScene
 
         /// <summary>The systems folded to their head, by id, the rest showing their lines.</summary>
         public HashSet<string> Folded { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Made from the bottom up, its head the last row and each system's lines over its own head, for a panel at the
+        /// foot of a column. What's pressed stays under the pointer as what it opens grows up from it.
+        /// </summary>
+        public bool BottomUp { get; init; }
+
+        /// <summary>What was just opened, a system's id or * for the whole panel, its lines eased in as they're made.</summary>
+        public string? Opening { get; set; }
+
+        /// <summary>The panel's head and each system's, as made, for putting them below what they open.</summary>
+        public List<UIComponent> Heads { get; } = [];
     }
 
     private SystemsPanel? noonSystems, agentsSystems;
@@ -76,10 +88,10 @@ internal sealed partial class DawnScene
     private HexAgentProfile[] AgentSystems() => [.. HexAgentProfiles.All.Where(profile => extensions.AgentRuns.ContainsKey(profile.Id))];
 
     /// <summary>A panel made empty in <paramref name="into"/>, drawn by <see cref="DrawSystems"/>.</summary>
-    private SystemsPanel MakeSystemsPanel(UIComponent into, bool open)
+    private SystemsPanel MakeSystemsPanel(UIComponent into, bool open, bool bottomUp = false)
     {
         var root = into.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2, Padding = new UIEdges(0, 6, 0, 0) });
-        return new SystemsPanel(root) { Open = open };
+        return new SystemsPanel(root) { Open = open, BottomUp = bottomUp };
     }
 
     /// <summary>
@@ -95,21 +107,24 @@ internal sealed partial class DawnScene
             panel.Made = made;
             Empty(panel.Root);
             panel.Refresh.Clear();
+            panel.Heads.Clear();
 
             // The section's head as the Details column has its own, how many systems and how many working on its right
             var head = panel.Root.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
+            panel.Heads.Add(head);
             head.Add(new Button
             {
                 Style = "button_flat", Fill = UIFill.Both, Animated = false, Label = string.Empty, Tooltip = Said("noon.systems_tip"),
                 OnPressed = () =>
                 {
                     panel.Open = !panel.Open;
+                    panel.Opening = panel.Open ? "*" : null;
                     SystemsFolded(panel);
                 }
             });
             head.Add(new Label
             {
-                Text = $"$({(panel.Open ? "chevron-down" : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
+                Text = $"$({(panel.Open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
                 Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
             });
             var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.11f, Dim = true, Align = Origin.Right });
@@ -128,6 +143,26 @@ internal sealed partial class DawnScene
             // Folded, the section is a line a system, open each shows its lines unless it's been folded on its own
             foreach (HexAgentProfile system in systems)
                 panel.Refresh.Add(SystemBlock(panel, system));
+
+            // At the foot of a column it's made from the bottom up, each head under what it opens and the panel's under all
+            if (panel.BottomUp)
+            {
+                var blocks = new List<List<UIComponent>>();
+                foreach (UIComponent row in panel.Root.Children.ToArray())
+                {
+                    if (panel.Heads.Contains(row) || blocks.Count == 0)
+                        blocks.Add([]);
+                    blocks[^1].Add(row);
+                }
+
+                int at = 0;
+                for (int b = blocks.Count - 1; b >= 0; b--)
+                {
+                    foreach (UIComponent row in blocks[b].Skip(1).Append(blocks[b][0]))
+                        panel.Root.MoveChild(row, at++);
+                }
+            }
+            panel.Opening = null;
         }
 
         foreach (Action<float> refresh in panel.Refresh)
@@ -147,6 +182,8 @@ internal sealed partial class DawnScene
 
         // The head is a flat button under its words, so the whole row lights up under the pointer and folds the system
         var head = into.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, SYSTEM_HEAD), Color = Vector4.Zero });
+        panel.Heads.Add(head);
+        int linesFrom = into.Children.Count;
         head.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Label = string.Empty,
@@ -161,10 +198,11 @@ internal sealed partial class DawnScene
                 }
                 else if (!panel.Folded.Remove(system.Id))
                     panel.Folded.Add(system.Id);
+                panel.Opening = panel.Folded.Contains(system.Id) ? null : system.Id;
                 SystemsFolded(panel);
             }
         });
-        head.Add(new Label { Text = $"$({(open ? "chevron-down" : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });
+        head.Add(new Label { Text = $"$({(open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });
         var badge = head.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(18, 0), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
         badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system.Name)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
         var name = head.Add(new Label { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(SYSTEM_INDENT, 0), TextScale = 0.13f, Bold = true, Align = Origin.Left });
@@ -196,6 +234,13 @@ internal sealed partial class DawnScene
             limitSlots.Add((line, limitTrack, limitGroove.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, 4), Radius = 2 })));
         }
         Label? harness = open ? Line() : null;
+
+        // What was just opened eases in, a step one after another, rather than being there all at once
+        if (panel.Opening is "*" || panel.Opening == system.Id)
+        {
+            for (int i = linesFrom; i < into.Children.Count; i++)
+                SlideRowIn(into.Children[i], (i - linesFrom) * 0.015f);
+        }
 
         static void Put(Label? label, string? text)
         {

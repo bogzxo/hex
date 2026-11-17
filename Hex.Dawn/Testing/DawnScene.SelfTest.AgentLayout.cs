@@ -149,8 +149,9 @@ internal sealed partial class DawnScene
             agentChat.Done();
         });
         test.Settle(0.4f);
-        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Label>()
-            .First(label => label.Text == "$(chevron-right)").Bounds.Center));
+        // A call alone is a slim line of its own, pressed it opens to what it was given and said back
+        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Button>()
+            .First(button => button.Tooltip?.StartsWith("mcp__hex__hex_search", StringComparison.Ordinal) == true).Bounds.Center));
         test.Settle(0.3f);
         test.Check("agents layout: opening a tool exposes its result", () =>
             tool?.Open == true && Descendants(agentsRows).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));

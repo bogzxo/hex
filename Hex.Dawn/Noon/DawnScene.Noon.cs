@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
         noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 6, 6) });
         noonFleetRows = noonFleetScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         // The agent systems at the foot of the fleet, what each is and where it stands, the fleet's list making room
-        noonSystems = MakeSystemsPanel(noonFleet, open: true);
+        noonSystems = MakeSystemsPanel(noonFleet, open: true, bottomUp: true);
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         noonCenter = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0 });

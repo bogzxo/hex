@@ -1,0 +1,53 @@
+# Hex to-do
+
+The list of what's asked for and not done yet, kept across sessions, agents and agent systems. Whoever works on Hex
+reads it first, ticks what they finish (with the commit), and adds what they're asked for. Newest asks at the end of
+their section. Plans in depth are in docs/agent-workspace-plan.md, this is what's on the go.
+
+## Decided
+
+- The agents' face is called Agentic (Noon in the code).
+- Agents' edits are written first and reviewed after.
+- Agents have their own menu on the bar.
+- An agent system that reports no cost keeps a token count.
+- Work handed to an agent stays in the face you're in.
+- Agents in this workspace use Hex's tools (hex_read, hex_edit, hex_write, hex_search, hex_terminal_run), never their own
+  Read, Edit, Write, grep or cat. Claude Code's guard enforces it (strict).
+
+## Agents panel and Agentic
+
+- [ ] Tool calls one after another grouped into one row, folded by default, slim lines when opened (in the tree, its
+      agents-layout checks to put right)
+- [ ] Text selection and a context menu (Copy, Copy all, Select all) in the agents' chat
+- [ ] Edit a queued message, put back in the queue when the edit is done
+- [ ] Confirm with the user that resizing the side bar and folding the agent systems no longer jump or flicker
+- [ ] Confirm the ghost resize line is gone from Agentic (grips of hidden components no longer light, f4714f2 and after)
+- [x] Agent systems panel at the foot of Agentic builds bottom up, what's pressed stays under the pointer, lines ease in
+- [x] Model and tokens on the chat cards (8e68257)
+- [x] Session and weekly limits each with a bar of its own colour (8e68257)
+- [x] Harness savings table follows its window (8e68257)
+- [x] File on screen is off by default in what's sent (8e68257)
+- [x] Agents menu (798fc02)
+
+## Agent systems
+
+- [ ] Claude Code's 5-hour session limit shown (only the weekly one arrives now, find what it prints for the session)
+- [ ] Codex on the app-server protocol, so its limits and stats match Claude Code's and grep is refused through its
+      approvals (research in chats #2 and #3 of the session that started this list)
+- [ ] Claude Code through --permission-prompt-tool or its control protocol, approvals asked in Hex
+- [ ] Gemini with a Google subscription (Google AI Pro and the like). Needs the Gemini CLI,
+      npm install -g @google/gemini-cli, then gemini once to sign in with the Google account. Extension in
+      hex-extensions/gemini
+- [ ] Codex can't be held to Hex's tools by a hook, only by its instructions, until it's on the app-server
+
+## Plan milestones (docs/agent-workspace-plan.md)
+
+- [x] M0
+- [ ] M1, left: Welcome row, Agentic themes, VirtualStack in the engine, a noon self-test suite
+- [ ] M2 and on
+
+## Known failures that aren't new
+
+- menus self test, File lists 21 rows and Run 25, more than 20
+- ux self test, narrow editor keeps file navigation on its own row
+- Seven older unpushed commits (bec71d5 to 96cc281) have a Co-Authored-By line against the no-AI-credit rule
