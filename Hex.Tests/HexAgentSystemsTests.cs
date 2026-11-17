@@ -187,8 +187,8 @@ public sealed class HexAgentSystemsTests : IDisposable
             ("command", Natives.Action("command", args => commands[args.Text(0)] = args.Callable(1))),
             ("say", Natives.Action("say", _ => { })),
             ("notify", Natives.Action("notify", _ => { })),
-            ("exists", Natives.Function("exists", args => Values.Bool(existing is not null && args.Text(0).EndsWith(".md")))),
-            ("read", Natives.Function("read", _ => new StringValue(existing ?? string.Empty))),
+            ("exists", Natives.Function("exists", args => Values.Bool(existing is not null && args.Text(0).EndsWith(".md") || args.Text(0).EndsWith(".json") && File.Exists(args.Text(0))))),
+            ("read", Natives.Function("read", args => new StringValue(args.Text(0).EndsWith(".json") && File.Exists(args.Text(0)) ? File.ReadAllText(args.Text(0)) : existing ?? string.Empty))),
             ("write", Natives.Action("write", args => written[Path.GetFileName(args.Text(0))] = args.Text(1))),
             ("ask", Natives.Action("ask", args => runtime.Invoke(args.Callable(1), hex, new StringValue("Add it")))),
             ("find_file", Natives.Function("find_file", args => HexExtensions.FindFile(args.Text(0), args.Text(1)) is { } found ? new StringValue(found) : Values.Null)),
@@ -293,6 +293,20 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.InRange((chat.Limit!.Resets!.Value - DateTimeOffset.FromUnixTimeSeconds(1795341600)).Duration(), TimeSpan.Zero, TimeSpan.FromMinutes(2));
         Assert.True(chat.Failed);
         Assert.Single(chat.Entries, entry => entry.Text.StartsWith("Limit reached, weekly limit · 100% used", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Claude_code_knows_a_models_window_from_the_start_of_a_turn_once_it_has_seen_it()
+    {
+        HexAgentChat first = Play("claude_code",
+            """{"type":"system","subtype":"init","session_id":"s","model":"claude-opus-5-5"}""",
+            """{"type":"result","session_id":"s","usage":{"input_tokens":2},"modelUsage":{"claude-opus-5-5":{"contextWindow":1000000}}}""");
+        Assert.Equal(1000000, first.ContextLimit);
+
+        // A coordinator's first turn can last as long as its agents do, its bar is there from its first line
+        HexAgentChat second = Play("claude_code", """{"type":"system","subtype":"init","session_id":"t","model":"claude-opus-5-5"}""");
+        Assert.Equal(1000000, second.ContextLimit);
+        Assert.Equal(1000000, Play("claude_code", """{"type":"system","subtype":"init","session_id":"u","model":"claude-sonnet-5-5[1m]"}""").ContextLimit);
     }
 
     [Fact]

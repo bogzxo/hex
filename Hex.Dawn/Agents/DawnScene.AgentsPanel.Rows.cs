@@ -24,6 +24,11 @@ internal sealed partial class DawnScene
     private (HexAgentChat? Chat, int Dropped, bool Narrow, object? Skin, float Motion) agentRowsFor;
     private Panel? agentsTyping;
 
+    // Where each chat was scrolled to as another was put on screen, null for at its end (where it follows what comes),
+    // and where the one put on screen goes back to once its rows are laid out
+    private readonly Dictionary<int, float?> agentScrolls = [];
+    private (HexAgentChat Chat, float? Offset)? agentScrollWanted;
+
     // The time of every tool that's still running, counted up as it goes without its row being made again
     private readonly Dictionary<HexAgentEntry, Label> agentsRunningTimes = [];
 
@@ -231,6 +236,17 @@ internal sealed partial class DawnScene
             // The dots stay through rows made again for a new width, made again they started their bounce over and
             // slid in on every step of a drag
             Panel? typing = chat == agentRowsFor.Chat && ReferenceEquals(Skin, agentRowsFor.Skin) ? agentsTyping : null;
+
+            // Another chat keeps where the one leaving was read to and goes back to where it was itself, the end for
+            // one not read before, so going between chats never loses the place in either
+            if (chat != agentRowsFor.Chat)
+            {
+                if (agentRowsFor.Chat is { } leaving)
+                    agentScrolls[leaving.Id] = agentsScroll.Offset >= agentsScroll.MaxOffset - 0.5f ? null : agentsScroll.Offset;
+                agentScrollWanted = chat is null ? null : (chat, agentScrolls.GetValueOrDefault(chat.Id));
+                agentsScroll.ScrollToEnd();
+            }
+
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();

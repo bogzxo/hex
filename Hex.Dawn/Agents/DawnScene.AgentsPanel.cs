@@ -220,6 +220,7 @@ internal sealed partial class DawnScene
         // The rows and the cards follow the width every tick, a side being dragged moves every frame and the words fitted a
         // tenth of a second behind it jumped as they caught up. Each does nothing when the width didn't move
         FitAgentRows();
+        RestoreAgentScroll();
         if ((int)agentsView.Size.X != chatRowsFitted)
         {
             chatRowsFitted = (int)agentsView.Size.X;
@@ -336,6 +337,36 @@ internal sealed partial class DawnScene
         agentsHarness.Label = calls == 0
             ? $"$(zap) {Said("agents_panel.harness_none")}"
             : $"$(zap) {Said("agents_panel.harness_saved", ("tokens", Count((plain - said) / 4)), ("share", plain <= 0 ? "0" : (100.0 * (plain - said) / plain).ToString("0")), ("calls", calls.ToString()))}";
+    }
+
+    // How many ticks a chat put on screen is laid out for before it goes back to where it was read to, its rows' heights
+    // known only once they've been laid out
+    private const int SCROLL_BACK_AFTER = 2;
+    private int agentScrollTicks;
+
+    /// <summary>The chat on screen back where it was read to, once its rows are laid out, the end when it was there.</summary>
+    private void RestoreAgentScroll()
+    {
+        if (agentScrollWanted is not { } wanted)
+        {
+            agentScrollTicks = 0;
+            return;
+        }
+
+        if (wanted.Chat != agentChat || wanted.Chat != agentRowsFor.Chat)
+        {
+            agentScrollWanted = null;
+            return;
+        }
+
+        if (++agentScrollTicks < SCROLL_BACK_AFTER)
+            return;
+        agentScrollWanted = null;
+        agentScrollTicks = 0;
+        if (wanted.Offset is { } offset)
+            agentsScroll.Offset = offset;
+        else
+            agentsScroll.ScrollToEnd();
     }
 
     private bool CanComposeAgent() => AgentFor(agentChat) is { } id

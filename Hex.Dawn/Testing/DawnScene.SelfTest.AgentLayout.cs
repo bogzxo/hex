@@ -188,8 +188,33 @@ internal sealed partial class DawnScene
             agentsRows.Children.Count == rowsBefore.Length && agentsRows.Children.Zip(rowsBefore).All(pair => ReferenceEquals(pair.First, pair.Second))
             && Bubble().Size.X > bubbleBefore + 60 && Bubble().Bounds.Max.X <= agentsView.Bounds.Max.X + 1);
 
+        // Each chat keeps where it was read to. Scrolled up in the long one, away to another and back, it's where it was
+        HexAgentChat? longChat = null, other = null;
+        float readTo = 0;
         test.Run(() =>
         {
+            longChat = agentChat;
+            agentsScroll.Offset = readTo = MathF.Floor(agentsScroll.MaxOffset * 0.3f);
+            other = new HexAgentChat(++agentChatsMade, "layout_agent");
+            agentChats.Add(other);
+            other.Ask("Something else");
+            other.Say("A short answer.");
+            other.Done();
+            OpenAgentChat(other);
+        });
+        test.Settle(0.3f);
+        test.Check("agents layout: the agent systems sit under the chats with the fixture's system in them", () =>
+            agentsSystemsHolder.Visible && Descendants(agentsSystemsHolder).OfType<Label>().Any(label => label.Text.Contains("Workspace assistant", StringComparison.Ordinal))
+            // Up is up on screen, so under the chats is below their list's bottom and above the chat's top
+            && agentsSystemsHolder.Bounds.Max.Y <= agentsListScroll.Bounds.Min.Y + 1 && agentsSystemsHolder.Bounds.Min.Y >= agentsScroll.Bounds.Max.Y - 1);
+        test.Run(() => OpenAgentChat(longChat!));
+        test.Settle(0.3f);
+        test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
+            MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
+
+        test.Run(() =>
+        {
+            agentChats.Remove(other!);
             ClearAgentChat();
             settings.UiAnimation = animation;
             extensions.ForgetAgents(provider!);
