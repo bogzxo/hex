@@ -161,8 +161,11 @@ internal sealed partial class DawnScene
             || !extension.Invoke(message, [new StringValue(text), chatObject], out IRuntimeValue made))
             return null;
 
-        string line = made is StringValue said ? said.Value : HexJson.FromHidl(made)?.ToJsonString() ?? string.Empty;
-        return line.ReplaceLineEndings(" ");
+        // A list is several lines, for an agent that's spoken to in steps (Codex's app-server, its handshake and its thread
+        // before the turn), each a line of its own
+        static string LineOf(IRuntimeValue value) =>
+            (value is StringValue said ? said.Value : HexJson.FromHidl(value)?.ToJsonString() ?? string.Empty).ReplaceLineEndings(" ");
+        return made is ListValue lines ? string.Join("\n", lines.Items.Select(LineOf).Where(line => line.Length > 0)) : LineOf(made);
     }
 
     /// <summary>The run of a chat that can be told more while it works, null when there's none.</summary>
@@ -339,7 +342,10 @@ internal sealed partial class DawnScene
         {
             foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat))
                 run.SaidWrong = true;
-        }, () => FinishAgentTurn(chat), () => TakeAgentMessage(chat));
+        }, () => FinishAgentTurn(chat), () => TakeAgentMessage(chat),
+            // A line for the agent's stdin from its extension, an answer to something it asked (Codex's approvals) or the
+            // next step of a conversation it holds with the agent (a turn started once its thread is)
+            line => agentRuns.FirstOrDefault(run => run.Chat == chat && run.Process.TakesInput)?.Process.Send(line) == true);
 
     /// <summary>The agent saying it took in a message, the first of a run being what it was started with.</summary>
     private void TakeAgentMessage(HexAgentChat chat)

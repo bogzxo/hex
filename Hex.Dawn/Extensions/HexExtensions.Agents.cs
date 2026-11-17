@@ -47,6 +47,10 @@ internal sealed partial class HexExtensions
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
         // What an agent is told in its system prompt about the harness, the same for every agent system
         ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
+        // Whether a shell command reads or searches the workspace the long way, the Hex tool to use instead when it does,
+        // null when it doesn't, for a system whose own approvals Hex answers (Codex's app-server)
+        ("harness_check", Natives.Function("harness_check", args =>
+            HexHarnessGuard.ForCommand(args.Text(0, string.Empty), [.. context.Workspace.Folders]) is { } instead ? new StringValue(instead) : Values.Null)),
         // Given the chat a run is for, the bridge says which it is, so what the agent does through Hex is known to be its
         // (the agents it starts are that chat's, and how deep it is)
         ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(

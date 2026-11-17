@@ -331,40 +331,30 @@ public sealed class HexAgentSystemsTests : IDisposable
     }
 
     [Fact]
-    public void Codex_reads_its_limits_and_compactions_from_its_session_file_and_says_reconnects_as_retries()
+    public void Codex_says_its_limits_compactions_and_retries_as_its_app_server_tells_them()
     {
-        string thread = "01a1ea31-c479-7da1-92b0-97fd13249ad5";
-        string sessions = Path.Combine(folder, ".codex", "sessions", "2026", "11", "17");
-        Directory.CreateDirectory(sessions);
-        string log = Path.Combine(sessions, $"rollout-2026-11-17T17-48-13-{thread}.jsonl");
-        File.WriteAllText(log, """{"type":"session_meta","payload":{"id":"x"}}""" + "\n");
-
         var (runtime, hex, _, _) = Load("codex");
         ObjectValue run = (ObjectValue)Agents(runtime, hex);
         var chat = new HexAgentChat(1, "codex");
         chat.Ask("go");
-        ObjectValue said = HexAgentChatApi.Of(chat, folder);
+        ObjectValue said = HexAgentChatApi.Of(chat, folder, write: _ => true);
         void Hear(string line) => runtime.Invoke(run.Properties["on_event"], said, HexJson.Parse(line)!);
 
-        Hear($$"""{"type":"thread.started","thread_id":"{{thread}}"}""");
-        File.AppendAllText(log, string.Join("\n",
-            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":449460},"model_context_window":475000},"rate_limits":null}}""",
-            """{"type":"compacted","payload":{"message":""}}""",
-            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":0},"model_context_window":475000},"rate_limits":null}}""",
-            """{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":61000},"model_context_window":475000},"rate_limits":{"primary":{"used_percent":93.0,"window_minutes":10080,"resets_at":1795286849},"secondary":null,"rate_limit_reached_type":null}}}""") + "\n");
-        Hear("""{"type":"error","message":"Reconnecting... 2/5"}""");
-        Hear("""{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}""");
+        Hear("""{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":449460,"outputTokens":10},"last":{"inputTokens":449460},"modelContextWindow":475000}}}""");
+        Hear("""{"method":"item/completed","params":{"item":{"type":"contextCompaction","id":"x"}}}""");
+        Hear("""{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":510460,"outputTokens":12},"last":{"inputTokens":61000},"modelContextWindow":475000}}}""");
+        Hear("""{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":93.0,"windowDurationMins":10080,"resetsAt":1795286849},"secondary":null,"rateLimitReachedType":null}}}""");
+        Hear("""{"method":"error","params":{"error":{"message":"stream disconnected"},"willRetry":true}}""");
+        Hear("""{"method":"turn/completed","params":{"turn":{"id":"t","status":"completed"}}}""");
 
         Assert.Equal(1, chat.Compactions);
-        Assert.Equal(449460, chat.CompactedFrom);
-        Assert.Equal(61000, chat.CompactedTo);
         Assert.Equal(61000, chat.ContextUsed);
         Assert.Equal(475000, chat.ContextLimit);
         Assert.Equal("seven_day", chat.Limit?.Kind);
         Assert.Equal(HexAgentLimitState.Warning, chat.Limit?.State);
         Assert.Equal(1, chat.Retries);
-        Assert.Contains(chat.Entries, entry => entry.Text.StartsWith("Retrying, attempt 2 of 5", StringComparison.Ordinal));
         Assert.Contains(chat.Entries, entry => entry.Text.StartsWith("Close to the limit, weekly limit · 93% used", StringComparison.Ordinal));
+        Assert.False(chat.Running);
     }
 
     [Fact]

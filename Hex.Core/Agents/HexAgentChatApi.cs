@@ -13,8 +13,18 @@ internal static class HexAgentChatApi
     /// <param name="wentWrong">Called when the extension says something went wrong, so the run's exit doesn't say it again.</param>
     /// <param name="finished">Called for chat.done in place of ending the turn, for a run that decides when it's over.</param>
     /// <param name="taken">Called for chat.taken in place of the chat's own, for a run that knows which message that was.</param>
-    public static ObjectValue Of(HexAgentChat chat, string folder, Action? wentWrong = null, Action? finished = null, Action? taken = null) => Natives.Object(
+    /// <param name="write">A line for the agent's stdin, false when it couldn't be written (it isn't running, or its stdin is shut).</param>
+    public static ObjectValue Of(HexAgentChat chat, string folder, Action? wentWrong = null, Action? finished = null, Action? taken = null,
+        Func<string, bool>? write = null) => Natives.Object(
         ("id", new StringValue(chat.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+        // Something for the agent's stdin, a string as it is or an object as a line of JSON, true when it went
+        ("write", Natives.Function("write", args =>
+        {
+            if (write is null || !args.Has(0))
+                return new BooleanValue(false);
+            string line = args[0] is StringValue said ? said.Value : HexJson.FromHidl(args[0])?.ToJsonString() ?? string.Empty;
+            return new BooleanValue(line.Length > 0 && write(line.ReplaceLineEndings(" ")));
+        })),
         ("folder", new StringValue(folder)),
         ("session", Natives.Function("session", args =>
         {
