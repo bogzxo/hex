@@ -23,6 +23,7 @@ internal sealed partial class DawnScene
                 ("question", McpSchema.String("The question, complete in itself.")),
                 ("options", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "The answers to pick from, a few words each, two to six of them." }),
                 ("recommended", McpSchema.Integer("Which option you'd pick yourself, counted from 0, what's taken when nobody answers.")),
+                ("multiple", McpSchema.Flag("Several options can be picked together, the answer them joined with commas.")),
                 ("timeout", McpSchema.Number($"Seconds to wait for an answer, {ASK_WAIT} by default, {ASK_WAIT_MOST} at the most."))], "question")),
             null, RunAway: Ask, NeedsEditor: false, TakesCaller: true)
     ];
@@ -51,7 +52,7 @@ internal sealed partial class DawnScene
                 yield break;
             }
 
-            card = chat.Question(question, options, recommended, seconds, answer => answered.TrySetResult(answer));
+            card = chat.Question(question, options, recommended, seconds, answer => answered.TrySetResult(answer), args.Flag("multiple"));
             questionsOpen++;
             yield return McpToolResult.Text("asked");
         }

@@ -36,25 +36,44 @@ internal sealed partial class DawnScene
             return card;
         }
 
-        // A button a line, the answers being a few words that don't fit side by side in a narrow panel
+        // A button a line, the answers being a few words that don't fit side by side in a narrow panel. Of a question that
+        // takes several, toggles, the picks going with Answer and what's in the box
         for (int at = 0; at < choices.Length; at++)
         {
             string choice = choices[at];
+            int index = at;
             bool recommended = entry.Recommended == at;
-            stack.Add(new Button
+            string label = recommended ? $"{choice}  ({Said("agents_panel.question_recommended")})" : choice;
+            var button = stack.Add(new Button
             {
-                Label = recommended ? $"{choice}  ({Said("agents_panel.question_recommended")})" : choice,
-                Primary = recommended, Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.125f, Animated = false,
-                OnPressed = () => chat.Reply(entry, choice)
+                Label = entry.Multiple ? $"$({(entry.Picked.Contains(at) ? "pass-filled" : "circle-large-outline")}) {label}" : label,
+                Primary = !entry.Multiple && recommended, Selected = entry.Multiple && entry.Picked.Contains(at),
+                Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.125f, Animated = false, Align = entry.Multiple ? Origin.Left : Origin.Center
             });
+            button.OnPressed = entry.Multiple
+                ? () =>
+                {
+                    if (!entry.Picked.Remove(index))
+                        entry.Picked.Add(index);
+                    button.Selected = entry.Picked.Contains(index);
+                    button.Label = $"$({(button.Selected ? "pass-filled" : "circle-large-outline")}) {label}";
+                }
+                : () => chat.Reply(entry, choice);
         }
 
         var own = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Fill = UIFill.Horizontal, Spacing = 6, Size = new Vector2(0, 26) });
         var box = own.Add(new TextBox { Fill = UIFill.Horizontal, Size = new Vector2(0, 24), Placeholder = Said("agents_panel.question_own"), MaxLength = 2000 });
         void Own()
         {
-            if (!string.IsNullOrWhiteSpace(box.Text))
-                chat.Reply(entry, box.Text.Trim());
+            string written = box.Text.Trim();
+            if (entry.Multiple)
+            {
+                string[] picked = [.. entry.Picked.Order().Select(at => choices[at]), .. written.Length > 0 ? new[] { written } : []];
+                if (picked.Length > 0)
+                    chat.Reply(entry, string.Join(", ", picked));
+            }
+            else if (written.Length > 0)
+                chat.Reply(entry, written);
         }
         box.OnSubmitted = _ => Own();
         own.Add(new Button { Label = Said("agents_panel.question_send"), Icon = "send", Size = new Vector2(90, 24), LabelScale = 0.125f, Animated = false, OnPressed = Own });

@@ -42,8 +42,9 @@ internal static class HexAgentChatApi
             int? recommended = args.Has(2) && args[2] is NumberValue pick ? (int)pick.Value : null;
             double seconds = args.Has(3) && args[3] is NumberValue wait ? wait.Value : 300;
             IRuntimeValue? answered = args.Has(4) ? args[4] : null;
+            bool multiple = args.Has(5) && args[5] is BooleanValue { Value: true };
             HexAgentEntry asked = chat.Question(args.Text(0, "?"), options, recommended, seconds,
-                answer => { if (answered is not null) call?.Invoke(answered, [answer is null ? Values.Null : new StringValue(answer)]); });
+                answer => { if (answered is not null) call?.Invoke(answered, [answer is null ? Values.Null : new StringValue(answer)]); }, multiple);
             return Natives.Action("withdraw", _ =>
             {
                 if (asked.Respond is null)

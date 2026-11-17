@@ -72,7 +72,7 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 Done so far: compact. A run says compact (the message that does it, Claude Code's "/compact"), the Agents menu and the
 palette have "Compact the agent's context", and Details puts "Compact now" beside a context bar at 95% and up. Asked
 mid-turn it waits for the turn to end. "/" in the box lists the commands the run says (Claude Code's from its handshake,
-its skills among them), Tab or a press puts one in. Left: Codex's compact (thread/compact/start) and commands, a self
+its skills among them), Tab or a press puts one in. Codex compacts with thread/compact/start. Left: Codex's commands, a self
 test of the button and the list with a stand-in run that says compact and commands, auto compact.
 
 What an agent system can be told to do beyond a message (compact its context, clear, change model, run one of its
@@ -117,7 +117,8 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] Claude Code's own AskUserQuestion tool, which comes through can_use_tool, a card for each question (its
       "(Recommended)" option marked), answered with updatedInput.answers by question, nobody answering refuses the
       tool with word to go on with its best pick (claude_code extension)
-- [ ] Multi-select questions (AskUserQuestion's multiSelect) as toggles with one Answer button
+- [x] Multi-select questions (AskUserQuestion's multiSelect, hex_ask's multiple) as toggles with one Answer button,
+      the picks and the box's words joined with commas
 - [ ] Codex's own questions (the app-server's tool/requestUserInput if it has one) on the same card
 
 ## Models and files

@@ -67,6 +67,12 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     /// <summary>For a question, the choice the agent would take itself, what it goes on with when nobody answers in time.</summary>
     public int? Recommended { get; init; }
 
+    /// <summary>For a question, whether several of its answers can be picked together, the card's buttons toggles then.</summary>
+    public bool Multiple { get; init; }
+
+    /// <summary>For a question of several answers, which are picked so far, kept here so the card made again keeps them.</summary>
+    public HashSet<int> Picked { get; } = [];
+
     /// <summary>For a question, when the agent stops waiting and goes on without an answer (Environment.TickCount64).</summary>
     public long? Deadline { get; init; }
 
@@ -380,10 +386,11 @@ internal sealed class HexAgentChat(int id, string agent)
     /// The agent asking the person something, a card with the answers it offers and a box for one of their own, which it
     /// waits on until <paramref name="seconds"/> are up and then goes on with the one it would pick itself.
     /// </summary>
-    public HexAgentEntry Question(string text, string[] choices, int? recommended, double seconds, Action<string?> respond) =>
+    public HexAgentEntry Question(string text, string[] choices, int? recommended, double seconds, Action<string?> respond, bool multiple = false) =>
         Add(new HexAgentEntry(HexAgentEntryKind.Question, text)
         {
             Choices = choices,
+            Multiple = multiple,
             Recommended = recommended is { } pick && pick >= 0 && pick < choices.Length ? pick : null,
             Deadline = Environment.TickCount64 + (long)(Math.Max(1, seconds) * 1000),
             Respond = respond

@@ -356,6 +356,12 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Contains(written, line => line.Contains("\"request_id\":\"q1\"", StringComparison.Ordinal) && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal)
             && line.Contains("\"answers\":{\"Which way?\":\"Patch\",\"Tests?\":\"Only the fast ones\"}", StringComparison.Ordinal));
 
+        // One that takes several answers says so on its card
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q3","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which?","multiSelect":true,"options":[{"label":"x"},{"label":"y"}]}]}}}""");
+        HexAgentEntry several = Assert.Single(chat.Pending);
+        Assert.True(several.Multiple);
+        Assert.True(chat.Reply(several, "x, y"));
+
         // Nobody answering refuses the tool with word to go on, the other card taken back
         Feed(runtime, run, api, """{"type":"control_request","request_id":"q2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"A?","options":[{"label":"x"}]},{"question":"B?","options":[{"label":"y"}]}]}}}""");
         cards = [.. chat.Pending];
