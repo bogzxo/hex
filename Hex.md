@@ -65,6 +65,15 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       Find out how Antigravity is driven from outside (its CLI or agent protocol, how it signs in, what it prints) and
       what the user installs, then make it an agent system of Hex's in hex-extensions (the Gemini CLI extension there
       is the starting point, kept as an alternative)
+      Research (2026-11-17). The Antigravity CLI is agy, installed with winget install Google.AntigravityCLI, signed in
+      through the system keyring or a browser Google sign-in, AI Pro and Ultra raising its limits. Headless it's
+      agy -p with --output-format stream-json (NDJSON, typed init, step_update and result events, tool_info per call),
+      --input-format stream-json for more turns on stdin, --model, --effort low/medium/high, --mode accept-edits or
+      plan, --conversation id to resume, MCP servers in .agents/mcp_config.json of the workspace. There's also agy acp
+      (Agent Client Protocol over stdio), said to run on the plan's models. Gemini CLI's own account sign-in ended
+      2026-06-18, an API key only now. Waiting on the person: Antigravity's FAQ is said to call wrapping agy in another
+      app unsupported on consumer plans, while a forum answer calls it fully supported, nothing official settles it.
+      Build only once they've said to go ahead. The event fields to be read off a real run
 - [x] Codex held to Hex's tools through its approvals, and hex_terminal_run itself refuses a read of the workspace (Codex went round the guard through it)
 
 ## Plan: agent commands and skills (compact first)
