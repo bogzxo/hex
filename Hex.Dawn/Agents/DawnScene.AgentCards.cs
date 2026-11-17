@@ -68,7 +68,8 @@ internal sealed partial class DawnScene
         {
             float room = width - indent;
             string? model = chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model?.Replace("claude-", string.Empty);
-            string starter = chat.Parent is { } parent ? ChatName(parent) : system;
+            // Who it is and the model it's on, always in sight, a working agent's line under its name being what it's doing
+            string starter = (chat.Parent is { } parent ? ChatName(parent) : system) + (model is { Length: > 0 } ? $" · {model}" : string.Empty);
             string said = UIRichText.Literal(OneLine(starter, Math.Max(4, (int)((room - 150) / 6.0f))));
             if (from.Text != said)
                 from.Text = said;
@@ -88,7 +89,7 @@ internal sealed partial class DawnScene
                 : null;
             string line = doing ?? string.Join(" · ", new[]
             {
-                model,
+                chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
                 chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null,
                 unread > 0 ? $"$(mail) {unread}" : null
             }.Where(part => !string.IsNullOrEmpty(part)));

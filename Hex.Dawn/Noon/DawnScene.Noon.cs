@@ -254,7 +254,7 @@ internal sealed partial class DawnScene
         ContextSection(Said("noon.agent"));
         string? model = chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model;
         ContextLine("robot", $"{HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == chat.Agent)?.Name ?? chat.Agent}{(model is null ? string.Empty : " · " + model)}");
-        ContextLine(chat.Running ? "loading" : "pass", $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s");
+        ContextLine(chat.Running ? "loading~spin" : "pass", $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s");
         if (chat.InputTokens + chat.OutputTokens > 0)
             ContextLine("graph", $"{Count(chat.InputTokens)} in · {Count(chat.OutputTokens)} out" + (chat.Cost > 0 ? $" · ${chat.Cost.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty));
 
@@ -281,7 +281,7 @@ internal sealed partial class DawnScene
 
         // What its system said along the way, how often its context was summed up, calls tried again, and how near it is
         // to the plan's limit
-        if (chat.Compactions > 0 || chat.Retries > 0 || chat.Limit is not null)
+        if (chat.Compactions > 0 || chat.Retries > 0 || chat.Limits.Count > 0)
         {
             ContextSection(Said("noon.limits"));
             if (chat.Compactions > 0)
@@ -290,11 +290,12 @@ internal sealed partial class DawnScene
                     : Said("noon.compacted", ("count", chat.Compactions.ToString())));
             if (chat.Retries > 0)
                 ContextLine("refresh", Said("noon.retries", ("count", chat.Retries.ToString())));
-            if (chat.Limit is { } limit)
+            // Each kind of limit with a bar of its own colour, the session's and the week's told apart at a glance
+            foreach (HexAgentLimit limit in HexAgentLimits.Across([chat]))
             {
                 ContextLine(LimitIcon(limit), HexAgentLimits.LimitLine(limit, DateTimeOffset.Now));
                 if (limit.Used >= 0)
-                    noonContextRows.Add(ContextBar((float)Math.Clamp(limit.Used, 0.0, 1.0)));
+                    noonContextRows.Add(LimitBar((float)Math.Clamp(limit.Used, 0.0, 1.0), LimitColour(limit, Skin), NOON_CONTEXT - noonContext.Padding.Total.X - 10));
             }
         }
 
@@ -307,7 +308,7 @@ internal sealed partial class DawnScene
             if (parent is not null)
                 ContextLink("arrow-up", Said("noon.started_by", ("name", ChatName(parent.Id))), () => OpenAgentChat(parent));
             foreach (HexAgentChat child in started)
-                ContextLink(child.Running ? "loading" : child.Failed ? "error" : "pass", ChatName(child.Id), () => OpenAgentChat(child));
+                ContextLink(child.Running ? "loading~spin" : child.Failed ? "error" : "pass", ChatName(child.Id), () => OpenAgentChat(child));
         }
 
         // The messages it was sent, the latest last
@@ -413,6 +414,6 @@ internal sealed partial class DawnScene
         noonContextRows.Add(new Button
         {
             Icon = icon, Label = UIRichText.Literal(OneLine(text, 40)), Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
-            Size = new Vector2(0, 24), LabelScale = 0.125f, Animated = false, OnPressed = open
+            Size = new Vector2(0, 20), LabelScale = 0.125f, Animated = false, OnPressed = open
         });
 }

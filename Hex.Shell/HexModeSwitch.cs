@@ -45,7 +45,7 @@ internal static class HexModeSwitch
     {
         var row = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2.0f, Anchor = Origin.Right, Pivot = Origin.Right });
         foreach (HexFace face in (ReadOnlySpan<HexFace>)[HexFace.Dawn, HexFace.Noon, HexFace.Dusk])
-            row.Add(new Button(face.ToString()) { Icon = face.Icon(), Style = "button_flat", Animated = false });
+            row.Add(new Button(face.Name()) { Icon = face.Icon(), Style = "button_flat", Animated = false });
         Button first = (Button)row.Children[0];
         Select(first, current, pick);
         SetScale(first, bar.Module?.Compositor.Scale ?? 1.0f);
@@ -60,11 +60,12 @@ internal static class HexModeSwitch
 
         foreach (Button button in row.Children.OfType<Button>())
         {
-            if (!Enum.TryParse(button.Label, out HexFace face))
+            // Known by the name it shows, which isn't the enum's own for the agents' face
+            if (Enum.GetValues<HexFace>().Where(each => each.Name() == button.Label).Select(each => (HexFace?)each).FirstOrDefault() is not { } face)
                 continue;
             bool active = face == current;
             button.Selected = active;
-            button.Tooltip = HexText.Get(active ? "modes.active" : "modes.switch", ("name", face.ToString()));
+            button.Tooltip = HexText.Get(active ? "modes.active" : "modes.switch", ("name", face.Name()));
             button.OnPressed = active ? null : () => pick(face);
         }
     }

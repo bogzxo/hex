@@ -13,6 +13,12 @@ public static class HexFaces
     /// <summary>The scene a face is shown by.</summary>
     public static HexMode Mode(this HexFace face) => face == HexFace.Dusk ? HexMode.Dusk : HexMode.Dawn;
 
+    /// <summary>
+    /// A face's name as the selector and the menus say it. The agents' face is Agentic, Noon is only what the code calls
+    /// it, the time of day between Dawn and Dusk.
+    /// </summary>
+    public static string Name(this HexFace face) => face == HexFace.Noon ? "Agentic" : face.ToString();
+
     /// <summary>The icon of a face on the selector.</summary>
     public static string Icon(this HexFace face) => face switch
     {

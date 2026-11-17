@@ -91,6 +91,26 @@ public sealed class HexAgentHubTests
     }
 
     [Fact]
+    public void EachKindOfLimitIsKeptAndTheAccountsAreSaidAcrossChats()
+    {
+        var one = new HexAgentChat(1, "claude_code");
+        var two = new HexAgentChat(2, "claude_code");
+        one.Limited(new HexAgentLimit("seven_day", HexAgentLimitState.Ok, 0.34, null, null));
+        one.Limited(new HexAgentLimit("five_hour", HexAgentLimitState.Ok, 0.10, null, null));
+        two.Limited(new HexAgentLimit("five_hour", HexAgentLimitState.Warning, 0.85, null, null));
+
+        // A later kind doesn't hide the earlier, the latest said is still the one Limit says
+        Assert.Equal(2, one.Limits.Count);
+        Assert.Equal("five_hour", one.Limit!.Kind);
+
+        // Across the chats, the session first and its most used, then the week
+        HexAgentLimit[] across = HexAgentLimits.Across([one, two]);
+        Assert.Equal(["five_hour", "seven_day"], across.Select(limit => limit.Kind).ToArray());
+        Assert.Equal(0.85, across[0].Used);
+        Assert.Equal("session limit", HexAgentLimits.KindName("five_hour"));
+    }
+
+    [Fact]
     public void TheSnapshotIsMadeAgainOnlyWhenASessionMoved()
     {
         var hub = new HexAgentHub();

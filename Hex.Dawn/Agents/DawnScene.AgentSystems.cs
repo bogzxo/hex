@@ -161,7 +161,18 @@ internal sealed partial class DawnScene
             var groove = track.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 4), Radius = 2, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) });
             fill = groove.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, 4), Radius = 2 });
         }
-        Label? compacted = open ? Line() : null, limit = open ? Line() : null, harness = open ? Line() : null;
+        Label? compacted = open ? Line() : null;
+
+        // Its limits, a line and a bar for each kind it was told of (the session's, the week's), up to three
+        var limitSlots = new List<(Label Line, Panel Track, Panel Fill)>();
+        for (int i = 0; open && i < 3; i++)
+        {
+            Label line = Line();
+            var limitTrack = into.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 4), Padding = new UIEdges(SYSTEM_INDENT, 0, 6, 0), Color = Vector4.Zero, Visible = false });
+            var limitGroove = limitTrack.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 4), Radius = 2, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) });
+            limitSlots.Add((line, limitTrack, limitGroove.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, 4), Radius = 2 })));
+        }
+        Label? harness = open ? Line() : null;
 
         static void Put(Label? label, string? text)
         {
@@ -228,12 +239,48 @@ internal sealed partial class DawnScene
             int compactions = chats.Sum(chat => chat.Compactions), retries = chats.Sum(chat => chat.Retries);
             Put(compacted, compactions + retries == 0 ? null : "$(fold) " + Said("noon.system_compacted", ("count", compactions.ToString(CultureInfo.InvariantCulture)), ("retries", retries.ToString(CultureInfo.InvariantCulture))));
 
-            Put(limit, nearest is null ? null : LimitText(nearest, skin));
+            HexAgentLimit[] limits = HexAgentLimits.Across(chats);
+            for (int i = 0; i < limitSlots.Count; i++)
+            {
+                var (line, limitTrack, limitFill) = limitSlots[i];
+                HexAgentLimit? each = i < limits.Length ? limits[i] : null;
+                Put(line, each is null ? null : LimitText(each, skin));
+                bool bar = each is { Used: >= 0 };
+                if (limitTrack.Visible != bar)
+                    limitTrack.Visible = bar;
+                if (each is not null && bar)
+                {
+                    limitFill.Size = new Vector2(MathF.Max(3, (width - SYSTEM_INDENT - 6) * (float)Math.Clamp(each.Used, 0.0, 1.0)), 4);
+                    limitFill.Color = LimitColour(each, skin);
+                }
+            }
 
             var (calls, back, plain) = Harness.Stats.TotalsFor(system.Clients);
             Put(harness, calls == 0 ? null : "$(zap) " + Said(calls == 1 ? "noon.system_harness_one" : "noon.system_harness", ("tokens", HexAgentLimits.Tokens((plain - back) / 4)),
                 ("share", plain <= 0 ? "0" : (100.0 * (plain - back) / plain).ToString("0", CultureInfo.InvariantCulture)), ("calls", calls.ToString(CultureInfo.InvariantCulture))));
         };
+    }
+
+    /// <summary>
+    /// The colour of a kind of limit's bar, the session's blue and the week's violet so the two are told apart at a glance,
+    /// whatever the look. Red once it's reached, whichever it is.
+    /// </summary>
+    internal static Vector4 LimitColour(HexAgentLimit limit, UISkin? skin) =>
+        limit.State == HexAgentLimitState.Hit ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
+        : limit.Kind switch
+        {
+            "five_hour" => RUNNING_BLUE,
+            "seven_day" => new Vector4(0.66f, 0.52f, 0.98f, 1.0f),
+            "seven_day_opus" or "seven_day_sonnet" => new Vector4(0.36f, 0.78f, 0.74f, 1.0f),
+            _ => skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
+        };
+
+    /// <summary>A bar of how much of a limit is gone, as wide as it's given, in the limit's own colour.</summary>
+    private Panel LimitBar(float share, Vector4 colour, float width)
+    {
+        var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = Skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
+        track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = colour });
+        return track;
     }
 
     // A limit in its line, in the colour of how near it is

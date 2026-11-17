@@ -212,6 +212,14 @@ internal sealed class HexAgentChat(int id, string agent)
     /// <summary>Where the agent stands against its rate or usage limit, as last said, null while nobody has said.</summary>
     public HexAgentLimit? Limit { get; private set; }
 
+    /// <summary>
+    /// Every limit the agent was told of, the latest of each kind (the 5-hour session, the week), since a plan has
+    /// several at once and the latest said alone hid the others.
+    /// </summary>
+    public IReadOnlyDictionary<string, HexAgentLimit> Limits => limits;
+
+    private readonly Dictionary<string, HexAgentLimit> limits = new(StringComparer.Ordinal);
+
     // The row saying the agent is trying a call again, put right in place while it keeps trying rather than a row a try
     private HexAgentEntry? retrying;
 
@@ -420,6 +428,7 @@ internal sealed class HexAgentChat(int id, string agent)
     {
         HexAgentLimit? was = Limit;
         Limit = limit;
+        limits[limit.Kind.Length > 0 ? limit.Kind : "usage"] = limit;
         Moved();
         bool worse = limit.State != HexAgentLimitState.Ok && (was is null || was.State < limit.State || was.Kind != limit.Kind);
         bool better = was is { State: HexAgentLimitState.Hit } && limit.State == HexAgentLimitState.Ok;

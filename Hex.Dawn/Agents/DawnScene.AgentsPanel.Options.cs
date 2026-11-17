@@ -273,8 +273,28 @@ internal sealed partial class DawnScene
                     grid.Strip.Visible = false;
             }
             FitWritten(written, WIDTH - INSET * 2.0f, keepWidth: true);
+
+            // Fitted again whenever the window's been made wider or narrower, the table following its edges
+            harnessSaved = (window, written, WIDTH);
+            window.OnClosed = () =>
+            {
+                window.Parent?.Remove(window);
+                harnessSaved = null;
+            };
         }
         chrome.Root.Add(window);
         window.TakeKeyboard();
+    }
+
+    // The window of what the harness saved while it's up, what's written in it and the width that was fitted to
+    private (WindowPanel Window, StackPanel Written, float Width)? harnessSaved;
+
+    /// <summary>Every tick, the table in the window of what the harness saved fitted again when the window's width moved.</summary>
+    private void FitHarnessSaved()
+    {
+        if (harnessSaved is not { } shown || MathF.Abs(shown.Window.Size.X - shown.Width) < 0.5f)
+            return;
+        harnessSaved = shown with { Width = shown.Window.Size.X };
+        FitWritten(shown.Written, MathF.Max(80.0f, shown.Window.Size.X - 36.0f), keepWidth: true);
     }
 }

@@ -3348,7 +3348,7 @@ let strings = {
     },
 
     noon: {
-        command: "View: Noon, the agents working on the project",
+        command: "View: Agentic, the agents working on the project",
         fleet: "Agents",
         fleet_empty: "No agents yet. Ask one in the middle, and the agents it starts show up here under it.",
         summary: "{agents} agents · {running} running · ${cost} · {mail} unread",
@@ -3407,8 +3407,8 @@ let strings = {
     agents_item: {
         agents: "{count} agents",
         working: "{count} working",
-        tip: "The agents, and how many want looking at. Click for the next one in Noon",
-        tip_counts: "{agents} agents, {working} working, {wanting} want looking at. Click for the next one in Noon"
+        tip: "The agents, and how many want looking at. Click for the next one in Agentic",
+        tip_counts: "{agents} agents, {working} working, {wanting} want looking at. Click for the next one in Agentic"
     },
 
     modes: {
@@ -3542,7 +3542,7 @@ let strings = {
         tool_running: "running {seconds}s",
         subagent_steps: "step {count} · {step}",
         harness_none: "No harness calls yet",
-        chat_open_noon: "Open in Noon",
+        chat_open_noon: "Open in Agentic",
         chat_open_side: "Show in the side bar",
         image: "Image {number}",
         image_remove: "Leave this image out",

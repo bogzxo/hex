@@ -35,7 +35,8 @@ internal sealed partial class DawnScene
 
     // The agent picked for the next chat, by its profile's id, and whether the file on screen goes in front of what's asked
     private string? agentPicked;
-    private bool agentWithFile = true;
+    // Off until it's asked for, the file on screen is often nothing to do with what an agent is asked
+    private bool agentWithFile;
 
     // What the view was last drawn from, it's drawn again when any of it moves
     private (int Chat, int Version) agentsDrawn = (-1, -1);
@@ -221,6 +222,7 @@ internal sealed partial class DawnScene
         TakeAgentLines();
         PublishAgentStatuses();
         DrawAgentsActivity();
+        FitHarnessSaved();
         if (agentsView is null || !agentsView.Visible || (!left.Shown && Face != HexFace.Noon))
             return;
 

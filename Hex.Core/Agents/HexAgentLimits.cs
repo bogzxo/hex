@@ -31,7 +31,7 @@ internal static class HexAgentLimits
     /// <summary>A limit's kind said for people, the five hour window, the weekly one, or the system's own word.</summary>
     public static string KindName(string kind) => kind switch
     {
-        "five_hour" => "5-hour limit",
+        "five_hour" => "session limit",
         "seven_day" => "weekly limit",
         "seven_day_opus" => "weekly Opus limit",
         "seven_day_sonnet" => "weekly Sonnet limit",
@@ -41,6 +41,25 @@ internal static class HexAgentLimits
         "" => "limit",
         _ => kind.Replace('_', ' ') + " limit"
     };
+
+    /// <summary>Where a kind of limit comes in a list, the session first, then the week, then the rest.</summary>
+    public static int Order(string kind) => kind switch
+    {
+        "five_hour" => 0,
+        "seven_day" => 1,
+        "seven_day_opus" => 2,
+        "seven_day_sonnet" => 3,
+        _ => 9
+    };
+
+    /// <summary>
+    /// The latest of each kind of limit any of some chats was told, the one most used when several were, since a plan's
+    /// limits are the account's and every chat on it sees the same. Session first, then the week.
+    /// </summary>
+    public static HexAgentLimit[] Across(IEnumerable<HexAgentChat> chats) =>
+        [.. chats.SelectMany(chat => chat.Limits.Values).GroupBy(limit => limit.Kind)
+            .Select(kind => kind.OrderByDescending(limit => limit.State).ThenByDescending(limit => limit.Used).First())
+            .OrderBy(limit => Order(limit.Kind)).ThenBy(limit => limit.Kind, StringComparer.Ordinal)];
 
     /// <summary>When a limit resets said against now, in 40m, in 3h 10m, or the day and time when it's further off.</summary>
     public static string ResetsIn(DateTimeOffset resets, DateTimeOffset now)

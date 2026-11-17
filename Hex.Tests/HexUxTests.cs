@@ -92,9 +92,9 @@ public class HexUxTests
         Assert.Same(row, any.Parent);
         Assert.Equal(Horizon.Rendering.Origin.Right, row.Anchor);
         var buttons = row.Children.Cast<Button>().ToArray();
-        Assert.Equal(new[] { "Dawn", "Noon", "Dusk" }, buttons.Select(button => button.Label));
+        Assert.Equal(new[] { "Dawn", "Agentic", "Dusk" }, buttons.Select(button => button.Label));
         Button active = Assert.Single(buttons, button => button.Selected);
-        Assert.Equal(current.ToString(), active.Label);
+        Assert.Equal(current.Name(), active.Label);
         Assert.Null(active.OnPressed);
         foreach (Button other in buttons.Where(button => !button.Selected))
             other.OnPressed!();
@@ -103,7 +103,7 @@ public class HexUxTests
         // Dawn and Noon trade places on the same row
         HexFace next = current == HexFace.Noon ? HexFace.Dawn : HexFace.Noon;
         HexModeSwitch.Select(any, next, picked.Add);
-        Assert.Equal(next.ToString(), Assert.Single(buttons, button => button.Selected).Label);
+        Assert.Equal(next.Name(), Assert.Single(buttons, button => button.Selected).Label);
     }
 
     [Fact]
