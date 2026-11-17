@@ -17,7 +17,7 @@ namespace Hex.Dawn;
 /// other parts reach it through what it adds to these (a source of diagnostics, a command, a page of settings).
 /// </summary>
 internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, INotices notices, IWork work, IWindows windows,
-    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, IEditorWindow window, UICommands commands, HexOptions options,
+    ISettingsHost settings, ITerminals terminals, IPanels panels, IStrings strings, IEditorWindow window, IAgents agents, UICommands commands, HexOptions options,
     Action wake, Action redraw, Func<Keyboard> keyboard, Func<bool> typing)
 {
     public IDocuments Documents { get; } = documents;
@@ -30,6 +30,7 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
     public IPanels Panels { get; } = panels;
     public IStrings Strings { get; } = strings;
     public IEditorWindow Window { get; } = window;
+    public IAgents Agents { get; } = agents;
     public UICommands Commands { get; } = commands;
 
     /// <summary>What the editor was started with, whether it is testing itself among them.</summary>
@@ -53,6 +54,22 @@ internal sealed class DawnContext(IDocuments documents, IWorkspace workspace, IN
 /// one of the source's, so the editor's own completions (HIDL's) aren't wanted, null or not.
 /// </summary>
 internal delegate UICompletionRequest? HexCompletionSource(HexDocument of, CodeEditor editor, out bool handled);
+
+/// <summary>
+/// The agents' sessions, for a part that shows what they're doing or hands them work (a file's marks, the Problems
+/// panel, the tests). It reads them and says which to bring up, the agents themselves are the hub's.
+/// </summary>
+internal interface IAgents
+{
+    /// <summary>Every session, in the order they were started.</summary>
+    IReadOnlyList<HexAgentSession> Sessions { get; }
+
+    /// <summary>Raised on the editor's thread when a session came, went or moved.</summary>
+    event Action Changed;
+
+    /// <summary>Brings a session's chat up on screen, in the face it's shown in.</summary>
+    void Show(int session);
+}
 
 /// <summary>The documents that are open, and what happens to them.</summary>
 internal interface IDocuments

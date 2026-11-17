@@ -69,7 +69,32 @@ internal sealed partial class DawnScene
     /// What the chats are now, made again for the tools that wait off the editor's thread whenever one of them moved.
     /// Every tick, a sum of their versions when nothing did.
     /// </summary>
-    private void PublishAgentStatuses() => hub.Pump(AGENTS_REPLY);
+    private void PublishAgentStatuses()
+    {
+        if (hub.Pump(AGENTS_REPLY))
+            agentsChanged?.Invoke();
+    }
+
+    /* The agents as the parts of the editor see them (DawnContext.Agents) */
+
+    private Action? agentsChanged;
+
+    IReadOnlyList<HexAgentSession> IAgents.Sessions => hub.Sessions;
+
+    event Action IAgents.Changed
+    {
+        add => agentsChanged += value;
+        remove => agentsChanged -= value;
+    }
+
+    void IAgents.Show(int session)
+    {
+        if (ChatById(session) is not { } chat)
+            return;
+        if (Face != HexFace.Noon)
+            ShowAgentsPanel();
+        OpenAgentChat(chat);
+    }
 
     // A chat in a line, for the lists
     private static string StatusLine(HexHubRow status) =>

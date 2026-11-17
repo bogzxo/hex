@@ -207,8 +207,20 @@ internal sealed partial class DawnScene
             agentsSystemsHolder.Visible && Descendants(agentsSystemsHolder).OfType<Label>().Any(label => label.Text.Contains("Workspace assistant", StringComparison.Ordinal))
             // Up is up on screen, so under the chats is below their list's bottom and above the chat's top
             && agentsSystemsHolder.Bounds.Max.Y <= agentsListScroll.Bounds.Min.Y + 1 && agentsSystemsHolder.Bounds.Min.Y >= agentsScroll.Bounds.Max.Y - 1);
-        test.Run(() => OpenAgentChat(longChat!));
+        // A part of the editor sees the sessions through its context, is told when one moves, and can bring one up
+        int heard = 0;
+        void Heard() => heard++;
+        test.Run(() =>
+        {
+            Context.Agents.Changed += Heard;
+            other!.Say("Another line.");
+        });
+        test.Settle(0.2f);
+        test.Run(() => Context.Agents.Show(longChat!.Id));
         test.Settle(0.3f);
+        test.Check("agents layout: the parts see the sessions through the context, told when one moves, and can bring one up", () =>
+            Context.Agents.Sessions.Any(session => session.Chat == other) && heard > 0 && agentChat == longChat);
+        test.Run(() => Context.Agents.Changed -= Heard);
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 
