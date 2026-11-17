@@ -29,7 +29,7 @@ internal sealed partial class DawnScene
     private void SendToAgent()
     {
         string asked = agentsInput.Text.Trim();
-        if (asked.Length == 0)
+        if (asked.Length == 0 && agentImages.Count == 0)
             return;
 
         if (agentChat?.Running == true)
@@ -62,7 +62,18 @@ internal sealed partial class DawnScene
         agentsInput.Text = string.Empty;
         RememberAsked(asked);
         agentDraftContext = null;
-        StartAgent(agentChat, run.Extension, run.Run, prompt, asked, location);
+
+        // The pictures pasted in go with it, for its extension to hand over while the turn is being started
+        HexAgentChat sending = agentChat;
+        sending.Attached = TakeAgentImages(ref prompt, ref asked);
+        try
+        {
+            StartAgent(sending, run.Extension, run.Run, prompt, asked, location);
+        }
+        finally
+        {
+            sending.Attached = [];
+        }
     }
 
     /// <summary>
@@ -186,10 +197,13 @@ internal sealed partial class DawnScene
             agentsInput.Text = string.Empty;
             RememberAsked(asked);
             agentDraftContext = null;
+            chat.Attached = TakeAgentImages(ref prompt, ref asked);
         }
 
-        HexAgentEntry entry = chat.Steer(prompt, location is null ? null : asked, location);
-        if (MessageLine(run.Extension, run.Run, prompt, run.ChatObject) is { } line && run.Process.Send(line))
+        HexAgentEntry entry = chat.Steer(prompt, location is null && chat.Attached.Count == 0 ? null : asked, location);
+        string? line = MessageLine(run.Extension, run.Run, prompt, run.ChatObject);
+        chat.Attached = [];
+        if (line is not null && run.Process.Send(line))
             return;
 
         entry.Queued = false;
@@ -208,6 +222,8 @@ internal sealed partial class DawnScene
         agentsInput.Text = string.Empty;
         RememberAsked(asked);
         agentDraftContext = null;
+        // By the mail a picture is its path, which the agent reads when it takes the message in
+        TakeAgentImages(ref prompt, ref asked);
         HexAgentEntry entry = chat.Steer(prompt);
         entry.Queued = false;
         chat.Touch(entry);

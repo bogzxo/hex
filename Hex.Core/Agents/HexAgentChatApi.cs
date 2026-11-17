@@ -24,6 +24,9 @@ internal static class HexAgentChatApi
         })),
         ("option", Natives.Function("option", args =>
             chat.Options.TryGetValue(args.Text(0, string.Empty), out string? value) ? new StringValue(value) : Values.Null)),
+        // The pictures going with the message being written, { path, media_type, data } each with data its base64, for a
+        // system that takes them inline (Claude Code's image blocks) or by their files (Codex's --image)
+        ("images", Natives.Function("images", _ => new ListValue([.. chat.Attached.Select(ImageOf).OfType<IRuntimeValue>()]))),
         ("text", Natives.Action("text", args => chat.Say(args.Text(0, string.Empty)))),
         ("thinking", Natives.Action("thinking", args => chat.Think(args.Text(0, string.Empty)))),
         ("note", Natives.Action("note", args => chat.Note(args.Text(0, string.Empty)))),
@@ -93,6 +96,27 @@ internal static class HexAgentChatApi
             else
                 chat.Done();
         })));
+
+    // A picture as the extension is handed it, null for a file that's gone or can't be read
+    private static ObjectValue? ImageOf(string path)
+    {
+        try
+        {
+            string type = Path.GetExtension(path).ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                _ => "image/png"
+            };
+            return Natives.Object(("path", new StringValue(path)), ("media_type", new StringValue(type)),
+                ("data", new StringValue(Convert.ToBase64String(File.ReadAllBytes(path)))));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private static string? TextOf(ObjectValue said, string key) =>
         said.Properties.TryGetValue(key, out IRuntimeValue? value) && value is StringValue { Value.Length: > 0 } text ? text.Value : null;

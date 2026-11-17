@@ -69,6 +69,12 @@ internal sealed class HexAgentChat(int id, string agent)
     /// <summary>The id of the agent profile it's with.</summary>
     public string Agent { get; set; } = agent;
 
+    /// <summary>
+    /// The pictures going with the message being written for the agent right now (pasted into the box), PNG files, for
+    /// its extension to hand over in the agent's own way (chat.images). Empty between messages.
+    /// </summary>
+    public IReadOnlyList<string> Attached { get; set; } = [];
+
     public IReadOnlyList<HexAgentEntry> Entries => entries;
 
     /// <summary>What it's called in the list, the start of the first thing asked.</summary>

@@ -77,6 +77,7 @@ internal sealed partial class DawnScene
             CompletionSource = _ => null
         });
         agentsCompose.MoveChild(agentsInput, 0);
+        BuildAgentImages();
         agentsStop = made.Get<Button>("agents_stop");
         agentsSend = made.Get<Button>("agents_send");
         agentsHistory = made.Get<Button>("agents_history");
@@ -227,6 +228,7 @@ internal sealed partial class DawnScene
             foreach (Action<float> refit in chatRowFits)
                 refit(agentsView.Size.X);
         }
+        DrawAgentImages();
         FitAgentsCompose();
 
         if ((agentsWait -= dt) > 0.0f)
@@ -253,7 +255,7 @@ internal sealed partial class DawnScene
         agentsHistory.Enabled = agentChats.Count > 0;
         agentsNew.Enabled = agentChat is not null || agentsInput.Text.Length > 0 || agentDraftContext is not null;
         bool canCompose = CanComposeAgent();
-        agentsSend.Enabled = canCompose && !string.IsNullOrWhiteSpace(agentsInput.Text);
+        agentsSend.Enabled = canCompose && (!string.IsNullOrWhiteSpace(agentsInput.Text) || agentImages.Count > 0);
         DrawAgentChips();
         DrawAgentsList();
         DrawAgentOptions();
@@ -316,7 +318,7 @@ internal sealed partial class DawnScene
         // The skin paints an editor's ground over what it was given, the box is the card's
         agentsInput.Color = System.Numerics.Vector4.Zero;
         agentsPlaceholder.Visible = agentsInput.Text.Length == 0;
-        float tall = MathF.Max(96.0f, MathF.Ceiling(agentsInput.Bounds.Height) + 56.0f);
+        float tall = MathF.Max(96.0f, MathF.Ceiling(agentsInput.Bounds.Height) + 56.0f) + AgentImagesTall;
         if (MathF.Abs(tall - agentsComposeTall) < 0.5f)
             return;
         agentsComposeTall = tall;

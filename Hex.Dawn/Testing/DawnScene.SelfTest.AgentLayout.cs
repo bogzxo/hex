@@ -232,6 +232,36 @@ internal sealed partial class DawnScene
         test.Check("agents layout: the box wraps prose by how wide its letters are, filling each row first", () => agentsInput.RowCount == 2);
         test.Run(() => agentsInput.Text = string.Empty);
 
+        // A picture pasted with no text beside it is a chip over the pickers, the card growing for it, and goes with the
+        // message as its path. A paste of text is text as ever. The clipboard is a stand-in so the real one is left alone
+        Func<byte[]?>? realClipboard = Horizon.Input.ClipboardPicture.Reader;
+        float cardBefore = 0;
+        bool textTaken = true;
+        string prompt = "look", asked = "look";
+        string[] sent = [];
+        test.Run(() =>
+        {
+            cardBefore = agentsComposeTall;
+            Horizon.Input.ClipboardPicture.Reader = () => Horizon.Graphics.ImageFile.EncodePng([255, 0, 0, 255], 1, 1);
+            agentsInput.OnPasting!(string.Empty);
+            textTaken = agentsInput.OnPasting!("some text");
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a pasted picture is a chip in the card, which grows for it, and pasted text is still text", () =>
+            agentImages.Count == 1 && File.Exists(agentImages[0]) && agentsImages.Visible && agentsComposeTall > cardBefore && !textTaken
+            && Descendants(agentsImages).OfType<Label>().Any(label => label.Text.Contains(Said("agents_panel.image", ("number", "1")), StringComparison.Ordinal)));
+        test.Run(() => sent = TakeAgentImages(ref prompt, ref asked));
+        test.Settle(0.2f);
+        test.Check("agents layout: sent, the picture goes with the message by its path and the chip goes", () =>
+            sent.Length == 1 && prompt.EndsWith($"[Pasted image: {sent[0]}]", StringComparison.Ordinal) && asked.StartsWith("look\n\n", StringComparison.Ordinal)
+            && agentImages.Count == 0 && !agentsImages.Visible);
+        test.Run(() =>
+        {
+            Horizon.Input.ClipboardPicture.Reader = realClipboard;
+            foreach (string made in sent)
+                File.Delete(made);
+        });
+
         // Somebody's word to an agent sitting in a wait for its agents goes by its mail, which wakes the wait, where on its
         // stdin it would only be read once the wait was over
         test.Run(() =>

@@ -63,6 +63,13 @@ last minutes) gets it as an instruction in its mail instead, which wakes the wai
 told more mid-step, finds it in its inbox or starts its next turn with it. Each chat keeps where it was scrolled to as
 you go between them.
 
+Paste a picture into the box (a screenshot, an image copied in a browser) and it becomes a chip over the pickers, its
+cross leaving it out again. Sent, it goes with the message, Claude Code getting it as an image block of the message and
+Codex as an `--image` file, and every agent sees its path at the end of the message too. Extensions get them as
+`chat.images()`, each `{ path, media_type, data }` with `data` in base64. Pasted pictures are kept in the
+`agent_images` folder beside Hex's settings for a fortnight. The box wraps by how wide its letters really are, so a line
+of prose runs to its edge.
+
 The chats say what their agent system did along the way, each a quiet row. Its context compacted (by itself or asked,
 and the tokens before and after), a call tried again (a run of retries is one row saying the latest), and coming close
 to its plan's limit or going over it, with when that resets. Noon's Details column has a Limits section with the same,
@@ -71,8 +78,10 @@ and a bar of how much of the limit is used.
 Under the chats, in the Agents view and at the foot of Noon's fleet, the Agent systems panel has a block for each
 system Hex can run. Whether it's installed and its version, the models its chats are on, how many are working, the
 chats, tokens and cost of this session, the fullest context of its chats with a bar, its compactions and retries, its
-limit and when that resets, and what Hex's harness saved it. Its head folds it, folded in Dawn and open in Noon. Its
-words are put right in place as things move, it's never made again under a click.
+limit and when that resets, and what Hex's harness saved it, each line under the system's name beside an icon. The
+panel's head folds every system to a line, folded in Dawn and open in Noon, and each system's own head folds it alone.
+Its words are put right in place as things move, it's never made again under a click. What the harness saved is
+counted across restarts, kept in `harness/stats.tsv` beside Hex's settings, so delete that file to start the count again.
 
 ## Keeping agents on the harness
 

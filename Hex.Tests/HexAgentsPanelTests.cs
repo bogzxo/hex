@@ -193,6 +193,33 @@ public sealed class HexAgentsPanelTests : IDisposable
         [.. ((ListValue)runtime.Invoke(run.Properties["arguments"], new StringValue("hi"), chat)).Items.Select(Values.Text)];
 
     [Fact]
+    public void Pasted_pictures_go_to_claude_as_image_blocks_and_to_codex_as_files()
+    {
+        Directory.CreateDirectory(folder);
+        string picture = Path.Combine(folder, "pasted.png");
+        File.WriteAllBytes(picture, [0x89, (byte)'P', (byte)'N', (byte)'G', 1, 2, 3]);
+
+        var (claude, _, claudeRun) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code") { Attached = [picture] };
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+        string said = HexJson.FromHidl(claude.Invoke(claudeRun.Properties["message"], new StringValue("what is this"), api))!.ToJsonString();
+        Assert.Contains("\"type\":\"image\"", said);
+        Assert.Contains("\"media_type\":\"image/png\"", said);
+        Assert.Contains($"\"data\":\"{Convert.ToBase64String(File.ReadAllBytes(picture))}\"", said);
+        Assert.True(said.IndexOf("\"type\":\"image\"", StringComparison.Ordinal) < said.IndexOf("what is this", StringComparison.Ordinal), "the picture comes before the words");
+
+        // Nothing pasted, the message is the words alone as it was
+        chat.Attached = [];
+        Assert.DoesNotContain("image", HexJson.FromHidl(claude.Invoke(claudeRun.Properties["message"], new StringValue("plain"), api))!.ToJsonString());
+
+        var (codex, _, codexRun) = Load("codex");
+        var other = new HexAgentChat(2, "codex") { Attached = [picture] };
+        string[] arguments = Arguments(codex, codexRun, HexAgentChatApi.Of(other, folder));
+        Assert.Equal("-", arguments[^1]);
+        Assert.Equal("--image=" + picture, arguments[^2]);
+    }
+
+    [Fact]
     public void Claude_codes_stream_json_becomes_rows_a_session_and_what_the_turn_used()
     {
         var (runtime, _, run) = Load("claude_code");
