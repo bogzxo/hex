@@ -82,6 +82,8 @@ internal sealed partial class DawnScene
 
     private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
     {
+        // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
+        prompt = UnreadPrompt(chat, prompt);
         chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
         string? found = HexAgentProcess.Find(program);
@@ -243,6 +245,8 @@ internal sealed partial class DawnScene
             run.Chat.Done();
             run.Process.Dispose();
             agentRuns.RemoveAt(r);
+            if (!agentRuns.Any(other => other.Chat == run.Chat))
+                AfterAgentTurn(run.Chat);
         }
     }
 

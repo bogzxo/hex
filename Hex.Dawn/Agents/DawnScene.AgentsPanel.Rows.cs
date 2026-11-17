@@ -386,7 +386,7 @@ internal sealed partial class DawnScene
                 return AgentMarkdown(entry.Text, thinking: true);
 
             case HexAgentEntryKind.Note:
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(UIRichText.Literal(entry.Text), 0.125f, dim: true));
+                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(NoteText(entry.Text), 0.125f, dim: true));
 
             case HexAgentEntryKind.Error:
             {
@@ -590,6 +590,18 @@ internal sealed partial class DawnScene
         }
         catch (JsonException) { }
         return input.Trim();
+    }
+
+    /// <summary>
+    /// A note as its row says it, the rest taken as it is but an icon it starts with drawn, which is how a message
+    /// between agents is told from the other notes.
+    /// </summary>
+    internal static string NoteText(string text)
+    {
+        int end = text.StartsWith("$(", StringComparison.Ordinal) ? text.IndexOf(") ", StringComparison.Ordinal) : -1;
+        return end > 2 && text[2..end].All(c => char.IsAsciiLetterOrDigit(c) || c == '-')
+            ? text[..(end + 2)] + UIRichText.Literal(text[(end + 2)..])
+            : UIRichText.Literal(text);
     }
 
     /// <summary>

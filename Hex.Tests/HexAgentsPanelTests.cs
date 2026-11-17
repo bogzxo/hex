@@ -248,6 +248,32 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void A_chats_messages_stay_unread_until_read_and_reading_only_goes_forward()
+    {
+        var chat = new HexAgentChat(2, "codex");
+        int version = chat.Version;
+        chat.Post(new HexAgentMail(1, 1, "#1", "finding", "the server starts in StartMcp", false));
+        chat.Post(new HexAgentMail(4, 3, "#3", "instruction", "test it next", true));
+        Assert.True(chat.Version > version);
+        Assert.Equal([1L, 4L], chat.UnreadMail().Select(message => message.Seq));
+
+        chat.MailRead(1);
+        Assert.Equal(4, Assert.Single(chat.UnreadMail()).Seq);
+        chat.MailRead(0);
+        Assert.Equal(1, chat.MailSeen);
+        chat.MailRead(4);
+        Assert.Empty(chat.UnreadMail());
+    }
+
+    [Fact]
+    public void A_note_draws_the_icon_it_starts_with_and_nothing_else_of_its_markup()
+    {
+        Assert.Equal("$(mail) " + Horizon.UI.Drawing.UIRichText.Literal("from #3 · finding: a [tag]"), DawnScene.NoteText("$(mail) from #3 · finding: a [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("plain [tag]"), DawnScene.NoteText("plain [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("$(not an icon) x"), DawnScene.NoteText("$(not an icon) x"));
+    }
+
+    [Fact]
     public void Claude_code_runs_with_hex_as_its_server_and_resumes_its_session()
     {
         var (runtime, _, run) = Load("claude_code");

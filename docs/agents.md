@@ -76,8 +76,27 @@ the chat that started them, so they can be watched and talked to like any other.
   are still running. The wait happens off the editor's thread, so the agents waited for keep using Hex's tools in the
   meantime.
 - `hex_agent_read(id, full?, most?)` gives a chat's last reply, or with `full` the whole chat.
-- `hex_agent_send(id, text)` starts another turn of a finished chat, or steers a running one that can be steered.
+- `hex_agent_send(id, text)` is an instruction. It starts another turn of a finished chat, and a running one takes it
+  in as it works when it can be told more (Claude Code) or finds it in its inbox when it can't (Codex), starting its
+  next turn with it if it hasn't read it by then.
+- `hex_agent_message(text, to?, kind?)` tells another agent of the family something while both keep working, the
+  parent by default. Its kind is a finding, a question, an answer, progress, blocked or an instruction. A chat started
+  by another uses it to report what it finds as soon as it matters, ask, or say it's stuck.
+- `hex_agent_inbox()` reads the messages not read yet, oldest first.
 - `hex_agent_stop(id)` stops a chat and the chats it started.
+
+So one agent can coordinate others, a more capable model keeping the judgement while cheaper ones explore, implement and
+test. `hex_agent_wait` returns as soon as a message comes for the agent waiting (`messages: false` waits on
+regardless), so what one finds steers the rest straight away. A message to an agent that's waiting wakes its wait
+rather than going in on its stdin, which it would only read once the wait was over. Only chats of one family talk, the
+chat somebody started and everything under it. Each message is a line in both chats, to or from whom, its kind and how
+it starts, and what a chat wasn't working to read goes in front of what it's next asked.
+
+What Claude Code and Codex are told in their system prompt (`HexAgentProfiles.HARNESS_RULES`, `hex.harness_rules` to
+an extension) says to find and read code through the harness before the shell, to run commands with
+`hex_terminal_run`, and how to coordinate. The shell stays theirs for anything the harness doesn't do. Claude Code's
+own Explore subagent is given the same rules (`--agents`), and what one of its subagents does is a single row, its
+latest step and how many it's taken, in place of a row for each.
 
 Two limits apply: agents can start agents only 2 deep, and at most 6 agents started by agents run at once. A chat's
 bridge tells Hex which chat it is (`--agent-chat`, tagged at the pipe's door), which is how Hex knows whose agents are

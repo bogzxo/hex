@@ -7,6 +7,13 @@ internal enum HexAgentEntryKind { User, Text, Thinking, Tool, Note, Error }
 internal enum HexAgentToolState { Running, Done, Failed }
 
 /// <summary>
+/// A message one chat's agent sent another's, a finding, a question, an answer or an instruction. Numbered across all
+/// chats so what's been read is one number a chat keeps. <paramref name="Directive"/> is an instruction, which starts a
+/// finished agent working on it where anything else waits to be read.
+/// </summary>
+internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive);
+
+/// <summary>
 /// A row of a chat. A tool's row keeps its id (to be told it's done), its name, what it was called with and what it said
 /// back, and when it started and ended. <see cref="Version"/> goes up with every change, what the panel redraws a row by.
 /// </summary>
@@ -80,6 +87,43 @@ internal sealed class HexAgentChat(int id, string agent)
 
     /// <summary>What it was called by the agent that started it, shown in place of what it was asked when there is one.</summary>
     public string? Name { get; init; }
+
+    // The most messages a chat keeps, the oldest go after that
+    private const int MOST_MAIL = 100;
+
+    private readonly List<HexAgentMail> mail = [];
+    private long mailSeen;
+
+    /// <summary>The messages other chats' agents sent this one, read or not, on the editor's thread.</summary>
+    public IReadOnlyList<HexAgentMail> Mail => mail;
+
+    /// <summary>The number of the last message read, read and moved on from any thread.</summary>
+    public long MailSeen => Interlocked.Read(ref mailSeen);
+
+    /// <summary>A message for this chat's agent kept until it's read.</summary>
+    public void Post(HexAgentMail message)
+    {
+        mail.Add(message);
+        if (mail.Count > MOST_MAIL)
+            mail.RemoveAt(0);
+        Version++;
+    }
+
+    /// <summary>Every message up to <paramref name="seq"/> read, from whichever thread read them. It only goes forward.</summary>
+    public void MailRead(long seq)
+    {
+        long was;
+        do
+        {
+            was = Interlocked.Read(ref mailSeen);
+            if (seq <= was)
+                return;
+        }
+        while (Interlocked.CompareExchange(ref mailSeen, seq, was) != was);
+    }
+
+    /// <summary>The messages not read yet, oldest first.</summary>
+    public HexAgentMail[] UnreadMail() => [.. mail.Where(each => each.Seq > MailSeen)];
 
     /// <summary>The agent's options for this chat alone (the model it was started with), over its extension's settings.</summary>
     public Dictionary<string, string> Options { get; } = new(StringComparer.Ordinal);

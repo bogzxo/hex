@@ -36,6 +36,8 @@ internal static class HexAgentProfiles
         + "- builds, tests and other commands, hex_terminal_run, which waits and gives back the exit code and what was printed\n"
         + "- catching up on what changed, hex_changes with the generation the last answer ended with\n"
         + "- more hands, hex_agent_spawn and hex_agent_wait start and wait for other agents of any system and model\n"
+        + "- coordinating, keep the judgement yourself and start cheaper agents to explore, implement and test. hex_agent_wait wakes on their messages as well as when they finish, "
+        + "hex_agent_send steers one as it works, hex_agent_message passes what one found to the others, and those you start report to you the same way\n"
         + "When a subagent of your own does the searching, tell it to use these tools too.";
 
     private static readonly Lock changing = new();
