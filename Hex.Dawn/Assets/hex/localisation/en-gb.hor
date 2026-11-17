@@ -3370,6 +3370,8 @@ let strings = {
         compacted_from: "Compacted {count}× · last {before} to {after}",
         retries: "{count} calls retried",
         systems: "Agent systems",
+        files_more: "{count} more",
+        files_fewer: "Fewer",
         family_talk: "Family conversation · {count}",
         family_all: "All",
         family_finding: "Findings",

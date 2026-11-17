@@ -16,12 +16,17 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 ## Agents panel and Agentic
 
-- [ ] Tool calls one after another grouped into one row, folded by default, slim lines when opened (in the tree, its
-      agents-layout checks to put right)
+- [x] Tool calls one after another grouped into one row, folded by default, slim lines when opened (3e32fb9)
+- [ ] Scrolling the chat in Agentic works over the margins round the centred column, not only over the column
+- [ ] "Files it touched" in Details lists the newest first, keeps the last 25, shows 10 with a fold for the rest
+- [ ] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
+      the file deleted with the chat
+- Performance by default: lists that grow (files, tools, mail, rows) are capped or paged, nothing kept in memory that
+  can be read back when it's needed
 - [ ] Text selection and a context menu (Copy, Copy all, Select all) in the agents' chat
 - [ ] Edit a queued message, put back in the queue when the edit is done
 - [ ] Confirm with the user that resizing the side bar and folding the agent systems no longer jump or flicker
-- [ ] Confirm the ghost resize line is gone from Agentic (grips of hidden components no longer light, f4714f2 and after)
+- [ ] Confirm the ghost resize line is gone from Agentic (grips of hidden components no longer light, horizon 3f8197b)
 - [x] Agent systems panel at the foot of Agentic builds bottom up, what's pressed stays under the pointer, lines ease in
 - [x] Model and tokens on the chat cards (8e68257)
 - [x] Session and weekly limits each with a bar of its own colour (8e68257)
@@ -35,9 +40,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [ ] Codex on the app-server protocol, so its limits and stats match Claude Code's and grep is refused through its
       approvals (research in chats #2 and #3 of the session that started this list)
 - [ ] Claude Code through --permission-prompt-tool or its control protocol, approvals asked in Hex
-- [ ] Gemini with a Google subscription (Google AI Pro and the like). Needs the Gemini CLI,
-      npm install -g @google/gemini-cli, then gemini once to sign in with the Google account. Extension in
-      hex-extensions/gemini
+- [ ] Gemini through the Antigravity provider, so a Google subscription (Google AI Pro and the like) is what it runs on.
+      Find out how Antigravity is driven from outside (its CLI or agent protocol, how it signs in, what it prints) and
+      what the user installs, then make it an agent system of Hex's in hex-extensions (the Gemini CLI extension there
+      is the starting point, kept as an alternative)
 - [ ] Codex can't be held to Hex's tools by a hook, only by its instructions, until it's on the app-server
 
 ## Plan milestones (docs/agent-workspace-plan.md)

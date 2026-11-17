@@ -241,7 +241,7 @@ internal sealed partial class DawnScene
 
         HexAgentChat? chat = agentChat;
         string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{(int)chat.TurnSeconds}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}"
-            + $":{hub.MailOf(chat).All.Count}:{noonTalkShown}";
+            + $":{hub.MailOf(chat).All.Count}:{noonTalkShown}:{noonFilesAll}";
         if (said == noonContextDrawn)
             return;
         noonContextDrawn = said;
@@ -326,15 +326,17 @@ internal sealed partial class DawnScene
         DrawFamilyTalk(chat);
 
         // The tools it reached for, Hex's harness against the shell, and the files it touched
+        // The files newest first, the last FILES_KEPT of them, a long chat's hundreds never all gone through or drawn
         var tools = new Dictionary<string, int>();
         var files = new List<string>();
-        foreach (HexAgentEntry entry in chat.Entries)
+        for (int i = chat.Entries.Count - 1; i >= 0; i--)
         {
+            HexAgentEntry entry = chat.Entries[i];
             if (entry.Kind != HexAgentEntryKind.Tool)
                 continue;
             string tool = ToolTitle(entry.ToolName ?? "tool");
             tools[tool] = tools.GetValueOrDefault(tool) + 1;
-            if (FileOf(entry.Input) is { } file && !files.Contains(file))
+            if (files.Count < FILES_KEPT && FileOf(entry.Input) is { } file && !files.Contains(file))
                 files.Add(file);
         }
 
@@ -350,7 +352,7 @@ internal sealed partial class DawnScene
         {
             ContextSection(Said("noon.files"));
             string? folder = explorer.workspace.Folders.FirstOrDefault();
-            foreach (string file in files.TakeLast(12))
+            foreach (string file in files.Take(noonFilesAll ? FILES_KEPT : FILES_SHOWN))
             {
                 string path = Path.IsPathRooted(file) || folder is null ? file : Path.Combine(folder, file);
                 string shown = folder is not null && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) ? Path.GetRelativePath(folder, path) : file;
@@ -360,8 +362,23 @@ internal sealed partial class DawnScene
                     Open(path);
                 });
             }
+
+            if (files.Count > FILES_SHOWN)
+                ContextLink(noonFilesAll ? "chevron-up" : "chevron-down",
+                    noonFilesAll ? Said("noon.files_fewer") : Said("noon.files_more", ("count", (files.Count - FILES_SHOWN).ToString(System.Globalization.CultureInfo.InvariantCulture))), () =>
+                    {
+                        noonFilesAll = !noonFilesAll;
+                        noonContextDrawn = string.Empty;
+                        noonWait = 0.0f;
+                    });
         }
     }
+
+    // The files Details keeps of a chat, the newest, and how many of them show until the rest are asked for
+    private const int FILES_KEPT = 25, FILES_SHOWN = 10;
+
+    // Whether Details shows every file it keeps, or the first few
+    private bool noonFilesAll;
 
     // The file a tool was given, from the arguments that name one
     private static string? FileOf(string? input)
