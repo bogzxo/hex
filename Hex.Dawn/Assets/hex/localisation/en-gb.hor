@@ -3378,9 +3378,12 @@ let strings = {
         system_working: "{count} working",
         system_chats: "{chats} chats · {tokens} tokens · ${cost}",
         system_chats_free: "{chats} chats · {tokens} tokens",
+        system_chats_one: "1 chat · {tokens} tokens · ${cost}",
+        system_chats_free_one: "1 chat · {tokens} tokens",
         system_context: "Fullest context {share}% · {chat}",
         system_compacted: "Compacted {count}× · {retries} retries",
         system_harness: "Hex saved {tokens} tokens · {share}% in {calls} calls",
+        system_harness_one: "Hex saved {tokens} tokens · {share}% in 1 call",
         system_none: "No agent systems yet. Claude Code, Codex and Gemini come as extensions."
     },
 

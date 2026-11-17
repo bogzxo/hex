@@ -192,8 +192,8 @@ internal sealed partial class DawnScene
             long tokens = chats.Sum(chat => chat.InputTokens + chat.OutputTokens);
             double cost = chats.Sum(chat => chat.Cost);
             Put(used, chats.Length == 0 ? null : "$(comment-discussion) " + (cost > 0
-                ? Said("noon.system_chats", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)), ("cost", cost.ToString("0.00", CultureInfo.InvariantCulture)))
-                : Said("noon.system_chats_free", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)))));
+                ? Said(chats.Length == 1 ? "noon.system_chats_one" : "noon.system_chats", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)), ("cost", cost.ToString("0.00", CultureInfo.InvariantCulture)))
+                : Said(chats.Length == 1 ? "noon.system_chats_free_one" : "noon.system_chats_free", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)))));
 
             string[] inUse = [.. chats.Select(chat => chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model?.Replace("claude-", string.Empty))
                 .Where(model => !string.IsNullOrEmpty(model)).Distinct(StringComparer.OrdinalIgnoreCase)!];
@@ -219,7 +219,7 @@ internal sealed partial class DawnScene
             Put(limit, nearest is null ? null : LimitText(nearest, skin));
 
             var (calls, back, plain) = Harness.Stats.TotalsFor(system.Clients);
-            Put(harness, calls == 0 ? null : "$(zap) " + Said("noon.system_harness", ("tokens", HexAgentLimits.Tokens((plain - back) / 4)),
+            Put(harness, calls == 0 ? null : "$(zap) " + Said(calls == 1 ? "noon.system_harness_one" : "noon.system_harness", ("tokens", HexAgentLimits.Tokens((plain - back) / 4)),
                 ("share", plain <= 0 ? "0" : (100.0 * (plain - back) / plain).ToString("0", CultureInfo.InvariantCulture)), ("calls", calls.ToString(CultureInfo.InvariantCulture))));
         };
     }
