@@ -4,9 +4,10 @@ using System.Text;
 namespace Hex.Core;
 
 /// <summary>
-/// What the harness was asked this run, by tool. How many calls, how many came back out of the kept answers, the
+/// What the harness has been asked, by tool. How many calls, how many came back out of the kept answers, the
 /// characters handed back and the characters the plain way would have read (grep's whole paths and lines, files read
-/// whole), which is the saving. A token is about four characters of code, near enough for this.
+/// whole), which is the saving. A token is about four characters of code, near enough for this. Kept in a file when
+/// it's given one, so the count goes on across Hex's restarts rather than starting at nothing each time.
 /// </summary>
 internal sealed class HexHarnessStats
 {
@@ -15,13 +16,35 @@ internal sealed class HexHarnessStats
         public long Calls, Kept, Said, Plain;
     }
 
+    // The least time between two writes of the file, in milliseconds, a busy agent calls the harness many times a second
+    private const int SAVE_EVERY = 5000;
+
     private readonly ConcurrentDictionary<string, Tool> tools = new();
 
     // The same again by the MCP client that asked, so each agent system can be told what the harness saved it
     private readonly ConcurrentDictionary<string, Tool> clients = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly string? file;
+    private readonly Lock saving = new();
+    private long saved;
+    private int dirty;
+
+    /// <param name="file">Where the counts are kept between runs, null for this run only (a self test).</param>
+    public HexHarnessStats(string? file = null)
+    {
+        this.file = file;
+        Load();
+    }
+
     /// <summary>A call counted, what it said, what the plain way would have read and whether it came from the kept answers.</summary>
     public void Count(string tool, long said, long plain, bool kept)
+    {
+        CountOnly(tool, said, plain, kept);
+        Interlocked.Exchange(ref dirty, 1);
+        Save(force: false);
+    }
+
+    private void CountOnly(string tool, long said, long plain, bool kept)
     {
         Tool counted = tools.GetOrAdd(tool, _ => new Tool());
         Interlocked.Increment(ref counted.Calls);
@@ -36,6 +59,72 @@ internal sealed class HexHarnessStats
             Interlocked.Increment(ref by.Calls);
             Interlocked.Add(ref by.Said, said);
             Interlocked.Add(ref by.Plain, Math.Max(plain, said));
+        }
+    }
+
+    /// <summary>
+    /// The counts written to the file, at most every few seconds unless <paramref name="force"/> (as Hex closes). Written
+    /// beside it and moved over it, so a Hex killed halfway leaves the last whole one. A line a tool or a client, its
+    /// kind, name and four numbers between tabs, which needs no JSON reflection in a native build.
+    /// </summary>
+    public void Save(bool force = true)
+    {
+        if (file is null || Volatile.Read(ref dirty) == 0 || (!force && Environment.TickCount64 - Interlocked.Read(ref saved) < SAVE_EVERY))
+            return;
+
+        lock (saving)
+        {
+            if (Interlocked.Exchange(ref dirty, 0) == 0)
+                return;
+            Interlocked.Exchange(ref saved, Environment.TickCount64);
+            var text = new StringBuilder();
+            foreach (var (name, tool) in tools)
+                text.Append($"tool\t{name}\t{Interlocked.Read(ref tool.Calls)}\t{Interlocked.Read(ref tool.Kept)}\t{Interlocked.Read(ref tool.Said)}\t{Interlocked.Read(ref tool.Plain)}\n");
+            foreach (var (name, client) in clients)
+                text.Append($"client\t{name}\t{Interlocked.Read(ref client.Calls)}\t{Interlocked.Read(ref client.Kept)}\t{Interlocked.Read(ref client.Said)}\t{Interlocked.Read(ref client.Plain)}\n");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                string writing = file + ".new";
+                File.WriteAllText(writing, text.ToString());
+                File.Move(writing, file, overwrite: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Tried again with the next call, the counts are still here
+                Interlocked.Exchange(ref dirty, 1);
+            }
+        }
+    }
+
+    // The counts of earlier runs taken back, a line that doesn't read skipped
+    private void Load()
+    {
+        if (file is null || !File.Exists(file))
+            return;
+
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (string line in lines)
+        {
+            string[] parts = line.Split('\t');
+            if (parts.Length != 6 || parts[1].Length == 0 || !long.TryParse(parts[2], out long calls) || !long.TryParse(parts[3], out long kept)
+                || !long.TryParse(parts[4], out long said) || !long.TryParse(parts[5], out long plain))
+                continue;
+
+            ConcurrentDictionary<string, Tool>? into = parts[0] switch { "tool" => tools, "client" => clients, _ => null };
+            if (into is null)
+                continue;
+            Tool counted = into.GetOrAdd(parts[1], _ => new Tool());
+            (counted.Calls, counted.Kept, counted.Said, counted.Plain) = (calls, kept, said, plain);
         }
     }
 

@@ -68,7 +68,7 @@ internal sealed partial class HexCodeIndex
     public int StaleAfter { get; init; } = 2000;
 
     /// <summary>What the harness was asked and what it handed back, for hex_harness_stats.</summary>
-    public HexHarnessStats Stats { get; } = new();
+    public HexHarnessStats Stats { get; }
 
     /// <summary>Called off the lock with the new generation when a look found something changed.</summary>
     public event Action<long>? Changed;
@@ -79,6 +79,7 @@ internal sealed partial class HexCodeIndex
     {
         this.roots = roots;
         this.cacheFolder = cacheFolder;
+        Stats = new HexHarnessStats(cacheFolder is null ? null : Path.Combine(cacheFolder, "stats.tsv"));
     }
 
     /// <summary>The index as it is now, looked at again first when the last look is stale (or it's forced).</summary>
