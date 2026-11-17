@@ -72,7 +72,9 @@ internal sealed partial class HexCodeIndex
                 said.Line($"... cut at line {stop + 1}, the rest with start_line {stop + 2} and end_line {last + 1}.");
 
             // The plain way reads the whole file, Read's own numbers in front of every line
-            return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), file.Length + 7L * lines.Length);
+            // Made from this file alone when it was named, still good after edits elsewhere. A symbol looked for across the
+            // workspace could be declared somewhere new, so that one isn't
+            return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), file.Length + 7L * lines.Length) { From = path is { Length: > 0 } ? [file] : null };
         });
 
     // The most of a file the index leaves out that's read from the disk, past it the file isn't taken as text to read

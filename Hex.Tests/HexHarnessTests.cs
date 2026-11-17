@@ -282,6 +282,28 @@ public sealed class HexHarnessTests : IDisposable
     }
 
     [Fact]
+    public void A_read_of_one_file_is_kept_across_edits_to_another_and_not_to_its_own()
+    {
+        string mine = Path.Combine(folder, "Kept.cs");
+        string other = Path.Combine(folder, "Other.cs");
+        File.WriteAllText(mine, "class Kept { void A() { } }\n");
+        File.WriteAllText(other, "class Other { }\n");
+        var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+        string first = index.Read("Kept.cs", null, null, null, true, 4000).Text;
+
+        // Another file changed, the generation moved, the read is the one kept
+        File.WriteAllText(other, "class Other { int x; }\n");
+        File.SetLastWriteTimeUtc(other, DateTime.UtcNow.AddSeconds(5));
+        Assert.True(index.Current(force: true).Generation > 1);
+        Assert.Same(first, index.Read("Kept.cs", null, null, null, true, 4000).Text);
+
+        // Its own file changed, it's read again
+        File.WriteAllText(mine, "class Kept { void A() { } void B() { } }\n");
+        File.SetLastWriteTimeUtc(mine, DateTime.UtcNow.AddSeconds(10));
+        Assert.Contains("void B", index.Read("Kept.cs", null, null, null, true, 4000).Text);
+    }
+
+    [Fact]
     public void The_cache_on_disk_brings_the_symbols_back_without_reading_the_files()
     {
         HexCodeIndex first = Index(cache);

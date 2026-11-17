@@ -62,7 +62,9 @@ internal sealed partial class HexCodeIndex
                 }
             }
 
-            return new HexAnswer(said.Finish("skim fewer files at once or lower depth"), plain);
+            // Files named one by one are all it took in, a glob or one that wasn't found could match a file made since
+            bool named = missing.Count == 0 && !paths.Contains('*') && !paths.Contains('?');
+            return new HexAnswer(said.Finish("skim fewer files at once or lower depth"), plain) { From = named ? [.. files.Distinct()] : null };
         });
 
     private static string Kilobytes(long length) => length < 1024 ? $"{length} bytes" : $"{length / 1024.0:0.#} KB";
