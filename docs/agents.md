@@ -57,8 +57,38 @@ chat, a step in. Click a row to open it, use its cross to close it (along with t
 it to stop it, copy what it said last, or open the chat that started it. The list's head folds it away and counts the
 chats that are working. While any are working, the activity bar's robot breathes, and its tooltip says how many.
 
-An agent that Claude Code or Codex steers can be told more while it works. Send stays beside Stop, and what you send
-waits in a faded bubble marked queued until the agent takes it in.
+Any working agent can be told more. Send stays beside Stop. Claude Code takes what you send on its stdin, a faded
+bubble marked queued until it takes it in. An agent sitting in `hex_agent_wait` for the agents it started (which can
+last minutes) gets it as an instruction in its mail instead, which wakes the wait at once, and Codex, which can't be
+told more mid-step, finds it in its inbox or starts its next turn with it. Each chat keeps where it was scrolled to as
+you go between them.
+
+The chats say what their agent system did along the way, each a quiet row. Its context compacted (by itself or asked,
+and the tokens before and after), a call tried again (a run of retries is one row saying the latest), and coming close
+to its plan's limit or going over it, with when that resets. Noon's Details column has a Limits section with the same,
+and a bar of how much of the limit is used.
+
+Under the chats, in the Agents view and at the foot of Noon's fleet, the Agent systems panel has a block for each
+system Hex can run. Whether it's installed and its version, the models its chats are on, how many are working, the
+chats, tokens and cost of this session, the fullest context of its chats with a bar, its compactions and retries, its
+limit and when that resets, and what Hex's harness saved it. Its head folds it, folded in Dawn and open in Noon. Its
+words are put right in place as things move, it's never made again under a click.
+
+## Keeping agents on the harness
+
+Agents are told to use the harness in their system prompt, and still drift back to grep and cat as a long session
+leaves the prompt far behind. So Claude Code runs with Hex as its PreToolUse hook (`Hex.exe --harness-hook`, given in a
+settings file of the chat's own with `--settings`). Before Claude Code runs its shell, Grep or Glob, Hex looks at the
+call, and a search or read of the workspace (`grep`, `rg`, `find`, `ls`, `cat`, `head`, `tail`, `sed -n`,
+`Select-String`, `Get-Content` and the like as the first command of the line) is turned back with the Hex tool that does
+it. A grep that filters a pipe, builds, tests, git and anything outside the workspace are left alone. Claude Code's
+setting Keep it on the harness picks how hard, turned back (the default), reminded (the call runs with the Hex tool said
+beside it) or left alone. Codex and Gemini have no such hook and are told more firmly in their instructions.
+
+An agent's bridge (`Hex.exe --mcp-connect`) outlives the Hex it talks to. When Hex restarts into a build of itself, the
+bridge fails the calls that were cut off (so the agent makes them again), holds what the agent says meanwhile, waits up
+to three minutes for a Hex to come back on the folder, shakes hands with it as the agent did and tells the agent the
+tools may have changed.
 
 ## Agents starting agents
 
