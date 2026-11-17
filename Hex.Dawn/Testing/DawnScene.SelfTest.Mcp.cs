@@ -161,6 +161,22 @@ internal sealed partial class DawnScene
             && McpTools.Tools.Count > 0 && !McpToolList().First(tool => tool.Meta.Name == "hex_agent_wait").NeedsEditor
             && McpToolList().First(tool => tool.Meta.Name == "hex_click").NeedsEditor);
 
+        // The step the editor takes while Dusk is on screen answers the calls about agents and stops at the first that
+        // drives the editor, which waits for the editor to come back. Taken here by hand, the self test's Hex has no Dusk
+        bool agentAnswered = false, editorWaited = false;
+        Task<McpToolResult>? behindEditor = null;
+        test.Run(() =>
+        {
+            Task<McpToolResult> agents = McpTools.CallAs("hex_agent_list", [], CancellationToken.None, null);
+            behindEditor = McpTools.Call("hex_editor", [], CancellationToken.None);
+            TickAgentsOffscreen(0.016f);
+            agentAnswered = agents.IsCompleted;
+            editorWaited = !behindEditor.IsCompleted && mcpCalls.Count == 1;
+        });
+        test.WaitFor(() => behindEditor?.IsCompleted == true, 5.0f);
+        test.Check("mcp: behind Dusk a call about agents is answered and one that drives the editor waits for it to come back", () =>
+            agentAnswered && editorWaited && behindEditor is { IsCompletedSuccessfully: true });
+
         TestAgentMcp(test, Ask);
 
         // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar
