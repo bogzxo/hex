@@ -72,11 +72,38 @@ internal sealed partial class DawnScene
         FillAgentEarlier(chat);
     }
 
-    /// <summary>Every tick, the next earlier rows read back when the chat's been scrolled to its very top.</summary>
+    // How long the chat's been at its latest with earlier rows read back, before they go back to its file
+    private const long EARLIER_KEPT_MS = 60_000;
+
+    // When the chat came to its latest with earlier rows read back, null while it isn't there or has none
+    private long? agentsEarlierAtEnd;
+
+    /// <summary>
+    /// Every tick, the next earlier rows read back when the chat's been scrolled to its very top. And those read back let
+    /// go again once the chat has stayed at its latest for a minute, somebody done looking back, so a chat read far back
+    /// once doesn't hold them for as long as it's open.
+    /// </summary>
     private void LoadEarlierAtTop()
     {
-        if (agentChat is { } chat && agentsEarlier is not null && agentsEarlierShown < chat.Dropped
-            && agentsScroll.MaxOffset > 0 && agentsScroll.Offset <= 1.0f && agentRowHeld is not { Ticks: > 0 })
+        if (agentChat is not { } chat || agentsEarlier is null)
+            return;
+        if (agentsEarlierShown < chat.Dropped && agentsScroll.MaxOffset > 0 && agentsScroll.Offset <= 1.0f && agentRowHeld is not { Ticks: > 0 })
             ShowAgentEarlier(chat);
+
+        bool atEnd = agentsEarlierShown > 0 && agentsScroll.Offset >= agentsScroll.MaxOffset - 1.0f;
+        if (!atEnd)
+        {
+            agentsEarlierAtEnd = null;
+            return;
+        }
+
+        long now = System.Environment.TickCount64;
+        agentsEarlierAtEnd ??= now;
+        if (now - agentsEarlierAtEnd < EARLIER_KEPT_MS)
+            return;
+        agentsEarlierAtEnd = null;
+        agentsEarlierShown = 0;
+        FillAgentEarlier(chat);
+        agentsScroll.ScrollToEnd();
     }
 }

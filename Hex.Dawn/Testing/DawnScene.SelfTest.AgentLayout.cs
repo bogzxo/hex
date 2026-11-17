@@ -419,6 +419,13 @@ internal sealed partial class DawnScene
             longest!.Dropped > 0 && longest.Entries.Count <= HexAgentChat.MOST_ENTRIES + HexAgentChat.SPILL_BATCH
             && earlierBefore == 1 && agentsEarlierShown > 0 && agentsEarlier!.Children.Count > earlierBefore
             && Descendants(agentsEarlier).OfType<Label>().Any(label => label.Text.Contains("Line 1 of a long chat.", StringComparison.Ordinal)));
+        // Back at its latest for a minute, what was read back goes back to its file, the button for it there again
+        test.Run(() => agentsScroll.ScrollToEnd());
+        test.Settle(0.2f);
+        test.Run(() => agentsEarlierAtEnd = System.Environment.TickCount64 - EARLIER_KEPT_MS - 1);
+        test.Settle(0.2f);
+        test.Check("agents layout: rows read back from the file go back to it after a minute at the chat's latest", () =>
+            agentsEarlierShown == 0 && agentsEarlier!.Children.Count == 1);
         test.Run(() => CloseAgentChat(longest!));
 
         // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
