@@ -196,7 +196,7 @@ internal static class HexHarnessGuard
                 if (words[i] is "-C" or "-c" or "--git-dir" or "--work-tree" && i + 1 < words.Length)
                 {
                     string place = words[++i].Trim('"', '\'');
-                    if (words[i - 1] == "-C" && LooksAbsolute(place) && !Inside(place, folders))
+                    if (words[i - 1] == "-C" && Outside(place, folders))
                         return null;
                 }
                 else if (!words[i].StartsWith('-'))
@@ -222,11 +222,29 @@ internal static class HexHarnessGuard
         foreach (string word in words.Skip(1))
         {
             string path = word.Trim('"', '\'');
-            if (LooksAbsolute(path) && !Inside(path, folders))
+            if (Outside(path, folders))
                 return null;
         }
 
         return instead;
+    }
+
+    // A path that's out of the workspace, whole or going up out of it from its first folder (..\horizon), which the
+    // shell is for. Anything else, a pattern or a path inside, isn't
+    private static bool Outside(string path, IReadOnlyList<string> folders)
+    {
+        if (LooksAbsolute(path))
+            return !Inside(path, folders);
+        if (folders.Count == 0 || !(path.StartsWith("..", StringComparison.Ordinal)))
+            return false;
+        try
+        {
+            return !Inside(Path.GetFullPath(Path.Combine(folders[0], path)), folders);
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     // A command's words, quotes kept together

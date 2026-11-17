@@ -66,6 +66,10 @@ public sealed class HexHarnessGuardTests
         Assert.Contains("hex_files", Bash("git ls-files | head"));
         Assert.Contains("hex_search", Bash($"git -C {FOLDER} grep Foo"));
         Assert.Null(Bash($"git -C {elsewhere} grep Foo"));
+        // A relative path going up out of the workspace is outside it too, one staying in isn't
+        Assert.Null(Bash("git -C ../../outside ls-files"));
+        Assert.Null(Bash("cat ../../outside/notes.txt"));
+        Assert.Contains("hex_read", Bash("cat ../" + Path.GetFileName(FOLDER) + "/Hex/Program.cs"));
         Assert.Null(Bash($"cd {elsewhere} && grep -rn Foo ."));
         Assert.Contains("hex_search", Bash($"cd {elsewhere} && cd {FOLDER} && grep -rn Foo ."));
         Assert.Null(Bash("echo 'a && grep x y' | wc -l"));
