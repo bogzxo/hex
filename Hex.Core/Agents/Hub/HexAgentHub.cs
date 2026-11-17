@@ -99,7 +99,8 @@ internal sealed class HexAgentHub
     {
         long from = sessions.Count;
         foreach (HexAgentSession session in sessions)
-            from = from * 31 + session.Chat.Version * 2 + (session.Chat.Running ? 1 : 0) + session.Id * 7919L;
+            // What was read of it too, so what watches for chats wanting looking at hears of one being looked at
+            from = from * 31 + session.Chat.Version * 2 + (session.Chat.Running ? 1 : 0) + session.Id * 7919L + session.Chat.Seen * 104729L + session.Chat.MailSeen * 15485863L;
         if (from == pumpedFrom)
             return false;
 

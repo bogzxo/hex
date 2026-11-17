@@ -3404,6 +3404,13 @@ let strings = {
         system_none: "No agent systems yet. Claude Code, Codex and Gemini come as extensions."
     },
 
+    agents_item: {
+        agents: "{count} agents",
+        working: "{count} working",
+        tip: "The agents, and how many want looking at. Click for the next one in Noon",
+        tip_counts: "{agents} agents, {working} working, {wanting} want looking at. Click for the next one in Noon"
+    },
+
     modes: {
         active: "{name} is active",
         switch: "Switch to {name}",

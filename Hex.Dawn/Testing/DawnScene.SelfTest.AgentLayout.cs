@@ -284,6 +284,24 @@ internal sealed partial class DawnScene
             ShowFace(HexFace.Dawn);
         });
         test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
+
+        // The status bar says the agents and how many want looking at, and follows one being looked at
+        int wantingBefore = 0;
+        test.Run(() =>
+        {
+            other!.Seen = other.Version - 1;
+            PublishAgentStatuses();
+            wantingBefore = AgentsWanting();
+        });
+        test.Check("agents layout: the status bar has the agents with how many want looking at", () =>
+            agentsItem.IsVisible?.Invoke() == true && wantingBefore > 0 && agentsItem.Text.Contains($"$(bell-dot) {wantingBefore}", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            other!.Seen = other.Version;
+            PublishAgentStatuses();
+        });
+        test.Check("agents layout: and puts it right once the agent is looked at", () =>
+            AgentsWanting() < wantingBefore && (AgentsWanting() == 0 ? !agentsItem.Text.Contains("bell-dot", StringComparison.Ordinal) : agentsItem.Text.Contains($"$(bell-dot) {AgentsWanting()}", StringComparison.Ordinal)));
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 

@@ -45,6 +45,7 @@ internal sealed partial class DawnScene
         }, tooltip: Said("mcp.status_tip", ("clients", string.Empty)));
         mcpItem.IsVisible = () => mcpClientsShown > 0 || System.Environment.TickCount64 - mcpLastOn < MCP_LINGER_MS;
         ApplyMcp();
+        BuildAgentsItem();
     }
 
     /// <summary>
