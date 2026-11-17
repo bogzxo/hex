@@ -109,7 +109,7 @@ internal sealed partial class DawnScene
         if (mcpHost is null && StartMcp())
             chat.Note(Said("agents_panel.mcp_started"));
 
-        ObjectValue chatObject = ChatObject(chat);
+        ObjectValue chatObject = ChatObject(chat, extension);
         List<string> arguments = [];
         if (HexExtensions.FunctionOf(run, "arguments") is { } making)
         {
@@ -337,7 +337,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What an extension says what its agent did on, a chat's rows, a turn that went wrong marked so on its run.</summary>
-    private ObjectValue ChatObject(HexAgentChat chat) =>
+    private ObjectValue ChatObject(HexAgentChat chat, HexExtension extension) =>
         HexAgentChatApi.Of(chat, explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory(), () =>
         {
             foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat))
@@ -345,7 +345,9 @@ internal sealed partial class DawnScene
         }, () => FinishAgentTurn(chat), () => TakeAgentMessage(chat),
             // A line for the agent's stdin from its extension, an answer to something it asked (Codex's approvals) or the
             // next step of a conversation it holds with the agent (a turn started once its thread is)
-            line => agentRuns.FirstOrDefault(run => run.Chat == chat && run.Process.TakesInput)?.Process.Send(line) == true);
+            line => agentRuns.FirstOrDefault(run => run.Chat == chat && run.Process.TakesInput)?.Process.Send(line) == true,
+            // An approval's answer handed back to the extension's own function
+            (function, arguments) => extension.Invoke(function, arguments, out _));
 
     /// <summary>The agent saying it took in a message, the first of a run being what it was started with.</summary>
     private void TakeAgentMessage(HexAgentChat chat)

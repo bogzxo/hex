@@ -1,7 +1,7 @@
 namespace Hex.Core;
 
 /// <summary>What a row of a chat is, what was asked, what the agent said or thought, a tool it called, a note or something wrong.</summary>
-internal enum HexAgentEntryKind { User, Text, Thinking, Tool, Note, Error }
+internal enum HexAgentEntryKind { User, Text, Thinking, Tool, Note, Error, Approval }
 
 /// <summary>Where a tool call has got to.</summary>
 internal enum HexAgentToolState { Running, Done, Failed }
@@ -54,6 +54,12 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     public bool Unheard { get; set; }
 
     public int Version { get; set; }
+
+    /// <summary>
+    /// For an approval, what's done with the person's answer, true to let the agent go ahead. Null once it's been answered
+    /// (or for any other row), so a second press does nothing. Its state says the answer, Done allowed and Failed denied.
+    /// </summary>
+    public Action<bool>? Answer { get; set; }
 
     /// <summary>How long a tool took, or has been going, in seconds.</summary>
     public double Seconds => ((Ended ?? Environment.TickCount64) - Started) / 1000.0;
@@ -267,7 +273,7 @@ internal sealed class HexAgentChat(int id, string agent)
         if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
         {
             // The oldest to its file, never one still queued or a tool still going, which are still to change
-            int going = entries.FindIndex(each => each.Queued || (each.Kind == HexAgentEntryKind.Tool && each.State == HexAgentToolState.Running));
+            int going = entries.FindIndex(each => each.Queued || each.Answer is not null || (each.Kind == HexAgentEntryKind.Tool && each.State == HexAgentToolState.Running));
             int spill = Math.Min(entries.Count - MOST_ENTRIES, going < 0 ? int.MaxValue : going);
             if (spill > 0)
             {
@@ -334,6 +340,29 @@ internal sealed class HexAgentChat(int id, string agent)
         Touch(taken);
         return true;
     }
+
+    /// <summary>
+    /// The agent asking leave to do something (run a command, change a file), a row with what it is that waits for the
+    /// person's answer, handed to <paramref name="answer"/> once it's given.
+    /// </summary>
+    public HexAgentEntry Approval(string title, string detail, Action<bool> answer) =>
+        Add(new HexAgentEntry(HexAgentEntryKind.Approval, title) { Input = detail, Answer = answer });
+
+    /// <summary>An approval answered, the agent told, the row saying what was decided. False when it had been already.</summary>
+    public bool Decide(HexAgentEntry approval, bool allowed)
+    {
+        if (approval.Kind != HexAgentEntryKind.Approval || approval.Answer is not { } answer)
+            return false;
+        approval.Answer = null;
+        approval.State = allowed ? HexAgentToolState.Done : HexAgentToolState.Failed;
+        approval.Ended = Environment.TickCount64;
+        Touch(approval);
+        answer(allowed);
+        return true;
+    }
+
+    /// <summary>The approvals still waiting for the person.</summary>
+    public IEnumerable<HexAgentEntry> Pending => entries.Where(entry => entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null);
 
     /// <summary>What the agent said, a row of its own.</summary>
     public HexAgentEntry Say(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Text, text));

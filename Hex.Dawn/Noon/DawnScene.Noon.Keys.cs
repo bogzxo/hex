@@ -79,7 +79,8 @@ internal sealed partial class DawnScene
         List<HexAgentChat> order = FleetOrder();
         int at = agentChat is null ? -1 : order.IndexOf(agentChat);
         HexAgentChat[] after = [.. order.Skip(at + 1), .. order.Take(at + 1)];
-        HexAgentChat? wanted = after.FirstOrDefault(chat => chat.Failed && chat.Unread)
+        HexAgentChat? wanted = after.FirstOrDefault(chat => chat.Pending.Any())
+            ?? after.FirstOrDefault(chat => chat.Failed && chat.Unread)
             ?? after.FirstOrDefault(chat => chat.UnreadMail().Length > 0 && !chat.Running)
             ?? after.FirstOrDefault(chat => chat.Unread && chat != agentChat);
         if (wanted is null)

@@ -434,6 +434,9 @@ internal sealed partial class DawnScene
                 return card;
             }
 
+            case HexAgentEntryKind.Approval:
+                return ApprovalRow(chat, entry, skin);
+
             default:
                 return Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
         }

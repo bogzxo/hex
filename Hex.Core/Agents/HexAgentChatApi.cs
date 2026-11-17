@@ -14,8 +14,25 @@ internal static class HexAgentChatApi
     /// <param name="finished">Called for chat.done in place of ending the turn, for a run that decides when it's over.</param>
     /// <param name="taken">Called for chat.taken in place of the chat's own, for a run that knows which message that was.</param>
     /// <param name="write">A line for the agent's stdin, false when it couldn't be written (it isn't running, or its stdin is shut).</param>
+    /// <param name="call">How a function of the extension's is called back later (an approval's answer), null when it can't be.</param>
     public static ObjectValue Of(HexAgentChat chat, string folder, Action? wentWrong = null, Action? finished = null, Action? taken = null,
-        Func<string, bool>? write = null) => Natives.Object(
+        Func<string, bool>? write = null, Func<IRuntimeValue, IRuntimeValue[], bool>? call = null) => Natives.Object(
+        // The agent asking leave, a row with Allow and Deny, the extension's function called with true or false once the
+        // person answers. Returns a function that takes the row back unanswered (the agent gave up asking)
+        ("approval", Natives.Function("approval", args =>
+        {
+            IRuntimeValue? answered = args.Has(2) ? args[2] : null;
+            HexAgentEntry asked = chat.Approval(args.Text(0, "Allow this?"), args.Has(1) ? HexJson.Short(args[1]) : string.Empty,
+                allowed => { if (answered is not null) call?.Invoke(answered, [new BooleanValue(allowed)]); });
+            return Natives.Action("withdraw", _ =>
+            {
+                if (asked.Answer is null)
+                    return;
+                asked.Answer = null;
+                asked.State = HexAgentToolState.Failed;
+                chat.Touch(asked);
+            });
+        })),
         ("id", new StringValue(chat.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))),
         // Something for the agent's stdin, a string as it is or an object as a line of JSON, true when it went
         ("write", Natives.Function("write", args =>

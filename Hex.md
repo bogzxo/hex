@@ -50,7 +50,20 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] Claude Code's 5-hour session limit shown, every window of rate_limit_event's unifiedWindows reported (to confirm live)
 - [x] Codex on the app-server protocol (d986fc4, run live: turns, rows, its weekly limit), so its limits and stats match Claude Code's and grep is refused through its
       approvals (research in chats #2 and #3 of the session that started this list)
-- [ ] Claude Code through --permission-prompt-tool or its control protocol, approvals asked in Hex
+- [ ] Claude Code through its control protocol, approvals asked in Hex. Done in Hex: approval rows
+      (HexAgentEntryKind.Approval, chat.Approval and Decide, DawnScene.AgentsPanel.Approvals.cs with Allow and Deny, counted
+      as needing the person), and chat.approval(title, detail, answered) in the chat API, which returns a withdraw
+      function. Left: in hex-extensions/claude_code/extension.hor add "--permission-prompt-tool", "stdio" to the
+      arguments, and in heard() handle {"type":"control_request","request_id","request":{"subtype":"can_use_tool",
+      "tool_name","input"}}. A Bash or PowerShell command that hex.harness_check flags is denied at once with the Hex tool;
+      anything else goes to chat.approval, whose answer writes {"type":"control_response","response":{"subtype":"success",
+      "request_id":<id>,"response":{"behavior":"allow","updatedInput":<input>}}} or behavior "deny" with a message.
+      {"type":"control_cancel_request","request_id"} calls the withdraw function. Stop could send
+      {"type":"control_request","request_id":"..","request":{"subtype":"interrupt"}} rather than killing. Research is
+      in the chat "Claude Code control research" (claude 2.1.326)
+- [ ] The mcp self test's "clicking File by its text opens the File menu" fails now and then (passes on a rerun)
+- [x] Codex declined both its own shell and hex_terminal_run for a read of the workspace, and fell back to hex_files
+      (live check)
 - [ ] Gemini through the Antigravity provider, so a Google subscription (Google AI Pro and the like) is what it runs on.
       Find out how Antigravity is driven from outside (its CLI or agent protocol, how it signs in, what it prints) and
       what the user installs, then make it an agent system of Hex's in hex-extensions (the Gemini CLI extension there

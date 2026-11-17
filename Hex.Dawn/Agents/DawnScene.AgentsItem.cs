@@ -27,7 +27,7 @@ internal sealed partial class DawnScene
     }
 
     // How many chats want looking at
-    private int AgentsWanting() => agentChats.Count(chat => chat.Unread || (!chat.Running && chat.UnreadMail().Length > 0));
+    private int AgentsWanting() => agentChats.Count(chat => chat.Pending.Any() || chat.Unread || (!chat.Running && chat.UnreadMail().Length > 0));
 
     /// <summary>The item's words as the chats are now.</summary>
     private void DrawAgentsItem()
