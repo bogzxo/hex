@@ -373,6 +373,22 @@ internal sealed partial class DawnScene
         });
         test.Check("agents layout: a row right-clicked copies its text or opens it to pick any part out", () => menuSays && windowSelects);
 
+        // A message held for a working agent goes back to the box to be changed, out of the chat until it's sent again
+        bool offered = false, taken = false;
+        int entriesBefore = 0;
+        test.Run(() =>
+        {
+            entriesBefore = longChat!.Entries.Count;
+            HexAgentEntry held = longChat.Steer("look at the tests first");
+            heldSteers.Add((longChat, held, "{}", "look at the tests first"));
+            offered = AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.edit_queued"));
+            taken = EditHeld(held);
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a queued message still held goes back to the box to be changed, out of the chat", () =>
+            offered && taken && heldSteers.Count == 0 && longChat!.Entries.Count == entriesBefore && agentsInput.Text == "look at the tests first");
+        test.Run(() => agentsInput.Text = string.Empty);
+
         // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
         // again as wide as the box wraps once, not three times as it did when it was counted in digits
         test.Run(() =>

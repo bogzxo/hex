@@ -13,6 +13,13 @@ internal sealed partial class DawnScene
     {
         var menu = new Menu("agent row");
         string said = EntryText(entry);
+
+        // A message still held for a working agent can be taken back to the box and changed, sent again once it's right
+        if (entry.Queued && IsHeld(entry))
+        {
+            menu.Add(Said("agents_panel.edit_queued"), () => EditHeld(entry), icon: "edit");
+            menu.AddSeparator();
+        }
         menu.Add(Said("agents_panel.copy_row"), () =>
         {
             UICompositor.Copy(said);

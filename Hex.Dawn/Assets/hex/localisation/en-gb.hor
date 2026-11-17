@@ -3547,6 +3547,7 @@ let strings = {
         harness_none: "No harness calls yet",
         chat_open_noon: "Open in Agentic",
         copy_row: "Copy",
+        edit_queued: "Edit before it's sent",
         select_text: "Select text…",
         copy_chat: "Copy whole chat as Markdown",
         select_chat: "Open whole chat as text…",

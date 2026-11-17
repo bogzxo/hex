@@ -289,6 +289,22 @@ internal sealed class HexAgentChat(int id, string agent)
     public HexAgentEntry Steer(string prompt, string? askedText = null, string? contextLocation = null) =>
         Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation, Queued = true });
 
+    /// <summary>
+    /// Something asked and still queued taken back out of the chat, to be written again, false when it's gone further. The
+    /// rows are drawn again from the start after it, see <see cref="Reshaped"/>.
+    /// </summary>
+    public bool Withdraw(HexAgentEntry entry)
+    {
+        if (!entry.Queued || !entries.Remove(entry))
+            return false;
+        Reshaped++;
+        Version++;
+        return true;
+    }
+
+    /// <summary>How many times a row was taken out of the middle, for the panel to draw the chat again from the start.</summary>
+    public int Reshaped { get; private set; }
+
     /// <summary>Whether something asked is still waiting for the agent to take it in.</summary>
     public bool HasQueued => entries.Any(entry => entry.Queued);
 

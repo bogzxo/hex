@@ -203,6 +203,15 @@ internal sealed partial class DawnScene
         HexAgentEntry entry = chat.Steer(prompt, location is null && chat.Attached.Count == 0 ? null : asked, location);
         string? line = MessageLine(run.Extension, run.Run, prompt, run.ChatObject);
         chat.Attached = [];
+
+        // What somebody typed is held by Hex until the agent next says something, where it would be taken in anyway, so
+        // it can be put back in the box and changed meanwhile. Written to the agent's stdin there was no taking it back
+        if (line is not null && typed)
+        {
+            heldSteers.Add((chat, entry, line, asked));
+            return;
+        }
+
         if (line is not null && run.Process.Send(line))
             return;
 
@@ -237,6 +246,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void FinishAgentTurn(HexAgentChat chat)
     {
+        // What's held for it goes now, its turn going on with it rather than ending with it unsaid
+        FlushSteers(chat);
         if (chat.HasQueued && SteeredRun(chat) is not null)
             return;
 
@@ -275,6 +286,10 @@ internal sealed partial class DawnScene
         {
             AgentRun run = agentRuns[r];
             bool exited = run.Process.Exited;
+
+            // The agent said something, so it's between steps, and what was held for it goes in now
+            if (!run.Process.Lines.IsEmpty)
+                FlushSteers(run.Chat);
             for (int taken = 0; taken < AGENTS_LINES_A_TICK && run.Process.Lines.TryDequeue(out var line); taken++)
                 TakeAgentLine(run, line.Line, line.Error);
 

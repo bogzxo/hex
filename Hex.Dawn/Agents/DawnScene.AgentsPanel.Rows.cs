@@ -225,7 +225,7 @@ internal sealed partial class DawnScene
     private void DrawAgentRows()
     {
         HexAgentChat? chat = agentChat;
-        var key = (chat, chat?.Dropped ?? 0, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
+        var key = (chat, (chat?.Dropped ?? 0) + (chat?.Reshaped ?? 0) * 100_000, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
         bool fresh = key != agentRowsFor;
 
         // Only another chat comes in moving, rows made again for a new width or theme are just there, and so is all of
