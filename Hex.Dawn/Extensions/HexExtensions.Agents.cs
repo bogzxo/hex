@@ -45,6 +45,8 @@ internal sealed partial class HexExtensions
         })),
         ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
+        // What an agent is told in its system prompt about the harness, the same for every agent system
+        ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
         // Given the chat a run is for, the bridge says which it is, so what the agent does through Hex is known to be its
         // (the agents it starts are that chat's, and how deep it is)
         ("mcp_server", Natives.Function("mcp_server", args => Natives.Object(

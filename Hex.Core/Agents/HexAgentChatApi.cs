@@ -35,6 +35,8 @@ internal static class HexAgentChatApi
         ("tool", Natives.Action("tool", args => chat.Tool(Values.Text(args[0]), args.Text(1, "tool"), args.Has(2) ? HexJson.Short(args[2]) : string.Empty))),
         ("tool_done", Natives.Action("tool_done", args =>
             chat.ToolDone(Values.Text(args[0]), !args.Has(1) || args[1] is not BooleanValue { Value: false }, args.Has(2) ? HexJson.Short(args[2]) : string.Empty))),
+        // A step of a subagent the tool of that id started, on the tool's row instead of a row of its own
+        ("progress", Natives.Action("progress", args => chat.Progress(Values.Text(args[0]), args.Has(1) ? HexJson.Short(args[1]) : string.Empty))),
         ("usage", Natives.Action("usage", args =>
         {
             ObjectValue used = args.Object(0);

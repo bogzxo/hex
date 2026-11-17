@@ -3469,6 +3469,7 @@ let strings = {
         queued: "queued, the agent takes it in as it can",
         unheard: "not taken in, the turn ended first",
         tool_running: "running {seconds}s",
+        subagent_steps: "step {count} · {step}",
         tool_done: "{seconds}s",
         turn_done: "Completed · {seconds}s",
         tool_failed: "failed {seconds}s",

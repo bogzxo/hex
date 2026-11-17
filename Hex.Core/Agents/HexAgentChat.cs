@@ -24,6 +24,12 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     public long Started { get; } = Environment.TickCount64;
     public long? Ended { get; set; }
 
+    /// <summary>What a subagent this tool started is doing now, its latest step, null for a tool that started none.</summary>
+    public string? Progress { get; set; }
+
+    /// <summary>How many steps the subagent this tool started has taken, said on its row rather than a row each.</summary>
+    public int Steps { get; set; }
+
     /// <summary>Whether its row is opened to say all of it.</summary>
     public bool Open { get; set; }
 
@@ -212,6 +218,22 @@ internal sealed class HexAgentChat(int id, string agent)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A step of a subagent a tool started, said on that tool's row as its latest step and a count, where a row each made
+    /// a subagent's every search and thought look like the chat's own. False when no tool of that id is in the turn.
+    /// </summary>
+    public bool Progress(string id, string step)
+    {
+        if (ToolOfTurn(id) is not { } tool)
+            return false;
+
+        tool.Steps++;
+        if (!string.IsNullOrWhiteSpace(step))
+            tool.Progress = step;
+        Touch(tool);
+        return true;
     }
 
     /// <summary>A tool done, by its id, false when there's no tool of that id going (it's added as done then).</summary>

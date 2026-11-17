@@ -161,6 +161,7 @@ public sealed class HexAgentsPanelTests : IDisposable
                 _ => new StringValue(string.Empty)
             })),
             ("temp", new StringValue(folder)),
+            ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
             ("home", new StringValue(folder)),
             ("exists", Natives.Function("exists", args => Values.Bool(File.Exists(args.Text(0)) || Directory.Exists(args.Text(0))))),
             ("read", Natives.Function("read", args => new StringValue(File.ReadAllText(args.Text(0))))),
@@ -224,6 +225,29 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void A_claude_subagents_steps_go_on_the_row_of_the_task_that_started_it()
+    {
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("find where the server starts");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+
+        Feed(runtime, run, api,
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Find the server start","prompt":"Look everywhere for where the MCP server starts and say the file and line.","subagent_type":"Explore"}}]}}""",
+            """{"type":"assistant","parent_tool_use_id":"toolu_task","message":{"content":[{"type":"text","text":"Looking it up.\nThen reading it."},{"type":"tool_use","id":"toolu_s1","name":"mcp__hex__hex_symbols","input":{"query":"StartMcp"}}]}}""",
+            """{"type":"user","parent_tool_use_id":"toolu_task","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_s1","content":"Hex.Dawn/Agents/DawnScene.Mcp.cs:62"}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_task","content":"DawnScene.Mcp.cs:62"}]}}""");
+
+        HexAgentEntry task = Assert.Single(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Tool);
+        Assert.Equal(2, task.Steps);
+        Assert.Equal("hex_symbols StartMcp", task.Progress);
+        Assert.Equal(HexAgentToolState.Done, task.State);
+        Assert.DoesNotContain(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Text);
+        Assert.Equal(("Subagent · Explore", "Find the server start"), DawnScene.SubagentOf(task));
+        Assert.Null(DawnScene.SubagentOf(new HexAgentEntry(HexAgentEntryKind.Tool, "Read") { ToolName = "Read", Input = "{}" }));
+    }
+
+    [Fact]
     public void Claude_code_runs_with_hex_as_its_server_and_resumes_its_session()
     {
         var (runtime, _, run) = Load("claude_code");
@@ -232,7 +256,11 @@ public sealed class HexAgentsPanelTests : IDisposable
 
         string[] first = Arguments(runtime, run, api);
         Assert.EndsWith("claude-mcp-1.json", first[8]);
-        Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits", "--allowedTools", "mcp__hex Read"], first);
+        Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits",
+            "--append-system-prompt", HexAgentProfiles.HARNESS_RULES, "--agents", first[14], "--allowedTools", "mcp__hex Read"], first);
+        Assert.EndsWith("claude-agents-1.json", first[14]);
+        using (System.Text.Json.JsonDocument agents = System.Text.Json.JsonDocument.Parse(File.ReadAllText(first[14])))
+            Assert.EndsWith(HexAgentProfiles.HARNESS_RULES, agents.RootElement.GetProperty("Explore").GetProperty("prompt").GetString());
         string config = File.ReadAllText(first[8]);
         Assert.Contains("--mcp-connect", config);
         Assert.Contains("\"--agent-chat\"", config);
@@ -443,7 +471,9 @@ public sealed class HexAgentsPanelTests : IDisposable
             "-c", "mcp_servers.hex.command=\"C:/Hex/Hex.exe\"",
             "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\",\"--agent-chat\",\"1\"]",
             "-c", "mcp_servers.hex.tool_timeout_sec=660", "-c", "mcp_servers.hex.enabled=true",
-            "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\"", "-"], first);
+            "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\"",
+            "-c", "developer_instructions='''" + HexAgentProfiles.HARNESS_RULES + "'''", "-"], first);
+        Assert.DoesNotContain('\'', HexAgentProfiles.HARNESS_RULES);
 
         chat.Session = "thread-1";
         Assert.Equal(["resume", "thread-1", "-"], Arguments(runtime, run, api)[^3..]);

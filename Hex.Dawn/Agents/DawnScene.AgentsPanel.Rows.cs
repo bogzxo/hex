@@ -485,6 +485,14 @@ internal sealed partial class DawnScene
         if (name.StartsWith("hex_", StringComparison.Ordinal)) name = name[4..];
         name = name.Replace('_', ' ');
         name = string.IsNullOrWhiteSpace(name) ? "Tool" : char.ToUpperInvariant(name[0]) + name[1..];
+        // A subagent is one row, what it was sent to do and where it's got to, its own steps folded into it
+        if (SubagentOf(entry) is { } subagent)
+        {
+            name = subagent.Name;
+            preview = entry.Steps > 0
+                ? Said("agents_panel.subagent_steps", ("count", entry.Steps.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("step", entry.Progress ?? subagent.About))
+                : subagent.About;
+        }
         var holder = new Panel { Fill = UIFill.Horizontal, Color = entry.Open ? hover with { W = hover.W * 0.6f } : null, Radius = 6 };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
         Button head = stack.Add(new Button
@@ -582,6 +590,34 @@ internal sealed partial class DawnScene
         }
         catch (JsonException) { }
         return input.Trim();
+    }
+
+    /// <summary>
+    /// A tool row that's a subagent, Claude Code's Task or Agent or one that said steps of its own, named for the kind
+    /// of agent it is and said by what it was sent to do. Null for any other tool.
+    /// </summary>
+    internal static (string Name, string About)? SubagentOf(HexAgentEntry entry)
+    {
+        string tool = ToolTitle(entry.ToolName ?? string.Empty).ToLowerInvariant();
+        if (tool is not ("task" or "agent") && entry.Steps == 0)
+            return null;
+
+        string kind = string.Empty, about = ToolPreview(entry.Input);
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(entry.Input ?? string.Empty);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                if (document.RootElement.TryGetProperty("subagent_type", out JsonElement type) && type.ValueKind == JsonValueKind.String)
+                    kind = type.GetString() ?? string.Empty;
+                if (document.RootElement.TryGetProperty("description", out JsonElement said) && said.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(said.GetString()))
+                    about = said.GetString()!;
+            }
+        }
+        catch (JsonException) { }
+
+        string name = kind.Length > 0 ? $"Subagent · {kind}" : "Subagent";
+        return (name, about);
     }
 
     private static string ToolDetails(string input)
