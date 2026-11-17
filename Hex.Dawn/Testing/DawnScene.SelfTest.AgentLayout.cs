@@ -189,6 +189,33 @@ internal sealed partial class DawnScene
             agentsRows.Children.Count == rowsBefore.Length && agentsRows.Children.Zip(rowsBefore).All(pair => ReferenceEquals(pair.First, pair.Second))
             && Bubble().Size.X > bubbleBefore + 60 && Bubble().Bounds.Max.X <= agentsView.Bounds.Max.X + 1);
 
+        // Calls one after another are one row folded, its words said, and opened it stays where it was on screen
+        float groupTop = 0;
+        Button? groupHead = null;
+        test.Run(() =>
+        {
+            agentChat!.Ask("Two calls in a row");
+            agentChat.Tool("g1", "mcp__hex__hex_read", """{"path":"a.cs"}""");
+            agentChat.ToolDone("g1", true, "a");
+            agentChat.Tool("g2", "mcp__hex__hex_search", """{"query":"b"}""");
+            agentChat.ToolDone("g2", true, "b");
+            agentChat.Say("Done with both.");
+            agentChat.Done();
+        });
+        test.Settle(0.4f);
+        test.Run(() =>
+        {
+            groupHead = Descendants(agentsRows).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal));
+            groupTop = groupHead?.Bounds.Max.Y ?? 0;
+            groupHead?.OnPressed!();
+        });
+        test.Settle(0.3f);
+        test.Check("agents layout: calls one after another are one folded row with its words, and open where they are", () =>
+            groupHead is not null && toolGroupsOpen.Count > 0
+            && !Descendants(agentsRows).OfType<Button>().Any(button => button.Label.Contains("@agents_panel", StringComparison.Ordinal))
+            && Descendants(agentsRows).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal)) is { } after
+            && MathF.Abs(after.Bounds.Max.Y - groupTop) < 2.0f);
+
         // Each chat keeps where it was read to. Scrolled up in the long one, away to another and back, it's where it was
         HexAgentChat? longChat = null, other = null;
         float readTo = 0;

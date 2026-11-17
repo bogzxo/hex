@@ -294,6 +294,10 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.InRange((chat.Limit!.Resets!.Value - DateTimeOffset.FromUnixTimeSeconds(1795341600)).Duration(), TimeSpan.Zero, TimeSpan.FromMinutes(2));
         Assert.True(chat.Failed);
         Assert.Single(chat.Entries, entry => entry.Text.StartsWith("Limit reached, weekly limit · 100% used", StringComparison.Ordinal));
+
+        // Every window it said is kept, the session's beside the week's, each as the latest said it
+        Assert.Equal(["five_hour", "seven_day"], chat.Limits.Keys.Order().ToArray());
+        Assert.Equal(0.8, chat.Limits["five_hour"].Used, 3);
     }
 
     [Fact]

@@ -251,6 +251,27 @@ public sealed class HexHarnessTests : IDisposable
     }
 
     [Fact]
+    public void A_file_the_index_leaves_out_is_read_from_the_disk_by_range()
+    {
+        string outside = Path.Combine(Path.GetTempPath(), "hex-unindexed-" + Guid.NewGuid().ToString("N")[..8] + ".hor");
+        File.WriteAllLines(outside, ["one", "two", "three", "four"]);
+        try
+        {
+            var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+            string said = index.Read(outside, null, 2, 3, true, 4000).Text;
+            Assert.Contains("from the disk", said);
+            Assert.Contains("2  two", said);
+            Assert.Contains("3  three", said);
+            Assert.DoesNotContain("four", said);
+            Assert.Contains("No file of the workspace", index.Read(outside + ".gone", null, null, null, true, 4000).Text);
+        }
+        finally
+        {
+            File.Delete(outside);
+        }
+    }
+
+    [Fact]
     public void The_same_question_twice_is_kept()
     {
         var slow = new HexCodeIndex(() => [folder]) { StaleAfter = 60_000 };

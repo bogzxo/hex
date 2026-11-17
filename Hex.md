@@ -18,6 +18,12 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 - [x] Tool calls one after another grouped into one row, folded by default, slim lines when opened (3e32fb9)
 - [ ] Scrolling the chat in Agentic works over the margins round the centred column, not only over the column
+- [x] A blue gutter beside tool calls while they run
+- [x] A click anywhere in the message card's writing room lands in the box (the box is two rows at the least)
+- [x] Opening or folding a group of calls keeps it where it is on screen
+- [ ] The ghost resize line still shows sometimes (not a hovered grip, the engine fix didn't end it). Needs a screenshot
+      of when it shows and what was done just before
+- [x] hex_read reads files the index leaves out (hex-extensions), by range
 - [ ] "Files it touched" in Details lists the newest first, keeps the last 25, shows 10 with a fold for the rest
 - [ ] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
       the file deleted with the chat
@@ -36,7 +42,7 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 ## Agent systems
 
-- [ ] Claude Code's 5-hour session limit shown (only the weekly one arrives now, find what it prints for the session)
+- [x] Claude Code's 5-hour session limit shown, every window of rate_limit_event's unifiedWindows reported (to confirm live)
 - [ ] Codex on the app-server protocol, so its limits and stats match Claude Code's and grep is refused through its
       approvals (research in chats #2 and #3 of the session that started this list)
 - [ ] Claude Code through --permission-prompt-tool or its control protocol, approvals asked in Hex

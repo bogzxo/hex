@@ -80,6 +80,8 @@ internal sealed partial class DawnScene
             CaretBand = false,
             TextScale = 0.15f,
             FitRows = AGENTS_INPUT_LINES,
+            // Two rows at the least, the card's room to write in all of it the box, a click anywhere there landing in it
+            FitLeast = 2,
             Padding = new UIEdges(2, 2, 2, 2),
             Highlighter = CodeLanguages.ForFile("message.md"),
             Color = System.Numerics.Vector4.Zero,
@@ -269,6 +271,8 @@ internal sealed partial class DawnScene
                 agentsScroll.Offset = MathF.Round(held.Share * agentsScroll.MaxOffset);
             agentScrollHeld = held with { Ticks = held.Ticks - 1 };
         }
+
+        KeepHeldRow();
 
         // The rows and the cards follow the width every tick, a side being dragged moves every frame and the words fitted a
         // tenth of a second behind it jumped as they caught up. Each does nothing when the width didn't move

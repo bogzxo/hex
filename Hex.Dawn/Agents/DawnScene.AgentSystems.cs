@@ -144,23 +144,16 @@ internal sealed partial class DawnScene
             foreach (HexAgentProfile system in systems)
                 panel.Refresh.Add(SystemBlock(panel, system));
 
-            // At the foot of a column it's made from the bottom up, each head under what it opens and the panel's under all
+            // At the foot of a column the panel's own head is its last row, so it stays under the pointer as the systems
+            // open over it. Each system keeps its head over its lines, the lines under another's head read as that one's
             if (panel.BottomUp)
             {
-                var blocks = new List<List<UIComponent>>();
-                foreach (UIComponent row in panel.Root.Children.ToArray())
-                {
-                    if (panel.Heads.Contains(row) || blocks.Count == 0)
-                        blocks.Add([]);
-                    blocks[^1].Add(row);
-                }
-
+                UIComponent[] rows = [.. panel.Root.Children];
+                int systemsFrom = Array.FindIndex(rows, row => panel.Heads.Contains(row) && row != panel.Heads[0]);
+                UIComponent[] own = systemsFrom < 0 ? rows : rows[..systemsFrom];
                 int at = 0;
-                for (int b = blocks.Count - 1; b >= 0; b--)
-                {
-                    foreach (UIComponent row in blocks[b].Skip(1).Append(blocks[b][0]))
-                        panel.Root.MoveChild(row, at++);
-                }
+                foreach (UIComponent row in (systemsFrom < 0 ? [] : rows[systemsFrom..]).Concat(own))
+                    panel.Root.MoveChild(row, at++);
             }
             panel.Opening = null;
         }
@@ -202,7 +195,7 @@ internal sealed partial class DawnScene
                 SystemsFolded(panel);
             }
         });
-        head.Add(new Label { Text = $"$({(open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });
+        head.Add(new Label { Text = $"$({(open ? "chevron-down" : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });
         var badge = head.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(18, 0), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
         badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system.Name)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
         var name = head.Add(new Label { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(SYSTEM_INDENT, 0), TextScale = 0.13f, Bold = true, Align = Origin.Left });

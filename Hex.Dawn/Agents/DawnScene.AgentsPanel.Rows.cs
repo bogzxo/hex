@@ -530,6 +530,9 @@ internal sealed partial class DawnScene
         // blue while it runs, green when it went and red when it failed. A failed one filled red was most of the chat red
         var holder = new Panel { Fill = UIFill.Horizontal, Color = hover with { W = hover.W * (entry.Open ? 0.75f : 0.45f) }, Radius = 8, Padding = new UIEdges(0, 0, 0, 2) };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
+        // A blue gutter down its left while it runs, as a group of calls has
+        if (entry.State == HexAgentToolState.Running)
+            holder.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(3, 24), Position = new Vector2(1, -3), Radius = 1.5f, Color = RUNNING_BLUE });
         Button head = stack.Add(new Button
         {
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },

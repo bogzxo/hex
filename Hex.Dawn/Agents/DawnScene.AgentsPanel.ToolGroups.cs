@@ -18,6 +18,49 @@ internal sealed partial class DawnScene
     // The groups opened, by the first call of each, the rest are folded
     private readonly HashSet<HexAgentEntry> toolGroupsOpen = [];
 
+    // A row pressed open or shut and where its top was on screen then, held there for a few ticks while it's made again
+    private (HexAgentEntry Entry, float Top, int Ticks)? agentRowHeld;
+
+    /// <summary>
+    /// The row of an entry kept where it is on screen as it opens or folds, the chat scrolled as much as what's above it
+    /// moved. Made again in its place it's laid out a frame later, and the chat jumped and came back meanwhile.
+    /// </summary>
+    private void HoldRowInPlace(HexAgentEntry entry, UIComponent pressed)
+    {
+        // Measured as the chat's own row it's in, a call's line in a group being part of the group's row
+        UIComponent row = pressed;
+        while (row.Parent is { } up && up != agentsRows)
+            row = up;
+        agentRowHeld = (entry, row.Bounds.Max.Y, 4);
+    }
+
+    /// <summary>Every tick, the held row put back where its top was, by scrolling the chat the difference.</summary>
+    private void KeepHeldRow()
+    {
+        if (agentRowHeld is not { Ticks: > 0 } held)
+            return;
+        agentRowHeld = held with { Ticks = held.Ticks - 1 };
+
+        // The row it's in now, or the group's that it belongs to
+        UIComponent? row = null;
+        for (int i = 0; i < agentRowsShown.Count && row is null; i++)
+        {
+            if (!ReferenceEquals(agentRowsShown[i].Entry, held.Entry))
+                continue;
+            // A call drawn by its group's row has a row of nothing of its own, the group's is the one before it that shows
+            int at = i;
+            while (at > 0 && !agentRowsShown[at].Row.Visible)
+                at--;
+            row = agentRowsShown[at].Row;
+        }
+
+        if (row is null || row.Bounds.IsEmpty || !row.Visible)
+            return;
+        float moved = held.Top - row.Bounds.Max.Y;
+        if (MathF.Abs(moved) >= 0.5f)
+            agentsScroll.Offset = Math.Clamp(agentsScroll.Offset + moved, 0.0f, agentsScroll.MaxOffset);
+    }
+
     /// <summary>The place in the list of a call drawn by its group's first row, a row of nothing taking no room.</summary>
     private static Panel GroupedPlace() => new() { Visible = false, Size = Vector2.Zero };
 
@@ -86,6 +129,9 @@ internal sealed partial class DawnScene
             : Said("agents_panel.tools_group", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("kinds", kinds));
 
         var bar = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f } });
+        // A blue gutter down its left while one of its calls is running, so what's going on now stands out of what's done
+        if (running is not null)
+            bar.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, TOOL_GROUP_HEAD - 6), Position = new Vector2(1, 0), Radius = 1.5f, Color = RUNNING_BLUE });
         var button = bar.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.13f, Icon = icon,
@@ -94,6 +140,7 @@ internal sealed partial class DawnScene
             {
                 if (!toolGroupsOpen.Remove(first))
                     toolGroupsOpen.Add(first);
+                HoldRowInPlace(first, bar);
                 chat.Touch(first);
             }
         });
@@ -135,7 +182,9 @@ internal sealed partial class DawnScene
     {
         var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
         var line = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero });
-        line.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(2, TOOL_LINE - 8), Radius = 1, Color = ToolStateColour(call.State, skin) });
+        // How it went, a thin mark at its left, a wider blue gutter while it's running
+        bool going = call.State == HexAgentToolState.Running;
+        line.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(going ? 3 : 2, TOOL_LINE - 6), Radius = 1, Color = going ? RUNNING_BLUE : ToolStateColour(call.State, skin) });
         string icon = call.State switch
         {
             HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading",
@@ -150,15 +199,15 @@ internal sealed partial class DawnScene
             OnPressed = () =>
             {
                 call.Open = !call.Open;
+                HoldRowInPlace(call, line);
                 chat.Touch(call);
             }
         });
         FollowWidth(width =>
         {
             int room = Math.Max(6, (int)((width - 90.0f) / 6.0f));
-            string fitted = UIRichText.Literal(name) + (preview.Length > 0 && room > name.Length + 4
-                ? $"  [color:{HexColour(skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1.0f))}]{UIRichText.Literal(OneLine(preview, room - name.Length - 2))}[/color]"
-                : string.Empty);
+            // A button's label takes no colours, so what it was given follows the name after a wider gap
+            string fitted = UIRichText.Literal(name + (preview.Length > 0 && room > name.Length + 4 ? "   " + OneLine(preview, room - name.Length - 3) : string.Empty));
             if (button.Label != fitted)
                 button.Label = fitted;
         });
