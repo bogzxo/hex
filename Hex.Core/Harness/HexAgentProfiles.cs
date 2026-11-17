@@ -38,7 +38,9 @@ internal static class HexAgentProfiles
         + "- more hands, hex_agent_spawn and hex_agent_wait start and wait for other agents of any system and model\n"
         + "- coordinating, keep the judgement yourself and start cheaper agents to explore, implement and test. hex_agent_wait wakes on their messages as well as when they finish, "
         + "hex_agent_send steers one as it works, hex_agent_message passes what one found to the others, and those you start report to you the same way\n"
-        + "When a subagent of your own does the searching, tell it to use these tools too.";
+        + "When a subagent of your own does the searching, tell it to use these tools too.\n"
+        + "This holds for the whole session, not only its start. Long tasks drift back to the shell, so before any grep, rg, find, ls, cat, head, tail or sed -n "
+        + "over the workspace, use the hex tool that does it instead.";
 
     private static readonly Lock changing = new();
     private static volatile HexAgentProfile[] all = [];

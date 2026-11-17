@@ -364,6 +364,24 @@ public sealed class HexAgentSystemsTests : IDisposable
     }
 
     [Fact]
+    public void Claude_code_runs_with_hex_as_the_hook_that_keeps_it_on_the_harness()
+    {
+        var (runtime, hex, _, _) = Load("claude_code");
+        hex = Natives.Object([.. hex.Properties.Select(pair => (pair.Key, pair.Value)).Where(pair => pair.Key is not "harness_rules" and not "setting"),
+            ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
+            ("setting", Natives.Function("setting", args => args.Text(0) switch { "budget" => new NumberValue(7000), "harness_guard" => new StringValue("insist"), "max_budget" => new NumberValue(0), _ => new StringValue("") }))]);
+        ObjectValue run = (ObjectValue)Agents(runtime, hex);
+        var chat = new HexAgentChat(9, "claude_code");
+        string[] arguments = [.. ((ListValue)runtime.Invoke(run.Properties["arguments"], new StringValue("go"), HexAgentChatApi.Of(chat, folder))).Items.Select(Values.Text)];
+        string settings = arguments[Array.IndexOf(arguments, "--settings") + 1];
+        JsonObject hook = JsonNode.Parse(File.ReadAllText(settings))!["hooks"]!["PreToolUse"]![0]!.AsObject();
+        Assert.Contains("Grep", hook["matcher"]!.GetValue<string>());
+        string command = hook["hooks"]![0]!["command"]!.GetValue<string>();
+        Assert.Contains("--harness-hook --guard insist --folder", command);
+        Assert.StartsWith("\"C:/Hex/Hex.exe\"", command);
+    }
+
+    [Fact]
     public void Gemini_says_who_it_is_and_runs_with_hex_in_its_settings_and_the_session_resumed()
     {
         var (runtime, hex, commands, written) = Load("gemini");
