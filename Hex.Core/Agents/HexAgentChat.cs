@@ -1,7 +1,7 @@
 namespace Hex.Core;
 
 /// <summary>What a row of a chat is, what was asked, what the agent said or thought, a tool it called, a note or something wrong.</summary>
-internal enum HexAgentEntryKind { User, Text, Thinking, Tool, Note, Error, Approval }
+internal enum HexAgentEntryKind { User, Text, Thinking, Tool, Note, Error, Approval, Question }
 
 /// <summary>Where a tool call has got to.</summary>
 internal enum HexAgentToolState { Running, Done, Failed }
@@ -60,6 +60,21 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     /// (or for any other row), so a second press does nothing. Its state says the answer, Done allowed and Failed denied.
     /// </summary>
     public Action<bool>? Answer { get; set; }
+
+    /// <summary>For a question, the answers the agent offers, the person picking one or writing their own.</summary>
+    public string[]? Choices { get; init; }
+
+    /// <summary>For a question, the choice the agent would take itself, what it goes on with when nobody answers in time.</summary>
+    public int? Recommended { get; init; }
+
+    /// <summary>For a question, when the agent stops waiting and goes on without an answer (Environment.TickCount64).</summary>
+    public long? Deadline { get; init; }
+
+    /// <summary>
+    /// For a question, what's done with the answer, null once it's been given or the time ran out, so it's given once. The
+    /// answer is in <see cref="Output"/>, the state Done when the person gave it and Failed when nobody did.
+    /// </summary>
+    public Action<string?>? Respond { get; set; }
 
     /// <summary>How long a tool took, or has been going, in seconds.</summary>
     public double Seconds => ((Ended ?? Environment.TickCount64) - Started) / 1000.0;
@@ -361,8 +376,39 @@ internal sealed class HexAgentChat(int id, string agent)
         return true;
     }
 
-    /// <summary>The approvals still waiting for the person.</summary>
-    public IEnumerable<HexAgentEntry> Pending => entries.Where(entry => entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null);
+    /// <summary>
+    /// The agent asking the person something, a card with the answers it offers and a box for one of their own, which it
+    /// waits on until <paramref name="seconds"/> are up and then goes on with the one it would pick itself.
+    /// </summary>
+    public HexAgentEntry Question(string text, string[] choices, int? recommended, double seconds, Action<string?> respond) =>
+        Add(new HexAgentEntry(HexAgentEntryKind.Question, text)
+        {
+            Choices = choices,
+            Recommended = recommended is { } pick && pick >= 0 && pick < choices.Length ? pick : null,
+            Deadline = Environment.TickCount64 + (long)(Math.Max(1, seconds) * 1000),
+            Respond = respond
+        });
+
+    /// <summary>
+    /// A question answered, by the person or, with null, by nobody in time. The row says which, and the agent is handed
+    /// the answer. False when it had been answered already.
+    /// </summary>
+    public bool Reply(HexAgentEntry question, string? answer)
+    {
+        if (question.Kind != HexAgentEntryKind.Question || question.Respond is not { } respond)
+            return false;
+        question.Respond = null;
+        question.Output = answer;
+        question.State = answer is null ? HexAgentToolState.Failed : HexAgentToolState.Done;
+        question.Ended = Environment.TickCount64;
+        Touch(question);
+        respond(answer);
+        return true;
+    }
+
+    /// <summary>The approvals and questions still waiting for the person.</summary>
+    public IEnumerable<HexAgentEntry> Pending => entries.Where(entry =>
+        (entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null));
 
     /// <summary>What the agent said, a row of its own.</summary>
     public HexAgentEntry Say(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Text, text));

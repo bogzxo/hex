@@ -102,6 +102,28 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 7. Order. The API and Claude's compact first, with the Details button and the menu entry. Then Codex's compact. Then "/"
    in the composer with discovery, and skills last.
 
+## Questions to the person
+
+- [x] hex_ask, an agent of the panel asks the person on a card in its chat, its options as buttons (the one it would
+      pick marked), a box for an answer of their own, a countdown (300 seconds by default, 3600 at most) after which
+      it's told to go on with its recommended option or the one it judges best. Counts as needing the person
+- [ ] Claude Code's own AskUserQuestion tool, which comes through can_use_tool, shown as the same card and answered
+      with updatedInput carrying the answers, so it doesn't need to know of hex_ask
+- [ ] Codex's own questions (the app-server's tool/requestUserInput if it has one) on the same card
+
+## Order (the person's)
+
+1. The other items here, Claude Code's integration first
+2. Performance of the new agent system (chat paging, rows, the harness)
+3. Last of all, Hex's dev and stable builds, below
+
+## Dev and stable builds (last)
+
+- [ ] A dev build's icon is the icon in greyscale with a yellow H
+- [ ] The installer installs a stable build and a dev build, each in a folder of its own, side by side
+- [ ] Each updates its own way, stable from releases, dev from the latest nightly build (artefact) of the development
+      branch, both managed by the installer
+
 ## Plan milestones (docs/agent-workspace-plan.md)
 
 - [x] M0

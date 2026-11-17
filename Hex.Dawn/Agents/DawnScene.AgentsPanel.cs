@@ -237,6 +237,7 @@ internal sealed partial class DawnScene
 
         TakeAgentLines();
         PublishAgentStatuses();
+        ExpireQuestions();
         DrawAgentsActivity();
         FitHarnessSaved();
         if (agentsView is null || !agentsView.Visible || (!left.Shown && Face != HexFace.Noon))

@@ -231,6 +231,29 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void A_question_waits_on_the_person_once_and_says_who_answered()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        var heard = new List<string?>();
+        HexAgentEntry asked = chat.Question("Which way?", ["Rewrite it", "Patch it"], 1, 300, heard.Add);
+        Assert.Equal(1, asked.Recommended);
+        Assert.Same(asked, Assert.Single(chat.Pending));
+
+        Assert.True(chat.Reply(asked, "Patch it, but keep the test"));
+        Assert.False(chat.Reply(asked, "again"));
+        Assert.Equal(["Patch it, but keep the test"], heard);
+        Assert.Equal(HexAgentToolState.Done, asked.State);
+        Assert.Empty(chat.Pending);
+
+        // Nobody answering is an answer of null, the row saying so
+        HexAgentEntry unanswered = chat.Question("And then?", ["A", "B"], 9, 300, heard.Add);
+        Assert.Null(unanswered.Recommended);
+        Assert.True(chat.Reply(unanswered, null));
+        Assert.Equal(HexAgentToolState.Failed, unanswered.State);
+        Assert.Null(heard[^1]);
+    }
+
+    [Fact]
     public void Claude_codes_leave_asked_is_turned_back_to_hex_or_asked_of_the_person()
     {
         Directory.CreateDirectory(folder);

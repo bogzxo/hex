@@ -253,6 +253,7 @@ internal sealed partial class DawnScene
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
             agentsGroupTimes.Clear();
+            agentsQuestionTimes.Clear();
             agentRowFits.Clear();
             foreach (UIComponent child in agentsRows.Children.ToArray())
             {
@@ -436,6 +437,9 @@ internal sealed partial class DawnScene
 
             case HexAgentEntryKind.Approval:
                 return ApprovalRow(chat, entry, skin);
+
+            case HexAgentEntryKind.Question:
+                return QuestionRow(chat, entry, skin);
 
             default:
                 return Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
@@ -674,6 +678,8 @@ internal sealed partial class DawnScene
             if (time.Text != said)
                 time.Text = said;
         }
+
+        TickQuestionTimes();
     }
 
     // What was asked split from the file put in front of it, which the bubble says under it rather than in it
