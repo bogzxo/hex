@@ -212,6 +212,27 @@ internal sealed partial class DawnScene
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 
+        // Somebody's word to an agent sitting in a wait for its agents goes by its mail, which wakes the wait, where on its
+        // stdin it would only be read once the wait was over
+        test.Run(() =>
+        {
+            other!.Ask("Coordinate the others");
+            OpenAgentChat(other);
+            agentsWaiting[other.Id] = 1;
+            agentsInput.Text = "Stop and look at the tests first";
+            SendToAgent();
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: what's typed for an agent in a long wait wakes it by its mail", () =>
+            other!.UnreadMail() is [{ Directive: true, Kind: "instruction" } told] && told.Text.Contains("look at the tests", StringComparison.Ordinal)
+            && other.Entries.Any(entry => entry.Kind == HexAgentEntryKind.User && !entry.Queued && entry.Text.Contains("look at the tests", StringComparison.Ordinal))
+            && other.Entries[^1].Text == Said("agents_panel.told_waiting") && agentsInput.Text.Length == 0);
+        test.Run(() =>
+        {
+            agentsWaiting.TryRemove(other!.Id, out _);
+            other.Done();
+        });
+
         test.Run(() =>
         {
             agentChats.Remove(other!);

@@ -3506,6 +3506,8 @@ let strings = {
         failed_start: "{program} couldn't be started, {why}",
         exited: "{program} stopped with exit code {code}",
         stopped: "Stopped.",
+        told_waiting: "It was waiting for its agents, this wakes it now.",
+        told_inbox: "It can't be told more mid-step, it reads this in its inbox or starts its next turn with it.",
         with_file: "with {where}",
         queued: "queued, the agent takes it in as it can",
         unheard: "not taken in, the turn ended first",

@@ -165,6 +165,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void SteerAgent(HexAgentChat chat, string asked, bool typed = true)
     {
+        // Somebody's word to an agent sitting in a long wait for its agents, or to one that can't be told more as it
+        // works, goes by the mail. Said on its stdin it would only be read once the wait was over, minutes later, or never
+        if (typed && chat.Running && (AgentWaiting(chat) || SteeredRun(chat) is null))
+        {
+            TellWorkingAgent(chat, asked);
+            return;
+        }
+
         if (SteeredRun(chat) is not { } run)
             return;
 
@@ -187,6 +195,24 @@ internal sealed partial class DawnScene
         entry.Queued = false;
         entry.Unheard = true;
         chat.Touch(entry);
+    }
+
+    /// <summary>
+    /// What's in the box sent to a working agent as an instruction from the person watching. It wakes a wait for its
+    /// agents at once, or waits in its inbox and starts its next turn when it isn't read before this one ends. The row of
+    /// it stands in the chat where it was said, as anything asked does.
+    /// </summary>
+    private void TellWorkingAgent(HexAgentChat chat, string asked)
+    {
+        string prompt = AgentDraftPrompt(asked);
+        agentsInput.Text = string.Empty;
+        RememberAsked(asked);
+        agentDraftContext = null;
+        HexAgentEntry entry = chat.Steer(prompt);
+        entry.Queued = false;
+        chat.Touch(entry);
+        string said = DeliverFromPerson(chat, prompt);
+        chat.Note(said);
     }
 
     /// <summary>

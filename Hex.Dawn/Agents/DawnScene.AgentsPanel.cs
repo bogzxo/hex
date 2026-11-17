@@ -236,7 +236,8 @@ internal sealed partial class DawnScene
         // Stop pops up in Send's place while the agent works, Send pops back when it's done. An agent that can be told
         // more as it works keeps Send, Stop beside it
         bool running = agentChat?.Running == true;
-        bool steering = SteeredRun(agentChat) is not null;
+        // Every running agent can be told more now, the ones that can't take it on their stdin by their mail
+        bool steering = running;
         if (running != agentsWasRunning || steering != agentsWasSteering)
         {
             bool started = running != agentsWasRunning;

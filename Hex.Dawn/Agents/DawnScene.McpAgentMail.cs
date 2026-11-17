@@ -147,6 +147,22 @@ internal sealed partial class DawnScene
         return $"{MailName(to)} isn't working, it reads it when it next does.";
     }
 
+    // Who a message typed in the panel's box is from, as the agent reads it
+    private const string FROM_PERSON = "the person watching";
+
+    /// <summary>
+    /// What somebody typed for an agent that's working but can't take it in on its stdin now, kept as an instruction in
+    /// its mail. A wait for its agents is woken with it, otherwise it's read between steps or starts its next turn. Says
+    /// in the person's words what became of it.
+    /// </summary>
+    private string DeliverFromPerson(HexAgentChat to, string text)
+    {
+        to.Post(new HexAgentMail(++agentMailMade, null, FROM_PERSON, "instruction", text, Directive: true));
+        return AgentWaiting(to)
+            ? Said("agents_panel.told_waiting")
+            : Said("agents_panel.told_inbox");
+    }
+
     /// <summary>
     /// What a chat's agent is asked with what it hasn't read put in front, read from then on. An empty prompt when the
     /// messages are all there is to it.
