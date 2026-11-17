@@ -165,8 +165,9 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 1. The other items here, Claude Code's integration first
 2. Performance of the new agent system (chat paging, rows, the harness). Done: rows read back go to the file again
    after a minute at the latest, Details no longer made again every second for its clock (a line put right in place),
-   a call's file worked out once. Next to look at: a chat's version moving with every streamed line makes Details and
-   the cards' keys change, the hub's snapshot (Pump) every tick, UnreadMail allocating
+   a call's file worked out once, the hub's rows kept for chats that didn't move. The agentic-perf self test measures
+   it (docs/benchmarks.md, dev and NativeAOT release). Next: idle still allocates 6 to 13 KB an update, the release
+   build's working set is 400 MiB against the dev build's 240 MiB, switching allocates 160 to 260 KB a turn
 3. Last of all, Hex's dev and stable builds, below
 
 ## Dev and stable builds (last)

@@ -225,6 +225,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateAgentsPanel(float dt)
     {
+        // A frame's length while the agentic perf test measures
+        perfFrames?.Add(dt);
         // A fold of the systems pressed is drawn on the ticks straight after, not when the panels next look
         if (systemsSettle > 0)
         {

@@ -112,6 +112,29 @@ from different machines as though they came from the same conditions.
 The recorded run used the shared workspace's Horizon checkout and wrote to
 `artifacts/readme-refresh/publish` and `artifacts/readme-refresh/benchmarks` at workspace level.
 
+## Agentic under load — 17 November 2026
+
+The `agentic-perf` self test (`--selftest agentic-perf --exit`) puts a dozen chats of 360 rows each into Agentic and
+measures five phases. Idle stands still on one chat. Switching goes through every chat twice. Scrolling goes from the
+end to the top and back. Streaming adds 120 lines and calls to the chat on screen, one an update. Groups opens and
+folds a group of tool calls twenty times. Render and update times are the engine's own loop averages for a turn, in
+milliseconds; allocation is what the update loop allocated per turn. The window was asked for frames throughout, so
+both builds drew at the display's 240 Hz. Same machine as above, Hex 3.0.0 at d816f30 with local changes.
+
+| Phase | Render ms (debug / release) | Update ms (debug / release) | Update KB a turn (debug / release) | CPU % of a core (debug / release) |
+| --- | ---: | ---: | ---: | ---: |
+| Idle | 0.21 / 0.19 | 0.62 / 0.21 | 13.2 / 6.3 | 22.6 / 26.5 |
+| Switching | 0.22 / 0.26 | 0.94 / 0.34 | 258.7 / 162.3 | 33.9 / 10.6 |
+| Scrolling | 0.32 / 0.22 | 0.45 / 0.15 | 10.5 / 9.6 | 44.0 / 11.7 |
+| Streaming | 0.49 / 0.27 | 0.48 / 0.21 | 42.9 / 42.1 | 73.7 / 24.6 |
+| Groups | 0.48 / 0.26 | 0.66 / 0.10 | 9.8 / 5.9 | 100.7 / 37.2 |
+
+Both are NativeAOT, the dev build Debug and the published one Release (`FolderProfile.pubxml`). Release updates two
+to six times faster. Its working set was 406 to 414 MiB against the dev build's 241 to 248 MiB with a similar
+managed heap (58 to 73 MiB), which wants looking into. Idle still allocates every update (6.3 KB a turn in release,
+about 1.5 MB a second at 240 Hz), the next thing to bring down. Results go to `hex-agentic-perf-<kind>.json` in the
+temp folder, one per kind of build.
+
 ## Evidence
 
 - [All 20 measured samples](benchmarks/2026-11-04/samples.json)
