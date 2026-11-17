@@ -71,7 +71,9 @@ internal sealed partial class DawnScene
         noonContext = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 10), Spacing = 6 });
         var contextHead = noonContext.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
         contextHead.Add(new Label { Text = Said("noon.context"), TextScale = 0.15f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
-        noonContextScroll = noonContext.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 6, 6) });
+        // A few pixels at its left, an icon that moves is drawn still once its clip cuts it, and the icons of the rows sat
+        // right on that edge (the running one never turned)
+        noonContextScroll = noonContext.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(3, 2, 6, 6) });
         noonContextRows = noonContextScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
 
         DressChrome();
