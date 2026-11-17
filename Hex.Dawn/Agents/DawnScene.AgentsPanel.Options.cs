@@ -35,6 +35,7 @@ internal sealed partial class DawnScene
         // Only from the box's first line up and its last line down, between its lines they move the caret
         commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == 0 && RecallAsked(-1), whileTyping: true, first: true);
         commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
+        commands.Keys.Add(Key.Tab, TakeFirstSlash, whileTyping: true, first: true);
         commands.Keys.Add(Key.Escape, () =>
         {
             // The window of what the harness saved goes first, wherever the keyboard is

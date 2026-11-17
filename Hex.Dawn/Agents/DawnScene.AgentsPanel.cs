@@ -292,6 +292,7 @@ internal sealed partial class DawnScene
         }
         DrawAgentImages();
         FitAgentsCompose();
+        DrawAgentSlash();
 
         // The rest follows the width as well on the tick it moves, the list over the chat, the systems under it, the
         // agents' chips and the pickers. Drawn a tenth of a second behind a side being dragged, each jumped as it caught up,
