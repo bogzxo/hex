@@ -496,6 +496,15 @@ internal sealed partial class DawnScene
         stack.Add(Text(shown, scale));
         if (under is not null)
             stack.Add(Text(under, 0.125f, dim: true));
+
+        // Held by Hex for the agent, it can go now rather than when the agent next says something, or back to the box
+        if (entry.Queued && IsHeld(entry))
+        {
+            var actions = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Size = new Vector2(0, 22) });
+            actions.Add(new Button { Label = Said("agents_panel.send_now"), Icon = "send", Style = "button_flat", Size = new Vector2(96, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => SendHeldNow(entry) });
+            actions.Add(new Button { Label = Said("agents_panel.edit_short"), Icon = "edit", Style = "button_flat", Size = new Vector2(64, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => EditHeld(entry) });
+        }
+
         if (entry.Queued || entry.Unheard)
             bubble.Opacity = 0.6f;
         return holder;

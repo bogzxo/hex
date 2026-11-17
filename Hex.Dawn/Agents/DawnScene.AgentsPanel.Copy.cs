@@ -17,6 +17,7 @@ internal sealed partial class DawnScene
         // A message still held for a working agent can be taken back to the box and changed, sent again once it's right
         if (entry.Queued && IsHeld(entry))
         {
+            menu.Add(Said("agents_panel.send_now"), () => SendHeldNow(entry), icon: "send");
             menu.Add(Said("agents_panel.edit_queued"), () => EditHeld(entry), icon: "edit");
             menu.AddSeparator();
         }

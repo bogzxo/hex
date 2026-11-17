@@ -3549,6 +3549,8 @@ let strings = {
         earlier: "Show earlier · {count} more",
         copy_row: "Copy",
         edit_queued: "Edit before it's sent",
+        send_now: "Send now",
+        edit_short: "Edit",
         select_text: "Select text…",
         copy_chat: "Copy whole chat as Markdown",
         select_chat: "Open whole chat as text…",

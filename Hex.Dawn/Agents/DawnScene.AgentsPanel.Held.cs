@@ -24,12 +24,35 @@ internal sealed partial class DawnScene
             if (held.Chat != chat)
                 continue;
             heldSteers.RemoveAt(i--);
-            if (SteeredRun(chat) is { } run && run.Process.Send(held.Line))
-                continue;
-            held.Entry.Queued = false;
-            held.Entry.Unheard = true;
-            chat.Touch(held.Entry);
+            Write(held);
         }
+    }
+
+    // A held message written to its agent, its bubble drawn again without the buttons a held one has, or marked as never
+    // heard when the agent can't take it now
+    private void Write((HexAgentChat Chat, HexAgentEntry Entry, string Line, string Asked) held)
+    {
+        if (SteeredRun(held.Chat) is { } run && run.Process.Send(held.Line))
+        {
+            held.Chat.Touch(held.Entry);
+            return;
+        }
+
+        held.Entry.Queued = false;
+        held.Entry.Unheard = true;
+        held.Chat.Touch(held.Entry);
+    }
+
+    /// <summary>A held message written to its agent now, not when the agent next says something. False when it had gone.</summary>
+    private bool SendHeldNow(HexAgentEntry entry)
+    {
+        int at = heldSteers.FindIndex(held => ReferenceEquals(held.Entry, entry));
+        if (at < 0)
+            return false;
+        var held = heldSteers[at];
+        heldSteers.RemoveAt(at);
+        Write(held);
+        return true;
     }
 
     /// <summary>

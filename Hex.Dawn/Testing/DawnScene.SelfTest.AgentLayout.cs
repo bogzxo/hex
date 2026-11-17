@@ -381,12 +381,18 @@ internal sealed partial class DawnScene
             entriesBefore = longChat!.Entries.Count;
             HexAgentEntry held = longChat.Steer("look at the tests first");
             heldSteers.Add((longChat, held, "{}", "look at the tests first"));
-            offered = AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.edit_queued"));
+            offered = AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.edit_queued"))
+                && AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.send_now"));
             taken = EditHeld(held);
+
+            // Sent now it's no longer held, and with no agent there to take it, it says it was never heard
+            HexAgentEntry now = longChat.Steer("and the docs");
+            heldSteers.Add((longChat, now, "{}", "and the docs"));
+            offered &= SendHeldNow(now) && !IsHeld(now) && now.Unheard && !longChat.Withdraw(now);
         });
         test.Settle(0.2f);
         test.Check("agents layout: a queued message still held goes back to the box to be changed, out of the chat", () =>
-            offered && taken && heldSteers.Count == 0 && longChat!.Entries.Count == entriesBefore && agentsInput.Text == "look at the tests first");
+            offered && taken && heldSteers.Count == 0 && longChat!.Entries.Count == entriesBefore + 1 && agentsInput.Text == "look at the tests first");
         test.Run(() => agentsInput.Text = string.Empty);
 
         // A chat past what it keeps in memory sends its oldest rows to its file, and they're read back from there when asked
