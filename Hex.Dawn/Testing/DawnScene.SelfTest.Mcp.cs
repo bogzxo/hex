@@ -177,6 +177,37 @@ internal sealed partial class DawnScene
         test.Check("mcp: behind Dusk a call about agents is answered and one that drives the editor waits for it to come back", () =>
             agentAnswered && editorWaited && behindEditor is { IsCompletedSuccessfully: true });
 
+        // Files written and changed through Hex, on the disk with their line endings kept, and in the editor when the file is
+        // open with changes nobody saved, where it's one step to undo
+        string written = Path.Combine(testFolder, "selftest_mcp_written.txt");
+        Ask("hex_write", new JsonObject { ["path"] = written, ["content"] = "one\r\ntwo\r\nthree\r\n" });
+        test.Check("mcp: hex_write makes a file with what it was given", () =>
+            !HexMcpTestClient.Failed(answer) && File.ReadAllText(written) == "one\r\ntwo\r\nthree\r\n");
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "two\nthree", ["new_string"] = "2\n3" });
+        test.Check("mcp: hex_edit changes it on the disk, its line endings kept, and says the line", () =>
+            !HexMcpTestClient.Failed(answer) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n" && Answered().Contains(":2", StringComparison.Ordinal));
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "nowhere", ["new_string"] = "x" });
+        test.Check("mcp: hex_edit of text that isn't there fails and changes nothing", () =>
+            HexMcpTestClient.Failed(answer) && Answered().Contains("isn't in it", StringComparison.Ordinal) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n");
+        test.Run(() =>
+        {
+            Context.Documents.Open(written);
+            code.Document.MoveTo(new UITextPosition(0, 0));
+            code.Document.Insert("zero\n");
+        });
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "one", ["new_string"] = "1" });
+        test.Check("mcp: a file open with unsaved changes is changed in the editor, not on the disk", () =>
+            !HexMcpTestClient.Failed(answer) && code.Text.StartsWith("zero\n1\n", StringComparison.Ordinal) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n");
+        test.Run(() =>
+        {
+            if (Context.Documents.Find(written) is { } open)
+            {
+                open.Editor.Text = File.ReadAllText(written);
+                CloseDocument(open);
+            }
+            File.Delete(written);
+        });
+
         TestAgentMcp(test, Ask);
 
         // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar

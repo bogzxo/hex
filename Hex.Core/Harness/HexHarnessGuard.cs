@@ -13,8 +13,30 @@ namespace Hex.Core;
 /// </summary>
 internal static class HexHarnessGuard
 {
-    /// <summary>How hard the guard holds the agent to the harness.</summary>
-    public enum Mode { Insist, Remind }
+    /// <summary>
+    /// How hard the guard holds the agent to the harness. Strict turns back the agent's own Read, Edit and Write of the
+    /// workspace as well (hex_read, hex_edit and hex_write do them), Insist only its searches and the shell's reads,
+    /// Remind lets everything through with the Hex tool said beside it.
+    /// </summary>
+    public enum Mode { Strict, Insist, Remind }
+
+    // The agent's own file tools, by the Hex tool in their place, turned back only when the guard is strict
+    private static readonly Dictionary<string, string> FILE_TOOLS = new(StringComparer.Ordinal)
+    {
+        ["Read"] = "hex_read (one declaration by its symbol, or start_line and end_line) or hex_skim (what files are)",
+        ["Edit"] = "hex_edit (old_string and new_string, no reading the file first)",
+        ["MultiEdit"] = "hex_edit, once for each change",
+        ["Write"] = "hex_write (a whole file), or hex_edit for part of one",
+        ["NotebookEdit"] = "hex_notebook_edit"
+    };
+
+    /// <summary>The mode a --guard argument names, strict for anything it doesn't know.</summary>
+    public static Mode ModeOf(string? said) => said switch
+    {
+        "remind" => Mode.Remind,
+        "insist" => Mode.Insist,
+        _ => Mode.Strict
+    };
 
     // The commands that read or search files, by what Hex has in their place
     private static readonly Dictionary<string, string> INSTEAD = new(StringComparer.OrdinalIgnoreCase)
@@ -66,14 +88,18 @@ internal static class HexHarnessGuard
             "Grep" => Inside(Text(input, "path"), folders) ? INSTEAD["grep"] : null,
             "Glob" => Inside(Text(input, "path"), folders) ? INSTEAD["find"] : null,
             "Bash" or "PowerShell" => ForCommand(Text(input, "command") ?? string.Empty, folders),
+            _ when mode == Mode.Strict && FILE_TOOLS.TryGetValue(tool, out string? hex)
+                && Inside(Text(input, "file_path") ?? Text(input, "notebook_path") ?? Text(input, "path"), folders) => hex,
             _ => null
         };
         if (instead is null)
             return null;
 
-        string why = $"This reads the workspace the long way. Hex is connected as the hex MCP server and answers it from its index in a fraction of the tokens, use {instead}. The shell is still yours for builds, tests, git and anything outside the workspace.";
+        string why = FILE_TOOLS.ContainsKey(tool)
+            ? $"In this workspace files are read and changed through Hex, the hex MCP server, which keeps the editor, its undo and the index in step. Use {instead}. Your own file tools are for what's outside the workspace."
+            : $"This reads the workspace the long way. Hex is connected as the hex MCP server and answers it from its index in a fraction of the tokens, use {instead}. The shell is still yours for builds, tests, git and anything outside the workspace.";
         var said = new JsonObject { ["hookEventName"] = "PreToolUse" };
-        if (mode == Mode.Insist)
+        if (mode != Mode.Remind)
         {
             said["permissionDecision"] = "deny";
             said["permissionDecisionReason"] = why;
@@ -84,21 +110,104 @@ internal static class HexHarnessGuard
     }
 
     /// <summary>
-    /// What Hex has in the place of a shell command, null for a command that isn't a read or a search of the workspace.
-    /// Only the first command of a line counts, a grep that filters git's output reads no files.
+    /// What Hex has in the place of a shell command line, null for a line that reads and searches nothing of the
+    /// workspace. Every command of it counts (cd somewhere && grep, a; b), each by the first stage of its pipe, since a
+    /// grep that filters another program's output reads no files. A cd out of the workspace makes what comes after it
+    /// the shell's business, a cd back in makes it the harness's again.
     /// </summary>
     internal static string? ForCommand(string command, IReadOnlyList<string> folders)
     {
-        string first = command.TrimStart();
-        int end = first.IndexOfAny(['|', ';', '&', '\n', '>']);
-        if (end >= 0)
-            first = first[..end];
-        string[] words = Words(first);
-        if (words.Length == 0)
-            return null;
+        bool outside = false;
+        foreach (string statement in Statements(command))
+        {
+            string first = statement;
+            int end = first.IndexOfAny(['|', '>']);
+            if (end >= 0)
+                first = first[..end];
+            string[] words = Words(first);
+            if (words.Length == 0)
+                continue;
 
-        // cd somewhere first and then the command, the place counts
-        string program = Path.GetFileNameWithoutExtension(words[0].Trim('"', '\'')).ToLowerInvariant();
+            string program = Path.GetFileNameWithoutExtension(words[0].Trim('"', '\'')).ToLowerInvariant();
+            if (program is "cd" or "pushd" or "set-location" or "sl")
+            {
+                string to = words.Length > 1 ? words[^1].Trim('"', '\'') : "~";
+                if (LooksAbsolute(to))
+                    outside = !Inside(to, folders);
+                continue;
+            }
+
+            if (!outside && ForOne(program, words, folders) is { } instead)
+                return instead;
+        }
+
+        return null;
+    }
+
+    // A line cut at &&, || and ; and new lines, outside quotes, into the commands it runs one after another
+    private static List<string> Statements(string line)
+    {
+        var statements = new List<string>();
+        var statement = new System.Text.StringBuilder();
+        char quote = '\0';
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                    quote = '\0';
+                statement.Append(c);
+                continue;
+            }
+
+            bool twice = i + 1 < line.Length && line[i + 1] == c;
+            if (c is '"' or '\'')
+                quote = c;
+            else if (c is ';' or '\n' || (c is '&' or '|' && twice))
+            {
+                statements.Add(statement.ToString());
+                statement.Clear();
+                if (c is '&' or '|')
+                    i++;
+                continue;
+            }
+
+            statement.Append(c);
+        }
+
+        statements.Add(statement.ToString());
+        return statements;
+    }
+
+    // What Hex has in the place of one command, by its program and its words
+    private static string? ForOne(string program, string[] words, IReadOnlyList<string> folders)
+    {
+        // git's own search and list of files read the workspace as grep and find do
+        if (program == "git")
+        {
+            // Past git's own options to its command, a -C into a folder outside the workspace being the shell's business
+            string? sub = null;
+            for (int i = 1; i < words.Length && sub is null; i++)
+            {
+                if (words[i] is "-C" or "-c" or "--git-dir" or "--work-tree" && i + 1 < words.Length)
+                {
+                    string place = words[++i].Trim('"', '\'');
+                    if (words[i - 1] == "-C" && LooksAbsolute(place) && !Inside(place, folders))
+                        return null;
+                }
+                else if (!words[i].StartsWith('-'))
+                    sub = words[i];
+            }
+
+            return sub switch
+            {
+                "grep" => INSTEAD["grep"],
+                "ls-files" => INSTEAD["find"],
+                _ => null
+            };
+        }
+
         if (!INSTEAD.TryGetValue(program, out string? instead))
             return null;
 
@@ -202,13 +311,13 @@ internal static class HexHarnessGuard
         try
         {
             var folders = new List<string>();
-            Mode mode = Mode.Insist;
+            Mode mode = Mode.Strict;
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "--folder")
                     folders.Add(args[i + 1]);
-                else if (args[i] == "--guard" && args[i + 1] == "remind")
-                    mode = Mode.Remind;
+                else if (args[i] == "--guard")
+                    mode = ModeOf(args[i + 1]);
             }
 
             // With no Hex answering for the workspace (it crashed, or it's restarting) the harness isn't there to turn the

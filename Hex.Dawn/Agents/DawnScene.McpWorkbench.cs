@@ -85,7 +85,7 @@ internal sealed partial class DawnScene
 
     /// <summary>Every tool, in the order tools/list says them.</summary>
     internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. TerminalTools(), .. DebugTools()];
+        .. Behind(AgentsTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Tools that do their work without the editor on screen, so an agent calling them leaves the person in Dusk.</summary>
     private static IEnumerable<HexMcpTool> Behind(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { NeedsEditor = false });
