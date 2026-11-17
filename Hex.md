@@ -70,6 +70,42 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       is the starting point, kept as an alternative)
 - [x] Codex held to Hex's tools through its approvals, and hex_terminal_run itself refuses a read of the workspace (Codex went round the guard through it)
 
+## Plan: agent commands and skills (compact first)
+
+What an agent system can be told to do beyond a message (compact its context, clear, change model, run one of its
+skills), said by its extension and offered by Hex in the composer, the Agents menu, the palette and Details.
+
+1. Extension API. hex.agent's run gains `commands`, a list of { id, title, icon, about, args? } that the system always
+   has (compact, clear), and `command(id, args, chat)`, which returns the line or lines for the agent's stdin (a string,
+   an object or a list, as message does). The run may also say `discover(chat)`, read from what the agent tells at start,
+   for the commands and skills it has of its own.
+   - Claude Code: compact is a user message "/compact" (optional instructions after it) on the stream-json stdin. Its
+     own slash commands and skills are listed in the `commands` of the initialize control_response (see the Claude Code
+     control research chat). A skill or command is sent as a user message "/name args".
+   - Codex (app-server): compact is the request `thread/compact/start { threadId }`. Skills go as a turn's input item
+     { type: "skill", name, path }, listed by the app-server (look up the method in the generated schema).
+2. Hex.Core. HexAgentCommand(Id, Title, Icon, About, TakesArgs) on the profile, and HexAgentChat.Commands, the ones it
+   discovered, a capped list kept with the chat.
+3. Running one. DawnScene.RunAgentCommand(chat, id, args). While the agent runs, the lines go on its stdin, held like a
+   steer, so they can be edited until the next step. While it's idle, a turn starts with them. Each shows as a quiet note
+   row, "Compacting context…", put right by the compaction event (chat.compacted) when it comes.
+4. Where they're offered.
+   - Composer: "/" at the start of the box opens a list of the system's commands and skills, filtered as it's typed.
+     Enter runs the picked one with what follows as its args. It's a list of its own, not the editor's completion, which
+     is off in the box.
+   - The Agents menu and the palette: Compact context, Clear context, Run a skill… (a picker), for the chat on screen.
+   - Details: a button beside the context bar, shown from 95% full (where the bar turns red), "Compact now". Greyed out
+     while a compaction is under way or the system has no compact command. Drawn with the bar, put right in place, never
+     rebuilt under the press.
+   - The card's menu: Compact context.
+5. Automatic option. A setting per system, "Compact at", off by default. Once the context passes it, Hex compacts
+   between turns (never mid-turn), and says so in a note.
+6. Tests. Unit tests that each extension's command gives the expected stdin lines (Claude "/compact", Codex
+   thread/compact/start with its thread). A self test that the button shows only at 95% and up and that pressing it adds
+   the note row and writes to the stand-in agent. A self test of "/" in the composer listing and running a command.
+7. Order. The API and Claude's compact first, with the Details button and the menu entry. Then Codex's compact. Then "/"
+   in the composer with discovery, and skills last.
+
 ## Plan milestones (docs/agent-workspace-plan.md)
 
 - [x] M0
