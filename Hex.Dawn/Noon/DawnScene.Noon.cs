@@ -63,7 +63,8 @@ internal sealed partial class DawnScene
         noonSystems = MakeSystemsPanel(noonFleet, open: true, bottomUp: true);
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
-        noonCenter = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0 });
+        // The wheel turned over the margins round the chat's column scrolls the chat, as it would over the column itself
+        noonCenter = noonView.Add(new HexWheelStack { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0, Wheeled = () => agentsScroll });
 
         // What the agent picked is and does
         noonContext = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 10), Spacing = 6 });

@@ -309,6 +309,20 @@ internal sealed partial class DawnScene
             filtered = said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal))
                 && !said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal));
             noonTalkShown = string.Empty;
+        });
+
+        // The wheel over the margin beside the chat's column scrolls the chat, not only over the column
+        float wheelFrom = 0;
+        test.Run(() => agentsScroll.Offset = wheelFrom = MathF.Floor(agentsScroll.MaxOffset * 0.5f));
+        test.Hover(() => chrome.ToWorld(new Vector2(noonCenter.Bounds.Min.X + 4, noonCenter.Bounds.Center.Y)));
+        test.Run(() => compositor.Scroll(-2));
+        test.Settle(0.3f);
+        test.Check("agents layout: in Agentic the wheel over the margins round the chat scrolls it", () =>
+            agentsScroll.Offset > wheelFrom + 1.0f);
+        test.Run(() =>
+        {
+            // Back where the chat was read to, which a check further on holds it to
+            agentsScroll.Offset = readTo;
             ShowFace(HexFace.Dawn);
         });
         test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
