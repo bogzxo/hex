@@ -212,6 +212,26 @@ internal sealed partial class DawnScene
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 
+        // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
+        // again as wide as the box wraps once, not three times as it did when it was counted in digits
+        test.Run(() =>
+        {
+            float scale = agentsInput.TextScale;
+            Horizon.UI.Drawing.UIFont font = compositor.Skin!.Font;
+            string prose = string.Empty;
+            while (font.Measure(prose, scale, markup: false).X < agentsInput.Bounds.Width * 1.5f)
+                prose += "ill fill till ";
+            agentsInput.Text = prose.TrimEnd();
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            if (agentsInput.RowCount != 2)
+                Console.WriteLine($"[Hex self-test]   the box is {agentsInput.Bounds.Width:0} wide and its prose took {agentsInput.RowCount} rows");
+        });
+        test.Check("agents layout: the box wraps prose by how wide its letters are, filling each row first", () => agentsInput.RowCount == 2);
+        test.Run(() => agentsInput.Text = string.Empty);
+
         // Somebody's word to an agent sitting in a wait for its agents goes by its mail, which wakes the wait, where on its
         // stdin it would only be read once the wait was over
         test.Run(() =>
