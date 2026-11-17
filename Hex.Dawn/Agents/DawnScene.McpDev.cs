@@ -28,6 +28,18 @@ internal sealed partial class DawnScene
     // this Hex when nothing changed, the build copies them back as they were
     private static volatile bool devBuilt;
 
+    // Whether the build that's running has been kept as the good one yet, once a run, before its first build
+    private static volatile bool devKept;
+
+    // How long the Hex that came up from a restart runs before it says it's whole, and where it says so
+    private const float DEV_HEALTHY_AFTER = 5.0f;
+    private string? devHealthy;
+    private float devHealthyIn = -1.0f;
+    private string? devResumeFile;
+
+    // The log of a build that crashed coming up, for the agent that made it, when this Hex is the one put back
+    private string? devCrash;
+
     private IEnumerable<HexMcpTool> DevTools()
     {
         if (HexSourceRoot() is null)
@@ -64,6 +76,15 @@ internal sealed partial class DawnScene
     private static async Task<McpToolResult> DevBuild(CancellationToken cancel)
     {
         string root = HexSourceRoot()!;
+
+        // The build that's running works, it's kept beside it before anything is built over it, for the guard to put back
+        // if what's built doesn't come up
+        if (!devKept)
+        {
+            Hex.Core.HexDevBuilds.Mirror(Hex.Core.HexHost.ProgramFolder, Hex.Core.HexDevBuilds.GoodFolder(Hex.Core.HexHost.ProgramFolder));
+            devKept = true;
+        }
+
         List<(string From, string Aside)> moved = MoveLockedAside(Hex.Core.HexHost.ProgramFolder);
         var watch = Stopwatch.StartNew();
         (int code, string output) = await DevRun("dotnet", ["build", Path.Combine(root, "Hex", "Hex.csproj"), "-c", "Debug", "-nologo", "-v", "q", "-clp:NoSummary"], root, cancel);
@@ -143,8 +164,8 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> DevRestart(JsonObject args)
     {
-        string? exe = System.Environment.ProcessPath;
-        if (exe is null || !devBuilt || !File.Exists(exe))
+        string exe = Path.Combine(Hex.Core.HexHost.ProgramFolder, OperatingSystem.IsWindows() ? "Hex.exe" : "Hex");
+        if (!devBuilt || !File.Exists(exe))
         {
             yield return McpToolResult.Error("There's no new build to restart into, hex_dev_build makes one.");
             yield break;
@@ -181,6 +202,20 @@ internal sealed partial class DawnScene
             CleanAside(Hex.Core.HexHost.ProgramFolder);
         }
 
+        // Up from a restart with its chats back and a few seconds run, the guard is told it came up whole, and the chats
+        // it was handed are let go
+        if (devHealthy is { } healthy && (devHealthyIn -= dt) <= 0.0f)
+        {
+            devHealthy = null;
+            try
+            {
+                File.WriteAllText(healthy, System.Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (devResumeFile is { } handed)
+                    File.Delete(handed);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+
         if (devRestartWith is not { } file)
             return;
 
@@ -193,8 +228,29 @@ internal sealed partial class DawnScene
         foreach (HexAgentChat chat in agentChats.Where(chat => chat.Running).ToList())
             StopAgent(chat);
 
-        var start = new ProcessStartInfo(System.Environment.ProcessPath!) { UseShellExecute = false, WorkingDirectory = Hex.Core.HexHost.ProgramFolder };
-        start.ArgumentList.Add("--window");
+        // The new build started by a guard running from the good one, which puts the good one back and starts it again if
+        // the new one doesn't come up. Without a good one kept, the new build is started as it is
+        string bin = Path.TrimEndingDirectorySeparator(Hex.Core.HexHost.ProgramFolder);
+        string good = Hex.Core.HexDevBuilds.GoodFolder(bin);
+        string guard = Path.Combine(good, OperatingSystem.IsWindows() ? "Hex.exe" : "Hex");
+        bool guarded = File.Exists(guard);
+        var start = new ProcessStartInfo(guarded ? guard : Path.Combine(bin, OperatingSystem.IsWindows() ? "Hex.exe" : "Hex"))
+        {
+            UseShellExecute = false,
+            WorkingDirectory = guarded ? good : bin,
+            CreateNoWindow = guarded
+        };
+        if (guarded)
+        {
+            foreach (string argument in (string[])["--dev-guard", "--bin", bin, "--good", good, "--resume", file])
+                start.ArgumentList.Add(argument);
+        }
+        else
+        {
+            start.ArgumentList.Add("--window");
+            start.Environment[DEV_RESUME] = file;
+        }
+
         if (mcpHost is not null)
             start.ArgumentList.Add("--mcp");
         if (explorer.workspace.Folders.FirstOrDefault() is { } folder)
@@ -202,7 +258,6 @@ internal sealed partial class DawnScene
             start.ArgumentList.Add("--folder");
             start.ArgumentList.Add(folder);
         }
-        start.Environment[DEV_RESUME] = file;
         Process.Start(start);
 
         // Closed as asked to, nothing to confirm, what isn't saved kept as backups for the new Hex to bring back
@@ -217,11 +272,24 @@ internal sealed partial class DawnScene
             return;
         System.Environment.SetEnvironmentVariable(DEV_RESUME, null);
 
+        // The chats are let go once this build says it's whole, the good one needs them again if it doesn't. A build put
+        // back after one crashed is told so, and where the crash is written down
+        devResumeFile = file;
+        devCrash = System.Environment.GetEnvironmentVariable("HEX_DEV_CRASH") is { Length: > 0 } crash ? crash : null;
+        if (System.Environment.GetEnvironmentVariable("HEX_DEV_HEALTHY") is { Length: > 0 } healthy)
+        {
+            devHealthy = healthy;
+            devHealthyIn = DEV_HEALTHY_AFTER;
+        }
+        else if (devCrash is not null)
+            devHealthy = null;
+
         JsonObject? resume;
         try
         {
             resume = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
-            File.Delete(file);
+            if (devHealthy is null)
+                File.Delete(file);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
@@ -249,6 +317,20 @@ internal sealed partial class DawnScene
             devContinue = (going, resume["note"]?.GetValue<string>() ?? string.Empty, 30.0f);
     }
 
+    // The end of what a crashed build printed, its own lines rather than the engine's chatter, and every line of a crash
+    private static string DevCrashTail(string log)
+    {
+        try
+        {
+            string[] lines = [.. File.ReadAllLines(log).Where(line => !line.StartsWith("[Info]", StringComparison.Ordinal))];
+            return string.Join('\n', lines.TakeLast(60));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return $"(the log couldn't be read, {e.Message})";
+        }
+    }
+
     // The chat to carry on once its agent system is there, what it's told and how long it's waited for
     private (HexAgentChat Chat, string Note, float Wait)? devContinue;
 
@@ -261,8 +343,10 @@ internal sealed partial class DawnScene
         if (extensions.AgentRuns.TryGetValue(going.Chat.Agent, out var run))
         {
             devContinue = null;
-            string told = $"[Hex restarted into the build you made, {HexAbout.Label}. You're in the same session, carry on.]"
-                + (going.Note.Length > 0 ? $"\n\n{going.Note}" : string.Empty);
+            string told = devCrash is { } crash
+                ? $"[The build you made crashed as Hex started it, so Hex put back the build before it and started that again, you're in it now, in the same session. Everything the new build printed is in {crash}, its end is below. Find why it crashed and fix it, then hex_dev_build and hex_dev_restart again.]\n\n```\n{DevCrashTail(crash)}\n```"
+                : $"[Hex restarted into the build you made, {HexAbout.Label}. You're in the same session, carry on.]";
+            told += going.Note.Length > 0 ? $"\n\n{(devCrash is null ? string.Empty : "What you meant to carry on with in it\n")}{going.Note}" : string.Empty;
             StartAgent(going.Chat, run.Extension, run.Run, told, Said("dev.continued"));
             return;
         }

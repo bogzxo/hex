@@ -19,6 +19,12 @@ internal static partial class Program
 {
     public static int Main(string[] args)
     {
+#if DEBUG
+        // The guard over a Hex restarting into a build of itself, no window, see DevGuard
+        if (args.Length > 0 && args[0] == DevGuard.ARGUMENT)
+            return DevGuard.Run(args);
+#endif
+
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;

@@ -61,6 +61,32 @@ public sealed class HexDevLoopTests : IDisposable
     }
 
     [Fact]
+    public void The_good_build_is_copied_without_Hexs_state_and_only_what_differs()
+    {
+        string bin = Path.Combine(folder, "bin"), good = HexDevBuilds.GoodFolder(bin);
+        Directory.CreateDirectory(Path.Combine(bin, "settings"));
+        Directory.CreateDirectory(Path.Combine(bin, "Assets"));
+        File.WriteAllText(Path.Combine(bin, "Hex.dll"), "build");
+        File.WriteAllText(Path.Combine(bin, "Assets", "a.hor"), "asset");
+        File.WriteAllText(Path.Combine(bin, "settings", "settings.hor"), "mine");
+        File.WriteAllText(Path.Combine(bin, "debug.log"), "log");
+        File.WriteAllText(Path.Combine(bin, "Hex.dll.1.hexold"), "aside");
+
+        Assert.Equal(2, HexDevBuilds.Mirror(bin, good));
+        Assert.Equal(["Hex.dll"], Directory.EnumerateFiles(good).Select(Path.GetFileName));
+        Assert.True(File.Exists(Path.Combine(good, "Assets", "a.hor")));
+        Assert.False(Directory.Exists(Path.Combine(good, "settings")));
+        Assert.Equal(0, HexDevBuilds.Mirror(bin, good));
+
+        // A crashed build's files put right from the good one, the settings it ran with left as they are
+        File.WriteAllText(Path.Combine(bin, "Hex.dll"), "a build that crashed");
+        File.WriteAllText(Path.Combine(bin, "settings", "settings.hor"), "changed since");
+        Assert.Equal(1, HexDevBuilds.Mirror(good, bin));
+        Assert.Equal("build", File.ReadAllText(Path.Combine(bin, "Hex.dll")));
+        Assert.Equal("changed since", File.ReadAllText(Path.Combine(bin, "settings", "settings.hor")));
+    }
+
+    [Fact]
     public void What_an_earlier_Hex_moved_aside_is_cleaned_away()
     {
         File.WriteAllText(Path.Combine(folder, "Hex.dll.123.hexold"), "old");
