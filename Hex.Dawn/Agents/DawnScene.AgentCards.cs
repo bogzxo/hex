@@ -75,7 +75,9 @@ internal sealed partial class DawnScene
                 state.Text = status;
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
-            float stateWidth = Skin?.Font.Measure(status, state.TextScale).X ?? 100.0f;
+            // Measured without its colour tags, which the font would count as letters
+            string bare = System.Text.RegularExpressions.Regex.Replace(status, @"\[/?color[^\]]*\]", string.Empty);
+            float stateWidth = Skin?.Font.Measure(bare, state.TextScale).X ?? 100.0f;
             string said = UIRichText.Literal(FitText(starter, from.TextScale, room - 38 - stateWidth - (closable ? 30 : 10) - 10));
             if (from.Text != said)
                 from.Text = said;
