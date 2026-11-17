@@ -34,6 +34,18 @@ internal sealed partial class DawnScene
 
     private SystemsPanel? noonSystems, agentsSystems;
 
+    // How many ticks are drawn at once after a fold was pressed, rather than on the panels' few times a second. The fold
+    // is made on the first and the room it takes is known once that's laid out, so it takes a couple
+    private int systemsSettle;
+
+    /// <summary>A fold pressed, made on the next tick and the ticks after it at once, never under the press itself.</summary>
+    private void SystemsFolded(SystemsPanel panel)
+    {
+        panel.Made = "\0";
+        systemsSettle = 3;
+        Engine.WindowManager.RequestFrames();
+    }
+
     // What each program says its version is, asked once off the editor's thread, empty while it's being asked
     private readonly ConcurrentDictionary<string, string> systemVersions = new(StringComparer.OrdinalIgnoreCase);
 
@@ -69,7 +81,7 @@ internal sealed partial class DawnScene
                 OnPressed = () =>
                 {
                     panel.Open = !panel.Open;
-                    panel.Made = "\0";
+                    SystemsFolded(panel);
                 }
             });
             head.Add(new Label
@@ -126,7 +138,7 @@ internal sealed partial class DawnScene
                 }
                 else if (!panel.Folded.Remove(system.Id))
                     panel.Folded.Add(system.Id);
-                panel.Made = "\0";
+                SystemsFolded(panel);
             }
         });
         head.Add(new Label { Text = $"$({(open ? "chevron-down" : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });

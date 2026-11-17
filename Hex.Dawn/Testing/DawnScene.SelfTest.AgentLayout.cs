@@ -207,6 +207,20 @@ internal sealed partial class DawnScene
             agentsSystemsHolder.Visible && Descendants(agentsSystemsHolder).OfType<Label>().Any(label => label.Text.Contains("Workspace assistant", StringComparison.Ordinal))
             // Up is up on screen, so under the chats is below their list's bottom and above the chat's top
             && agentsSystemsHolder.Bounds.Max.Y <= agentsListScroll.Bounds.Min.Y + 1 && agentsSystemsHolder.Bounds.Min.Y >= agentsScroll.Bounds.Max.Y - 1);
+
+        // Its head pressed, the panel opens within a few ticks, not when the side bar next looks, and the room follows
+        float foldedTall = 0;
+        test.Run(() =>
+        {
+            foldedTall = agentsSystemsHolder.Size.Y;
+            Descendants(agentsSystems!.Root).OfType<Button>().First().OnPressed!();
+        });
+        test.Wait();
+        test.Check("agents layout: the agent systems open within a few ticks of their head being pressed, the room growing with them", () =>
+            agentsSystems!.Open && agentsSystemsHolder.Size.Y > foldedTall);
+        test.Run(() => Descendants(agentsSystems!.Root).OfType<Button>().First().OnPressed!());
+        test.Wait();
+
         // A part of the editor sees the sessions through its context, is told when one moves, and can bring one up
         int heard = 0;
         void Heard() => heard++;

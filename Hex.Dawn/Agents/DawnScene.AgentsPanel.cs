@@ -210,6 +210,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateAgentsPanel(float dt)
     {
+        // A fold of the systems pressed is drawn on the ticks straight after, not when the panels next look
+        if (systemsSettle > 0)
+        {
+            systemsSettle--;
+            agentsWait = 0.0f;
+            noonWait = 0.0f;
+        }
+
         TakeAgentLines();
         PublishAgentStatuses();
         DrawAgentsActivity();
