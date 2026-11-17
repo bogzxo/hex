@@ -237,7 +237,8 @@ internal sealed partial class DawnScene
             return;
 
         HexAgentChat? chat = agentChat;
-        string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{(int)chat.TurnSeconds}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}";
+        string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{(int)chat.TurnSeconds}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}"
+            + $":{hub.MailOf(chat).All.Count}:{noonTalkShown}";
         if (said == noonContextDrawn)
             return;
         noonContextDrawn = said;
@@ -317,6 +318,8 @@ internal sealed partial class DawnScene
             foreach (HexAgentMail message in chat.Mail.TakeLast(8))
                 ContextLine(message.Seq > seen ? "mail" : "mail-read", $"{message.FromName} · {message.Kind}: {OneLine(message.Text, 120)}", wrap: true);
         }
+
+        DrawFamilyTalk(chat);
 
         // The tools it reached for, Hex's harness against the shell, and the files it touched
         var tools = new Dictionary<string, int>();

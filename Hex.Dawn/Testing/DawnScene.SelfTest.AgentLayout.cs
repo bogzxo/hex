@@ -255,6 +255,35 @@ internal sealed partial class DawnScene
         test.Check("agents layout: the keys go round the fleet in its order and to the next agent that needs looking at", () =>
             stepped == FleetOrder()[0] && back == FleetOrder()[^1] && needed == other
             && FleetOrder().Count == agentChats.Count && FleetOrder().Distinct().Count() == agentChats.Count);
+
+        // In Noon the Details say the family's conversation, who to whom and how it got there, and a filter shows one kind
+        bool talkShown = false, filtered = false;
+        test.Run(() =>
+        {
+            hub.MailOf(longChat!).Add(new HexAgentMail(hub.NextMailSeq(), null, "the person watching", "instruction", "look at the tests first", true) { To = longChat!.Id }, HexMailRoute.Inbox);
+            hub.MailOf(longChat!).Add(new HexAgentMail(hub.NextMailSeq(), longChat!.Id, "#x", "finding", "the server starts in StartMcp", false) { To = HexMailLog.USER }, HexMailRoute.Inbox);
+            ShowFace(HexFace.Noon);
+            OpenAgentChat(longChat!);
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            Label[] said = [.. Descendants(noonContextRows).OfType<Label>()];
+            talkShown = said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal))
+                && said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal));
+            Descendants(noonContextRows).OfType<Button>().First(button => button.Label.StartsWith(Said("noon.family_finding"), StringComparison.Ordinal)).OnPressed!();
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            Label[] said = [.. Descendants(noonContextRows).OfType<Label>()];
+            filtered = said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal))
+                && !said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal));
+            noonTalkShown = string.Empty;
+            ShowFace(HexFace.Dawn);
+        });
+        test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 
