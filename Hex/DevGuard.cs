@@ -31,7 +31,8 @@ internal static class DevGuard
         string log = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(bin))!, $"hex-dev-start-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         File.Delete(healthy);
 
-        using var written = new StreamWriter(log, append: false) { AutoFlush = true };
+        // Shared for reading, the build put back reads it to tell the agent why the new one crashed while this goes on writing
+        using var written = new StreamWriter(new FileStream(log, FileMode.Create, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
         written.WriteLine($"[guard] starting the new build in {bin}");
         Process started = Start(bin, folder, mcp, resume, healthy, crash: null, written);
 

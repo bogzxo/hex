@@ -323,7 +323,10 @@ internal sealed partial class DawnScene
     {
         try
         {
-            string[] lines = [.. File.ReadAllLines(log).Where(line => !line.StartsWith("[Info]", StringComparison.Ordinal))];
+            // The guard still has it open, writing what this Hex prints after it, so it's read beside that writer
+            using var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            string[] lines = [.. reader.ReadToEnd().Split('\n').Select(line => line.TrimEnd('\r')).Where(line => !line.StartsWith("[Info]", StringComparison.Ordinal))];
             return string.Join('\n', lines.TakeLast(60));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
