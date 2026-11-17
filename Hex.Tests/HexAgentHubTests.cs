@@ -40,6 +40,57 @@ public sealed class HexAgentHubTests
     }
 
     [Fact]
+    public void AFamilyKeepsOneLogOfWhatItsAgentsSaid()
+    {
+        var hub = new HexAgentHub();
+        var root = new HexAgentChat(1, "claude_code");
+        var scout = new HexAgentChat(2, "codex") { Parent = 1, Depth = 1 };
+        var other = new HexAgentChat(3, "claude_code");
+        hub.Add(root);
+        hub.Add(scout);
+        hub.Add(other);
+
+        HexAgentMail found = new(hub.NextMailSeq(), 2, "#2", "finding", "it's in StartMcp", false) { To = 1 };
+        HexAgentMail told = new(hub.NextMailSeq(), 1, "#1", "instruction", "read it next", true) { To = 2, Re = found.Seq };
+        HexAgentMail person = new(hub.NextMailSeq(), null, "the person watching", "instruction", "stop there", true) { To = 1 };
+        hub.MailOf(root).Add(found, HexMailRoute.WokeWait);
+        hub.MailOf(scout).Add(told, HexMailRoute.Steered);
+        hub.MailOf(root).Add(person, HexMailRoute.Inbox);
+
+        // The family's one log, whichever of them it's asked of, and another family's apart
+        Assert.Same(hub.MailOf(root), hub.MailOf(scout));
+        Assert.NotSame(hub.MailOf(root), hub.MailOf(other));
+        Assert.Equal([found.Seq, told.Seq, person.Seq], hub.MailOf(scout).All.Select(entry => entry.Mail.Seq).ToArray());
+        Assert.Equal(HexMailRoute.Steered, hub.MailOf(root).All[1].Route);
+        Assert.Equal([found, told], hub.MailOf(root).Between(1, 2).ToArray());
+        Assert.Equal([person], hub.MailOf(root).Between(HexMailLog.USER, 1).ToArray());
+        Assert.Equal(found.Seq, told.Re);
+
+        var flows = hub.MailOf(root).Flows(since: 0);
+        Assert.Equal(3, flows.Length);
+        Assert.Contains((HexMailLog.USER, 1, 1, person.Seq), flows);
+        Assert.Single(hub.MailOf(root).Flows(since: told.Seq));
+    }
+
+    [Fact]
+    public void AFullLogLetsProgressGoBeforeInstructions()
+    {
+        var log = new HexMailLog();
+        log.Add(new HexAgentMail(1, 2, "#2", "instruction", "keep me", true) { To = 1 }, HexMailRoute.Inbox);
+        for (int i = 2; i <= 2001; i++)
+            log.Add(new HexAgentMail(i, 2, "#2", i == 2 ? "progress" : "finding", "step", false) { To = 1 }, HexMailRoute.Inbox);
+
+        Assert.Equal(2000, log.All.Count);
+        Assert.Equal(1, log.All[0].Mail.Seq);
+        Assert.DoesNotContain(log.All, entry => entry.Mail.Kind == "progress");
+
+        // No progress left, the oldest finding goes and the instruction stays
+        log.Add(new HexAgentMail(2002, 2, "#2", "finding", "more", false) { To = 1 }, HexMailRoute.Inbox);
+        Assert.Equal(1, log.All[0].Mail.Seq);
+        Assert.Equal(4, log.All[1].Mail.Seq);
+    }
+
+    [Fact]
     public void TheSnapshotIsMadeAgainOnlyWhenASessionMoved()
     {
         var hub = new HexAgentHub();

@@ -11,7 +11,14 @@ internal enum HexAgentToolState { Running, Done, Failed }
 /// chats so what's been read is one number a chat keeps. <paramref name="Directive"/> is an instruction, which starts a
 /// finished agent working on it where anything else waits to be read.
 /// </summary>
-internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive);
+internal sealed record HexAgentMail(long Seq, int? From, string FromName, string Kind, string Text, bool Directive)
+{
+    /// <summary>The chat it's for, or one of the endpoints of HexMailLog (the person watching, Hex).</summary>
+    public int To { get; init; }
+
+    /// <summary>The message it answers, when it's an answer to one.</summary>
+    public long? Re { get; init; }
+}
 
 /// <summary>
 /// A row of a chat. A tool's row keeps its id (to be told it's done), its name, what it was called with and what it said

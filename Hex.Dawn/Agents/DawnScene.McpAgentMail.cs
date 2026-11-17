@@ -14,9 +14,6 @@ internal sealed partial class DawnScene
     // The kinds a message can be, instruction being the one a finished agent is started again on
     private static readonly string[] MAIL_KINDS = ["finding", "question", "answer", "progress", "blocked", "instruction"];
 
-    // Where messages are numbered from, across every chat
-    private long agentMailMade;
-
     // The chats whose agent is in hex_agent_wait now, how many waits each, written off the editor's thread, kept by the hub
     private System.Collections.Concurrent.ConcurrentDictionary<int, int> agentsWaiting => hub.Waiting;
 
@@ -107,8 +104,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private string Deliver(HexAgentChat to, HexAgentChat? from, string kind, string text, bool directive)
     {
-        var message = new HexAgentMail(++agentMailMade, from?.Id, from is null ? "an agent outside Hex's panel" : MailName(from), kind, text, directive);
+        var message = new HexAgentMail(hub.NextMailSeq(), from?.Id, from is null ? "an agent outside Hex's panel" : MailName(from), kind, text, directive) { To = to.Id };
         to.Post(message);
+        HexMailLog log = hub.MailOf(to);
         string line = OneLine(text, 160);
         from?.Note($"$(mail) to {MailName(to)} · {kind}: {line}");
 
@@ -116,12 +114,14 @@ internal sealed partial class DawnScene
         // the wait was over, too late to steer the others on it
         if (to.Running && AgentWaiting(to))
         {
+            log.Add(message, HexMailRoute.WokeWait);
             to.Note($"$(mail) from {message.FromName} · {kind}: {line}");
             return $"{MailName(to)} is waiting for its agents, the message wakes it.";
         }
 
         if (to.Running && SteeredRun(to) is not null)
         {
+            log.Add(message, HexMailRoute.Steered);
             to.MailRead(message.Seq);
             SteerAgent(to, MailText(message), typed: false);
             return $"{MailName(to)} takes it in as it works.";
@@ -129,15 +129,20 @@ internal sealed partial class DawnScene
 
         to.Note($"$(mail) from {message.FromName} · {kind}: {line}");
         if (to.Running)
+        {
+            log.Add(message, HexMailRoute.Inbox);
             return $"{MailName(to)} is working and can't be told more as it goes, it's in its inbox"
                 + (directive ? ", and starts its next turn if it isn't read by the end of this one." : ".");
+        }
 
         if (directive && !to.Stopped && extensions.AgentRuns.TryGetValue(to.Agent, out var run))
         {
+            log.Add(message, HexMailRoute.StartedTurn);
             StartAgent(to, run.Extension, run.Run, string.Empty, text);
             return $"{MailName(to)} had finished, it's working on it now. hex_agent_wait waits for it.";
         }
 
+        log.Add(message, HexMailRoute.Inbox);
         return $"{MailName(to)} isn't working, it reads it when it next does.";
     }
 
@@ -151,7 +156,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private string DeliverFromPerson(HexAgentChat to, string text)
     {
-        to.Post(new HexAgentMail(++agentMailMade, null, FROM_PERSON, "instruction", text, Directive: true));
+        var message = new HexAgentMail(hub.NextMailSeq(), null, FROM_PERSON, "instruction", text, Directive: true) { To = to.Id };
+        to.Post(message);
+        hub.MailOf(to).Add(message, AgentWaiting(to) ? HexMailRoute.WokeWait : HexMailRoute.Inbox);
         return AgentWaiting(to)
             ? Said("agents_panel.told_waiting")
             : Said("agents_panel.told_inbox");

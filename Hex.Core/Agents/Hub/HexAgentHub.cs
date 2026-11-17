@@ -27,6 +27,23 @@ internal sealed class HexAgentHub
     /// </summary>
     public ConcurrentDictionary<int, int> Waiting { get; } = new();
 
+    // The families' logs of what was said between them, by the id of the chat at the top of each, and where messages
+    // are numbered from, across every chat
+    private readonly Dictionary<int, HexMailLog> mail = [];
+    private long mailMade;
+
+    /// <summary>The number of the next message, one count for every chat so they sort across families.</summary>
+    public long NextMailSeq() => ++mailMade;
+
+    /// <summary>The log of what was said in a chat's family, made the first time it's asked for.</summary>
+    public HexMailLog MailOf(HexAgentChat chat)
+    {
+        int root = RootOf(chat).Id;
+        if (!mail.TryGetValue(root, out HexMailLog? log))
+            mail[root] = log = new HexMailLog();
+        return log;
+    }
+
     /// <summary>Goes up whenever a session comes, goes or moves, as of the last pump.</summary>
     public long Version { get; private set; }
 
