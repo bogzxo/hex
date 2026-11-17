@@ -352,6 +352,27 @@ internal sealed partial class DawnScene
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 
+        // A row right-clicked offers its text to copy or to pick out of in a window, and the whole chat as Markdown
+        bool menuSays = false, windowSelects = false;
+        test.Run(() =>
+        {
+            HexAgentEntry said = longChat!.Entries.First(entry => entry.Kind == HexAgentEntryKind.Text);
+            UIComponent row = agentRowsShown.First(shown => ReferenceEquals(shown.Entry, said)).Row;
+            Menu menu = AgentRowMenu(longChat!, said);
+            menuSays = row.OnContextMenu is not null && menu.Items.Any(item => item.Label == Said("agents_panel.select_text"))
+                && ChatAsMarkdown(longChat!).Contains(said.Text, StringComparison.Ordinal);
+            ShowAgentText(said.Text, longChat!.Shown);
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            WindowPanel? window = chrome.Root.Children.OfType<WindowPanel>().LastOrDefault();
+            windowSelects = window is not null && Descendants(window).OfType<CodeEditor>().FirstOrDefault() is { ReadOnly: true } shown
+                && shown.Document.HasSelection && shown.Document.SelectedText.Length > 0;
+            window?.Parent?.Remove(window);
+        });
+        test.Check("agents layout: a row right-clicked copies its text or opens it to pick any part out", () => menuSays && windowSelects);
+
         // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
         // again as wide as the box wraps once, not three times as it did when it was counted in digits
         test.Run(() =>

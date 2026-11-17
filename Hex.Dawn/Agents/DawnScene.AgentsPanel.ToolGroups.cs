@@ -31,7 +31,8 @@ internal sealed partial class DawnScene
         UIComponent row = pressed;
         while (row.Parent is { } up && up != agentsRows)
             row = up;
-        agentRowHeld = (entry, row.Bounds.Max.Y, 4);
+        // Held for a few frames more than it takes, a busy frame laying it out a step late
+        agentRowHeld = (entry, row.Bounds.Max.Y, 8);
     }
 
     /// <summary>Every tick, the held row put back where its top was, by scrolling the chat the difference.</summary>

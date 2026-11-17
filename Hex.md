@@ -23,17 +23,17 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] A blue gutter beside tool calls while they run
 - [x] A click anywhere in the message card's writing room lands in the box (the box is two rows at the least)
 - [x] Opening or folding a group of calls keeps it where it is on screen
-- [ ] The ghost resize line in Agentic was the side's HexSplitter laid on the window over Agentic, now hidden while
-      Agentic covers the body, and the agents view's second handle in Dawn is gone. To confirm with the user
+- [x] The ghost resize line in Agentic was the side's HexSplitter laid on the window over Agentic, now hidden while
+      Agentic covers the body, and the agents view's second handle in Dawn is gone (confirmed by the user)
 - [x] hex_read reads files the index leaves out (hex-extensions), by range
 - [ ] "Files it touched" in Details lists the newest first, keeps the last 25, shows 10 with a fold for the rest
 - [ ] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
       the file deleted with the chat
 - Performance by default: lists that grow (files, tools, mail, rows) are capped or paged, nothing kept in memory that
   can be read back when it's needed
-- [ ] Text selection and a context menu (Copy, Copy all, Select all) in the agents' chat
+- [x] A context menu on the agents' chat rows, Copy, Select text (a read-only editor window to pick any part out), the whole chat as Markdown. Selecting in the rows themselves would need the engine's labels to select
 - [ ] Edit a queued message, put back in the queue when the edit is done
-- [ ] Confirm with the user that resizing the side bar and folding the agent systems no longer jump or flicker
+- [x] Resizing the side bar and folding the agent systems no longer jump (confirmed by the user)
 - [ ] Confirm the ghost resize line is gone from Agentic (grips of hidden components no longer light, horizon 3f8197b)
 - [x] Agent systems panel at the foot of Agentic builds bottom up, what's pressed stays under the pointer, lines ease in
 - [x] Model and tokens on the chat cards (8e68257)

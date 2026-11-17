@@ -75,6 +75,8 @@ internal sealed partial class DawnScene
             UIComponent row = RowOf(chat, entry);
             if (fits.Count > 0)
                 agentRowFits[row] = fits;
+            // Right-clicked, what it says can be copied, or opened as text to pick any part of it out
+            row.OnContextMenu ??= at => ContextMenu.Show(chrome, at, AgentRowMenu(chat, entry));
             return row;
         }
         finally
