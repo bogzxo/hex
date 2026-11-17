@@ -61,6 +61,19 @@ internal sealed partial class DawnScene
         if (row is null || row.Bounds.IsEmpty || !row.Visible)
             return;
         float moved = held.Top - row.Bounds.Max.Y;
+
+        // What it opened to that's gone under the bottom of the chat is brought up into sight, as far as its top going to
+        // the top, so the last group of a chat doesn't open off screen. Its place to hold moves up with it
+        UIRect view = agentsScroll.Bounds;
+        float under = view.Min.Y - (row.Bounds.Min.Y + moved);
+        float room = view.Max.Y - held.Top;
+        float up = MathF.Min(MathF.Max(0.0f, under + 6.0f), MathF.Max(0.0f, room));
+        if (up > 0.5f && under > 0.0f)
+        {
+            moved += up;
+            agentRowHeld = held with { Top = held.Top + up, Ticks = held.Ticks - 1 };
+        }
+
         if (MathF.Abs(moved) >= 0.5f)
             agentsScroll.Offset = Math.Clamp(agentsScroll.Offset + moved, 0.0f, agentsScroll.MaxOffset);
     }
@@ -94,7 +107,7 @@ internal sealed partial class DawnScene
             hash.Add(call.Version);
         }
 
-        hash.Add(toolGroupsOpen.Contains(chat.Entries[start]));
+        // Not whether it's open, a press opens it in place without the row being made again
         return hash.ToHashCode();
     }
 
@@ -146,14 +159,38 @@ internal sealed partial class DawnScene
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.13f, Icon = icon,
             Padding = new UIEdges(6, 0, 70, 0), Tooltip = string.Join("\n", calls.Select(call => $"{ShortToolName(call)} {OneLine(ToolPreview(call.Input), 80)}")),
-            OnPressed = () =>
-            {
-                if (!toolGroupsOpen.Remove(first))
-                    toolGroupsOpen.Add(first);
-                HoldRowInPlace(first, bar);
-                chat.Touch(first);
-            }
         });
+        Label chevron = null!;
+        StackPanel? lines = null;
+        // Opened and folded in place, its lines put in under the head or taken out, the row not made again. Made again,
+        // the new row wasn't laid out for a frame, the chat was held to the wrong place and jumped up and back
+        void Lay(bool opening)
+        {
+            if (opening)
+            {
+                lines ??= MakeLines();
+                if (lines.Parent is null)
+                    holder.Add(lines);
+            }
+            else
+                lines?.Parent?.Remove(lines);
+            chevron.Text = opening ? "$(chevron-down)" : "$(chevron-right)";
+        }
+        StackPanel MakeLines()
+        {
+            var made = new StackPanel { Fill = UIFill.Horizontal, Spacing = 1, Padding = new UIEdges(10, 0, 0, 0) };
+            foreach (HexAgentEntry call in calls)
+                made.Add(ToolLine(chat, call, skin));
+            return made;
+        }
+        button.OnPressed = () =>
+        {
+            bool opening = !toolGroupsOpen.Remove(first);
+            if (opening)
+                toolGroupsOpen.Add(first);
+            HoldRowInPlace(first, bar);
+            Lay(opening);
+        };
         FollowWidth(width =>
         {
             string fitted = UIRichText.Literal(OneLine(head, Math.Max(6, (int)((width - 90.0f) / 6.0f))));
@@ -167,14 +204,9 @@ internal sealed partial class DawnScene
             agentsGroupTimes[first] = (time, calls);
         else
             agentsGroupTimes.Remove(first);
-        right.Add(new Label { Text = open ? "$(chevron-down)" : "$(chevron-right)", TextScale = 0.12f, Dim = true });
-
+        chevron = right.Add(new Label { Text = open ? "$(chevron-down)" : "$(chevron-right)", TextScale = 0.12f, Dim = true });
         if (open)
-        {
-            var lines = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 1, Padding = new UIEdges(10, 0, 0, 0) });
-            foreach (HexAgentEntry call in calls)
-                lines.Add(ToolLine(chat, call, skin));
-        }
+            Lay(true);
 
         return holder;
     }
@@ -210,14 +242,23 @@ internal sealed partial class DawnScene
         var button = line.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.125f, Icon = icon,
-            Padding = new UIEdges(8, 0, 56, 0), Tooltip = $"{call.ToolName}\n{preview}",
-            OnPressed = () =>
-            {
-                call.Open = !call.Open;
-                HoldRowInPlace(call, line);
-                chat.Touch(call);
-            }
+            Padding = new UIEdges(8, 0, 56, 0), Tooltip = $"{call.ToolName}\n{preview}"
         });
+        // Opened and folded in place under its line, nothing made again, as a group is
+        Panel? opened = null;
+        button.OnPressed = () =>
+        {
+            call.Open = !call.Open;
+            HoldRowInPlace(call, line);
+            if (call.Open)
+            {
+                opened ??= OpenedCall(call, skin);
+                if (opened.Parent is null)
+                    holder.Add(opened);
+            }
+            else
+                opened?.Parent?.Remove(opened);
+        };
         FollowWidth(width =>
         {
             int room = Math.Max(6, (int)((width - 90.0f) / 6.0f));
@@ -240,20 +281,29 @@ internal sealed partial class DawnScene
 
         if (call.Open)
         {
-            var opened = holder.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(12, 6, 12, 8), Color = skin?.FieldColor, Radius = 6 });
-            var said = opened.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
-            if (!string.IsNullOrWhiteSpace(call.Input))
-            {
-                said.Add(Text(Said("agents_panel.given"), 0.125f, dim: true).Also(label => label.Bold = true));
-                said.Add(Text("```json\n" + Lines(ToolDetails(call.Input!), 12) + "\n```", 0.16f, markdown: true).Also(label => label.CodeFont = code.Font));
-            }
-            if (!string.IsNullOrWhiteSpace(call.Output))
-            {
-                said.Add(Text(Said("agents_panel.said"), 0.125f, dim: true).Also(label => label.Bold = true));
-                said.Add(Text(UIRichText.Literal(Lines(call.Output!, 12)), 0.15f));
-            }
+            opened = OpenedCall(call, skin);
+            holder.Add(opened);
         }
 
         return holder;
+    }
+
+    // What a call was given and said back, under its line once it's opened
+    private Panel OpenedCall(HexAgentEntry call, UISkin? skin)
+    {
+        var opened = new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(12, 6, 12, 8), Color = skin?.FieldColor, Radius = 6 };
+        var said = opened.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
+        if (!string.IsNullOrWhiteSpace(call.Input))
+        {
+            said.Add(Text(Said("agents_panel.given"), 0.125f, dim: true).Also(label => label.Bold = true));
+            said.Add(Text("```json\n" + Lines(ToolDetails(call.Input!), 12) + "\n```", 0.16f, markdown: true).Also(label => label.CodeFont = code.Font));
+        }
+        if (!string.IsNullOrWhiteSpace(call.Output))
+        {
+            said.Add(Text(Said("agents_panel.said"), 0.125f, dim: true).Also(label => label.Bold = true));
+            said.Add(Text(UIRichText.Literal(Lines(call.Output!, 12)), 0.15f));
+        }
+
+        return opened;
     }
 }

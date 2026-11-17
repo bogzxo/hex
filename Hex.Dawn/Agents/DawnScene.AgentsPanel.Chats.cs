@@ -101,11 +101,13 @@ internal sealed partial class DawnScene
         foreach (HexAgentChat chat in agentChats)
             chat.Tick();
         int working = agentChats.Count(chat => chat.Running);
-        string said = $"{wanted}{agentsListOpen}{most}{working}{systems}{systemsTall}|{AgentCardsKey(ChatsInOrder())}";
+        // Not the systems' height, which eases a step every frame after a fold, the list only placed again for that
+        string said = $"{wanted}{agentsListOpen}{most}{working}{systems}|{AgentCardsKey(ChatsInOrder())}";
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)
                 refresh(width);
+            PlaceAgentsSystems(systems, systemsTall);
             return;
         }
         agentsListDrawn = said;
@@ -144,6 +146,22 @@ internal sealed partial class DawnScene
             height = CHATS_HEAD + listed + 6.0f;
         }
 
+        agentsCardsHeight = height;
+        agentsSystemsPlaced = -1.0f;
+        PlaceAgentsSystems(systems, systemsTall);
+    }
+
+    // How tall the chats' part of the list is, and the systems' height it was last placed with
+    private float agentsCardsHeight, agentsSystemsPlaced = -1.0f;
+
+    /// <summary>The systems put under the chats and the list sized to both, only when the systems' height moved.</summary>
+    private void PlaceAgentsSystems(bool systems, float systemsTall)
+    {
+        float tall = systems ? systemsTall : 0.0f;
+        if (MathF.Abs(tall - agentsSystemsPlaced) < 0.5f && agentsSystemsHolder.Visible == systems)
+            return;
+        agentsSystemsPlaced = tall;
+        float height = agentsCardsHeight;
         agentsSystemsHolder.Visible = systems;
         if (systems)
         {

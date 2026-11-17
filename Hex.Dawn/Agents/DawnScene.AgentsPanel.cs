@@ -234,6 +234,8 @@ internal sealed partial class DawnScene
         }
 
         TakeAgentLines();
+        // The systems panels' heights eased a step every frame, the columns they're in following
+        EaseSystems(Face == HexFace.Noon ? noonSystems : agentsSystems, dt);
         PublishAgentStatuses();
         ExpireQuestions();
         DrawAgentsActivity();

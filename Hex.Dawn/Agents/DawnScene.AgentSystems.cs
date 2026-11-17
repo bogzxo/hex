@@ -21,9 +21,18 @@ internal sealed partial class DawnScene
     private const float SYSTEM_HEAD = 24.0f, SYSTEM_INDENT = 46.0f;
 
     /// <summary>The panel on screen, what puts its words right at a width, and what it was made for.</summary>
-    private sealed class SystemsPanel(StackPanel root)
+    private sealed class SystemsPanel(StackPanel root, Panel holder)
     {
         public StackPanel Root { get; } = root;
+
+        /// <summary>
+        /// What the panel's rows are in, cut to the height it's at as it eases to theirs, so a fold opening or closing
+        /// grows or shrinks the column it's in smoothly rather than the column jumping on the frame it's made again.
+        /// </summary>
+        public Panel Holder { get; } = holder;
+
+        /// <summary>The height it's drawn at, easing towards its rows', below zero before it's first known.</summary>
+        public float Shown { get; set; } = -1.0f;
         public List<Action<float>> Refresh { get; } = [];
         public string Made { get; set; } = "\0";
         public bool Open { get; set; } = true;
@@ -55,10 +64,36 @@ internal sealed partial class DawnScene
     /// panel's made again. Read off the layout it was a frame or two behind, the list over the chat sized for what had
     /// been and the chat under it jumping as it caught up.
     /// </summary>
-    private static float SystemsTall(SystemsPanel? panel)
+    private static float SystemsTall(SystemsPanel? panel) => panel is null ? 0.0f : panel.Shown >= 0.0f ? panel.Shown : SystemsRowsTall(panel);
+
+    /// <summary>
+    /// Every frame, the panel's height eased a step towards its rows', a fifth of a second or so to get there, at once
+    /// with motion off or before it's been drawn. True while it's still moving.
+    /// </summary>
+    private bool EaseSystems(SystemsPanel? panel, float dt)
     {
         if (panel is null)
-            return 0.0f;
+            return false;
+        float wanted = SystemsRowsTall(panel);
+        float time = AgentsMotion(SYSTEMS_EASE);
+        float shown = panel.Shown < 0.0f || time <= 0.0f || MathF.Abs(wanted - panel.Shown) < 0.5f
+            ? wanted
+            : panel.Shown + (wanted - panel.Shown) * (1.0f - MathF.Exp(-dt * 5.0f / time));
+        bool moving = MathF.Abs(shown - wanted) >= 0.5f;
+        panel.Shown = MathF.Round(shown);
+        if (MathF.Abs(panel.Holder.Size.Y - panel.Shown) >= 0.5f)
+            panel.Holder.Size = new Vector2(0, panel.Shown);
+        if (moving)
+            Engine.WindowManager.RequestFrames();
+        return moving;
+    }
+
+    // How long the systems panel takes to grow or shrink to a fold, in seconds at the usual speed
+    private const float SYSTEMS_EASE = 0.22f;
+
+    /// <summary>How tall the panel's rows are, what its height eases to.</summary>
+    private static float SystemsRowsTall(SystemsPanel panel)
+    {
 
         float tall = panel.Root.Padding.Total.Y;
         int shown = 0;
@@ -90,8 +125,12 @@ internal sealed partial class DawnScene
     /// <summary>A panel made empty in <paramref name="into"/>, drawn by <see cref="DrawSystems"/>.</summary>
     private SystemsPanel MakeSystemsPanel(UIComponent into, bool open, bool bottomUp = false)
     {
-        var root = into.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2, Padding = new UIEdges(0, 6, 0, 0) });
-        return new SystemsPanel(root) { Open = open, BottomUp = bottomUp };
+        // The rows hang from the holder's bottom when the panel builds from the bottom up, so as it eases what's cut off is
+        // at the far side from its head
+        var holder = into.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 0), Color = Vector4.Zero, Clip = true });
+        Origin end = bottomUp ? Origin.Bottom : Origin.Top;
+        var root = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2, Padding = new UIEdges(0, 6, 0, 0), Anchor = end, Pivot = end });
+        return new SystemsPanel(root, holder) { Open = open, BottomUp = bottomUp };
     }
 
     /// <summary>
