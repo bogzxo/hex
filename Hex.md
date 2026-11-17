@@ -126,6 +126,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] hex_workspace, an agent lists, adds and removes workspace folders (a project file adds its folder), told of it in
       the harness rules with hex_ask. The engine (..\horizon) is in this workspace now, so Hex's tools reach it
 - [x] Details' running spinner turns (its row sat on its scroll panel's clip edge, where a moving icon is drawn still)
+- [x] A restart on a folder of the workspace keeps the workspace whole (it was cut to that one folder)
+- [x] hex_edit and hex_write take the folder-named paths the harness answers with in a multi-folder workspace (hex/...)
+- [x] Groups of tool calls have a gutter by how they went, blue running, green, yellow when one failed but the last
+      went (a warning icon), red when it ended failing
 - [ ] A moving icon cut by its clip is drawn still (UIDrawList.MovingSymbol), clip the turned quad instead
 - [ ] The harness guard refuses git ls-files and the like aimed outside the workspace (git -C ..\horizon ls-files), it
       should only turn back reads of the workspace's own folders

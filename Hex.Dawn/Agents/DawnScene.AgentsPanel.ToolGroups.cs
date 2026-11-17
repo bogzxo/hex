@@ -127,15 +127,21 @@ internal sealed partial class DawnScene
         string kinds = string.Join(", ", calls.GroupBy(call => ShortToolName(call)).OrderByDescending(kind => kind.Count())
             .Take(4).Select(kind => kind.Count() > 1 ? $"{kind.Key} ×{kind.Count()}" : kind.Key));
         double seconds = calls.Sum(call => call.Seconds);
-        string icon = running is not null ? (settings.UiAnimation > 0 ? "loading~spin" : "loading") : failed > 0 ? "error" : "tools";
+        // One that failed on the way and was got past (its last call went) is a warning, a group that ended failing an error
+        bool endedFailing = calls[^1].State == HexAgentToolState.Failed;
+        string icon = running is not null ? (settings.UiAnimation > 0 ? "loading~spin" : "loading") : endedFailing ? "error" : failed > 0 ? "warning" : "tools";
         string head = running is not null
             ? Said("agents_panel.tools_running", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("tool", ShortToolName(running)))
             : Said("agents_panel.tools_group", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("kinds", kinds));
 
         var bar = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f } });
-        // A blue gutter down its left while one of its calls is running, so what's going on now stands out of what's done
-        if (running is not null)
-            bar.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, TOOL_GROUP_HEAD - 6), Position = new Vector2(1, 0), Radius = 1.5f, Color = RUNNING_BLUE });
+        // A gutter down its left by how it went, blue while one of its calls is running, so what's going on now stands out
+        // of what's done, then green, yellow when one failed on the way but the last went, red when it ended failing
+        Vector4 gutter = running is not null ? RUNNING_BLUE
+            : endedFailing ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
+            : failed > 0 ? skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
+            : skin?.Palette.Success ?? new Vector4(0.35f, 0.8f, 0.45f, 1.0f);
+        bar.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, TOOL_GROUP_HEAD - 6), Position = new Vector2(1, 0), Radius = 1.5f, Color = gutter });
         var button = bar.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.13f, Icon = icon,

@@ -274,8 +274,10 @@ internal sealed partial class DawnScene : Scene
         // The folders of last time and the files that were open in them, unless the editor was told what to open
         explorer.RestoreWorkspace();
 
-        // A folder it was started on (dawn -window folder in a terminal) is the workspace instead
-        if (options.Folder is not null)
+        // A folder it was started on (dawn -window folder in a terminal) is the workspace instead, unless it's a folder of
+        // the workspace of last time, which is kept whole (a restart on its first folder lost the others)
+        if (options.Folder is not null && !explorer.workspace.Folders.Any(folder =>
+                string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             explorer.OpenFolder(options.Folder);
 
         // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
