@@ -254,6 +254,9 @@ internal sealed partial class DawnScene
         // A Jupyter notebook comes up as its cells, its JSON is the Code view
         if (IsNotebookFile(path))
             opened.View = HexView.Notebook;
+        // Markdown comes up as it reads, its text a press of the Code view away
+        else if (IsMarkdownFile(path))
+            opened.View = HexView.Markdown;
 
         // Coloured by the grammar of whatever language the extension says (HIDL's own, VS Code's for the rest, plain
         // text when there is none), and only HIDL is parsed for its errors, until the rest come through a language server
