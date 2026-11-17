@@ -90,7 +90,7 @@ internal sealed partial class DawnScene
         if (systems)
         {
             DrawSystems(agentsSystems!, width - 8.0f);
-            systemsTall = agentsSystems!.Root.Bounds.IsEmpty ? 0.0f : MathF.Ceiling(agentsSystems.Root.Bounds.Height);
+            systemsTall = SystemsTall(agentsSystems);
         }
 
         // Grows with the chats up to half the panel, and never less than the usual most. Only how many rows that is goes in

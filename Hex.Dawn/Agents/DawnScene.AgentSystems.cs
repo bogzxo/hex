@@ -38,6 +38,29 @@ internal sealed partial class DawnScene
     // is made on the first and the room it takes is known once that's laid out, so it takes a couple
     private int systemsSettle;
 
+    /// <summary>
+    /// How tall the panel is, worked out from its rows rather than read off the last layout, so it's right on the tick the
+    /// panel's made again. Read off the layout it was a frame or two behind, the list over the chat sized for what had
+    /// been and the chat under it jumping as it caught up.
+    /// </summary>
+    private static float SystemsTall(SystemsPanel? panel)
+    {
+        if (panel is null)
+            return 0.0f;
+
+        float tall = panel.Root.Padding.Total.Y;
+        int shown = 0;
+        foreach (UIComponent row in panel.Root.Children)
+        {
+            if (!row.Visible)
+                continue;
+            tall += row.Size.Y > 0 ? row.Size.Y : row.Bounds.Height;
+            shown++;
+        }
+
+        return shown == 0 ? 0.0f : MathF.Ceiling(tall + (shown - 1) * panel.Root.Spacing);
+    }
+
     /// <summary>A fold pressed, made on the next tick and the ticks after it at once, never under the press itself.</summary>
     private void SystemsFolded(SystemsPanel panel)
     {

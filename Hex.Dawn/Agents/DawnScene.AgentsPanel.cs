@@ -44,6 +44,10 @@ internal sealed partial class DawnScene
     private bool agentsWasRunning, agentsWasSteering;
     private float agentsWait;
 
+    // The width the panel's parts were last drawn at and the room the systems took then, a change of either drawing them now
+    private int agentsWidthDrawn = -1;
+    private float agentsSystemsTallDrawn = -1.0f;
+
     private void BuildAgentsPanel()
     {
         UILayout made = layout.Instantiate(AGENTS_LAYOUT, left);
@@ -244,6 +248,18 @@ internal sealed partial class DawnScene
         }
         DrawAgentImages();
         FitAgentsCompose();
+
+        // The rest follows the width as well on the tick it moves, the list over the chat, the systems under it, the
+        // agents' chips and the pickers. Drawn a tenth of a second behind a side being dragged, each jumped as it caught up,
+        // and the chat under them jumped with them. The room the systems take is known a frame after they're laid out, so
+        // that moving counts too
+        float systemsTall = SystemsTall(agentsSystems);
+        if ((int)agentsView.Size.X != agentsWidthDrawn || systemsTall != agentsSystemsTallDrawn)
+        {
+            agentsWidthDrawn = (int)agentsView.Size.X;
+            agentsSystemsTallDrawn = systemsTall;
+            agentsWait = 0.0f;
+        }
 
         if ((agentsWait -= dt) > 0.0f)
             return;

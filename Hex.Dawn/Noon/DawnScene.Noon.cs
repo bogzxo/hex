@@ -101,12 +101,15 @@ internal sealed partial class DawnScene
             agentsViewIndex = IndexIn(left, agentsView);
             noonCenter.Add(agentsView);
             agentsView.Visible = true;
+            // Its edge is the side bar's to drag, in the middle it has none, or a grip of a side that isn't there showed
+            agentsView.Resizable = UIResize.None;
             agentsInput.Focus();
         }
         else
         {
             left.Insert(Math.Max(0, agentsViewIndex), agentsView);
             agentsView.Visible = false;
+            agentsView.Resizable = UIResize.Right;
             PlaceAgentsView(Side == HexSide.Agents);
             if (document.View == HexView.Code || document.IsText)
                 code.Focus();
@@ -179,7 +182,7 @@ internal sealed partial class DawnScene
         noonView.Size = new Vector2(width, height);
 
         noonFleet.Size = new Vector2(NOON_FLEET, height);
-        float systems = noonSystems is { Root.Bounds.IsEmpty: false } panel ? MathF.Ceiling(panel.Root.Bounds.Height) + noonFleet.Spacing : 0.0f;
+        float systems = noonSystems is not null && SystemsTall(noonSystems) is > 0 and var tall ? tall + noonFleet.Spacing : 0.0f;
         noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - systems));
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
