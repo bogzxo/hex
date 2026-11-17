@@ -254,7 +254,7 @@ internal sealed partial class DawnScene
 
         // The agent
         ContextSection(Said("noon.agent"));
-        string? model = chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model;
+        string? model = HexAgentModels.Of(chat);
         ContextLine("robot", $"{HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == chat.Agent)?.Name ?? chat.Agent}{(model is null ? string.Empty : " · " + model)}");
         // Whole seconds while it runs, Details is drawn again once a second and tenths stood still between, the tenths once it's done
         ContextLine(chat.Running ? "loading~spin" : "pass", chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds:0}s" : $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s");

@@ -115,9 +115,12 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 
 ## Models and files
 
-- [ ] Full model names wherever a model is said (cards, Details, systems panel, pickers), not opus or sonnet
-- [ ] Models pulled from the agent system itself, Codex by its app-server's model/list, Claude Code by the initialize
-      control request (which also says its slash commands, for the commands plan)
+- [x] Full model names wherever a model is said (cards, Details, systems panel, the header), the model the agent says
+      it runs over the alias it was started with (HexAgentModels, Claude Opus 5.5, GPT-5.1-Codex)
+- [x] Models from the agent system itself. Claude Code is sent initialize with the first message of each run, its
+      answer's models fill the picker and its commands are kept (discovered.commands, for the commands plan). Codex's
+      names come from its own models_cache.json through chat.models. To confirm live, the picker after a Claude turn
+- [ ] Codex's app-server model/list in place of reading its cache file
 - [x] Files said in Agentic with the icon of their extension as the file tree has it, in Files it touched and after
       the name of a tool row given a file. Left, links to files in what an agent says
 - [ ] The harness guard refuses git ls-files and the like aimed outside the workspace (git -C ..\horizon ls-files), it

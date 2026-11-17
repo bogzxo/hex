@@ -67,7 +67,7 @@ internal sealed partial class DawnScene
         void Refresh(float width)
         {
             float room = width - indent;
-            string? model = chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model?.Replace("claude-", string.Empty);
+            string? model = HexAgentModels.Of(chat);
             // Who it is and the model it's on, always in sight, a working agent's line under its name being what it's doing
             string starter = (chat.Parent is { } parent ? ChatName(parent) : system) + (model is { Length: > 0 } ? $" · {model}" : string.Empty);
             string said = UIRichText.Literal(OneLine(starter, Math.Max(4, (int)((room - 150) / 6.0f))));

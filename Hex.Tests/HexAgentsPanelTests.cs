@@ -230,6 +230,55 @@ public sealed class HexAgentsPanelTests : IDisposable
             && line.Contains(HexJson.FromHidl(new StringValue(picture))!.ToJsonString().Trim('"'), StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("claude-opus-5-5", "Claude Opus 5.5")]
+    [InlineData("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5")]
+    [InlineData("claude-3-5-haiku-20241022", "Claude Haiku 3.5")]
+    [InlineData("sonnet[1m]", "Claude Sonnet (1M context)")]
+    [InlineData("opus", "Claude Opus")]
+    [InlineData("gpt-5.1-codex-max", "GPT-5.1-Codex-Max")]
+    [InlineData("gemini-2.5-pro", "Gemini 2.5 Pro")]
+    [InlineData("o3", "o3")]
+    [InlineData("", null)]
+    public void Models_are_said_in_full(string id, string? expected) => Assert.Equal(expected, HexAgentModels.Name(id));
+
+    [Fact]
+    public void Claude_code_is_asked_its_models_as_a_run_starts_and_the_picker_has_them()
+    {
+        ObjectValue? said = null;
+        var (runtime, hex, run) = Load("claude_code");
+        hex.Properties["agent"] = Natives.Action("agent", args => said = args.Object(0));
+        var chat = new HexAgentChat(1, "claude_code");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+
+        Arguments(runtime, run, api);
+        string first = Said(runtime, run, api, "hi");
+        Assert.StartsWith("[", first);
+        Assert.Contains("\"subtype\":\"initialize\"", first);
+        Assert.Contains("\"type\":\"user\"", first);
+        // Only the first message of a run goes with it
+        Assert.DoesNotContain("initialize", Said(runtime, run, api, "more"));
+
+        Feed(runtime, run, api, """{"type":"control_response","response":{"subtype":"success","request_id":"hex-init-1","response":{"commands":[{"name":"compact","description":"Compact"}],"models":[{"value":"default","displayName":"Default (recommended)","description":"Opus 5.5"},{"value":"sonnet","displayName":"Sonnet","description":"Sonnet 5.5"}]}}}""");
+        Assert.NotNull(said);
+        string options = HexJson.FromHidl(((ObjectValue)said!.Value.Properties["run"]).Properties["options"])!.ToJsonString();
+        Assert.Contains("\"label\":\"Default (recommended)\"", options);
+        Assert.Contains("\"value\":\"sonnet\"", options);
+        Assert.DoesNotContain("Haiku", options);
+    }
+
+    [Fact]
+    public void A_chat_says_the_model_it_runs_over_the_alias_it_was_asked_for()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Options["model"] = "opus";
+        Assert.Equal("Claude Opus", HexAgentModels.Of(chat));
+        chat.Model = "claude-opus-5-5";
+        Assert.Equal("Claude Opus 5.5", HexAgentModels.Of(chat));
+        HexAgentModels.Said("gpt-test-only", "Test Model");
+        Assert.Equal("Test Model", HexAgentModels.Name("gpt-test-only"));
+    }
+
     [Fact]
     public void A_question_waits_on_the_person_once_and_says_who_answered()
     {

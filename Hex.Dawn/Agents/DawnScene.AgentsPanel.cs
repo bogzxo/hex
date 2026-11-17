@@ -373,7 +373,7 @@ internal sealed partial class DawnScene
             parts.Add(Said("agents_panel.started_by", ("name", ChatName(parent))));
         if (agentChat is { } shown && (shown.InputTokens > 0 || shown.Model is not null || shown.Running || shown.TurnSeconds > 0))
         {
-            parts.Add(shown.Model?.Replace("claude-", string.Empty));
+            parts.Add(HexAgentModels.Of(shown));
             if (shown.InputTokens + shown.OutputTokens > 0)
                 parts.Add(Said("agents_panel.tokens", ("input", Count(shown.InputTokens)), ("output", Count(shown.OutputTokens))).TrimStart(' ', '·'));
             if (shown.Cost > 0)

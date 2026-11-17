@@ -279,7 +279,7 @@ internal sealed partial class DawnScene
                 ? Said(chats.Length == 1 ? "noon.system_chats_one" : "noon.system_chats", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)), ("cost", cost.ToString("0.00", CultureInfo.InvariantCulture)))
                 : Said(chats.Length == 1 ? "noon.system_chats_free_one" : "noon.system_chats_free", ("chats", chats.Length.ToString(CultureInfo.InvariantCulture)), ("tokens", HexAgentLimits.Tokens(tokens)))));
 
-            string[] inUse = [.. chats.Select(chat => chat.Options.GetValueOrDefault("model") is { Length: > 0 } picked ? picked : chat.Model?.Replace("claude-", string.Empty))
+            string[] inUse = [.. chats.Select(HexAgentModels.Of)
                 .Where(model => !string.IsNullOrEmpty(model)).Distinct(StringComparer.OrdinalIgnoreCase)!];
             Put(models, inUse.Length == 0 ? null : $"$(hubot) {UIRichText.Literal(OneLine(string.Join(", ", inUse), Fits(width)))}");
 

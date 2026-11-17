@@ -53,6 +53,17 @@ internal static class HexAgentChatApi
                 chat.Touch(asked);
             });
         })),
+        // The models the agent system says it has, [{ id, name }], each said by its name wherever Hex says a model
+        ("models", Natives.Action("models", args =>
+        {
+            if (!args.Has(0) || args[0] is not ListValue listed)
+                return;
+            foreach (ObjectValue model in listed.Items.OfType<ObjectValue>().Take(200))
+            {
+                if (TextOf(model, "id") is { Length: > 0 } id && TextOf(model, "name") is { Length: > 0 } name && !string.Equals(id, name, StringComparison.OrdinalIgnoreCase))
+                    HexAgentModels.Said(id, name);
+            }
+        })),
         ("id", new StringValue(chat.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))),
         // Something for the agent's stdin, a string as it is or an object as a line of JSON, true when it went
         ("write", Natives.Function("write", args =>

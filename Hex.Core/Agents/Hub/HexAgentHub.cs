@@ -118,7 +118,8 @@ internal sealed class HexAgentHub
 
     // A chat as a row of the snapshot
     private static HexHubRow RowOf(HexAgentChat chat, int reply) => new(chat.Id, chat.Shown, chat.Agent,
-        chat.Options.GetValueOrDefault("model") ?? chat.Model, chat.Parent, chat.Depth, StateWord(chat),
+        // The model's id as the agent runs it, which an agent can start another with, the alias it was asked for until it says
+        chat.Model is { Length: > 0 } running ? running : chat.Options.GetValueOrDefault("model"), chat.Parent, chat.Depth, StateWord(chat),
         chat.Running ? string.Empty : chat.LastReply(reply), chat.TurnSeconds, chat.Cost, chat.Version, chat, chat.UnreadMail());
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
