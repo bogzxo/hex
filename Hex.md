@@ -23,8 +23,8 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] A blue gutter beside tool calls while they run
 - [x] A click anywhere in the message card's writing room lands in the box (the box is two rows at the least)
 - [x] Opening or folding a group of calls keeps it where it is on screen
-- [ ] The ghost resize line still shows sometimes (not a hovered grip, the engine fix didn't end it). Needs a screenshot
-      of when it shows and what was done just before
+- [ ] The ghost resize line in Agentic was the side's HexSplitter laid on the window over Agentic, now hidden while
+      Agentic covers the body, and the agents view's second handle in Dawn is gone. To confirm with the user
 - [x] hex_read reads files the index leaves out (hex-extensions), by range
 - [ ] "Files it touched" in Details lists the newest first, keeps the last 25, shows 10 with a fold for the rest
 - [ ] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
@@ -64,4 +64,6 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 - menus self test, File lists 21 rows and Run 25, more than 20
 - ux self test, narrow editor keeps file navigation on its own row
+- shell self test, "Extensions is lit while its window is up" and "once it's closed the side's button is lit again"
+  (first run this session, not yet checked against an older build)
 - Seven older unpushed commits (bec71d5 to 96cc281) have a Co-Authored-By line against the no-AI-credit rule

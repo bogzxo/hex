@@ -319,12 +319,17 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: in Agentic the wheel over the margins round the chat scrolls it", () =>
             agentsScroll.Offset > wheelFrom + 1.0f);
+        test.Check("agents layout: in Agentic no side's handle shows, there's no side there to drag", () =>
+            Splitters.Left is not { Visible: true } && Splitters.Right is not { Visible: true });
         test.Run(() =>
         {
             // Back where the chat was read to, which a check further on holds it to
             agentsScroll.Offset = readTo;
             ShowFace(HexFace.Dawn);
         });
+        test.Settle(0.2f);
+        test.Check("agents layout: back in Dawn the side has one handle, the line's, the agents view none of its own", () =>
+            agentsView.Resizable == UIResize.None && Splitters.Left is { Visible: true });
         test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
 
         // The status bar says the agents and how many want looking at, and follows one being looked at

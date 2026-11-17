@@ -134,7 +134,9 @@ internal sealed partial class DawnScene
 
         UIRect window = chrome.Root.Bounds;
         Vector4 accent = compositor.Skin?.AccentColor ?? Vector4.One;
-        bool ready = compositor.Skin is not null && !window.IsEmpty;
+        // Nothing to hold while Agentic is over the body, the sides' lines aren't there, and a handle laid on where they had
+        // been showed as a line down the middle of Agentic
+        bool ready = compositor.Skin is not null && !window.IsEmpty && body.Visible;
 
         leftSplitter.Place(ready && left.Shown ? ShownGrip(leftGrips) : null, UIResize.Right,
             new Vector2(left.Bounds.Max.X - window.Min.X, window.Max.Y - left.Bounds.Max.Y), GRIP_HOLD, left.Bounds.Height, accent);

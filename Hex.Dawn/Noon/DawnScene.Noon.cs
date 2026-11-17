@@ -102,15 +102,12 @@ internal sealed partial class DawnScene
             agentsViewIndex = IndexIn(left, agentsView);
             noonCenter.Add(agentsView);
             agentsView.Visible = true;
-            // Its edge is the side bar's to drag, in the middle it has none, or a grip of a side that isn't there showed
-            agentsView.Resizable = UIResize.None;
             agentsInput.Focus();
         }
         else
         {
             left.Insert(Math.Max(0, agentsViewIndex), agentsView);
             agentsView.Visible = false;
-            agentsView.Resizable = UIResize.Right;
             PlaceAgentsView(Side == HexSide.Agents);
             if (document.View == HexView.Code || document.IsText)
                 code.Focus();
