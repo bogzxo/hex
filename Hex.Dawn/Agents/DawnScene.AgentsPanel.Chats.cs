@@ -165,7 +165,8 @@ internal sealed partial class DawnScene
     private void PlaceAgentsList()
     {
         agentsList.Position = new Vector2(0, -(agentsHeadHeight - 2.0f));
-        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 36.0f);
+        // The card sits on the bottom, the harness's line that was under it being in the head now
+        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f);
     }
 
     private string ChatName(int id) => ChatById(id) is { } chat ? $"#{id} {chat.Shown}" : $"#{id}";

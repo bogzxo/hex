@@ -15,10 +15,13 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // A card's height
-    private const float AGENT_CARD = 66.0f;
+    private const float AGENT_CARD = 70.0f;
 
     // Where a card's three lines start down from its top, an even padding above and below and the same gap between
-    private const float CARD_TOP = 9.0f, CARD_TITLE = 26.0f, CARD_UNDER = 46.0f;
+    private const float CARD_TOP = 9.0f, CARD_TITLE = 27.0f, CARD_UNDER = 49.0f;
+
+    // The size of a card's small lines and of its name, a step up from what read too small at 100% scale
+    private const float CARD_SMALL = 0.12f, CARD_NAME = 0.155f;
 
     /// <summary>A card on screen and what puts its words right as its agent moves on, at the width it's at.</summary>
     private sealed record AgentCard(UIComponent Root, Action<float> Refresh);
@@ -53,10 +56,10 @@ internal sealed partial class DawnScene
         var badge = root.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
         badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
 
-        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = 0.11f, Dim = true, Align = Origin.Left });
-        var state = root.Add(new Label { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP - 1), TextScale = 0.11f, Align = Origin.Right });
-        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = 0.145f, Bold = chat == agentChat, Align = Origin.Left });
-        var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = 0.11f, Dim = true, Align = Origin.Left });
+        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        var state = root.Add(new Label { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP - 1), TextScale = CARD_SMALL, Align = Origin.Right });
+        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
+        var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
 
         if (closable)
         {

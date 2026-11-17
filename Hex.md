@@ -131,6 +131,9 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] hex_edit and hex_write take the folder-named paths the harness answers with in a multi-folder workspace (hex/...)
 - [x] Groups of tool calls have a gutter by how they went, blue running, green, yellow when one failed but the last
       went (a warning icon), red when it ended failing
+- [x] Harness saved is a toggle, Escape closes it, its button a zap in the panel's head (the composer back on the
+      bottom) and a line at the foot of Agentic's Agents column
+- [x] Agentic's side columns, cards and systems panel a step bigger in text
 - [ ] A moving icon cut by its clip is drawn still (UIDrawList.MovingSymbol), clip the turned quad instead
 - [ ] The harness guard refuses git ls-files and the like aimed outside the workspace (git -C ..\horizon ls-files), it
       should only turn back reads of the workspace's own folders

@@ -127,7 +127,7 @@ internal sealed partial class DawnScene
                 Text = $"$({(panel.Open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
                 Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
             });
-            var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.11f, Dim = true, Align = Origin.Right });
+            var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.12f, Dim = true, Align = Origin.Right });
             panel.Refresh.Add(_ =>
             {
                 int working = agentChats.Count(chat => chat.Running && systems.Any(system => system.Id == chat.Agent));
@@ -139,7 +139,7 @@ internal sealed partial class DawnScene
             });
 
             if (systems.Length == 0)
-                panel.Root.Add(new Label { Text = Said("noon.system_none"), TextScale = 0.115f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left, Padding = new UIEdges(6, 0, 6, 0) });
+                panel.Root.Add(new Label { Text = Said("noon.system_none"), TextScale = 0.125f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left, Padding = new UIEdges(6, 0, 6, 0) });
             // Folded, the section is a line a system, open each shows its lines unless it's been folded on its own
             foreach (HexAgentProfile system in systems)
                 panel.Refresh.Add(SystemBlock(panel, system));
@@ -199,13 +199,13 @@ internal sealed partial class DawnScene
         var badge = head.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(18, 0), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
         badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system.Name)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
         var name = head.Add(new Label { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(SYSTEM_INDENT, 0), TextScale = 0.13f, Bold = true, Align = Origin.Left });
-        var state = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.11f, Align = Origin.Right });
+        var state = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.12f, Align = Origin.Right });
 
         // Its lines, an icon each as the Details column has them, each hidden while it has nothing to say, so a system not
         // used yet is its head alone
         // A line is a label in a row put in under the name, a label's own padding isn't kept by the stack it's in
         Label Line() => into.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 16), Padding = new UIEdges(SYSTEM_INDENT, 0, 6, 0), Color = Vector4.Zero, Visible = false })
-            .Add(new Label { TextScale = 0.115f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+            .Add(new Label { TextScale = 0.125f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
         Label? install = open && missing ? Line() : null;
         Label? used = open ? Line() : null, models = open ? Line() : null, context = open ? Line() : null;
         Panel? track = null, fill = null;

@@ -37,6 +37,13 @@ internal sealed partial class DawnScene
         commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
         commands.Keys.Add(Key.Escape, () =>
         {
+            // The window of what the harness saved goes first, wherever the keyboard is
+            if (harnessWindow is { } open)
+            {
+                open.Close();
+                return true;
+            }
+
             if (compositor.Focus != agentsInput || agentChat?.Running != true)
                 return false;
             StopAgent(agentChat);
@@ -249,6 +256,13 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ShowHarnessSaved()
     {
+        // A toggle, pressed again it closes the window that's up rather than opening another over it
+        if (harnessWindow is { } open)
+        {
+            open.Close();
+            return;
+        }
+
         const float WIDTH = 620.0f, INSET = 18.0f;
         string? table = Harness.Stats.Table();
         int rows = table?.Count(c => c == '\n') ?? 0;
@@ -259,7 +273,12 @@ internal sealed partial class DawnScene
             MinSize = new System.Numerics.Vector2(420.0f, 140.0f)
         };
         DressWindow(window);
-        window.OnClosed = () => window.Parent?.Remove(window);
+        harnessWindow = window;
+        window.OnClosed = () =>
+        {
+            window.Parent?.Remove(window);
+            harnessWindow = null;
+        };
 
         var column = window.Add(new StackPanel { Spacing = 10.0f, Padding = new UIEdges(INSET, 16.0f), Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal });
         column.Add(Text(Said("agents_panel.harness_about"), 0.13f, dim: true));
@@ -283,11 +302,15 @@ internal sealed partial class DawnScene
             {
                 window.Parent?.Remove(window);
                 harnessSaved = null;
+                harnessWindow = null;
             };
         }
         chrome.Root.Add(window);
         window.TakeKeyboard();
     }
+
+    // The window of what the harness saved while it's up, so a second press closes it
+    private WindowPanel? harnessWindow;
 
     // The window of what the harness saved while it's up, what's written in it and the width that was fitted to
     private (WindowPanel Window, StackPanel Written, float Width)? harnessSaved;

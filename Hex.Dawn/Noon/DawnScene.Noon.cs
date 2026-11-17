@@ -33,6 +33,10 @@ internal sealed partial class DawnScene
     private StackPanel noonView = null!, noonFleet = null!, noonCenter = null!, noonContext = null!;
     private StackPanel noonFleetRows = null!, noonContextRows = null!;
     private ScrollPanel noonFleetScroll = null!, noonContextScroll = null!;
+
+    // The line at the foot of the fleet of what the harness saved, and how tall it is
+    private Button? noonHarness;
+    private const float NOON_HARNESS = 22.0f;
     private Label noonFleetSummary = null!;
 
     /// <summary>The face on screen of the editor's two, Dawn or Noon.</summary>
@@ -56,12 +60,19 @@ internal sealed partial class DawnScene
         var head = noonFleet.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
         head.Add(new Label { Text = Said("noon.fleet"), TextScale = 0.15f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
         head.Add(new Button { Icon = "add", Style = "button_flat", Size = new Vector2(24, 22), Anchor = Origin.Right, Pivot = Origin.Right, Animated = false, Tooltip = Said("agents_panel.new_chat"), OnPressed = NewAgentChat });
-        noonFleetSummary = noonFleet.Add(new Label { Text = string.Empty, TextScale = 0.115f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        noonFleetSummary = noonFleet.Add(new Label { Text = string.Empty, TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         // No room kept at its right, the cards line up with the head's edge as they do with its left
         noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 0, 6) });
         noonFleetRows = noonFleetScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         // The agent systems at the foot of the fleet, what each is and where it stands, the fleet's list making room
         noonSystems = MakeSystemsPanel(noonFleet, open: true, bottomUp: true);
+        // Under it all, what Hex's harness saved the agents this run, opening the window of it
+        noonHarness = noonFleet.Add(new Button
+        {
+            Style = "button_flat", Fill = UIFill.Horizontal, Size = new Vector2(0, NOON_HARNESS), Align = Origin.Left, LabelScale = 0.13f, Animated = false,
+            Tooltip = Said("agents_panel.harness_tip"), OnPressed = ShowHarnessSaved
+        });
+        agentsHarnessShown = (-1, -1);
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         // The wheel turned over the margins round the chat's column scrolls the chat, as it would over the column itself
@@ -184,7 +195,7 @@ internal sealed partial class DawnScene
 
         noonFleet.Size = new Vector2(NOON_FLEET, height);
         float systems = noonSystems is not null && SystemsTall(noonSystems) is > 0 and var tall ? tall + noonFleet.Spacing : 0.0f;
-        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - systems));
+        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - systems - NOON_HARNESS - noonFleet.Spacing));
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
         float side = MathF.Floor((middle - column) * 0.5f);
@@ -362,7 +373,7 @@ internal sealed partial class DawnScene
                 {
                     Icon = HexExplorer.FileIcon(path), IconColor = explorer.FileIconColor(path),
                     Label = UIRichText.Literal(OneLine(shown, 40)), Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
-                    Size = new Vector2(0, 20), LabelScale = 0.125f, Animated = false, OnPressed = () =>
+                    Size = new Vector2(0, 22), LabelScale = 0.135f, Animated = false, OnPressed = () =>
                     {
                         ShowFace(HexFace.Dawn);
                         Open(path);
@@ -416,10 +427,10 @@ internal sealed partial class DawnScene
 
     private void ContextSection(string title) =>
         noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 8, 0, 0), Color = Vector4.Zero })
-            .With(new Label { Text = UIRichText.Literal(title), TextScale = 0.125f, Bold = true, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+            .With(new Label { Text = UIRichText.Literal(title), TextScale = 0.135f, Bold = true, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
 
     private void ContextLine(string icon, string text, bool wrap = false) =>
-        noonContextRows.Add(new Label { Text = $"$({icon}) {UIRichText.Literal(text)}", TextScale = 0.125f, Align = Origin.Left, Wrap = wrap, Fill = UIFill.Horizontal });
+        noonContextRows.Add(new Label { Text = $"$({icon}) {UIRichText.Literal(text)}", TextScale = 0.135f, Align = Origin.Left, Wrap = wrap, Fill = UIFill.Horizontal });
 
     // A bar of how full the context is, the accent until it's getting full, amber past three quarters and red near the end
     private Panel ContextBar(float share)
@@ -435,12 +446,12 @@ internal sealed partial class DawnScene
     }
 
     private static Label ContextText(string text, bool dim) =>
-        new() { Text = UIRichText.Literal(text), TextScale = 0.13f, Dim = dim, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left };
+        new() { Text = UIRichText.Literal(text), TextScale = 0.14f, Dim = dim, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left };
 
     private void ContextLink(string icon, string text, Action open) =>
         noonContextRows.Add(new Button
         {
             Icon = icon, Label = UIRichText.Literal(OneLine(text, 40)), Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
-            Size = new Vector2(0, 20), LabelScale = 0.125f, Animated = false, OnPressed = open
+            Size = new Vector2(0, 22), LabelScale = 0.135f, Animated = false, OnPressed = open
         });
 }

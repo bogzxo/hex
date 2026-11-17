@@ -101,8 +101,6 @@ internal sealed partial class DawnScene
         agentsSend = made.Get<Button>("agents_send");
         agentsHistory = made.Get<Button>("agents_history");
         agentsHarness = made.Get<Button>("agents_harness");
-        agentsHarness.LabelScale = 0.11f;
-        agentsHarness.Align = Origin.Left;
         agentsHarness.Animated = false;
         agentsHarness.OnPressed = ShowHarnessSaved;
 
@@ -413,9 +411,12 @@ internal sealed partial class DawnScene
             return;
         agentsHarnessShown = (calls, said);
 
-        agentsHarness.Label = calls == 0
-            ? $"$(zap) {Said("agents_panel.harness_none")}"
-            : $"$(zap) {Said("agents_panel.harness_saved", ("tokens", Count((plain - said) / 4)), ("share", plain <= 0 ? "0" : (100.0 * (plain - said) / plain).ToString("0")), ("calls", calls.ToString()))}";
+        string saved = calls == 0
+            ? Said("agents_panel.harness_none")
+            : Said("agents_panel.harness_saved", ("tokens", Count((plain - said) / 4)), ("share", plain <= 0 ? "0" : (100.0 * (plain - said) / plain).ToString("0")), ("calls", calls.ToString()));
+        agentsHarness.Tooltip = $"{saved}\n{Said("agents_panel.harness_tip")}";
+        if (noonHarness is not null)
+            noonHarness.Label = $"$(zap) {saved}";
     }
 
     // How many ticks a chat put on screen is laid out for before it goes back to where it was read to, its rows' heights
