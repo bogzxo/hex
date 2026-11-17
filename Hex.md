@@ -69,6 +69,11 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 
 ## Plan: agent commands and skills (compact first)
 
+Done so far: compact. A run says compact (the message that does it, Claude Code's "/compact"), the Agents menu and the
+palette have "Compact the agent's context", and Details puts "Compact now" beside a context bar at 95% and up. Asked
+mid-turn it waits for the turn to end. Left: Codex's (thread/compact/start), a self test of the button with a stand-in
+run that says compact, "/" in the composer listing Claude's commands (discovered.commands), skills, auto compact.
+
 What an agent system can be told to do beyond a message (compact its context, clear, change model, run one of its
 skills), said by its extension and offered by Hex in the composer, the Agents menu, the palette and Details.
 

@@ -343,6 +343,7 @@ internal sealed partial class DawnScene
     private void TakeAgentLines()
     {
         TickStopping();
+        TickCompactAfter();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];

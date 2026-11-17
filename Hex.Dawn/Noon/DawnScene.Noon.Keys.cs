@@ -21,6 +21,7 @@ internal sealed partial class DawnScene
         commands.Add("Agents/chats", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up").IsEnabled =
             () => InNoon() && agentChat?.Parent is { } parent && ChatById(parent) is not null;
         commands.Add("Agents/chats", Said("noon.command_needs_me"), NextNeedingMe, "Ctrl+Alt+.", "bell", UIKeyUse.BoundWhileTyping);
+        commands.Add("Agents/chats", Said("noon.command_compact"), () => CompactAgent(agentChat), icon: "fold").IsEnabled = () => CanCompact(agentChat);
         commands.Add("Agents/chats", Said("noon.command_stop"), () => StopAgent(agentChat), "Ctrl+Alt+Shift+.", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => agentChat?.Running == true;
     }

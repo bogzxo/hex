@@ -34,6 +34,9 @@ internal sealed partial class DawnScene
     private StackPanel noonFleetRows = null!, noonContextRows = null!;
     private ScrollPanel noonFleetScroll = null!, noonContextScroll = null!;
 
+    // How full a context is before Details offers to compact it, and how wide the button for it is
+    private const float COMPACT_OFFERED = 0.95f, COMPACT_BUTTON = 110.0f;
+
     // The line at the foot of the fleet of what the harness saved, and how tall it is
     private Button? noonHarness;
     private const float NOON_HARNESS = 22.0f;
@@ -284,7 +287,22 @@ internal sealed partial class DawnScene
                 ContextLine("symbol-namespace", chat.ContextLimit > 0
                     ? Said("noon.context_of", ("used", Count(chat.ContextUsed)), ("limit", Count(chat.ContextLimit)), ("share", (share * 100).ToString("0")))
                     : Said("noon.context_only", ("used", Count(chat.ContextUsed))));
-                if (chat.ContextLimit > 0)
+                // Nearly full, a button beside the bar to compact it now rather than wait for the agent to
+                if (chat.ContextLimit > 0 && share >= COMPACT_OFFERED && CanCompact(chat))
+                {
+                    var row = noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 24), Color = Vector4.Zero });
+                    Panel bar = row.Add(ContextBar(share, NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8));
+                    bar.Fill = UIFill.None;
+                    bar.Anchor = Origin.Left;
+                    bar.Pivot = Origin.Left;
+                    bar.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8, 6);
+                    row.Add(new Button
+                    {
+                        Label = Said("noon.compact_now"), Icon = "fold", Danger = true, Anchor = Origin.Right, Pivot = Origin.Right, Size = new Vector2(COMPACT_BUTTON, 22),
+                        LabelScale = 0.12f, Animated = false, Tooltip = Said("noon.command_compact"), OnPressed = () => CompactAgent(chat)
+                    });
+                }
+                else if (chat.ContextLimit > 0)
                     noonContextRows.Add(ContextBar(share));
             }
 
@@ -433,13 +451,13 @@ internal sealed partial class DawnScene
         noonContextRows.Add(new Label { Text = $"$({icon}) {UIRichText.Literal(text)}", TextScale = 0.135f, Align = Origin.Left, Wrap = wrap, Fill = UIFill.Horizontal });
 
     // A bar of how full the context is, the accent until it's getting full, amber past three quarters and red near the end
-    private Panel ContextBar(float share)
+    private Panel ContextBar(float share, float? across = null)
     {
         UISkin? skin = Skin;
         Vector4 fill = share > 0.9f ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
             : share > 0.75f ? skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
             : skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f);
-        float width = NOON_CONTEXT - noonContext.Padding.Total.X - 10;
+        float width = across ?? NOON_CONTEXT - noonContext.Padding.Total.X - 10;
         var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
         track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = fill });
         return track;
