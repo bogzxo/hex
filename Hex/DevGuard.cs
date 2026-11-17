@@ -44,7 +44,7 @@ internal static class DevGuard
         {
             // It works. What it prints goes on into the log for as long as it runs, the guard with it
             written.WriteLine($"[guard] the new build came up in {watch.Elapsed.TotalSeconds:0}s");
-            started.WaitForExit();
+            WaitGone(started);
             written.WriteLine($"[guard] it closed with {started.ExitCode}");
             return 0;
         }
@@ -53,11 +53,10 @@ internal static class DevGuard
         {
             written.WriteLine($"[guard] the new build didn't come up in {HEALTHY_WITHIN.TotalSeconds:0}s, taken as hung");
             started.Kill(entireProcessTree: true);
-            started.WaitForExit();
+            WaitGone(started);
         }
         else
             written.WriteLine($"[guard] the new build closed with {started.ExitCode} before it came up");
-        started.WaitForExit();
 
         // The good build back where it ran from, and started with the chats and why
         int putBack = Hex.Core.HexDevBuilds.Mirror(good, bin);
@@ -65,9 +64,19 @@ internal static class DevGuard
         // What the good one prints goes on into the log too, so a build put back that has trouble of its own says why
         written.WriteLine("[guard] what the build put back printed");
         Process restored = Start(bin, folder, mcp, resume, healthy: null, crash: log, written);
-        restored.WaitForExit();
+        WaitGone(restored);
         written.WriteLine($"[guard] the build put back closed with {restored.ExitCode}");
         return 1;
+    }
+
+    /// <summary>
+    /// Waits for Hex itself to be gone, not for the ends of what it printed. The agents it started inherit its output,
+    /// so with them still running the pipe never ended and WaitForExit waited on them, the build that crashed never put
+    /// back while an agent it had resumed was alive.
+    /// </summary>
+    private static void WaitGone(Process process)
+    {
+        while (!process.WaitForExit(500)) { }
     }
 
     // Hex started from a folder, its output into the log when there's one

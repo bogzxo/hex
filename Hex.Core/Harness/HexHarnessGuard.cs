@@ -211,8 +211,14 @@ internal static class HexHarnessGuard
                     mode = Mode.Remind;
             }
 
+            // With no Hex answering for the workspace (it crashed, or it's restarting) the harness isn't there to turn the
+            // agent back to, and the shell is all it has
             using var input = new StreamReader(Console.OpenStandardInput(), System.Text.Encoding.UTF8);
-            if (Answer(input.ReadToEnd(), folders, mode) is { } said)
+            string call = input.ReadToEnd();
+            List<McpListing> running = McpDiscovery.All();
+            if (folders.Count > 0 && !folders.Any(folder => McpDiscovery.For(folder, running) is not null))
+                return 0;
+            if (Answer(call, folders, mode) is { } said)
             {
                 using var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
                 output.Write(said);

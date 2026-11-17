@@ -469,7 +469,8 @@ internal sealed partial class DawnScene
             Radius = 10,
             Padding = new UIEdges(13, 10, 13, 10)
         });
-        FollowWidth(width => bubble.Size = new Vector2(Math.Clamp(longest, 60.0f, Math.Max(64.0f, width - 12.0f) * AGENTS_BUBBLE), 0));
+        // The widest it may be is kept over the narrowest, a side bar narrower than that as Hex comes up made the clamp throw
+        FollowWidth(width => bubble.Size = new Vector2(Math.Clamp(longest, 60.0f, Math.Max(64.0f, (width - 12.0f) * AGENTS_BUBBLE)), 0));
         var stack = bubble.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         stack.Add(Text(shown, scale));
         if (under is not null)
