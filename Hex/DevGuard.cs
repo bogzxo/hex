@@ -100,6 +100,9 @@ internal static class DevGuard
             start.ArgumentList.Add(folder);
         }
 
+        // Only what this start means, nothing of a start before it the guard itself inherited
+        start.Environment.Remove("HEX_DEV_CRASH");
+        start.Environment.Remove("HEX_DEV_HEALTHY");
         start.Environment["HEX_DEV_RESUME"] = resume;
         if (healthy is not null)
             start.Environment["HEX_DEV_HEALTHY"] = healthy;

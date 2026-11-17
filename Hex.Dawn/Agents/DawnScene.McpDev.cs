@@ -285,6 +285,11 @@ internal sealed partial class DawnScene
         else if (devCrash is not null)
             devHealthy = null;
 
+        // Taken, and gone from what this Hex hands down, or the next build and every agent started from here inherited
+        // them, and a build that came up whole was told it had crashed
+        System.Environment.SetEnvironmentVariable("HEX_DEV_CRASH", null);
+        System.Environment.SetEnvironmentVariable("HEX_DEV_HEALTHY", null);
+
         JsonObject? resume;
         try
         {
