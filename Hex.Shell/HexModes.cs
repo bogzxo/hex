@@ -97,9 +97,24 @@ public static class HexModes
         GameEngine.Instance?.WindowManager?.Wake();
     }
 
-    /// <summary>Every update of the scene on screen, a swap the window's thread asked for, made on the thread a swap is made on.</summary>
-    public static void Update()
+    // What each mode does while the other is on screen, the editor's agents going on with their turns under Dusk
+    private static readonly Dictionary<HexMode, Action<float>> background = [];
+
+    /// <summary>
+    /// A step a mode takes on every update of the other mode while it's out of sight, for work that mustn't wait for it to
+    /// come back (agents reading their output, their calls about agents answered). Only while the modes share the window.
+    /// </summary>
+    public static void InBackground(HexMode mode, Action<float> step) => background[mode] = step;
+
+    /// <summary>
+    /// Every update of the scene on screen, the other mode's background step taken, then a swap the window's thread asked
+    /// for, made on the thread a swap is made on.
+    /// </summary>
+    public static void Update(float dt)
     {
+        if (make is not null && made.ContainsKey(Other) && background.TryGetValue(Other, out Action<float>? step))
+            step(dt);
+
         if (!swapWanted)
             return;
 

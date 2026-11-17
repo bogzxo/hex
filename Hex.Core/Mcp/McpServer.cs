@@ -42,6 +42,13 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
     /// </summary>
     public static readonly AsyncLocal<string?> CallingClient = new();
 
+    /// <summary>
+    /// The chat of Hex's Agents panel whose agent made the call going on, null for a client that isn't one. Set by the
+    /// tools for every call, on the editor's thread around each step and off it for the whole call, so any tool can
+    /// tell who asked without the caller being put in its arguments.
+    /// </summary>
+    public static readonly AsyncLocal<int?> CallingChat = new();
+
     // The resources this client asked to be told about, what stops telling it when it goes
     private readonly ConcurrentDictionary<string, IDisposable> subscribed = new();
 

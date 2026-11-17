@@ -24,6 +24,8 @@ internal sealed partial class DawnScene
         modeToggle = HexModeSwitch.Add((TitleBar)top, HexFace.Dawn, PickFace);
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
+        HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
+        HexAgentProcess.Woken = Engine.WindowManager.Wake;
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)
@@ -32,11 +34,27 @@ internal sealed partial class DawnScene
                 LetGo();
 
                 // The editor stops ticking in Dusk, an agent's call that swapped (a click on the toggle) is answered now or
-                // it would wait out its whole timeout
-                mcpCurrent?.Finish(McpToolResult.Text("Done, and Hex swapped to Dusk, the terminal. The next call brings the editor back."));
+                // it would wait out its whole timeout. One about agents goes on in the background step
+                if (mcpCurrent is { NeedsEditor: true } driving)
+                {
+                    driving.Finish(McpToolResult.Text("Done, and Hex swapped to Dusk, the terminal. The next call brings the editor back."));
+                    mcpCurrent = null;
+                }
                 agentPointer.Release();
             }
         };
+    }
+
+    /// <summary>
+    /// While Dusk is on screen, the agents go on as they would in the editor. Their output is read, the statuses the
+    /// waiting tools look at are made, and the calls that don't need the editor are answered. One that does brings the
+    /// editor back, as it always did.
+    /// </summary>
+    private void TickAgentsOffscreen(float dt)
+    {
+        TakeAgentLines();
+        PublishAgentStatuses();
+        RunMcpCalls(behind: true);
     }
 
     /// <summary>A face picked on the title bar, Dusk swapping the scene and Dawn and Noon trading places in this one.</summary>

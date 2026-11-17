@@ -119,7 +119,7 @@ internal sealed partial class DawnScene
                     HexCodeIndex index = Harness;
                     HexAgentProfile? profile = HexAgentProfiles.For(McpServer.CallingClient.Value);
                     return Task.FromResult(McpToolResult.Text($"{index.Current().Files.Length} files indexed, {index.FromCache} of them out of the cache on disk, generation {index.Generation}."
-                        + $" You are {McpServer.CallingClient.Value ?? "a client"}, {(profile is null ? "with no agent profile" : $"profile {profile.Name}")}, budget {HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, null)} characters.\n"
+                        + $" You are {McpServer.CallingClient.Value ?? "a client"}{(McpServer.CallingChat.Value is { } chat ? $" in chat {chat}" : string.Empty)}, {(profile is null ? "with no agent profile" : $"profile {profile.Name}")}, budget {HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, null)} characters.\n"
                         + index.Stats.Describe()));
                 })
         ];

@@ -406,7 +406,7 @@ internal sealed partial class DawnScene : Scene
 
         UpdateZoomSettings(dt);
         UpdateShortcutHints();
-        UpdateWindow();
+        UpdateWindow(dt);
         Profile.Mark("window");
         UpdateDesigner(dt);
         Profile.Mark("designer");
@@ -440,13 +440,13 @@ internal sealed partial class DawnScene : Scene
     }
 
     /// <summary>A dialog that was answered, the x of the window, its colours and the canvas put where it is.</summary>
-    private void UpdateWindow()
+    private void UpdateWindow(float dt)
     {
         UpdateDialog();
         UpdateClosing();
         UpdateHosted();
         UpdateRenderScale();
-        Hex.Shell.HexModes.Update();
+        Hex.Shell.HexModes.Update(dt);
         ColourChrome();
         PlaceCanvas();
     }

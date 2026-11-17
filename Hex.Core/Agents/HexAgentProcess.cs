@@ -24,6 +24,12 @@ internal sealed class HexAgentProcess : IDisposable
 
     private int readersLeft = 2;
 
+    /// <summary>
+    /// Called from the reading threads when a line came or the program ended, so a window that sleeps while nothing
+    /// happens (Dusk on screen and quiet) wakes to take it in. Set once by whoever ticks the agents.
+    /// </summary>
+    public static Action? Woken { get; set; }
+
     private HexAgentProcess(Process process) => this.process = process;
 
     /// <summary>
@@ -203,7 +209,10 @@ internal sealed class HexAgentProcess : IDisposable
         try
         {
             while (from.ReadLine() is { } line)
+            {
                 Lines.Enqueue((line, error));
+                Woken?.Invoke();
+            }
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException)
         {
@@ -221,6 +230,8 @@ internal sealed class HexAgentProcess : IDisposable
             {
                 ExitCode = -1;
             }
+
+            Woken?.Invoke();
         }
     }
 

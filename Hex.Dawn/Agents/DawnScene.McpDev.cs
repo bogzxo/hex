@@ -57,7 +57,8 @@ internal sealed partial class DawnScene
             new(new McpTool("hex_dev_restart", "Restart into the new build",
                 "Restart Hex into the build hex_dev_build made. Every chat of the Agents panel goes over to the new Hex as it was, and yours goes on there in the same session with the note as its next message, so write down in it what you were doing and what's next. Your turn ends here, call nothing after it.",
                 McpSchema.Object([("note", McpSchema.String("What to carry on with in the new build, complete in itself."))])),
-                DevRestart)
+                // Hex restarting into its own build carries on the chat that asked, so it has to know which that was
+                DevRestart, TakesCaller: true)
         ];
     }
 

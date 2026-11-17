@@ -146,6 +146,21 @@ internal sealed partial class DawnScene
         test.Check("mcp: arguments a tool doesn't take come back as its failure, with what it does take", () =>
             HexMcpTestClient.Failed(answer) && Answered().Contains("'path' is required", StringComparison.Ordinal));
 
+        // Every tool is told which chat's agent is calling, not only the agents' own, and a client that isn't one is told none
+        Task<McpToolResult>? asChat = null, asNobody = null;
+        test.Run(() =>
+        {
+            asChat = McpTools.CallAs("hex_harness_stats", [], CancellationToken.None, 4242);
+            asNobody = McpTools.Call("hex_harness_stats", [], CancellationToken.None);
+        });
+        test.WaitFor(() => asChat?.IsCompleted == true && asNobody?.IsCompleted == true, 5.0f);
+        test.Check("mcp: a tool that isn't about agents knows the chat calling it, and none for a client that isn't one", () =>
+            asChat is { IsCompletedSuccessfully: true } && asNobody is { IsCompletedSuccessfully: true }
+            && asChat.Result.ToJson().ToJsonString().Contains("in chat 4242", StringComparison.Ordinal)
+            && !asNobody.Result.ToJson().ToJsonString().Contains("in chat", StringComparison.Ordinal)
+            && McpTools.Tools.Count > 0 && !McpToolList().First(tool => tool.Meta.Name == "hex_agent_wait").NeedsEditor
+            && McpToolList().First(tool => tool.Meta.Name == "hex_click").NeedsEditor);
+
         TestAgentMcp(test, Ask);
 
         // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar
