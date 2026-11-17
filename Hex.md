@@ -1,4 +1,4 @@
-# Hex to-do
+ a# Hex to-do
 
 The list of what's asked for and not done yet, kept across sessions, agents and agent systems. Whoever works on Hex
 reads it first, ticks what they finish (with the commit), and adds what they're asked for. Newest asks at the end of
@@ -50,17 +50,13 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] Claude Code's 5-hour session limit shown, every window of rate_limit_event's unifiedWindows reported (to confirm live)
 - [x] Codex on the app-server protocol (d986fc4, run live: turns, rows, its weekly limit), so its limits and stats match Claude Code's and grep is refused through its
       approvals (research in chats #2 and #3 of the session that started this list)
-- [ ] Claude Code through its control protocol, approvals asked in Hex. Done in Hex: approval rows
-      (HexAgentEntryKind.Approval, chat.Approval and Decide, DawnScene.AgentsPanel.Approvals.cs with Allow and Deny, counted
-      as needing the person), and chat.approval(title, detail, answered) in the chat API, which returns a withdraw
-      function. Left: in hex-extensions/claude_code/extension.hor add "--permission-prompt-tool", "stdio" to the
-      arguments, and in heard() handle {"type":"control_request","request_id","request":{"subtype":"can_use_tool",
-      "tool_name","input"}}. A Bash or PowerShell command that hex.harness_check flags is denied at once with the Hex tool;
-      anything else goes to chat.approval, whose answer writes {"type":"control_response","response":{"subtype":"success",
-      "request_id":<id>,"response":{"behavior":"allow","updatedInput":<input>}}} or behavior "deny" with a message.
-      {"type":"control_cancel_request","request_id"} calls the withdraw function. Stop could send
-      {"type":"control_request","request_id":"..","request":{"subtype":"interrupt"}} rather than killing. Research is
-      in the chat "Claude Code control research" (claude 2.1.326)
+- [x] Claude Code through its control protocol, approvals asked in Hex (claude_code 1.10.0, --permission-prompt-tool
+      stdio, can_use_tool to the Allow and Deny cards, a read of the workspace by the shell refused at once, cancel takes
+      the card back). To confirm live with the Permissions option on Ask first
+- [ ] Stop for Claude Code could send {"type":"control_request","request_id":"..","request":{"subtype":"interrupt"}}
+      rather than killing it, so its session is left whole. Research is in the chat "Claude Code control research"
+- [ ] hex_search finds nothing in files the index leaves out (extension .hor files), so an agent held to the harness
+      can't search them; search them from the disk as hex_read reads them
 - [ ] The mcp self test's "clicking File by its text opens the File menu" fails now and then (passes on a rerun)
 - [x] Codex declined both its own shell and hex_terminal_run for a read of the workspace, and fell back to hex_files
       (live check)

@@ -231,6 +231,39 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void Claude_codes_leave_asked_is_turned_back_to_hex_or_asked_of_the_person()
+    {
+        Directory.CreateDirectory(folder);
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code");
+        var written = new List<string>();
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; },
+            call: (function, args) => { runtime.Invoke(function, args); return true; });
+        Assert.Contains("--permission-prompt-tool", Arguments(runtime, run, api));
+
+        // A search of the workspace by the shell is refused at once with the Hex tool, nobody asked
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"grep -rn foo ."}}}""");
+        Assert.Empty(chat.Pending);
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"r1\"", StringComparison.Ordinal)
+            && line.Contains("\"behavior\":\"deny\"", StringComparison.Ordinal) && line.Contains("hex_", StringComparison.Ordinal));
+
+        // Anything else waits on a card, and its answer goes back with the input as it was
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"dotnet test"}}}""");
+        HexAgentEntry asked = Assert.Single(chat.Pending);
+        Assert.Equal("dotnet test", asked.Input);
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"r2\"", StringComparison.Ordinal));
+        Assert.True(chat.Decide(asked, true));
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"r2\"", StringComparison.Ordinal)
+            && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal) && line.Contains("dotnet test", StringComparison.Ordinal));
+
+        // One it gives up asking is taken back unanswered
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r3","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"a.txt"}}}""",
+            """{"type":"control_cancel_request","request_id":"r3"}""");
+        Assert.Empty(chat.Pending);
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"r3\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Claude_codes_stream_json_becomes_rows_a_session_and_what_the_turn_used()
     {
         var (runtime, _, run) = Load("claude_code");
@@ -321,9 +354,9 @@ public sealed class HexAgentsPanelTests : IDisposable
         string[] first = Arguments(runtime, run, api);
         Assert.EndsWith("claude-mcp-1.json", first[8]);
         Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits",
-            "--append-system-prompt", HexAgentProfiles.HARNESS_RULES, "--agents", first[14], "--allowedTools", "mcp__hex Read"], first);
-        Assert.EndsWith("claude-agents-1.json", first[14]);
-        using (System.Text.Json.JsonDocument agents = System.Text.Json.JsonDocument.Parse(File.ReadAllText(first[14])))
+            "--permission-prompt-tool", "stdio", "--append-system-prompt", HexAgentProfiles.HARNESS_RULES, "--agents", first[16], "--allowedTools", "mcp__hex Read"], first);
+        Assert.EndsWith("claude-agents-1.json", first[16]);
+        using (System.Text.Json.JsonDocument agents = System.Text.Json.JsonDocument.Parse(File.ReadAllText(first[16])))
             Assert.EndsWith(HexAgentProfiles.HARNESS_RULES, agents.RootElement.GetProperty("Explore").GetProperty("prompt").GetString());
         string config = File.ReadAllText(first[8]);
         Assert.Contains("--mcp-connect", config);
