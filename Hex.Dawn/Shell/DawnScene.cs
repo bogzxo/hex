@@ -546,6 +546,8 @@ internal sealed partial class DawnScene : Scene
             .Add("remote", UpdateRemote)
             .Add("mcp", UpdateMcp)
             .Add("noon", UpdateNoon)
+            .Add("dev_restart", UpdateDevRestart)
+            .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)
             .Add("asked_console", running.RunAskedConsole)
             .Add("panel", UpdatePanel);

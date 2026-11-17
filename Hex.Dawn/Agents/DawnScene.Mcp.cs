@@ -337,7 +337,12 @@ internal sealed class HexMcpTools : IMcpTools
     public Task<McpToolResult> CallAs(string name, JsonObject arguments, CancellationToken cancel, int? caller)
     {
         arguments.Remove(HexMcpCaller.CALLER);
+#if DEBUG
+        // Hex restarting into its own build carries on the chat that asked, so it has to know which that was
+        if (caller is { } chat && (name.StartsWith("hex_agent", StringComparison.Ordinal) || name == "hex_dev_restart"))
+#else
         if (caller is { } chat && name.StartsWith("hex_agent", StringComparison.Ordinal))
+#endif
             arguments[HexMcpCaller.CALLER] = chat;
 
         if (!byName.TryGetValue(name, out HexMcpTool? tool))

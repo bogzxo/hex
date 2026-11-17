@@ -28,7 +28,7 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     public string? Input { get; init; }
     public string? Output { get; set; }
     public HexAgentToolState State { get; set; } = HexAgentToolState.Running;
-    public long Started { get; } = Environment.TickCount64;
+    public long Started { get; init; } = Environment.TickCount64;
     public long? Ended { get; set; }
 
     /// <summary>What a subagent this tool started is doing now, its latest step, null for a tool that started none.</summary>
@@ -196,6 +196,25 @@ internal sealed class HexAgentChat(int id, string agent)
 
     /// <summary>How many rows have been dropped off the top, for the panel to know its rows from the start.</summary>
     public int Dropped { get; private set; }
+
+    /// <summary>
+    /// A chat read back as it was written (HexAgentChatStore), its title and its rows, a tool still going when it was
+    /// written taken as having ended with it.
+    /// </summary>
+    public void Restore(string title, IEnumerable<HexAgentEntry> rows)
+    {
+        Title = title;
+        entries.Clear();
+        foreach (HexAgentEntry row in rows)
+        {
+            if (row.Kind == HexAgentEntryKind.Tool && row.State == HexAgentToolState.Running)
+                row.State = HexAgentToolState.Failed;
+            entries.Add(row);
+        }
+
+        Version++;
+        Seen = Version;
+    }
 
     private HexAgentEntry Add(HexAgentEntry entry)
     {

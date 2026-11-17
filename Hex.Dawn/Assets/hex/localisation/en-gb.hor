@@ -3342,6 +3342,11 @@ let strings = {
         restore_failed: "dotnet restore {name} ended with {code}, what it said is under Output"
     },
 
+    dev: {
+        continued: "carried on in the new build",
+        no_agent: "{agent} wasn't there in the new build to carry on with"
+    },
+
     noon: {
         command: "View: Noon, the agents working on the project",
         fleet: "Agents",
