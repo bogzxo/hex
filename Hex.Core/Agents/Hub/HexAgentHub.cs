@@ -112,9 +112,30 @@ internal sealed class HexAgentHub
 
         pumpedFrom = from;
         Version++;
-        snapshot = new HexHubSnapshot(Version, sessions.ToDictionary(session => session.Id, session => RowOf(session.Chat, reply)));
+        // A chat that didn't move keeps the row it had, only the one that did (the agent streaming) is made again, its
+        // reply and its mail gone through. Made again whole, every chat's were for every line one of them said
+        var rows = new Dictionary<int, HexHubRow>(sessions.Count);
+        foreach (HexAgentSession session in sessions)
+        {
+            HexAgentChat chat = session.Chat;
+            var stamp = (chat.Version, chat.Running, chat.Seen, chat.MailSeen);
+            rows[session.Id] = rowsMade.TryGetValue(session.Id, out var was) && was.Stamp == stamp
+                ? was.Row
+                : (rowsMade[session.Id] = (stamp, RowOf(chat, reply))).Row;
+        }
+
+        if (rowsMade.Count > rows.Count)
+        {
+            foreach (int gone in rowsMade.Keys.Where(id => !rows.ContainsKey(id)).ToArray())
+                rowsMade.Remove(gone);
+        }
+
+        snapshot = new HexHubSnapshot(Version, rows);
         return true;
     }
+
+    // Each chat's row and what it was made at, kept for the next snapshot
+    private readonly Dictionary<int, ((int Version, bool Running, int Seen, long MailSeen) Stamp, HexHubRow Row)> rowsMade = [];
 
     // A chat as a row of the snapshot
     private static HexHubRow RowOf(HexAgentChat chat, int reply) => new(chat.Id, chat.Shown, chat.Agent,
