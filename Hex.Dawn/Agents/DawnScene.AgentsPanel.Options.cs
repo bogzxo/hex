@@ -101,7 +101,10 @@ internal sealed partial class DawnScene
         string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
 
         bool compact = agentsCompose.Bounds.Width < 300;
-        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))))}";
+        // The choices are in it too, an agent system says its models as it starts (Claude Code's handshake) and the menu
+        // made with the old ones kept them
+        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))
+            + ":" + string.Join(",", option.Choices.Select(choice => choice.Value + "~" + choice.Label))))}";
         if (said == agentsOptionsDrawn) return;
         agentsOptionsDrawn = said;
         Empty(agentsOptions);

@@ -70,15 +70,17 @@ internal sealed partial class DawnScene
             string? model = HexAgentModels.Of(chat);
             // Who it is and the model it's on, always in sight, a working agent's line under its name being what it's doing
             string starter = (chat.Parent is { } parent ? ChatName(parent) : system) + (model is { Length: > 0 } ? $" · {model}" : string.Empty);
-            string said = UIRichText.Literal(OneLine(starter, Math.Max(4, (int)((room - 150) / 6.0f))));
-            if (from.Text != said)
-                from.Text = said;
-
             string status = AgentStatusText(chat, skin);
             if (state.Text != status)
                 state.Text = status;
 
-            said = UIRichText.Literal(OneLine(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), Math.Max(4, (int)((room - 24) / 7.4f))));
+            // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
+            float stateWidth = Skin?.Font.Measure(status, state.TextScale).X ?? 100.0f;
+            string said = UIRichText.Literal(FitText(starter, from.TextScale, room - 38 - stateWidth - (closable ? 30 : 10) - 10));
+            if (from.Text != said)
+                from.Text = said;
+
+            said = UIRichText.Literal(FitText(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), name.TextScale, room - 24));
             if (name.Text != said)
                 name.Text = said;
 
@@ -93,12 +95,33 @@ internal sealed partial class DawnScene
                 chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null,
                 unread > 0 ? $"$(mail) {unread}" : null
             }.Where(part => !string.IsNullOrEmpty(part)));
-            said = doing is null ? line : UIRichText.Literal(OneLine(line, Math.Max(4, (int)((room - 24) / 6.0f))));
+            said = doing is null ? line : UIRichText.Literal(FitText(line, under.TextScale, room - 24));
             if (under.Text != said)
                 under.Text = said;
         }
 
         return new AgentCard(root, Refresh);
+    }
+
+    /// <summary>
+    /// A line cut with an ellipsis to the most of it that fits in <paramref name="width"/> pixels at a scale, measured in the
+    /// skin's font. Whole when it fits or there's no font.
+    /// </summary>
+    private string FitText(string text, float scale, float width)
+    {
+        if (Skin?.Font is not { } font || font.Measure(text, scale, markup: false).X <= width)
+            return text;
+        int low = 1, high = text.Length;
+        while (low < high)
+        {
+            int middle = (low + high + 1) / 2;
+            if (font.Measure(OneLine(text, middle), scale, markup: false).X <= width)
+                low = middle;
+            else
+                high = middle - 1;
+        }
+
+        return OneLine(text, Math.Max(4, low));
     }
 
     // How an agent is doing in a word or two and its time, in the colour of it
