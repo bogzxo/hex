@@ -236,7 +236,11 @@ internal sealed partial class DawnScene
         }
 
         string marker = $"__HEX_{Guid.NewGuid().ToString("N")[..8]}";
-        view.Send(McpMarked(McpNoPager(command), McpShellOf(tab.Profile), marker) + "\r");
+        // Whatever was left on the shell's line is cleared first, Escape in PowerShell and cmd and Ctrl+U in the others.
+        // A key that landed in the terminal before went in front of the command (".git", "wgit") and broke it
+        string shell = McpShellOf(tab.Profile);
+        view.Send(shell == "sh" ? "\u0015" : "\u001b");
+        view.Send(McpMarked(McpNoPager(command), shell, marker) + "\r");
 
         long until = System.Environment.TickCount64 + (long)(Math.Clamp(arguments.Number("timeout") ?? 120.0, 1.0, 600.0) * 1000.0);
         (string Output, int? Exit) ran = (string.Empty, null);
