@@ -111,6 +111,16 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
       with updatedInput carrying the answers, so it doesn't need to know of hex_ask
 - [ ] Codex's own questions (the app-server's tool/requestUserInput if it has one) on the same card
 
+## Models and files
+
+- [ ] Full model names wherever a model is said (cards, Details, systems panel, pickers), not opus or sonnet
+- [ ] Models pulled from the agent system itself, Codex by its app-server's model/list, Claude Code by the initialize
+      control request (which also says its slash commands, for the commands plan)
+- [x] Files said in Agentic with the icon of their extension as the file tree has it, in Files it touched and after
+      the name of a tool row given a file. Left, links to files in what an agent says
+- [ ] The harness guard refuses git ls-files and the like aimed outside the workspace (git -C ..\horizon ls-files), it
+      should only turn back reads of the workspace's own folders
+
 ## Order (the person's)
 
 1. The other items here, Claude Code's integration first

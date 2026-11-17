@@ -572,9 +572,15 @@ internal sealed partial class DawnScene
                 chat.Touch(entry);
             }
         });
+        // The file it was given after its name, with the icon of its kind as the file tree has it, when there's room
+        string? file = SubagentOf(entry) is null ? FileOf(entry.Input) : null;
+        string fileIcon = file is null ? string.Empty : FileIconText(file);
         FollowWidth(width =>
         {
-            string fitted = UIRichText.Literal(OneLine(name, Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f))));
+            int room = Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f));
+            string fitted = UIRichText.Literal(OneLine(name, room));
+            if (file is not null && room - name.Length - 3 >= 6)
+                fitted += $"  {fileIcon} {UIRichText.Literal(OneLine(Path.GetFileName(file), room - name.Length - 3))}";
             if (head.Label != fitted)
                 head.Label = fitted;
         });
