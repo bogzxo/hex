@@ -137,7 +137,9 @@ internal sealed partial class DawnScene
 
         // Its lines, an icon each as the Details column has them, each hidden while it has nothing to say, so a system not
         // used yet is its head alone
-        Label Line() => into.Add(new Label { TextScale = 0.115f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(SYSTEM_INDENT, 0, 6, 0), Visible = false });
+        // A line is a label in a row put in under the name, a label's own padding isn't kept by the stack it's in
+        Label Line() => into.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 16), Padding = new UIEdges(SYSTEM_INDENT, 0, 6, 0), Color = Vector4.Zero, Visible = false })
+            .Add(new Label { TextScale = 0.115f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
         Label? install = open && missing ? Line() : null;
         Label? used = open ? Line() : null, models = open ? Line() : null, context = open ? Line() : null;
         Panel? track = null, fill = null;
@@ -154,8 +156,9 @@ internal sealed partial class DawnScene
             if (label is null)
                 return;
             bool shown = !string.IsNullOrEmpty(text);
-            if (label.Visible != shown)
-                label.Visible = shown;
+            UIComponent row = label.Parent ?? label;
+            if (row.Visible != shown)
+                row.Visible = shown;
             if (shown && label.Text != text)
                 label.Text = text!;
         }
