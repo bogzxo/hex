@@ -128,7 +128,7 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] Models from the agent system itself. Claude Code is sent initialize with the first message of each run, its
       answer's models fill the picker and its commands are kept (discovered.commands, for the commands plan). Codex's
       names come from its own models_cache.json through chat.models. To confirm live, the picker after a Claude turn
-- [ ] Codex's app-server model/list in place of reading its cache file
+- [x] Codex asked model/list with its handshake, its answer over the cache file for the picker and the names
 - [x] Files said in Agentic with the icon of their extension as the file tree has it, in Files it touched and after
       the name of a tool row given a file. Left, links to files in what an agent says
 - [x] hex_workspace, an agent lists, adds and removes workspace folders (a project file adds its folder), told of it in

@@ -285,6 +285,23 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void Codex_is_asked_its_models_and_the_picker_and_names_have_them()
+    {
+        ObjectValue? said = null;
+        var (runtime, hex, run) = Load("codex");
+        hex.Properties["agent"] = Natives.Action("agent", args => said = args.Object(0));
+        var chat = new HexAgentChat(1, "codex");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: _ => true);
+        Arguments(runtime, run, api);
+        Assert.Contains("\"method\":\"model/list\"", Said(runtime, run, api, "hi"));
+
+        Feed(runtime, run, api, """{"id":4,"result":{"data":[{"id":"gpt-test-9","model":"gpt-test-9","displayName":"GPT Test Nine","description":"For tests"}]}}""");
+        Assert.Equal("GPT Test Nine", HexAgentModels.Name("gpt-test-9"));
+        Assert.NotNull(said);
+        Assert.Contains("\"label\":\"GPT Test Nine\"", HexJson.FromHidl(((ObjectValue)said!.Value.Properties["run"]).Properties["options"])!.ToJsonString());
+    }
+
+    [Fact]
     public void A_chat_says_the_model_it_runs_over_the_alias_it_was_asked_for()
     {
         var chat = new HexAgentChat(1, "claude_code");
