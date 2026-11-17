@@ -740,11 +740,11 @@ A "do not disturb" toggle in the totals strip holds toasts and flashes (badges s
 | `Ctrl+Alt+Shift+A` | To Noon / back to the last face |
 | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` | Focus Fleet / Stage / Context |
 | `Alt+1`..`Alt+5` | Stage tab Thread, Inbox, Review, Board, Search |
-| `Alt+Up` / `Alt+Down` | Previous / next session in the Fleet order |
-| `Alt+Shift+Up` | The session that started this one |
+| `Alt+PageUp` / `Alt+PageDown` | Previous / next session in the Fleet order (Alt with the arrows moves and copies lines in the editor) |
+| `Alt+Home` | The session that started this one |
 | `Ctrl+N` (in Noon) | New agent |
-| `Ctrl+.` | Jump to the next thing that needs me (question, approval, unread) |
-| `Ctrl+Shift+.` | Stop the selected session |
+| `Ctrl+Alt+.` | Jump to the next thing that needs me (question, approval, unread); `Ctrl+.` is the quick fix |
+| `Ctrl+Alt+Shift+.` | Stop the selected session |
 | `1`..`9`, `Ctrl+Enter`, `Y` / `A` / `N` | Inside a focused question / approval card |
 | `J` `K` `A` `R` `E` `C` `O` | Inside Review's diff |
 | `Ctrl+F` | Find in the thread (the editor's find bar over the virtual list) |

@@ -221,6 +221,26 @@ internal sealed partial class DawnScene
         test.Check("agents layout: the parts see the sessions through the context, told when one moves, and can bring one up", () =>
             Context.Agents.Sessions.Any(session => session.Chat == other) && heard > 0 && agentChat == longChat);
         test.Run(() => Context.Agents.Changed -= Heard);
+
+        // Going from agent to agent, the fleet's order round from the end, and the next one that wants looking at
+        HexAgentChat? stepped = null, back = null, needed = null;
+        test.Run(() =>
+        {
+            List<HexAgentChat> order = FleetOrder();
+            OpenAgentChat(order[^1]);
+            StepAgent(1);
+            stepped = agentChat;
+            StepAgent(-1);
+            back = agentChat;
+            OpenAgentChat(longChat!);
+            other!.Seen = other.Version - 1;
+            NextNeedingMe();
+            needed = agentChat;
+            OpenAgentChat(longChat!);
+        });
+        test.Check("agents layout: the keys go round the fleet in its order and to the next agent that needs looking at", () =>
+            stepped == FleetOrder()[0] && back == FleetOrder()[^1] && needed == other
+            && FleetOrder().Count == agentChats.Count && FleetOrder().Distinct().Count() == agentChats.Count);
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
             MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
 

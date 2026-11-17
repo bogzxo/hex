@@ -74,6 +74,7 @@ internal sealed partial class DawnScene
 
         DressChrome();
         commands.Add("View/agent", Said("noon.command"), () => ShowFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
+        AddNoonCommands();
     }
 
     /// <summary>

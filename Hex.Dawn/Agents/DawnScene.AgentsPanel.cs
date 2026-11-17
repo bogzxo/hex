@@ -175,6 +175,8 @@ internal sealed partial class DawnScene
             menu.Add(Said("agents_panel.clear"), ClearAgentChat, icon: "clear-all");
         }
 
+        if (Face != HexFace.Noon)
+            menu.Add(Said("agents_panel.chat_open_noon"), () => ShowFace(HexFace.Noon), icon: "robot");
         menu.Add(Said("agents_panel.saved"), ShowHarnessSaved, icon: "graph");
 
         return menu;

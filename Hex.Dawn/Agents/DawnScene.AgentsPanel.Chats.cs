@@ -175,6 +175,11 @@ internal sealed partial class DawnScene
     {
         var menu = new Menu("agent chat");
         menu.Add(Said("agents_panel.chat_open"), () => OpenAgentChat(chat), icon: "comment");
+        // The same chat in the other place it's shown, Noon's middle or the side bar
+        if (Face == HexFace.Noon)
+            menu.Add(Said("agents_panel.chat_open_side"), () => { ShowFace(HexFace.Dawn); ShowAgentsPanel(); OpenAgentChat(chat); }, icon: "layout-sidebar-left");
+        else
+            menu.Add(Said("agents_panel.chat_open_noon"), () => { ShowFace(HexFace.Noon); OpenAgentChat(chat); }, icon: "robot");
         if (chat.Parent is { } parent && ChatById(parent) is { } starter)
             menu.Add(Said("agents_panel.chat_open_parent", ("name", ChatName(parent))), () => OpenAgentChat(starter), icon: "arrow-up");
         menu.Add(Said("agents_panel.stop"), () => StopAgent(chat), icon: "debug-stop").IsEnabled = () => chat.Running;
