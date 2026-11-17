@@ -53,8 +53,9 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] Claude Code through its control protocol, approvals asked in Hex (claude_code 1.10.0, --permission-prompt-tool
       stdio, can_use_tool to the Allow and Deny cards, a read of the workspace by the shell refused at once, cancel takes
       the card back). To confirm live with the Permissions option on Ask first
-- [ ] Stop for Claude Code could send {"type":"control_request","request_id":"..","request":{"subtype":"interrupt"}}
-      rather than killing it, so its session is left whole. Research is in the chat "Claude Code control research"
+- [x] Stop asks the agent to end its turn (run's stop, Claude Code's interrupt control request, Codex's turn/interrupt),
+      killed only if it hasn't within 5 seconds. To confirm live
+- [x] The model picker lists what Claude Code's initialize says (Opus 5.5, Fable 5.2 and the rest), confirmed live
 - [ ] hex_search finds nothing in files the index leaves out (extension .hor files), so an agent held to the harness
       can't search them; search them from the disk as hex_read reads them
 - [ ] The mcp self test's "clicking File by its text opens the File menu" fails now and then (passes on a rerun)

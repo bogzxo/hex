@@ -258,6 +258,8 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Contains("\"type\":\"user\"", first);
         // Only the first message of a run goes with it
         Assert.DoesNotContain("initialize", Said(runtime, run, api, "more"));
+        // Stop interrupts its turn rather than killing it
+        Assert.Contains("\"subtype\":\"interrupt\"", HexJson.FromHidl(runtime.Invoke(run.Properties["stop"], api))!.ToJsonString());
 
         Feed(runtime, run, api, """{"type":"control_response","response":{"subtype":"success","request_id":"hex-init-1","response":{"commands":[{"name":"compact","description":"Compact"}],"models":[{"value":"default","displayName":"Default (recommended)","description":"Opus 5.5"},{"value":"sonnet","displayName":"Sonnet","description":"Sonnet 5.5"}]}}}""");
         Assert.NotNull(said);

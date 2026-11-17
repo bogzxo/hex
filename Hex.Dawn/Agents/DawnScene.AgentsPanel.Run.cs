@@ -259,7 +259,17 @@ internal sealed partial class DawnScene
             run.Process.CloseInput();
     }
 
-    /// <summary>Stops a chat's agent, it and everything it started killed.</summary>
+    // How long an agent told to stop has to end its turn itself before it's killed
+    private const long AGENT_STOP_MS = 5000;
+
+    // The chats whose agents were told to stop and when they're killed if they haven't by then
+    private readonly Dictionary<HexAgentChat, long> agentsStopping = [];
+
+    /// <summary>
+    /// Stops a chat's agent and everything it started. One whose run says how (run's stop, Claude Code's interrupt, Codex's
+    /// turn/interrupt) is told to stop its turn, its session left whole to go on from, and killed only if it hasn't
+    /// within a few seconds. Any other is killed.
+    /// </summary>
     private void StopAgent(HexAgentChat? chat)
     {
         if (chat is null)
@@ -267,16 +277,63 @@ internal sealed partial class DawnScene
 
         foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
         {
-            run.Process.Dispose();
-            agentRuns.Remove(run);
-            run.Chat.Note(Said("agents_panel.stopped"));
-            run.Chat.Done();
-            run.Chat.Stopped = true;
+            if (!agentsStopping.ContainsKey(chat) && run.Chat.Running && run.Process.TakesInput && StopLine(run) is { Length: > 0 } line && run.Process.Send(line))
+            {
+                agentsStopping[chat] = System.Environment.TickCount64 + AGENT_STOP_MS;
+                continue;
+            }
+
+            KillAgentRun(run);
         }
 
         // The agents it started go with it, nobody's waiting for them now
         foreach (HexAgentChat started in agentChats.Where(each => each.Parent == chat.Id && each.Running).ToList())
             StopAgent(started);
+    }
+
+    /// <summary>A run's agent killed and its chat said to be stopped.</summary>
+    private void KillAgentRun(AgentRun run)
+    {
+        run.Process.Dispose();
+        agentRuns.Remove(run);
+        agentsStopping.Remove(run.Chat);
+        run.Chat.Note(Said("agents_panel.stopped"));
+        run.Chat.Done();
+        run.Chat.Stopped = true;
+    }
+
+    /// <summary>What a run's extension writes to stop its agent's turn, null when it says nothing (and it's killed).</summary>
+    private static string? StopLine(AgentRun run)
+    {
+        if (HexExtensions.FunctionOf(run.Run, "stop") is not { } stop || !run.Extension.Invoke(stop, [run.ChatObject], out IRuntimeValue made) || made is NullValue)
+            return null;
+        return made is StringValue said ? said.Value : HexJson.FromHidl(made)?.ToJsonString().ReplaceLineEndings(" ");
+    }
+
+    /// <summary>
+    /// Every tick, the agents told to stop. One whose turn ended is stopped, its process kept for the next message, one
+    /// that went on past its time killed.
+    /// </summary>
+    private void TickStopping()
+    {
+        if (agentsStopping.Count == 0)
+            return;
+        long now = System.Environment.TickCount64;
+        foreach (var (chat, deadline) in agentsStopping.ToArray())
+        {
+            if (!chat.Running)
+            {
+                agentsStopping.Remove(chat);
+                chat.Note(Said("agents_panel.stopped"));
+                chat.Stopped = true;
+            }
+            else if (now >= deadline)
+            {
+                foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
+                    KillAgentRun(run);
+                agentsStopping.Remove(chat);
+            }
+        }
     }
 
     /// <summary>
@@ -285,6 +342,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void TakeAgentLines()
     {
+        TickStopping();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];
