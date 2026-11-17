@@ -57,7 +57,8 @@ internal sealed partial class DawnScene
         head.Add(new Label { Text = Said("noon.fleet"), TextScale = 0.15f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
         head.Add(new Button { Icon = "add", Style = "button_flat", Size = new Vector2(24, 22), Anchor = Origin.Right, Pivot = Origin.Right, Animated = false, Tooltip = Said("agents_panel.new_chat"), OnPressed = NewAgentChat });
         noonFleetSummary = noonFleet.Add(new Label { Text = string.Empty, TextScale = 0.115f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
-        noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 6, 6) });
+        // No room kept at its right, the cards line up with the head's edge as they do with its left
+        noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 0, 6) });
         noonFleetRows = noonFleetScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         // The agent systems at the foot of the fleet, what each is and where it stands, the fleet's list making room
         noonSystems = MakeSystemsPanel(noonFleet, open: true, bottomUp: true);
