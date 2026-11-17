@@ -10,8 +10,8 @@ internal sealed partial class DawnScene
 
     private void BuildAgent()
     {
-        commands.Add("Edit/agent", Said("agent.explain"), () => RequestAgent("explain"), icon: "robot").IsEnabled = CanAskAgent;
-        commands.Add("Edit/agent", Said("agent.change"), () => RequestAgent("change"), icon: "edit").IsEnabled = CanAskAgent;
+        commands.Add("Agents/open", Said("agent.explain"), () => RequestAgent("explain"), icon: "robot").IsEnabled = CanAskAgent;
+        commands.Add("Agents/open", Said("agent.change"), () => RequestAgent("change"), icon: "edit").IsEnabled = CanAskAgent;
     }
 
     private bool CanAskAgent() => document.DiffOf is null && document.Picture is null && !code.ReadOnly;

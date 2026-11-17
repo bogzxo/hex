@@ -116,7 +116,7 @@ internal sealed partial class DawnScene
         BuildAgentsOptions(made);
         BuildAgentsList();
 
-        commands.Add("View/agent", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
+        commands.Add("Agents/open", Said("agents_panel.command"), ShowAgentsPanel, "Ctrl+Alt+A", "robot", UIKeyUse.BoundWhileTyping);
     }
 
     /// <summary>The Agents view of the side bar brought up, and the box given the keys.</summary>

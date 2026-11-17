@@ -122,16 +122,18 @@ internal sealed partial class DawnScene
     private void DeclareMenus()
     {
         commands.Declare("File", "new", "save", "close", "path", "workspace", "settings", "exit");
-        commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment", "agent");
+        commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
         commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
-        commands.Declare("View", "palette", "sides", "panels", "appearance", "editor", "agent");
+        commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
         commands.Declare("Go", "places", "open", "symbols", "problems");
         commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
         commands.Declare("Test", "tests");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
+        // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness saved
+        commands.Declare("Agents", "open", "chats", "harness");
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in

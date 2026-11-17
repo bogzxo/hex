@@ -9,12 +9,19 @@ internal sealed partial class DawnScene
     private void AddNoonCommands()
     {
         bool InNoon() => Face == HexFace.Noon;
-        commands.Add("View/agent", Said("noon.command_next"), () => StepAgent(1), "Alt+PageDown", "arrow-down").IsEnabled = InNoon;
-        commands.Add("View/agent", Said("noon.command_previous"), () => StepAgent(-1), "Alt+PageUp", "arrow-up").IsEnabled = InNoon;
-        commands.Add("View/agent", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up").IsEnabled =
+        commands.Add("Agents/open", Said("noon.command_new"), () =>
+        {
+            if (Face != HexFace.Noon)
+                ShowAgentsPanel();
+            NewAgentChat();
+        }, icon: "add");
+        commands.Add("Agents/harness", Said("agents_panel.saved"), ShowHarnessSaved, icon: "graph");
+        commands.Add("Agents/chats", Said("noon.command_next"), () => StepAgent(1), "Alt+PageDown", "arrow-down").IsEnabled = InNoon;
+        commands.Add("Agents/chats", Said("noon.command_previous"), () => StepAgent(-1), "Alt+PageUp", "arrow-up").IsEnabled = InNoon;
+        commands.Add("Agents/chats", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up").IsEnabled =
             () => InNoon() && agentChat?.Parent is { } parent && ChatById(parent) is not null;
-        commands.Add("View/agent", Said("noon.command_needs_me"), NextNeedingMe, "Ctrl+Alt+.", "bell", UIKeyUse.BoundWhileTyping);
-        commands.Add("View/agent", Said("noon.command_stop"), () => StopAgent(agentChat), "Ctrl+Alt+Shift+.", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled =
+        commands.Add("Agents/chats", Said("noon.command_needs_me"), NextNeedingMe, "Ctrl+Alt+.", "bell", UIKeyUse.BoundWhileTyping);
+        commands.Add("Agents/chats", Said("noon.command_stop"), () => StopAgent(agentChat), "Ctrl+Alt+Shift+.", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => agentChat?.Running == true;
     }
 

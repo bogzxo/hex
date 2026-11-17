@@ -3381,6 +3381,7 @@ let strings = {
         route_woke: "woke its wait",
         route_started: "started its turn",
         route_inbox: "in its inbox",
+        command_new: "New agent chat",
         command_next: "Next agent",
         command_previous: "Previous agent",
         command_parent: "The agent that started this one",

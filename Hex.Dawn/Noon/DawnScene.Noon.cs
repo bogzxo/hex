@@ -73,7 +73,7 @@ internal sealed partial class DawnScene
         noonContextRows = noonContextScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
 
         DressChrome();
-        commands.Add("View/agent", Said("noon.command"), () => ShowFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
+        commands.Add("Agents/open", Said("noon.command"), () => ShowFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
         AddNoonCommands();
     }
 

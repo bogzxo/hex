@@ -423,9 +423,14 @@ internal sealed partial class DawnScene
             try { process.Kill(entireProcessTree: true); } catch (Exception) { }
         }
 
-        string[] said;
+        string[] said, details;
         lock (lines)
-            said = [.. lines.Where(line => line.StartsWith("[Hex self-test]", StringComparison.Ordinal)).Select(line => line["[Hex self-test]".Length..].Trim())];
+        {
+            string[] raw = [.. lines.Where(line => line.StartsWith("[Hex self-test]", StringComparison.Ordinal)).Select(line => line["[Hex self-test]".Length..])];
+            said = [.. raw.Select(line => line.Trim())];
+            // What a check printed to say why, indented under it, which is what an agent needs to put a failure right
+            details = [.. raw.Where(line => line.StartsWith("   ", StringComparison.Ordinal)).Select(line => line.Trim()).Distinct().Take(40)];
+        }
 
         if (list)
             return McpToolResult.Text($"The suites are\n{string.Join('\n', said.SkipWhile(line => !line.StartsWith("there is no", StringComparison.Ordinal)).Skip(1))}");
@@ -436,7 +441,11 @@ internal sealed partial class DawnScene
         foreach (string line in said.Where(line => line.EndsWith(" s", StringComparison.Ordinal) && line.Contains(" took ", StringComparison.Ordinal)))
             report.Append(line).Append('\n');
         if (failed.Length > 0)
+        {
             report.Append($"{failed.Length} failed\n").AppendJoin('\n', failed);
+            if (details.Length > 0)
+                report.Append("\n\nWhat the checks printed\n").AppendJoin('\n', details);
+        }
 
         return ended && process.ExitCode == 0 ? McpToolResult.Text(report.ToString()) : McpToolResult.Error(report.ToString());
     }
