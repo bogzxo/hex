@@ -41,7 +41,26 @@ internal static partial class McpBridge
                 return 1;
         }
 
-        using var pipe = new NamedPipeClientStream(".", listing.Pipe, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        // A bridge started for a chat of the Agents panel says which, so what the agent does is known to be that chat's
+        int chatAt = Array.IndexOf(args, "--agent-chat");
+        string? chat = chatAt >= 0 && chatAt + 1 < args.Length ? args[chatAt + 1] : null;
+        NamedPipeClientStream? pipe = Open(listing, chat);
+        if (pipe is null)
+            return 1;
+
+        Say($"talking to Hex {listing.Pid} for {folder}");
+        Pump(pipe, listing.Pid, () => Again(folder, args, chat));
+        return 0;
+    }
+
+    // How long a bridge waits for a Hex to come back on its folder once the one it talked to went, a restart into a
+    // build of itself takes a while, and how often it looks
+    private const int AGAIN_WAIT_MS = 180_000, AGAIN_EVERY_MS = 500;
+
+    /// <summary>The pipe of a Hex opened and the door knocked on, null having said why it couldn't be.</summary>
+    private static NamedPipeClientStream? Open(McpListing listing, string? chat)
+    {
+        var pipe = new NamedPipeClientStream(".", listing.Pipe, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try
         {
             pipe.Connect(CONNECT_MS);
@@ -49,21 +68,40 @@ internal static partial class McpBridge
         catch (Exception e) when (e is TimeoutException or IOException or UnauthorizedAccessException)
         {
             Say($"Hex {listing.Pid} didn't answer on its pipe, {e.Message}");
-            return 1;
+            pipe.Dispose();
+            return null;
         }
 
-        // A bridge started for a chat of the Agents panel says which, so what the agent does is known to be that chat's
-        int chatAt = Array.IndexOf(args, "--agent-chat");
-        string? chat = chatAt >= 0 && chatAt + 1 < args.Length ? args[chatAt + 1] : null;
         if (!McpGate.Knock(pipe, listing.Token, chat, out string? why))
         {
             Say(why ?? "Hex didn't let this in");
-            return 1;
+            pipe.Dispose();
+            return null;
         }
 
-        Say($"talking to Hex {listing.Pid} for {folder}");
-        Pump(pipe);
-        return 0;
+        return pipe;
+    }
+
+    /// <summary>
+    /// The Hex on the folder after the one talked to went, waited for while it restarts. Null when none came back in
+    /// time, the bridge ends then as it always did.
+    /// </summary>
+    private static (NamedPipeClientStream Pipe, int Pid)? Again(string folder, string[] args, string? chat)
+    {
+        long giveUp = Environment.TickCount64 + AGAIN_WAIT_MS;
+        while (Environment.TickCount64 < giveUp)
+        {
+            if (Resolve(folder, args) is { } listing && McpDiscovery.Running(listing.Pid) && Open(listing, chat) is { } pipe)
+            {
+                Say($"talking to Hex {listing.Pid} again for {folder}");
+                return (pipe, listing.Pid);
+            }
+
+            Thread.Sleep(AGAIN_EVERY_MS);
+        }
+
+        Say($"no Hex came back for {folder} in {AGAIN_WAIT_MS / 1000} seconds");
+        return null;
     }
 
     private static McpListing? Resolve(string folder, string[] args) =>
@@ -152,22 +190,120 @@ internal static partial class McpBridge
         return null;
     }
 
-    /// <summary>Bytes both ways until one side is done. Stdin ending hangs up on Hex, Hex hanging up ends stdout.</summary>
-    private static void Pump(NamedPipeClientStream pipe)
+    /// <summary>
+    /// Messages both ways, a line each, until the client is done. Hex going (restarted into a build of itself) isn't the
+    /// end. The calls it was in the middle of are failed so the client makes them again, what the client says meanwhile
+    /// is held, and once a Hex is back on the folder it's shaken hands with as the client did and told the rest. Without
+    /// one back in time the bridge ends, as it did before.
+    /// </summary>
+    private static void Pump(NamedPipeClientStream first, int pid, Func<(NamedPipeClientStream Pipe, int Pid)?> again)
     {
         using Stream stdin = Console.OpenStandardInput();
         using Stream stdout = Console.OpenStandardOutput();
+        var session = new McpBridgeSession();
+        var writing = new Lock();
+        NamedPipeClientStream? pipe = first;
+        bool clientGone = false;
 
-        var toHex = new Thread(() =>
+        void ToClient(string line)
         {
-            Copy(stdin, pipe);
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(line + "\n");
+            lock (writing)
+            {
+                stdout.Write(bytes);
+                stdout.Flush();
+            }
+        }
+
+        static bool ToHex(Stream to, string line)
+        {
+            try
+            {
+                to.Write(System.Text.Encoding.UTF8.GetBytes(line + "\n"));
+                to.Flush();
+                return true;
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        var fromClient = new Thread(() =>
+        {
+            using var reader = new StreamReader(stdin, System.Text.Encoding.UTF8);
+            try
+            {
+                while (reader.ReadLine() is { } line)
+                {
+                    if (line.Length == 0)
+                        continue;
+                    NamedPipeClientStream? now = Volatile.Read(ref pipe);
+                    session.FromClient(line, now is not null);
+                    if (now is not null && !ToHex(now, line))
+                        session.FromClient(line, connected: false);
+                }
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException)
+            {
+            }
 
             // The client's done, Hex hears the end of the stream and lets the session go
-            try { pipe.Dispose(); } catch (Exception) { }
+            clientGone = true;
+            try { Volatile.Read(ref pipe)?.Dispose(); } catch (Exception) { }
         }) { IsBackground = true, Name = "mcp stdin" };
-        toHex.Start();
+        fromClient.Start();
 
-        Copy(pipe, stdout);
+        while (true)
+        {
+            NamedPipeClientStream talking = Volatile.Read(ref pipe)!;
+            try
+            {
+                using var reader = new StreamReader(talking, System.Text.Encoding.UTF8, false, 64 * 1024, leaveOpen: true);
+                while (reader.ReadLine() is { } line)
+                {
+                    if (session.FromHex(line) is { } said)
+                        ToClient(said);
+                }
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+            }
+
+            Volatile.Write(ref pipe, null);
+            try { talking.Dispose(); } catch (Exception) { }
+            if (clientGone)
+                return;
+
+            Say($"Hex {pid} went, waiting for it to come back");
+            try
+            {
+                foreach (string failed in session.Dropped())
+                    ToClient(failed);
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException)
+            {
+                return;
+            }
+
+            if (again() is not { } back || clientGone)
+                return;
+            pid = back.Pid;
+            foreach (string line in session.Replay())
+                ToHex(back.Pipe, line);
+            Volatile.Write(ref pipe, back.Pipe);
+            // Said what the client held while there was no Hex, since it may have said more as the first lines went
+            foreach (string line in session.Held())
+                ToHex(back.Pipe, line);
+            try
+            {
+                ToClient(McpBridgeSession.ToolsChanged());
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException)
+            {
+                return;
+            }
+        }
     }
 
     private static void Copy(Stream from, Stream to)
