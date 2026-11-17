@@ -27,7 +27,9 @@ internal sealed partial class DawnScene
     private Button agentsStop = null!, agentsSend = null!, agentsHistory = null!, agentsNew = null!, agentsHarness = null!;
     private (long Calls, long Said) agentsHarnessShown = (-1, -1);
 
-    private readonly List<HexAgentChat> agentChats = [];
+    // The agents' sessions, the model the panel, Noon and the tools all read, and their chats seen as a list
+    private readonly HexAgentHub hub = new();
+    private HexHubChats agentChats => hub.Chats;
     private HexAgentChat? agentChat;
     private int agentChatsMade;
 

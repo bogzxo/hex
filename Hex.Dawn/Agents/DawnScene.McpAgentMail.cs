@@ -17,11 +17,11 @@ internal sealed partial class DawnScene
     // Where messages are numbered from, across every chat
     private long agentMailMade;
 
-    // The chats whose agent is in hex_agent_wait now, how many waits each, written off the editor's thread
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> agentsWaiting = new();
+    // The chats whose agent is in hex_agent_wait now, how many waits each, written off the editor's thread, kept by the hub
+    private System.Collections.Concurrent.ConcurrentDictionary<int, int> agentsWaiting => hub.Waiting;
 
     /// <summary>Whether a chat's agent is waiting in hex_agent_wait, which a message to it wakes.</summary>
-    private bool AgentWaiting(HexAgentChat chat) => agentsWaiting.TryGetValue(chat.Id, out int count) && count > 0;
+    private bool AgentWaiting(HexAgentChat chat) => hub.IsWaiting(chat);
 
     private IEnumerable<HexMcpTool> AgentMailTools() =>
     [
@@ -37,13 +37,7 @@ internal sealed partial class DawnScene
     ];
 
     /// <summary>The chat at the top of a chat's family, the one somebody started.</summary>
-    private HexAgentChat RootOf(HexAgentChat chat)
-    {
-        HexAgentChat at = chat;
-        for (int guard = 0; at.Parent is { } up && ChatById(up) is { } parent && guard < 16; guard++)
-            at = parent;
-        return at;
-    }
+    private HexAgentChat RootOf(HexAgentChat chat) => hub.RootOf(chat);
 
     // A chat as a message says who it's from
     private static string MailName(HexAgentChat chat) =>

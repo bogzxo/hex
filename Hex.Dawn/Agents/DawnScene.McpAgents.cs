@@ -18,17 +18,8 @@ internal sealed partial class DawnScene
     // How long hex_agent_wait waits when it isn't told, the most it waits, and how much of each reply it hands back
     private const int AGENTS_WAIT = 300, AGENTS_WAIT_MOST = 600, AGENTS_REPLY = 6000;
 
-    /// <summary>A chat as the tools see it off the editor's thread, as it was the last tick.</summary>
-    private sealed record AgentStatus(int Id, string Shown, string Agent, string? Model, int? Parent, int Depth, string State,
-        string Reply, double Seconds, double Cost, int Version, HexAgentChat Chat, HexAgentMail[] Mail)
-    {
-        /// <summary>Its messages not read yet, read off any thread by the number the chat has read up to.</summary>
-        public HexAgentMail[] Unread => [.. Mail.Where(message => message.Seq > Chat.MailSeen)];
-    }
-
-    // What the chats were the last tick, for hex_agent_wait off the editor's thread, and what they were made from
-    private volatile IReadOnlyDictionary<int, AgentStatus> agentStatuses = new Dictionary<int, AgentStatus>();
-    private long agentStatusesFrom = -1;
+    // What the chats were the last tick, for hex_agent_wait off the editor's thread, the hub's snapshot of them
+    private IReadOnlyDictionary<int, HexHubRow> agentStatuses => hub.Snapshot.Rows;
 
     private IEnumerable<HexMcpTool> AgentsTools() =>
     [
@@ -69,32 +60,19 @@ internal sealed partial class DawnScene
     /// <summary>The chat a call came from, when it's an agent of the panel's.</summary>
     private static int? CallerOf(JsonObject args) => args.Integer(HexMcpCaller.CALLER);
 
-    private HexAgentChat? ChatById(int id) => agentChats.FirstOrDefault(chat => chat.Id == id);
+    private HexAgentChat? ChatById(int id) => hub.ChatById(id);
 
     // A chat's state in a word
-    private static string StateWord(HexAgentChat chat) =>
-        chat.Running ? "running" : chat.Stopped ? "stopped" : chat.Failed ? "failed" : chat.Entries.Count == 0 ? "new" : "done";
+    private static string StateWord(HexAgentChat chat) => HexAgentHub.StateWord(chat);
 
     /// <summary>
     /// What the chats are now, made again for the tools that wait off the editor's thread whenever one of them moved.
     /// Every tick, a sum of their versions when nothing did.
     /// </summary>
-    private void PublishAgentStatuses()
-    {
-        long from = agentChats.Count;
-        foreach (HexAgentChat chat in agentChats)
-            from = from * 31 + chat.Version * 2 + (chat.Running ? 1 : 0) + chat.Id * 7919L;
-        if (from == agentStatusesFrom)
-            return;
-
-        agentStatusesFrom = from;
-        agentStatuses = agentChats.ToDictionary(chat => chat.Id, chat => new AgentStatus(chat.Id, chat.Shown, chat.Agent,
-            chat.Options.GetValueOrDefault("model") ?? chat.Model, chat.Parent, chat.Depth, StateWord(chat),
-            chat.Running ? string.Empty : chat.LastReply(AGENTS_REPLY), chat.TurnSeconds, chat.Cost, chat.Version, chat, chat.UnreadMail()));
-    }
+    private void PublishAgentStatuses() => hub.Pump(AGENTS_REPLY);
 
     // A chat in a line, for the lists
-    private static string StatusLine(AgentStatus status) =>
+    private static string StatusLine(HexHubRow status) =>
         $"#{status.Id} \"{status.Shown}\" {status.Agent}{(status.Model is { Length: > 0 } model ? " " + model : string.Empty)} {status.State}"
         + (status.Seconds > 0 ? $" {status.Seconds.ToString("0.#", CultureInfo.InvariantCulture)}s" : string.Empty)
         + (status.Cost > 0 ? $" ${status.Cost.ToString("0.000", CultureInfo.InvariantCulture)}" : string.Empty)
@@ -125,7 +103,7 @@ internal sealed partial class DawnScene
         said.Append("\nChats:\n");
         if (agentChats.Count == 0)
             said.Append("none\n");
-        foreach (AgentStatus status in agentStatuses.Values.OrderBy(status => status.Id))
+        foreach (HexHubRow status in agentStatuses.Values.OrderBy(status => status.Id))
             said.Append(StatusLine(status)).Append('\n');
         yield return McpToolResult.Text(said.ToString().TrimEnd());
     }
@@ -208,7 +186,7 @@ internal sealed partial class DawnScene
         double timeout = Math.Clamp(args.Number("timeout") ?? AGENTS_WAIT, 1, AGENTS_WAIT_MOST);
         long deadline = System.Environment.TickCount64 + (long)(timeout * 1000);
 
-        IReadOnlyDictionary<int, AgentStatus> now = agentStatuses;
+        IReadOnlyDictionary<int, HexHubRow> now = agentStatuses;
         int[] ids;
         if (args["ids"] is JsonArray asked && asked.Count > 0)
         {
@@ -226,7 +204,7 @@ internal sealed partial class DawnScene
         {
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
-            AgentStatus[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
+            HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
             ids = [.. (mine.Any(status => status.State == "running") ? mine.Where(status => status.State == "running") : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
@@ -241,7 +219,7 @@ internal sealed partial class DawnScene
             while (true)
             {
                 now = agentStatuses;
-                AgentStatus[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<AgentStatus>()];
+                HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
                 int done = those.Count(status => status.State != "running");
                 bool over = any ? done > 0 : done == those.Length;
                 bool late = System.Environment.TickCount64 >= deadline;
@@ -276,12 +254,12 @@ internal sealed partial class DawnScene
     }
 
     // What the agents waited for said, the finished ones with their replies and the rest by their state
-    private static string WaitReport(AgentStatus[] those, bool late)
+    private static string WaitReport(HexHubRow[] those, bool late)
     {
         var said = new StringBuilder();
         if (late)
             said.Append("Timed out, ").Append(those.Count(status => status.State == "running")).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
-        foreach (AgentStatus status in those.OrderBy(status => status.State == "running"))
+        foreach (HexHubRow status in those.OrderBy(status => status.State == "running"))
         {
             said.Append(StatusLine(status)).Append('\n');
             if (status.State != "running")
