@@ -56,8 +56,8 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] Stop asks the agent to end its turn (run's stop, Claude Code's interrupt control request, Codex's turn/interrupt),
       killed only if it hasn't within 5 seconds. To confirm live
 - [x] The model picker lists what Claude Code's initialize says (Opus 5.5, Fable 5.2 and the rest), confirmed live
-- [ ] hex_search finds nothing in files the index leaves out (extension .hor files), so an agent held to the harness
-      can't search them; search them from the disk as hex_read reads them
+- [x] hex_search finds the extensions' .hor, the walk going into a submodule unless a workspace folder goes by its
+      name (a copy of something open), where it used to skip every submodule
 - [ ] The mcp self test's "clicking File by its text opens the File menu" fails now and then (passes on a rerun)
 - [x] Codex declined both its own shell and hex_terminal_run for a read of the workspace, and fell back to hex_files
       (live check)

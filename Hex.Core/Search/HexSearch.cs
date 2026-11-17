@@ -50,9 +50,11 @@ internal static partial class HexSearch
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<string>();
         HexExcludes excludes = Excluded();
+        // A submodule is walked unless one of the workspace's folders goes by its name, a copy of something that's open
+        var open = new HashSet<string>(roots.Select(root => Path.GetFileName(Path.GetFullPath(root).TrimEnd('\\', '/'))), StringComparer.OrdinalIgnoreCase);
         foreach (string root in roots)
         {
-            foreach (string file in FilesIn(root, pattern, keep, excludes))
+            foreach (string file in FilesIn(root, pattern, keep, excludes, open))
             {
                 if (seen.Add(file))
                     files.Add(file);
@@ -66,9 +68,11 @@ internal static partial class HexSearch
     /// Every .hor under a folder, leaving out what files_exclude and search_exclude say (what gets built, git's own, old
     /// builds), what each .gitignore on the way down says while search_use_ignore_files is on, and the checkouts of
     /// submodules (which are the files of another repository, and there are copies of the engine in more than one). A
-    /// dot folder that's none of those is looked in, .github/workflows has files people open.
+    /// dot folder that's none of those is looked in, .github/workflows has files people open. Given the names of the
+    /// workspace's folders, a submodule is left out only when it goes by one of them, the copy of something open, and
+    /// one of its own (an app's extensions) walked like the rest.
     /// </summary>
-    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null, HexExcludes? excludes = null)
+    public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null, HexExcludes? excludes = null, HashSet<string>? openNames = null)
     {
         HexExcludes leftOut = excludes ?? Excluded();
         var files = new List<string>();
@@ -99,7 +103,7 @@ internal static partial class HexSearch
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
                     string under = Inside(Path.GetFileName(inside));
-                    if (Out(under, true) || File.Exists(Path.Combine(inside, ".git")))
+                    if (Out(under, true) || (File.Exists(Path.Combine(inside, ".git")) && (openNames is null || openNames.Contains(Path.GetFileName(inside)))))
                         continue;
                     pending.Push((inside, under, ignores));
                 }

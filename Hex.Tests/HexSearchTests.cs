@@ -28,7 +28,7 @@ public sealed class HexSearchTests : IDisposable
     }
 
     [Fact]
-    public void The_files_are_every_hor_but_what_gets_built_git_and_submodules_dot_folders_included()
+    public void The_files_are_every_hor_but_what_gets_built_git_and_copies_of_open_folders_dot_folders_included()
     {
         Write("a.hor", "let a = 1;");
         Write("ui/b.hor", "let b = 2;");
@@ -36,13 +36,24 @@ public sealed class HexSearchTests : IDisposable
         Write("bin/Debug/c.hor", "let c = 3;");
         Write("obj/d.hor", "let d = 4;");
         Write(".hidden/e.hor", "let e = 5;");
-        Write("engine/.git", "gitdir: ../.git/modules/engine");
-        Write("engine/f.hor", "let f = 6;");
+        Write("extensions/.git", "gitdir: ../.git/modules/extensions");
+        Write("extensions/f.hor", "let f = 6;");
         Write("~syncthing~g.hor", "let g = 7;");
+        // A submodule that's a copy of a folder open beside it is that folder's files twice
+        Write("engine/.git", "gitdir: ../.git/modules/engine");
+        Write("engine/h.hor", "let h = 8;");
+        string engine = Path.Combine(Path.GetDirectoryName(root)!, "engine-" + Guid.NewGuid().ToString("N")[..6], "engine");
+        Directory.CreateDirectory(engine);
 
-        List<string> files = HexSearch.FilesUnder([root]);
-
-        Assert.Equal([".hidden/e.hor", "a.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
+        try
+        {
+            List<string> files = HexSearch.FilesUnder([root, engine]);
+            Assert.Equal([".hidden/e.hor", "a.hor", "extensions/f.hor", "ui/b.hor"], files.Select(file => HexSearch.RelativeTo([root], file)));
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(engine)!, true);
+        }
     }
 
     [Fact]
