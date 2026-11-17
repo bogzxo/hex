@@ -141,7 +141,7 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] Harness saved is a toggle, Escape closes it, its button a zap in the panel's head (the composer back on the
       bottom) and a line at the foot of Agentic's Agents column
 - [x] Agentic's side columns, cards and systems panel a step bigger in text
-- [ ] A moving icon cut by its clip is drawn still (UIDrawList.MovingSymbol), clip the turned quad instead
+- [x] A moving icon its clip only nicks (three quarters inside or more) is drawn whole and turning, in the engine (UIDrawList.MovingSymbol), clip the turned quad instead
 - [x] The harness guard lets through reads aimed outside the workspace by a relative path (git -C ..\other ls-files,
       cat ../other/x), as it did whole ones (git -C ..\horizon ls-files), it
       should only turn back reads of the workspace's own folders
