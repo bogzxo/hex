@@ -21,6 +21,9 @@ internal sealed class NotebookCellView
     public required NotebookCellEditor Editor { get; init; }
     public StackPanel? Written { get; set; }
 
+    /// <summary>A code cell's outlined frame round its editor, null for a markdown cell, whose editor goes without.</summary>
+    public StackPanel? Frame { get; set; }
+
     /// <summary>The source the editor and the written out markdown were last given, another string once it changes.</summary>
     public string? Shown { get; set; }
 
@@ -143,11 +146,22 @@ internal sealed partial class DawnScene
         var count = gutter.Add(new Label { Anchor = Origin.TopRight, Align = Origin.TopRight, TextScale = 0.125f, Dim = true });
 
         var body = row.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f });
-        var editor = body.Add(new NotebookCellEditor(cell.Source) { Arranged = FitNotebookWrap });
+        // The code in a thin outline of the theme's border colour, and what it put out in one of its own in the accent's,
+        // so where the code ends and its output starts is plain at a glance. A markdown cell's text goes without
+        var (codeLine, outputLine) = NotebookOutlines();
+        StackPanel? frame = cell.Kind == CellKind.Markdown ? null : body.Add(new StackPanel
+        {
+            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Padding = new UIEdges(CELL_FRAME), Radius = 5.0f, Outline = codeLine
+        });
+        var editor = (frame ?? body).Add(new NotebookCellEditor(cell.Source) { Arranged = FitNotebookWrap });
         PrepareCellEditor(notebook, editor, cell);
-        var outputs = body.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 2.0f });
+        var outputs = body.Add(new StackPanel
+        {
+            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 2.0f,
+            Padding = new UIEdges(CELL_OUTPUT_INSET), Radius = 5.0f, Outline = outputLine
+        });
 
-        var view = new NotebookCellView { Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor };
+        var view = new NotebookCellView { Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor, Frame = frame };
         card.Pressed = twice => PressCell(notebook, view, twice);
         run.OnPressed = () =>
         {
@@ -338,6 +352,21 @@ internal sealed partial class DawnScene
         }
     }
 
+    // How far in from its outline a code cell's editor sits, and a cell's outputs from theirs
+    private const float CELL_FRAME = 2.0f, CELL_OUTPUT_INSET = 6.0f;
+
+    /// <summary>
+    /// The outline round a cell's code, the theme's border a touch stronger so it shows on the card, and the one round its
+    /// output, the accent faded, told apart from the code's by its tint.
+    /// </summary>
+    private (Vector4 Code, Vector4 Output) NotebookOutlines()
+    {
+        Horizon.UI.Skinning.UISkin? skin = compositor.Skin;
+        Vector4 border = skin?.BorderColor ?? new Vector4(1, 1, 1, 0.14f);
+        Vector4 accent = skin?.Palette.Accent ?? new Vector4(0.35f, 0.6f, 1.0f, 1.0f);
+        return (border with { W = MathF.Min(1.0f, border.W * 1.6f + 0.08f) }, accent with { W = 0.38f });
+    }
+
     // Helper method for every cell as wide as the notebook, less its column of counts
     private void FitCellViews(float width)
     {
@@ -346,10 +375,13 @@ internal sealed partial class DawnScene
         {
             view.Card.Size = view.Card.Size with { X = width };
             view.Body.Size = view.Body.Size with { X = body };
-            view.Editor.Size = view.Editor.Size with { X = body };
+            if (view.Frame is { } frame)
+                frame.Size = frame.Size with { X = body };
+            view.Editor.Size = view.Editor.Size with { X = view.Frame is null ? body : body - CELL_FRAME * 2.0f };
             if (view.Written is { } written)
                 FitWritten(written, body, settings.CodeZoom);
-            FitOutputs(view, body, settings.CodeZoom);
+            view.Outputs.Size = view.Outputs.Size with { X = body };
+            FitOutputs(view, body - CELL_OUTPUT_INSET * 2.0f, settings.CodeZoom);
         }
     }
 }
