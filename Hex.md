@@ -27,7 +27,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       Agentic covers the body, and the agents view's second handle in Dawn is gone (confirmed by the user)
 - [x] hex_read reads files the index leaves out (hex-extensions), by range
 - [x] "Files it touched" in Details lists the newest first, keeps the last 25, shows 10 with a fold for the rest
-- [ ] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
+- [ ] A "Send now" button on a queued message, writing it to the agent at once rather than when it next says something
+- [ ] Harness answers kept across edits to other files: they're keyed by the index generation now, which every edit
+      moves, so repeats rarely count as cache hits
+- [x] A chat keeps its last 200 entries in memory and the rest in a file of its own, read back only when scrolled to,
       the file deleted with the chat
 - Performance by default: lists that grow (files, tools, mail, rows) are capped or paged, nothing kept in memory that
   can be read back when it's needed

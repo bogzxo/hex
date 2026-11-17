@@ -389,6 +389,32 @@ internal sealed partial class DawnScene
             offered && taken && heldSteers.Count == 0 && longChat!.Entries.Count == entriesBefore && agentsInput.Text == "look at the tests first");
         test.Run(() => agentsInput.Text = string.Empty);
 
+        // A chat past what it keeps in memory sends its oldest rows to its file, and they're read back from there when asked
+        HexAgentChat? longest = null;
+        int earlierBefore = 0;
+        test.Run(() =>
+        {
+            longest = new HexAgentChat(++agentChatsMade, "layout_agent");
+            agentChats.Add(longest);
+            longest.Ask("A long one");
+            for (int i = 1; i <= 300; i++)
+                longest.Say($"Line {i} of a long chat.");
+            longest.Done();
+            OpenAgentChat(longest);
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            earlierBefore = agentsEarlier?.Children.Count ?? -1;
+            ShowAgentEarlier(longest!);
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a long chat keeps its latest rows, the rest read back from its file when asked", () =>
+            longest!.Dropped > 0 && longest.Entries.Count <= HexAgentChat.MOST_ENTRIES + HexAgentChat.SPILL_BATCH
+            && earlierBefore == 1 && agentsEarlierShown > 0 && agentsEarlier!.Children.Count > earlierBefore
+            && Descendants(agentsEarlier).OfType<Label>().Any(label => label.Text.Contains("Line 1 of a long chat.", StringComparison.Ordinal)));
+        test.Run(() => CloseAgentChat(longest!));
+
         // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
         // again as wide as the box wraps once, not three times as it did when it was counted in digits
         test.Run(() =>

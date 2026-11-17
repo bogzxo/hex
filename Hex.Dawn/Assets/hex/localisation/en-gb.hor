@@ -3546,6 +3546,7 @@ let strings = {
         subagent_steps: "step {count} · {step}",
         harness_none: "No harness calls yet",
         chat_open_noon: "Open in Agentic",
+        earlier: "Show earlier · {count} more",
         copy_row: "Copy",
         edit_queued: "Edit before it's sent",
         select_text: "Select text…",

@@ -52,9 +52,13 @@ internal sealed class HexAgentHub
 
     private volatile HexHubSnapshot snapshot = HexHubSnapshot.Empty;
 
-    /// <summary>A chat taken in as a session of its own.</summary>
+    /// <summary>Where the rows chats no longer keep in memory go, null for nowhere (they're let go of).</summary>
+    public HexAgentHistory? History { get; set; }
+
+    /// <summary>A chat taken in as a session of its own, the rows it lets go of sent to its file.</summary>
     public HexAgentSession Add(HexAgentChat chat, HexSessionKind? kind = null)
     {
+        chat.Spill ??= rows => History?.Append(chat.Key, rows);
         var session = new HexAgentSession(chat, kind);
         sessions.Add(session);
         return session;
@@ -68,6 +72,8 @@ internal sealed class HexAgentHub
             return false;
         sessions.RemoveAt(at);
         Waiting.TryRemove(chat.Id, out _);
+        // Its file of older rows goes with it
+        History?.Delete(chat.Key);
         return true;
     }
 

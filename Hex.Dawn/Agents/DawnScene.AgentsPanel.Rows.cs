@@ -268,6 +268,9 @@ internal sealed partial class DawnScene
                 DrawAgentWelcome();
                 return;
             }
+
+            // The rows it no longer keeps, a press or a scroll to the top away, over the ones it does
+            DrawAgentEarlier(chat);
         }
 
         if (chat is null)

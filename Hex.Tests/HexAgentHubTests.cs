@@ -111,6 +111,43 @@ public sealed class HexAgentHubTests
     }
 
     [Fact]
+    public void AChatKeepsItsLatestRowsAndTheRestGoToItsFileWhichGoesWithIt()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "hex-history-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var hub = new HexAgentHub { History = new HexAgentHistory(folder) };
+            var chat = new HexAgentChat(1, "claude_code");
+            hub.Add(chat);
+            for (int i = 1; i <= 260; i++)
+                chat.Say($"line {i}");
+
+            // A batch went at 251, the latest 200 kept from then and the rest since added
+            Assert.Equal(51, chat.Dropped);
+            Assert.Equal(209, chat.Entries.Count);
+            Assert.Equal("line 52", chat.Entries[0].Text);
+            Assert.Equal(51, hub.History!.Count(chat.Key));
+
+            // Read back from the end of the file, oldest first
+            Assert.Equal(["line 42", "line 43"], hub.History.Read(chat.Key, 8, 2).Select(entry => entry.Text).ToArray());
+            Assert.Equal("line 51", hub.History.Read(chat.Key, 0, 1)[0].Text);
+
+            // The chat written down and read back keeps its key and how many it let go of
+            HexAgentChat back = HexAgentChatStore.Read(HexAgentChatStore.Write(chat))!;
+            Assert.Equal(chat.Key, back.Key);
+            Assert.Equal(51, back.Dropped);
+
+            // Gone with the chat
+            hub.Remove(chat);
+            Assert.Equal(0, hub.History.Count(chat.Key));
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch (Exception) { }
+        }
+    }
+
+    [Fact]
     public void TheSnapshotIsMadeAgainOnlyWhenASessionMoved()
     {
         var hub = new HexAgentHub();

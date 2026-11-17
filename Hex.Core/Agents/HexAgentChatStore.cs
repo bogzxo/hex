@@ -17,23 +17,7 @@ internal static class HexAgentChatStore
 
         var rows = new JsonArray();
         foreach (HexAgentEntry entry in chat.Entries)
-        {
-            rows.Add((JsonNode)new JsonObject
-            {
-                ["kind"] = entry.Kind.ToString(),
-                ["text"] = entry.Text,
-                ["asked"] = entry.AskedText,
-                ["at"] = entry.ContextLocation,
-                ["tool_id"] = entry.ToolId,
-                ["tool"] = entry.ToolName,
-                ["input"] = entry.Input,
-                ["output"] = entry.Output,
-                ["state"] = entry.State.ToString(),
-                ["progress"] = entry.Progress,
-                ["steps"] = entry.Steps,
-                ["seconds"] = entry.Seconds
-            });
-        }
+            rows.Add((JsonNode)RowOf(entry));
 
         return new JsonObject
         {
@@ -53,7 +37,51 @@ internal static class HexAgentChatStore
             ["context_limit"] = chat.ContextLimit,
             ["cache_read"] = chat.CacheRead,
             ["stopped"] = chat.Stopped,
+            ["key"] = chat.Key,
+            ["dropped"] = chat.Dropped,
             ["rows"] = rows
+        };
+    }
+
+    /// <summary>A row as it's written down.</summary>
+    public static JsonObject RowOf(HexAgentEntry entry) => new()
+    {
+        ["kind"] = entry.Kind.ToString(),
+        ["text"] = entry.Text,
+        ["asked"] = entry.AskedText,
+        ["at"] = entry.ContextLocation,
+        ["tool_id"] = entry.ToolId,
+        ["tool"] = entry.ToolName,
+        ["input"] = entry.Input,
+        ["output"] = entry.Output,
+        ["state"] = entry.State.ToString(),
+        ["progress"] = entry.Progress,
+        ["steps"] = entry.Steps,
+        ["seconds"] = entry.Seconds
+    };
+
+    /// <summary>A row as it was written down, null for something that isn't one.</summary>
+    public static HexAgentEntry? EntryOf(JsonNode? node)
+    {
+        if (node is not JsonObject entry || !Enum.TryParse(entry["kind"]?.GetValue<string>(), out HexAgentEntryKind kind))
+            return null;
+
+        // How long it took, an end it had, or every redraw counted on from when it was read back
+        long now = Environment.TickCount64;
+        long took = (long)((entry["seconds"]?.GetValue<double>() ?? 0) * 1000);
+        return new HexAgentEntry(kind, entry["text"]?.GetValue<string>() ?? string.Empty)
+        {
+            Started = now - took,
+            Ended = now,
+            AskedText = entry["asked"]?.GetValue<string>(),
+            ContextLocation = entry["at"]?.GetValue<string>(),
+            ToolId = entry["tool_id"]?.GetValue<string>(),
+            ToolName = entry["tool"]?.GetValue<string>(),
+            Input = entry["input"]?.GetValue<string>(),
+            Output = entry["output"]?.GetValue<string>(),
+            State = Enum.TryParse(entry["state"]?.GetValue<string>(), out HexAgentToolState state) ? state : HexAgentToolState.Done,
+            Progress = entry["progress"]?.GetValue<string>(),
+            Steps = entry["steps"]?.GetValue<int>() ?? 0
         };
     }
 
@@ -91,29 +119,14 @@ internal static class HexAgentChatStore
         var rows = new List<HexAgentEntry>();
         foreach (JsonNode? row in said["rows"] as JsonArray ?? [])
         {
-            if (row is not JsonObject entry || !Enum.TryParse(entry["kind"]?.GetValue<string>(), out HexAgentEntryKind kind))
-                continue;
-
-            // How long it took, an end it had, or every redraw counted on from when it was read back
-            long now = Environment.TickCount64;
-            long took = (long)((entry["seconds"]?.GetValue<double>() ?? 0) * 1000);
-            rows.Add(new HexAgentEntry(kind, entry["text"]?.GetValue<string>() ?? string.Empty)
-            {
-                Started = now - took,
-                Ended = now,
-                AskedText = entry["asked"]?.GetValue<string>(),
-                ContextLocation = entry["at"]?.GetValue<string>(),
-                ToolId = entry["tool_id"]?.GetValue<string>(),
-                ToolName = entry["tool"]?.GetValue<string>(),
-                Input = entry["input"]?.GetValue<string>(),
-                Output = entry["output"]?.GetValue<string>(),
-                State = Enum.TryParse(entry["state"]?.GetValue<string>(), out HexAgentToolState state) ? state : HexAgentToolState.Done,
-                Progress = entry["progress"]?.GetValue<string>(),
-                Steps = entry["steps"]?.GetValue<int>() ?? 0
-            });
+            if (EntryOf(row) is { } entry)
+                rows.Add(entry);
         }
 
-        chat.Restore(said["title"]?.GetValue<string>() ?? string.Empty, rows);
+        // The same key, so the rows it sent to its file before are still its own, and how many of them there were
+        if (said["key"]?.GetValue<string>() is { Length: > 0 } fileKey)
+            chat.Key = fileKey;
+        chat.Restore(said["title"]?.GetValue<string>() ?? string.Empty, rows, said["dropped"]?.GetValue<int>() ?? 0);
         return chat;
     }
 }

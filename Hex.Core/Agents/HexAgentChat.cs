@@ -66,10 +66,17 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 /// </summary>
 internal sealed class HexAgentChat(int id, string agent)
 {
-    // The most rows a chat keeps, the oldest go after that
-    public const int MOST_ENTRIES = 2000;
+    // The rows a chat keeps in memory, and how many more it lets come before the oldest go to its file a batch at a time.
+    // A batch rather than a row each, the panel draws the chat again from the start when rows leave its top
+    public const int MOST_ENTRIES = 200, SPILL_BATCH = 50;
 
     private readonly List<HexAgentEntry> entries = [];
+
+    /// <summary>What names its file of rows it no longer keeps, the same across Hex's restarts.</summary>
+    public string Key { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Where the rows it no longer keeps go, oldest first, nowhere (they're let go of) when nobody said.</summary>
+    public Action<IReadOnlyList<HexAgentEntry>>? Spill { get; set; }
 
     public int Id { get; } = id;
 
@@ -238,9 +245,10 @@ internal sealed class HexAgentChat(int id, string agent)
     /// A chat read back as it was written (HexAgentChatStore), its title and its rows, a tool still going when it was
     /// written taken as having ended with it.
     /// </summary>
-    public void Restore(string title, IEnumerable<HexAgentEntry> rows)
+    public void Restore(string title, IEnumerable<HexAgentEntry> rows, int dropped = 0)
     {
         Title = title;
+        Dropped = dropped;
         entries.Clear();
         foreach (HexAgentEntry row in rows)
         {
@@ -256,10 +264,18 @@ internal sealed class HexAgentChat(int id, string agent)
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);
-        if (entries.Count > MOST_ENTRIES)
+        if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
         {
-            entries.RemoveAt(0);
-            Dropped++;
+            // The oldest to its file, never one still queued or a tool still going, which are still to change
+            int going = entries.FindIndex(each => each.Queued || (each.Kind == HexAgentEntryKind.Tool && each.State == HexAgentToolState.Running));
+            int spill = Math.Min(entries.Count - MOST_ENTRIES, going < 0 ? int.MaxValue : going);
+            if (spill > 0)
+            {
+                HexAgentEntry[] old = [.. entries.GetRange(0, spill)];
+                entries.RemoveRange(0, spill);
+                Dropped += spill;
+                Spill?.Invoke(old);
+            }
         }
 
         Version++;

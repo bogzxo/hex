@@ -91,6 +91,12 @@ internal sealed partial class DawnScene
         });
         agentsCompose.MoveChild(agentsInput, 0);
         BuildAgentImages();
+
+        // The rows a chat no longer keeps in memory, in Hex's folder, a self test's in a folder of its own it leaves behind
+        hub.History = new HexAgentHistory(options.SelfTest
+            ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
+            : Path.Combine(TerminalFiles.UserFolder, "agent_history"));
+        hub.History.Tidy(TimeSpan.FromDays(2));
         agentsStop = made.Get<Button>("agents_stop");
         agentsSend = made.Get<Button>("agents_send");
         agentsHistory = made.Get<Button>("agents_history");
@@ -273,6 +279,7 @@ internal sealed partial class DawnScene
         }
 
         KeepHeldRow();
+        LoadEarlierAtTop();
 
         // The rows and the cards follow the width every tick, a side being dragged moves every frame and the words fitted a
         // tenth of a second behind it jumped as they caught up. Each does nothing when the width didn't move
