@@ -120,9 +120,10 @@ internal static class HexAgentLimits
         return said;
     }
 
-    /// <summary>Tokens said short, 1.2k, 180k, 1.1M.</summary>
+    /// <summary>Tokens said short, 1.2k, 180k, 1.1M, 2.4B.</summary>
     public static string Tokens(long tokens) =>
-        tokens >= 1_000_000 ? (tokens / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M"
+        tokens >= 1_000_000_000 ? (tokens / 1_000_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "B"
+        : tokens >= 1_000_000 ? (tokens / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M"
         : tokens >= 10_000 ? (tokens / 1000.0).ToString("0", CultureInfo.InvariantCulture) + "k"
         : tokens >= 1000 ? (tokens / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "k"
         : tokens.ToString(CultureInfo.InvariantCulture);

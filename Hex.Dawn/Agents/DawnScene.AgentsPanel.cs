@@ -452,5 +452,5 @@ internal sealed partial class DawnScene
         && HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == id) is { } profile
         && StateOf(profile) != AgentStates.Missing;
 
-    private static string Count(long tokens) => tokens >= 10_000 ? $"{tokens / 1000.0:0.#}k" : tokens.ToString();
+    private static string Count(long tokens) => HexAgentLimits.Tokens(tokens);
 }

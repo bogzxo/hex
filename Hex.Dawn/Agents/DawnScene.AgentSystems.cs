@@ -300,7 +300,7 @@ internal sealed partial class DawnScene
             int compactions = chats.Sum(chat => chat.Compactions), retries = chats.Sum(chat => chat.Retries);
             Put(compacted, compactions + retries == 0 ? null : "$(fold) " + Said("noon.system_compacted", ("count", compactions.ToString(CultureInfo.InvariantCulture)), ("retries", retries.ToString(CultureInfo.InvariantCulture))));
 
-            HexAgentLimit[] limits = HexAgentLimits.Across(chats);
+            HexAgentLimit[] limits = KnownLimits(system.Id, chats);
             for (int i = 0; i < limitSlots.Count; i++)
             {
                 var (line, limitTrack, limitFill) = limitSlots[i];
