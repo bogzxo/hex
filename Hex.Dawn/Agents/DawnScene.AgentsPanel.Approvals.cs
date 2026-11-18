@@ -29,9 +29,10 @@ internal sealed partial class DawnScene
         if (waiting)
         {
             var buttons = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 26) });
-            // Their keys said on them, answered from anywhere in Hex without the mouse (DecideWaiting)
-            buttons.Add(new Button { Label = Said("noon.allow_key", ("key", ALLOW_KEY)), Icon = "check", Primary = true, Size = new Vector2(150, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, true) });
-            buttons.Add(new Button { Label = Said("noon.deny_key", ("key", DENY_KEY)), Icon = "close", Danger = true, Size = new Vector2(140, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, false) });
+            // Their keys said on them when they're the request the keys answer from anywhere in Hex (DecideWaiting)
+            var (allow, deny) = DecideLabels(entry);
+            buttons.Add(new Button { Label = allow, Icon = "check", Primary = true, Size = new Vector2(150, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, true) });
+            buttons.Add(new Button { Label = deny, Icon = "close", Danger = true, Size = new Vector2(140, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, false) });
         }
         else
             stack.Add(Text(entry.State == HexAgentToolState.Done ? $"$(check) {Said("agents_panel.allowed")}" : $"$(close) {Said("agents_panel.denied")}", 0.125f, dim: true));

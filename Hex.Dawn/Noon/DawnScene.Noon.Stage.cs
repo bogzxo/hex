@@ -38,6 +38,11 @@ internal sealed partial class DawnScene
 
     // What the stage on screen was drawn from, and what the tabs say
     private long noonStageDrawn = NOT_DRAWN;
+
+    // Which chat and tab the stage was last drawn for and when, and how often at the most it's drawn again for the same
+    private int noonStageShown = -1;
+    private long noonStageAt;
+    private const long STAGE_REDRAW_MS = 400;
     private (int Inbox, int Changes, int Done, int All) noonTabsSaid = (-1, -1, -1, -1);
 
     private static readonly string[] STAGE_KEYS = ["Alt+1", "Alt+2", "Alt+3", "Alt+4"];
@@ -134,6 +139,20 @@ internal sealed partial class DawnScene
     /// <summary>The tabs' counts put right and the stage on screen drawn again when the agents moved, a few times a second.</summary>
     private void DrawNoonStage()
     {
+        long key = (hub.Version * 31 + (agentChat?.Id ?? -1)) * 31 + (int)noonStage;
+        if (key == noonStageDrawn)
+            return;
+        // Another chat or tab is drawn at once. The agents only having gone on (one streaming moves it every word) waits a
+        // little, and for a held button to be let go, an Allow made again under the press was lost
+        long now = System.Environment.TickCount64;
+        int shown = (agentChat?.Id ?? -1) * 8 + (int)noonStage;
+        if (shown == noonStageShown && noonStageDrawn != NOT_DRAWN && (now - noonStageAt < STAGE_REDRAW_MS || Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left)))
+            return;
+        noonStageDrawn = key;
+        noonStageShown = shown;
+        noonStageAt = now;
+
+        // Counted again only as the agents move, going through every turn's tool calls each tick allocated while nothing did
         var (_, done, all) = PlanOf(agentChat);
         // The changes' count, the files the latest turn that wrote any wrote
         var counts = (InboxCount(), agentChat is null ? 0 : ChangedFilesOf(agentChat, latestOnly: true).FirstOrDefault().Files?.Count ?? 0, done, all);
@@ -147,10 +166,6 @@ internal sealed partial class DawnScene
             noonTabButtons[(int)NoonStage.Inbox].Primary = counts.Item1 > 0;
         }
 
-        long key = (hub.Version * 31 + (agentChat?.Id ?? -1)) * 31 + (int)noonStage;
-        if (key == noonStageDrawn)
-            return;
-        noonStageDrawn = key;
         switch (noonStage)
         {
             case NoonStage.Inbox:
@@ -210,7 +225,30 @@ internal sealed partial class DawnScene
         }
 
         if (!any)
-            noonInboxRows.Add(ContextText(Said("noon.inbox_empty"), dim: true));
+            StageEmpty(noonInboxRows, "inbox", Said("noon.inbox_empty"));
+    }
+
+    /// <summary>
+    /// A tab with nothing in it, what comes there and what can be done next. A dim line alone left the person wondering
+    /// what to do, so the chat is always a key away and Plan can ask the agent for one.
+    /// </summary>
+    private void StageEmpty(StackPanel rows, string icon, string text, (string Label, string Icon, Action Then)? also = null)
+    {
+        rows.Add(new Label { Text = $"$({icon})", TextScale = 0.3f, Dim = true, Align = Origin.Left, Size = new Vector2(0, 34) });
+        rows.Add(ContextText(text, dim: true));
+        var buttons = rows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 28) });
+        if (also is var (label, mark, then))
+            buttons.Add(new Button { Label = label, Icon = mark, Primary = true, Size = new Vector2(MathF.Ceiling(label.Length * 6.6f) + 40, 26), LabelScale = 0.125f, Animated = false, OnPressed = then });
+        string back = $"{Said("noon.stage_back")} ({STAGE_KEYS[(int)NoonStage.Chat]})";
+        buttons.Add(new Button { Label = back, Icon = "comment-discussion", Size = new Vector2(MathF.Ceiling(back.Length * 6.6f) + 40, 26), LabelScale = 0.125f, Animated = false, OnPressed = () => ShowStage(NoonStage.Chat) });
+    }
+
+    // What asking an agent for a plan puts in its box, left there to be changed before it's sent
+    private void AskForPlan()
+    {
+        ShowStage(NoonStage.Chat);
+        agentsInput.Text = Said("noon.plan_ask_text");
+        agentsInput.Focus();
     }
 
     // A card of the inbox, the agent's badge and who it is over what it is
@@ -252,10 +290,11 @@ internal sealed partial class DawnScene
         card.Add(ContextText(asked.Text, dim: false));
         if (!string.IsNullOrWhiteSpace(asked.Input))
             card.Add(ContextText(OneLine(asked.Input!, 400), dim: true)).Also(label => label.CodeFont = code.Font);
+        var (allow, deny) = DecideLabels(asked);
         InboxButtons(card, chat,
         [
-            (Said("noon.allow_key", ("key", ALLOW_KEY)), "check", true, () => chat.Decide(asked, true)),
-            (Said("noon.deny_key", ("key", DENY_KEY)), "close", false, () => chat.Decide(asked, false))
+            (allow, "check", true, () => chat.Decide(asked, true)),
+            (deny, "close", false, () => chat.Decide(asked, false))
         ]);
     }
 
@@ -286,17 +325,32 @@ internal sealed partial class DawnScene
     /// </summary>
     private void DecideWaiting(bool allow)
     {
-        HexAgentEntry? Oldest(HexAgentChat chat) => HexAgentHub.Approvals(chat).FirstOrDefault();
-        HexAgentChat? asking = agentChat is { } open && Oldest(open) is not null ? open : FleetOrder().FirstOrDefault(chat => Oldest(chat) is not null);
-        if (asking is null || Oldest(asking) is not { } request)
+        if (KeyedRequest() is not var (asking, request))
         {
             Say(Said("noon.nothing_to_allow"));
             return;
         }
 
         asking.Decide(request, allow);
-        Say($"{(allow ? Said("agents_panel.allowed") : Said("agents_panel.denied"))}: {OneLine(request.Text, 80)}");
+        // Which agent it was for said too, with several waiting the keys answered one the person couldn't tell from the rest
+        Say($"{(allow ? Said("agents_panel.allowed") : Said("agents_panel.denied"))} {ChatName(asking.Id)}: {OneLine(request.Text, 80)}");
     }
+
+    /// <summary>
+    /// The request the keys answer, the open chat's oldest, then the oldest of any chat in the fleet's order. Its buttons
+    /// are the only ones that say the keys, so it's plain which one they're for.
+    /// </summary>
+    private (HexAgentChat Chat, HexAgentEntry Request)? KeyedRequest()
+    {
+        HexAgentEntry? Oldest(HexAgentChat chat) => HexAgentHub.Approvals(chat).FirstOrDefault();
+        HexAgentChat? asking = agentChat is { } open && Oldest(open) is not null ? open : FleetOrder().FirstOrDefault(chat => Oldest(chat) is not null);
+        return asking is not null && Oldest(asking) is { } request ? (asking, request) : null;
+    }
+
+    // Allow and Deny for a request, saying their keys when they're the ones the keys answer
+    private (string Allow, string Deny) DecideLabels(HexAgentEntry request) => KeyedRequest()?.Request == request
+        ? (Said("noon.allow_key", ("key", ALLOW_KEY)), Said("noon.deny_key", ("key", DENY_KEY)))
+        : (Said("agents_panel.allow"), Said("agents_panel.deny"));
 
     /* Changes */
 
@@ -319,10 +373,11 @@ internal sealed partial class DawnScene
             var made = new List<(string, string)>();
             foreach (string folder in folders)
             {
-                if (HexCheckpoints.TopOf(folder) is not { } top || !tops.Add(top))
-                    continue;
-                if (HexCheckpoints.Take(top) is { } tree)
-                    made.Add((top, tree));
+                foreach (string top in HexCheckpoints.ReposOf(folder))
+                {
+                    if (tops.Add(top) && HexCheckpoints.Take(top) is { } tree)
+                        made.Add((top, tree));
+                }
             }
 
             return made;
@@ -401,7 +456,7 @@ internal sealed partial class DawnScene
         ClearRows(noonChangesRows);
         if (agentChat is not { } chat || ChangedFilesOf(chat) is not { Count: > 0 } turns)
         {
-            noonChangesRows.Add(ContextText(Said("noon.changes_empty"), dim: true));
+            StageEmpty(noonChangesRows, "diff", Said("noon.changes_empty"));
             return;
         }
 
@@ -524,7 +579,7 @@ internal sealed partial class DawnScene
         var (items, done, all) = PlanOf(agentChat);
         if (all == 0)
         {
-            noonPlanRows.Add(ContextText(Said("noon.plan_empty"), dim: true));
+            StageEmpty(noonPlanRows, "checklist", Said("noon.plan_empty"), CanComposeAgent() ? (Said("noon.plan_ask"), "edit", AskForPlan) : null);
             return;
         }
 
