@@ -280,6 +280,9 @@ internal sealed partial class DawnScene : Scene
                 string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             explorer.OpenFolder(options.Folder);
 
+        // The agents' chats of this workspace as they were when Hex last had it open
+        BringBackChats();
+
         // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
         // The self test is left where it starts, its checks expect the designer the way it always was
         if (!options.SelfTest && (options.Fresh || options.Folder is not null))
@@ -548,6 +551,7 @@ internal sealed partial class DawnScene : Scene
             .Add("remote", UpdateRemote)
             .Add("mcp", UpdateMcp)
             .Add("noon", UpdateNoon)
+            .Add("chats_kept", UpdateChatsKept)
             .Add("dev_restart", UpdateDevRestart)
             .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)

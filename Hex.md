@@ -44,6 +44,12 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] Harness savings table follows its window (8e68257)
 - [x] File on screen is off by default in what's sent (8e68257)
 - [x] Agents menu (798fc02)
+- [x] The chats of a workspace kept on disk as they go (a file a chat, written only when it moved, every 3 seconds and as
+      Hex closes) and brought back when Hex starts on it, so a crash or the machine going down loses none of them.
+      Named by the workspace's first folder, in agent_chats beside the settings, their older rows in its history, the
+      newest 40 kept. Another workspace opened swaps its chats in once none of this one's agents is working
+- The crash of 2026-11-18 broke horizon's development ref and index mid-commit, put back to the commit being made
+  (e7512f7, found dangling) and the index made again
 
 ## Agent systems
 
