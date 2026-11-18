@@ -120,6 +120,13 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       Left for later, as the reviewers ranked them: inline hunk review with accept and reject, worktrees so agents
       working at once don't share one checkout, @ files and symbols and a model picker in the composer, shortcuts
       on the tabs, family members' ids opening their chats, quieter tool rows
+- [x] Leftovers of the UX rounds, the small ones (asked 2026-11-18): the tabs' keys dim at their right (b854089), an
+      agent's number on a family message opening its chat (a62ce9c), calls that went drawn quieter (5db96a4)
+- [x] The family's conversation and what the harness saved as windows of their own design (asked 2026-11-18, the
+      reviewers had left them out): a summary over chips that filter with their counts, messages as cards with a
+      stripe and badge in the agent system's colour and who to whom along their top, tools and agent systems as cards
+      with bars of what they saved, nothing cut off by the window's bottom, an empty state with the way back, Details
+      filtering with the same chips (db9ea80, 89de584)
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
