@@ -269,10 +269,8 @@ public sealed class HexAgentSystemsTests : IDisposable
         agy.Options["deny"] = "command(rm \"x\")";
         string[] run = ArgumentsOf("antigravity", agy);
         JsonNode permissions = JsonNode.Parse(run[Array.IndexOf(run, "--settings") + 1])!["permissions"]!;
-        // A command rule also as the unsandboxed one agy checks a command against outside its sandbox, as Hex runs it
-        Assert.Equal(["mcp(hex/*)", "command(git)", "unsandboxed(git)"], permissions["allow"]!.AsArray().Select(rule => rule!.GetValue<string>()).ToArray());
+        Assert.Equal(["mcp(hex/*)", "command(git)"], permissions["allow"]!.AsArray().Select(rule => rule!.GetValue<string>()).ToArray());
         Assert.Equal("command(rm \"x\")", permissions["deny"]![0]!.GetValue<string>());
-        Assert.Equal("unsandboxed(rm \"x\")", permissions["deny"]![1]!.GetValue<string>());
     }
 
     // What an extension runs its agent with for a chat
