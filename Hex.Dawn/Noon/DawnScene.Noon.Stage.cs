@@ -538,10 +538,22 @@ internal sealed partial class DawnScene
     {
         string yes = Said("noon.changes_restore_button");
         string what = paths.Length == 1 ? Path.GetFileName(paths[0]) : HexText.Count("file", paths.Length);
-        Context.Windows.Ask(Said("noon.changes_restore_title"), Said("noon.changes_restore_text", ("files", what)), [Said("git.discard_no"), yes], answer =>
+        string text = Said("noon.changes_restore_text", ("files", what));
+        // Changed again after the turn, by a later one, another agent or by hand, it's said, that's lost as well
+        string[] since = [.. paths.Where(path => ChangedSince(asked, path)).Select(Path.GetFileName).OfType<string>()];
+        if (since.Length > 0)
+            text += "\n\n" + Said("noon.changes_restore_since", ("files", string.Join(", ", since.Take(5))));
+        Context.Windows.Ask(Said("noon.changes_restore_title"), text, [Said("git.discard_no"), yes], answer =>
         {
             if (answer != yes)
                 return;
+            // Looked at again as it's said, a file changed while the question was up is asked about once more
+            if (paths.Any(path => ChangedSince(asked, path) && !since.Contains(Path.GetFileName(path))))
+            {
+                AskRestore(asked, paths);
+                return;
+            }
+
             var each = paths.Select(path => (Path: path, At: CheckpointFor(asked, path))).Where(pair => pair.At is not null).ToArray();
             InBackground("restore", () => each.Select(pair => HexCheckpoints.Restore(pair.At!.Value.Top, pair.At.Value.Tree, pair.Path)).Count(why => why is null), restored =>
             {
@@ -549,6 +561,58 @@ internal sealed partial class DawnScene
                 noonStageDrawn = NOT_DRAWN;
             });
         }, risky: yes);
+    }
+
+    // A little longer than a write takes to reach the disk, a file's time within it of the agent's last write is that write
+    private const long WRITE_SLACK_MS = 3000;
+
+    /// <summary>
+    /// Whether a file of a turn was changed after the turn last wrote it, by a write of any agent after it or on the disk
+    /// later than that, which putting it back would lose as well.
+    /// </summary>
+    private bool ChangedSince(HexAgentEntry asked, string path)
+    {
+        // When the turn last wrote it, from the turn's own rows, and whether any agent wrote it after that
+        var writes = new List<(long Started, long At, bool InTurn)>();
+        foreach (HexAgentChat chat in agentChats)
+        {
+            bool inTurn = false;
+            foreach (HexAgentEntry entry in chat.Entries)
+            {
+                if (entry == asked)
+                    inTurn = true;
+                else if (entry.Kind == HexAgentEntryKind.User)
+                    inTurn = false;
+                if (entry.Kind == HexAgentEntryKind.Tool && Writes(entry.ToolName) && FileOfCall(entry) is { } file
+                    && PlatformPaths.Comparer.Equals(FullPathOf(file), path))
+                    writes.Add((entry.Started, entry.Ended ?? entry.Started, inTurn));
+            }
+        }
+
+        long last = -1;
+        foreach (var write in writes)
+        {
+            if (write.InTurn)
+                last = Math.Max(last, write.At);
+        }
+
+        if (last < 0)
+            return false;
+        foreach (var write in writes)
+        {
+            if (!write.InTurn && write.Started > last)
+                return true;
+        }
+        try
+        {
+            // The ticks of the write turned into the clock's time, a file written on the disk well after it changed since
+            DateTime wrote = DateTime.UtcNow.AddMilliseconds(last - System.Environment.TickCount64);
+            return File.Exists(path) && File.GetLastWriteTimeUtc(path) > wrote.AddMilliseconds(WRITE_SLACK_MS);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /* Plan */

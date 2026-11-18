@@ -304,7 +304,19 @@ internal sealed partial class DawnScene
                 noonFleetRows.Add(new Button { Label = Said("noon.fleet_empty_systems"), Icon = "extensions", Style = "button_flat", Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.13f, Animated = false, OnPressed = BrowseAgentExtensions });
             }
             else if (order.Count == 0)
+            {
                 noonFleetRows.Add(new Label { Text = Said("noon.fleet_none_fit"), TextScale = 0.13f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
+                // The way back to every chat right there, rather than finding the box and emptying it
+                noonFleetRows.Add(new Button
+                {
+                    Label = Said("noon.fleet_clear"), Icon = "clear-all", Style = "button_flat", Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.13f, Animated = false,
+                    OnPressed = () =>
+                    {
+                        noonFleetFilter.Text = string.Empty;
+                        noonFleetDrawn = NOT_DRAWN;
+                    }
+                });
+            }
             foreach (var (chat, step) in order)
             {
                 AgentCard card = AgentCardOf(chat, step, closable: false);
@@ -331,6 +343,9 @@ internal sealed partial class DawnScene
     // The fleet's totals as they were last written
     private (int Agents, int Running, long Cents, int Mail) noonSummaryDrawn = (-1, -1, -1, -1);
 
+    // What of the chat in Details waits on the person, as of which version of which chat
+    private (int Chat, long Version, int Hash) noonWaitingOf = (-1, -1, 0);
+
     // What the agent picked is, who it works with, the messages between them, the tools it reached for and the files it touched
     private void DrawNoonContext()
     {
@@ -346,14 +361,21 @@ internal sealed partial class DawnScene
             var hash = new HashCode();
             hash.Add(chat.Id);
             hash.Add(chat.Running);
-            // What waits on the person shows at once, a chat keeps a couple of hundred rows so going through them is cheap
-            IReadOnlyList<HexAgentEntry> entries = chat.Entries;
-            for (int at = 0; at < entries.Count; at++)
+            // What waits on the person shows at once, its rows gone through only when the chat moved, not every tick
+            if (chat.Id != noonWaitingOf.Chat || chat.Version != noonWaitingOf.Version)
             {
-                HexAgentEntry entry = entries[at];
-                if ((entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null))
-                    hash.Add(entry.GetHashCode());
+                var asking = new HashCode();
+                IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+                for (int at = 0; at < entries.Count; at++)
+                {
+                    HexAgentEntry entry = entries[at];
+                    if ((entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null))
+                        asking.Add(entry.GetHashCode());
+                }
+
+                noonWaitingOf = (chat.Id, chat.Version, asking.ToHashCode());
             }
+            hash.Add(noonWaitingOf.Hash);
             hash.Add(hub.MailOf(chat).All.Count);
             hash.Add(noonTalkShown);
             hash.Add(noonFilesAll);
