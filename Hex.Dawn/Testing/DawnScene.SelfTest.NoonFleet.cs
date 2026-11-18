@@ -62,5 +62,71 @@ internal sealed partial class DawnScene
             ChatById(lead!.Id) is null && ChatById(scout!.Id) is null && ChatById(builder!.Id) is null);
         test.Run(() => ShowFace(HexFace.Dawn));
         test.Settle(0.2f);
+
+        if (OperatingSystem.IsWindows())
+            TestNoonFleetSpawned(test);
+    }
+
+    // A stand-in agent system whose agent is ping, a few seconds of lines and gone (cmd waited for good on the --version
+    // the systems panel asks every agent program), two of them started by a chat through
+    // hex_agent_spawn as an agent would, shown under it while they run, and stopped with it
+    private void TestNoonFleetSpawned(HexPointerScript test)
+    {
+        HexExtension? standIn = null;
+        HexAgentChat? lead = null;
+        Task<McpToolResult>? first = null, second = null;
+        HexAgentChat[] Started() => lead is null ? [] : [.. agentChats.Where(chat => chat.Parent == lead.Id)];
+
+        test.Run(() =>
+        {
+            string folder = Path.Combine(testFolder, "noon_stand_in");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, HexExtension.FILE), """
+                let extension = { name: "Noon stand-in" };
+                func on_start(hex) {
+                    hex.agent({ id: "noon_stand_in", name: "Stand-in", run: { program: "ping",
+                        arguments: (prompt, chat) => ["-n", "6", "127.0.0.1"] } });
+                }
+                """);
+            standIn = new HexExtension(folder, builtIn: false) { Enabled = true };
+            extensions.Add(standIn);
+            extensions.Start(standIn);
+            lead = new HexAgentChat(++agentChatsMade, "noon_stand_in");
+            lead.Ask("start two helpers");
+            agentChats.Add(lead);
+            ShowFace(HexFace.Noon);
+            OpenAgentChat(lead);
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            first = McpTools.CallAs("hex_agent_spawn", new System.Text.Json.Nodes.JsonObject { ["prompt"] = "scout the tests", ["name"] = "Scout", ["agent"] = "noon_stand_in" }, CancellationToken.None, lead!.Id);
+            second = McpTools.CallAs("hex_agent_spawn", new System.Text.Json.Nodes.JsonObject { ["prompt"] = "build it", ["name"] = "Builder", ["agent"] = "noon_stand_in" }, CancellationToken.None, lead!.Id);
+        });
+        test.WaitFor(() => first?.IsCompleted == true && second?.IsCompleted == true, 15.0f);
+        test.Run(() => noonWait = 0);
+        test.Settle(0.5f);
+        test.Check("noon fleet: two agents a chat started with hex_agent_spawn run under it in the fleet", () =>
+            first is { IsCompletedSuccessfully: true, Result.IsError: false } && second is { IsCompletedSuccessfully: true, Result.IsError: false }
+            && Started() is { Length: 2 } started && started.All(chat => chat.Running)
+            && ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Skip(1).Take(2).All(chat => chat.Parent == lead!.Id));
+
+        test.Run(() => StopAgent(lead));
+        test.WaitFor(() => Started().All(chat => !chat.Running), 10.0f);
+        test.Check("noon fleet: stopping the one that started them stops them", () => Started() is { Length: 2 } started && started.All(chat => !chat.Running));
+
+        test.Run(() =>
+        {
+            CloseAgentChat(lead!);
+            ShowFace(HexFace.Dawn);
+            // Started for the agents, its server would keep the test's Hex from closing
+            StopMcp();
+            if (standIn is not null)
+            {
+                extensions.ForgetAgents(standIn);
+                extensions.Remove(standIn);
+            }
+        });
+        test.Settle(0.2f);
     }
 }

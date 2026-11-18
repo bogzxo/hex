@@ -187,7 +187,7 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 ## Plan milestones (docs/agent-workspace-plan.md)
 
 - [x] M0
-- [ ] M1, left: below
+- M1, item by item
   - [x] Agentic themes, solstice_noon and solstice_day_noon, a teal accent while Agentic is up, Dawn's back as it's
         left, a look without a Noon theme as it was (5342a6a)
   - [x] Welcome's Agents row, New Agent, Continue "<last chat>", how many want looking at (1aa4204)
@@ -210,8 +210,14 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
         closing a family)
   - [x] Suites noon-panel (f252f57) and dusk-noon (this commit). A self test that names dusk-noon has Dusk in its
         window and goes on stepping while Dusk is on screen, so it's only run when named
-  - [ ] noon-fleet's stand-in agent that spawns two with hex_agent_spawn, and hex_agent_brief (not built, the plan
-        lists it with the fleet tools of 7.7)
+  - [x] noon-fleet's stand-in agent system (ping), two started by a chat through hex_agent_spawn, under it in the
+        fleet and stopped with it (this commit). hex_agent_brief is M6's, not M1's
+  - [x] The agent systems' --version probe has its stdin closed, a program that read it (cmd) sat there and outlived
+        a Hex that closed within its 8 seconds (this commit)
+- [x] M1 (the face, themes, fleet, chat and family mail on VirtualStack, context, horizon, Welcome, keys, --face and
+      the last face, the panel link, and the suites noon, noon-fleet, noon-keys, noon-looks, noon-mail, noon-panel,
+      dusk-noon). Not done of the plan's M1 text: the 1.0 screenshot pass and the accept's shots in all seven looks
+      at 100/150/200% reviewed by eye (noon-looks takes them with HEX_SELFTEST_SHOTS), and the fleet's version-hash key
   - The fleet is drawn again from a string key every quarter second (AgentCardsKey), a version hash would allocate
     nothing (plan 12.5)
   - The settings self test's "tab_size 3 on Workspace is written to the folder's file alone" fails on 0829def too,

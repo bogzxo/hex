@@ -421,7 +421,7 @@ internal sealed partial class DawnScene
                 bool script = path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
                 var start = new ProcessStartInfo(script ? "cmd.exe" : path)
                 {
-                    RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
+                    RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false, CreateNoWindow = true
                 };
                 if (script)
                 {
@@ -433,6 +433,9 @@ internal sealed partial class DawnScene
                 using Process? process = Process.Start(start);
                 if (process is null)
                     return;
+                // Nothing to read, a program that waits on its input (cmd took --version as nothing and sat at its prompt)
+                // ends at once rather than outliving a Hex that closed before its 8 seconds were up
+                process.StandardInput.Close();
                 Task<string> said = process.StandardOutput.ReadToEndAsync();
                 if (!process.WaitForExit(8000))
                 {
