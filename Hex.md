@@ -140,6 +140,8 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] What the harness saved drawn the way Horizon's performance overlay draws a frame (asked 2026-11-18): a large
       figure and tiles with meters, a bar cut into each tool's part of the saving, a table of numbers in columns with
       a meter a row, the agent systems the same (a3a9957, 8ec705d)
+- [x] Worktrees per agent left out, the person's call (2026-11-18): agents work together on the one project in the
+      workspace, checkpoints, review and restore being how an agent's changes are undone
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
