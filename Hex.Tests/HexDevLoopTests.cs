@@ -1,3 +1,5 @@
+// What these test is only in a Debug build of Hex, a published Release one never restarts into a build of itself
+#if DEBUG
 using Hex.Core;
 using Hex.Dawn;
 
@@ -95,3 +97,4 @@ public sealed class HexDevLoopTests : IDisposable
         Assert.Equal(["Hex.dll"], Directory.EnumerateFiles(folder).Select(Path.GetFileName));
     }
 }
+#endif
