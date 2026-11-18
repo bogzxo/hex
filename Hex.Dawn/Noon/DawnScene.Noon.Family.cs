@@ -39,7 +39,7 @@ internal sealed partial class DawnScene
             button.OnPressed = () =>
             {
                 noonTalkShown = kind;
-                noonContextDrawn = string.Empty;
+                noonContextDrawn = CONTEXT_NOT_DRAWN;
                 noonWait = 0.0f;
             };
         }

@@ -43,7 +43,7 @@ internal sealed partial class DawnScene
             ShowFace(HexFace.Noon);
             OpenAgentChat(lead!);
             noonWait = 0;
-            noonContextDrawn = string.Empty;
+            noonContextDrawn = CONTEXT_NOT_DRAWN;
         });
         test.Settle(0.4f);
         Button? every = null;

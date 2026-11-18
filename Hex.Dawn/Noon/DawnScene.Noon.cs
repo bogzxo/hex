@@ -68,7 +68,11 @@ internal sealed partial class DawnScene
 
     // What the fleet and the context were last drawn from, they're drawn again when it moves
     private long noonFleetDrawn = NOT_DRAWN;
-    private string noonContextDrawn = string.Empty;
+    private (long Shape, long Version, long At) noonContextDrawn = CONTEXT_NOT_DRAWN;
+    private static readonly (long Shape, long Version, long At) CONTEXT_NOT_DRAWN = (-1, -1, 0);
+
+    // How often at the most Details is made again for a chat that only went on, a running one changing every word
+    private const long CONTEXT_REDRAW_MS = 1000;
     private readonly List<Action<float>> noonCards = [];
     private float noonWait;
 
@@ -175,7 +179,7 @@ internal sealed partial class DawnScene
         agentsChipsDrawn = default;
         agentsListDrawn = NOT_DRAWN;
         noonFleetDrawn = NOT_DRAWN;
-        noonContextDrawn = string.Empty;
+        noonContextDrawn = CONTEXT_NOT_DRAWN;
         HexModeSwitch.Select(modeToggle, face, PickFace);
         UseFaceTheme();
         if (Skin is { } skin)
@@ -335,10 +339,44 @@ internal sealed partial class DawnScene
 
         HexAgentChat? chat = agentChat;
         // Not the clock, which ticks in its own line in place, Details made again every second went through every tool
-        // call of the chat each time for its tools and files
-        string said = chat is null ? "none" : $"{chat.Id}:{chat.Version}:{chat.Running}:{string.Join(',', agentChats.Where(each => each.Parent == chat.Id).Select(each => $"{each.Id}{each.Running}"))}"
-            + $":{hub.MailOf(chat).All.Count}:{noonTalkShown}:{noonFilesAll}";
-        if (said == noonContextDrawn)
+        // call of the chat each time for its tools and files. Worked out without allocating, it's asked every tick
+        long shape = 0, version = 0;
+        if (chat is not null)
+        {
+            var hash = new HashCode();
+            hash.Add(chat.Id);
+            hash.Add(chat.Running);
+            // What waits on the person shows at once, a chat keeps a couple of hundred rows so going through them is cheap
+            IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+            for (int at = 0; at < entries.Count; at++)
+            {
+                HexAgentEntry entry = entries[at];
+                if ((entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null))
+                    hash.Add(entry.GetHashCode());
+            }
+            hash.Add(hub.MailOf(chat).All.Count);
+            hash.Add(noonTalkShown);
+            hash.Add(noonFilesAll);
+            HexHubChats chats = agentChats;
+            for (int at = 0; at < chats.Count; at++)
+            {
+                HexAgentChat each = chats[at];
+                if (each.Parent != chat.Id)
+                    continue;
+                hash.Add(each.Id);
+                hash.Add(each.Running);
+            }
+
+            shape = hash.ToHashCode() | 1L << 40;
+            version = chat.Version;
+        }
+
+        // What it's made of moving draws it at once. The chat only having gone on (every word it streams) draws it a second
+        // later at the most, and not under a held button, made again between the press and the letting go every click was lost
+        long now = System.Environment.TickCount64;
+        bool moved = shape != noonContextDrawn.Shape
+            || (version != noonContextDrawn.Version && now - noonContextDrawn.At >= CONTEXT_REDRAW_MS && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left));
+        if (!moved)
         {
             if (chat is not null && noonClock is not null)
             {
@@ -348,7 +386,7 @@ internal sealed partial class DawnScene
             }
             return;
         }
-        noonContextDrawn = said;
+        noonContextDrawn = (shape, version, now);
 
         ClearRows(noonContextRows);
         if (chat is null)
@@ -369,8 +407,9 @@ internal sealed partial class DawnScene
                     continue;
                 var row = noonContextRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 24) });
                 HexAgentEntry request = asked;
-                row.Add(new Button { Label = Said("noon.allow_key", ("key", ALLOW_KEY)), Icon = "check", Primary = true, Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, true) });
-                row.Add(new Button { Label = Said("noon.deny_key", ("key", DENY_KEY)), Icon = "close", Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, false) });
+                var (allow, deny) = DecideLabels(request);
+                row.Add(new Button { Label = allow, Icon = "check", Primary = true, Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, true) });
+                row.Add(new Button { Label = deny, Icon = "close", Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, false) });
             }
             ContextLink("inbox", $"{Said("noon.stage_inbox")} ({STAGE_KEYS[(int)NoonStage.Inbox]})", () => ShowStage(NoonStage.Inbox));
         }
@@ -511,7 +550,7 @@ internal sealed partial class DawnScene
                     noonFilesAll ? Said("noon.files_fewer") : Said("noon.files_more", ("count", (files.Count - FILES_SHOWN).ToString(System.Globalization.CultureInfo.InvariantCulture))), () =>
                     {
                         noonFilesAll = !noonFilesAll;
-                        noonContextDrawn = string.Empty;
+                        noonContextDrawn = CONTEXT_NOT_DRAWN;
                         noonWait = 0.0f;
                     });
         }
