@@ -134,6 +134,7 @@ internal sealed partial class DawnScene
         ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
         ("noon-fleet", "Agentic's fleet, a family as a block with the ones started a step in, the totals, and the family closed with its top", TestNoonFleet),
         ("noon-mail", "Messages between a family's agents through hex_agent_message, in Details and in the family's window, filtered, hundreds with few rows made", TestNoonMail),
+        ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
