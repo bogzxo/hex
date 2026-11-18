@@ -210,15 +210,10 @@ kbd {
   letter-spacing: -0.01em;
   text-decoration: none;
 
-  & span {
-    display: grid;
-    place-items: center;
-    inline-size: 1.7rem;
-    aspect-ratio: 1;
-    border-radius: 6px;
-    background: var(--dawn);
-    color: var(--on-accent);
-    font-size: 1rem;
+  /* Hex's own icon, Hex.Shell/Assets/hex_icon.png */
+  & img {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
   }
 }
 
