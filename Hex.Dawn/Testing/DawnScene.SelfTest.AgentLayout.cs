@@ -492,9 +492,9 @@ internal sealed partial class DawnScene
             textTaken = agentsInput.OnPasting!("some text");
         });
         test.Settle(0.2f);
-        test.Check("agents layout: a pasted picture is a chip in the card, which grows for it, and pasted text is still text", () =>
+        test.Check("agents layout: a pasted picture is a small one of itself in the card, which grows for it, and pasted text is still text", () =>
             agentImages.Count == 1 && File.Exists(agentImages[0]) && agentsImages.Visible && agentsComposeTall > cardBefore && !textTaken
-            && Descendants(agentsImages).OfType<Label>().Any(label => label.Text.Contains(Said("agents_panel.image", ("number", "1")), StringComparison.Ordinal)));
+            && Descendants(agentsImages).OfType<Image>().Any(image => image.Texture is { IsValid: true }));
         test.Run(() => sent = TakeAgentImages(ref prompt, ref asked));
         test.Settle(0.2f);
         test.Check("agents layout: sent, the picture goes with the message by its path and the chip goes", () =>

@@ -116,8 +116,9 @@ internal sealed partial class DawnScene
         pictureFull?.Parent?.Remove(pictureFull);
         if (Engine.WindowManager.Graphics is null)
             return;
-        Texture picture = Texture.Load(path, smooth: true);
-        if (!picture.IsValid)
+        // The chat's own texture of it, kept and let go of by the chat. Loaded again here it was the same texture the small
+        // one draws, and freeing it as this closed left the small one white
+        if (ChatPicture(path) is not { } picture)
         {
             Say(Said("images.not_read", ("name", Path.GetFileName(path))), error: true);
             return;
@@ -141,9 +142,6 @@ internal sealed partial class DawnScene
             overlay.Parent?.Remove(overlay);
             if (ReferenceEquals(pictureFull, overlay))
                 pictureFull = null;
-            lock (picturesToFree)
-                picturesToFree.Add((picture, FREE_AFTER_FRAMES));
-            Engine.WindowManager.RequestExclusive();
         }
 
         Button Tool(string icon, string tip, Action pressed) =>

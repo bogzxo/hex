@@ -467,6 +467,18 @@ internal sealed partial class DawnScene
         return best;
     }
 
+    // The checkpoints of the turn before a row, the one the agent was working on when the row came, null when it had none
+    private static IReadOnlyList<(string Top, string Tree)>? EarlierCheckpoints(IReadOnlyList<HexAgentEntry> entries, int before)
+    {
+        for (int at = before - 1; at >= 0; at--)
+        {
+            if (entries[at].Kind == HexAgentEntryKind.User)
+                return entries[at].Checkpoints is { Count: > 0 } taken ? taken : null;
+        }
+
+        return null;
+    }
+
     // The turns being checkpointed now, so a turn is checkpointed once however it began
     private readonly HashSet<HexAgentEntry> checkpointing = [];
 
@@ -501,7 +513,18 @@ internal sealed partial class DawnScene
                 // Diff, Review and Restore would say there were none. A chat read back with no checkpoint on its turn
                 // got one that way, after the edits it was meant to be before
                 if (entry.Checkpoints is null && !wrote && !checkpointing.Contains(entry) && chat.Running)
-                    TakeCheckpoint(entry, () => { });
+                {
+                    // Sent while the agent was already working, it goes on with the turn it was working on and its changes
+                    // are seen against that turn's checkpoint. One of its own was taken while the agent went on writing,
+                    // git going through the repository for a few seconds, and held the very edits it was meant to be before
+                    if (EarlierCheckpoints(entries, at) is { } running)
+                    {
+                        entry.Checkpoints = running;
+                        chat.Touch(entry);
+                    }
+                    else
+                        TakeCheckpoint(entry, () => { });
+                }
                 break;
             }
         }

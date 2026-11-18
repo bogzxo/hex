@@ -12,7 +12,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // How tall the row of chips is, and how long a pasted picture is kept before it's tidied away
-    private const float AGENT_IMAGES_TALL = 26.0f;
+    private const float AGENT_IMAGES_TALL = 56.0f, AGENT_IMAGE_THUMB = 50.0f;
     private static readonly TimeSpan AGENT_IMAGES_KEPT = TimeSpan.FromDays(14);
 
     private readonly List<string> agentImages = [];
@@ -26,7 +26,7 @@ internal sealed partial class DawnScene
         agentsImages = agentsCompose.Add(new StackPanel
         {
             Anchor = Origin.BottomLeft, Pivot = Origin.BottomLeft, Position = new Vector2(0, 36), Direction = UIDirection.Horizontal,
-            Spacing = 4, Size = new Vector2(0, 22), Fill = UIFill.Horizontal, Clip = true, Visible = false
+            Spacing = 6, Size = new Vector2(0, AGENT_IMAGE_THUMB), Fill = UIFill.Horizontal, Clip = true, Visible = false
         });
         agentsInput.OnPasting = text => text.Length == 0 && PasteAgentImage();
     }
@@ -85,15 +85,24 @@ internal sealed partial class DawnScene
         for (int i = 0; i < agentImages.Count; i++)
         {
             string path = agentImages[i];
-            var chip = agentsImages.Add(new Panel { Size = new Vector2(112, 22), Radius = 4, Color = Skin?.Palette.Track ?? new Vector4(1, 1, 1, 0.08f), Tooltip = path });
-            chip.Add(new Label
+            // The picture itself small, a press opening it full screen, its cross in its corner. A chip of its number alone
+            // didn't say which picture it was
+            var chip = agentsImages.Add(new Panel { Size = new Vector2(AGENT_IMAGE_THUMB, AGENT_IMAGE_THUMB), Radius = 5, Color = Skin?.Palette.Track ?? new Vector4(1, 1, 1, 0.08f), Outline = Skin?.BorderColor ?? Vector4.Zero, Tooltip = path });
+            if (ChatPicture(path) is { } picture)
             {
-                Text = $"$(file-media) {Said("agents_panel.image", ("number", (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)))}",
-                TextScale = 0.115f, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(6, 0)
+                float fit = MathF.Min(AGENT_IMAGE_THUMB / picture.Width, AGENT_IMAGE_THUMB / picture.Height);
+                chip.Add(new Image { Texture = picture, Size = new Vector2(MathF.Round(picture.Width * fit), MathF.Round(picture.Height * fit)), Anchor = Origin.Center, Pivot = Origin.Center });
+            }
+            else
+                chip.Add(new Label { Text = "$(file-media)", TextScale = 0.2f, Dim = true, Anchor = Origin.Center, Pivot = Origin.Center });
+            chip.Add(new Button
+            {
+                Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false,
+                Tooltip = Said("agents_panel.picture_open"), OnPressed = () => ShowPictureFull(path)
             });
             chip.Add(new Button
             {
-                Icon = "close", Style = "button_flat", Anchor = Origin.Right, Pivot = Origin.Right, Size = new Vector2(20, 20), Animated = false,
+                Icon = "close", Style = "button_flat", Anchor = Origin.TopRight, Pivot = Origin.TopRight, Size = new Vector2(18, 18), Animated = false,
                 Tooltip = Said("agents_panel.image_remove"),
                 OnPressed = () =>
                 {

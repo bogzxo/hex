@@ -15,10 +15,15 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // A card's height
-    private const float AGENT_CARD = 70.0f;
+    // A card's height, room under its three lines for the bar of its context with a gap either side of it, the bar sat
+    // against the line above it at seventy
+    private const float AGENT_CARD = 82.0f;
 
     // Where a card's three lines start down from its top, an even padding above and below and the same gap between
-    private const float CARD_TOP = 9.0f, CARD_TITLE = 27.0f, CARD_UNDER = 49.0f;
+    private const float CARD_TOP = 10.0f, CARD_TITLE = 29.0f, CARD_UNDER = 52.0f;
+
+    // How far up from the card's foot its context bar sits
+    private const float CONTEXT_BAR_FOOT = 9.0f;
 
     // The size of a card's small lines and of its name, a step up from what read too small at 100% scale
     private const float CARD_SMALL = 0.12f, CARD_NAME = 0.155f;
@@ -84,7 +89,7 @@ internal sealed partial class DawnScene
         // How full its context is, a thin bar along the card's foot in the colour of how full, there once the agent said
         var contextRow = root.Add(new Panel
         {
-            Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, CONTEXT_BAR), Position = new Vector2(0, 4),
+            Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, CONTEXT_BAR), Position = new Vector2(0, CONTEXT_BAR_FOOT),
             Padding = new UIEdges(10, 0, 10, 0), Color = Vector4.Zero, Visible = false
         });
         var context = contextRow.Add(new HexShareBar { Fill = UIFill.Both, Track = (skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f)) with { W = 0.5f } });

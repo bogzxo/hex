@@ -218,6 +218,9 @@ let strings = {
 
     // What a release brought, a line each on the welcome page and what the button beside it says (HexWhatsNew)
     whats_new: {
+        agentic: "Agentic is a face of its own for agents: Claude Code, Codex and Antigravity side by side in a fleet, each chat with its Inbox, Changes and Plan, and a bar of how full its context is.",
+        agentic_review: "Every agent's turn is checkpointed, so its changes can be reviewed hunk by hunk, kept or undone, and put back whole.",
+        agentic_family: "Agents start and steer each other, and their messages to one another are a conversation you can read and filter.",
         solstice: "Solstice is a new fresh default look: flush panes and accents for each mode, orange in Dawn and violet in Dusk, and a light varient for certain people.",
         go_profiles: "Choose a look",
         new_project: "New Project makes a C#, Horizon game, Python, Java, C++, Rust, Go, TypeScript or D project, says whether its language server is installed, and extensions can add their own templates.",
