@@ -300,7 +300,10 @@ internal sealed partial class DawnScene
             Label[] said = [.. Descendants(noonContextRows).OfType<Label>()];
             talkShown = said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal))
                 && said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal));
-            Descendants(noonContextRows).OfType<Button>().First(button => button.Label.StartsWith(Said("noon.family_finding"), StringComparison.Ordinal)).OnPressed!();
+            // The findings chip, a rounded panel with its words on a label over a button
+            Panel chip = Descendants(noonContextRows).OfType<Panel>().First(panel =>
+                panel.Children.OfType<Label>().Any(label => label.Text.StartsWith(Said("noon.family_finding"), StringComparison.Ordinal)) && panel.Children.OfType<Button>().Any());
+            chip.Children.OfType<Button>().First().OnPressed!();
         });
         test.Settle(0.3f);
         test.Run(() =>
