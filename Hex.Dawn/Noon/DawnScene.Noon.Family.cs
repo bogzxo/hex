@@ -25,23 +25,19 @@ internal sealed partial class DawnScene
             return;
 
         ContextSection(Said("noon.family_talk", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))));
-        var filters = noonContextRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2, Fill = UIFill.Horizontal, Size = new Vector2(0, 22) });
+        // Chips as the family's window has, only the kinds there are messages of, so the row fits Details' width
+        var filters = noonContextRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Fill = UIFill.Horizontal, Size = new Vector2(0, CHIP_TALL) });
         foreach (string kind in FAMILY_FILTERS)
         {
             int count = kind.Length == 0 ? all.Count : all.Count(entry => entry.Mail.Kind == kind);
-            string label = $"{Said(kind.Length == 0 ? "noon.family_all" : $"noon.family_{kind}")} {count}";
-            var button = filters.Add(new Button
-            {
-                Label = label, Style = "button_flat", Size = new Vector2(0, 20), LabelScale = 0.11f, Animated = false, Selected = noonTalkShown == kind,
-                Enabled = count > 0 || kind.Length == 0
-            });
-            button.Size = new Vector2(MathF.Ceiling(label.Length * 6.2f) + 12, 20);
-            button.OnPressed = () =>
+            if (count == 0 && kind.Length > 0 && noonTalkShown != kind)
+                continue;
+            Chip(filters, Said(kind.Length == 0 ? "noon.family_all" : $"noon.family_{kind}"), count, noonTalkShown == kind, () =>
             {
                 noonTalkShown = kind;
                 noonContextDrawn = CONTEXT_NOT_DRAWN;
                 noonWait = 0.0f;
-            };
+            });
         }
 
         HexMailEntry[] shown = [.. all.Where(entry => noonTalkShown.Length == 0 || entry.Mail.Kind == noonTalkShown).TakeLast(FAMILY_SHOWN)];

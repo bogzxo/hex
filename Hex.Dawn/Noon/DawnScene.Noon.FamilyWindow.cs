@@ -275,7 +275,7 @@ internal sealed partial class DawnScene
         row.Add(new Button
         {
             Label = UIRichText.Literal(label), Style = "button_flat", LabelScale = 0.12f, Animated = false,
-            Size = new Vector2(MathF.Ceiling(label.Length * 6.5f) + 12, 20),
+            Size = new Vector2(MathF.Ceiling(label.Length * 5.9f) + 10, 20),
             Tooltip = Said("noon.family_open", ("name", OneLine(found.Shown, 40))),
             OnPressed = () =>
             {

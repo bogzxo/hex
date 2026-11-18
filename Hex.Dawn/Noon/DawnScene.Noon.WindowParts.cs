@@ -37,13 +37,14 @@ internal sealed partial class DawnScene
         Vector4 raised = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.08f);
         string text = count is { } many ? $"{label}  {many}" : label;
         string written = (dot is { } colour ? $"[color:{HexColour(colour)}]●[/color] " : string.Empty) + UIRichText.Literal(text);
-        float width = MathF.Ceiling(text.Length * 6.3f) + (dot is null ? 22 : 34);
+        float width = MathF.Ceiling(text.Length * 5.7f) + (dot is null ? 22 : 32);
 
+        // One not picked has the border's outline, filled with the raised colour alone it was lost on a window's own
         var chip = row.Add(new Panel
         {
             Size = new Vector2(width, CHIP_TALL), Radius = CHIP_TALL / 2,
-            Color = picked ? accent with { W = 0.28f } : raised with { W = raised.W * 0.6f },
-            Outline = picked ? accent with { W = 0.7f } : Vector4.Zero
+            Color = picked ? accent with { W = 0.28f } : raised with { W = raised.W * 0.35f },
+            Outline = picked ? accent with { W = 0.7f } : skin?.BorderColor ?? new Vector4(1, 1, 1, 0.12f)
         });
         chip.Add(new Button { Style = "button_flat", Fill = UIFill.Both, Animated = false, Selected = false, OnPressed = pick });
         chip.Add(new Label { Text = written, TextScale = 0.12f, Bold = picked, Anchor = Origin.Center, Pivot = Origin.Center });
