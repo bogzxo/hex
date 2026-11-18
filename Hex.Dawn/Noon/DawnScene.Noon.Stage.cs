@@ -524,6 +524,8 @@ internal sealed partial class DawnScene
                     Label = Said("noon.changes_diff"), Icon = "diff", Style = "button_flat", Size = new Vector2(70, 22), LabelScale = 0.12f, Animated = false,
                     Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-94, 0), OnPressed = () => DiffSinceTurn(asked, path)
                 });
+                row.Add(ReviewButton(asked, path));
+                DrawReview(card, asked, path);
             }
         }
     }
