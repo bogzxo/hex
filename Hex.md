@@ -110,6 +110,11 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       list, Ctrl+Alt+Y and Ctrl+Alt+N for the request waiting with the keys on its buttons, Waiting on you at the top
       of Details, the fleet's filter, Ctrl+Alt+B and a narrow window putting the fleet away, its empty state's actions,
       terminal codes taken out of notes and errors
+      Round 2 scored 7 and 6.5 (parity with Cursor 6 and 4). Round 2 built: the agent launched only once its turn's
+      checkpoint is taken, a checkpoint of each repository in a folder of several, Details and the tabs not made again
+      under a press (a single click on "All n messages" was lost) nor allocating while idle, only the request the keys
+      answer saying them, empty tabs saying what to do next with Plan asking the agent for one, a wheel scroll no longer
+      snapping up in a chat just opened, an agent's Escape through hex_key no longer stopping the selected chat
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
