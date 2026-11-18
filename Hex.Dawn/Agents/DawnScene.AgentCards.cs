@@ -23,6 +23,9 @@ internal sealed partial class DawnScene
     // The size of a card's small lines and of its name, a step up from what read too small at 100% scale
     private const float CARD_SMALL = 0.12f, CARD_NAME = 0.155f;
 
+    // How thick the bar of a card's context is, thin enough to sit under its lines without being another line
+    private const float CONTEXT_BAR = 3.0f;
+
     /// <summary>A card on screen and what puts its words right as its agent moves on, at the width it's at.</summary>
     private sealed record AgentCard(UIComponent Root, Action<float> Refresh);
 
@@ -77,6 +80,14 @@ internal sealed partial class DawnScene
         var state = root.Add(new Label { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP - 1), TextScale = CARD_SMALL, Align = Origin.Right });
         var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
         var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+
+        // How full its context is, a thin bar along the card's foot in the colour of how full, there once the agent said
+        var contextRow = root.Add(new Panel
+        {
+            Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, CONTEXT_BAR), Position = new Vector2(0, 4),
+            Padding = new UIEdges(10, 0, 10, 0), Color = Vector4.Zero, Visible = false
+        });
+        var context = contextRow.Add(new HexShareBar { Fill = UIFill.Both, Track = (skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f)) with { W = 0.5f } });
 
         if (closable)
         {
@@ -138,6 +149,16 @@ internal sealed partial class DawnScene
             }
             if (under.Text != said)
                 under.Text = said;
+
+            bool known = chat.ContextLimit > 0 && chat.ContextUsed > 0;
+            contextRow.Visible = known;
+            if (known)
+            {
+                float share = Math.Clamp((float)chat.ContextUsed / chat.ContextLimit, 0.0f, 1.0f);
+                context.Share = share;
+                context.Colour = ContextColour(share);
+                contextRow.Tooltip = Said("noon.context_of", ("used", Count(chat.ContextUsed)), ("limit", Count(chat.ContextLimit)), ("share", (share * 100).ToString("0", CultureInfo.InvariantCulture)));
+            }
         }
 
         return new AgentCard(root, Refresh);

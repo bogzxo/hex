@@ -632,13 +632,26 @@ internal sealed partial class DawnScene
     private string ClockLine(HexAgentChat chat) =>
         $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds:0}s" : $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s")}";
 
-    // A bar of how full the context is, the accent until it's getting full, amber past three quarters and red near the end
+    /// <summary>
+    /// The colour of how full a context is, green while there's plenty, turning amber past half and red as it nears its
+    /// end, the same on the cards and in Details.
+    /// </summary>
+    private Vector4 ContextColour(float share)
+    {
+        UISkin? skin = Skin;
+        Vector4 good = skin?.Palette.Success ?? new Vector4(0.35f, 0.8f, 0.45f, 1.0f);
+        Vector4 warn = skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
+        Vector4 bad = skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f);
+        return share < 0.5f ? good
+            : share < 0.8f ? Vector4.Lerp(good, warn, (share - 0.5f) / 0.3f)
+            : Vector4.Lerp(warn, bad, Math.Clamp((share - 0.8f) / 0.15f, 0.0f, 1.0f));
+    }
+
+    // A bar of how full the context is, in its colour by how full
     private Panel ContextBar(float share, float? across = null)
     {
         UISkin? skin = Skin;
-        Vector4 fill = share > 0.9f ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
-            : share > 0.75f ? skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
-            : skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f);
+        Vector4 fill = ContextColour(share);
         float width = across ?? NOON_CONTEXT - noonContext.Padding.Total.X - 10;
         var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
         track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = fill });
