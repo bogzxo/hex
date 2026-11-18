@@ -62,6 +62,22 @@ internal sealed partial class DawnScene
         test.Run(() => Shot("noon-solstice"));
         test.Settle(0.5f);
 
+        // Agentic's horizon is the agents', running while one works and red a moment when one fails
+        test.Check("noon: the horizon is empty while no agent works", () => HorizonLine is { Share: 0.0f });
+        test.Run(() => chat!.Ask("work a while"));
+        test.Settle(0.4f);
+        test.Check("noon: an agent working runs Agentic's horizon", () => horizonAgentsWorking == 1 && HorizonLine is { Share: > 0.0f });
+        test.Run(() =>
+        {
+            chat!.Error("the agent went wrong");
+            chat.Done();
+        });
+        test.Settle(0.4f);
+        test.Check("noon: an agent that failed turns Agentic's horizon the error's red", () =>
+            HorizonLine is { Share: 1.0f } line && compositor.Skin is { } skin && line.FillColour == skin.Palette.Error);
+        test.Run(() => horizonAgentFailedUntil = 0);
+        test.Settle(0.2f);
+
         // Its key takes it back to Dawn, and the orange with it
         PressKeys(test, "Ctrl+Alt+Shift+N");
         test.Settle(0.4f);

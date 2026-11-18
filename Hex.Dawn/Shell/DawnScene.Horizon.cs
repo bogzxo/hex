@@ -36,11 +36,49 @@ internal sealed partial class DawnScene
     /// <summary>Something that was going went wrong, a task or work in the background: the line is red for a moment.</summary>
     private void NoteWorkFailed() => Volatile.Write(ref horizonFailedUntil, System.Environment.TickCount64 + HORIZON_FAILED_MS);
 
-    /// <summary>Every tick, the line set for what's going. It sets nothing when nothing changed.</summary>
+    // In Agentic the line says the agents, how many are working and until when it's red for one that failed, put right
+    // when the chats move rather than every tick
+    private int horizonAgentsWorking, horizonAgentsFailing;
+    private long horizonAgentFailedUntil;
+
+    /// <summary>The agents as Agentic's line says them, counted again as the chats move.</summary>
+    private void CountHorizonAgents()
+    {
+        int working = 0, failing = 0;
+        foreach (HexAgentChat chat in agentChats)
+        {
+            if (chat.Running)
+                working++;
+            else if (chat.Failed)
+                failing++;
+        }
+
+        // One more that ended badly turns the line red for a moment, the way a task that did does in Dawn
+        if (failing > horizonAgentsFailing)
+            Volatile.Write(ref horizonAgentFailedUntil, System.Environment.TickCount64 + HORIZON_FAILED_MS);
+        horizonAgentsWorking = working;
+        horizonAgentsFailing = failing;
+    }
+
+    /// <summary>
+    /// Every tick, the line set for what's going. It sets nothing when nothing changed. In Agentic it's the agents, running
+    /// while any works, red when one fails, Dawn's builds and work having the status bar there.
+    /// </summary>
     private void UpdateHorizon()
     {
         if (compositor.Skin is not { } skin || top.Bounds.IsEmpty)
             return;
+
+        if (Face == HexFace.Noon)
+        {
+            bool working = horizonAgentsWorking > 0;
+            if (working)
+                horizonAgentFailedUntil = 0;
+            HexHorizonState said = working ? HexHorizonState.Running
+                : System.Environment.TickCount64 < Volatile.Read(ref horizonAgentFailedUntil) ? HexHorizonState.Failed : HexHorizonState.Idle;
+            frame.UpdateHorizon(chrome.Root, skin, top.Bounds.Height, chrome.Root.Bounds.Width, said, null);
+            return;
+        }
 
         bool tasks = taskWatches.Count > 0;
         bool running = tasks || work.CountActive(seenWork) > 0;

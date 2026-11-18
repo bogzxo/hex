@@ -24,6 +24,7 @@ internal sealed partial class DawnScene
         }, tooltip: Said("agents_item.tip"));
         agentsItem.IsVisible = () => agentChats.Count > 0;
         agentsChanged += DrawAgentsItem;
+        agentsChanged += CountHorizonAgents;
     }
 
     // How many chats want looking at
