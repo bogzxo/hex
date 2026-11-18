@@ -469,7 +469,16 @@ internal sealed partial class DawnScene
                 return Bubble(entry, skin);
 
             case HexAgentEntryKind.Text:
-                return AgentMarkdown(entry.Text, thinking: false);
+            {
+                // A picture it links under its words, small, a click opening it full screen
+                UIComponent said = AgentMarkdown(entry.Text, thinking: false);
+                if (PictureStrip(PicturesIn(entry.Text, asked: false), Origin.Left) is not { } pictures)
+                    return said;
+                var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 };
+                both.Add(said);
+                both.Add(pictures);
+                return both;
+            }
 
             case HexAgentEntryKind.Thinking:
                 return AgentMarkdown(entry.Text, thinking: true);
@@ -554,6 +563,14 @@ internal sealed partial class DawnScene
         stack.Add(Text(shown, scale));
         if (under is not null)
             stack.Add(Text(under, 0.125f, dim: true));
+
+        // The pictures pasted with it, small under the words, the bubble as wide as they need
+        if (PictureStrip(PicturesIn(entry.Text, asked: true), Origin.Left) is StackPanel pictures)
+        {
+            float wide = pictures.Children.Sum(each => each.Size.X) + pictures.Spacing * (pictures.Children.Count - 1);
+            longest = Math.Max(longest == float.MaxValue ? 0 : longest, wide + padding);
+            stack.Add(pictures);
+        }
 
         // Held by Hex for the agent, it can go now rather than when the agent next says something, or back to the box
         if (entry.Queued && IsHeld(entry))
