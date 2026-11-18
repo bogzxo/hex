@@ -119,10 +119,13 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p publish/hex.iconset
+          # The nightly build's own, grey with a yellow H
+          icon=Hex.Shell/Assets/hex_icon.png
+          if [ "${{ inputs.channel }}" = "dev" ]; then icon=Hex.Shell/Assets/hex_icon_dev.png; fi
           for size in 16 32 128 256 512; do
-            sips -z "$size" "$size" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}.png"
+            sips -z "$size" "$size" "$icon" --out "publish/hex.iconset/icon_${size}x${size}.png"
             double=$((size * 2))
-            sips -z "$double" "$double" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
+            sips -z "$double" "$double" "$icon" --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
           done
           iconutil -c icns publish/hex.iconset -o publish/Hex/Assets/hex_icon.icns
           cp publish/Hex/Assets/hex_icon.icns publish/Hex.Setup/Assets/hex_icon.icns

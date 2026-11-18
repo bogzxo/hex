@@ -159,7 +159,8 @@ public static class PlatformRegistration
         // The dev build's launchers say so, beside the stable one's in the same menu
         if (channel == InstallChannel.Dev)
             name += " Dev";
-        return $"[Desktop Entry]\nType=Application\nName={name}\nExec={DesktopQuote(exe)}{args}\nIcon={Path.Combine(root, "Assets", "hex_icon.png")}\nTerminal=false\nCategories={(dusk ? "System;TerminalEmulator;" : "Development;IDE;")}\nStartupWMClass={(dusk ? "hex-dusk" : "hex-dawn")}\nX-Hex-Install={root}\n";
+        string icon = channel == InstallChannel.Dev ? "hex_icon_dev.png" : "hex_icon.png";
+        return $"[Desktop Entry]\nType=Application\nName={name}\nExec={DesktopQuote(exe)}{args}\nIcon={Path.Combine(root, "Assets", icon)}\nTerminal=false\nCategories={(dusk ? "System;TerminalEmulator;" : "Development;IDE;")}\nStartupWMClass={(dusk ? "hex-dusk" : "hex-dawn")}\nX-Hex-Install={root}\n";
     }
 
     private static void RegisterLinux(string root, InstallChoices choices, InstallChannel channel) => RegisterLinux(root, choices, LinuxApplications, Desktop, channel);
