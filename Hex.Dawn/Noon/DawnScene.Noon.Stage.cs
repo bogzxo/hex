@@ -572,7 +572,8 @@ internal sealed partial class DawnScene
             if (checkpointed)
                 head.Add(new Button
                 {
-                    Label = Said("noon.changes_restore_turn"), Icon = "discard", Danger = true, Size = new Vector2(150, 24), LabelScale = 0.12f, Animated = false,
+                    // Quiet beside the files' Review, putting a whole turn back is the last thing to reach for, not the first
+                    Label = Said("noon.changes_restore_turn"), Icon = "discard", Style = "button_flat", Size = new Vector2(150, 24), LabelScale = 0.12f, Animated = false,
                     Anchor = Origin.Right, Pivot = Origin.Right, OnPressed = () => AskRestore(asked, [.. files.Select(FullPathOf)])
                 });
             else

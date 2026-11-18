@@ -515,8 +515,9 @@ internal sealed partial class DawnScene
                 ContextLink(child.Running ? "loading~spin" : child.Failed ? "error" : "pass", ChatName(child.Id), () => OpenAgentChat(child));
         }
 
-        // The messages it was sent, the latest last
-        if (chat.Mail.Count > 0)
+        // The messages it was sent, the latest last, only while the family's conversation has none, which has these among
+        // its own and said them twice over
+        if (chat.Mail.Count > 0 && hub.MailOf(chat).All.Count == 0)
         {
             ContextSection(Said("noon.messages", ("count", chat.Mail.Count.ToString())));
             long seen = chat.MailSeen;

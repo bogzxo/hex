@@ -25,6 +25,9 @@ internal sealed partial class DawnScene
             return;
 
         ContextSection(Said("noon.family_talk", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        // The way to the whole of it first, in a window of its own filtered by kind and by member. Under the latest it was
+        // found only by going past them
+        ContextLink("link-external", Said("noon.family_every", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))), () => ShowFamilyTalk(chat));
         // Chips as the family's window has, only the kinds there are messages of, so the row fits Details' width
         var filters = noonContextRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Fill = UIFill.Horizontal, Size = new Vector2(0, CHIP_TALL) });
         foreach (string kind in FAMILY_FILTERS)
@@ -45,9 +48,6 @@ internal sealed partial class DawnScene
             noonContextRows.Add(ContextText(Said("noon.family_none"), dim: true));
         foreach (HexMailEntry entry in shown)
             noonContextRows.Add(FamilyMessage(entry, 160));
-
-        // The whole of it in a window of its own, filtered by kind and by member
-        ContextLink("mail", Said("noon.family_every", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))), () => ShowFamilyTalk(chat));
     }
 
     // A message's kind as its icon
