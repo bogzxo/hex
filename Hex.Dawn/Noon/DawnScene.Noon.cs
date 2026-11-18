@@ -290,7 +290,9 @@ internal sealed partial class DawnScene
                 || $"#{each.Chat.Id}".Contains(filter, StringComparison.Ordinal) || (HexAgentModels.Of(each.Chat) ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase));
         long said = AgentCardsKey(order) * 31 + string.GetHashCode(filter, StringComparison.Ordinal);
         float width = NOON_FLEET - noonFleet.Padding.Total.X - 6;
-        if (said != noonFleetDrawn)
+        // Not made again under a held button, a card made again between the press and the letting go lost the click, the
+        // same as Details and the tabs wait for it
+        if (said != noonFleetDrawn && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
         {
             noonFleetDrawn = said;
             ClearRows(noonFleetRows);
@@ -630,7 +632,7 @@ internal sealed partial class DawnScene
 
     // How the agent is and how long its turn has gone, whole seconds while it runs and the tenths once it's done
     private string ClockLine(HexAgentChat chat) =>
-        $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds:0}s" : $"{StateWord(chat)} · {chat.TurnSeconds:0.0}s")}";
+        $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}s" : $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s")}";
 
     /// <summary>
     /// The colour of how full a context is, green while there's plenty, turning amber past half and red as it nears its

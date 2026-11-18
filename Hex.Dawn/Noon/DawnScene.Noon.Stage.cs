@@ -419,9 +419,10 @@ internal sealed partial class DawnScene
     // Whether a tool writes files by its name, the edits and writes of every agent system
     private static bool Writes(string? tool)
     {
-        string name = (tool ?? string.Empty).ToLowerInvariant();
-        return name.Contains("edit", StringComparison.Ordinal) || name.Contains("write", StringComparison.Ordinal) || name.Contains("patch", StringComparison.Ordinal)
-            || name.Contains("replace", StringComparison.Ordinal) || name.Contains("filechange", StringComparison.Ordinal) || name.Contains("sed_file", StringComparison.Ordinal);
+        // Without a lower-case copy of the name, asked for every row of a chat each time its changes are counted
+        string name = tool ?? string.Empty;
+        return name.Contains("edit", StringComparison.OrdinalIgnoreCase) || name.Contains("write", StringComparison.OrdinalIgnoreCase) || name.Contains("patch", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("replace", StringComparison.OrdinalIgnoreCase) || name.Contains("filechange", StringComparison.OrdinalIgnoreCase) || name.Contains("sed_file", StringComparison.OrdinalIgnoreCase);
     }
 
     // Each turn of a chat that wrote files, newest first, what was asked and the files, at most the turns a chat keeps

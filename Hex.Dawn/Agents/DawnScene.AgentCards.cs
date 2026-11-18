@@ -194,20 +194,21 @@ internal sealed partial class DawnScene
     private static string AgentStatusText(HexAgentChat chat, UISkin? skin)
     {
         string time = Took(chat.TurnSeconds);
+        // In the texts, not written here in English
         if (chat.Running)
-            return $"[color:{HexColour(RUNNING_BLUE)}]$(loading~spin) Working {time}[/color]";
+            return $"[color:{HexColour(RUNNING_BLUE)}]$(loading~spin) {Said("agents_panel.card_working", ("time", time))}[/color]";
         if (chat.Failed)
-            return $"[color:{HexColour(skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f))}]$(error) Failed[/color]";
+            return $"[color:{HexColour(skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f))}]$(error) {Said("agents_panel.card_failed")}[/color]";
         if (chat.Stopped)
-            return "$(debug-stop) Stopped";
+            return $"$(debug-stop) {Said("agents_panel.card_stopped")}";
         if (chat.Unread)
-            return $"[color:{HexColour(skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f))}]$(circle-filled) Done {time}[/color]";
-        return chat.Entries.Count == 0 ? "New" : $"Done {time}";
+            return $"[color:{HexColour(skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f))}]$(circle-filled) {Said("agents_panel.card_done", ("time", time))}[/color]";
+        return chat.Entries.Count == 0 ? Said("agents_panel.card_new") : Said("agents_panel.card_done", ("time", time));
     }
 
-    /// <summary>Seconds said short, 12s, 11m, 1h 5m.</summary>
+    /// <summary>Seconds said short, 12s, 11m, 1h 5m, the same whatever the machine's language writes numbers in.</summary>
     internal static string Took(double seconds) =>
-        seconds < 60 ? $"{seconds:0}s" : seconds < 3600 ? $"{seconds / 60:0}m" : $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
+        seconds < 60 ? $"{seconds.ToString("0", CultureInfo.InvariantCulture)}s" : seconds < 3600 ? $"{(seconds / 60).ToString("0", CultureInfo.InvariantCulture)}m" : $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
 
     /// <summary>An agent system's letters for its badge, CC for Claude Code, CO for Codex.</summary>
     internal static string Initials(string name)

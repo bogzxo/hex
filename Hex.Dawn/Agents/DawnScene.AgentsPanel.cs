@@ -415,8 +415,8 @@ internal sealed partial class DawnScene
             if (shown.InputTokens + shown.OutputTokens > 0)
                 parts.Add(Said("agents_panel.tokens", ("input", Count(shown.InputTokens)), ("output", Count(shown.OutputTokens))).TrimStart(' ', '·'));
             if (shown.Cost > 0)
-                parts.Add(Said("agents_panel.cost", ("cost", shown.Cost.ToString("0.000"))).TrimStart(' ', '·'));
-            parts.Add(Said(shown.Running ? "agents_panel.tool_running" : "agents_panel.turn_done", ("seconds", shown.TurnSeconds.ToString("0.0"))));
+                parts.Add(Said("agents_panel.cost", ("cost", shown.Cost.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))).TrimStart(' ', '·'));
+            parts.Add(Said(shown.Running ? "agents_panel.tool_running" : "agents_panel.turn_done", ("seconds", shown.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))));
         }
 
         agentsSubtitle.Text = UIRichText.Literal(string.Join("  ·  ", parts.Where(part => !string.IsNullOrWhiteSpace(part))));

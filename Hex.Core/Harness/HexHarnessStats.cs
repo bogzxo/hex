@@ -52,6 +52,9 @@ internal sealed class HexHarnessStats
             Interlocked.Increment(ref counted.Kept);
         Interlocked.Add(ref counted.Said, said);
         Interlocked.Add(ref counted.Plain, Math.Max(plain, said));
+        Interlocked.Increment(ref allCalls);
+        Interlocked.Add(ref allSaid, said);
+        Interlocked.Add(ref allPlain, Math.Max(plain, said));
 
         if (McpServer.CallingClient.Value is { Length: > 0 } client)
         {
@@ -125,6 +128,8 @@ internal sealed class HexHarnessStats
                 continue;
             Tool counted = into.GetOrAdd(parts[1], _ => new Tool());
             (counted.Calls, counted.Kept, counted.Said, counted.Plain) = (calls, kept, said, plain);
+            if (into == tools)
+                (allCalls, allSaid, allPlain) = (allCalls + calls, allSaid + said, allPlain + plain);
         }
     }
 
@@ -161,13 +166,11 @@ internal sealed class HexHarnessStats
     }
 
     /// <summary>Every tool's together, the calls, the characters handed back and what the plain way would have read.</summary>
-    public (long Calls, long Said, long Plain) Totals()
-    {
-        long calls = 0, said = 0, plain = 0;
-        foreach (Tool tool in tools.Values)
-            (calls, said, plain) = (calls + Interlocked.Read(ref tool.Calls), said + Interlocked.Read(ref tool.Said), plain + Interlocked.Read(ref tool.Plain));
-        return (calls, said, plain);
-    }
+    public (long Calls, long Said, long Plain) Totals() => (Interlocked.Read(ref allCalls), Interlocked.Read(ref allSaid), Interlocked.Read(ref allPlain));
+
+    // Every tool's together as they're counted, asked a few times a second by the panel's line and adding them up then
+    // went through the dictionary's values, which makes a list of them every time
+    private long allCalls, allSaid, allPlain;
 
     /// <summary>The whole of it as a few lines, a tool a line and the total at the end.</summary>
     public string Describe()

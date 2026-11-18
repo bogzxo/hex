@@ -592,7 +592,7 @@ internal sealed partial class DawnScene
     {
         Vector4 hover = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         Vector4 rule = skin?.BorderColor ?? new Vector4(1, 1, 1, 0.1f);
-        string seconds = entry.Seconds.ToString("0.0");
+        string seconds = entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         string state = entry.State switch
         {
             HexAgentToolState.Running => Said("agents_panel.tool_running", ("seconds", seconds)),
@@ -743,13 +743,13 @@ internal sealed partial class DawnScene
         foreach (var (entry, label) in agentsRunningTimes)
         {
             if (entry.State == HexAgentToolState.Running)
-                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0")));
+                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         // A group's time, all of its calls together, going on while one of them runs
         foreach (var (time, calls) in agentsGroupTimes.Values)
         {
-            string said = $"{calls.Sum(call => call.Seconds):0.0}s";
+            string said = calls.Sum(call => call.Seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
             if (time.Text != said)
                 time.Text = said;
         }

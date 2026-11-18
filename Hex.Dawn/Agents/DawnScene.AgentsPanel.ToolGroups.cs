@@ -221,7 +221,7 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
         var right = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : $"{seconds:0.0}s", TextScale = 0.115f, Dim = failed == 0 });
+        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s", TextScale = 0.115f, Dim = failed == 0 });
         // Its time goes on with the call running in it, a few times a second (TickRunningTimes)
         if (running is not null && failed == 0)
             agentsGroupTimes[first] = (time, calls);
@@ -297,7 +297,7 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
 
-        string seconds = call.Seconds.ToString("0.0");
+        string seconds = call.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Label time = line.Add(new Label
         {
             Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", seconds)) : $"{seconds}s",
