@@ -36,16 +36,37 @@ internal sealed partial class DawnScene
         settings.EditorSkin = skin?.Name ?? TOOL_SKIN_NAME;
         settings.EditorTheme = theme ?? skin?.UsualTheme ?? string.Empty;
 
+        // Noon on screen wears the theme's Noon accent where the skin has one, the settings keeping Dawn's
+        string? shown = Face == Hex.Shell.HexFace.Noon && NoonThemeOf(skin, settings.EditorTheme) is { } noon ? noon : theme;
         if (skin is null)
-            compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, theme);
+            compositor.SetSkin(TOOL_SKIN_DIRECTORY, TOOL_SKIN, shown);
         else
-            compositor.SetSkin(skin.Directory, skin.File, theme);
+            compositor.SetSkin(skin.Directory, skin.File, shown);
 
         if (save)
         {
             SaveSettings();
             Say(theme is null ? $"the editor is in {skin?.Title}" : $"the editor is in {skin?.Title}, {theme}");
         }
+    }
+
+    /// <summary>
+    /// The theme Noon wears in place of one, the same name with _noon after it when the skin has it (solstice_noon for
+    /// solstice), null for a theme that has one accent for every face.
+    /// </summary>
+    private static string? NoonThemeOf(UISkinChoice? skin, string theme) =>
+        skin is not null && theme.Length > 0 && !theme.EndsWith(NOON_SUFFIX, StringComparison.Ordinal) && skin.Has(theme + NOON_SUFFIX) ? theme + NOON_SUFFIX : null;
+
+    private const string NOON_SUFFIX = "_noon";
+
+    /// <summary>
+    /// The editor put in the theme of the face on screen, Noon's accent coming up with Noon and Dawn's back as it's left,
+    /// for a theme that has a Noon one. Nothing is done for one that hasn't.
+    /// </summary>
+    private void UseFaceTheme()
+    {
+        if (NoonThemeOf(UISkins.Find(settings.EditorSkin), settings.EditorTheme) is not null)
+            UseEditorSkin(settings.EditorSkin, settings.EditorTheme, save: false);
     }
 
     /// <summary>Every skin there is in every theme of it, the flat one first, as the dropdown of the editor's skin lists them.</summary>

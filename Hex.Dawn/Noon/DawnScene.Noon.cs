@@ -136,6 +136,7 @@ internal sealed partial class DawnScene
         agentsListDrawn = string.Empty;
         noonFleetDrawn = noonContextDrawn = string.Empty;
         HexModeSwitch.Select(modeToggle, face, PickFace);
+        UseFaceTheme();
         if (Skin is { } skin)
             HexModeSwitch.Dress(modeToggle, skin);
         Engine.WindowManager.RequestFrames();
