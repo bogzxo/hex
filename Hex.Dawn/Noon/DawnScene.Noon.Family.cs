@@ -54,6 +54,9 @@ internal sealed partial class DawnScene
             string from = mail.From is { } id ? $"#{id}" : Said("noon.family_you");
             ContextLine(MailIcon(mail.Kind), $"{from} → {to} · {mail.Kind} · {RouteWord(entry.Route)}: {OneLine(mail.Text, 160)}", wrap: true);
         }
+
+        // The whole of it in a window of its own, filtered by kind and by member
+        ContextLink("mail", Said("noon.family_every", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))), () => ShowFamilyTalk(chat));
     }
 
     // A message's kind as its icon

@@ -172,6 +172,7 @@ internal sealed partial class DawnScene
     /// <summary>Noon's columns fitted to the window and drawn again when what they show moved, a few times a second.</summary>
     private void UpdateNoon(float dt)
     {
+        UpdateFamilyWindow();
         if (Face != HexFace.Noon)
             return;
 

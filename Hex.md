@@ -199,15 +199,17 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
         its entry so a chat gone back to lands on the row it was read to (HexAgentRowList, horizon 3d2aed6, 8360b4a).
         A chat put on screen makes its rows as they come into sight, switching 259 KB a turn down to 45 (this commit,
         docs/benchmarks.md)
-  - [ ] The family view's mail in a VirtualStack (1.7)
+  - [x] The family's whole conversation in a window from Details ("All n messages…"), a VirtualStack over the log
+        with kind and member filters, following new messages, and the noon-mail self test of it with
+        hex_agent_message between two chats of a family (1.7, this commit)
   - [x] The horizon in Agentic, running while an agent works, red when one fails (17.3, ab90d37)
   - [x] --face on the command line, the last face kept with the workspace's chats (1.9, 476fdde)
   - [x] "Open in Agentic" on a chat's menu in the side bar (1.10, there already)
   - [x] Suites noon-keys and noon-looks (df0356e, which also has Alt+Page Up, Page Down and Home heard while the box
         has the keyboard, they never were in Agentic), noon-fleet for what the fleet has now (family blocks, totals,
         closing a family)
-  - [ ] Suites noon-panel, noon-mail (two tagged MCP clients of a family, needs the mail rows of 1.6), dusk-noon
-        (needs the self test to host Dusk), noon-fleet's stand-in agent that spawns, and hex_agent_brief (not built)
+  - [ ] Suites noon-panel, dusk-noon (needs the self test to host Dusk), noon-fleet's stand-in agent that spawns,
+        and hex_agent_brief (not built)
   - The fleet is drawn again from a string key every quarter second (AgentCardsKey), a version hash would allocate
     nothing (plan 12.5)
   - The settings self test's "tab_size 3 on Workspace is written to the folder's file alone" fails on 0829def too,
