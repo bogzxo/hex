@@ -22,7 +22,9 @@ internal sealed partial class DawnScene
     private StackPanel agentsListRows = null!;
     private Button agentsActivity = null!;
     private bool agentsListOpen = true;
-    private string agentsListDrawn = string.Empty;
+    // What the list was last drawn from as a number, NOT_DRAWN for drawing it again on the next tick
+    private long agentsListDrawn = NOT_DRAWN;
+    private const long NOT_DRAWN = long.MinValue;
     private Panel agentsSystemsHolder = null!;
 
     // How far down the chat starts under the head, the list's height and what the activity bar's robot says
@@ -41,7 +43,7 @@ internal sealed partial class DawnScene
         agentsListHead.OnPressed = () =>
         {
             agentsListOpen = !agentsListOpen;
-            agentsListDrawn = string.Empty;
+            agentsListDrawn = NOT_DRAWN;
         };
         agentsListScroll = agentsList.Add(new ScrollPanel { Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal, Position = new Vector2(0, -CHATS_HEAD), Fade = 8.0f });
         agentsListRows = agentsListScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 1 });
@@ -52,9 +54,20 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The chats in the order the list shows them, the newest that somebody started first, each with those it started under it.</summary>
+    /// <remarks>
+    /// Made again only when the chats or who started whom changed, the same list handed back otherwise, so it's read and
+    /// never changed by whoever asks. It was made, with a set of the ids, every time the list and the fleet looked.
+    /// </remarks>
     private List<(HexAgentChat Chat, int Step)> ChatsInOrder()
     {
-        var shown = new List<(HexAgentChat, int)>();
+        long key = 17;
+        for (int i = 0; i < agentChats.Count; i++)
+            key = (key * 31 + agentChats[i].Id) * 31 + (agentChats[i].Parent ?? -1);
+        if (key == chatsOrderedFor && chatsOrdered.Count > 0 == agentChats.Count > 0)
+            return chatsOrdered;
+
+        chatsOrderedFor = key;
+        var shown = new List<(HexAgentChat, int)>(agentChats.Count);
         var known = agentChats.Select(chat => chat.Id).ToHashSet();
         void Under(HexAgentChat chat, int step)
         {
@@ -70,8 +83,13 @@ internal sealed partial class DawnScene
                 Under(agentChats[i], 0);
         }
 
+        chatsOrdered = shown;
         return shown;
     }
+
+    // The chats in order as they were last worked out, and what of the chats they were worked out from
+    private List<(HexAgentChat Chat, int Step)> chatsOrdered = [];
+    private long chatsOrderedFor;
 
     /// <summary>
     /// The list drawn again when what it shows moved, the chats, which is open, how they're doing and the width. Shown
@@ -80,7 +98,17 @@ internal sealed partial class DawnScene
     private void DrawAgentsList()
     {
         // Noon has every chat down its left already, the list over the chat would say it twice
-        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || agentChats.Any(chat => chat.Parent is not null));
+        // Loops over the chats rather than LINQ, this runs ten times a second whether anything moved or not
+        bool started = false;
+        int working = 0;
+        for (int i = 0; i < agentChats.Count; i++)
+        {
+            HexAgentChat chat = agentChats[i];
+            chat.Tick();
+            started |= chat.Parent is not null;
+            working += chat.Running ? 1 : 0;
+        }
+        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || started);
         float width = agentsView.Size.X;
 
         // The systems under the chats in Dawn, Noon has them under its fleet. Their words put right every time, the list
@@ -98,11 +126,8 @@ internal sealed partial class DawnScene
         // The cards are made again only when the chats or how they're doing changed. Their clocks and what they're on are
         // put right in place, a card made again every second under a click took the click with it
         float most = MathF.Max(CHAT_ROWS_MOST, MathF.Floor(agentsView.Size.Y * 0.5f / (AGENT_CARD + 1.0f)));
-        foreach (HexAgentChat chat in agentChats)
-            chat.Tick();
-        int working = agentChats.Count(chat => chat.Running);
         // Not the systems' height, which eases a step every frame after a fold, the list only placed again for that
-        string said = $"{wanted}{agentsListOpen}{most}{working}{systems}|{AgentCardsKey(ChatsInOrder())}";
+        long said = ((((AgentCardsKey(ChatsInOrder()) * 31 + (wanted ? 1 : 0)) * 31 + (agentsListOpen ? 1 : 0)) * 31 + (long)most) * 31 + working) * 31 + (systems ? 1 : 0);
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)

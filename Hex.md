@@ -88,10 +88,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
         tool rows as mcp__hex__..., the conversation gone on with by a second message. Headless agy refuses every MCP
         call without an allow-rule, so each run allows mcp(hex/*) through --settings (never saved). A refused step
         ends in ERROR, and what it wasn't let do is said in a note
-  - [ ] The model in the panel when none is picked, agy's init names it only when --model is given (agy models
-        has the default)
-  - [ ] The other writes to the hex server's config (.agents/mcp_config.json) leave a chat's id in the folder, as
-        Gemini's .gemini/settings.json does, ignored in Hex's repository
+  - The model in the panel when none is picked can't be had: agy's init names it only when --model is given, agy
+    models marks no default, and only its own cli.log says it ("selected model override ... Gemini 3.8 Flash (High)")
+  - The hex server's entry in .agents/mcp_config.json keeps the last chat's id in the folder, as Gemini's
+    .gemini/settings.json does, ignored in Hex's repository
 - [x] The agent that starts others decides what they may do (asked 2026-11-18). hex_agent_spawn's permissions, allow
       and deny rules in the child system's own words (Claude Code's --allowedTools and --disallowedTools, Antigravity's
       --settings), and what a child asks leave to do goes to its parent as a question it answers with hex_agent_approve,
@@ -194,8 +194,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 2. Performance of the new agent system (chat paging, rows, the harness). Done: rows read back go to the file again
    after a minute at the latest, Details no longer made again every second for its clock (a line put right in place),
    a call's file worked out once, the hub's rows kept for chats that didn't move. The agentic-perf self test measures
-   it (docs/benchmarks.md, dev and NativeAOT release). Next: idle still allocates 6 to 13 KB an update, the release
-   build's working set is 400 MiB against the dev build's 240 MiB, switching allocates 160 to 260 KB a turn
+   it (docs/benchmarks.md, dev and NativeAOT release). Since: switching 259 KB a turn down to 12 (rows made as they
+   come into sight), idle 13 KB an update down to 0.4 (keys as numbers, words written only when they moved, weighed
+   step by step with HexTicks.Weighing). Next: the release build's working set is 400 MiB against the dev build's
+   240 MiB
 3. Last of all, Hex's dev and stable builds, below
 
 ## Dev and stable builds (last)
@@ -238,9 +240,8 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 - [x] M1 (the face, themes, fleet, chat and family mail on VirtualStack, context, horizon, Welcome, keys, --face and
       the last face, the panel link, and the suites noon, noon-fleet, noon-keys, noon-looks, noon-mail, noon-panel,
       dusk-noon). Not done of the plan's M1 text: the 1.0 screenshot pass and the accept's shots in all seven looks
-      at 100/150/200% reviewed by eye (noon-looks takes them with HEX_SELFTEST_SHOTS), and the fleet's version-hash key
-  - The fleet is drawn again from a string key every quarter second (AgentCardsKey), a version hash would allocate
-    nothing (plan 12.5)
+      at 100/150/200% reviewed by eye (noon-looks takes them with HEX_SELFTEST_SHOTS)
+  - [x] The fleet's key a number (AgentCardsKey) rather than a string every quarter second (plan 12.5)
   - The settings self test's "tab_size 3 on Workspace is written to the folder's file alone" fails on 0829def too,
     before any of this
 - [ ] M2 and on

@@ -44,7 +44,7 @@ internal sealed partial class DawnScene
 
     // What the view was last drawn from, it's drawn again when any of it moves
     private (int Chat, int Version) agentsDrawn = (-1, -1);
-    private (string? Providers, int Width) agentsChipsDrawn;
+    private (long Providers, int Width) agentsChipsDrawn;
     private bool agentsWasRunning, agentsWasSteering;
     private float agentsWait;
 
@@ -371,6 +371,9 @@ internal sealed partial class DawnScene
         else FitAgentRows();
     }
 
+    // What the line under the agents was last written from
+    private (HexAgentChat? Chat, int Version, int Tenths, object? Draft, string? Agent, int State) agentsHeadDrawn = (null, -2, -2, null, null, -2);
+
     // The quiet line under the agents, the model, the tokens, the cost and the time of the turn, and the card at the
     // bottom in the theme's colours, its edge lit while the box has the keys
     private void DrawAgentsHead()
@@ -383,7 +386,24 @@ internal sealed partial class DawnScene
         }
 
         string? agent = AgentFor(agentChat);
-        HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == agent);
+        HexAgentProfile? profile = null;
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count && profile is null; i++)
+        {
+            if (all[i].Id == agent)
+                profile = all[i];
+        }
+
+        // Its words made again only when what they say moved, the running turn's clock by the tenth. Ten times a second
+        // they were all made anew, the most the panel still made standing still
+        var now = (agentChat, agentChat?.Version ?? -1, agentChat is { Running: true } going ? (int)(going.TurnSeconds * 10) : -1,
+            agentDraftContext, agent, profile is null ? -1 : (int)StateOf(profile));
+        if (now == agentsHeadDrawn)
+        {
+            FitAgentsCompose();
+            return;
+        }
+        agentsHeadDrawn = now;
 
         // The agent's chip says who, so this is the rest of it, kept short for a side bar
         var parts = new List<string?> { AgentDraftCaption(), agentChat is null && profile is not null ? AgentState(profile) : null };

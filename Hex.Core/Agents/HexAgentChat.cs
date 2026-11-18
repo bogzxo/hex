@@ -175,6 +175,16 @@ internal sealed class HexAgentChat(int id, string agent)
     /// <summary>The messages not read yet, oldest first.</summary>
     public HexAgentMail[] UnreadMail() => [.. mail.Where(each => each.Seq > MailSeen)];
 
+    /// <summary>How many messages aren't read yet, counted with nothing made, for what's looked at every few ticks.</summary>
+    public int UnreadMailCount()
+    {
+        long seen = MailSeen;
+        int count = 0;
+        for (int i = 0; i < mail.Count; i++)
+            count += mail[i].Seq > seen ? 1 : 0;
+        return count;
+    }
+
     /// <summary>The agent's options for this chat alone (the model it was started with), over its extension's settings.</summary>
     public Dictionary<string, string> Options { get; } = new(StringComparer.Ordinal);
 

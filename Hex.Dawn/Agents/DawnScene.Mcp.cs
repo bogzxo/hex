@@ -167,9 +167,6 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateMcp(float dt)
     {
-        UpdateAgent();
-        UpdateHarness(dt);
-        UpdateAgentsPanel(dt);
         if (mcpHost is null && mcpCurrent is null && mcpCalls.IsEmpty && !agentPointer.Taken)
             return;
 

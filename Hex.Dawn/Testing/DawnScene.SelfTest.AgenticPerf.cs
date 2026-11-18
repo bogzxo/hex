@@ -111,10 +111,30 @@ internal sealed partial class DawnScene
         test.Check("agentic perf: the chats are in, their oldest rows gone to their files", () =>
             chats.All(chat => chat.Dropped > 0 && chat.Entries.Count <= HexAgentChat.MOST_ENTRIES + HexAgentChat.SPILL_BATCH));
 
-        // Standing still, a chat on screen and the fleet beside it
+        // Standing still, a chat on screen and the fleet beside it, what each stretch and step of the update allocates
+        // weighed and said, the most first, for what's left to bring down
+        int idleFrom = 0;
+        test.Run(() =>
+        {
+            HexTicks.Weighing = true;
+            foreach (HexTicks ticks in (HexTicks[])[workTicks, lateTicks, panelTicks])
+                ticks.ResetWeighed();
+            Array.Clear(weighedStretches);
+            idleFrom = perfFrames?.Count ?? 0;
+        });
         Start("idle");
         test.Settle(2.0f);
         End();
+        test.Run(() =>
+        {
+            HexTicks.Weighing = false;
+            int updates = Math.Max(1, (perfFrames?.Count ?? 0) - idleFrom);
+            var heavy = WEIGHED_STRETCHES.Select((name, at) => (Step: name, Bytes: weighedStretches[at]))
+                .Concat(((HexTicks[])[workTicks, lateTicks, panelTicks]).SelectMany(ticks => ticks.Weighed))
+                .Where(each => each.Bytes > 0).OrderByDescending(each => each.Bytes).Take(14);
+            foreach (var (step, bytes) in heavy)
+                Console.WriteLine($"[Hex self-test]   idle allocates in {step}: {bytes / (double)updates:0} bytes an update");
+        });
 
         // Going from chat to chat, each drawn from its start
         Start("switching");

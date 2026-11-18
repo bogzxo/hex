@@ -46,7 +46,8 @@ internal sealed partial class DawnScene
     internal HexFace Face { get; private set; } = HexFace.Dawn;
 
     // What the fleet and the context were last drawn from, they're drawn again when it moves
-    private string noonFleetDrawn = string.Empty, noonContextDrawn = string.Empty;
+    private long noonFleetDrawn = NOT_DRAWN;
+    private string noonContextDrawn = string.Empty;
     private readonly List<Action<float>> noonCards = [];
     private float noonWait;
 
@@ -133,8 +134,9 @@ internal sealed partial class DawnScene
         // Drawn again at its new width straight away, the list over the chat goes or comes back
         agentsDrawn = (-1, -1);
         agentsChipsDrawn = default;
-        agentsListDrawn = string.Empty;
-        noonFleetDrawn = noonContextDrawn = string.Empty;
+        agentsListDrawn = NOT_DRAWN;
+        noonFleetDrawn = NOT_DRAWN;
+        noonContextDrawn = string.Empty;
         HexModeSwitch.Select(modeToggle, face, PickFace);
         UseFaceTheme();
         if (Skin is { } skin)
@@ -215,12 +217,21 @@ internal sealed partial class DawnScene
     // Every agent of the project, those started by agents under the one that started them
     private void DrawNoonFleet()
     {
-        foreach (HexAgentChat chat in agentChats)
+        // The chats gone through by their places, LINQ and foreach over the hub's list made garbage four times a second
+        int running = 0, mail = 0;
+        double cost = 0;
+        for (int i = 0; i < agentChats.Count; i++)
+        {
+            HexAgentChat chat = agentChats[i];
             chat.Tick();
+            running += chat.Running ? 1 : 0;
+            cost += chat.Cost;
+            mail += chat.UnreadMailCount();
+        }
 
         // The cards made again only when the agents or how they're doing changed, their words put right in place otherwise
         List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
-        string said = AgentCardsKey(order);
+        long said = AgentCardsKey(order);
         float width = NOON_FLEET - noonFleet.Padding.Total.X - 6;
         if (said != noonFleetDrawn)
         {
@@ -242,13 +253,18 @@ internal sealed partial class DawnScene
         if (noonSystems is not null)
             DrawSystems(noonSystems, width);
 
-        int running = agentChats.Count(chat => chat.Running);
-        double cost = agentChats.Sum(chat => chat.Cost);
-        int mail = agentChats.Sum(chat => chat.UnreadMail().Length);
+        // The totals written again only when one of them moved, to the cent
+        var totals = (agentChats.Count, running, (long)Math.Round(cost * 100), mail);
+        if (totals == noonSummaryDrawn)
+            return;
+        noonSummaryDrawn = totals;
         noonFleetSummary.Text = UIRichText.Literal(Said("noon.summary",
             ("agents", agentChats.Count.ToString()), ("running", running.ToString()),
             ("cost", cost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)), ("mail", mail.ToString())));
     }
+
+    // The fleet's totals as they were last written
+    private (int Agents, int Running, long Cents, int Mail) noonSummaryDrawn = (-1, -1, -1, -1);
 
     // What the agent picked is, who it works with, the messages between them, the tools it reached for and the files it touched
     private void DrawNoonContext()

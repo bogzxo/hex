@@ -357,6 +357,21 @@ internal sealed partial class DawnScene : Scene
         Engine.Graphics.ClearColor = new Vector4(0.065f, 0.07f, 0.092f, 1.0f);
     }
 
+    // What each stretch of the update allocated while the ticks are weighed (HexTicks.Weighing), for the self test that
+    // measures what the editor makes standing still. The tick lists' own stretch counts its steps as well
+    internal static readonly string[] WEIGHED_STRETCHES = ["window", "designer", "lists", "tick lists", "bars", "components", "fit"];
+    internal readonly long[] weighedStretches = new long[WEIGHED_STRETCHES.Length];
+    private long weighedFrom;
+
+    private void Weigh(int stretch)
+    {
+        if (!HexTicks.Weighing)
+            return;
+        long now = GC.GetAllocatedBytesForCurrentThread();
+        weighedStretches[stretch] += now - weighedFrom;
+        weighedFrom = now;
+    }
+
     // When Hex last said something, and how long that stays in the status bar
     private long saidAt;
     private const long SAID_FOR = 10_000;
@@ -396,6 +411,7 @@ internal sealed partial class DawnScene : Scene
     public override void UpdateState(float dt)
     {
         Profile.Begin();
+        weighedFrom = HexTicks.Weighing ? GC.GetAllocatedBytesForCurrentThread() : 0;
 
         // A unit of the camera per pixel of the window, whatever the window is resized to. The UI does the scaling
         Vector2 viewport = Engine.WindowManager.ViewportSize;
@@ -413,10 +429,13 @@ internal sealed partial class DawnScene : Scene
         UpdateShortcutHints();
         UpdateWindow(dt);
         Profile.Mark("window");
+        Weigh(0);
         UpdateDesigner(dt);
         Profile.Mark("designer");
+        Weigh(1);
         RebuildMarked();
         Profile.Mark("lists");
+        Weigh(2);
 
         // The three stretches of the tick that are lists of steps, see DeclareTicks. Each step is timed by its own name
         // with the profile on, the mark after each list is for what little is left over
@@ -426,19 +445,23 @@ internal sealed partial class DawnScene : Scene
         Profile.Mark("late");
         panelTicks.Run(dt);
         Profile.Mark("panel");
+        Weigh(3);
 
         UpdateStatusBar();
         UpdateCrumbs();
         Profile.Mark("bars");
+        Weigh(4);
 
         base.UpdateState(dt);
         Profile.Mark("components");
+        Weigh(5);
 
         // The editor fitted round the canvas last, after the components moved along, a side sliding in or out has taken
         // its step by now and the middle is sized to what it will be laid out as. Fitted first, it was a step behind and
         // the right side shook a few pixels to and fro for as long as the slide took
         FitChrome();
         Profile.Mark("fit");
+        Weigh(6);
         Profile.End();
 
         UpdateSelfTest(dt);
@@ -549,6 +572,10 @@ internal sealed partial class DawnScene : Scene
             .Add("markdown", UpdateMarkdownPreview)
             .Add("terminal", UpdateTerminal)
             .Add("remote", UpdateRemote)
+            // The agent of a selection, the harness, the Agents panel and the server, a step each so each is weighed
+            .Add("agent", UpdateAgent)
+            .Add("harness", UpdateHarness)
+            .Add("agents_panel", UpdateAgentsPanel)
             .Add("mcp", UpdateMcp)
             .Add("noon", UpdateNoon)
             .Add("chats_kept", UpdateChatsKept)

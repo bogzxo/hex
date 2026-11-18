@@ -51,7 +51,7 @@ internal sealed partial class DawnScene
             agentChat = opened;
         // The face the workspace was left in, unless the command line said one
         faceAtStart ??= FaceNamed(state?["face"]?.GetValue<string>());
-        agentsListDrawn = string.Empty;
+        agentsListDrawn = NOT_DRAWN;
         agentsDrawn = (-1, -1);
     }
 

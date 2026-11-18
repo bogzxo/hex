@@ -49,9 +49,38 @@ internal sealed class HexTicks(string name, HexProfiler profile)
     /// <summary>A part, under its own name.</summary>
     public HexTicks Add(IHexPart part) => Add(part.TickName, part.Tick);
 
+    /// <summary>
+    /// Whether every step's allocations are added up by its name, for the self test that measures what the editor makes
+    /// standing still (agentic-perf). Off, the steps run as they are.
+    /// </summary>
+    public static bool Weighing { get; set; }
+
+    // What each step allocated while weighing, by the step's place in the list
+    private long[] weighed = [];
+
+    /// <summary>What each step allocated since weighing began, the most first.</summary>
+    public IEnumerable<(string Step, long Bytes)> Weighed =>
+        steps.Select((step, at) => (step.Name, at < weighed.Length ? weighed[at] : 0L)).Where(each => each.Item2 > 0).OrderByDescending(each => each.Item2);
+
+    /// <summary>The weights put back to nothing.</summary>
+    public void ResetWeighed() => weighed = new long[steps.Count];
+
     /// <summary>Every step, in order. With the profile on each is marked as it finishes, by its name.</summary>
     public void Run(float dt)
     {
+        if (Weighing)
+        {
+            if (weighed.Length != steps.Count)
+                weighed = new long[steps.Count];
+            for (int i = 0; i < steps.Count; i++)
+            {
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                steps[i].Run(dt);
+                weighed[i] += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+            return;
+        }
+
         if (!profile.On)
         {
             for (int i = 0; i < steps.Count; i++)

@@ -116,16 +116,24 @@ internal sealed partial class DawnScene
     /// <summary>The provider selector, rebuilt when its choices, status or available width change.</summary>
     private void DrawAgentChips()
     {
-        HexAgentProfile[] agents = [.. RunnableAgents()];
+        // What it was drawn from as a number, every agent that can run, which is picked and how each is, worked out with
+        // nothing allocated. It was a string made again ten times a second, most of what the panel made standing still
         string? current = AgentFor(agentChat);
-        var said = new StringBuilder();
-        foreach (HexAgentProfile agent in agents)
-            said.Append(agent.Id).Append(agent.Id == current).Append(StateOf(agent)).Append('|');
-        string providers = said.ToString();
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        long providers = 17;
+        for (int i = 0; i < all.Count; i++)
+        {
+            HexAgentProfile agent = all[i];
+            if (!extensions.AgentRuns.ContainsKey(agent.Id))
+                continue;
+            providers = providers * 31 + string.GetHashCode(agent.Id, StringComparison.Ordinal);
+            providers = providers * 31 + (agent.Id == current ? 1 : 0) * 7 + (int)StateOf(agent);
+        }
         float width = agentsView.Size.X;
         var key = (providers, (int)width);
         if (key == agentsChipsDrawn)
             return;
+        HexAgentProfile[] agents = [.. RunnableAgents()];
         if (providers != agentsChipsDrawn.Providers && agentChat is not { Entries.Count: > 0 })
             agentRowsFor = default;
         agentsChipsDrawn = key;
@@ -189,17 +197,24 @@ internal sealed partial class DawnScene
     private void BrowseAgentExtensions() => OpenSettings(HexExtensions.AVAILABLE);
 
     private readonly Dictionary<string, (long Checked, string Program, bool Missing)> agentPrograms = [];
+    private const long AGENT_PROGRAM_EVERY = 15_000;
 
     private enum AgentStates { Ready, Running, Missing }
 
     private AgentStates StateOf(HexAgentProfile agent)
     {
-        if (agentChats.Any(chat => chat.Running && chat.Agent == agent.Id))
-            return AgentStates.Running;
+        // A loop rather than Any with a lambda, which made a closure every time the chips were looked at
+        for (int i = 0; i < agentChats.Count; i++)
+        {
+            if (agentChats[i] is { Running: true } chat && chat.Agent == agent.Id)
+                return AgentStates.Running;
+        }
         if (!extensions.AgentRuns.TryGetValue(agent.Id, out var run)) return AgentStates.Missing;
         string program = HexExtensions.Text(run.Run, "program") ?? string.Empty;
         long now = System.Environment.TickCount64;
-        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program || now - cached.Checked > 2000)
+        // Looked for again every fifteen seconds, soon enough to see one installed meanwhile. Each look goes through every
+        // folder of PATH and the system's PATH as it is now, and every two seconds it was most of what the panel made
+        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program || now - cached.Checked > AGENT_PROGRAM_EVERY)
         {
             cached = (now, program, HexAgentProcess.Find(program) is null);
             agentPrograms[agent.Id] = cached;

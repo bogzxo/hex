@@ -149,7 +149,24 @@ release build wasn't measured again.
 | Streaming | 0.48 / 0.40 / 0.25 | 42.9 / 26.2 / 14.2 |
 | Groups | 0.66 / 0.17 / 0.17 | 9.8 / 5.5 / 8.6 |
 
-Idle allocating 13 KB a turn is untouched by either, it's what's left to bring down.
+### Standing still — 18 November 2026
+
+What idle allocated was weighed step by step (`HexTicks.Weighing`, agentic-perf prints the heaviest steps). Nearly all
+of it was the Agents panel and Agentic's fleet drawing nothing new a few times a second: keys made as strings (the
+chips, the list of chats, the fleet, the systems panel), the order of the chats and a set of their ids made again,
+LINQ over the hub's chats, every card's words written anew, and the agent programs looked for on PATH every two
+seconds. Each now goes by a number worked out with nothing allocated and writes its words only when they moved.
+
+| Phase | Update ms (made in sight / now) | Update KB a turn (made in sight / now) |
+| --- | ---: | ---: |
+| Idle | 0.40 / 0.17 | 14.1 / 0.4 |
+| Switching | 1.07 / 0.24 | 44.6 / 12.2 |
+| Scrolling | 0.18 / 0.21 | 10.6 / 9.8 |
+| Streaming | 0.25 / 0.28 | 14.2 / 13.3 |
+| Groups | 0.17 / 0.17 | 8.6 / 6.9 |
+
+What idle still makes, a few hundred bytes an update, is the agents panel's buttons and the notebooks' and the
+extensions' own steps, under 0.2 KB each.
 
 ## Evidence
 

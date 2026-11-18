@@ -26,10 +26,27 @@ internal sealed partial class DawnScene
     /// <summary>A card on screen and what puts its words right as its agent moves on, at the width it's at.</summary>
     private sealed record AgentCard(UIComponent Root, Action<float> Refresh);
 
-    /// <summary>What a list of cards is made from, the chats, their order and states, never their clocks or their tools.</summary>
-    private string AgentCardsKey(IEnumerable<(HexAgentChat Chat, int Step)> chats) =>
-        string.Join(';', chats.Select(each =>
-            $"{each.Chat.Id}.{each.Step}.{StateWord(each.Chat)}.{each.Chat.Unread}.{each.Chat == agentChat}.{each.Chat.Shown}.{each.Chat.Parent}"));
+    /// <summary>
+    /// What a list of cards is made from as a number, the chats, their order and states, never their clocks or their
+    /// tools. A string of them was made a few times a second for nothing to have changed, most of what the panel
+    /// allocated standing still.
+    /// </summary>
+    private long AgentCardsKey(List<(HexAgentChat Chat, int Step)> chats)
+    {
+        long key = 17;
+        for (int i = 0; i < chats.Count; i++)
+        {
+            var (chat, step) = chats[i];
+            key = key * 31 + chat.Id;
+            key = key * 31 + step;
+            key = key * 31 + string.GetHashCode(StateWord(chat), StringComparison.Ordinal);
+            key = key * 31 + (chat.Unread ? 1 : 0) + (chat == agentChat ? 2 : 0);
+            key = key * 31 + string.GetHashCode(chat.Shown, StringComparison.Ordinal);
+            key = key * 31 + (chat.Parent ?? -1);
+        }
+
+        return key;
+    }
 
     private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable)
     {
@@ -67,8 +84,16 @@ internal sealed partial class DawnScene
             close.OnPressed = () => CloseAgentChat(chat);
         }
 
+        // What the card was last written from, its words made again only when one of these moved. Every refresh made its
+        // strings anew, a few times a second for every card, which was most of what the fleet made standing still
+        (int Version, int Seconds, bool Unread, int Mail, int Width, string? Model, bool Stopped) drawn = (-1, -1, false, -1, -1, null, false);
+
         void Refresh(float width)
         {
+            var now = (chat.Version, chat.Running ? (int)chat.TurnSeconds : -1, chat.Unread, chat.UnreadMailCount(), (int)width, chat.Model, chat.Stopped);
+            if (now == drawn)
+                return;
+            drawn = now;
             float room = width - indent;
             string? model = HexAgentModels.Of(chat);
             // Who it is and the model it's on, always in sight, a working agent's line under its name being what it's doing

@@ -34,7 +34,7 @@ internal sealed partial class DawnScene
         /// <summary>The height it's drawn at, easing towards its rows', below zero before it's first known.</summary>
         public float Shown { get; set; } = -1.0f;
         public List<Action<float>> Refresh { get; } = [];
-        public string Made { get; set; } = "\0";
+        public long Made { get; set; } = NOT_DRAWN;
         public bool Open { get; set; } = true;
 
         /// <summary>The systems folded to their head, by id, the rest showing their lines.</summary>
@@ -111,7 +111,7 @@ internal sealed partial class DawnScene
     /// <summary>A fold pressed, made on the next tick and the ticks after it at once, never under the press itself.</summary>
     private void SystemsFolded(SystemsPanel panel)
     {
-        panel.Made = "\0";
+        panel.Made = NOT_DRAWN;
         systemsSettle = 3;
         Engine.WindowManager.RequestFrames();
     }
@@ -139,10 +139,20 @@ internal sealed partial class DawnScene
     /// </summary>
     private void DrawSystems(SystemsPanel panel, float width)
     {
-        HexAgentProfile[] systems = AgentSystems();
-        string made = $"{panel.Open}|{string.Join(';', systems.Select(system => $"{system.Id}.{StateOf(system) == AgentStates.Missing}.{panel.Folded.Contains(system.Id)}"))}";
+        // What it's made from as a number, worked out with nothing allocated, a string of it was made every few ticks
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        long made = panel.Open ? 1 : 2;
+        for (int i = 0; i < all.Count; i++)
+        {
+            HexAgentProfile each = all[i];
+            if (!extensions.AgentRuns.ContainsKey(each.Id))
+                continue;
+            made = made * 31 + string.GetHashCode(each.Id, StringComparison.Ordinal);
+            made = made * 31 + (StateOf(each) == AgentStates.Missing ? 1 : 0) + (panel.Folded.Contains(each.Id) ? 2 : 0);
+        }
         if (made != panel.Made)
         {
+            HexAgentProfile[] systems = AgentSystems();
             panel.Made = made;
             Empty(panel.Root);
             panel.Refresh.Clear();
@@ -167,9 +177,27 @@ internal sealed partial class DawnScene
                 Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
             });
             var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.12f, Dim = true, Align = Origin.Right });
+            int summaryWorking = -1;
             panel.Refresh.Add(_ =>
             {
-                int working = agentChats.Count(chat => chat.Running && systems.Any(system => system.Id == chat.Agent));
+                // Counted by places, the chats' Count with a lambda over the systems made garbage every few ticks
+                int working = 0;
+                for (int i = 0; i < agentChats.Count; i++)
+                {
+                    if (!agentChats[i].Running)
+                        continue;
+                    for (int s = 0; s < systems.Length; s++)
+                    {
+                        if (systems[s].Id == agentChats[i].Agent)
+                        {
+                            working++;
+                            break;
+                        }
+                    }
+                }
+                if (working == summaryWorking)
+                    return;
+                summaryWorking = working;
                 string said = working > 0
                     ? Said("noon.systems_summary_working", ("count", systems.Length.ToString(CultureInfo.InvariantCulture)), ("working", working.ToString(CultureInfo.InvariantCulture)))
                     : systems.Length.ToString(CultureInfo.InvariantCulture);
@@ -289,8 +317,23 @@ internal sealed partial class DawnScene
         // How many characters a line has room for after its indent and its icon
         static int Fits(float width) => Math.Max(8, (int)((width - SYSTEM_INDENT - 22) / 5.5f));
 
+        // What its words were last written from, its chats' versions and the width, so they're made again only when one
+        // of those moved. Every few ticks they were all made anew, LINQ and strings, for nothing having changed
+        long drawn = long.MinValue;
+
         return width =>
         {
+            // The minute too, a limit's time to its reset and what the harness saved going on by the clock
+            long now = ((long)width * 31 + (systemVersions.GetValueOrDefault(program)?.Length ?? -1)) * 31 + System.Environment.TickCount64 / 60_000;
+            for (int i = 0; i < agentChats.Count; i++)
+            {
+                if (agentChats[i].Agent == system.Id)
+                    now = now * 31 + agentChats[i].Version * 2 + (agentChats[i].Running ? 1 : 0);
+            }
+            if (now == drawn)
+                return;
+            drawn = now;
+
             HexAgentChat[] chats = [.. agentChats.Where(chat => chat.Agent == system.Id)];
             int working = chats.Count(chat => chat.Running);
             string version = systemVersions.GetValueOrDefault(program) ?? string.Empty;
