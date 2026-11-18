@@ -110,11 +110,18 @@ internal static class GitProcess
                     writer.Write(input);
             }
 
-            Task<string> output = git.StandardOutput.ReadToEndAsync();
-            Task<string> error = git.StandardError.ReadToEndAsync();
+            // Closed here rather than left to the process's own Dispose, which leaves its pipes to the finalizer. An idle
+            // Hex makes so little garbage that the collector hardly comes round, and a status every few seconds had
+            // hundreds of pipe handles open within minutes
+            using StreamReader outputReader = git.StandardOutput, errorReader = git.StandardError;
+            Task<string> output = outputReader.ReadToEndAsync();
+            Task<string> error = errorReader.ReadToEndAsync();
             if (!git.WaitForExit(patience ?? Patience))
             {
                 try { git.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+
+                // The reads end once git has gone, before their pipes are closed under them
+                try { Task.WaitAll([output, error], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
                 return new GitResult(-1, string.Empty, $"git {string.Join(' ', arguments)} took longer than {(patience ?? Patience).TotalSeconds:0} seconds");
             }
 
