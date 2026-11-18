@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
                 ("permissions", new JsonObject
                 {
                     ["type"] = "object",
-                    ["description"] = "What it may do without asking (allow) and may never do (deny), each a list of rules in its agent system's own words: Claude Code's tool rules such as \"Bash(git status:*)\" or \"Edit\", Antigravity's such as \"command(git)\" or \"mcp(hex/*)\". Codex has none, its sandbox option says what it may do.",
+                    ["description"] = "What it may do without asking (allow) and may never do (deny), each a list of rules in its agent system's own words: Claude Code's tool rules such as \"Bash(git status:*)\" or \"Edit\", Antigravity's such as \"command(git *)\" (a command and its arguments, * for any) or \"mcp(hex/*)\". Codex has none, its sandbox option says what it may do.",
                     ["properties"] = new JsonObject
                     {
                         ["allow"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },

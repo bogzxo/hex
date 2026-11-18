@@ -111,7 +111,8 @@ the chat that started them, so they can be watched and talked to like any other.
   at once. The prompt has to stand on its own, because the new agent doesn't see the conversation that started it.
   Its last message is what comes back. `permissions: { allow: [...], deny: [...] }` says what it may do without asking
   and may never do, in its agent system's own rules (Claude Code's `Bash(git status:*)` or `Edit` go to
-  `--allowedTools` and `--disallowedTools`, Antigravity's `command(git)` to its run's `--settings`). Codex has no rules
+  `--allowedTools` and `--disallowedTools`, Antigravity's `command(git *)` to its run's `--settings`, given as `unsandboxed(git *)` too, the rule agy checks a
+  command against outside its sandbox). Codex has no rules
   of the kind, its `sandbox` option says what it may do.
 - What a spawned agent asks leave to do beyond its rules (Claude Code's and Codex's approvals) comes to the agent that started it
   as a message of kind question, which wakes its wait or starts its next turn, and `hex_agent_approve(id, allow,
