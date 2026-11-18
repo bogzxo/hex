@@ -77,8 +77,11 @@ internal sealed partial class DawnScene
         test.Check("noon mail: the summary counts the messages and the chips how many each lets through", () =>
             Descendants(familyFilters!).OfType<Label>().Any(label => label.Text.Contains(Said("noon.family_messages"), StringComparison.Ordinal))
             && Descendants(familyFilters!).OfType<Label>().Any(label => label.Text.Contains($"{Said("noon.family_finding")}  1", StringComparison.Ordinal)));
-        test.Run(() => PressChip(false, Said("noon.family_finding")));
+        // Pressed with the pointer, the way the person does, the list laid over the chips once took every press on them
+        test.Click(() => chrome.ToWorld(familyFilters!.Children.OfType<StackPanel>().ElementAt(1).Children.OfType<Panel>()
+            .First(each => each.Children.OfType<Label>().Any(label => label.Text.Contains(Said("noon.family_finding"), StringComparison.Ordinal))).Bounds.Center));
         test.Settle(0.3f);
+        test.Check("noon mail: a chip pressed with the pointer filters the window", () => familyKind == "finding");
         test.Check("noon mail: the findings filter leaves the finding", () => familyList is { ItemCount: 1 } && Shown() is [var only] && only.Contains("StartMcp", StringComparison.Ordinal));
         test.Run(() => PressChip(false, Said("noon.family_question")));
         test.Settle(0.3f);

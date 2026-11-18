@@ -50,6 +50,8 @@ internal sealed partial class DawnScene
             MinSize = new Vector2(420, 300)
         };
         DressWindow(window);
+        // Solid, a page of messages read through glass had the chat behind it showing through its words
+        window.Glass = null;
         window.OnClosed = () =>
         {
             window.Parent?.Remove(window);
@@ -83,6 +85,11 @@ internal sealed partial class DawnScene
         familyEmpty.Pivot = Origin.Top;
         familyEmpty.Position = new Vector2(0, -FAMILY_HEAD);
         familyEmpty.Visible = false;
+
+        // The summary and the chips over the list rather than under it. The list fills the window and starts under them by
+        // its padding, and laid over them it took every press on a chip, none of them could be pressed
+        window.Remove(familyFilters);
+        window.Add(familyFilters);
 
         familyWindow = window;
         chrome.Root.Add(window);

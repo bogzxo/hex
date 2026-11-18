@@ -46,6 +46,8 @@ internal sealed partial class DawnScene
             MinSize = new Vector2(560.0f, 260.0f)
         };
         DressWindow(window);
+        // Solid, numbers read through glass had the chat behind them showing through
+        window.Glass = null;
         harnessWindow = window;
         window.OnClosed = () =>
         {

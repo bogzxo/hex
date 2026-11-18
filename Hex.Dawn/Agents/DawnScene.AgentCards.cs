@@ -14,7 +14,6 @@ namespace Hex.Dawn;
 // put right in place after that, so a running agent's clock or its next tool never makes the card again under a click.
 internal sealed partial class DawnScene
 {
-    // A card's height
     // A card's height, room under its three lines for the bar of its context with a gap either side of it, the bar sat
     // against the line above it at seventy
     private const float AGENT_CARD = 82.0f;
