@@ -436,6 +436,9 @@ public sealed class HexAgentSystemsTests : IDisposable
         var chat = new HexAgentChat(4, "antigravity") { Session = "c1" };
         string[] arguments = [.. ((ListValue)runtime.Invoke(run.Properties["arguments"], new StringValue("go"), HexAgentChatApi.Of(chat, folder))).Items.Select(Values.Text)];
         Assert.Equal(["--output-format", "stream-json", "--input-format", "stream-json"], arguments[..4]);
+        // The hex server's tools allowed for the run alone, headless agy refuses every MCP call otherwise
+        JsonNode allowed = JsonNode.Parse(arguments[Array.IndexOf(arguments, "--settings") + 1])!;
+        Assert.Equal("mcp(hex/*)", allowed["permissions"]!["allow"]![0]!.GetValue<string>());
         // The stub's settings are all "hex", which is a mode as far as the arguments go
         Assert.Contains("--mode", arguments);
         Assert.Equal("c1", arguments[Array.IndexOf(arguments, "--conversation") + 1]);
@@ -459,16 +462,19 @@ public sealed class HexAgentSystemsTests : IDisposable
             """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":1,"state":"DONE","step_type":"agent_response","duration_seconds":4.3,"usage":{"input_tokens":9800,"output_tokens":35,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":9835}}}""",
             """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"read_file","tool_info":{"name":"read_file","parameters":{"Path":"C:\\probe\\hello.txt"}}}}""",
             """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":2,"state":"DONE","step_type":"tool","tool_name":"read_file","duration_seconds":0.12,"tool_info":{"name":"read_file","parameters":{"Path":"C:\\probe\\hello.txt"},"output":"1 lines, 4 bytes"}}}""",
-            """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":3,"state":"DONE","step_type":"tool","tool_name":"call_mcp_tool","tool_info":{"name":"call_mcp_tool","parameters":{"ServerName":"hex","ToolName":"hex_search"},"error":{"type":"denied","message":"not allowed"}}}}""",
+            """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"call_mcp_tool","tool_info":{"name":"call_mcp_tool","parameters":{"Arguments":{"query":"Kept"},"ServerName":"hex","ToolName":"hex_search"}}}}""",
+            """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":3,"state":"ERROR","step_type":"tool","tool_name":"call_mcp_tool","tool_info":{"name":"call_mcp_tool","parameters":{"Arguments":{"query":"Kept"},"ServerName":"hex","ToolName":"hex_search"},"error":{"type":"TOOL_ERROR","message":"permission check failed for mcp \"hex/hex_search\""}}}}""",
             """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":4,"state":"ACTIVE","step_type":"agent_response","text_delta":"The file contains t"}}""",
             """{"event":"step_update","step_update":{"conversation_id":"2b7a17d3","step_index":4,"state":"DONE","step_type":"agent_response","text_delta":"he word \"hi\".\n","duration_seconds":3.0,"usage":{"input_tokens":2164,"output_tokens":36,"thinking_tokens":0,"cache_read_tokens":7757,"total_tokens":2200}}}""",
-            """{"event":"result","result":{"conversation_id":"2b7a17d3","status":"ERROR","error":{"message":"429 RESOURCE_EXHAUSTED"},"duration_seconds":7.4,"num_turns":1}}""");
+            """{"event":"result","result":{"conversation_id":"2b7a17d3","status":"ERROR","error":{"message":"429 RESOURCE_EXHAUSTED"},"duration_seconds":7.4,"num_turns":1,"denied_actions":[{"action":"command","display_name":"Bash"}]}}""");
 
         Assert.Equal("2b7a17d3", chat.Session);
         Assert.Equal("gemini-3.8-flash-low", chat.Model);
         Assert.Equal(["The file contains the word \"hi\".\n"], chat.Entries.Where(entry => entry.Kind == HexAgentEntryKind.Text).Select(entry => entry.Text).ToArray());
         Assert.Contains(chat.Entries, entry => entry is { Kind: HexAgentEntryKind.Tool, ToolId: "step-2", ToolName: "read_file", State: HexAgentToolState.Done, Output: "1 lines, 4 bytes" });
-        Assert.Contains(chat.Entries, entry => entry is { Kind: HexAgentEntryKind.Tool, ToolId: "step-3", ToolName: "mcp__hex__hex_search", State: HexAgentToolState.Failed });
+        Assert.Contains(chat.Entries, entry => entry is { Kind: HexAgentEntryKind.Tool, ToolId: "step-3", ToolName: "mcp__hex__hex_search", State: HexAgentToolState.Failed }
+            && entry.Input!.Contains("Kept", StringComparison.Ordinal) && !entry.Input.Contains("ServerName", StringComparison.Ordinal));
+        Assert.Contains(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Note && entry.Text.Contains("Bash", StringComparison.Ordinal));
         Assert.Equal(HexAgentLimitState.Hit, chat.Limit?.State);
         Assert.True(chat.ContextLimit > 1_000_000);
         Assert.False(chat.Running);

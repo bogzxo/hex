@@ -431,3 +431,6 @@ Thumbs.db
 
 # Hex's build count, one more every build (Hex/HexBuildNumber.targets)
 .hex-build
+
+# Antigravity's MCP servers, the hex server written in for each run with this machine's paths and the chat it's for
+/.agents/mcp_config.json
