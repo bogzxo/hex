@@ -66,7 +66,12 @@ internal sealed partial class DawnScene
             McpSchema.Object([("id", McpSchema.Integer("The chat.")), ("text", McpSchema.String("What to say."))], "id", "text")), AgentSend),
         new(new McpTool("hex_agent_stop", "Stop an agent",
             "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
-            McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool)
+            McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
+        new(new McpTool("hex_agent_close", "Close or clear an agent you started",
+            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it."))], "id")), AgentClose)
     ];
 
     /// <summary>The chat a call came from, when it's an agent of the panel's.</summary>
@@ -412,5 +417,62 @@ internal sealed partial class DawnScene
         bool was = chat.Running;
         StopAgent(chat);
         yield return McpToolResult.Text(was ? $"Stopped #{chat.Id}." : $"#{chat.Id} wasn't running.");
+    }
+
+    /// <summary>
+    /// A chat an agent started deleted, with the chats it started, or with clear emptied to start afresh. Only by the agent
+    /// that started it, or a client that isn't an agent of the panel (the person's own tools).
+    /// </summary>
+    private IEnumerable<McpToolResult?> AgentClose(JsonObject args)
+    {
+        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        int? caller = CallerOf(args);
+        if (caller is { } asking && chat.Parent != asking)
+        {
+            yield return McpToolResult.Error(chat.Id == asking
+                ? "That's your own chat."
+                : $"#{chat.Id} wasn't started by you, only the agent that started it closes or clears it.");
+            yield break;
+        }
+
+        if (args["clear"]?.GetValue<bool>() != true)
+        {
+            int family = 1 + agentChats.Count(each => IsUnder(each, chat));
+            CloseAgentChat(chat);
+            yield return McpToolResult.Text($"Deleted #{chat.Id}{(family > 1 ? $" and the {family - 1} it started" : string.Empty)}.");
+            yield break;
+        }
+
+        // Emptied, it has to have stopped, what a working agent printed next would land in the chat that was cleared
+        if (chat.Running || agentRuns.Any(run => run.Chat == chat))
+        {
+            yield return McpToolResult.Error($"#{chat.Id} is working, hex_agent_stop it first and clear it once it has stopped.");
+            yield break;
+        }
+
+        // Its older rows go with them, the family's log of what was said between them stays the family's record
+        hub.History?.Delete(chat.Key);
+        chat.Clear();
+        if (agentChat == chat)
+            agentRowsFor = default;
+        yield return McpToolResult.Text($"Cleared #{chat.Id}, its rows, mail and session gone. hex_agent_send starts it afresh.");
+    }
+
+    // Whether a chat is under another, started by it or by one it started
+    private bool IsUnder(HexAgentChat chat, HexAgentChat top)
+    {
+        for (int guard = 0; chat.Parent is { } up && ChatById(up) is { } parent && guard < 16; guard++)
+        {
+            if (parent == top)
+                return true;
+            chat = parent;
+        }
+
+        return false;
     }
 }

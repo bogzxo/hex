@@ -184,14 +184,22 @@ internal sealed partial class DawnScene
     /// <summary>The blue of something going on, the same in every look, a theme's selection colour is its accent in some.</summary>
     internal static readonly Vector4 RUNNING_BLUE = new(0.38f, 0.62f, 1.0f, 1.0f);
 
-    // The colour of an agent system's badge, the same one every time for the same system, Claude Code's the accent and
-    // Codex's blue
+    // The colour of an agent system's badge, its own as its extension says it (hex.agent's colour, colour_light on a light
+    // theme), so it reads as that system wherever it's shown. One that says none has one of the theme's, the same every
+    // time for the same system
     private static Vector4 AgentTint(string agent, UISkin? skin)
     {
-        if (agent == "claude_code")
-            return skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f);
-        if (agent == "codex")
-            return RUNNING_BLUE;
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].Id != agent)
+                continue;
+            string? said = skin?.Palette.LightField == true ? all[i].ColourOnLight ?? all[i].Colour : all[i].Colour;
+            if (said is { Length: > 0 } && ColorPicker.FromHex(said) is { } own)
+                return own with { W = 1.0f };
+            break;
+        }
+
         Vector4[] tints =
         [
             skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f),

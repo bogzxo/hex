@@ -56,6 +56,27 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Check("noon fleet: and none once it's done", () => noonFleetSummary.Text.Contains("0 running", StringComparison.Ordinal));
 
+        // The one that started them clears one and deletes the other, which nobody else may
+        Task<McpToolResult>? stranger = null, cleared = null, deleted = null;
+        test.Run(() =>
+        {
+            scout!.Say("what the scout found");
+            scout.Session = "scout-session";
+            stranger = McpTools.CallAs("hex_agent_close", new System.Text.Json.Nodes.JsonObject { ["id"] = scout.Id }, CancellationToken.None, builder!.Id);
+            cleared = McpTools.CallAs("hex_agent_close", new System.Text.Json.Nodes.JsonObject { ["id"] = scout.Id, ["clear"] = true }, CancellationToken.None, lead!.Id);
+        });
+        test.WaitFor(() => stranger?.IsCompleted == true && cleared?.IsCompleted == true, 10.0f);
+        test.Check("noon fleet: only the one that started an agent closes or clears it", () =>
+            stranger is { IsCompletedSuccessfully: true, Result.IsError: true } && ChatById(scout!.Id) is not null);
+        test.Check("noon fleet: cleared, the chat stays, emptied, its session gone", () =>
+            cleared is { IsCompletedSuccessfully: true, Result.IsError: false } && ChatById(scout!.Id) == scout
+            && scout.Entries.Count == 0 && scout.Session is null);
+        test.Run(() => deleted = McpTools.CallAs("hex_agent_close", new System.Text.Json.Nodes.JsonObject { ["id"] = builder!.Id }, CancellationToken.None, lead!.Id));
+        test.WaitFor(() => deleted?.IsCompleted == true, 10.0f);
+        test.Check("noon fleet: closed, the chat is gone from the fleet", () =>
+            deleted is { IsCompletedSuccessfully: true, Result.IsError: false } && ChatById(builder!.Id) is null
+            && !ChatsInOrder().Any(each => each.Chat == builder));
+
         test.Run(() => CloseAgentChat(lead!));
         test.Settle(0.4f);
         test.Check("noon fleet: closing the one at the top closes the ones it started", () =>

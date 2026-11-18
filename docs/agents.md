@@ -92,7 +92,7 @@ call, and a search or read of the workspace (`grep`, `rg`, `find`, `ls`, `cat`, 
 `Select-String`, `Get-Content` and the like as the first command of the line) is turned back with the Hex tool that does
 it. A grep that filters a pipe, builds, tests, git and anything outside the workspace are left alone. Claude Code's
 setting Keep it on the harness picks how hard, turned back (the default), reminded (the call runs with the Hex tool said
-beside it) or left alone. Codex and Gemini have no such hook and are told more firmly in their instructions.
+beside it) or left alone. Codex and Antigravity have no such hook and are told more firmly in their instructions.
 
 An agent's bridge (`Hex.exe --mcp-connect`) outlives the Hex it talks to. When Hex restarts into a build of itself, the
 bridge fails the calls that were cut off (so the agent makes them again), holds what the agent says meanwhile, waits up
@@ -132,6 +132,9 @@ the chat that started them, so they can be watched and talked to like any other.
   by another uses it to report what it finds as soon as it matters, ask, or say it's stuck.
 - `hex_agent_inbox()` reads the messages not read yet, oldest first.
 - `hex_agent_stop(id)` stops a chat and the chats it started.
+- `hex_agent_close(id, clear?)` deletes the chat of an agent you started, and the chats it started, once its work is
+  done. With `clear` the chat stays and is emptied instead, its rows, mail and session gone, so the next
+  `hex_agent_send` starts it afresh. Only the agent that started it may close or clear it.
 
 So one agent can coordinate others, a more capable model keeping the judgement while cheaper ones explore, implement and
 test. `hex_agent_wait` returns as soon as a message comes for the agent waiting (`messages: false` waits on

@@ -3416,7 +3416,7 @@ let strings = {
         system_compacted: "Compacted {count}× · {retries} retries",
         system_harness: "Hex saved {tokens} tokens · {share}% in {calls} calls",
         system_harness_one: "Hex saved {tokens} tokens · {share}% in 1 call",
-        system_none: "No agent systems yet. Claude Code, Codex and Gemini come as extensions."
+        system_none: "No agent systems yet. Claude Code, Codex and Antigravity come as extensions."
     },
 
     agents_item: {

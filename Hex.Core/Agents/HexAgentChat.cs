@@ -298,6 +298,23 @@ internal sealed class HexAgentChat(int id, string agent)
         Seen = Version;
     }
 
+    /// <summary>
+    /// Everything of it let go of but who it is (its id, agent, the chat that started it, its name and options), for it to
+    /// start afresh: its rows, its session, its mail and what it used. A new key, the file of its old rows the caller's
+    /// to delete by the one it had.
+    /// </summary>
+    public void Clear()
+    {
+        Restore(string.Empty, [], 0);
+        Session = null;
+        Key = Guid.NewGuid().ToString("N");
+        InputTokens = OutputTokens = CacheRead = ContextUsed = 0;
+        Cost = 0;
+        Stopped = false;
+        mail.Clear();
+        Version++;
+    }
+
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);

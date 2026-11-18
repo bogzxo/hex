@@ -7,7 +7,10 @@ namespace Hex.Core;
 /// <param name="Extension">The id of the extension that said it, which takes it away again when it's switched off.</param>
 /// <param name="Budget">The characters a harness answer stays under for it when a call doesn't say, 0 for the usual.</param>
 /// <param name="Instructions">What its agent is told as it connects, after what Hex tells every agent.</param>
-internal sealed record HexAgentProfile(string Id, string Name, string[] Clients, int Budget, string Instructions, string Extension);
+/// <param name="Colour">Its own colour as #rrggbb, its badge's in the chats and the systems panel, null for one Hex picks.</param>
+/// <param name="ColourOnLight">The same on a light theme where the dark one wouldn't read (Codex's white), null for <paramref name="Colour"/>.</param>
+internal sealed record HexAgentProfile(string Id, string Name, string[] Clients, int Budget, string Instructions, string Extension,
+    string? Colour = null, string? ColourOnLight = null);
 
 /// <summary>
 /// The agent profiles there are, said by extensions on the editor's thread and read from the pipe's as clients connect

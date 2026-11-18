@@ -37,7 +37,7 @@ internal sealed partial class HexExtensions
                 ? [.. list.Items.OfType<StringValue>().Select(each => each.Value)]
                 : [id];
             HexAgentProfiles.Set(new HexAgentProfile(id, Text(said, "name") ?? extension.Name, clients, (int)(Number(said, "budget") ?? 0),
-                Text(said, "instructions") ?? string.Empty, extension.Id));
+                Text(said, "instructions") ?? string.Empty, extension.Id, Text(said, "colour"), Text(said, "colour_light")));
             if (said.Properties.TryGetValue("run", out IRuntimeValue? run) && run is ObjectValue running)
                 agentRuns[id] = (extension, running);
             else

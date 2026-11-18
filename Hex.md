@@ -88,10 +88,16 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
         tool rows as mcp__hex__..., the conversation gone on with by a second message. Headless agy refuses every MCP
         call without an allow-rule, so each run allows mcp(hex/*) through --settings (never saved). A refused step
         ends in ERROR, and what it wasn't let do is said in a note
-  - The model in the panel when none is picked can't be had: agy's init names it only when --model is given, agy
-    models marks no default, and only its own cli.log says it ("selected model override ... Gemini 3.8 Flash (High)")
+  - [x] The model in the panel when none is picked, read from agy's own cli.log ("selected model override ...
+        label=Gemini 3.8 Flash (High)") since its init names it only when --model is given (asked 2026-11-18)
+  - [x] Hex's tools all reach it, checked live: hex_files, hex_symbols, hex_read, hex_search, hex_skim and
+        hex_terminal_run each answered right (asked 2026-11-18)
+  - [x] The Gemini CLI extension removed, Antigravity runs Gemini on the Google plan (asked 2026-11-18)
   - The hex server's entry in .agents/mcp_config.json keeps the last chat's id in the folder, as Gemini's
     .gemini/settings.json does, ignored in Hex's repository
+- [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
+- [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
+      Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
 - [x] The agent that starts others decides what they may do (asked 2026-11-18). hex_agent_spawn's permissions, allow
       and deny rules in the child system's own words (Claude Code's --allowedTools and --disallowedTools, Antigravity's
       --settings), and what a child asks leave to do goes to its parent as a question it answers with hex_agent_approve,

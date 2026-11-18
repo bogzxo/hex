@@ -26,7 +26,6 @@ public sealed class HexAgentSystemsTests : IDisposable
         HexAgentProfiles.Forget("test");
         HexAgentProfiles.Forget("claude_code");
         HexAgentProfiles.Forget("codex");
-        HexAgentProfiles.Forget("gemini");
         HexAgentProfiles.Forget("antigravity");
         try { Directory.Delete(folder, true); } catch (Exception) { }
     }
@@ -185,7 +184,8 @@ public sealed class HexAgentSystemsTests : IDisposable
             ("agent", Natives.Action("agent", args => HexAgentProfiles.Set(new HexAgentProfile(
                 HexExtensions.Text(args.Object(0), "id")!, HexExtensions.Text(args.Object(0), "name")!,
                 [.. ((ListValue)args.Object(0).Properties["clients"]).Items.Select(Values.Text)],
-                (int)((NumberValue)args.Object(0).Properties["budget"]).Value, HexExtensions.Text(args.Object(0), "instructions")!, id)))),
+                (int)((NumberValue)args.Object(0).Properties["budget"]).Value, HexExtensions.Text(args.Object(0), "instructions")!, id,
+            HexExtensions.Text(args.Object(0), "colour"), HexExtensions.Text(args.Object(0), "colour_light"))))),
             ("workspace", Natives.Function("workspace", _ => Natives.List([folder]))),
             ("executable", new StringValue(@"C:\Hex\Hex.exe")),
             ("home", new StringValue(folder)),
@@ -223,6 +223,9 @@ public sealed class HexAgentSystemsTests : IDisposable
         var (runtime, hex, commands, _) = Load("claude_code");
         HexAgentProfile? profile = HexAgentProfiles.For("claude-code 2.1.0");
         Assert.Equal("Claude Code", profile?.Name);
+        // Its badge in Claude's coral, deeper on a light theme
+        Assert.Equal("#D97757", profile?.Colour);
+        Assert.Equal("#C15F3C", profile?.ColourOnLight);
         Assert.Equal(7000, profile?.Budget);
         Assert.Contains("hex_symbols", profile?.Instructions);
 
@@ -247,6 +250,9 @@ public sealed class HexAgentSystemsTests : IDisposable
     {
         var (runtime, hex, commands, written) = Load("codex");
         Assert.Equal("Codex", HexAgentProfiles.For("codex-mcp-client")?.Name);
+        // OpenAI's white on a dark theme and black on a light one
+        Assert.Equal("#ECECEC", HexAgentProfiles.For("codex-mcp-client")?.Colour);
+        Assert.Equal("#0D0D0D", HexAgentProfiles.For("codex-mcp-client")?.ColourOnLight);
 
         runtime.Invoke(commands["Connect Codex to Hex"], hex);
         Assert.Equal("[mcp_servers.hex]\ncommand = 'C:\\Hex\\Hex.exe'\nargs = [\"--mcp-connect\"]\n", written["config.toml"]);
@@ -409,52 +415,6 @@ public sealed class HexAgentSystemsTests : IDisposable
         string command = hook["hooks"]![0]!["command"]!.GetValue<string>();
         Assert.Contains("--harness-hook --guard insist --folder", command);
         Assert.StartsWith("\"C:/Hex/Hex.exe\"", command);
-    }
-
-    [Fact]
-    public void Gemini_says_who_it_is_and_runs_with_hex_in_its_settings_and_the_session_resumed()
-    {
-        var (runtime, hex, commands, written) = Load("gemini");
-        Assert.Equal("Gemini", HexAgentProfiles.For("gemini-cli-mcp-client 0.20")?.Name);
-
-        ObjectValue run = (ObjectValue)Agents(runtime, hex);
-        var chat = new HexAgentChat(3, "gemini") { Session = "s1" };
-        IRuntimeValue made = runtime.Invoke(run.Properties["arguments"], new StringValue("go"), HexAgentChatApi.Of(chat, folder));
-        string[] arguments = [.. ((ListValue)made).Items.Select(Values.Text)];
-        Assert.Equal(["-p", "", "--output-format", "stream-json"], arguments[..4]);
-        Assert.Equal("s1", arguments[Array.IndexOf(arguments, "--resume") + 1]);
-        JsonObject settings = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, ".gemini", "settings.json")))!.AsObject();
-        Assert.Equal("Hex.exe", settings["mcpServers"]!["hex"]!["command"]!.GetValue<string>());
-        Assert.True(settings["mcpServers"]!["hex"]!["trust"]!.GetValue<bool>());
-
-        runtime.Invoke(commands["Teach Gemini the Hex tools"], hex);
-        Assert.Contains("## Finding code", written["GEMINI.md"]);
-    }
-
-    [Fact]
-    public void Geminis_stream_is_rows_its_chunks_one_answer_and_a_quota_its_limit()
-    {
-        HexAgentChat chat = Play("gemini",
-            """{"type":"init","timestamp":"2026-11-17T10:00:00Z","session_id":"g1","model":"gemini-3-pro-preview"}""",
-            """{"type":"message","role":"user","content":"go"}""",
-            """{"type":"message","role":"assistant","content":"Looking ","delta":true}""",
-            """{"type":"message","role":"assistant","content":"now.","delta":true}""",
-            """{"type":"tool_use","tool_name":"mcp_hex_hex_search","tool_id":"t1","parameters":{"query":"Load"}}""",
-            """{"type":"tool_result","tool_id":"t1","status":"success","output":"a.cs:1"}""",
-            """{"type":"message","role":"assistant","content":"Found it.","delta":true}""",
-            """{"type":"error","severity":"warning","message":"Quota exceeded for quota metric, 429 RESOURCE_EXHAUSTED"}""",
-            """{"type":"result","status":"success","stats":{"total_tokens":120,"input_tokens":100,"output_tokens":20,"duration_ms":900,"tool_calls":1}}""");
-
-        Assert.Equal("g1", chat.Session);
-        Assert.Equal("gemini-3-pro-preview", chat.Model);
-        string[] said = [.. chat.Entries.Where(entry => entry.Kind == HexAgentEntryKind.Text).Select(entry => entry.Text)];
-        Assert.Equal(["Looking now.", "Found it."], said);
-        Assert.Contains(chat.Entries, entry => entry is { Kind: HexAgentEntryKind.Tool, ToolId: "t1", State: HexAgentToolState.Done });
-        Assert.Equal(HexAgentLimitState.Hit, chat.Limit?.State);
-        Assert.Equal(100, chat.InputTokens);
-        Assert.Equal(20, chat.OutputTokens);
-        Assert.True(chat.ContextLimit > 1_000_000);
-        Assert.False(chat.Running);
     }
 
     [Fact]
