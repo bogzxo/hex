@@ -17,6 +17,11 @@ internal sealed partial class DawnScene
     private StackPanel? agentsMention;
     private string agentsMentionFor = string.Empty;
     private string? agentsMentionFirst;
+    private volatile bool mentionLooking;
+
+    // The index the list looks in, the harness's, or a self-test's own over a folder it made where Hex has no workspace
+    private HexCodeIndex? mentionIndex;
+    private HexCodeIndex MentionIndex => mentionIndex ?? Harness;
 
     /// <summary>
     /// The @ and what's after it up to the caret on the caret's line, where it starts in the line, null when the caret isn't
@@ -42,7 +47,7 @@ internal sealed partial class DawnScene
     private void DrawAgentMention()
     {
         var mention = MentionAtCaret();
-        string key = mention is { } at ? $"{at.Typed}|{agentsComposeTall}|{Harness.Generation}" : string.Empty;
+        string key = mention is { } at ? $"{at.Typed}|{agentsComposeTall}|{MentionIndex.Generation}" : string.Empty;
         if (key == agentsMentionFor)
             return;
         agentsMentionFor = key;
@@ -55,7 +60,19 @@ internal sealed partial class DawnScene
         if (mention is not { } typed || typed.Typed.Length == 0)
             return;
 
-        HexIndexSnapshot index = Harness.Latest;
+        HexCodeIndex looked = MentionIndex;
+        HexIndexSnapshot index = looked.Latest;
+        // Not looked at yet since Hex started (no agent has asked it anything), looked at off the editor's thread, the
+        // list coming once it's done as the generation in the key moves
+        if (!index.Files.Any())
+        {
+            if (!mentionLooking)
+            {
+                mentionLooking = true;
+                Task.Run(() => looked.Look()).ContinueWith(_ => mentionLooking = false, TaskScheduler.Default);
+            }
+            return;
+        }
         var picks = new List<(string Icon, string Label, string Taken)>();
         foreach (var (file, _) in HexCodeIndex.FindFiles(index, typed.Typed).Take(MENTION_FILES))
             picks.Add((HexExplorer.FileIcon(file.Path), file.Relative, file.Relative.Replace('\\', '/')));

@@ -124,6 +124,33 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("noon: Alt+1 is the chat again", () => noonStage == NoonStage.Chat && agentsView.Visible && !noonInbox.Visible);
 
+        // An @ in the box lists the files that fit and Tab puts the first one's path in
+        string? mentioned = null;
+        test.Run(() =>
+        {
+            // A folder and an index of its own, the self-test's Hex has no workspace for the harness to look in
+            string folder = Path.Combine(Path.GetTempPath(), "hex-mention-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "MentionTarget.cs"), "class MentionTarget { }\n");
+            mentionIndex = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+            mentionIndex.Look(force: true);
+            mentioned = HexCodeIndex.FindFiles(mentionIndex.Latest, "MentionTarget").Select(each => each.File.Relative.Replace('\\', '/')).FirstOrDefault();
+            agentsInput.Focus();
+            agentsInput.Text = "see @MentionTar";
+            agentsInput.Document.MoveTo(new UITextPosition(0, agentsInput.Text.Length));
+        });
+        test.Settle(0.3f);
+        test.Check("noon: an @ in the box lists the files that fit what's typed after it", () =>
+            mentioned is not null && agentsMention is not null && Descendants(agentsMention).OfType<Button>().Any(button => button.Label.Contains("MentionTarget.cs", StringComparison.Ordinal)));
+        test.Run(() => TakeFirstMention());
+        test.Settle(0.2f);
+        test.Check("noon: and Tab puts the first one's path in with a space after it", () => agentsInput.Text == $"see @{mentioned} " && agentsMention is null);
+        test.Run(() =>
+        {
+            agentsInput.Text = string.Empty;
+            mentionIndex = null;
+        });
+
         // The fleet put away for the room and brought back
         PressKeys(test, "Ctrl+Alt+B");
         test.Settle(0.3f);
