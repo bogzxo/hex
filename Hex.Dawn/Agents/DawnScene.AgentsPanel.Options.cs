@@ -265,14 +265,17 @@ internal sealed partial class DawnScene
             return;
         }
 
-        const float WIDTH = 620.0f, INSET = 18.0f;
-        string? table = Harness.Stats.Table();
-        int rows = table?.Count(c => c == '\n') ?? 0;
+        // The saving at the top in large type with a bar of it, then a card a tool with its own bar and figures, the agent
+        // systems' shares under them, and what the numbers mean last and small. It was a Markdown table in the window's
+        // default type, its header shouting and its last row cut off by the window's bottom
+        var tools = Harness.Stats.Rows();
+        var clients = Harness.Stats.ClientRows();
+        var (calls, said, plain) = Harness.Stats.Totals();
         var window = new WindowPanel(Said("agents_panel.harness_title"))
         {
             Icon = "zap",
-            Size = new System.Numerics.Vector2(WIDTH, 120.0f + rows * 30.0f),
-            MinSize = new System.Numerics.Vector2(420.0f, 140.0f)
+            Size = new System.Numerics.Vector2(640.0f, MathF.Min(720.0f, 230.0f + (tools.Count + clients.Count) * 46.0f)),
+            MinSize = new System.Numerics.Vector2(420.0f, 220.0f)
         };
         DressWindow(window);
         harnessWindow = window;
@@ -282,47 +285,63 @@ internal sealed partial class DawnScene
             harnessWindow = null;
         };
 
-        var column = window.Add(new StackPanel { Spacing = 10.0f, Padding = new UIEdges(INSET, 16.0f), Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal });
-        column.Add(Text(Said("agents_panel.harness_about"), 0.13f, dim: true));
-        if (table is null)
-            column.Add(Text(Said("agents_panel.harness_none"), 0.14f));
+        var scroll = window.Add(new ScrollPanel { Fill = UIFill.Both, Padding = new UIEdges(18, 14, 10, 14) });
+        var column = scroll.Add(new StackPanel { Spacing = 10.0f, Fill = UIFill.Horizontal });
+        if (tools.Count == 0)
+            column.Add(WindowEmpty("zap", Said("agents_panel.harness_none")));
         else
         {
-            // Written the way an agent's reply is, the table a table of the notebooks' kind
-            var written = column.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
-            WriteMarkdown(written, table, string.Empty);
-            foreach (UIComponent part in Descendants(written))
-            {
-                if (part is NotebookTablePanel grid)
-                    grid.Strip.Visible = false;
-            }
-            FitWritten(written, WIDTH - INSET * 2.0f, keepWidth: true);
+            System.Numerics.Vector4 good = Skin?.Palette.Success ?? new System.Numerics.Vector4(0.35f, 0.8f, 0.45f, 1.0f);
+            double share = plain <= 0 ? 0 : (double)(plain - said) / plain;
+            column.Add(WindowSummary($"{share * 100:0}%", Said("agents_panel.harness_fewer"),
+                Said("agents_panel.harness_under", ("back", HexHarnessStats.Tokens(said)), ("plain", HexHarnessStats.Tokens(plain)),
+                    ("calls", calls.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)),
+                    ("kept", tools.Sum(tool => tool.Kept).ToString("N0", System.Globalization.CultureInfo.InvariantCulture))), good));
+            column.Add(ShareBar(share, good, 8.0f));
 
-            // Fitted again whenever the window's been made wider or narrower, the table following its edges
-            harnessSaved = (window, written, WIDTH);
-            window.OnClosed = () =>
+            column.Add(SectionHead(Said("agents_panel.harness_by_tool")));
+            foreach (var tool in tools)
+                column.Add(HarnessRow(tool.Name, tool.Calls, tool.Kept, tool.Said, tool.Plain, ToolIcon(tool.Name)));
+
+            if (clients.Count > 0)
             {
-                window.Parent?.Remove(window);
-                harnessSaved = null;
-                harnessWindow = null;
-            };
+                column.Add(SectionHead(Said("agents_panel.harness_by_client")));
+                foreach (var client in clients)
+                    column.Add(HarnessRow(client.Name, client.Calls, null, client.Said, client.Plain, "account"));
+            }
+
+            column.Add(new Label { Text = UIRichText.Literal(Said("agents_panel.harness_about")), TextScale = 0.115f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
         }
+
         chrome.Root.Add(window);
         window.TakeKeyboard();
     }
 
+    // A section's name over its cards, small, bold and dim
+    private static Label SectionHead(string text) =>
+        new() { Text = UIRichText.Literal(text.ToUpperInvariant()), TextScale = 0.105f, Bold = true, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal };
+
+    // A tool's or an agent system's card, its name and what it saved in figures along the top, a bar of the share under them
+    private Panel HarnessRow(string name, long calls, long? kept, long said, long plain, string icon)
+    {
+        System.Numerics.Vector4 good = Skin?.Palette.Success ?? new System.Numerics.Vector4(0.35f, 0.8f, 0.45f, 1.0f);
+        double share = plain <= 0 ? 0 : (double)(plain - said) / plain;
+        // Under half saved is the warning's colour, the tool reads about as much as the plain way would
+        System.Numerics.Vector4 colour = share >= 0.5 ? good : Skin?.Palette.Warning ?? new System.Numerics.Vector4(1.0f, 0.78f, 0.3f, 1.0f);
+        Panel card = StripedCard(colour, 8.0f);
+        var stack = card.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
+        var head = stack.Add(new Panel { Fill = UIFill.Horizontal, Size = new System.Numerics.Vector2(0, 20), Color = System.Numerics.Vector4.Zero });
+        head.Add(new Label { Text = $"$({icon}) {UIRichText.Literal(name)}", TextScale = 0.135f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left }).Also(label => label.CodeFont = code.Font);
+        string figures = Said(kept is { } hits ? "agents_panel.harness_row" : "agents_panel.harness_row_client",
+            ("back", HexHarnessStats.Tokens(said)), ("plain", HexHarnessStats.Tokens(plain)),
+            ("calls", calls.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)), ("kept", (kept ?? 0).ToString("N0", System.Globalization.CultureInfo.InvariantCulture)));
+        var right = head.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 10, Anchor = Origin.Right, Pivot = Origin.Right });
+        right.Add(new Label { Text = UIRichText.Literal(figures), TextScale = 0.115f, Dim = true });
+        right.Add(new Label { Text = $"[color:{HexColour(colour)}]{share * 100:0}%[/color]", TextScale = 0.14f, Bold = true });
+        stack.Add(ShareBar(share, colour, 5.0f));
+        return card;
+    }
+
     // The window of what the harness saved while it's up, so a second press closes it
     private WindowPanel? harnessWindow;
-
-    // The window of what the harness saved while it's up, what's written in it and the width that was fitted to
-    private (WindowPanel Window, StackPanel Written, float Width)? harnessSaved;
-
-    /// <summary>Every tick, the table in the window of what the harness saved fitted again when the window's width moved.</summary>
-    private void FitHarnessSaved()
-    {
-        if (harnessSaved is not { } shown || MathF.Abs(shown.Window.Size.X - shown.Width) < 0.5f)
-            return;
-        harnessSaved = shown with { Width = shown.Window.Size.X };
-        FitWritten(shown.Written, MathF.Max(80.0f, shown.Window.Size.X - 36.0f), keepWidth: true);
-    }
 }

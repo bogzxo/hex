@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
             every is not null && Descendants(noonContextRows).OfType<Label>().Any(label => label.Text.Contains("where are the tests?", StringComparison.Ordinal)));
 
         // Each row's words, the last label of it under the line of who to whom
-        string[] Shown() => familyList is null ? [] : [.. familyList.Children.OrderByDescending(row => row.Bounds.Max.Y).Select(row => Descendants(row).OfType<Label>().Last().Text)];
+        string[] Shown() => familyList is null ? [] : [.. familyList.Children.OrderByDescending(row => row.Bounds.Max.Y).Select(row => Descendants(row).OfType<Label>().LastOrDefault()?.Text).OfType<string>()];
         test.Run(() => every?.OnPressed?.Invoke());
         test.Settle(0.4f);
         test.Check("noon mail: the family's window has every message, oldest first", () =>
@@ -66,19 +66,34 @@ internal sealed partial class DawnScene
         });
 
         // By kind, and by member, what one sent or was sent
-        test.Run(() => familyFilters!.Children.OfType<StackPanel>().First().Children.OfType<Button>().First(button => button.Label == Said("noon.family_finding")).OnPressed!());
+        // A chip pressed by the words on it, the kinds the summary's next row and the members the last
+        void PressChip(bool members, string starts)
+        {
+            StackPanel row = members ? familyFilters!.Children.OfType<StackPanel>().Last() : familyFilters!.Children.OfType<StackPanel>().ElementAt(1);
+            Panel chip = row.Children.OfType<Panel>().First(each => each.Children.OfType<Label>().Any(label => label.Text.Contains(starts, StringComparison.Ordinal)));
+            chip.Children.OfType<Button>().First().OnPressed!();
+        }
+
+        test.Check("noon mail: the summary counts the messages and the chips how many each lets through", () =>
+            Descendants(familyFilters!).OfType<Label>().Any(label => label.Text.Contains(Said("noon.family_messages"), StringComparison.Ordinal))
+            && Descendants(familyFilters!).OfType<Label>().Any(label => label.Text.Contains($"{Said("noon.family_finding")}  1", StringComparison.Ordinal)));
+        test.Run(() => PressChip(false, Said("noon.family_finding")));
         test.Settle(0.3f);
         test.Check("noon mail: the findings filter leaves the finding", () => familyList is { ItemCount: 1 } && Shown() is [var only] && only.Contains("StartMcp", StringComparison.Ordinal));
-        test.Run(() =>
-        {
-            familyFilters!.Children.OfType<StackPanel>().First().Children.OfType<Button>().First().OnPressed!();
-            familyFilters.Children.OfType<StackPanel>().Last().Children.OfType<Button>().First(button => button.Label.StartsWith($"#{scout!.Id}", StringComparison.Ordinal)).OnPressed!();
-        });
+        test.Run(() => PressChip(false, Said("noon.family_question")));
+        test.Settle(0.3f);
+        test.Run(() => PressChip(false, Said("noon.family_instruction")));
+        test.Settle(0.3f);
+        test.Run(() => PressChip(true, $"#{scout!.Id} "));
+        test.Settle(0.3f);
+        test.Check("noon mail: filtered to nothing the window says so with a way back", () =>
+            familyList is { ItemCount: 0 } && familyEmpty is { Visible: true } && Descendants(familyEmpty).OfType<Button>().Any(button => button.Label == Said("noon.family_show_all")));
+        test.Run(() => PressChip(false, Said("noon.family_all")));
         test.Settle(0.3f);
         test.Check("noon mail: a member's filter leaves what it sent and was sent", () => familyList is { ItemCount: 2 });
 
         // An agent's number on a message opens its chat
-        test.Run(() => Descendants(familyList!).OfType<Button>().First(button => button.Label == $"#{scout!.Id}").OnPressed!());
+        test.Run(() => Descendants(familyList!).OfType<Button>().First(button => button.Label.StartsWith($"#{scout!.Id} ", StringComparison.Ordinal)).OnPressed!());
         test.Settle(0.3f);
         test.Check("noon mail: an agent's number on a message opens its chat", () => agentChat == scout && noonStage == NoonStage.Chat);
         test.Run(() => OpenAgentChat(lead!));
@@ -86,7 +101,7 @@ internal sealed partial class DawnScene
         // Hundreds of messages, a few rows made, the newest in sight
         test.Run(() =>
         {
-            familyFilters!.Children.OfType<StackPanel>().Last().Children.OfType<Button>().First().OnPressed!();
+            PressChip(true, Said("noon.family_everyone"));
             for (int i = 1; i <= 500; i++)
                 hub.MailOf(lead!).Add(new HexAgentMail(hub.NextMailSeq(), scout!.Id, "Scout", "progress", $"step {i} of the long job", false) { To = lead!.Id }, HexMailRoute.Inbox);
         });

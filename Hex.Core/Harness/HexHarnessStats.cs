@@ -145,6 +145,21 @@ internal sealed class HexHarnessStats
         return (calls, said, plain);
     }
 
+    /// <summary>Each tool's counts, the one that saved the most first, for a window to draw rather than a table of text.</summary>
+    public List<(string Name, long Calls, long Kept, long Said, long Plain)> Rows() => Of(tools);
+
+    /// <summary>The same by the MCP client that asked, each agent system's share of it.</summary>
+    public List<(string Name, long Calls, long Kept, long Said, long Plain)> ClientRows() => Of(clients);
+
+    private static List<(string, long, long, long, long)> Of(ConcurrentDictionary<string, Tool> from)
+    {
+        var rows = new List<(string Name, long Calls, long Kept, long Said, long Plain)>();
+        foreach (var (name, tool) in from)
+            rows.Add((name, Interlocked.Read(ref tool.Calls), Interlocked.Read(ref tool.Kept), Interlocked.Read(ref tool.Said), Interlocked.Read(ref tool.Plain)));
+        rows.Sort((a, b) => (b.Plain - b.Said).CompareTo(a.Plain - a.Said));
+        return [.. rows.Select(row => (row.Name, row.Calls, row.Kept, row.Said, row.Plain))];
+    }
+
     /// <summary>Every tool's together, the calls, the characters handed back and what the plain way would have read.</summary>
     public (long Calls, long Said, long Plain) Totals()
     {
@@ -193,11 +208,11 @@ internal sealed class HexHarnessStats
         return said.ToString();
     }
 
-    // Characters as tokens, short, 1.2k past a thousand
-    private static string Tokens(long chars)
+    /// <summary>Characters as tokens, short, 1.2k past a thousand and 6.0M past a million.</summary>
+    public static string Tokens(long chars)
     {
         long tokens = chars / 4;
-        return tokens >= 1000 ? $"{tokens / 1000.0:0.#}k" : tokens.ToString();
+        return tokens >= 1_000_000 ? $"{tokens / 1_000_000.0:0.0}M" : tokens >= 1000 ? $"{tokens / 1000.0:0.#}k" : tokens.ToString();
     }
 
     private static string Saved(long said, long plain) => plain <= 0 ? "0%" : $"{100.0 * (plain - said) / plain:0}%";
