@@ -269,10 +269,14 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 
 ## Dev and stable builds (last)
 
-- [ ] A dev build's icon is the icon in greyscale with a yellow H
-- [ ] The installer installs a stable build and a dev build, each in a folder of its own, side by side
-- [ ] Each updates its own way, stable from releases, dev from the latest nightly build (artefact) of the development
-      branch, both managed by the installer
+- [x] A dev build's icon is the icon in greyscale with a yellow H, on its exe, windows, launchers and Mac app (454dd79)
+- [x] The installer installs a stable build and a dev build, each in a folder of its own, side by side, with entries,
+      shortcuts and launchers of their own (Hex Dev), a Stable or Nightly choice in Setup and --channel dev (b1d147d)
+- [x] Each updates its own way, stable from releases, dev from the newest nightly prerelease of the development branch
+      (nightly-<run>, a release rather than the run's artefact, which can't be downloaded without a token), both
+      through Hex Setup. The build stamps its channel and nightly into Hex (HexChannel, HexNightly), Help has Open Hex
+      Setup (c36ad70). The nightly workflow builds development every night it moved and keeps the last seven
+      (.github/workflows/nightly.yml, 4fd8792), not yet run on GitHub
 
 ## Plan milestones (docs/agent-workspace-plan.md)
 
