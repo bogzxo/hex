@@ -9,6 +9,16 @@ namespace Hex.Tests;
 public sealed class HexAgentHubTests
 {
     [Fact]
+    public void ATerminalsColourCodesAreTakenOutOfNotesAndErrors()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Error("\u001b[31mError:\u001b[0m it \u001b]0;title\u0007failed");
+        chat.Note("plain words stay");
+        Assert.Equal("Error: it failed", chat.Entries[0].Text);
+        Assert.Equal("plain words stay", chat.Entries[1].Text);
+    }
+
+    [Fact]
     public void ChatsBecomeSessionsWithTheirFamily()
     {
         var hub = new HexAgentHub();

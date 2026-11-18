@@ -99,6 +99,17 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       start so the picker has them before the first run
   - The hex server's entry in .agents/mcp_config.json keeps the last chat's id in the folder, as Gemini's
     .gemini/settings.json does, ignored in Hex's repository
+- [ ] Images in the chat log seen inline (pictures pasted into a message and ones an agent shows or reads), and opened
+      full screen with zooming and panning (asked 2026-11-18)
+- [ ] Agentic's UX rounds (asked 2026-11-18): two gpt-6-luna reviewers score it, the changes made, three rounds, aiming
+      for 8/10. Round 1 scored 7 and 6 (parity with Cursor 5 and 3.5): an Inbox, change review with checkpoints, a
+      plan, keys for approvals, a collapsible fleet with a filter, pending decisions on top of Details, ANSI in errors.
+      Round 1 built: tabs over Agentic's middle (Chat, Inbox, Changes, Plan, Alt+1 to Alt+4), the Inbox of every agent's
+      requests, questions and finished chats, Changes per turn against a checkpoint taken as the turn began
+      (HexCheckpoints, a git tree through a copy of the index) with Diff and Restore, the Plan from the agent's to-do
+      list, Ctrl+Alt+Y and Ctrl+Alt+N for the request waiting with the keys on its buttons, Waiting on you at the top
+      of Details, the fleet's filter, Ctrl+Alt+B and a narrow window putting the fleet away, its empty state's actions,
+      terminal codes taken out of notes and errors
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)

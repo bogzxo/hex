@@ -108,7 +108,8 @@ internal sealed partial class DawnScene
 
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
         prompt = UnreadPrompt(chat, prompt);
-        chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
+        // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes)
+        TakeCheckpoint(chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation));
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
         string? found = HexAgentProcess.Find(program);
         if (found is null)

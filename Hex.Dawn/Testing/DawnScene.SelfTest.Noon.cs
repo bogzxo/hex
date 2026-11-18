@@ -90,6 +90,48 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Check("noon: and the key brings Agentic up again", () => Face == HexFace.Noon && noonView.Visible);
 
+        // The tabs over the middle, a request waiting in the Inbox and answered by its key from anywhere
+        bool? allowed = null;
+        test.Run(() =>
+        {
+            chat!.Approval("Run the tests", "dotnet test", answer => allowed = answer);
+            chat.Note("[x] Read the loader\n[~] Change the cache\n[ ] Run the tests");
+            noonWait = 0;
+        });
+        test.Settle(0.4f);
+        test.Check("noon: the Inbox tab counts what waits and the Plan tab how far the agent's list got", () =>
+            noonTabButtons[(int)NoonStage.Inbox].Label.EndsWith("1", StringComparison.Ordinal) && noonTabButtons[(int)NoonStage.Plan].Label.EndsWith("1/3", StringComparison.Ordinal));
+        PressKeys(test, "Alt+2");
+        test.Settle(0.4f);
+        test.Check("noon: Alt+2 shows the Inbox, the request on a card with Allow and Deny and their keys", () =>
+            noonStage == NoonStage.Inbox && noonInbox.Visible && !agentsView.Visible
+            && Descendants(noonInboxRows).OfType<Button>().Any(button => button.Label == Said("noon.allow_key", ("key", ALLOW_KEY))));
+        test.Run(() => Shot("noon-inbox"));
+        PressKeys(test, "Ctrl+Alt+Y");
+        test.Settle(0.4f);
+        test.Check("noon: Ctrl+Alt+Y allows the request waiting and the Inbox empties", () =>
+            allowed == true && !chat!.Pending.Any() && noonTabButtons[(int)NoonStage.Inbox].Label == Said("noon.stage_inbox"));
+        PressKeys(test, "Alt+4");
+        test.Settle(0.4f);
+        test.Check("noon: Alt+4 shows the plan, a line an item", () =>
+            noonStage == NoonStage.Plan && Descendants(noonPlanRows).OfType<Label>().Count(label => label.Text.Contains("Change the cache", StringComparison.Ordinal)) == 1);
+        test.Run(() => Shot("noon-plan"));
+        PressKeys(test, "Alt+3");
+        test.Settle(0.4f);
+        test.Check("noon: Alt+3 shows the changes, none yet for a chat that wrote nothing", () =>
+            noonStage == NoonStage.Changes && Descendants(noonChangesRows).OfType<Label>().Any(label => label.Text == Said("noon.changes_empty")));
+        PressKeys(test, "Alt+1");
+        test.Settle(0.3f);
+        test.Check("noon: Alt+1 is the chat again", () => noonStage == NoonStage.Chat && agentsView.Visible && !noonInbox.Visible);
+
+        // The fleet put away for the room and brought back
+        PressKeys(test, "Ctrl+Alt+B");
+        test.Settle(0.3f);
+        test.Check("noon: Ctrl+Alt+B puts the fleet away, the middle taking its room", () => !noonFleet.Visible && noonFleetBack.Visible);
+        PressKeys(test, "Ctrl+Alt+B");
+        test.Settle(0.3f);
+        test.Check("noon: and brings it back", () => noonFleet.Visible && !noonFleetBack.Visible);
+
         // Solstice Day has its own Noon, a deeper teal on the paper
         test.Run(() => PickLook(HexLooks.SolsticeDay));
         test.Settle(0.4f);

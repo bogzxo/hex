@@ -91,7 +91,7 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
 /// goes on from there), and what the turns used. Everything here happens on the editor's thread, the agent's lines are
 /// queued for it by <see cref="HexAgentProcess"/>, so none of it locks.
 /// </summary>
-internal sealed class HexAgentChat(int id, string agent)
+internal sealed partial class HexAgentChat(int id, string agent)
 {
     // The rows a chat keeps in memory, and how many more it lets come before the oldest go to its file a batch at a time.
     // A batch rather than a row each, the panel draws the chat again from the start when rows leave its top
@@ -459,9 +459,19 @@ internal sealed class HexAgentChat(int id, string agent)
 
     public HexAgentEntry Think(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Thinking, text));
 
-    public HexAgentEntry Note(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Note, text));
+    public HexAgentEntry Note(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Note, WithoutEscapes(text)));
 
-    public HexAgentEntry Error(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Error, text));
+    public HexAgentEntry Error(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Error, WithoutEscapes(text)));
+
+    /// <summary>
+    /// A terminal's colour and cursor codes taken out of what a program printed, its words kept. A note or an error is
+    /// often a line an agent's program wrote to its error output for a terminal, and the codes showed as [31m and the like.
+    /// </summary>
+    public static string WithoutEscapes(string text) =>
+        text.Contains('\u001b') ? EscapeCodes().Replace(text, string.Empty) : text;
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\u001b(\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(\u0007|\u001b\\)|[@-Z\\-_])")]
+    private static partial System.Text.RegularExpressions.Regex EscapeCodes();
 
     /// <summary>
     /// A tool called, running until it's said to be done. Said again by the same id in the same turn it's the row there

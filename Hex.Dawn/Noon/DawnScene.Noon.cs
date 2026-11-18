@@ -27,6 +27,27 @@ internal sealed partial class DawnScene
     // How far a chat started by another is stepped in under it in the fleet
     private const float NOON_STEP = 16.0f;
 
+    // How tall the fleet's filter is, the key that hides and shows the fleet, and the width of the window under which
+    // the fleet hides by itself for the chat to have the room
+    private const float NOON_FILTER = 26.0f;
+    private const string FLEET_KEY = "Ctrl+Alt+B";
+    private const float NOON_FLEET_FROM = 900.0f;
+
+    private TextBox noonFleetFilter = null!;
+
+    // Whether the person put the fleet away, and the button over the middle that brings it back
+    private bool noonFleetHidden;
+    private Button noonFleetBack = null!;
+
+    /// <summary>The fleet shown or put away, the middle taking its room.</summary>
+    private void ShowFleet(bool shown)
+    {
+        noonFleetHidden = !shown;
+        noonFleetDrawn = NOT_DRAWN;
+        noonWait = 0.0f;
+        Engine.WindowManager.RequestFrames();
+    }
+
     // How wide the chat's column is at most, centred in the middle
     private const float NOON_COLUMN = 920.0f;
 
@@ -64,7 +85,20 @@ internal sealed partial class DawnScene
         var head = noonFleet.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 22), Color = Vector4.Zero });
         head.Add(new Label { Text = Said("noon.fleet"), TextScale = 0.15f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
         head.Add(new Button { Icon = "add", Style = "button_flat", Size = new Vector2(24, 22), Anchor = Origin.Right, Pivot = Origin.Right, Animated = false, Tooltip = Said("agents_panel.new_chat"), OnPressed = NewAgentChat });
+        // Put away for the chat to have the room, the tabs over the middle bring it back
+        head.Add(new Button
+        {
+            Icon = "layout-sidebar-left-off", Style = "button_flat", Size = new Vector2(24, 22), Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-28, 0),
+            Animated = false, Tooltip = Said("noon.fleet_hide", ("key", FLEET_KEY)), OnPressed = () => ShowFleet(false)
+        });
         noonFleetSummary = noonFleet.Add(new Label { Text = string.Empty, TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        // Narrowed to the chats whose name, agent system or number has what's typed, for a fleet longer than the column
+        noonFleetFilter = noonFleet.Add(new TextBox { Fill = UIFill.Horizontal, Size = new Vector2(0, NOON_FILTER), Placeholder = Said("noon.fleet_filter"), MaxLength = 80 });
+        noonFleetFilter.OnChanged = _ =>
+        {
+            noonFleetDrawn = NOT_DRAWN;
+            noonWait = 0.0f;
+        };
         // No room kept at its right, the cards line up with the head's edge as they do with its left
         noonFleetScroll = noonFleet.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(0, 2, 0, 6) });
         noonFleetRows = noonFleetScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
@@ -80,7 +114,9 @@ internal sealed partial class DawnScene
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         // The wheel turned over the margins round the chat's column scrolls the chat, as it would over the column itself
-        noonCenter = noonView.Add(new HexWheelStack { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0, Wheeled = () => agentsScroll });
+        noonCenter = noonView.Add(new HexWheelStack { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 8), Spacing = 0, Wheeled = NoonWheeled });
+        // The tabs over it and the stages other than the chat, the chat's view going in after them as Agentic comes up
+        BuildNoonStage();
 
         // What the agent picked is and does
         noonContext = noonView.Add(new StackPanel { Anchor = Origin.Top, Pivot = Origin.Top, Padding = new UIEdges(10, 10, 10, 10), Spacing = 6 });
@@ -121,6 +157,9 @@ internal sealed partial class DawnScene
             noonCenter.Add(agentsView);
             agentsView.Visible = true;
             agentsInput.Focus();
+            // The stage it was left on, the chat unless another was picked
+            ApplyStage();
+            noonStageDrawn = NOT_DRAWN;
         }
         else
         {
@@ -184,6 +223,7 @@ internal sealed partial class DawnScene
         noonWait = 0.25f;
         DrawNoonFleet();
         DrawNoonContext();
+        DrawNoonStage();
     }
 
     // The three columns over the body's room, the context giving way on a narrow window
@@ -197,19 +237,27 @@ internal sealed partial class DawnScene
         float height = screen.Height - root.Padding.Total.Y - top.Bounds.Height - statusBar.Bounds.Height;
         bool context = width >= NOON_CONTEXT_FROM;
         noonContext.Visible = context;
-        float middle = width - NOON_FLEET - (context ? NOON_CONTEXT : 0.0f);
+        // The fleet away when it's been put away, or the window is too narrow for it beside a chat worth reading, the
+        // tabs' button bringing it back
+        bool fleet = !noonFleetHidden && width >= NOON_FLEET_FROM;
+        noonFleet.Visible = fleet;
+        noonFleetBack.Visible = !fleet;
+        float middle = width - (fleet ? NOON_FLEET : 0.0f) - (context ? NOON_CONTEXT : 0.0f);
         noonView.Size = new Vector2(width, height);
 
         noonFleet.Size = new Vector2(NOON_FLEET, height);
         float systems = noonSystems is not null && SystemsTall(noonSystems) is > 0 and var tall ? tall + noonFleet.Spacing : 0.0f;
-        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - systems - NOON_HARNESS - noonFleet.Spacing));
+        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - NOON_FILTER - noonFleet.Spacing - systems - NOON_HARNESS - noonFleet.Spacing));
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
         float side = MathF.Floor((middle - column) * 0.5f);
         if (MathF.Abs(noonCenter.Padding.Left - side) > 0.5f)
             noonCenter.Padding = new UIEdges(side, 10, side, 8);
         noonCenter.Size = new Vector2(middle, height);
-        agentsView.Size = new Vector2(middle - noonCenter.Padding.Total.X, height - noonCenter.Padding.Total.Y);
+        // The stage under its tabs, the chat and the others the same room
+        var stage = new Vector2(middle - noonCenter.Padding.Total.X, height - noonCenter.Padding.Total.Y - NOON_TABS);
+        agentsView.Size = stage;
+        noonInbox.Size = noonChanges.Size = noonPlan.Size = stage;
         noonContext.Size = new Vector2(NOON_CONTEXT, height);
         noonContextScroll.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X, MathF.Max(40, height - noonContext.Padding.Total.Y - 28));
     }
@@ -230,16 +278,29 @@ internal sealed partial class DawnScene
         }
 
         // The cards made again only when the agents or how they're doing changed, their words put right in place otherwise
+        // Narrowed by the filter, a new list only while something's typed in it
         List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
-        long said = AgentCardsKey(order);
+        string filter = noonFleetFilter.Text.Trim();
+        if (filter.Length > 0)
+            order = order.FindAll(each => each.Chat.Shown.Contains(filter, StringComparison.OrdinalIgnoreCase) || each.Chat.Agent.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || $"#{each.Chat.Id}".Contains(filter, StringComparison.Ordinal) || (HexAgentModels.Of(each.Chat) ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase));
+        long said = AgentCardsKey(order) * 31 + string.GetHashCode(filter, StringComparison.Ordinal);
         float width = NOON_FLEET - noonFleet.Padding.Total.X - 6;
         if (said != noonFleetDrawn)
         {
             noonFleetDrawn = said;
             ClearRows(noonFleetRows);
             noonCards.Clear();
+            // No agents at all, what to do about it, a chat to start or a system to install
             if (agentChats.Count == 0)
+            {
+                noonFleetRows.Add(new Label { Text = Said("noon.fleet_empty_title"), TextScale = 0.145f, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
                 noonFleetRows.Add(new Label { Text = Said("noon.fleet_empty"), TextScale = 0.13f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
+                noonFleetRows.Add(new Button { Label = Said("noon.fleet_empty_new"), Icon = "add", Primary = true, Fill = UIFill.Horizontal, Size = new Vector2(0, 28), LabelScale = 0.13f, Animated = false, OnPressed = NewAgentChat });
+                noonFleetRows.Add(new Button { Label = Said("noon.fleet_empty_systems"), Icon = "extensions", Style = "button_flat", Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.13f, Animated = false, OnPressed = BrowseAgentExtensions });
+            }
+            else if (order.Count == 0)
+                noonFleetRows.Add(new Label { Text = Said("noon.fleet_none_fit"), TextScale = 0.13f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
             foreach (var (chat, step) in order)
             {
                 AgentCard card = AgentCardOf(chat, step, closable: false);
@@ -294,6 +355,24 @@ internal sealed partial class DawnScene
         {
             noonContextRows.Add(ContextText(Said("noon.context_empty"), dim: true));
             return;
+        }
+
+        // What it waits on the person for, first, so it's never under the rest
+        HexAgentEntry[] waiting = [.. chat.Pending];
+        if (waiting.Length > 0)
+        {
+            ContextSection(Said("noon.waiting_on_you"));
+            foreach (HexAgentEntry asked in waiting)
+            {
+                ContextLine(asked.Kind == HexAgentEntryKind.Approval ? "shield" : "question", OneLine(asked.Text, 120), wrap: true);
+                if (asked.Kind != HexAgentEntryKind.Approval)
+                    continue;
+                var row = noonContextRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 24) });
+                HexAgentEntry request = asked;
+                row.Add(new Button { Label = Said("noon.allow_key", ("key", ALLOW_KEY)), Icon = "check", Primary = true, Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, true) });
+                row.Add(new Button { Label = Said("noon.deny_key", ("key", DENY_KEY)), Icon = "close", Size = new Vector2(132, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => chat.Decide(request, false) });
+            }
+            ContextLink("inbox", $"{Said("noon.stage_inbox")} ({STAGE_KEYS[(int)NoonStage.Inbox]})", () => ShowStage(NoonStage.Inbox));
         }
 
         // The agent

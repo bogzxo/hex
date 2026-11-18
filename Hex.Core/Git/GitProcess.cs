@@ -45,7 +45,8 @@ internal static class GitProcess
     /// Runs git with some arguments in a folder, what's handed in going to its input, and waits for it. Never throws, a
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
-    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false)
+    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -89,6 +90,12 @@ internal static class GitProcess
         start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         start.Environment["LC_ALL"] = "C";
+        // What the caller sets on top, an index of its own for a checkpoint that leaves the real one alone
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+                start.Environment[name] = value;
+        }
 
         try
         {
