@@ -131,6 +131,15 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       harness's index, a press or Tab putting the path in (afbd9ba, fe29e51)
 - [x] A thin bar under each chat's card of how full its context is, green turning amber and red as it fills, Details'
       bar in the same colours (asked 2026-11-18, 4d94c90)
+- [x] The model the next turn runs on as a picker of its own beside the thinking in the agents' box (f103dd1)
+- [x] Review in Changes, a file's hunks against the turn's checkpoint as cards under its row, each kept or undone on
+      its own with the rest of the file left as it is (c7a7efd)
+- [x] Every turn checkpointed however it began, a message sent while the agent works and a chat carried on after a
+      restart as well, the checkpoints kept with the chat across restarts, and a turn's title fitted to its card
+      (asked 2026-11-18, 7fd5606, 8ec705d)
+- [x] What the harness saved drawn the way Horizon's performance overlay draws a frame (asked 2026-11-18): a large
+      figure and tiles with meters, a bar cut into each tool's part of the saving, a table of numbers in columns with
+      a meter a row, the agent systems the same (a3a9957, 8ec705d)
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
