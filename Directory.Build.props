@@ -13,6 +13,14 @@
   <ItemGroup Condition="$(MSBuildProjectName.StartsWith('Hex')) and '$(VersionName)' != ''">
     <AssemblyMetadata Include="VersionName" Value="$(VersionName)" />
   </ItemGroup>
+  <!--
+    Which Hex a build is, stable unless the nightly build says dev (dotnet publish -p:HexChannel=dev -p:HexNightly=nightly-57),
+    and the nightly release it goes out as, so a dev build updates from the nightlies and knows which one it is
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
+    <AssemblyMetadata Include="Channel" Value="$(HexChannel)" Condition="'$(HexChannel)' != ''" />
+    <AssemblyMetadata Include="Nightly" Value="$(HexNightly)" Condition="'$(HexNightly)' != ''" />
+  </ItemGroup>
 
   <!--
     MSBuild stops at the first Directory.Build.props it finds, so the workspace's one above (the shared engine

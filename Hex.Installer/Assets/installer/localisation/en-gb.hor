@@ -150,6 +150,8 @@ let strings = {
             available: "Hex {version} is available. Install downloads and verifies the release, then asks about unsaved files before closing Hex. The new Hex Setup installs the update, including the updater and uninstaller. Close any other Hex or Dusk windows first.",
             prepare_failed: "Could not start the update. Install portable copies using Hex Setup first. {reason}",
             command: "Check for Updates",
+            setup_command: "Open Hex Setup",
+            setup_failed: "Couldn't open Hex Setup. {reason}",
         },
     },
 };
