@@ -96,8 +96,9 @@ internal sealed partial class DawnScene
             drawn = now;
             float room = width - indent;
             string? model = HexAgentModels.Of(chat);
-            // Who it is and the model it's on, always in sight, a working agent's line under its name being what it's doing
-            string starter = (chat.Parent is { } parent ? ChatName(parent) : system) + (model is { Length: > 0 } ? $" · {model}" : string.Empty);
+            // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
+            // The model goes with what it used under its name, where the model and what it cost read together
+            string starter = chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
             string status = AgentStatusText(chat, skin);
             if (state.Text != status)
                 state.Text = status;
@@ -114,18 +115,27 @@ internal sealed partial class DawnScene
             if (name.Text != said)
                 name.Text = said;
 
-            // What it's doing now while it works, its model, cost and what's waiting for it otherwise
+            // What it's doing now while it works, its model, tokens, cost and what's waiting for it otherwise
             int unread = chat.UnreadMail().Length;
             string? doing = chat.Running && chat.Entries.LastOrDefault(entry => entry.Kind == HexAgentEntryKind.Tool) is { State: HexAgentToolState.Running } tool
                 ? (SubagentOf(tool) is { } subagent ? $"{subagent.Name} · {tool.Progress ?? subagent.About}" : $"{ToolTitle(tool.ToolName ?? "tool")} {ToolPreview(tool.Input)}")
                 : null;
-            string line = doing ?? string.Join(" · ", new[]
+            // Cut to the card's width either way, a long model's name in front of the tokens ran past its edge. The mail's
+            // icon is put on after the cut, cut into it would have left its name as text
+            string mail = unread > 0 ? $" · $(mail) {unread}" : string.Empty;
+            float mailWidth = mail.Length > 0 ? 40.0f : 0.0f;
+            if (doing is not null)
+                said = UIRichText.Literal(FitText(doing, under.TextScale, room - 24));
+            else
             {
-                chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
-                chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null,
-                unread > 0 ? $"$(mail) {unread}" : null
-            }.Where(part => !string.IsNullOrEmpty(part)));
-            said = doing is null ? line : UIRichText.Literal(FitText(line, under.TextScale, room - 24));
+                string used = string.Join(" · ", new[]
+                {
+                    model,
+                    chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
+                    chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null
+                }.Where(part => !string.IsNullOrEmpty(part)));
+                said = UIRichText.Literal(FitText(used, under.TextScale, room - 24 - mailWidth)) + (used.Length > 0 ? mail : mail.TrimStart(' ', '·'));
+            }
             if (under.Text != said)
                 under.Text = said;
         }
