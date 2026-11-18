@@ -179,7 +179,8 @@ public sealed class HexAgentSystemsTests : IDisposable
     [Fact]
     public void Antigravity_offers_the_models_agy_says_the_account_has()
     {
-        programSays = "Fetching available models...\ngemini-9-pro            Gemini 9 Pro\nclaude-opus-9-thinking  Claude Opus 9 (Thinking)\n";
+        // As agy 1.5 prints them, a tab between the id and the name
+        programSays = "Fetching available models...\ngemini-9-pro\tGemini 9 Pro\r\nclaude-opus-9-thinking\tClaude Opus 9 (Thinking)\n";
         var (runtime, hex, _, _) = Load("antigravity");
         ObjectValue run = (ObjectValue)Agents(runtime, hex);
         ObjectValue model = (ObjectValue)((ListValue)run.Properties["options"]).Items[0];
@@ -188,6 +189,22 @@ public sealed class HexAgentSystemsTests : IDisposable
         // Its own list, none of the ones written in the extension, the words it says while it fetches left out
         Assert.Equal(["", "gemini-9-pro", "claude-opus-9-thinking"], values);
         Assert.Equal("Claude Opus 9 (Thinking)", labels[2]);
+    }
+
+    [Fact]
+    public void Antigravity_says_the_model_agy_runs_from_its_log_when_none_was_picked()
+    {
+        // agy's log where the home is, its last selected model the one it runs, init naming none
+        string log = Path.Combine(folder, ".gemini", "antigravity-cli", "cli.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+        File.WriteAllText(log, "I1118 model_config_manager.go:375] Propagating selected model override to backend: label=\"Gemini 3.8 Flash (Low)\"\n"
+            + "I1118 other line\n"
+            + "I1118 model_config_manager.go:375] Propagating selected model override to backend: label=\"Gemini 3.8 Flash (High)\"\n");
+        HexAgentChat chat = Play("antigravity",
+            """{"event":"init","conversation_id":"c9","init":{"cwd":"C:\\probe","tools":[],"permission_mode":"request-review"}}""",
+            """{"event":"step_update","step_update":{"conversation_id":"c9","step_index":0,"state":"DONE","step_type":"user_input"}}""",
+            """{"event":"result","result":{"conversation_id":"c9","status":"SUCCESS","response":"hi","num_turns":1}}""");
+        Assert.Equal("Gemini 3.8 Flash (High)", chat.Model);
     }
 
     /// <summary>A catalog extension run against a hex with just what an agent system uses, and the hex it ran against.</summary>
