@@ -1,4 +1,4 @@
- a# Hex to-do
+# Hex to-do
 
 The list of what's asked for and not done yet, kept across sessions, agents and agent systems. Whoever works on Hex
 reads it first, ticks what they finish (with the commit), and adds what they're asked for. Newest asks at the end of
@@ -93,6 +93,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
   - [x] Hex's tools all reach it, checked live: hex_files, hex_symbols, hex_read, hex_search, hex_skim and
         hex_terminal_run each answered right (asked 2026-11-18)
   - [x] The Gemini CLI extension removed, Antigravity runs Gemini on the Google plan (asked 2026-11-18)
+- [x] The models in the picker from the agent systems themselves, not written in their extensions (asked 2026-11-18).
+      Antigravity asks agy models as Hex starts (hex.program_output, a program's output off the editor's thread),
+      Claude Code's initialize and Codex's model/list as they ran already, now kept in Hex's temp folder for the next
+      start so the picker has them before the first run
   - The hex server's entry in .agents/mcp_config.json keeps the last chat's id in the folder, as Gemini's
     .gemini/settings.json does, ignored in Hex's repository
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)

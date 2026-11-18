@@ -132,6 +132,9 @@ the chat that started them, so they can be watched and talked to like any other.
   by another uses it to report what it finds as soon as it matters, ask, or say it's stuck.
 - `hex_agent_inbox()` reads the messages not read yet, oldest first.
 - `hex_agent_stop(id)` stops a chat and the chats it started.
+- The models `hex_agent_list` offers come from each agent system: Claude Code's initialize, Codex's `model/list` and
+  Antigravity's `agy models`, kept from one start to the next, so a new model shows without an extension being
+  brought up to date.
 - `hex_agent_close(id, clear?)` deletes the chat of an agent you started, and the chats it started, once its work is
   done. With `clear` the chat stays and is emptied instead, its rows, mail and session gone, so the next
   `hex_agent_send` starts it afresh. Only the agent that started it may close or clear it.

@@ -44,6 +44,18 @@ internal sealed partial class HexExtensions
                 agentRuns.Remove(id);
         })),
         ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
+        // What a program prints run with some arguments, for an agent system to say what it has on this machine (agy
+        // models lists the models the account may use), so its extension needn't be brought up to date for every model
+        // that comes out. Run off the editor's thread for at most 20 seconds, its output and its error output handed to
+        // then on the editor's, null when it couldn't be run or didn't end
+        ("program_output", Natives.Action("program_output", args =>
+        {
+            string program = args.Text(0);
+            string[] arguments = args.Has(1) && args[1] is ListValue listed ? [.. listed.Items.Select(Values.Text)] : [];
+            IRuntimeValue then = args[2];
+            context.Work.InBackground($"{extension.Name}: {program}", () => ProgramOutput(program, arguments),
+                said => Answered(extension, then, said is null ? Values.Null : new StringValue(said)), quiet: true);
+        })),
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
         // What an agent is told in its system prompt about the harness, the same for every agent system
         ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
@@ -79,6 +91,44 @@ internal sealed partial class HexExtensions
         // A file under a folder by how its name ends, the newest when there are several, null when there's none
         ("find_file", Natives.Function("find_file", args => FindFile(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null))
     ];
+
+    // How long program_output waits for a program to end, and the most of what it prints it keeps
+    private const int PROGRAM_OUTPUT_MS = 20_000, PROGRAM_OUTPUT_MOST = 1 << 20;
+
+    /// <summary>
+    /// What a program printed run with arguments, found the way an agent's program is (PATH, the system's PATH as it is now,
+    /// a .cmd through cmd), its stdin closed so one that waits on it ends. Null when it isn't there, can't be started or
+    /// doesn't end in time (it's killed then).
+    /// </summary>
+    internal static string? ProgramOutput(string program, string[] arguments)
+    {
+        if (HexAgentProcess.Find(program) is not { } found)
+            return null;
+        try
+        {
+            System.Diagnostics.ProcessStartInfo start = HexAgentProcess.StartInfo(found, arguments, System.Environment.CurrentDirectory);
+            start.RedirectStandardOutput = start.RedirectStandardError = start.RedirectStandardInput = true;
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            using var process = System.Diagnostics.Process.Start(start);
+            if (process is null)
+                return null;
+            process.StandardInput.Close();
+            Task<string> output = process.StandardOutput.ReadToEndAsync(), error = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(PROGRAM_OUTPUT_MS))
+            {
+                process.Kill(entireProcessTree: true);
+                return null;
+            }
+
+            string said = output.Result + error.Result;
+            return said.Length > PROGRAM_OUTPUT_MOST ? said[..PROGRAM_OUTPUT_MOST] : said;
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or AggregateException)
+        {
+            return null;
+        }
+    }
 
     // The most a read_lines takes at once, a log that grew more than that is read on from where this stopped
     private const int READ_LINES_MOST = 4 << 20;

@@ -173,6 +173,23 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.Contains("isn't a JSON object", HexExtensions.JsonSet(file, ["a"], new StringValue("b")));
     }
 
+    // What a program run through hex.program_output prints in these tests, null for one that can't be run
+    private string? programSays;
+
+    [Fact]
+    public void Antigravity_offers_the_models_agy_says_the_account_has()
+    {
+        programSays = "Fetching available models...\ngemini-9-pro            Gemini 9 Pro\nclaude-opus-9-thinking  Claude Opus 9 (Thinking)\n";
+        var (runtime, hex, _, _) = Load("antigravity");
+        ObjectValue run = (ObjectValue)Agents(runtime, hex);
+        ObjectValue model = (ObjectValue)((ListValue)run.Properties["options"]).Items[0];
+        string[] values = [.. ((ListValue)model.Properties["choices"]).Items.Select(choice => HexExtensions.Text((ObjectValue)choice, "value") ?? string.Empty)];
+        string[] labels = [.. ((ListValue)model.Properties["choices"]).Items.Select(choice => HexExtensions.Text((ObjectValue)choice, "label") ?? string.Empty)];
+        // Its own list, none of the ones written in the extension, the words it says while it fetches left out
+        Assert.Equal(["", "gemini-9-pro", "claude-opus-9-thinking"], values);
+        Assert.Equal("Claude Opus 9 (Thinking)", labels[2]);
+    }
+
     /// <summary>A catalog extension run against a hex with just what an agent system uses, and the hex it ran against.</summary>
     private (HIDLRuntime Runtime, ObjectValue Hex, Dictionary<string, IRuntimeValue> Commands, Dictionary<string, string> Written) Load(string id, string? existing = null)
     {
@@ -206,6 +223,12 @@ public sealed class HexAgentSystemsTests : IDisposable
                 return Natives.Object(("lines", new ListValue([.. lines.Select(line => (IRuntimeValue)new StringValue(line))])), ("end", new NumberValue(end)));
             })),
             ("json_parse", Natives.Function("json_parse", args => HexJson.Parse(args.Text(0)) ?? Values.Null)),
+            // A program's output as programSays has it, handed back at once where Hex hands it back a moment later
+            ("program_output", Natives.Action("program_output", args =>
+            {
+                if (programSays is { } said)
+                    runtime.Invoke(args.Callable(2), hex, new StringValue(said));
+            })),
             ("temp", new StringValue(folder)),
             ("mcp_server", Natives.Function("mcp_server", _ => Natives.Object(("command", new StringValue("Hex.exe")), ("args", Natives.List(["--mcp-connect"]))))));
 
