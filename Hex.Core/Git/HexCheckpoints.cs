@@ -57,6 +57,50 @@ internal static class HexCheckpoints
         return top.Ok ? Path.GetFullPath(top.Output.Trim()) : null;
     }
 
+    // How far below a folder that isn't a repository its repositories are looked for, a folder of a few projects side by side
+    private const int NESTED_DEPTH = 2;
+
+    /// <summary>
+    /// The repositories a workspace folder holds, its own when it's in one, otherwise those a level or two below it. A folder
+    /// of several projects each with its own repository had no checkpoint at all.
+    /// </summary>
+    public static List<string> ReposOf(string folder)
+    {
+        var found = new List<string>();
+        if (TopOf(folder) is { } top)
+            found.Add(top);
+        else
+            Below(folder, NESTED_DEPTH, found);
+        return found;
+    }
+
+    // The folders under one that have a .git of their own, not looking inside a repository once one is found
+    private static void Below(string folder, int depth, List<string> found)
+    {
+        if (depth <= 0)
+            return;
+        IEnumerable<string> children;
+        try
+        {
+            children = Directory.EnumerateDirectories(folder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (string child in children)
+        {
+            string name = Path.GetFileName(child);
+            if (name.StartsWith('.') || name is "node_modules" or "bin" or "obj")
+                continue;
+            if (Directory.Exists(Path.Combine(child, ".git")) || File.Exists(Path.Combine(child, ".git")))
+                found.Add(Path.GetFullPath(child));
+            else
+                Below(child, depth - 1, found);
+        }
+    }
+
     // A path as git names it in a tree, from the repository's top, with forward slashes
     private static string InTree(string top, string path) => Path.GetRelativePath(top, Path.GetFullPath(path)).Replace('\\', '/');
 

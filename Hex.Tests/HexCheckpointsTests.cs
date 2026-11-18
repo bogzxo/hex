@@ -59,4 +59,35 @@ public sealed class HexCheckpointsTests
             Directory.Delete(top, true);
         }
     }
+
+    [Fact]
+    public void A_folder_of_several_repositories_has_each_of_them()
+    {
+        if (!GitProcess.Installed)
+            return;
+
+        string outer = Path.Combine(Path.GetTempPath(), "hex-repos-" + Guid.NewGuid().ToString("N")[..8]);
+        string first = Path.Combine(outer, "first"), second = Path.Combine(outer, "group", "second"), built = Path.Combine(outer, "bin", "built");
+        foreach (string folder in new[] { first, second, built })
+        {
+            Directory.CreateDirectory(folder);
+            Assert.True(GitProcess.Run(folder, ["init", "-q"]).Ok);
+        }
+
+        try
+        {
+            // Not a repository itself, the two below it are and the one in bin is left out
+            Assert.Equal([first, second], HexCheckpoints.ReposOf(outer).Select(Path.GetFullPath).Order().ToArray());
+
+            // Inside one, it's just that one
+            Directory.CreateDirectory(Path.Combine(first, "deeper"));
+            Assert.Equal([first], HexCheckpoints.ReposOf(Path.Combine(first, "deeper")).Select(Path.GetFullPath).ToArray());
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(outer, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(outer, true);
+        }
+    }
 }
