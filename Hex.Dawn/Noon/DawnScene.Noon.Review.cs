@@ -97,7 +97,7 @@ internal sealed partial class DawnScene
         head.Add(new Button
         {
             Label = Said("noon.review_undo"), Icon = "discard", Style = "button_flat", Danger = true, Size = new Vector2(78, 22), LabelScale = 0.12f, Animated = false,
-            Anchor = Origin.Right, Pivot = Origin.Right, Tooltip = Said("noon.review_undo_tip"), OnPressed = () => UndoHunk(asked, path, old, made)
+            Anchor = Origin.Right, Pivot = Origin.Right, Tooltip = Said("noon.review_undo_tip"), OnPressed = () => UndoHunk(asked, path, old, made, hunk.NewStart)
         });
         head.Add(new Button
         {
@@ -124,18 +124,31 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>One hunk of a file put back as it was before the turn, off the editor's thread, the rest of the file left as it is.</summary>
-    private void UndoHunk(HexAgentEntry asked, string path, string[] old, string[] made)
+    private void UndoHunk(HexAgentEntry asked, string path, string[] old, string[] made, int near)
     {
         if (CheckpointFor(asked, path) is not { } at)
             return;
         InBackground("review", () =>
         {
-            string before = HexCheckpoints.TextAt(at.Top, at.Tree, path) ?? string.Empty;
-            string now = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
-            if (HexHunkReview.Undo(before, now, old, made) is not { } undone)
+            try
+            {
+                string before = HexCheckpoints.TextAt(at.Top, at.Tree, path) ?? string.Empty;
+                if (!File.Exists(path))
+                    return false;
+                var (now, encoding) = HexHunkReview.Read(path);
+                DateTime read = File.GetLastWriteTimeUtc(path);
+                if (HexHunkReview.Undo(before, now, old, made, near) is not { } undone)
+                    return false;
+                // Written only if nobody wrote it since it was read, an agent's write in between was lost otherwise
+                if (File.GetLastWriteTimeUtc(path) != read)
+                    return false;
+                HexHunkReview.Write(path, undone, encoding);
+                return true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
                 return false;
-            File.WriteAllText(path, undone);
-            return true;
+            }
         }, done =>
         {
             Say(Said(done ? "noon.review_undone" : "noon.review_gone", ("name", Path.GetFileName(path))));

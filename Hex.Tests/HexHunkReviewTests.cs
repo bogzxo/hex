@@ -23,6 +23,35 @@ public sealed class HexHunkReviewTests
     }
 
     [Fact]
+    public void Of_two_same_hunks_the_one_where_it_was_seen_is_undone()
+    {
+        string before = "a\nx\nb\nc\nd\ne\nx\nf\n";
+        string now = "a\ny\nb\nc\nd\ne\ny\nf\n";
+        var hunks = HexHunkReview.Hunks(before, now);
+        Assert.Equal(2, hunks.Count);
+        Assert.Equal("a\ny\nb\nc\nd\ne\nx\nf\n", HexHunkReview.Undo(before, now, hunks[1].Old, hunks[1].New, hunks[1].Hunk.NewStart));
+    }
+
+    [Fact]
+    public void A_file_is_written_back_in_its_own_encoding()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "hex-hunk-" + Guid.NewGuid().ToString("N")[..8] + ".txt");
+        try
+        {
+            File.WriteAllText(path, "one\ntwo\n", System.Text.Encoding.Unicode);
+            var (text, encoding) = HexHunkReview.Read(path);
+            HexHunkReview.Write(path, text.Replace("two", "three"), encoding);
+            byte[] bytes = File.ReadAllBytes(path);
+            Assert.Equal([0xFF, 0xFE], bytes[..2]);
+            Assert.Equal("one\nthree\n", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void A_hunk_no_longer_there_is_left_alone()
     {
         string now = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";

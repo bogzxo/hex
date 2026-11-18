@@ -3432,6 +3432,7 @@ let strings = {
         changes_restore_button: "Put back",
         changes_restore_since: "Changed again since this turn, by a later turn, another agent or by hand: {files}. Those changes go too.",
         changes_restored: "{count} put back as before the turn",
+        changes_not_restored: "{name} left as it is, {why}",
         changes_unchanged: "{name} is as it was before the turn",
         changes_diff_title: "{name} since the turn",
         plan_empty: "No plan yet. The to-do list an agent keeps as it works (Claude Code's and Codex's) comes here.",

@@ -381,13 +381,21 @@ internal sealed partial class DawnScene
         {
             var tops = new HashSet<string>(PlatformPaths.Comparer);
             var made = new List<(string, string)>();
-            foreach (string folder in folders)
+            // Whatever goes wrong, what was taken so far comes back. A throw here never called what's after, and the agent
+            // waiting on it never started
+            try
             {
-                foreach (string top in HexCheckpoints.ReposOf(folder))
+                foreach (string folder in folders)
                 {
-                    if (tops.Add(top) && HexCheckpoints.Take(top) is { } tree)
-                        made.Add((top, tree));
+                    foreach (string top in HexCheckpoints.ReposOf(folder))
+                    {
+                        if (tops.Add(top) && HexCheckpoints.Take(top) is { } tree)
+                            made.Add((top, tree));
+                    }
                 }
+            }
+            catch (Exception)
+            {
             }
 
             return made;
@@ -642,9 +650,13 @@ internal sealed partial class DawnScene
             }
 
             var each = paths.Select(path => (Path: path, At: CheckpointFor(asked, path))).Where(pair => pair.At is not null).ToArray();
-            InBackground("restore", () => each.Select(pair => HexCheckpoints.Restore(pair.At!.Value.Top, pair.At.Value.Tree, pair.Path)).Count(why => why is null), restored =>
+            InBackground("restore", () => each.Select(pair => (pair.Path, Why: HexCheckpoints.Restore(pair.At!.Value.Top, pair.At.Value.Tree, pair.Path))).ToArray(), done =>
             {
+                int restored = done.Count(each => each.Why is null);
                 Say(Said("noon.changes_restored", ("count", HexText.Count("file", restored))));
+                // A file left as it is says why, one that wasn't in the checkpoint is left rather than deleted
+                if (done.FirstOrDefault(each => each.Why is not null) is { Why: { } why } left)
+                    Say(Said("noon.changes_not_restored", ("name", Path.GetFileName(left.Path)), ("why", why)), error: true);
                 noonStageDrawn = NOT_DRAWN;
             });
         }, risky: yes);

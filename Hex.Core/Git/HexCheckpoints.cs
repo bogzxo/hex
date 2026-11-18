@@ -9,6 +9,10 @@ namespace Hex.Core.Git;
 /// </summary>
 internal static class HexCheckpoints
 {
+    // How long the add of the whole working copy may take, and the refs each checkpoint is kept alive by
+    private static readonly TimeSpan TAKE_PATIENCE = TimeSpan.FromMinutes(3);
+    private const string PIN = "refs/hex/checkpoints/";
+
     /// <summary>The tree of a folder's repository as it is now, null when it isn't one or git couldn't.</summary>
     public static string? Take(string folder)
     {
@@ -26,13 +30,22 @@ internal static class HexCheckpoints
             if (File.Exists(index))
                 File.Copy(index, copy);
             var own = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = copy };
-            if (!GitProcess.Run(top, ["add", "-A", "--", "."], environment: own).Ok)
+            // A first add of a big working copy with untracked build output takes longer than git's usual patience, and
+            // killed halfway the turn had no checkpoint at all
+            if (!GitProcess.Run(top, ["add", "-A", "--", "."], patience: TAKE_PATIENCE, environment: own).Ok)
                 return null;
-            GitResult tree = GitProcess.Run(top, ["write-tree"], environment: own);
-            return tree.Ok && tree.Output.Trim() is { Length: 40 or 64 } hash ? hash : null;
+            GitResult tree = GitProcess.Run(top, ["write-tree"], patience: TAKE_PATIENCE, environment: own);
+            if (!tree.Ok || tree.Output.Trim() is not { Length: 40 or 64 } hash)
+                return null;
+
+            // Pinned by a ref of its own, nothing else points at the tree and git's tidying would let it go after a couple
+            // of weeks, leaving a chat read back then with nothing to put back from
+            GitProcess.Run(top, ["update-ref", PIN + hash, hash]);
+            return hash;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
+            // Whatever went wrong, no checkpoint rather than a throw, which left the turn waiting on one for ever
             return null;
         }
         finally
@@ -118,8 +131,19 @@ internal static class HexCheckpoints
     public static string? Restore(string top, string tree, string path)
     {
         string inTree = InTree(top, path);
+        // The checkpoint itself still there first, gone (git let it go, or git failed) nothing is touched
+        GitResult kind = GitProcess.Run(top, ["cat-file", "-t", tree]);
+        if (!kind.Ok || kind.Output.Trim() != "tree")
+            return kind.Ok ? "the checkpoint isn't there any more" : kind.Why;
+
         if (!GitProcess.Run(top, ["cat-file", "-e", $"{tree}:{inTree}"]).Ok)
         {
+            // Not in the checkpoint is only "made in the turn" for a file git would have taken in. One it ignores (a .env,
+            // local settings) or one in a repository of its own below this one was never in it, and was deleted as new
+            if (GitProcess.Run(top, ["check-ignore", "-q", "--", inTree]).Ok)
+                return "git ignores it, so the checkpoint never had it";
+            if (TopOf(path) is { } own && !PlatformPaths.Comparer.Equals(own, Path.GetFullPath(top)))
+                return "it's in a repository of its own, which the checkpoint doesn't have";
             try
             {
                 if (File.Exists(path))

@@ -61,6 +61,42 @@ public sealed class HexCheckpointsTests
     }
 
     [Fact]
+    public void An_ignored_file_is_left_alone_and_the_checkpoint_is_pinned()
+    {
+        if (!GitProcess.Installed)
+            return;
+
+        string top = Path.Combine(Path.GetTempPath(), "hex-checkpoint-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(top);
+        try
+        {
+            Assert.True(GitProcess.Run(top, ["init", "-q"]).Ok);
+            File.WriteAllText(Path.Combine(top, ".gitignore"), ".env\n");
+            File.WriteAllText(Path.Combine(top, ".env"), "SECRET=1\n");
+            string? tree = HexCheckpoints.Take(top);
+            Assert.NotNull(tree);
+
+            // Kept alive by a ref of its own
+            Assert.Contains(tree!, GitProcess.Run(top, ["for-each-ref", "--format=%(objectname)", "refs/hex/checkpoints/"]).Output);
+
+            // Never in the checkpoint because git ignores it, so putting it back leaves it rather than deleting it
+            Assert.NotNull(HexCheckpoints.Restore(top, tree!, Path.Combine(top, ".env")));
+            Assert.True(File.Exists(Path.Combine(top, ".env")));
+
+            // A checkpoint that isn't there touches nothing
+            File.WriteAllText(Path.Combine(top, "made.txt"), "new\n");
+            Assert.NotNull(HexCheckpoints.Restore(top, new string('0', 40), Path.Combine(top, "made.txt")));
+            Assert.True(File.Exists(Path.Combine(top, "made.txt")));
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(top, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(top, true);
+        }
+    }
+
+    [Fact]
     public void A_folder_of_several_repositories_has_each_of_them()
     {
         if (!GitProcess.Installed)
