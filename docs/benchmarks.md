@@ -168,6 +168,88 @@ seconds. Each now goes by a number worked out with nothing allocated and writes 
 What idle still makes, a few hundred bytes an update, is the agents panel's buttons and the notebooks' and the
 extensions' own steps, under 0.2 KB each.
 
+## Release against Debug, 3.1.0 — 18 November 2026
+
+Hex 3.1.0 Amphetamine at 4d00117 (Horizon b8f14f4), same machine as above. Release is `dotnet publish Hex/Hex.csproj
+-c Release -r win-x64` into a folder of its own, NativeAOT. Debug is the dev build out of `Hex/bin/Debug/net11.0`,
+which is **not** NativeAOT. It is `Hex.dll` under the JIT from the shared runtime, with the AOT project's switches
+(dynamic code off) in its runtimeconfig. That is why the agentic-perf files called it `nativeaot-debug`, now `jit-debug`.
+Another agent was building the repository and three dev Hexes were running throughout, so CPU percentages are noisy
+(the machine sat at 30 to 60% load) and frame times are best compared between runs taken minutes apart, as here.
+
+### The 400 against 240 MiB
+
+It was not Release being bigger. A Release Hex started in a folder with no shader cache (a new publish, a new install,
+an update, which swaps the folder) found no compiled shaders and compiled them all with Slang. Slangc.NET keeps its
+Slang session in a static field for the rest of the process, about 250 MB of native memory, so that run sat at 406 to
+450 MiB working set and 510 to 546 MiB private bytes for its whole life, while every later start was 198 MiB. The
+4 November measurements threw that first launch away, the 17 November ones did not. Server GC, GC settings and trimming
+played no part, Hex has none of them set and both builds use workstation concurrent GC. The publish already carries
+`shaders/packed/horizon.hzshaders` (84 modules), read only when Slang was missing. Now an ordinary run looks in the
+cache, then in the pack, then compiles (Horizon c04f3e2).
+
+| First launch in a new folder, agentic-perf | Before | After |
+| --- | ---: | ---: |
+| Working set, MiB | 406 / 450 | 212 / 217 |
+| Private bytes, MiB | 510 / 546 | 274 / 276 |
+| First frame of the scene, ms | 4856 | 3538 |
+
+### Agentic under load (agentic-perf, medians of 4 Release and 3 Debug runs)
+
+| Phase | Render ms (debug / release) | Update ms (debug / release) | Update KB a turn (debug / release) | Working set MiB (debug / release) |
+| --- | ---: | ---: | ---: | ---: |
+| Idle | 0.24 / 0.21 | 0.33 / 0.14 | 0.6 / 0.5 | 255 / 198 |
+| Switching | 0.25 / 0.21 | 0.39 / 0.18 | 37.9 / 37.6 | 256 / 198 |
+| Scrolling | 0.42 / 0.23 | 0.24 / 0.08 | 7.5 / 7.4 | 258 / 199 |
+| Streaming | 0.51 / 0.25 | 0.31 / 0.15 | 12.9 / 12.4 | 260 / 199 |
+| Groups | 0.51 / 0.25 | 0.21 / 0.08 | 6.2 / 6.4 | 260 / 199 |
+
+Managed heap is 69 to 86 MB in Release and 78 to 94 MB in Debug. Allocation is the same code in both, so it matches.
+
+### Typing and UI cost (one run each)
+
+| Measure | Debug | Release |
+| --- | ---: | ---: |
+| Typing a 19,000 line C# file, ms a key, median / 95th / worst | 4.4 / 9.0 / 23.2 | 4.2 / 5.4 / 17.8 |
+| Typing a 5,000 line .hor, ms a key, median / 95th / worst | 5.2 / 7.4 / 20.4 | 4.2 / 4.6 / 5.9 |
+| uicost paint ms, idle / typing / wheel / drag / notebook | 1.52 / 1.82 / 1.56 / 4.57 / 1.54 | 0.39 / 0.51 / 0.37 / 1.07 / 0.38 |
+| Working set after both suites, MiB | 488 | 372 |
+
+### Normal start, warm caches (three launches each, the 4 November way)
+
+| Measure | Debug | Release |
+| --- | ---: | ---: |
+| Process start to `main`, ms | 54 | 14 |
+| First frame of the scene, ms (median, range) | 2057 (2027–3417) | 683 (663–741) |
+| Idle working set, MiB | 251 | 202 |
+| Idle private bytes, MiB | 260 | 251 |
+| Idle CPU, % of a core | 5.1 | 3.2 |
+
+Release's first frame was 492 ms on 4 November. Of today's 683, the device takes about 240 ms (the driver went from
+621.01 to 621.14) and setting the scene up 250, of which 51 is the collection `SceneManager` takes under the loading
+screen. With the machine busy as it was, that is not yet a regression anybody can point at.
+
+### Leaks
+
+Idle in the Hex repository with a file open, the handle count climbed by about 60 a minute in both builds, 757 to
+1212 in ten minutes in Release. Nearly all were pipes. `GitProcess.Run` (status and blame every few seconds, fetch every few minutes) let
+`Process.Dispose` leave git's redirected output and error to the finalizer, and an idle Hex makes so little garbage
+the collector hardly ever came round. They're closed after reading now (0e0c03b).
+
+| Release, idle in the repository | 2 min | 10 min | 15 min |
+| --- | ---: | ---: | ---: |
+| Handles before | 801 | 1212 | |
+| Handles after | 739 / 564 | 691 / 569 | 566 |
+| Private bytes after, MiB | 254 | 266 | 267 |
+
+The two after rows are a busy run (three Hexes at once) and a quiet one. Private bytes level off after the first few
+minutes. `HEX_SELFTEST_REPEAT=8` with agentic-perf (a dozen 360 row chats made, measured and closed eight times in one
+process) ended every round from the third at a 42.5 MB heap after a full collection, 93.4 MB committed, 458 MiB
+working set (a first launch, see above) and 636 to 639 handles, so the chats leave nothing behind.
+
+Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
+CPU, handles and threads every half second from the outside, the self-tests say the rest.
+
 ## Evidence
 
 - [All 20 measured samples](benchmarks/2026-11-04/samples.json)

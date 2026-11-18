@@ -152,7 +152,7 @@ For logic that needs no UI, prefer a unit test in `Hex.Tests` (fast, CI-run).
 ### 3.7 Env vars used by self-tests
 `HEX_SELFTEST_SHOTS` (folder, screenshots, 27 uses), `HEX_TEST_SOLUTION` + `HEX_TEST_REPOSITORY_RUN_TESTS=1` / `HEX_TEST_REPOSITORY_NAVIGATION=1` (suite `repository`),
 `HEX_NOTEBOOK_TEST_FILE` (+ `HEX_NOTEBOOK_TEST_EXECUTE`) (suite `notebookfile`, skipped with a message when absent), `HEX_MEMORY_SESSION_SECONDS` (default 1800, allowed 10..86400, suite `document-memory`),
-`HEX_UICOST_PROFILE`, `HEX_TYPING_DIAGNOSTICS=1`, `HEX_NOTEBOOK_HTML_SAMPLE/OUT`, `HEX_PRESET_*`, `HEX_FIGHT_GAME` (move editor on Fighter2D), plus the same `HEX_TEST_*` toolchain variables as 2.3 (cmake, clang, python, pytest).
+`HEX_SELFTEST_REPEAT=N` (1..50, runs the asked suites N times in one process and prints heap after a full collection, committed, working set, private bytes, handles and threads after each round, for leak hunting), `HEX_UICOST_PROFILE`, `HEX_TYPING_DIAGNOSTICS=1`, `HEX_NOTEBOOK_HTML_SAMPLE/OUT`, `HEX_PRESET_*`, `HEX_FIGHT_GAME` (move editor on Fighter2D), plus the same `HEX_TEST_*` toolchain variables as 2.3 (cmake, clang, python, pytest).
 Toolchain suites (csharp, d, pyright, clangd, native-debug, python-debug...) go quiet/skip or fail depending on csharp-ls, serve-d, clangd, lldb, debugpy, pyright, netcoredbg, cmake being on the machine ("when it's on this machine" in many suite descriptions).
 
 ## 4. Catalogue of Dawn suites (`SelfTestSuites`)
