@@ -107,9 +107,17 @@ the chat that started them, so they can be watched and talked to like any other.
 
 - `hex_agent_list()` lists the agent systems that can be started, with the models and options they offer, and every
   chat with its id, name, state and which chat started it. It also says which chat you are.
-- `hex_agent_spawn(prompt, name?, agent?, model?, options?)` starts one and returns its id at once. The prompt has to
-  stand on its own, because the new agent doesn't see the conversation that started it. Its last message is what
-  comes back.
+- `hex_agent_spawn(prompt, name?, agent?, model?, options?, permissions?, approvals?)` starts one and returns its id
+  at once. The prompt has to stand on its own, because the new agent doesn't see the conversation that started it.
+  Its last message is what comes back. `permissions: { allow: [...], deny: [...] }` says what it may do without asking
+  and may never do, in its agent system's own rules (Claude Code's `Bash(git status:*)` or `Edit` go to
+  `--allowedTools` and `--disallowedTools`, Antigravity's `command(git)` to its run's `--settings`). Codex has no rules
+  of the kind, its `sandbox` option says what it may do.
+- What a spawned agent asks leave to do beyond its rules (Claude Code's and Codex's approvals) comes to the agent that started it
+  as a message of kind question, which wakes its wait or starts its next turn, and `hex_agent_approve(id, allow,
+  request?)` answers it. The card is in the agent's chat for the person as well, whoever answers first decides.
+  `approvals: "person"` leaves them to the person alone. Only the agent that started it may answer for it.
+  Antigravity can't ask headless, what it wasn't let do is a note at the end of its turn instead.
 - `hex_agent_wait(ids?, mode?, timeout?)` waits until they finish and hands back what they said. By default it waits
   for all the running agents you started. `mode: "any"` returns when the first one finishes. A timeout reports which
   are still running. The wait happens off the editor's thread, so the agents waited for keep using Hex's tools in the

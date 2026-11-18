@@ -92,6 +92,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
         has the default)
   - [ ] The other writes to the hex server's config (.agents/mcp_config.json) leave a chat's id in the folder, as
         Gemini's .gemini/settings.json does, ignored in Hex's repository
+- [x] The agent that starts others decides what they may do (asked 2026-11-18). hex_agent_spawn's permissions, allow
+      and deny rules in the child system's own words (Claude Code's --allowedTools and --disallowedTools, Antigravity's
+      --settings), and what a child asks leave to do goes to its parent as a question it answers with hex_agent_approve,
+      the person's card still there, approvals "person" leaving them to the person. Codex has a sandbox, not rules
 - [x] A chat whose run was still going after its turn was said over (Claude Code woken by a background task of its
       own) had a second run started on the same session by the next message, two agents writing the same files. A
       message then waits in its inbox and starts the next run once that one has gone

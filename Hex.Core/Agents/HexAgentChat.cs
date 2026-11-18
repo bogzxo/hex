@@ -366,8 +366,18 @@ internal sealed class HexAgentChat(int id, string agent)
     /// The agent asking leave to do something (run a command, change a file), a row with what it is that waits for the
     /// person's answer, handed to <paramref name="answer"/> once it's given.
     /// </summary>
-    public HexAgentEntry Approval(string title, string detail, Action<bool> answer) =>
-        Add(new HexAgentEntry(HexAgentEntryKind.Approval, title) { Input = detail, Answer = answer });
+    public HexAgentEntry Approval(string title, string detail, Action<bool> answer)
+    {
+        HexAgentEntry asked = Add(new HexAgentEntry(HexAgentEntryKind.Approval, title) { Input = detail, Answer = answer });
+        Approving?.Invoke(asked);
+        return asked;
+    }
+
+    /// <summary>
+    /// Told of every approval the agent asks, for the agent that started this one to be asked as well as the person
+    /// (HexAgentHub sets it as the chat is taken in).
+    /// </summary>
+    public Action<HexAgentEntry>? Approving { get; set; }
 
     /// <summary>An approval answered, the agent told, the row saying what was decided. False when it had been already.</summary>
     public bool Decide(HexAgentEntry approval, bool allowed)

@@ -110,6 +110,8 @@ internal sealed partial class DawnScene
             ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
             : Path.Combine(TerminalFiles.UserFolder, "agent_history"));
         hub.History.Tidy(TimeSpan.FromDays(2));
+        // What an agent another started asks leave to do goes to that one too (DawnScene.McpAgentApprovals)
+        hub.ApprovalAsked = RouteApproval;
         agentsStop = made.Get<Button>("agents_stop");
         agentsSend = made.Get<Button>("agents_send");
         agentsHistory = made.Get<Button>("agents_history");

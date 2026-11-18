@@ -52,6 +52,13 @@ internal sealed class HexAgentHub
 
     private volatile HexHubSnapshot snapshot = HexHubSnapshot.Empty;
 
+    /// <summary>An approval a chat's agent asked, for whoever decides them besides the person (the agent that started it).</summary>
+    public Action<HexAgentChat, HexAgentEntry>? ApprovalAsked { get; set; }
+
+    /// <summary>The approvals a chat's agent is waiting on, oldest first.</summary>
+    public static IEnumerable<HexAgentEntry> Approvals(HexAgentChat chat) =>
+        chat.Pending.Where(entry => entry.Kind == HexAgentEntryKind.Approval);
+
     /// <summary>Where the rows chats no longer keep in memory go, null for nowhere (they're let go of).</summary>
     public HexAgentHistory? History { get; set; }
 
@@ -59,6 +66,7 @@ internal sealed class HexAgentHub
     public HexAgentSession Add(HexAgentChat chat, HexSessionKind? kind = null)
     {
         chat.Spill ??= rows => History?.Append(chat.Key, rows);
+        chat.Approving ??= asked => ApprovalAsked?.Invoke(chat, asked);
         var session = new HexAgentSession(chat, kind);
         sessions.Add(session);
         return session;

@@ -252,6 +252,35 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.Equal("[mcp_servers.hex]\ncommand = 'C:\\Hex\\Hex.exe'\nargs = [\"--mcp-connect\"]\n", written["config.toml"]);
     }
 
+    [Fact]
+    public void The_rules_an_agent_was_spawned_with_reach_claude_code_and_antigravity_in_their_own_arguments()
+    {
+        var claude = new HexAgentChat(5, "claude_code");
+        claude.Options["allow"] = "Bash(git status:*)\nEdit";
+        claude.Options["deny"] = "Write";
+        string[] said = ArgumentsOf("claude_code", claude);
+        int allowed = Array.IndexOf(said, "--allowedTools");
+        // The setting's own tool first (the stub's settings are all "hex"), then the rules, a rule with a space kept whole
+        Assert.Equal(["hex", "Bash(git status:*)", "Edit"], said[(allowed + 1)..(allowed + 4)]);
+        Assert.Equal("Write", said[Array.IndexOf(said, "--disallowedTools") + 1]);
+
+        var agy = new HexAgentChat(6, "antigravity");
+        agy.Options["allow"] = "command(git)";
+        agy.Options["deny"] = "command(rm \"x\")";
+        string[] run = ArgumentsOf("antigravity", agy);
+        JsonNode permissions = JsonNode.Parse(run[Array.IndexOf(run, "--settings") + 1])!["permissions"]!;
+        Assert.Equal(["mcp(hex/*)", "command(git)"], permissions["allow"]!.AsArray().Select(rule => rule!.GetValue<string>()).ToArray());
+        Assert.Equal("command(rm \"x\")", permissions["deny"]![0]!.GetValue<string>());
+    }
+
+    // What an extension runs its agent with for a chat
+    private string[] ArgumentsOf(string id, HexAgentChat chat)
+    {
+        var (runtime, hex, _, _) = Load(id);
+        ObjectValue run = (ObjectValue)Agents(runtime, hex);
+        return [.. ((ListValue)runtime.Invoke(run.Properties["arguments"], new StringValue("go"), HexAgentChatApi.Of(chat, folder))).Items.Select(Values.Text)];
+    }
+
     /// <summary>The lines given played through an extension's on_event into a chat, as its agent would print them.</summary>
     private HexAgentChat Play(string id, params string[] lines)
     {

@@ -33,8 +33,20 @@ internal sealed partial class DawnScene
                 ("name", McpSchema.String("A short name for it in the panel, a few words.")),
                 ("agent", McpSchema.String("The agent system's id from hex_agent_list, your own by default, the panel's when you aren't one.")),
                 ("model", McpSchema.String("The model, one of those hex_agent_list says or a whole name, the agent system's setting by default.")),
-                ("options", new JsonObject { ["type"] = "object", ["description"] = "Other options of the agent system by id, as hex_agent_list says them." })], "prompt")),
+                ("options", new JsonObject { ["type"] = "object", ["description"] = "Other options of the agent system by id, as hex_agent_list says them." }),
+                ("permissions", new JsonObject
+                {
+                    ["type"] = "object",
+                    ["description"] = "What it may do without asking (allow) and may never do (deny), each a list of rules in its agent system's own words: Claude Code's tool rules such as \"Bash(git status:*)\" or \"Edit\", Antigravity's such as \"command(git)\" or \"mcp(hex/*)\". Codex has none, its sandbox option says what it may do.",
+                    ["properties"] = new JsonObject
+                    {
+                        ["allow"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
+                        ["deny"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } }
+                    }
+                }),
+                ("approvals", McpSchema.OneOf("Who answers what it asks leave to do beyond its rules. you (the default) get each as a question to answer with hex_agent_approve, the person can answer on its card either way, person leaves them to the person alone.", "you", "person"))], "prompt")),
             AgentSpawn),
+        AgentApproveTool(),
         new(new McpTool("hex_agent_wait", "Wait for agents",
             "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. A message sent to you by one of them returns at once with it, so you can steer the others on what it found (messages false waits on regardless). A timeout says what's still running.",
             McpSchema.Object([
@@ -183,6 +195,14 @@ internal sealed partial class DawnScene
                 if (value is JsonValue && value.ToString() is { Length: > 0 } chosen)
                     chat.Options[key] = chosen;
             }
+        }
+
+        // What it may do, said by the one starting it, and whose word what it asks waits on
+        if (!TakePermissions(args, chat, out string? wrong))
+        {
+            agentChatsMade--;
+            yield return McpToolResult.Error(wrong!);
+            yield break;
         }
 
         agentChats.Add(chat);

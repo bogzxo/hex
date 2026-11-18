@@ -88,6 +88,25 @@ internal sealed partial class DawnScene
             familyList is { ItemCount: 503 } list && list.Children.Count is > 0 and < 80
             && Shown().Any(said => said.Contains("step 500 of the long job", StringComparison.Ordinal)));
 
+        // What the scout asks leave to do goes to the one that started it, which decides it with hex_agent_approve
+        bool? decided = null;
+        Task<McpToolResult>? stranger = null, approved = null;
+        test.Run(() =>
+        {
+            scout!.Approval("Run git push", "git push origin development", allowed => decided = allowed);
+            stranger = McpTools.CallAs("hex_agent_approve", new JsonObject { ["id"] = scout.Id, ["allow"] = true }, CancellationToken.None, scout.Id);
+        });
+        test.WaitFor(() => stranger?.IsCompleted == true, 10.0f);
+        test.Check("noon mail: what an agent asks leave to do reaches the one that started it as a question it answers with hex_agent_approve", () =>
+            hub.MailOf(lead!).All.Any(entry => entry.Mail.Kind == "question" && entry.Mail.To == lead!.Id
+                && entry.Mail.Text.Contains("Run git push", StringComparison.Ordinal) && entry.Mail.Text.Contains("hex_agent_approve", StringComparison.Ordinal)));
+        test.Check("noon mail: only the one that started it decides, another chat is refused", () =>
+            stranger is { IsCompletedSuccessfully: true, Result.IsError: true } && decided is null);
+        test.Run(() => approved = McpTools.CallAs("hex_agent_approve", new JsonObject { ["id"] = scout!.Id, ["allow"] = false, ["request"] = 1 }, CancellationToken.None, lead!.Id));
+        test.WaitFor(() => approved?.IsCompleted == true, 10.0f);
+        test.Check("noon mail: and its answer is the agent's, the card answered with it", () =>
+            approved is { IsCompletedSuccessfully: true, Result.IsError: false } && decided == false && !scout!.Pending.Any());
+
         test.Run(() =>
         {
             familyWindow?.OnClosed?.Invoke();
