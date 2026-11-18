@@ -3648,6 +3648,8 @@ let strings = {
         picture_tab: "Open in a tab",
         picture_close: "Close (Esc)",
         harness_title: "Harness token savings",
+        model_default: "Default model",
+        model_tip: "The model the next turn runs on, {model}",
         mention_head: "Files and declarations to point the agent at · Tab takes the first",
         harness_about: "Tokens returned by each harness tool since the count began, kept across restarts, against the baseline, the tokens an equivalent grep or full-file read would have returned. Estimated at 4 characters per token. Cache hits were served from the result cache without querying the index again.",
         harness_saved: "Harness saved ~{tokens} tokens ({share}%) · {calls} calls",

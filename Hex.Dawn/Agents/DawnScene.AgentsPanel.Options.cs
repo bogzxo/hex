@@ -155,12 +155,42 @@ internal sealed partial class DawnScene
             }
             ContextMenu.Show(chrome, settings.Bounds.PointAt(Origin.TopLeft), menu);
         };
+        // The model the next turn runs on, a picker of its own by the box as the thinking is, it was only in the gear's menu
+        // and the person had to go into it to see which one the chat would ask
+        float taken = 0.0f;
+        if (options.FirstOrDefault(option => option.Key == "model") is { } models && models.Choices.Length > 0)
+        {
+            string value = Values.Text(extensions.SettingOf(extension, models.Key));
+            string current = value.Length == 0 ? Said("agents_panel.model_default")
+                : models.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
+            float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
+            float room = MathF.Max(32, MathF.Min(MathF.Min(wide, 180), agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - 150));
+            Button modelButton = agentsOptions.Add(Picker(room >= 80 ? current : string.Empty, "sparkle", false,
+                Said("agents_panel.model_tip", ("model", current)), () => { }));
+            modelButton.Size = new System.Numerics.Vector2(room, 32);
+            taken = room;
+            modelButton.OnPressed = () =>
+            {
+                var menu = new Menu(models.Title);
+                foreach (var (choiceValue, label) in models.Choices)
+                {
+                    string selected = choiceValue;
+                    menu.Add(label, () =>
+                    {
+                        extensions.SetSetting(extension, models.Key, new StringValue(selected), tell: true);
+                        agentsOptionsDrawn = string.Empty;
+                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, models.Key)) == selected;
+                }
+                ContextMenu.Show(chrome, modelButton.Bounds.PointAt(Origin.TopLeft), menu);
+            };
+        }
+
         if (thinking is not null)
         {
             string value = Values.Text(extensions.SettingOf(extension, thinking.Key));
             string current = value.Length == 0 ? Said("agents_panel.thinking_auto")
                 : thinking.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
-            float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - 48));
+            float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - taken - 48));
             agentsThinking = agentsOptions.Add(Picker(room >= 60 ? current : string.Empty, "lightbulb", false,
                 Said("agents_panel.thinking_tip", ("level", current)), () => { }));
             agentsThinking.Size = new System.Numerics.Vector2(room, 32);

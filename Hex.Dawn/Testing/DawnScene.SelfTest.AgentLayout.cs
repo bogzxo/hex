@@ -77,6 +77,8 @@ internal sealed partial class DawnScene
         test.Check("agents layout: installing a provider enables the existing draft", () =>
             agentsSend.Enabled && agentsInput.Text == "Explain the settings loader");
         test.Check("agents layout: thinking level is directly available in the composer", () => agentsThinking is { Enabled: true });
+        test.Check("agents layout: and the model the next turn runs on beside it", () =>
+            Descendants(agentsOptions).OfType<Button>().Any(button => button.Icon == "sparkle"));
         test.Run(() => agentsThinking!.OnPressed!());
         test.Wait();
         PressKeys(test, "End");
