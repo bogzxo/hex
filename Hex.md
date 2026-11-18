@@ -127,6 +127,10 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       stripe and badge in the agent system's colour and who to whom along their top, tools and agent systems as cards
       with bars of what they saved, nothing cut off by the window's bottom, an empty state with the way back, Details
       filtering with the same chips (db9ea80, 89de584)
+- [x] An @ in the agents' box lists the workspace's files and declarations that fit what's typed after it, from the
+      harness's index, a press or Tab putting the path in (afbd9ba, fe29e51)
+- [x] A thin bar under each chat's card of how full its context is, green turning amber and red as it fills, Details'
+      bar in the same colours (asked 2026-11-18, 4d94c90)
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
 - [x] Each agent system's badge in its own colour as its extension says it (hex.agent's colour and colour_light), Claude
       Code's coral, Codex's white or black, Antigravity's Google blue (asked 2026-11-18)
