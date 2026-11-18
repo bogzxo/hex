@@ -15,6 +15,9 @@ internal sealed partial class DawnScene
     // How tall a call's line is in an opened group, and the group's head
     private const float TOOL_LINE = 22.0f, TOOL_GROUP_HEAD = 26.0f;
 
+    // How strongly the calls that went are drawn, the reply round them standing out of them
+    private const float TOOL_QUIET = 0.72f;
+
     // The groups opened, by the first call of each, the rest are folded
     private readonly HashSet<HexAgentEntry> toolGroupsOpen = [];
 
@@ -163,7 +166,11 @@ internal sealed partial class DawnScene
             ? Said("agents_panel.tools_running", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("tool", ShortToolName(running)))
             : Said("agents_panel.tools_group", ("count", calls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("kinds", kinds));
 
-        var bar = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f } });
+        var bar = holder.Add(new Panel
+        {
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f },
+            Opacity = running is null && failed == 0 ? TOOL_QUIET : 1.0f
+        });
         // A gutter down its left by how it went, blue while one of its calls is running, so what's going on now stands out
         // of what's done, then green, yellow when one failed on the way but the last went, red when it ended failing
         Vector4 gutter = running is not null ? RUNNING_BLUE
@@ -244,7 +251,13 @@ internal sealed partial class DawnScene
     private UIComponent ToolLine(HexAgentChat chat, HexAgentEntry call, UISkin? skin)
     {
         var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
-        var line = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero });
+        // A call that went is quieter than the words round it, the agent's reply is what the chat is read for. One running
+        // or failed stays as it is, it's what wants seeing
+        var line = holder.Add(new Panel
+        {
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero,
+            Opacity = call.State == HexAgentToolState.Done ? TOOL_QUIET : 1.0f
+        });
         // How it went, a thin mark at its left, a wider blue gutter while it's running
         bool going = call.State == HexAgentToolState.Running;
         line.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(going ? 3 : 2, TOOL_LINE - 6), Radius = 1, Color = going ? RUNNING_BLUE : ToolStateColour(call.State, skin) });

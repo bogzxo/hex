@@ -64,12 +64,18 @@ internal sealed partial class DawnScene
         foreach (NoonStage stage in Enum.GetValues<NoonStage>())
         {
             NoonStage shown = stage;
-            noonTabButtons[(int)stage] = noonTabs.Add(new Button
+            // The key dim at the tab's right, over the button so a press still lands on it, the keys were only in tooltips
+            var tab = noonTabs.Add(new Panel { Size = new Vector2(146, 26), Color = Vector4.Zero });
+            noonTabButtons[(int)stage] = tab.Add(new Button
             {
-                Icon = StageIcon(stage), Label = TabLabel(stage, string.Empty), Style = "button_flat",
-                Size = new Vector2(146, 26), LabelScale = 0.13f, Animated = false,
+                Icon = StageIcon(stage), Label = TabLabel(stage, string.Empty), Style = "button_flat", Fill = UIFill.Both, Align = Origin.Left,
+                LabelScale = 0.13f, Animated = false, Padding = new UIEdges(8, 0, 40, 0),
                 Tooltip = Said("noon.stage_tip", ("name", Said($"noon.stage_{stage.ToString().ToLowerInvariant()}")), ("key", STAGE_KEYS[(int)stage])),
                 OnPressed = () => ShowStage(shown)
+            });
+            tab.Add(new Label
+            {
+                Text = UIRichText.Literal(STAGE_KEYS[(int)stage]), TextScale = 0.11f, Dim = true, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
             });
         }
 
@@ -87,12 +93,11 @@ internal sealed partial class DawnScene
 
     private bool InAgentic() => Face == HexFace.Noon;
 
-    // A tab's name, its count when it has one, and its key dim after them, the keys were only in the tooltips before
+    // A tab's name and its count when it has one, its key is a label of its own at the tab's right
     private string TabLabel(NoonStage stage, string count)
     {
-        string name = UIRichText.Literal(Said($"noon.stage_{stage.ToString().ToLowerInvariant()}"));
-        string key = STAGE_KEYS[(int)stage].Replace("Alt+", "Alt ", StringComparison.Ordinal);
-        return count.Length > 0 ? $"{name}  {count}  [dim]{key}[/dim]" : $"{name}  [dim]{key}[/dim]";
+        string name = Said($"noon.stage_{stage.ToString().ToLowerInvariant()}");
+        return count.Length > 0 ? $"{name}  {count}" : name;
     }
 
     private static string StageIcon(NoonStage stage) => stage switch
