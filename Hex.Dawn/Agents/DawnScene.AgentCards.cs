@@ -135,8 +135,9 @@ internal sealed partial class DawnScene
             // icon is put on after the cut, cut into it would have left its name as text
             string mail = unread > 0 ? $" · $(mail) {unread}" : string.Empty;
             float mailWidth = mail.Length > 0 ? 40.0f : 0.0f;
+            // The model stays in front of what it's doing, it was gone from the card for as long as a tool ran
             if (doing is not null)
-                said = UIRichText.Literal(FitText(doing, under.TextScale, room - 24));
+                said = UIRichText.Literal(FitText(model is { Length: > 0 } ? $"{model} · {doing}" : doing, under.TextScale, room - 24));
             else
             {
                 string used = string.Join(" · ", new[]
