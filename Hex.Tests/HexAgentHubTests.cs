@@ -143,9 +143,12 @@ public sealed class HexAgentHubTests
             Assert.Equal("line 51", hub.History.Read(chat.Key, 0, 1)[0].Text);
 
             // The chat written down and read back keeps its key and how many it let go of
-            HexAgentChat back = HexAgentChatStore.Read(HexAgentChatStore.Write(chat))!;
+            // A turn's checkpoints kept with its row, so its changes can be reviewed after Hex starts again
+            chat.Ask("change it").Checkpoints = [("C:/work/repo", "4b825dc642cb6eb9a060e54bf8d69288fbee4904")];
+            HexAgentChat back = HexAgentChatStore.Read(System.Text.Json.Nodes.JsonNode.Parse(HexAgentChatStore.Write(chat).ToJsonString()))!;
             Assert.Equal(chat.Key, back.Key);
             Assert.Equal(51, back.Dropped);
+            Assert.Equal([("C:/work/repo", "4b825dc642cb6eb9a060e54bf8d69288fbee4904")], back.Entries.Last(entry => entry.Kind == HexAgentEntryKind.User).Checkpoints!);
 
             // Gone with the chat
             hub.Remove(chat);

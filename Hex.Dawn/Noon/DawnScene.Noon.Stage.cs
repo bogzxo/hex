@@ -152,7 +152,8 @@ internal sealed partial class DawnScene
     /// <summary>The tabs' counts put right and the stage on screen drawn again when the agents moved, a few times a second.</summary>
     private void DrawNoonStage()
     {
-        long key = (hub.Version * 31 + (agentChat?.Id ?? -1)) * 31 + (int)noonStage;
+        // The middle's width in it too, a stage's titles are fitted to it
+        long key = ((hub.Version * 31 + (agentChat?.Id ?? -1)) * 31 + (int)noonStage) * 31 + (int)(noonCenter.Bounds.Width / 24);
         if (key == noonStageDrawn)
             return;
         // Another chat or tab is drawn at once. The agents only having gone on (one streaming moves it every word) waits a
@@ -367,19 +368,15 @@ internal sealed partial class DawnScene
 
     /* Changes */
 
-    // The checkpoint taken as each turn began, by what was asked then, a repository's top and its tree for each folder of
-    // the workspace that's one. Kept for as long as the row is
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<HexAgentEntry, List<(string Top, string Tree)>> checkpoints = [];
-
     /// <summary>
     /// A checkpoint of every repository of the workspace as a turn begins, taken off the editor's thread, for that turn's
-    /// changes to be seen against and put back from.
+    /// changes to be seen against and put back from. Kept on the turn's row (HexAgentEntry.Checkpoints), written down
+    /// with the chat, so it outlives Hex starting again, the trees themselves being in the repository's own objects.
     /// </summary>
     private void TakeCheckpoint(HexAgentEntry asked, Action then)
     {
         string[] folders = [.. explorer.workspace.Folders];
-        var taken = new List<(string, string)>();
-        checkpoints.AddOrUpdate(asked, taken);
+        checkpointing.Add(asked);
         InBackground("checkpoint", () =>
         {
             var tops = new HashSet<string>(PlatformPaths.Comparer);
@@ -396,8 +393,17 @@ internal sealed partial class DawnScene
             return made;
         }, made =>
         {
-            lock (taken)
-                taken.AddRange(made);
+            checkpointing.Remove(asked);
+            asked.Checkpoints = made;
+            // The chat written down again with it
+            foreach (HexAgentChat chat in agentChats)
+            {
+                if (chat.Entries.Contains(asked))
+                {
+                    chat.Touch(asked);
+                    break;
+                }
+            }
             then();
         }, quiet: true);
     }
@@ -449,18 +455,49 @@ internal sealed partial class DawnScene
     // The checkpoint a file of a turn goes back to, the repository it's in, null when the turn has none for it
     private static (string Top, string Tree)? CheckpointFor(HexAgentEntry asked, string path)
     {
-        if (!checkpoints.TryGetValue(asked, out var taken))
+        if (asked.Checkpoints is not { } taken)
             return null;
-        lock (taken)
+        (string Top, string Tree)? best = null;
+        foreach (var each in taken)
         {
-            (string Top, string Tree)? best = null;
-            foreach (var each in taken)
-            {
-                if (PlatformPaths.IsUnder(path, each.Top) && (best is null || each.Top.Length > best.Value.Top.Length))
-                    best = each;
-            }
+            if (PlatformPaths.IsUnder(path, each.Top) && (best is null || each.Top.Length > best.Value.Top.Length))
+                best = each;
+        }
 
-            return best;
+        return best;
+    }
+
+    // The turns being checkpointed now, so a turn is checkpointed once however it began
+    private readonly HashSet<HexAgentEntry> checkpointing = [];
+
+    // Each chat's version as it was last looked at for a turn without a checkpoint
+    private readonly Dictionary<int, int> checkpointLooked = [];
+
+    /// <summary>
+    /// Every tick, a checkpoint for any chat's latest turn that has none, whichever way it began, a message sent while the
+    /// agent worked or a chat carried on after Hex started again as much as one started from the box (StartAgent takes
+    /// that one before the agent starts). Before, those turns had no Diff, Review or Restore at all. A chat is looked at
+    /// again only when it moved.
+    /// </summary>
+    private void CheckpointNewTurns()
+    {
+        HexHubChats chats = agentChats;
+        for (int i = 0; i < chats.Count; i++)
+        {
+            HexAgentChat chat = chats[i];
+            if (checkpointLooked.TryGetValue(chat.Id, out int seen) && seen == chat.Version)
+                continue;
+            checkpointLooked[chat.Id] = chat.Version;
+            IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+            for (int at = entries.Count - 1; at >= 0; at--)
+            {
+                HexAgentEntry entry = entries[at];
+                if (entry.Kind != HexAgentEntryKind.User)
+                    continue;
+                if (entry.Checkpoints is null && !checkpointing.Contains(entry) && chat.Running)
+                    TakeCheckpoint(entry, () => { });
+                break;
+            }
         }
     }
 
@@ -482,12 +519,16 @@ internal sealed partial class DawnScene
                 Color = (Skin?.Palette.Field ?? new Vector4(0.1f, 0.1f, 0.12f, 1.0f)) with { W = 0.6f }, Outline = Skin?.BorderColor ?? Vector4.Zero
             });
             var head = card.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 26), Color = Vector4.Zero });
+            bool checkpointed = files.Any(file => CheckpointFor(asked, FullPathOf(file)) is not null);
+            // As much of what was asked as the card's width has room for beside its button, measured in the font, it was
+            // cut at seventy letters however wide the card was
+            string title = Said("noon.changes_turn", ("number", number.ToString(CultureInfo.InvariantCulture)), ("asked", OneLine(asked.AskedText ?? asked.Text, 400)));
+            float room = noonChanges.Bounds.Width - 40 - (checkpointed ? 160 : 0) - 24;
             head.Add(new Label
             {
-                Text = $"$(history) {UIRichText.Literal(Said("noon.changes_turn", ("number", number.ToString(CultureInfo.InvariantCulture)), ("asked", OneLine(asked.AskedText ?? asked.Text, 70))))}",
-                TextScale = 0.135f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left
+                Text = $"$(history) {UIRichText.Literal(room > 100 ? FitText(title, 0.135f, room) : OneLine(title, 70))}",
+                TextScale = 0.135f, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = asked.AskedText ?? asked.Text
             });
-            bool checkpointed = files.Any(file => CheckpointFor(asked, FullPathOf(file)) is not null);
             if (checkpointed)
                 head.Add(new Button
                 {

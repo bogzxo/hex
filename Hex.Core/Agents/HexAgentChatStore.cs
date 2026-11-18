@@ -46,6 +46,9 @@ internal static class HexAgentChatStore
     /// <summary>A row as it's written down.</summary>
     public static JsonObject RowOf(HexAgentEntry entry) => new()
     {
+        ["checkpoints"] = entry.Checkpoints is { Count: > 0 } taken
+            ? new JsonArray([.. taken.Select(each => (JsonNode)new JsonObject { ["top"] = each.Top, ["tree"] = each.Tree })])
+            : null,
         ["kind"] = entry.Kind.ToString(),
         ["text"] = entry.Text,
         ["asked"] = entry.AskedText,
@@ -81,7 +84,11 @@ internal static class HexAgentChatStore
             Output = entry["output"]?.GetValue<string>(),
             State = Enum.TryParse(entry["state"]?.GetValue<string>(), out HexAgentToolState state) ? state : HexAgentToolState.Done,
             Progress = entry["progress"]?.GetValue<string>(),
-            Steps = entry["steps"]?.GetValue<int>() ?? 0
+            Steps = entry["steps"]?.GetValue<int>() ?? 0,
+            Checkpoints = entry["checkpoints"] is JsonArray taken
+                ? [.. taken.OfType<JsonObject>().Select(each => (Top: each["top"]?.GetValue<string>() ?? string.Empty, Tree: each["tree"]?.GetValue<string>() ?? string.Empty))
+                    .Where(each => each.Top.Length > 0 && each.Tree.Length > 0)]
+                : null
         };
     }
 

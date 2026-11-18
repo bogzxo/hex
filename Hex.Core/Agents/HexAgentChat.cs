@@ -38,6 +38,12 @@ internal sealed class HexAgentEntry(HexAgentEntryKind kind, string text)
     public long Started { get; init; } = Environment.TickCount64;
     public long? Ended { get; set; }
 
+    /// <summary>
+    /// For what somebody asked, the checkpoint of each repository taken as the turn began (its top folder and the git tree),
+    /// kept with the chat so a turn's changes can still be reviewed and put back after Hex starts again. Null while none.
+    /// </summary>
+    public IReadOnlyList<(string Top, string Tree)>? Checkpoints { get; set; }
+
     /// <summary>What a subagent this tool started is doing now, its latest step, null for a tool that started none.</summary>
     public string? Progress { get; set; }
 

@@ -89,7 +89,11 @@ internal sealed partial class DawnScene
     private void PublishAgentStatuses()
     {
         if (hub.Pump(AGENTS_REPLY))
+        {
             agentsChanged?.Invoke();
+            // Whichever face is up, a turn that began without a checkpoint gets one
+            CheckpointNewTurns();
+        }
     }
 
     /* The agents as the parts of the editor see them (DawnContext.Agents) */
