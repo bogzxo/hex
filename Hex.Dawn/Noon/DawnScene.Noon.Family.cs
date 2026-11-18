@@ -48,12 +48,7 @@ internal sealed partial class DawnScene
         if (shown.Length == 0)
             noonContextRows.Add(ContextText(Said("noon.family_none"), dim: true));
         foreach (HexMailEntry entry in shown)
-        {
-            HexAgentMail mail = entry.Mail;
-            string to = mail.To == HexMailLog.USER ? Said("noon.family_you") : $"#{mail.To}";
-            string from = mail.From is { } id ? $"#{id}" : Said("noon.family_you");
-            ContextLine(MailIcon(mail.Kind), $"{from} → {to} · {mail.Kind} · {RouteWord(entry.Route)}: {OneLine(mail.Text, 160)}", wrap: true);
-        }
+            noonContextRows.Add(FamilyMessage(entry, 160));
 
         // The whole of it in a window of its own, filtered by kind and by member
         ContextLink("mail", Said("noon.family_every", ("count", all.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))), () => ShowFamilyTalk(chat));

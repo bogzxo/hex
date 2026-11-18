@@ -51,7 +51,8 @@ internal sealed partial class DawnScene
         test.Check("noon mail: Details list the family's messages with a way to all of them", () =>
             every is not null && Descendants(noonContextRows).OfType<Label>().Any(label => label.Text.Contains("where are the tests?", StringComparison.Ordinal)));
 
-        string[] Shown() => familyList is null ? [] : [.. familyList.Children.OfType<Label>().OrderByDescending(label => label.Bounds.Max.Y).Select(label => label.Text)];
+        // Each row's words, the last label of it under the line of who to whom
+        string[] Shown() => familyList is null ? [] : [.. familyList.Children.OrderByDescending(row => row.Bounds.Max.Y).Select(row => Descendants(row).OfType<Label>().Last().Text)];
         test.Run(() => every?.OnPressed?.Invoke());
         test.Settle(0.4f);
         test.Check("noon mail: the family's window has every message, oldest first", () =>
@@ -75,6 +76,12 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Check("noon mail: a member's filter leaves what it sent and was sent", () => familyList is { ItemCount: 2 });
+
+        // An agent's number on a message opens its chat
+        test.Run(() => Descendants(familyList!).OfType<Button>().First(button => button.Label == $"#{scout!.Id}").OnPressed!());
+        test.Settle(0.3f);
+        test.Check("noon mail: an agent's number on a message opens its chat", () => agentChat == scout && noonStage == NoonStage.Chat);
+        test.Run(() => OpenAgentChat(lead!));
 
         // Hundreds of messages, a few rows made, the newest in sight
         test.Run(() =>

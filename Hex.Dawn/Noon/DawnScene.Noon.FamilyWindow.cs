@@ -187,15 +187,54 @@ internal sealed partial class DawnScene
         && (familyMember is not { } member || entry.Mail.From == member || entry.Mail.To == member);
 
     // A message as a row, who to whom, its kind, how it got there and all of what it said
-    private Label FamilyRow(HexMailEntry entry)
+    private UIComponent FamilyRow(HexMailEntry entry) => FamilyMessage(entry, int.MaxValue);
+
+    /// <summary>
+    /// A message of the family, who to whom over what it said. Each agent's number a button opening its chat, the family
+    /// was only reachable through Details' Works with before. The words cut to <paramref name="most"/> characters.
+    /// </summary>
+    private UIComponent FamilyMessage(HexMailEntry entry, int most)
     {
         HexAgentMail mail = entry.Mail;
-        string to = mail.To == HexMailLog.USER ? Said("noon.family_you") : $"#{mail.To}";
-        string from = mail.From is { } id ? $"#{id}" : Said("noon.family_you");
-        return new Label
+        var message = new StackPanel { Fill = UIFill.Horizontal, Spacing = 1 };
+        var head = message.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 3, Size = new Vector2(0, 18), Anchor = Origin.Left, Pivot = Origin.Left });
+        head.Add(new Label { Text = $"$({MailIcon(mail.Kind)})", TextScale = 0.13f, Dim = true, Size = new Vector2(16, 18) });
+        FamilyWho(head, mail.From);
+        head.Add(new Label { Text = "→", TextScale = 0.13f, Dim = true, Size = new Vector2(12, 18) });
+        FamilyWho(head, mail.To == HexMailLog.USER ? null : mail.To);
+        string about = $"{mail.Kind} · {RouteWord(entry.Route)}";
+        head.Add(new Label { Text = UIRichText.Literal(about), TextScale = 0.12f, Dim = true, Size = new Vector2(MathF.Ceiling(about.Length * 6.0f) + 8, 18), Align = Origin.Left });
+        message.Add(new Label
         {
-            Text = $"$({MailIcon(mail.Kind)}) {UIRichText.Literal($"{from} → {to} · {mail.Kind} · {RouteWord(entry.Route)}: {mail.Text}")}",
-            TextScale = 0.135f, Align = Origin.Left, Wrap = true, Fill = UIFill.Horizontal
-        };
+            Text = UIRichText.Literal(most == int.MaxValue ? mail.Text : OneLine(mail.Text, most)), TextScale = 0.135f, Align = Origin.Left, Wrap = true, Fill = UIFill.Horizontal
+        });
+        return message;
+    }
+
+    // Who sent or was sent a message, the person in words, an agent its number as a button to its chat
+    private void FamilyWho(StackPanel head, int? id)
+    {
+        if (id is not { } chat)
+        {
+            string you = Said("noon.family_you");
+            head.Add(new Label { Text = UIRichText.Literal(you), TextScale = 0.12f, Bold = true, Size = new Vector2(MathF.Ceiling(you.Length * 6.4f) + 4, 18) });
+            return;
+        }
+
+        string label = $"#{chat}";
+        head.Add(new Button
+        {
+            Label = label, Style = "button_flat", LabelScale = 0.115f, Animated = false, Size = new Vector2(MathF.Ceiling(label.Length * 6.4f) + 12, 18),
+            Tooltip = ChatById(chat) is { } found ? Said("noon.family_open", ("name", OneLine(found.Shown, 40))) : null,
+            Enabled = ChatById(chat) is not null,
+            OnPressed = () =>
+            {
+                if (ChatById(chat) is { } open)
+                {
+                    OpenAgentChat(open);
+                    ShowStage(NoonStage.Chat);
+                }
+            }
+        });
     }
 }

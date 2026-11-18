@@ -3386,6 +3386,7 @@ let strings = {
         family_instruction: "Instructions",
         family_none: "Nothing of that kind yet",
         family_you: "you",
+        family_open: "Open {name}",
         family_every: "All {count} messages…",
         family_window: "Family conversation of {name}",
         family_everyone: "Everyone",
