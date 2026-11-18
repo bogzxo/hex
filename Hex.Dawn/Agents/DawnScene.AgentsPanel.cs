@@ -14,8 +14,12 @@ internal sealed partial class DawnScene
     private const string AGENTS_LAYOUT = "agents_view.hor";
 
     private Panel agentsView = null!;
-    private StackPanel agentsChips = null!, agentsRows = null!;
-    private ScrollPanel agentsScroll = null!;
+    private StackPanel agentsChips = null!;
+    private HexAgentRowList agentsRows = null!;
+    private VirtualStack agentsScroll = null!;
+
+    // What a row is taken to be tall before it's been measured, about a line of what an agent said and its gap
+    private const float AGENTS_ROW_ESTIMATE = 40.0f;
     private Label agentsSubtitle = null!;
     private Panel agentsCompose = null!, agentsMeta = null!, agentsBody = null!;
     private CodeEditor agentsInput = null!;
@@ -58,12 +62,21 @@ internal sealed partial class DawnScene
         agentsView = made.Get<Panel>("agents_view");
         SideGrip(agentsView, UIResize.Right, left: true);
         agentsChips = made.Get<StackPanel>("agents_chips");
-        agentsRows = made.Get<StackPanel>("agents_rows");
-        agentsScroll = made.Get<ScrollPanel>("agents_scroll");
-        agentsScroll.StickToEnd = true;
         agentsCompose = made.Get<Panel>("agents_compose");
         agentsMeta = made.Get<Panel>("agents_meta");
         agentsBody = made.Get<Panel>("agents_body");
+
+        // The layout's scroll and stack give way to a list that has only the rows near what's in sight in its tree, the
+        // same room, padding and gap between rows
+        ScrollPanel laid = made.Get<ScrollPanel>("agents_scroll");
+        StackPanel laidRows = made.Get<StackPanel>("agents_rows");
+        agentsScroll = agentsBody.Insert(IndexIn(agentsBody, laid), new VirtualStack
+        {
+            Fill = laid.Fill, Anchor = laid.Anchor, Pivot = laid.Pivot, Padding = laid.Padding,
+            Spacing = laidRows.Spacing >= 0.0f ? laidRows.Spacing : 8.0f, Estimate = AGENTS_ROW_ESTIMATE, StickToEnd = true
+        });
+        agentsBody.Remove(laid);
+        agentsRows = new HexAgentRowList(agentsScroll);
         agentsSubtitle = made.Get<Label>("agents_subtitle");
         agentsPlaceholder = made.Get<Label>("agents_placeholder");
         agentsInput = agentsCompose.Add(new CodeEditor

@@ -135,6 +135,22 @@ managed heap (58 to 73 MiB), which wants looking into. Idle still allocates ever
 about 1.5 MB a second at 240 Hz), the next thing to bring down. Results go to `hex-agentic-perf-<kind>.json` in the
 temp folder, one per kind of build.
 
+### The chat in a VirtualStack — 18 November 2026
+
+The same test on the dev build once the chat's rows went into a `VirtualStack` (only the rows near what's in sight
+measured, laid out and painted). The release build wasn't measured again.
+
+| Phase | Update ms (before / after) | Update KB a turn (before / after) |
+| --- | ---: | ---: |
+| Idle | 0.62 / 0.41 | 13.2 / 13.3 |
+| Switching | 0.94 / 1.62 | 258.7 / 140.7 |
+| Scrolling | 0.45 / 0.18 | 10.5 / 9.0 |
+| Streaming | 0.48 / 0.40 | 42.9 / 26.2 |
+| Groups | 0.66 / 0.17 | 9.8 / 5.5 |
+
+Switching takes longer, a chat put on screen still makes every row it keeps and the stack then asks for those in sight
+again. Making rows only as they come into sight is what would bring it down.
+
 ## Evidence
 
 - [All 20 measured samples](benchmarks/2026-11-04/samples.json)

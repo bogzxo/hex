@@ -255,11 +255,7 @@ internal sealed partial class DawnScene
             agentsGroupTimes.Clear();
             agentsQuestionTimes.Clear();
             agentRowFits.Clear();
-            foreach (UIComponent child in agentsRows.Children.ToArray())
-            {
-                if (child != typing)
-                    agentsRows.Remove(child);
-            }
+            agentsRows.Clear(keep: typing);
 
             agentsTyping = typing;
             if (chat is not { Entries.Count: > 0 })
@@ -302,8 +298,7 @@ internal sealed partial class DawnScene
                 // Made again in its place, a tool that finished giving a little pop
                 UIComponent was = agentRowsShown[i].Row;
                 UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
-                agentsRows.Insert(IndexIn(agentsRows, was), made);
-                agentsRows.Remove(was);
+                agentsRows.Replace(was, made);
                 agentRowFits.Remove(was);
                 agentRowsShown[i] = (entry, version, made);
                 // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
@@ -313,7 +308,7 @@ internal sealed partial class DawnScene
             }
 
             UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
-            agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : IndexIn(agentsRows, agentsTyping), row);
+            agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping), row, entry);
             agentRowsShown.Add((entry, version, row));
 
             // A whole chat brought up comes in quickly a few rows at a time, a row that just came slides in on its own,

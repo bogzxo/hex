@@ -195,7 +195,11 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
         pages its rows by hand (200 in memory)
   - [x] The noon self test suite, the title bar's button and the key, the themes, the side bar's width after, the
         welcome row (1aa4204)
-  - [ ] The chat's rows in a VirtualStack (1.6), the family view's mail (1.7)
+  - [x] The chat's rows in a VirtualStack (1.6), only the rows near what's in sight in the tree, a row's height kept by
+        its entry so a chat gone back to lands on the row it was read to (HexAgentRowList, horizon 3d2aed6, this
+        commit). A chat put on screen still makes every row it keeps in memory, the stack only lays out and paints
+        the ones in sight, making them as they come into sight is next
+  - [ ] The family view's mail in a VirtualStack (1.7)
   - [x] The horizon in Agentic, running while an agent works, red when one fails (17.3, ab90d37)
   - [x] --face on the command line, the last face kept with the workspace's chats (1.9, 476fdde)
   - [x] "Open in Agentic" on a chat's menu in the side bar (1.10, there already)

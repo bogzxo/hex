@@ -45,10 +45,10 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: a draft without a provider offers setup and cannot send", () =>
             agentsInput.Enabled && !agentsSend.Enabled
-            && Descendants(agentsRows).OfType<Button>().Any(button => button.Label == Said("agents_panel.browse")));
+            && Descendants(agentsScroll).OfType<Button>().Any(button => button.Label == Said("agents_panel.browse")));
         Capture("agents-setup");
         TestAgentWelcomeResize(test);
-        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Button>().First().Bounds.Center));
+        test.Click(() => chrome.ToWorld(Descendants(agentsScroll).OfType<Button>().First().Bounds.Center));
         test.Settle(0.3f);
         test.Check("agents layout: setup opens available extensions", () => SettingsPage?.CurrentGroup == HexExtensions.AVAILABLE);
         test.Run(CloseSettings);
@@ -137,11 +137,11 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: running tools use the configured animation speed", () =>
             agentsStop.Visible && AgentsMotion(0.4f) == 0.2f
-            && Descendants(agentsRows).OfType<Button>().Any(button => button.Icon == "loading~spin"));
+            && Descendants(agentsScroll).OfType<Button>().Any(button => button.Icon == "loading~spin"));
         test.Run(() => settings.UiAnimation = 0);
         test.Settle(0.3f);
         test.Check("agents layout: disabling motion updates the tool already on screen", () =>
-            AgentsMotion(0.4f) == 0 && Descendants(agentsRows).OfType<Button>().Any(button => button.Icon == "loading"));
+            AgentsMotion(0.4f) == 0 && Descendants(agentsScroll).OfType<Button>().Any(button => button.Icon == "loading"));
         test.Run(() =>
         {
             agentChat!.ToolDone("1", true, "Found the settings loader in Hex.Shell.");
@@ -150,11 +150,11 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.4f);
         // A call alone is a slim line of its own, pressed it opens to what it was given and said back
-        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Button>()
+        test.Click(() => chrome.ToWorld(Descendants(agentsScroll).OfType<Button>()
             .First(button => button.Tooltip?.StartsWith("mcp__hex__hex_search", StringComparison.Ordinal) == true).Bounds.Center));
         test.Settle(0.3f);
         test.Check("agents layout: opening a tool exposes its result", () =>
-            tool?.Open == true && Descendants(agentsRows).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));
+            tool?.Open == true && Descendants(agentsScroll).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));
         Capture("agents-transcript");
 
         // A long chat dragged wider is fitted to the width as it goes and not made again. Made again on every step it
@@ -162,7 +162,7 @@ internal sealed partial class DawnScene
         UIComponent[] rowsBefore = [];
         float bubbleBefore = 0;
         Vector2 splitter = default;
-        Panel Bubble() => Descendants(agentsRows).OfType<Panel>().First(panel => panel.Radius == 10 && panel.Anchor == Horizon.Rendering.Origin.Right);
+        Panel Bubble() => Descendants(agentsScroll).OfType<Panel>().First(panel => panel.Radius == 10 && panel.Anchor == Horizon.Rendering.Origin.Right);
         test.Run(() =>
         {
             settings.LeftWidth = 300;
@@ -205,15 +205,15 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Run(() =>
         {
-            groupHead = Descendants(agentsRows).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal));
+            groupHead = Descendants(agentsScroll).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal));
             groupTop = groupHead?.Bounds.Max.Y ?? 0;
             groupHead?.OnPressed!();
         });
         test.Settle(0.3f);
         test.Check("agents layout: calls one after another are one folded row with its words, and open where they are", () =>
             groupHead is not null && toolGroupsOpen.Count > 0
-            && !Descendants(agentsRows).OfType<Button>().Any(button => button.Label.Contains("@agents_panel", StringComparison.Ordinal))
-            && Descendants(agentsRows).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal)) is { } after
+            && !Descendants(agentsScroll).OfType<Button>().Any(button => button.Label.Contains("@agents_panel", StringComparison.Ordinal))
+            && Descendants(agentsScroll).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal)) is { } after
             && MathF.Abs(after.Bounds.Max.Y - groupTop) < 2.0f);
 
         // Each chat keeps where it was read to. Scrolled up in the long one, away to another and back, it's where it was
@@ -321,13 +321,26 @@ internal sealed partial class DawnScene
             agentsScroll.Offset > wheelFrom + 1.0f);
         test.Check("agents layout: in Agentic no side's handle shows, there's no side there to drag", () =>
             Splitters.Left is not { Visible: true } && Splitters.Right is not { Visible: true });
+        test.Run(() => ShowFace(HexFace.Dawn));
+        test.Settle(0.2f);
+
+        // Back where the chat was read to, the row at the top then the one a check further on holds it to. Only the rows
+        // near what's in sight are laid out, so a place is a row and how far into it, not the pixels down a whole chat
+        UIComponent? readRow = null;
+        int readIndex = -1;
+        float ViewTop() => agentsScroll.Bounds.Shrink(agentsScroll.Padding).Max.Y;
+        UIComponent? RowAtTop() => agentsScroll.Children.FirstOrDefault(row => row.Visible && row.Bounds.Min.Y <= ViewTop() + 0.5f && row.Bounds.Max.Y >= ViewTop() - 0.5f);
+        test.Run(() => agentsScroll.Offset = readTo);
+        test.Settle(0.2f);
         test.Run(() =>
         {
-            // Back where the chat was read to, which a check further on holds it to
-            agentsScroll.Offset = readTo;
-            ShowFace(HexFace.Dawn);
+            readRow = RowAtTop();
+            readIndex = readRow is null ? -1 : agentsRows.IndexOf(readRow);
+            OpenAgentChat(other!);
         });
-        test.Settle(0.2f);
+        test.Settle(0.3f);
+        test.Run(() => OpenAgentChat(longChat!));
+        test.Settle(0.4f);
         test.Check("agents layout: back in Dawn the side has one handle, the line's, the agents view none of its own", () =>
             agentsView.Resizable == UIResize.None && Splitters.Left is { Visible: true });
         test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
@@ -350,7 +363,11 @@ internal sealed partial class DawnScene
         test.Check("agents layout: and puts it right once the agent is looked at", () =>
             AgentsWanting() < wantingBefore && (AgentsWanting() == 0 ? !agentsItem.Text.Contains("bell-dot", StringComparison.Ordinal) : agentsItem.Text.Contains($"$(bell-dot) {AgentsWanting()}", StringComparison.Ordinal)));
         test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
-            MathF.Abs(agentsScroll.Offset - readTo) < 2 && agentsScroll.Offset < agentsScroll.MaxOffset - 10);
+        {
+            // Made again on the way back, the row is the same by its place in the chat
+            int was = readRow is null ? -1 : readIndex, now = RowAtTop() is { } top ? agentsRows.IndexOf(top) : -2;
+            return was >= 0 && was == now && agentsScroll.Offset < agentsScroll.MaxOffset - 10;
+        });
 
         // A row right-clicked offers its text to copy or to pick out of in a window, and the whole chat as Markdown
         bool menuSays = false, windowSelects = false;
@@ -536,7 +553,7 @@ internal sealed partial class DawnScene
             {
                 // Sample every layout, including the first measure after the sidebar updates its rows.
                 Label hint = agentsRows.Children.OfType<Label>().Skip(1).First();
-                float below = agentsRows.Bounds.Max.Y - agentsRows.Children.OfType<Button>().First().Bounds.Max.Y;
+                float below = agentsRows.Children[0].Bounds.Max.Y - agentsRows.Children.OfType<Button>().First().Bounds.Max.Y;
                 if (step > 1)
                     reversal = Math.Max(reversal, narrowing ? previous - below : below - previous);
                 previous = below;

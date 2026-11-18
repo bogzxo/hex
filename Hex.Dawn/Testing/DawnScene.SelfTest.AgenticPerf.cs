@@ -169,7 +169,7 @@ internal sealed partial class DawnScene
         {
             test.Run(() =>
             {
-                if (Descendants(agentsRows).OfType<Horizon.UI.Components.Button>().FirstOrDefault(button => button.Label.Contains("tool calls", StringComparison.Ordinal)) is { OnPressed: { } press })
+                if (Descendants(agentsScroll).OfType<Horizon.UI.Components.Button>().FirstOrDefault(button => button.Label.Contains("tool calls", StringComparison.Ordinal)) is { OnPressed: { } press })
                     press();
             });
             test.Wait();

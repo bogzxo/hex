@@ -32,7 +32,7 @@ internal sealed partial class DawnScene
     {
         // Measured as the chat's own row it's in, a call's line in a group being part of the group's row
         UIComponent row = pressed;
-        while (row.Parent is { } up && up != agentsRows)
+        while (row.Parent is { } up && up != agentsScroll)
             row = up;
         // Held for a few frames more than it takes, a busy frame laying it out a step late
         agentRowHeld = (entry, row.Bounds.Max.Y, 8);
