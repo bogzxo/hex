@@ -305,6 +305,9 @@ internal sealed partial class DawnScene
         if (chat is null)
             return;
 
+        // What was held for it goes with the run, kept it went to the next run's agent as soon as it said anything
+        heldSteers.RemoveAll(held => held.Chat == chat);
+
         // One still waiting for its checkpoint is never started, its turn over as it is
         if (agentsStarting.Remove(chat))
             chat.Done();

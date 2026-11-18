@@ -306,7 +306,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     /// <summary>
     /// Everything of it let go of but who it is (its id, agent, the chat that started it, its name and options), for it to
-    /// start afresh: its rows, its session, its mail and what it used. A new key, the file of its old rows the caller's
+    /// start afresh, its rows, its session, its mail and what it used. A new key, the file of its old rows the caller's
     /// to delete by the one it had.
     /// </summary>
     public void Clear()
@@ -326,8 +326,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
         entries.Add(entry);
         if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
         {
-            // The oldest to its file, never one still queued or a tool still going, which are still to change
-            int going = entries.FindIndex(each => each.Queued || each.Answer is not null || (each.Kind == HexAgentEntryKind.Tool && each.State == HexAgentToolState.Running));
+            // The oldest to its file, never one still queued, a tool still going or a question still waiting for its answer,
+            // which are still to change. A question spilled while the agent waited was never seen and timed out unanswered
+            int going = entries.FindIndex(each => each.Queued || each.Answer is not null || each.Respond is not null
+                || (each.Kind == HexAgentEntryKind.Tool && each.State == HexAgentToolState.Running));
             int spill = Math.Min(entries.Count - MOST_ENTRIES, going < 0 ? int.MaxValue : going);
             if (spill > 0)
             {

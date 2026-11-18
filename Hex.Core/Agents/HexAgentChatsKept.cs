@@ -113,25 +113,32 @@ internal sealed class HexAgentChatsKept
                 return (chats, null);
 
             state = JsonNode.Parse(File.ReadAllText(list)) as JsonObject;
+            // Every chat the list names is kept on the disk whether it reads or not. One that didn't read was left out of
+            // what was kept and its file and history deleted as nobody's
+            var named = new HashSet<string>(StringComparer.Ordinal);
             foreach (JsonNode? key in state?["chats"] as JsonArray ?? [])
             {
-                if (key?.GetValue<string>() is not { Length: > 0 } named || !File.Exists(FileOf(named)))
+                if (key is not JsonValue value || !value.TryGetValue(out string? said) || said is not { Length: > 0 } name)
                     continue;
+                named.Add(name);
+                if (!File.Exists(FileOf(name)))
+                    continue;
+                // A chat that doesn't read is skipped, a value of the wrong kind threw past this and lost every other chat
                 try
                 {
-                    if (HexAgentChatStore.Read(JsonNode.Parse(File.ReadAllText(FileOf(named)))) is { } chat)
+                    if (HexAgentChatStore.Read(JsonNode.Parse(File.ReadAllText(FileOf(name)))) is { } chat)
                     {
                         chats.Add(chat);
                         written[chat.Key] = Stamp(chat);
                     }
                 }
-                catch (System.Text.Json.JsonException)
+                catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or FormatException or IOException)
                 {
                 }
             }
 
             listWritten = state?.ToJsonString() ?? string.Empty;
-            Tidy(chats);
+            Tidy(named);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
         {
@@ -141,9 +148,8 @@ internal sealed class HexAgentChatsKept
     }
 
     // The files nothing kept names any more, left by a Hex that went down between a chat going and the list being written
-    private void Tidy(List<HexAgentChat> kept)
+    private void Tidy(HashSet<string> keys)
     {
-        var keys = new HashSet<string>(kept.Select(chat => chat.Key), StringComparer.Ordinal);
         foreach (string file in Directory.EnumerateFiles(Folder, "chat-*.json"))
         {
             string key = Path.GetFileNameWithoutExtension(file)["chat-".Length..];

@@ -81,6 +81,13 @@ internal sealed partial class DawnScene
             return;
 
         List<HexAgentChat> over = HexAgentChatsKept.PastMost(agentChats);
+        // Those past the most let go of here too, left out of what's written they stayed in memory and on screen and were
+        // gone after the next start
+        foreach (HexAgentChat old in over)
+        {
+            if (old != agentChat)
+                CloseAgentChat(old);
+        }
         IReadOnlyList<HexAgentChat> kept = over.Count == 0 ? agentChats : [.. agentChats.Where(chat => !over.Contains(chat))];
         chatsKept.Keep(kept, new JsonObject
         {
