@@ -131,6 +131,7 @@ internal sealed partial class DawnScene
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
         ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
+        ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),

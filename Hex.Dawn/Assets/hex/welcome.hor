@@ -232,6 +232,27 @@ let recent = compositor.stack({
     spacing: 2,
 });
 
+// The agents of this workspace, a new one, the last chat to carry on with and how many want looking at, put in by the
+// editor (DawnScene.Welcome FillWelcomeAgents) and kept up as the chats move
+let agents_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
+
+let agents_title = compositor.label({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.agents",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let agents = compositor.stack({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+});
+
 let help_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
 
 let help_title = compositor.label({

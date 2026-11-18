@@ -28,6 +28,7 @@ internal sealed partial class DawnScene
         public readonly StackPanel List = made.Get<StackPanel>("recent");
         private readonly StackPanel news = made.Get<StackPanel>("news");
         public readonly Button CommandsButton = made.Get<Button>("commands");
+        public readonly StackPanel Agents = made.Get<StackPanel>("agents");
         public void Invalidate() => width = 0;
         private float width;
         private UISkin? measuredWith;
@@ -60,6 +61,11 @@ internal sealed partial class DawnScene
                     hint.Size = hint.Size with { X = column };
                 else if (row is Button link)
                     FitFile(link, column, skin);
+            }
+            foreach (Button agent in Agents.Children.OfType<Button>())
+            {
+                agent.Size = new Vector2(column, 36);
+                agent.Align = Origin.Left;
             }
 
             // What's new, each line wrapped to its column with its button under it
@@ -187,10 +193,82 @@ internal sealed partial class DawnScene
 
         FillWelcomeNews(made);
         var sizing = new WelcomeSizing(page, made);
+        if (welcomeSizes.Count == 0)
+            agentsChanged += FillWelcomeAgents;
         welcomeSizes.Add(sizing);
         FillWelcomeRecent(sizing);
+        FillWelcomeAgents(sizing);
         return page;
     }
+
+    // What the agents' row said last, it's filled again only when that moves
+    private string welcomeAgentsSaid = string.Empty;
+
+    // The longest a chat's title is in the row before it's cut short
+    private const int WELCOME_AGENT_TITLE = 40;
+
+    /// <summary>The agents' row of every welcome page filled again once the chats have moved in a way it shows.</summary>
+    private void FillWelcomeAgents()
+    {
+        (HexAgentChat? last, int wanting) = WelcomeAgents();
+        string said = $"{last?.Id}|{last?.Shown}|{wanting}";
+        if (said == welcomeAgentsSaid)
+            return;
+        welcomeAgentsSaid = said;
+        foreach (WelcomeSizing sizing in welcomeSizes)
+            FillWelcomeAgents(sizing);
+    }
+
+    // The chat to carry on with, the last one somebody started that has anything in it, and how many want looking at
+    private (HexAgentChat? Last, int Wanting) WelcomeAgents() =>
+        (agentChats.LastOrDefault(chat => chat.Parent is null && chat.Entries.Count > 0), AgentsWanting());
+
+    /// <summary>
+    /// The agents' row of a welcome page, a new agent, the last chat to carry on with and how many want looking at, each
+    /// going to Agentic.
+    /// </summary>
+    private void FillWelcomeAgents(WelcomeSizing sizing)
+    {
+        StackPanel list = sizing.Agents;
+        foreach (UIComponent child in list.Children.ToArray())
+            list.Remove(child);
+
+        (HexAgentChat? last, int wanting) = WelcomeAgents();
+        WelcomeAgentButton(list, "add", Said("welcome.new_agent"), Said("welcome.new_agent_tip"), () =>
+        {
+            ShowFace(Hex.Shell.HexFace.Noon);
+            NewAgentChat();
+        });
+
+        if (last is not null)
+        {
+            string title = last.Shown.ReplaceLineEndings(" ");
+            title = title.Length > WELCOME_AGENT_TITLE ? title[..(WELCOME_AGENT_TITLE - 1)].TrimEnd() + "…" : title;
+            WelcomeAgentButton(list, "comment-discussion", Said("welcome.continue_agent", ("title", title)), Said("welcome.continue_agent_tip"), () =>
+            {
+                ShowFace(Hex.Shell.HexFace.Noon);
+                OpenAgentChat(last);
+            });
+        }
+
+        if (wanting > 0)
+        {
+            WelcomeAgentButton(list, "bell-dot", Said("welcome.agents_wanting", ("count", wanting.ToString(System.Globalization.CultureInfo.InvariantCulture))), Said("welcome.agents_wanting_tip"), () =>
+            {
+                ShowFace(Hex.Shell.HexFace.Noon);
+                NextNeedingMe();
+            });
+        }
+
+        sizing.Invalidate();
+    }
+
+    private static void WelcomeAgentButton(StackPanel list, string icon, string label, string tip, Action pressed) =>
+        list.Add(new Button
+        {
+            Icon = icon, Label = label, Tooltip = tip, Style = "button_flat", LabelScale = 0.16f, Animated = false,
+            Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, OnPressed = pressed
+        });
 
     /// <summary>
     /// What the release that's running brought, a line each and a button under it that goes to the thing, the setting,
