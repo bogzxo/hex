@@ -527,8 +527,31 @@ internal sealed partial class HexLanguages
         // A project of a server's that reads them only as it starts, the server started again a moment after
         foreach (HexServerEntry entry in serverEntries)
         {
-            if (changes.Any(change => entry.ReloadsFor(change.Path)) && servers.Any(server => server.Name == entry.Name))
+            if (changes.Any(change => entry.ReloadsFor(change.Path) && servers.Any(server => server.Name == entry.Name && server.Failure is null && ReloadsServer(server, change.Path))))
                 reloadIn[entry] = RELOAD_DELAY;
         }
+    }
+
+    /// <summary>
+    /// Whether a project file that changed is one of a server's, in the folder it runs in and not in a build's output or
+    /// a hidden folder. Any restore anywhere in the workspace (a copy of the repositories in .hexbase building its self
+    /// tests) started csharp-ls again, and the engine's solution takes it half a minute to load, completing nothing meanwhile.
+    /// </summary>
+    internal static bool ReloadsServer(LanguageServer server, string changed)
+    {
+        string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string full = Path.GetFullPath(changed);
+        if (!PlatformPaths.IsUnder(full, root))
+            return false;
+
+        // The folders it's in, the file's own name (.editorconfig) left out
+        string[] parts = Path.GetRelativePath(root, full).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (string part in parts.AsSpan(0, parts.Length - 1))
+        {
+            if (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || (part.Length > 1 && part[0] == '.' && part != ".."))
+                return false;
+        }
+
+        return true;
     }
 }

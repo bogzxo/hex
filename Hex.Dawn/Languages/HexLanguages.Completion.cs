@@ -62,6 +62,7 @@ internal sealed partial class HexLanguages
                 return asked.Offered ?? Waiting(of, word.Start);
             if ((editor.CompletionTyped || presentingServerAnswer)
                 && (!asked.Incomplete || asked.Prefix == prefix)
+                && (asked.Offered is not null || asked.Prefix == prefix)
                 && (asked.Version != doc.Version || asked.Prefix == prefix)
                 && (asked.Version == doc.Version || asked.Offered is not { } offer
                     || !offer.Items.Any(item => item.AdditionalEdits is { Count: > 0 } || item.ReplacementStart is not null || item.ReplacementEnd is not null)))
@@ -79,6 +80,10 @@ internal sealed partial class HexLanguages
             server.Change(path, editor.Text);
 
         bool again = asked is { Answered: true, Incomplete: true } && asked.Word == word;
+
+        // Nothing for this word last time (a server still loading its solution says nothing), asked again quietly as it
+        // goes on, the list opening if something comes. The nothing stood for the rest of the word before
+        bool quietly = asked is { Answered: true, Offered: null } && asked.Word == word && editor.CompletionTyped;
         var asking = new ServerAsking
         {
             Word = word,
@@ -99,7 +104,7 @@ internal sealed partial class HexLanguages
             context.Wake();
         }, TaskScheduler.Default);
 
-        return asking.Offered ?? Waiting(of, start);
+        return asking.Offered ?? (quietly ? null : Waiting(of, start));
     }
 
     // The list while the server's still thinking, a quiet row that says who's being asked. The first list from serve-d
