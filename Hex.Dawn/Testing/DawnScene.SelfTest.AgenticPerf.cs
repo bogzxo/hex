@@ -199,7 +199,9 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             perfFrames = null;
-            string kind = (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "jit" : "nativeaot")
+            // The host hands the runtime its list of assemblies only when there is a runtime to hand it to, a native
+            // compiled Hex has none. Dynamic code says nothing here, the dev build has it switched off under the JIT as well
+            string kind = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is not null ? "jit" : "nativeaot")
 #if DEBUG
                 + "-debug";
 #else
