@@ -66,8 +66,8 @@ internal sealed partial class DawnScene
             NoonStage shown = stage;
             noonTabButtons[(int)stage] = noonTabs.Add(new Button
             {
-                Icon = StageIcon(stage), Label = Said($"noon.stage_{stage.ToString().ToLowerInvariant()}"), Style = "button_flat",
-                Size = new Vector2(118, 26), LabelScale = 0.13f, Animated = false,
+                Icon = StageIcon(stage), Label = TabLabel(stage, string.Empty), Style = "button_flat",
+                Size = new Vector2(146, 26), LabelScale = 0.13f, Animated = false,
                 Tooltip = Said("noon.stage_tip", ("name", Said($"noon.stage_{stage.ToString().ToLowerInvariant()}")), ("key", STAGE_KEYS[(int)stage])),
                 OnPressed = () => ShowStage(shown)
             });
@@ -86,6 +86,14 @@ internal sealed partial class DawnScene
     }
 
     private bool InAgentic() => Face == HexFace.Noon;
+
+    // A tab's name, its count when it has one, and its key dim after them, the keys were only in the tooltips before
+    private string TabLabel(NoonStage stage, string count)
+    {
+        string name = UIRichText.Literal(Said($"noon.stage_{stage.ToString().ToLowerInvariant()}"));
+        string key = STAGE_KEYS[(int)stage].Replace("Alt+", "Alt ", StringComparison.Ordinal);
+        return count.Length > 0 ? $"{name}  {count}  [dim]{key}[/dim]" : $"{name}  [dim]{key}[/dim]";
+    }
 
     private static string StageIcon(NoonStage stage) => stage switch
     {
@@ -159,9 +167,9 @@ internal sealed partial class DawnScene
         if (counts != noonTabsSaid)
         {
             noonTabsSaid = counts;
-            noonTabButtons[(int)NoonStage.Inbox].Label = counts.Item1 > 0 ? $"{Said("noon.stage_inbox")}  {counts.Item1}" : Said("noon.stage_inbox");
-            noonTabButtons[(int)NoonStage.Changes].Label = counts.Item2 > 0 ? $"{Said("noon.stage_changes")}  {counts.Item2}" : Said("noon.stage_changes");
-            noonTabButtons[(int)NoonStage.Plan].Label = all > 0 ? $"{Said("noon.stage_plan")}  {done}/{all}" : Said("noon.stage_plan");
+            noonTabButtons[(int)NoonStage.Inbox].Label = TabLabel(NoonStage.Inbox, counts.Item1 > 0 ? counts.Item1.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+            noonTabButtons[(int)NoonStage.Changes].Label = TabLabel(NoonStage.Changes, counts.Item2 > 0 ? counts.Item2.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+            noonTabButtons[(int)NoonStage.Plan].Label = TabLabel(NoonStage.Plan, all > 0 ? $"{done}/{all}" : string.Empty);
             // The inbox's count in the accent while something waits, it's what wants the person
             noonTabButtons[(int)NoonStage.Inbox].Primary = counts.Item1 > 0;
         }

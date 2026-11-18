@@ -100,7 +100,7 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.4f);
         test.Check("noon: the Inbox tab counts what waits and the Plan tab how far the agent's list got", () =>
-            noonTabButtons[(int)NoonStage.Inbox].Label.EndsWith("1", StringComparison.Ordinal) && noonTabButtons[(int)NoonStage.Plan].Label.EndsWith("1/3", StringComparison.Ordinal));
+            noonTabButtons[(int)NoonStage.Inbox].Label == TabLabel(NoonStage.Inbox, "1") && noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, "1/3"));
         PressKeys(test, "Alt+2");
         test.Settle(0.4f);
         test.Check("noon: Alt+2 shows the Inbox, the request on a card with Allow and Deny and their keys", () =>
@@ -110,7 +110,7 @@ internal sealed partial class DawnScene
         PressKeys(test, "Ctrl+Alt+Y");
         test.Settle(0.4f);
         test.Check("noon: Ctrl+Alt+Y allows the request waiting and the Inbox empties", () =>
-            allowed == true && !chat!.Pending.Any() && noonTabButtons[(int)NoonStage.Inbox].Label == Said("noon.stage_inbox"));
+            allowed == true && !chat!.Pending.Any() && noonTabButtons[(int)NoonStage.Inbox].Label == TabLabel(NoonStage.Inbox, string.Empty));
         PressKeys(test, "Alt+4");
         test.Settle(0.4f);
         test.Check("noon: Alt+4 shows the plan, a line an item", () =>
