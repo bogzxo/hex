@@ -135,6 +135,7 @@ internal sealed partial class DawnScene
         ("noon-fleet", "Agentic's fleet, a family as a block with the ones started a step in, the totals, and the family closed with its top", TestNoonFleet),
         ("noon-mail", "Messages between a family's agents through hex_agent_message, in Details and in the family's window, filtered, hundreds with few rows made", TestNoonMail),
         ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
+        ("dusk-noon", "Agentic and Dusk in the one window, the agents going on behind Dusk and Dusk's Noon button bringing Agentic back", TestDuskNoon),
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
@@ -464,8 +465,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AskedSuites(out HashSet<string> asked)
     {
-        // OS input tests take the foreground briefly, so they only run when explicitly named.
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository")).Select(suite => suite.Name)];
+        // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
+        // window having Dusk in it only when it's named
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon")).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

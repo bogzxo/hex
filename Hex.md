@@ -208,8 +208,10 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
   - [x] Suites noon-keys and noon-looks (df0356e, which also has Alt+Page Up, Page Down and Home heard while the box
         has the keyboard, they never were in Agentic), noon-fleet for what the fleet has now (family blocks, totals,
         closing a family)
-  - [ ] Suites noon-panel, dusk-noon (needs the self test to host Dusk), noon-fleet's stand-in agent that spawns,
-        and hex_agent_brief (not built)
+  - [x] Suites noon-panel (f252f57) and dusk-noon (this commit). A self test that names dusk-noon has Dusk in its
+        window and goes on stepping while Dusk is on screen, so it's only run when named
+  - [ ] noon-fleet's stand-in agent that spawns two with hex_agent_spawn, and hex_agent_brief (not built, the plan
+        lists it with the fleet tools of 7.7)
   - The fleet is drawn again from a string key every quarter second (AgentCardsKey), a version hash would allocate
     nothing (plan 12.5)
   - The settings self test's "tab_size 3 on Workspace is written to the folder's file alone" fails on 0829def too,

@@ -181,9 +181,10 @@ public static partial class DawnProgram
         var scene = new DawnScene(options);
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
-        // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Never in a self test, which
-        // is the one mode and nothing else
-        if (!selfTest && Other is { } other)
+        // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Not in a self test, which
+        // is the one mode and nothing else, unless it asks for the suite that goes between the two
+        bool bothTested = selfTest && options.Suites?.Contains("dusk-noon", StringComparer.Ordinal) == true;
+        if ((!selfTest || bothTested) && Other is { } other)
             Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dawn, scene, (mode, folder) => mode == Hex.Shell.HexMode.Dawn ? scene : other(folder));
 
 #if DEBUG

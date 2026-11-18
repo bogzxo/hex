@@ -55,6 +55,11 @@ internal sealed partial class DawnScene
         TakeAgentLines();
         PublishAgentStatuses();
         RunMcpCalls(behind: true);
+
+        // A self test that went over to Dusk goes on there, to see what goes on behind it and to come back. Only with Dusk
+        // really on screen, a step of the test taking this step by hand would have run itself again inside itself
+        if (HexModes.Current == HexMode.Dusk)
+            UpdateSelfTest(dt);
     }
 
     /// <summary>A face picked on the title bar, Dusk swapping the scene and Dawn and Noon trading places in this one.</summary>
