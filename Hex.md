@@ -80,6 +80,14 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       2026-06-18, an API key only now. Waiting on the person: Antigravity's FAQ is said to call wrapping agy in another
       app unsupported on consumer plans, while a forum answer calls it fully supported, nothing official settles it.
       Build only once they've said to go ahead. The event fields to be read off a real run
+        2026-11-18: the person said to go ahead and test it. Only the Antigravity IDE was on the machine (no agy, its
+        bin has language_server.exe alone), they're installing the CLI and signing in themselves
+        Built: hex-extensions/antigravity (agy 1.5.11 read off real runs, stream-json both ways, .agents/mcp_config.json,
+        --conversation to go on), its unit tests in HexAgentSystemsTests, and Hex finds a program installed since it
+        started (the system's PATH as it is now). Left: a live turn from the Agents panel
+- [x] A chat whose run was still going after its turn was said over (Claude Code woken by a background task of its
+      own) had a second run started on the same session by the next message, two agents writing the same files. A
+      message then waits in its inbox and starts the next run once that one has gone
 - [x] Codex held to Hex's tools through its approvals, and hex_terminal_run itself refuses a read of the workspace (Codex went round the guard through it)
 
 ## Plan: agent commands and skills (compact first)

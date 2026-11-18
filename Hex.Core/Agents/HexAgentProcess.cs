@@ -49,7 +49,25 @@ internal sealed class HexAgentProcess : IDisposable
         if (Path.HasExtension(program))
             tried = [string.Empty, .. tried];
 
-        foreach (string folder in (path ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        if (FindOn(path ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty, program, tried) is { } found)
+            return found;
+
+        // Installed since Hex started (winget, npm -g), it's on the system's PATH as it is now, which Hex's own copy of
+        // it from its start hasn't got
+        if (path is null && OperatingSystem.IsWindows())
+        {
+            string now = Environment.ExpandEnvironmentVariables(
+                $"{Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine)};{Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User)}");
+            return FindOn(now, program, tried);
+        }
+
+        return null;
+    }
+
+    // The first of a program's names in the folders of a PATH
+    private static string? FindOn(string path, string program, string[] tried)
+    {
+        foreach (string folder in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             foreach (string ending in tried)
             {

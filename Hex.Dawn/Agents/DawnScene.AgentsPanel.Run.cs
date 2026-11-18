@@ -93,6 +93,19 @@ internal sealed partial class DawnScene
 
     private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
     {
+        // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
+        // background), and a second run on the same session had two agents writing over each other. What's asked waits in
+        // its inbox and starts the next run once that one has gone (AfterAgentTurn)
+        if (agentRuns.Any(each => each.Chat == chat && !each.Process.Exited))
+        {
+            string said = prompt.Length > 0 ? prompt : asked;
+            var message = new HexAgentMail(hub.NextMailSeq(), null, FROM_PERSON, "instruction", said, Directive: true) { To = chat.Id };
+            chat.Post(message);
+            hub.MailOf(chat).Add(message, HexMailRoute.Inbox);
+            chat.Note(Said("agents_panel.after_run", ("asked", OneLine(asked, 80))));
+            return;
+        }
+
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
         prompt = UnreadPrompt(chat, prompt);
         chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);

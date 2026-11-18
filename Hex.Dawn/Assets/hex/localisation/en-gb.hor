@@ -3551,6 +3551,7 @@ let strings = {
         stopped: "Stopped.",
         told_waiting: "It was waiting for its agents, this wakes it now.",
         told_inbox: "It can't be told more mid-step, it reads this in its inbox or starts its next turn with it.",
+        after_run: "It's still finishing what it was doing, “{asked}” starts its next turn as soon as it's done.",
         with_file: "with {where}",
         queued: "queued, the agent takes it in as it can",
         unheard: "not taken in, the turn ended first",
