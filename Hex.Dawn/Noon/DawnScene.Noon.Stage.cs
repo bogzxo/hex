@@ -489,12 +489,18 @@ internal sealed partial class DawnScene
                 continue;
             checkpointLooked[chat.Id] = chat.Version;
             IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+            bool wrote = false;
             for (int at = entries.Count - 1; at >= 0; at--)
             {
                 HexAgentEntry entry = entries[at];
+                if (entry.Kind == HexAgentEntryKind.Tool && Writes(entry.ToolName))
+                    wrote = true;
                 if (entry.Kind != HexAgentEntryKind.User)
                     continue;
-                if (entry.Checkpoints is null && !checkpointing.Contains(entry) && chat.Running)
+                // Never one for a turn that already wrote something, taken now it would hold the turn's own changes and
+                // Diff, Review and Restore would say there were none. A chat read back with no checkpoint on its turn
+                // got one that way, after the edits it was meant to be before
+                if (entry.Checkpoints is null && !wrote && !checkpointing.Contains(entry) && chat.Running)
                     TakeCheckpoint(entry, () => { });
                 break;
             }
