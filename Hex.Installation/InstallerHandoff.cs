@@ -110,10 +110,10 @@ public static class InstallerHandoff
         }
     }
 
-    public static IReadOnlyList<string> UpdateArguments(string root, string version)
+    public static IReadOnlyList<string> UpdateArguments(string root, string version, InstallChannel channel = InstallChannel.Stable)
     {
         using var parent = Process.GetCurrentProcess();
-        return ["--target", Path.GetFullPath(root), "--update", "--version", version, "--wait-pid", parent.Id.ToString(CultureInfo.InvariantCulture),
+        return ["--target", Path.GetFullPath(root), "--update", "--version", version, "--channel", channel.Word(), "--wait-pid", parent.Id.ToString(CultureInfo.InvariantCulture),
             "--wait-start", parent.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture)];
     }
 

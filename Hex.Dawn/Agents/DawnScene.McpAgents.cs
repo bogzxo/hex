@@ -18,13 +18,8 @@ internal sealed partial class DawnScene
     // How long hex_agent_wait waits when it isn't told, the most it waits, and how much of each reply it hands back
     private const int AGENTS_WAIT = 300, AGENTS_WAIT_MOST = 600, AGENTS_REPLY = 6000;
 
-    /// <summary>A chat as the tools see it off the editor's thread, as it was the last tick.</summary>
-    private sealed record AgentStatus(int Id, string Shown, string Agent, string? Model, int? Parent, int Depth, string State,
-        string Reply, double Seconds, double Cost, int Version);
-
-    // What the chats were the last tick, for hex_agent_wait off the editor's thread, and what they were made from
-    private volatile IReadOnlyDictionary<int, AgentStatus> agentStatuses = new Dictionary<int, AgentStatus>();
-    private long agentStatusesFrom = -1;
+    // What the chats were the last tick, for hex_agent_wait off the editor's thread, the hub's snapshot of them
+    private IReadOnlyDictionary<int, HexHubRow> agentStatuses => hub.Snapshot.Rows;
 
     private IEnumerable<HexMcpTool> AgentsTools() =>
     [
@@ -38,13 +33,26 @@ internal sealed partial class DawnScene
                 ("name", McpSchema.String("A short name for it in the panel, a few words.")),
                 ("agent", McpSchema.String("The agent system's id from hex_agent_list, your own by default, the panel's when you aren't one.")),
                 ("model", McpSchema.String("The model, one of those hex_agent_list says or a whole name, the agent system's setting by default.")),
-                ("options", new JsonObject { ["type"] = "object", ["description"] = "Other options of the agent system by id, as hex_agent_list says them." })], "prompt")),
+                ("options", new JsonObject { ["type"] = "object", ["description"] = "Other options of the agent system by id, as hex_agent_list says them." }),
+                ("permissions", new JsonObject
+                {
+                    ["type"] = "object",
+                    ["description"] = "What it may do without asking (allow) and may never do (deny), each a list of rules in its agent system's own words: Claude Code's tool rules such as \"Bash(git status:*)\" or \"Edit\", Antigravity's such as \"command(git status)\" (one whole command line, \"command(*)\" for any) or \"mcp(hex/*)\". Codex has none, its sandbox option says what it may do.",
+                    ["properties"] = new JsonObject
+                    {
+                        ["allow"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
+                        ["deny"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } }
+                    }
+                }),
+                ("approvals", McpSchema.OneOf("Who answers what it asks leave to do beyond its rules. you (the default) get each as a question to answer with hex_agent_approve, the person can answer on its card either way, person leaves them to the person alone.", "you", "person"))], "prompt")),
             AgentSpawn),
+        AgentApproveTool(),
         new(new McpTool("hex_agent_wait", "Wait for agents",
-            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. A timeout says what's still running.",
+            "Wait until agents finish their turn and get what they said. By default every agent you started that's running (every running chat when you aren't a chat of the panel), until all of them are done. any returns when the first is. A message sent to you by one of them returns at once with it, so you can steer the others on what it found (messages false waits on regardless). A timeout says what's still running.",
             McpSchema.Object([
                 ("ids", new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" }, ["description"] = "The chats to wait for, those you started that are running by default." }),
                 ("mode", McpSchema.OneOf("all (the default) or any.", "all", "any")),
+                ("messages", McpSchema.Flag("Return as soon as a message comes for you, true by default.")),
                 ("timeout", McpSchema.Number($"Seconds, {AGENTS_WAIT} by default, {AGENTS_WAIT_MOST} at the most."))])),
             null, RunAway: AgentWait),
         new(new McpTool("hex_agent_read", "Read an agent's chat",
@@ -54,21 +62,25 @@ internal sealed partial class DawnScene
                 ("full", McpSchema.Flag("The whole chat rather than the last reply.")),
                 ("most", McpSchema.Integer("The most characters, 8000 by default."))], "id")), AgentRead),
         new(new McpTool("hex_agent_send", "Tell an agent more",
-            "Say something to a chat's agent. A finished one starts another turn with it, going on from where it was. A running one that can be steered takes it in as it works, one that can't says so, wait for it first.",
+            "Steer a chat's agent, an instruction. A finished one starts another turn with it, going on from where it was. A running one that can be told more takes it in as it works, one that can't finds it in its inbox and starts its next turn with it if it hasn't read it by then. hex_agent_message sends a finding or an answer without it being an instruction.",
             McpSchema.Object([("id", McpSchema.Integer("The chat.")), ("text", McpSchema.String("What to say."))], "id", "text")), AgentSend),
         new(new McpTool("hex_agent_stop", "Stop an agent",
             "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
-            McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool)
+            McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
+        new(new McpTool("hex_agent_close", "Close or clear an agent you started",
+            "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("clear", McpSchema.Flag("Keep the chat, emptied, rather than deleting it."))], "id")), AgentClose)
     ];
 
     /// <summary>The chat a call came from, when it's an agent of the panel's.</summary>
     private static int? CallerOf(JsonObject args) => args.Integer(HexMcpCaller.CALLER);
 
-    private HexAgentChat? ChatById(int id) => agentChats.FirstOrDefault(chat => chat.Id == id);
+    private HexAgentChat? ChatById(int id) => hub.ChatById(id);
 
     // A chat's state in a word
-    private static string StateWord(HexAgentChat chat) =>
-        chat.Running ? "running" : chat.Stopped ? "stopped" : chat.Failed ? "failed" : chat.Entries.Count == 0 ? "new" : "done";
+    private static string StateWord(HexAgentChat chat) => HexAgentHub.StateWord(chat);
 
     /// <summary>
     /// What the chats are now, made again for the tools that wait off the editor's thread whenever one of them moved.
@@ -76,24 +88,42 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PublishAgentStatuses()
     {
-        long from = agentChats.Count;
-        foreach (HexAgentChat chat in agentChats)
-            from = from * 31 + chat.Version * 2 + (chat.Running ? 1 : 0) + chat.Id * 7919L;
-        if (from == agentStatusesFrom)
-            return;
+        if (hub.Pump(AGENTS_REPLY))
+        {
+            agentsChanged?.Invoke();
+            // Whichever face is up, a turn that began without a checkpoint gets one
+            CheckpointNewTurns();
+        }
+    }
 
-        agentStatusesFrom = from;
-        agentStatuses = agentChats.ToDictionary(chat => chat.Id, chat => new AgentStatus(chat.Id, chat.Shown, chat.Agent,
-            chat.Options.GetValueOrDefault("model") ?? chat.Model, chat.Parent, chat.Depth, StateWord(chat),
-            chat.Running ? string.Empty : chat.LastReply(AGENTS_REPLY), chat.TurnSeconds, chat.Cost, chat.Version));
+    /* The agents as the parts of the editor see them (DawnContext.Agents) */
+
+    private Action? agentsChanged;
+
+    IReadOnlyList<HexAgentSession> IAgents.Sessions => hub.Sessions;
+
+    event Action IAgents.Changed
+    {
+        add => agentsChanged += value;
+        remove => agentsChanged -= value;
+    }
+
+    void IAgents.Show(int session)
+    {
+        if (ChatById(session) is not { } chat)
+            return;
+        if (Face != HexFace.Noon)
+            ShowAgentsPanel();
+        OpenAgentChat(chat);
     }
 
     // A chat in a line, for the lists
-    private static string StatusLine(AgentStatus status) =>
+    private static string StatusLine(HexHubRow status) =>
         $"#{status.Id} \"{status.Shown}\" {status.Agent}{(status.Model is { Length: > 0 } model ? " " + model : string.Empty)} {status.State}"
         + (status.Seconds > 0 ? $" {status.Seconds.ToString("0.#", CultureInfo.InvariantCulture)}s" : string.Empty)
         + (status.Cost > 0 ? $" ${status.Cost.ToString("0.000", CultureInfo.InvariantCulture)}" : string.Empty)
-        + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty);
+        + (status.Parent is { } parent ? $" (started by #{parent})" : string.Empty)
+        + (status.Unread.Length is > 0 and var unread ? $", {unread} unread message{(unread == 1 ? string.Empty : "s")}" : string.Empty);
 
     private IEnumerable<McpToolResult?> AgentsList(JsonObject args)
     {
@@ -119,7 +149,7 @@ internal sealed partial class DawnScene
         said.Append("\nChats:\n");
         if (agentChats.Count == 0)
             said.Append("none\n");
-        foreach (AgentStatus status in agentStatuses.Values.OrderBy(status => status.Id))
+        foreach (HexHubRow status in agentStatuses.Values.OrderBy(status => status.Id))
             said.Append(StatusLine(status)).Append('\n');
         yield return McpToolResult.Text(said.ToString().TrimEnd());
     }
@@ -176,11 +206,22 @@ internal sealed partial class DawnScene
             }
         }
 
+        // What it may do, said by the one starting it, and whose word what it asks waits on
+        if (!TakePermissions(args, chat, out string? wrong))
+        {
+            agentChatsMade--;
+            yield return McpToolResult.Error(wrong!);
+            yield break;
+        }
+
         agentChats.Add(chat);
 
         // It's told what it is, the one that started it reads its last message
         string from = parent is null ? "another agent" : $"chat #{parent.Id}";
-        string told = $"[You're a background agent in Hex, chat #{chat.Id}, started by {from}. It doesn't see this chat, only your last message, so end with what you found or did, complete in itself.]\n\n{prompt}";
+        string told = $"[You're a background agent in Hex, chat #{chat.Id}, started by {from}. It doesn't see this chat, only your last message, so end with what you found or did, complete in itself. "
+            + "You can talk to it as you both work. hex_agent_message tells it what you find as soon as it matters, asks it what you need or says you're blocked, "
+            + "and its instructions, answers and what the other agents it started have found reach you as you work or in hex_agent_inbox, look between steps. hex_agent_list shows who else is working with you.]\n\n"
+            + prompt;
         StartAgent(chat, run.Extension, run.Run, told, prompt);
 
         // A model the agent system doesn't list goes as it was given, a whole name it may know, said so in case it's a typo
@@ -195,10 +236,11 @@ internal sealed partial class DawnScene
     {
         int? caller = CallerOf(args);
         bool any = args.String("mode") == "any";
+        bool wakes = args.Flag("messages", true);
         double timeout = Math.Clamp(args.Number("timeout") ?? AGENTS_WAIT, 1, AGENTS_WAIT_MOST);
         long deadline = System.Environment.TickCount64 + (long)(timeout * 1000);
 
-        IReadOnlyDictionary<int, AgentStatus> now = agentStatuses;
+        IReadOnlyDictionary<int, HexHubRow> now = agentStatuses;
         int[] ids;
         if (args["ids"] is JsonArray asked && asked.Count > 0)
         {
@@ -216,40 +258,62 @@ internal sealed partial class DawnScene
         {
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
-            AgentStatus[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
+            HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
             ids = [.. (mine.Any(status => status.State == "running") ? mine.Where(status => status.State == "running") : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
         }
 
-        while (true)
+        // Known to be waiting, so what's sent to it meanwhile wakes this rather than going in on its stdin, which it
+        // only reads once this call is over
+        if (caller is { } waiting)
+            agentsWaiting.AddOrUpdate(waiting, 1, (_, count) => count + 1);
+        try
         {
-            now = agentStatuses;
-            AgentStatus[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<AgentStatus>()];
-            int done = those.Count(status => status.State != "running");
-            bool over = any ? done > 0 : done == those.Length;
-            bool late = System.Environment.TickCount64 >= deadline;
-            if (over || late)
-                return McpToolResult.Text(WaitReport(those, late && !over));
+            while (true)
+            {
+                now = agentStatuses;
+                HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
+                int done = those.Count(status => status.State != "running");
+                bool over = any ? done > 0 : done == those.Length;
+                bool late = System.Environment.TickCount64 >= deadline;
+                HexAgentMail[] mail = caller is { } me && wakes && now.GetValueOrDefault(me) is { } mine ? mine.Unread : [];
+                if (over || late || mail.Length > 0)
+                {
+                    // What came for it is read with the report, the waiting one steering the others on it
+                    string report = WaitReport(those, late && !over && mail.Length == 0);
+                    if (mail.Length == 0)
+                        return McpToolResult.Text(report);
 
-            try
-            {
-                await Task.Delay(250, cancel);
+                    now[caller!.Value].Chat.MailRead(mail[^1].Seq);
+                    return McpToolResult.Text("Messages for you:\n\n" + string.Join("\n\n", mail.Select(MailText))
+                        + (over ? string.Empty : "\n\nThe rest are still working, hex_agent_wait again to go on waiting.") + "\n\n" + report);
+                }
+
+                try
+                {
+                    await Task.Delay(250, cancel);
+                }
+                catch (TaskCanceledException)
+                {
+                    return McpToolResult.Error("hex_agent_wait was cancelled.");
+                }
             }
-            catch (TaskCanceledException)
-            {
-                return McpToolResult.Error("hex_agent_wait was cancelled.");
-            }
+        }
+        finally
+        {
+            if (caller is { } waited)
+                agentsWaiting.AddOrUpdate(waited, 0, (_, count) => Math.Max(0, count - 1));
         }
     }
 
     // What the agents waited for said, the finished ones with their replies and the rest by their state
-    private static string WaitReport(AgentStatus[] those, bool late)
+    private static string WaitReport(HexHubRow[] those, bool late)
     {
         var said = new StringBuilder();
         if (late)
             said.Append("Timed out, ").Append(those.Count(status => status.State == "running")).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
-        foreach (AgentStatus status in those.OrderBy(status => status.State == "running"))
+        foreach (HexHubRow status in those.OrderBy(status => status.State == "running"))
         {
             said.Append(StatusLine(status)).Append('\n');
             if (status.State != "running")
@@ -319,16 +383,11 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        // Working, it's an instruction, taken in at once by an agent that can be told more as it goes and kept in the
+        // inbox of one that can't, starting its next turn if it isn't read by then
         if (chat.Running)
         {
-            if (SteeredRun(chat) is null)
-            {
-                yield return McpToolResult.Error($"#{chat.Id} is working and its agent can't be told more as it goes. hex_agent_wait for it, then send.");
-                yield break;
-            }
-
-            SteerAgent(chat, text, typed: false);
-            yield return McpToolResult.Text($"Sent to #{chat.Id}, it takes it in as it works.");
+            yield return McpToolResult.Text(Deliver(chat, caller is { } from ? ChatById(from) : null, "instruction", text, directive: true));
             yield break;
         }
 
@@ -362,5 +421,62 @@ internal sealed partial class DawnScene
         bool was = chat.Running;
         StopAgent(chat);
         yield return McpToolResult.Text(was ? $"Stopped #{chat.Id}." : $"#{chat.Id} wasn't running.");
+    }
+
+    /// <summary>
+    /// A chat an agent started deleted, with the chats it started, or with clear emptied to start afresh. Only by the agent
+    /// that started it, or a client that isn't an agent of the panel (the person's own tools).
+    /// </summary>
+    private IEnumerable<McpToolResult?> AgentClose(JsonObject args)
+    {
+        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        int? caller = CallerOf(args);
+        if (caller is { } asking && chat.Parent != asking)
+        {
+            yield return McpToolResult.Error(chat.Id == asking
+                ? "That's your own chat."
+                : $"#{chat.Id} wasn't started by you, only the agent that started it closes or clears it.");
+            yield break;
+        }
+
+        if (args["clear"]?.GetValue<bool>() != true)
+        {
+            int family = 1 + agentChats.Count(each => IsUnder(each, chat));
+            CloseAgentChat(chat);
+            yield return McpToolResult.Text($"Deleted #{chat.Id}{(family > 1 ? $" and the {family - 1} it started" : string.Empty)}.");
+            yield break;
+        }
+
+        // Emptied, it has to have stopped, what a working agent printed next would land in the chat that was cleared
+        if (chat.Running || agentRuns.Any(run => run.Chat == chat))
+        {
+            yield return McpToolResult.Error($"#{chat.Id} is working, hex_agent_stop it first and clear it once it has stopped.");
+            yield break;
+        }
+
+        // Its older rows go with them, the family's log of what was said between them stays the family's record
+        hub.History?.Delete(chat.Key);
+        chat.Clear();
+        if (agentChat == chat)
+            agentRowsFor = default;
+        yield return McpToolResult.Text($"Cleared #{chat.Id}, its rows, mail and session gone. hex_agent_send starts it afresh.");
+    }
+
+    // Whether a chat is under another, started by it or by one it started
+    private bool IsUnder(HexAgentChat chat, HexAgentChat top)
+    {
+        for (int guard = 0; chat.Parent is { } up && ChatById(up) is { } parent && guard < 16; guard++)
+        {
+            if (parent == top)
+                return true;
+            chat = parent;
+        }
+
+        return false;
     }
 }

@@ -6,12 +6,20 @@
     and keeps its own version, hence going by the project's name.
   -->
   <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
     <!-- What this release is called, said after the number wherever a person reads it (2.8.0 thickboy), empty for none -->
-    <VersionName>Solstice</VersionName>
+    <VersionName>Amphetamine</VersionName>
   </PropertyGroup>
   <ItemGroup Condition="$(MSBuildProjectName.StartsWith('Hex')) and '$(VersionName)' != ''">
     <AssemblyMetadata Include="VersionName" Value="$(VersionName)" />
+  </ItemGroup>
+  <!--
+    Which Hex a build is, stable unless the nightly build says dev (dotnet publish -p:HexChannel=dev -p:HexNightly=nightly-57),
+    and the nightly release it goes out as, so a dev build updates from the nightlies and knows which one it is
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('Hex'))">
+    <AssemblyMetadata Include="Channel" Value="$(HexChannel)" Condition="'$(HexChannel)' != ''" />
+    <AssemblyMetadata Include="Nightly" Value="$(HexNightly)" Condition="'$(HexNightly)' != ''" />
   </ItemGroup>
 
   <!--

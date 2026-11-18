@@ -17,7 +17,7 @@ internal sealed partial class HexCodeIndex
         {
             HexIndexedFile? file = path is { Length: > 0 } ? FileOf(index, path) : null;
             if (path is { Length: > 0 } && file is null)
-                return HexAnswer.Wrong(NoFile(index, path));
+                return ReadUnindexed(index, path, start, end, numbers, budget) ?? HexAnswer.Wrong(NoFile(index, path));
 
             string? also = null;
             int first, last;
@@ -72,8 +72,74 @@ internal sealed partial class HexCodeIndex
                 said.Line($"... cut at line {stop + 1}, the rest with start_line {stop + 2} and end_line {last + 1}.");
 
             // The plain way reads the whole file, Read's own numbers in front of every line
-            return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), file.Length + 7L * lines.Length);
+            // Made from this file alone when it was named, still good after edits elsewhere. A symbol looked for across the
+            // workspace could be declared somewhere new, so that one isn't
+            return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), file.Length + 7L * lines.Length) { From = path is { Length: > 0 } ? [file] : null };
         });
+
+    // The most of a file the index leaves out that's read from the disk, past it the file isn't taken as text to read
+    private const long MOST_UNINDEXED = 4L * 1024 * 1024;
+
+    /// <summary>
+    /// Lines of a file that's there on the disk but not in the index (a folder it leaves out, a repository of its own
+    /// inside the workspace, a file just made), by range, since nothing of it is known to find a symbol by. An agent kept
+    /// to Hex's tools could read it no other way. Null when there's no such file to read.
+    /// </summary>
+    private static HexAnswer? ReadUnindexed(HexIndexSnapshot index, string path, int? start, int? end, bool numbers, int budget)
+    {
+        string? found = null;
+        if (Path.IsPathRooted(path))
+            found = File.Exists(path) ? Path.GetFullPath(path) : null;
+        else
+        {
+            foreach (string root in index.Roots)
+            {
+                string full = Path.GetFullPath(Path.Combine(root, path));
+                if (File.Exists(full))
+                {
+                    found = full;
+                    break;
+                }
+            }
+        }
+
+        if (found is null)
+            return null;
+
+        string[] lines;
+        try
+        {
+            if (new FileInfo(found).Length > MOST_UNINDEXED)
+                return HexAnswer.Wrong($"{found} is too big to read through Hex, past {MOST_UNINDEXED / (1024 * 1024)} MB.");
+            lines = File.ReadAllLines(found);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return HexAnswer.Wrong($"{found} couldn't be read, {e.Message}");
+        }
+
+        if (lines.Length == 0)
+            return HexAnswer.Wrong($"{found} is empty.");
+
+        int first = Math.Clamp(Math.Max(1, start ?? 1) - 1, 0, lines.Length - 1);
+        int last = Math.Clamp(Math.Min(lines.Length, end ?? first + MOST_LINES) - 1, first, lines.Length - 1);
+        var said = new HexBudget(budget);
+        said.Line($"{found}:{first + 1}-{last + 1} of {lines.Length} lines, from the disk (the index leaves this file out, so there are no symbols to read it by)");
+        int width = (last + 1).ToString().Length;
+        int stop = Math.Min(last, first + MOST_LINES - 1);
+        for (int i = first; i <= stop; i++)
+        {
+            if (!said.Line(numbers ? $"{(i + 1).ToString().PadLeft(width)}  {lines[i]}" : lines[i]))
+            {
+                stop = i - 1;
+                break;
+            }
+        }
+
+        if (stop < last)
+            said.Line($"... cut at line {stop + 1}, the rest with start_line {stop + 2} and end_line {last + 1}.");
+        return new HexAnswer(said.Finish($"read on with start_line {stop + 2}"), lines.Sum(line => (long)line.Length + 8));
+    }
 
     /// <summary>The lines a symbol takes up, from 0, the comments and attributes above it among them.</summary>
     internal static (int First, int Last) Extent(HexIndexedFile file, HexSymbol symbol)

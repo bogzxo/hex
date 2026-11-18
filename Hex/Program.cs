@@ -19,9 +19,20 @@ internal static partial class Program
 {
     public static int Main(string[] args)
     {
+#if DEBUG
+        // The guard over a Hex restarting into a build of itself, no window, see DevGuard
+        if (args.Length > 0 && args[0] == DevGuard.ARGUMENT)
+            return DevGuard.Run(args);
+#endif
+
         // Everything Hex keeps (settings, backups, compiled shaders, the driver's pipeline cache) goes next to the exe,
         // before anything asks where. A copy carried about on a stick has it all with it
         Horizon.Core.Platform.PlatformPaths.BesideProgram = true;
+
+        // The guard an agent system runs before each of its own tools, which keeps the agent on Hex's harness. First of
+        // all, since it's started for every shell command an agent runs and has to answer at once
+        if (args.Contains("--harness-hook"))
+            return Hex.Core.HexHarnessGuard.Run(args);
 
         // A terminal nobody picked a theme for is Solstice's own of Dusk, before any settings are read
         Horizon.UI.Components.TerminalSettings.UsualTheme = Hex.Core.HexSettings.USUAL_TERMINAL_THEME;
@@ -238,8 +249,10 @@ internal static partial class Program
           --folder <folder>        a folder to open as the workspace (what a folder on its own is)
           --window                 a window of its own rather than the Dawn that's running
           --mcp-connect            MCP stdio bridge to an existing editor only; never opens a window
+          --harness-hook           Claude Code's PreToolUse hook, turns a shell search of the workspace back to Hex's tools
           --mcp                    MCP stdio bridge, starts one editor if needed; --window --mcp opens the editor with its server
           --view <design|code|table>  which view a file comes up in
+          --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes
           --size <w>x<h>           the window's size, maximised otherwise

@@ -66,4 +66,10 @@ internal sealed class HexBudget(int most)
 internal readonly record struct HexAnswer(string Text, long Plain, bool Failed = false)
 {
     public static HexAnswer Wrong(string why) => new(why, 0, Failed: true);
+
+    /// <summary>
+    /// The files the answer was made from alone (a read of one file), when it says, so it's still good after edits to any
+    /// other file. Null for one that took in the whole workspace (a search), which any edit can change.
+    /// </summary>
+    public HexIndexedFile[]? From { get; init; }
 }

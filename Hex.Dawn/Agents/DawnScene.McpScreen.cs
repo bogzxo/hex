@@ -235,6 +235,9 @@ internal sealed partial class DawnScene
         yield return McpToolResult.Text($"Typed {text.Length} characters into {McpIdOf(focused, 'c')} {focused.GetType().Name}.");
     }
 
+    /// <summary>How many agents' key presses are landing now, so Escape from one of them doesn't stop a chat.</summary>
+    private int agentKeysPressing;
+
     private IEnumerable<McpToolResult?> PressKeys(JsonObject arguments)
     {
         string keys = arguments.String("keys") ?? string.Empty;
@@ -256,20 +259,30 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        foreach (HexKeyStroke stroke in strokes)
+        // While an agent's keys land, Escape in the agents' box doesn't stop anyone. A reviewer closing a popup with
+        // Escape stopped the chat it had selected, and every agent under that chat with it
+        agentKeysPressing++;
+        try
         {
-            // The key and what it types land together on the next tick, the way a real press does. The
-            // program's shortcuts hear it first, and one that moves the keyboard (B in a notebook giving a new cell
-            // its editor) throws away what it typed. Typed a tick later, the b went into the new cell
-            Engine.Input.Keyboard.Tap(stroke.Keys);
-            if (!stroke.Control && !stroke.Alt && !stroke.Super && UIKeyboard.CharacterOf(stroke.Key, stroke.Shift) is { } character)
-                Engine.Input.Post(Horizon.Input.InputEvent.Typed(character.ToString()));
-            yield return null;
-            yield return null;
-        }
+            foreach (HexKeyStroke stroke in strokes)
+            {
+                // The key and what it types land together on the next tick, the way a real press does. The
+                // program's shortcuts hear it first, and one that moves the keyboard (B in a notebook giving a new cell
+                // its editor) throws away what it typed. Typed a tick later, the b went into the new cell
+                Engine.Input.Keyboard.Tap(stroke.Keys);
+                if (!stroke.Control && !stroke.Alt && !stroke.Super && UIKeyboard.CharacterOf(stroke.Key, stroke.Shift) is { } character)
+                    Engine.Input.Post(Horizon.Input.InputEvent.Typed(character.ToString()));
+                yield return null;
+                yield return null;
+            }
 
-        for (int settle = 0; settle < 3; settle++)
-            yield return null;
+            for (int settle = 0; settle < 3; settle++)
+                yield return null;
+        }
+        finally
+        {
+            agentKeysPressing--;
+        }
 
         string focus = compositor.Focus is { } focused ? $"{McpIdOf(focused, 'c')} {focused.GetType().Name}" : "nothing";
         string dialog = chrome.Dialog is { } up ? $" A dialogue is up ({up.GetType().Name})." : string.Empty;

@@ -104,19 +104,54 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
 
         suitesAsked = asked;
-        foreach (var (name, _, run) in SelfTestSuites)
-        {
-            if (!asked.Contains(name))
-                continue;
 
-            // How long each part takes is said after it, the slow ones are the ones to look at
-            var took = new System.Diagnostics.Stopwatch();
-            test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
-            MakeTestFiles();
-            run(test);
-            test.Run(TidyAfterSuite);
-            test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
+        // HEX_SELFTEST_REPEAT runs the parts asked for that many times over in the one process, and weighs what's left
+        // after each round, so something a part keeps that it shouldn't shows as a number climbing round by round
+        int rounds = int.TryParse(System.Environment.GetEnvironmentVariable(REPEAT_VARIABLE), out int repeat) ? Math.Clamp(repeat, 1, MOST_ROUNDS) : 1;
+        for (int round = 1; round <= rounds; round++)
+        {
+            foreach (var (name, _, run) in SelfTestSuites)
+            {
+                if (!asked.Contains(name))
+                    continue;
+
+                // How long each part takes is said after it, the slow ones are the ones to look at
+                var took = new System.Diagnostics.Stopwatch();
+                test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
+                MakeTestFiles();
+                run(test);
+                test.Run(TidyAfterSuite);
+                test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
+            }
+
+            if (rounds > 1)
+            {
+                int done = round;
+                test.Settle(1.0f);
+                test.Run(() => WeighRound(done, rounds));
+            }
         }
+    }
+
+    private const string REPEAT_VARIABLE = "HEX_SELFTEST_REPEAT";
+
+    // Rounds are minutes each for some parts, fifty is a long evening already
+    private const int MOST_ROUNDS = 50;
+
+    /// <summary>
+    /// Helper method to say what the process holds once a round of the parts is over, the heap after a full collection
+    /// rather than whatever the last collection happened to leave, beside what the system counts as the process's.
+    /// </summary>
+    private static void WeighRound(int round, int rounds)
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        GCMemoryInfo info = GC.GetGCMemoryInfo();
+        Console.WriteLine($"[Hex self-test] round {round} of {rounds}: heap {GC.GetTotalMemory(false) / 1048576.0:0.0} MB, "
+            + $"committed {info.TotalCommittedBytes / 1048576.0:0.0} MB, working set {self.WorkingSet64 / 1048576.0:0.0} MB, "
+            + $"private {self.PrivateMemorySize64 / 1048576.0:0.0} MB, handles {self.HandleCount}, threads {self.Threads.Count}");
     }
 
     /// <summary>
@@ -129,7 +164,15 @@ internal sealed partial class DawnScene
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
+        ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
+        ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
+        ("noon-fleet", "Agentic's fleet, a family as a block with the ones started a step in, the totals, and the family closed with its top", TestNoonFleet),
+        ("noon-mail", "Messages between a family's agents through hex_agent_message, in Details and in the family's window, filtered, hundreds with few rows made", TestNoonMail),
+        ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
+        ("dusk-noon", "Agentic and Dusk in the one window, the agents going on behind Dusk and Dusk's Noon button bringing Agentic back", TestDuskNoon),
+        ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
+        ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
@@ -457,8 +500,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool AskedSuites(out HashSet<string> asked)
     {
-        // OS input tests take the foreground briefly, so they only run when explicitly named.
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository")).Select(suite => suite.Name)];
+        // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
+        // window having Dusk in it only when it's named
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon")).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

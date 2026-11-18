@@ -22,7 +22,7 @@ internal sealed partial class HexCodeIndex
         string key = $"{tool}\n{asked}";
         lock (keeping)
         {
-            if (kept.TryGetValue(key, out var was) && was.Generation == now.Generation)
+            if (kept.TryGetValue(key, out var was) && (was.Generation == now.Generation || StillSo(was.Answer, now)))
             {
                 Stats.Count(tool, was.Answer.Text.Length, was.Answer.Plain, kept: true);
                 return was.Answer;
@@ -45,6 +45,13 @@ internal sealed partial class HexCodeIndex
         Stats.Count(tool, made.Text.Length, made.Plain, kept: false);
         return made;
     }
+
+    /// <summary>
+    /// Whether an answer made from some files alone still holds at a later generation, every one of them there as it was
+    /// (the same length and time). Edits to other files moved the generation and changed nothing it said.
+    /// </summary>
+    private static bool StillSo(HexAnswer answer, HexIndexSnapshot now) =>
+        answer.From is { Length: > 0 } from && from.All(file => now.File(file.Path) is { } there && there.Length == file.Length && there.Written == file.Written);
 
     /// <summary>A path an agent gave, matched against the index, whole, inside a folder of the workspace, or by its end.</summary>
     public static HexIndexedFile? FileOf(HexIndexSnapshot index, string asked)

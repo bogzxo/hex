@@ -5,41 +5,82 @@ using System.Text.Json.Nodes;
 
 namespace Hex.Installation;
 
-public sealed record ReleaseAsset(string Version, string Name, Uri Download, long Size, string Sha256, string Label = "")
+public sealed record ReleaseAsset(string Version, string Name, Uri Download, long Size, string Sha256, string Label = "", InstallChannel Channel = InstallChannel.Stable)
 {
     /// <summary>The version the way a person reads it, the number and what the release is called (2.8.0 thickboy).</summary>
     public string Shown => Label.Length > 0 ? Label : Version.TrimStart('v', 'V');
 }
 public sealed record InstallProgress(string Message, float Fraction);
 
-/// <summary>The public stable release and its exact platform asset. No credentials or remote commands.</summary>
+/// <summary>The public release of a channel and its exact platform asset. No credentials or remote commands.</summary>
 public sealed class ReleaseClient(HttpClient? client = null)
 {
     private static readonly HttpClient Shared = new() { Timeout = TimeSpan.FromMinutes(15) };
     private readonly HttpClient http = client ?? Shared;
 
-    public async Task<ReleaseAsset> Latest(string rid, CancellationToken cancel = default)
+    public Task<ReleaseAsset> Latest(string rid, CancellationToken cancel = default) => Latest(rid, InstallChannel.Stable, cancel);
+
+    /// <summary>
+    /// The newest release of a channel and its asset for this platform. Stable is GitHub's latest release. Dev is the
+    /// newest nightly prerelease of the development branch, the one with the highest run in its tag, out of the most
+    /// recent releases, which the nightly build keeps to its last few.
+    /// </summary>
+    public async Task<ReleaseAsset> Latest(string rid, InstallChannel channel, CancellationToken cancel = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/bogzxo/hex/releases/latest");
+        string url = channel == InstallChannel.Dev
+            ? "https://api.github.com/repos/bogzxo/hex/releases?per_page=30"
+            : "https://api.github.com/repos/bogzxo/hex/releases/latest";
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Hex-Installer", "1.0"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         using var response = await http.SendAsync(request, cancel);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new InvalidOperationException(InstallText.Get("errors.no_release"));
+            throw new InvalidOperationException(InstallText.Get(channel == InstallChannel.Dev ? "errors.no_nightly" : "errors.no_release"));
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
             throw new HttpRequestException(InstallText.Get("errors.rate_limit"));
         response.EnsureSuccessStatusCode();
-        return Parse(await response.Content.ReadAsStringAsync(cancel), rid);
+        string json = await response.Content.ReadAsStringAsync(cancel);
+        return channel == InstallChannel.Dev ? ParseNightly(json, rid) : Parse(json, rid);
     }
 
-    public static ReleaseAsset Parse(string json, string rid)
+    /// <summary>The newest nightly of a list of releases, by the run in its tag, with this platform's asset.</summary>
+    public static ReleaseAsset ParseNightly(string json, string rid)
+    {
+        var releases = JsonNode.Parse(json) as JsonArray ?? throw new InvalidDataException(InstallText.Get("errors.empty_release"));
+        JsonNode? newest = null;
+        long newestRun = -1;
+        foreach (JsonNode? release in releases)
+        {
+            if (release?["draft"]?.GetValue<bool>() != false || release["prerelease"]?.GetValue<bool>() != true)
+                continue;
+            if (InstallChannels.NightlyNumber(release["tag_name"]?.GetValue<string>() ?? "") is { } run && run > newestRun)
+                (newest, newestRun) = (release, run);
+        }
+
+        return newest is null
+            ? throw new InvalidOperationException(InstallText.Get("errors.no_nightly"))
+            : Parse(newest.ToJsonString(), rid, InstallChannel.Dev);
+    }
+
+    public static ReleaseAsset Parse(string json, string rid) => Parse(json, rid, InstallChannel.Stable);
+
+    public static ReleaseAsset Parse(string json, string rid, InstallChannel channel)
     {
         InstallPaths.ValidateRid(rid);
         var release = JsonNode.Parse(json) ?? throw new InvalidDataException(InstallText.Get("errors.empty_release"));
-        if (release["draft"]?.GetValue<bool>() != false || release["prerelease"]?.GetValue<bool>() != false)
-            throw new InvalidDataException(InstallText.Get("errors.stable_only"));
+        // A stable channel takes only published, stable releases. The dev channel only its nightly prereleases, nothing
+        // else of GitHub's prereleases (a release candidate is neither)
+        bool prerelease = release["prerelease"]?.GetValue<bool>() ?? false;
+        if (release["draft"]?.GetValue<bool>() != false || prerelease != (channel == InstallChannel.Dev))
+            throw new InvalidDataException(InstallText.Get(channel == InstallChannel.Dev ? "errors.nightly_only" : "errors.stable_only"));
         string version = release["tag_name"]?.GetValue<string>() ?? "";
-        _ = VersionOf(version);
+        if (channel == InstallChannel.Dev)
+        {
+            if (InstallChannels.NightlyNumber(version) is null)
+                throw new InvalidDataException(InstallText.Get("errors.version", ("version", version)));
+        }
+        else
+            _ = VersionOf(version);
         string name = $"Hex-{rid}.zip";
         var asset = (release["assets"] as JsonArray)?.SingleOrDefault(a => a?["name"]?.GetValue<string>() == name)
             ?? throw new InvalidOperationException(InstallText.Get("errors.missing_asset", ("asset", name)));
@@ -52,7 +93,18 @@ public sealed class ReleaseClient(HttpClient? client = null)
         long size = asset["size"]!.GetValue<long>();
         if (size <= 0 || size > 2L * 1024 * 1024 * 1024)
             throw new InvalidDataException(InstallText.Get("errors.asset_size"));
-        return new(version, name, url, size, digest[7..], LabelOf(release["name"]?.GetValue<string>(), version));
+        // A nightly is shown by its title as the build names it (3.1.0 nightly 1234), its tag being only the run
+        string label = channel == InstallChannel.Dev ? NightlyLabel(release["name"]?.GetValue<string>(), version) : LabelOf(release["name"]?.GetValue<string>(), version);
+        return new(version, name, url, size, digest[7..], label, channel);
+    }
+
+    /// <summary>What a nightly is called, its title without Hex in front, its tag when it has no title worth showing.</summary>
+    public static string NightlyLabel(string? title, string tag)
+    {
+        string said = (title ?? "").Trim();
+        if (said.StartsWith("Hex ", StringComparison.OrdinalIgnoreCase))
+            said = said[4..].TrimStart();
+        return said.Length > 0 && said.Length <= 60 && !said.Any(char.IsControl) ? said : tag;
     }
 
     /// <summary>

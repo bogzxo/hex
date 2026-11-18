@@ -1,0 +1,10 @@
+// Solstice as Noon wears it, the same ground with the accent gone from Dawn's orange to a midday teal, so the agents'
+// face is told from the editor and the terminal by the one colour that moves. Not a yellow or a gold, yellow is a
+// warning's. Hex puts it on as Noon comes up in a Solstice look, and Dawn's back as Noon is left.
+let theme = {
+    title: "Solstice Noon",
+    base: "solstice",
+    accent_color: vec(0.290, 0.686, 0.706, 1),
+    highlight_color: vec(0.392, 0.765, 0.784, 1),
+    selection_color: vec(0.290, 0.686, 0.706, 0.28)
+};

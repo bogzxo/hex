@@ -45,10 +45,10 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: a draft without a provider offers setup and cannot send", () =>
             agentsInput.Enabled && !agentsSend.Enabled
-            && Descendants(agentsRows).OfType<Button>().Any(button => button.Label == Said("agents_panel.browse")));
+            && Descendants(agentsScroll).OfType<Button>().Any(button => button.Label == Said("agents_panel.browse")));
         Capture("agents-setup");
         TestAgentWelcomeResize(test);
-        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Button>().First().Bounds.Center));
+        test.Click(() => chrome.ToWorld(Descendants(agentsScroll).OfType<Button>().First().Bounds.Center));
         test.Settle(0.3f);
         test.Check("agents layout: setup opens available extensions", () => SettingsPage?.CurrentGroup == HexExtensions.AVAILABLE);
         test.Run(CloseSettings);
@@ -77,6 +77,8 @@ internal sealed partial class DawnScene
         test.Check("agents layout: installing a provider enables the existing draft", () =>
             agentsSend.Enabled && agentsInput.Text == "Explain the settings loader");
         test.Check("agents layout: thinking level is directly available in the composer", () => agentsThinking is { Enabled: true });
+        test.Check("agents layout: and the model the next turn runs on beside it", () =>
+            Descendants(agentsOptions).OfType<Button>().Any(button => button.Icon == "sparkle"));
         test.Run(() => agentsThinking!.OnPressed!());
         test.Wait();
         PressKeys(test, "End");
@@ -137,11 +139,11 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("agents layout: running tools use the configured animation speed", () =>
             agentsStop.Visible && AgentsMotion(0.4f) == 0.2f
-            && Descendants(agentsRows).OfType<Button>().Any(button => button.Icon == "loading~spin"));
+            && Descendants(agentsScroll).OfType<Button>().Any(button => button.Icon == "loading~spin"));
         test.Run(() => settings.UiAnimation = 0);
         test.Settle(0.3f);
         test.Check("agents layout: disabling motion updates the tool already on screen", () =>
-            AgentsMotion(0.4f) == 0 && Descendants(agentsRows).OfType<Button>().Any(button => button.Icon == "loading"));
+            AgentsMotion(0.4f) == 0 && Descendants(agentsScroll).OfType<Button>().Any(button => button.Icon == "loading"));
         test.Run(() =>
         {
             agentChat!.ToolDone("1", true, "Found the settings loader in Hex.Shell.");
@@ -149,11 +151,12 @@ internal sealed partial class DawnScene
             agentChat.Done();
         });
         test.Settle(0.4f);
-        test.Click(() => chrome.ToWorld(Descendants(agentsRows).OfType<Label>()
-            .First(label => label.Text == "$(chevron-right)").Bounds.Center));
+        // A call alone is a slim line of its own, pressed it opens to what it was given and said back
+        test.Click(() => chrome.ToWorld(Descendants(agentsScroll).OfType<Button>()
+            .First(button => button.Tooltip?.StartsWith("mcp__hex__hex_search", StringComparison.Ordinal) == true).Bounds.Center));
         test.Settle(0.3f);
         test.Check("agents layout: opening a tool exposes its result", () =>
-            tool?.Open == true && Descendants(agentsRows).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));
+            tool?.Open == true && Descendants(agentsScroll).OfType<Label>().Any(label => label.Text.Contains("Found the settings loader")));
         Capture("agents-transcript");
 
         // A long chat dragged wider is fitted to the width as it goes and not made again. Made again on every step it
@@ -161,7 +164,7 @@ internal sealed partial class DawnScene
         UIComponent[] rowsBefore = [];
         float bubbleBefore = 0;
         Vector2 splitter = default;
-        Panel Bubble() => Descendants(agentsRows).OfType<Panel>().First(panel => panel.Radius == 10 && panel.Anchor == Horizon.Rendering.Origin.Right);
+        Panel Bubble() => Descendants(agentsScroll).OfType<Panel>().First(panel => panel.Radius == 10 && panel.Anchor == Horizon.Rendering.Origin.Right);
         test.Run(() =>
         {
             settings.LeftWidth = 300;
@@ -188,8 +191,346 @@ internal sealed partial class DawnScene
             agentsRows.Children.Count == rowsBefore.Length && agentsRows.Children.Zip(rowsBefore).All(pair => ReferenceEquals(pair.First, pair.Second))
             && Bubble().Size.X > bubbleBefore + 60 && Bubble().Bounds.Max.X <= agentsView.Bounds.Max.X + 1);
 
+        // Calls one after another are one row folded, its words said, and opened it stays where it was on screen
+        float groupTop = 0;
+        Button? groupHead = null;
         test.Run(() =>
         {
+            agentChat!.Ask("Two calls in a row");
+            agentChat.Tool("g1", "mcp__hex__hex_read", """{"path":"a.cs"}""");
+            agentChat.ToolDone("g1", true, "a");
+            agentChat.Tool("g2", "mcp__hex__hex_search", """{"query":"b"}""");
+            agentChat.ToolDone("g2", true, "b");
+            agentChat.Say("Done with both.");
+            agentChat.Done();
+        });
+        test.Settle(0.4f);
+        test.Run(() =>
+        {
+            groupHead = Descendants(agentsScroll).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal));
+            groupTop = groupHead?.Bounds.Max.Y ?? 0;
+            groupHead?.OnPressed!();
+        });
+        test.Settle(0.3f);
+        test.Check("agents layout: calls one after another are one folded row with its words, and open where they are", () =>
+            groupHead is not null && toolGroupsOpen.Count > 0
+            && !Descendants(agentsScroll).OfType<Button>().Any(button => button.Label.Contains("@agents_panel", StringComparison.Ordinal))
+            && Descendants(agentsScroll).OfType<Button>().LastOrDefault(button => button.Label.Contains("2 tool calls", StringComparison.Ordinal)) is { } after
+            && MathF.Abs(after.Bounds.Max.Y - groupTop) < 2.0f);
+
+        // Each chat keeps where it was read to. Scrolled up in the long one, away to another and back, it's where it was
+        HexAgentChat? longChat = null, other = null;
+        float readTo = 0;
+        test.Run(() =>
+        {
+            longChat = agentChat;
+            agentsScroll.Offset = readTo = MathF.Floor(agentsScroll.MaxOffset * 0.3f);
+            other = new HexAgentChat(++agentChatsMade, "layout_agent");
+            agentChats.Add(other);
+            other.Ask("Something else");
+            other.Say("A short answer.");
+            other.Done();
+            OpenAgentChat(other);
+        });
+        test.Settle(0.3f);
+        test.Check("agents layout: the agent systems sit under the chats with the fixture's system in them", () =>
+            agentsSystemsHolder.Visible && Descendants(agentsSystemsHolder).OfType<Label>().Any(label => label.Text.Contains("Workspace assistant", StringComparison.Ordinal))
+            // Up is up on screen, so under the chats is below their list's bottom and above the chat's top
+            && agentsSystemsHolder.Bounds.Max.Y <= agentsListScroll.Bounds.Min.Y + 1 && agentsSystemsHolder.Bounds.Min.Y >= agentsScroll.Bounds.Max.Y - 1);
+
+        // Its head pressed, the panel opens within a few ticks, not when the side bar next looks, and the room follows
+        float foldedTall = 0;
+        test.Run(() =>
+        {
+            foldedTall = agentsSystemsHolder.Size.Y;
+            Descendants(agentsSystems!.Root).OfType<Button>().First().OnPressed!();
+        });
+        test.Wait();
+        test.Check("agents layout: the agent systems open within a few ticks of their head being pressed, the room growing with them", () =>
+            agentsSystems!.Open && agentsSystemsHolder.Size.Y > foldedTall);
+        test.Run(() => Descendants(agentsSystems!.Root).OfType<Button>().First().OnPressed!());
+        test.Wait();
+
+        // A part of the editor sees the sessions through its context, is told when one moves, and can bring one up
+        int heard = 0;
+        void Heard() => heard++;
+        test.Run(() =>
+        {
+            Context.Agents.Changed += Heard;
+            other!.Say("Another line.");
+        });
+        test.Settle(0.2f);
+        test.Run(() => Context.Agents.Show(longChat!.Id));
+        test.Settle(0.3f);
+        test.Check("agents layout: the parts see the sessions through the context, told when one moves, and can bring one up", () =>
+            Context.Agents.Sessions.Any(session => session.Chat == other) && heard > 0 && agentChat == longChat);
+        test.Run(() => Context.Agents.Changed -= Heard);
+
+        // Going from agent to agent, the fleet's order round from the end, and the next one that wants looking at
+        HexAgentChat? stepped = null, back = null, needed = null;
+        test.Run(() =>
+        {
+            List<HexAgentChat> order = FleetOrder();
+            OpenAgentChat(order[^1]);
+            StepAgent(1);
+            stepped = agentChat;
+            StepAgent(-1);
+            back = agentChat;
+            OpenAgentChat(longChat!);
+            other!.Seen = other.Version - 1;
+            NextNeedingMe();
+            needed = agentChat;
+            OpenAgentChat(longChat!);
+        });
+        test.Check("agents layout: the keys go round the fleet in its order and to the next agent that needs looking at", () =>
+            stepped == FleetOrder()[0] && back == FleetOrder()[^1] && needed == other
+            && FleetOrder().Count == agentChats.Count && FleetOrder().Distinct().Count() == agentChats.Count);
+
+        // In Noon the Details say the family's conversation, who to whom and how it got there, and a filter shows one kind
+        bool talkShown = false, filtered = false;
+        test.Run(() =>
+        {
+            hub.MailOf(longChat!).Add(new HexAgentMail(hub.NextMailSeq(), null, "the person watching", "instruction", "look at the tests first", true) { To = longChat!.Id }, HexMailRoute.Inbox);
+            hub.MailOf(longChat!).Add(new HexAgentMail(hub.NextMailSeq(), longChat!.Id, "#x", "finding", "the server starts in StartMcp", false) { To = HexMailLog.USER }, HexMailRoute.Inbox);
+            ShowFace(HexFace.Noon);
+            OpenAgentChat(longChat!);
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            Label[] said = [.. Descendants(noonContextRows).OfType<Label>()];
+            talkShown = said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal))
+                && said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal));
+            // The findings chip, a rounded panel with its words on a label over a button
+            Panel chip = Descendants(noonContextRows).OfType<Panel>().First(panel =>
+                panel.Children.OfType<Label>().Any(label => label.Text.StartsWith(Said("noon.family_finding"), StringComparison.Ordinal)) && panel.Children.OfType<Button>().Any());
+            chip.Children.OfType<Button>().First().OnPressed!();
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            Label[] said = [.. Descendants(noonContextRows).OfType<Label>()];
+            filtered = said.Any(label => label.Text.Contains("the server starts in StartMcp", StringComparison.Ordinal))
+                && !said.Any(label => label.Text.Contains("look at the tests first", StringComparison.Ordinal));
+            noonTalkShown = string.Empty;
+        });
+
+        // The wheel over the margin beside the chat's column scrolls the chat, not only over the column
+        float wheelFrom = 0;
+        test.Run(() => agentsScroll.Offset = wheelFrom = MathF.Floor(agentsScroll.MaxOffset * 0.5f));
+        test.Hover(() => chrome.ToWorld(new Vector2(noonCenter.Bounds.Min.X + 4, noonCenter.Bounds.Center.Y)));
+        test.Run(() => compositor.Scroll(-2));
+        test.Settle(0.3f);
+        test.Check("agents layout: in Agentic the wheel over the margins round the chat scrolls it", () =>
+            agentsScroll.Offset > wheelFrom + 1.0f);
+        test.Check("agents layout: in Agentic no side's handle shows, there's no side there to drag", () =>
+            Splitters.Left is not { Visible: true } && Splitters.Right is not { Visible: true });
+        test.Run(() => ShowFace(HexFace.Dawn));
+        test.Settle(0.2f);
+
+        // Back where the chat was read to, the row at the top then the one a check further on holds it to. Only the rows
+        // near what's in sight are laid out, so a place is a row and how far into it, not the pixels down a whole chat
+        UIComponent? readRow = null;
+        int readIndex = -1;
+        float ViewTop() => agentsScroll.Bounds.Shrink(agentsScroll.Padding).Max.Y;
+        UIComponent? RowAtTop() => agentsScroll.Children.FirstOrDefault(row => row.Visible && row.Bounds.Min.Y <= ViewTop() + 0.5f && row.Bounds.Max.Y >= ViewTop() - 0.5f);
+        test.Run(() => agentsScroll.Offset = readTo);
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            readRow = RowAtTop();
+            readIndex = readRow is null ? -1 : agentsRows.IndexOf(readRow);
+            OpenAgentChat(other!);
+        });
+        test.Settle(0.3f);
+        test.Run(() => OpenAgentChat(longChat!));
+        test.Settle(0.4f);
+        test.Check("agents layout: back in Dawn the side has one handle, the line's, the agents view none of its own", () =>
+            agentsView.Resizable == UIResize.None && Splitters.Left is { Visible: true });
+        test.Check("agents layout: Noon's Details say the family's conversation, and a filter shows only its kind", () => talkShown && filtered);
+
+        // The status bar says the agents and how many want looking at, and follows one being looked at
+        int wantingBefore = 0;
+        test.Run(() =>
+        {
+            other!.Seen = other.Version - 1;
+            PublishAgentStatuses();
+            wantingBefore = AgentsWanting();
+        });
+        test.Check("agents layout: the status bar has the agents with how many want looking at", () =>
+            agentsItem.IsVisible?.Invoke() == true && wantingBefore > 0 && agentsItem.Text.Contains($"$(bell-dot) {wantingBefore}", StringComparison.Ordinal));
+        test.Run(() =>
+        {
+            other!.Seen = other.Version;
+            PublishAgentStatuses();
+        });
+        test.Check("agents layout: and puts it right once the agent is looked at", () =>
+            AgentsWanting() < wantingBefore && (AgentsWanting() == 0 ? !agentsItem.Text.Contains("bell-dot", StringComparison.Ordinal) : agentsItem.Text.Contains($"$(bell-dot) {AgentsWanting()}", StringComparison.Ordinal)));
+        test.Check("agents layout: a chat gone back to is where it was read to, not at its end", () =>
+        {
+            // Made again on the way back, the row is the same by its place in the chat
+            int was = readRow is null ? -1 : readIndex, now = RowAtTop() is { } top ? agentsRows.IndexOf(top) : -2;
+            return was >= 0 && was == now && agentsScroll.Offset < agentsScroll.MaxOffset - 10;
+        });
+
+        // A row right-clicked offers its text to copy or to pick out of in a window, and the whole chat as Markdown
+        bool menuSays = false, windowSelects = false;
+        // Scrolled to first, a row is made once it comes into sight
+        test.Run(() =>
+        {
+            HexAgentEntry first = longChat!.Entries.First(entry => entry.Kind == HexAgentEntryKind.Text);
+            agentsScroll.ScrollTo(agentsRows.IndexOf(agentRowsShown.First(shown => ReferenceEquals(shown.Entry, first)).Row));
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            HexAgentEntry said = longChat!.Entries.First(entry => entry.Kind == HexAgentEntryKind.Text);
+            UIComponent row = agentRowsShown.First(shown => ReferenceEquals(shown.Entry, said)).Row;
+            Menu menu = AgentRowMenu(longChat!, said);
+            menuSays = row.OnContextMenu is not null && menu.Items.Any(item => item.Label == Said("agents_panel.select_text"))
+                && ChatAsMarkdown(longChat!).Contains(said.Text, StringComparison.Ordinal);
+            ShowAgentText(said.Text, longChat!.Shown);
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            WindowPanel? window = chrome.Root.Children.OfType<WindowPanel>().LastOrDefault();
+            windowSelects = window is not null && Descendants(window).OfType<CodeEditor>().FirstOrDefault() is { ReadOnly: true } shown
+                && shown.Document.HasSelection && shown.Document.SelectedText.Length > 0;
+            window?.Parent?.Remove(window);
+        });
+        test.Check("agents layout: a row right-clicked copies its text or opens it to pick any part out", () => menuSays && windowSelects);
+
+        // A message held for a working agent goes back to the box to be changed, out of the chat until it's sent again
+        bool offered = false, taken = false;
+        int entriesBefore = 0;
+        test.Run(() =>
+        {
+            entriesBefore = longChat!.Entries.Count;
+            HexAgentEntry held = longChat.Steer("look at the tests first");
+            heldSteers.Add((longChat, held, "{}", "look at the tests first"));
+            offered = AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.edit_queued"))
+                && AgentRowMenu(longChat, held).Items.Any(item => item.Label == Said("agents_panel.send_now"));
+            taken = EditHeld(held);
+
+            // Sent now it's no longer held, and with no agent there to take it, it says it was never heard
+            HexAgentEntry now = longChat.Steer("and the docs");
+            heldSteers.Add((longChat, now, "{}", "and the docs"));
+            offered &= SendHeldNow(now) && !IsHeld(now) && now.Unheard && !longChat.Withdraw(now);
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a queued message still held goes back to the box to be changed, out of the chat", () =>
+            offered && taken && heldSteers.Count == 0 && longChat!.Entries.Count == entriesBefore + 1 && agentsInput.Text == "look at the tests first");
+        test.Run(() => agentsInput.Text = string.Empty);
+
+        // A chat past what it keeps in memory sends its oldest rows to its file, and they're read back from there when asked
+        HexAgentChat? longest = null;
+        int earlierBefore = 0;
+        test.Run(() =>
+        {
+            longest = new HexAgentChat(++agentChatsMade, "layout_agent");
+            agentChats.Add(longest);
+            longest.Ask("A long one");
+            for (int i = 1; i <= 300; i++)
+                longest.Say($"Line {i} of a long chat.");
+            longest.Done();
+            OpenAgentChat(longest);
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            earlierBefore = agentsEarlier?.Children.Count ?? -1;
+            ShowAgentEarlier(longest!);
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a long chat keeps its latest rows, the rest read back from its file when asked", () =>
+            longest!.Dropped > 0 && longest.Entries.Count <= HexAgentChat.MOST_ENTRIES + HexAgentChat.SPILL_BATCH
+            && earlierBefore == 1 && agentsEarlierShown > 0 && agentsEarlier!.Children.Count > earlierBefore
+            && Descendants(agentsEarlier).OfType<Label>().Any(label => label.Text.Contains("Line 1 of a long chat.", StringComparison.Ordinal)));
+        // Back at its latest for a minute, what was read back goes back to its file, the button for it there again
+        test.Run(() => agentsScroll.ScrollToEnd());
+        test.Settle(0.2f);
+        test.Run(() => agentsEarlierAtEnd = System.Environment.TickCount64 - EARLIER_KEPT_MS - 1);
+        test.Settle(0.2f);
+        test.Check("agents layout: rows read back from the file go back to it after a minute at the chat's latest", () =>
+            agentsEarlierShown == 0 && agentsEarlier!.Children.Count == 1);
+        test.Run(() => CloseAgentChat(longest!));
+
+        // The box's words are in the UI's font, whose narrow letters take less room than a digit. A line of them half
+        // again as wide as the box wraps once, not three times as it did when it was counted in digits
+        test.Run(() =>
+        {
+            float scale = agentsInput.TextScale;
+            Horizon.UI.Drawing.UIFont font = compositor.Skin!.Font;
+            string prose = string.Empty;
+            while (font.Measure(prose, scale, markup: false).X < agentsInput.Bounds.Width * 1.5f)
+                prose += "ill fill till ";
+            agentsInput.Text = prose.TrimEnd();
+        });
+        test.Settle(0.2f);
+        test.Run(() =>
+        {
+            if (agentsInput.RowCount != 2)
+                Console.WriteLine($"[Hex self-test]   the box is {agentsInput.Bounds.Width:0} wide and its prose took {agentsInput.RowCount} rows");
+        });
+        test.Check("agents layout: the box wraps prose by how wide its letters are, filling each row first", () => agentsInput.RowCount == 2);
+        test.Run(() => agentsInput.Text = string.Empty);
+
+        // A picture pasted with no text beside it is a chip over the pickers, the card growing for it, and goes with the
+        // message as its path. A paste of text is text as ever. The clipboard is a stand-in so the real one is left alone
+        Func<byte[]?>? realClipboard = Horizon.Input.ClipboardPicture.Reader;
+        float cardBefore = 0;
+        bool textTaken = true;
+        string prompt = "look", asked = "look";
+        string[] sent = [];
+        test.Run(() =>
+        {
+            cardBefore = agentsComposeTall;
+            Horizon.Input.ClipboardPicture.Reader = () => Horizon.Graphics.ImageFile.EncodePng([255, 0, 0, 255], 1, 1);
+            agentsInput.OnPasting!(string.Empty);
+            textTaken = agentsInput.OnPasting!("some text");
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: a pasted picture is a small one of itself in the card, which grows for it, and pasted text is still text", () =>
+            agentImages.Count == 1 && File.Exists(agentImages[0]) && agentsImages.Visible && agentsComposeTall > cardBefore && !textTaken
+            && Descendants(agentsImages).OfType<Image>().Any(image => image.Texture is { IsValid: true }));
+        test.Run(() => sent = TakeAgentImages(ref prompt, ref asked));
+        test.Settle(0.2f);
+        test.Check("agents layout: sent, the picture goes with the message by its path and the chip goes", () =>
+            sent.Length == 1 && prompt.EndsWith($"[Pasted image: {sent[0]}]", StringComparison.Ordinal) && asked.StartsWith("look\n\n", StringComparison.Ordinal)
+            && agentImages.Count == 0 && !agentsImages.Visible);
+        test.Run(() =>
+        {
+            Horizon.Input.ClipboardPicture.Reader = realClipboard;
+            foreach (string made in sent)
+                File.Delete(made);
+        });
+
+        // Somebody's word to an agent sitting in a wait for its agents goes by its mail, which wakes the wait, where on its
+        // stdin it would only be read once the wait was over
+        test.Run(() =>
+        {
+            other!.Ask("Coordinate the others");
+            OpenAgentChat(other);
+            agentsWaiting[other.Id] = 1;
+            agentsInput.Text = "Stop and look at the tests first";
+            SendToAgent();
+        });
+        test.Settle(0.2f);
+        test.Check("agents layout: what's typed for an agent in a long wait wakes it by its mail", () =>
+            other!.UnreadMail() is [{ Directive: true, Kind: "instruction" } told] && told.Text.Contains("look at the tests", StringComparison.Ordinal)
+            && other.Entries.Any(entry => entry.Kind == HexAgentEntryKind.User && !entry.Queued && entry.Text.Contains("look at the tests", StringComparison.Ordinal))
+            && other.Entries[^1].Text == Said("agents_panel.told_waiting") && agentsInput.Text.Length == 0);
+        test.Run(() =>
+        {
+            agentsWaiting.TryRemove(other!.Id, out _);
+            other.Done();
+        });
+
+        test.Run(() =>
+        {
+            agentChats.Remove(other!);
             ClearAgentChat();
             settings.UiAnimation = animation;
             extensions.ForgetAgents(provider!);
@@ -224,7 +565,7 @@ internal sealed partial class DawnScene
             {
                 // Sample every layout, including the first measure after the sidebar updates its rows.
                 Label hint = agentsRows.Children.OfType<Label>().Skip(1).First();
-                float below = agentsRows.Bounds.Max.Y - agentsRows.Children.OfType<Button>().First().Bounds.Max.Y;
+                float below = agentsRows.Children[0].Bounds.Max.Y - agentsRows.Children.OfType<Button>().First().Bounds.Max.Y;
                 if (step > 1)
                     reversal = Math.Max(reversal, narrowing ? previous - below : below - previous);
                 previous = below;

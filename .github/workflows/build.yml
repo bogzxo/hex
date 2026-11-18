@@ -9,6 +9,21 @@ on:
   push:
     branches: [ "master" ]
     tags: [ "v*" ]
+  # The nightly build (nightly.yml) runs the same build on the development branch, as the dev channel
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to build, the event's own when empty
+        type: string
+        default: ""
+      channel:
+        description: stable or dev, said into the build so it updates from its own kind of release
+        type: string
+        default: ""
+      nightly:
+        description: The nightly release the build goes out as, nightly- and the run
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -38,6 +53,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # The commit the nightly build asked for, the event's own otherwise
+          ref: ${{ inputs.ref }}
           # The extensions (bogzxo/hex-extensions at hex-extensions)
           submodules: recursive
 
@@ -76,10 +93,10 @@ jobs:
           if ($env:GITHUB_REF_NAME.Substring(1) -ne $version) { throw "Release tag must match Directory.Build.props ($version)." }
 
       - name: Publish
-        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }}
+        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}"
 
       - name: Publish installer
-        run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }}
+        run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}"
 
       - name: Verify standalone setup
         if: runner.os == 'Windows'
@@ -102,10 +119,13 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p publish/hex.iconset
+          # The nightly build's own, grey with a yellow H
+          icon=Hex.Shell/Assets/hex_icon.png
+          if [ "${{ inputs.channel }}" = "dev" ]; then icon=Hex.Shell/Assets/hex_icon_dev.png; fi
           for size in 16 32 128 256 512; do
-            sips -z "$size" "$size" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}.png"
+            sips -z "$size" "$size" "$icon" --out "publish/hex.iconset/icon_${size}x${size}.png"
             double=$((size * 2))
-            sips -z "$double" "$double" Hex.Shell/Assets/hex_icon.png --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
+            sips -z "$double" "$double" "$icon" --out "publish/hex.iconset/icon_${size}x${size}@2x.png"
           done
           iconutil -c icns publish/hex.iconset -o publish/Hex/Assets/hex_icon.icns
           cp publish/Hex/Assets/hex_icon.icns publish/Hex.Setup/Assets/hex_icon.icns

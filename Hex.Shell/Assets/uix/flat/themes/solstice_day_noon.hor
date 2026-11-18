@@ -1,0 +1,8 @@
+// Solstice Day as Noon wears it, the paper the same and the accent a deeper teal, so it reads on white.
+let theme = {
+    title: "Solstice Day Noon",
+    base: "solstice_day",
+    accent_color: vec(0.110, 0.490, 0.510, 1),
+    highlight_color: vec(0.16, 0.56, 0.58, 1),
+    selection_color: vec(0.110, 0.490, 0.510, 0.2)
+};

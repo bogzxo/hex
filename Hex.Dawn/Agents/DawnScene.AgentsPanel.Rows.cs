@@ -24,6 +24,11 @@ internal sealed partial class DawnScene
     private (HexAgentChat? Chat, int Dropped, bool Narrow, object? Skin, float Motion) agentRowsFor;
     private Panel? agentsTyping;
 
+    // Where each chat was scrolled to as another was put on screen, null for at its end (where it follows what comes),
+    // and where the one put on screen goes back to once its rows are laid out
+    private readonly Dictionary<int, float?> agentScrolls = [];
+    private (HexAgentChat Chat, float? Offset)? agentScrollWanted;
+
     // The time of every tool that's still running, counted up as it goes without its row being made again
     private readonly Dictionary<HexAgentEntry, Label> agentsRunningTimes = [];
 
@@ -70,6 +75,8 @@ internal sealed partial class DawnScene
             UIComponent row = RowOf(chat, entry);
             if (fits.Count > 0)
                 agentRowFits[row] = fits;
+            // Right-clicked, what it says can be copied, or opened as text to pick any part of it out
+            row.OnContextMenu ??= at => ContextMenu.Show(chrome, at, AgentRowMenu(chat, entry));
             return row;
         }
         finally
@@ -109,16 +116,24 @@ internal sealed partial class DawnScene
     /// <summary>The provider selector, rebuilt when its choices, status or available width change.</summary>
     private void DrawAgentChips()
     {
-        HexAgentProfile[] agents = [.. RunnableAgents()];
+        // What it was drawn from as a number, every agent that can run, which is picked and how each is, worked out with
+        // nothing allocated. It was a string made again ten times a second, most of what the panel made standing still
         string? current = AgentFor(agentChat);
-        var said = new StringBuilder();
-        foreach (HexAgentProfile agent in agents)
-            said.Append(agent.Id).Append(agent.Id == current).Append(StateOf(agent)).Append('|');
-        string providers = said.ToString();
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        long providers = 17;
+        for (int i = 0; i < all.Count; i++)
+        {
+            HexAgentProfile agent = all[i];
+            if (!extensions.AgentRuns.ContainsKey(agent.Id))
+                continue;
+            providers = providers * 31 + string.GetHashCode(agent.Id, StringComparison.Ordinal);
+            providers = providers * 31 + (agent.Id == current ? 1 : 0) * 7 + (int)StateOf(agent);
+        }
         float width = agentsView.Size.X;
         var key = (providers, (int)width);
         if (key == agentsChipsDrawn)
             return;
+        HexAgentProfile[] agents = [.. RunnableAgents()];
         if (providers != agentsChipsDrawn.Providers && agentChat is not { Entries.Count: > 0 })
             agentRowsFor = default;
         agentsChipsDrawn = key;
@@ -182,17 +197,24 @@ internal sealed partial class DawnScene
     private void BrowseAgentExtensions() => OpenSettings(HexExtensions.AVAILABLE);
 
     private readonly Dictionary<string, (long Checked, string Program, bool Missing)> agentPrograms = [];
+    private const long AGENT_PROGRAM_EVERY = 15_000;
 
     private enum AgentStates { Ready, Running, Missing }
 
     private AgentStates StateOf(HexAgentProfile agent)
     {
-        if (agentChats.Any(chat => chat.Running && chat.Agent == agent.Id))
-            return AgentStates.Running;
+        // A loop rather than Any with a lambda, which made a closure every time the chips were looked at
+        for (int i = 0; i < agentChats.Count; i++)
+        {
+            if (agentChats[i] is { Running: true } chat && chat.Agent == agent.Id)
+                return AgentStates.Running;
+        }
         if (!extensions.AgentRuns.TryGetValue(agent.Id, out var run)) return AgentStates.Missing;
         string program = HexExtensions.Text(run.Run, "program") ?? string.Empty;
         long now = System.Environment.TickCount64;
-        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program || now - cached.Checked > 2000)
+        // Looked for again every fifteen seconds, soon enough to see one installed meanwhile. Each look goes through every
+        // folder of PATH and the system's PATH as it is now, and every two seconds it was most of what the panel made
+        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program || now - cached.Checked > AGENT_PROGRAM_EVERY)
         {
             cached = (now, program, HexAgentProcess.Find(program) is null);
             agentPrograms[agent.Id] = cached;
@@ -218,7 +240,7 @@ internal sealed partial class DawnScene
     private void DrawAgentRows()
     {
         HexAgentChat? chat = agentChat;
-        var key = (chat, chat?.Dropped ?? 0, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
+        var key = (chat, (chat?.Dropped ?? 0) + (chat?.Reshaped ?? 0) * 100_000, chat is { Entries.Count: > 0 } && AgentsNarrow(), (object?)Skin, settings.UiAnimation);
         bool fresh = key != agentRowsFor;
 
         // Only another chat comes in moving, rows made again for a new width or theme are just there, and so is all of
@@ -231,15 +253,24 @@ internal sealed partial class DawnScene
             // The dots stay through rows made again for a new width, made again they started their bounce over and
             // slid in on every step of a drag
             Panel? typing = chat == agentRowsFor.Chat && ReferenceEquals(Skin, agentRowsFor.Skin) ? agentsTyping : null;
+
+            // Another chat keeps where the one leaving was read to and goes back to where it was itself, the end for
+            // one not read before, so going between chats never loses the place in either
+            if (chat != agentRowsFor.Chat)
+            {
+                if (agentRowsFor.Chat is { } leaving)
+                    agentScrolls[leaving.Id] = agentsScroll.Offset >= agentsScroll.MaxOffset - 0.5f ? null : agentsScroll.Offset;
+                agentScrollWanted = chat is null ? null : (chat, agentScrolls.GetValueOrDefault(chat.Id));
+                agentsScroll.ScrollToEnd();
+            }
+
             agentRowsFor = key;
             agentRowsShown.Clear();
             agentsRunningTimes.Clear();
+            agentsGroupTimes.Clear();
+            agentsQuestionTimes.Clear();
             agentRowFits.Clear();
-            foreach (UIComponent child in agentsRows.Children.ToArray())
-            {
-                if (child != typing)
-                    agentsRows.Remove(child);
-            }
+            agentsRows.Clear(keep: typing);
 
             agentsTyping = typing;
             if (chat is not { Entries.Count: > 0 })
@@ -250,6 +281,9 @@ internal sealed partial class DawnScene
                 DrawAgentWelcome();
                 return;
             }
+
+            // The rows it no longer keeps, a press or a scroll to the top away, over the ones it does
+            DrawAgentEarlier(chat);
         }
 
         if (chat is null)
@@ -258,37 +292,92 @@ internal sealed partial class DawnScene
         for (int i = 0; i < chat.Entries.Count; i++)
         {
             HexAgentEntry entry = chat.Entries[i];
+
+            // A call after the first of a group is drawn by the group's first row, its own place in the list kept by a row
+            // of nothing so the rows still go one to an entry. The first row goes by what the whole group is
+            bool member = InToolGroup(chat, i);
+            int version = member ? entry.Version : Groupable(entry) ? ToolGroupKey(chat, i) : entry.Version;
             if (i < agentRowsShown.Count)
             {
-                if (agentRowsShown[i].Version == entry.Version)
+                if (agentRowsShown[i].Version == version)
                     continue;
 
-                // Made again in its place, a tool that finished giving a little pop
+                // A call that's become part of a group, or one that's left one, is made again as what it is now
+                bool wasMember = agentRowsShown[i].Row is Panel { Visible: false, Children.Count: 0 };
+                if (member && wasMember)
+                {
+                    agentRowsShown[i] = (entry, version, agentRowsShown[i].Row);
+                    continue;
+                }
+
+                // One not made yet is made as its entry is whenever it comes into sight, nothing to make again
                 UIComponent was = agentRowsShown[i].Row;
-                UIComponent made = FittedRowOf(chat, entry);
-                agentsRows.Insert(IndexIn(agentsRows, was), made);
-                agentsRows.Remove(was);
+                if (!member && agentsRows.IsWaiting(was))
+                {
+                    agentRowsShown[i] = (entry, version, was);
+                    continue;
+                }
+
+                // Made again in its place, a tool that finished giving a little pop
+                UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
+                agentsRows.Replace(was, made);
                 agentRowFits.Remove(was);
-                agentRowsShown[i] = (entry, entry.Version, made);
-                if (entry.Kind == HexAgentEntryKind.Tool && entry.State != HexAgentToolState.Running)
+                agentRowsShown[i] = (entry, version, made);
+                // A tool of its own that finished gives a little pop, a group changing as its calls come and go doesn't
+                if (entry.Kind == HexAgentEntryKind.Tool && !Groupable(entry) && entry.State != HexAgentToolState.Running)
                     PopRow(made);
                 continue;
             }
 
-            UIComponent row = FittedRowOf(chat, entry);
-            agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : IndexIn(agentsRows, agentsTyping), row);
-            agentRowsShown.Add((entry, entry.Version, row));
+            int at = agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping);
 
-            // A whole chat brought up comes in quickly a few rows at a time, a row that just came slides in on its own,
-            // what was asked from the right where its bubble is
-            if (arriving)
-                SlideRowIn(row, Math.Min(i, 8) * 0.025f);
-            else if (!fresh && !still)
+            // A whole chat put on screen has its rows made only as they come into sight, the dozen or two at its end
+            // first, where every row it keeps was made at once
+            if (fresh && !member)
+            {
+                UIComponent place = new Panel { Size = Vector2.Zero, Color = Vector4.Zero };
+                agentsRows.InsertLater(at, place, entry, () => MadeLater(chat, entry, place));
+                agentRowsShown.Add((entry, version, place));
+                continue;
+            }
+
+            UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
+            agentsRows.Insert(at, row, entry);
+            agentRowsShown.Add((entry, version, row));
+
+            // A row that just came slides in on its own, what was asked from the right where its bubble is
+            if (member)
+                continue;
+            if (!fresh && !still)
                 SlideRowIn(row, 0.0f, entry.Kind == HexAgentEntryKind.User ? 16.0f : 0.0f);
+        }
+
+        // Rows made in the moment after another chat came on screen come in quickly a few at a time, as a whole chat did
+        if (arriving)
+        {
+            agentsArrivingUntil = System.Environment.TickCount64 + ARRIVING_MS;
+            agentsArrived = 0;
         }
 
         ShowTyping(chat, still);
         FitAgentRows();
+    }
+
+    // How long after a chat comes on screen the rows made for it slide in, and how many have so far
+    private const long ARRIVING_MS = 300;
+    private long agentsArrivingUntil;
+    private int agentsArrived;
+
+    /// <summary>A row that waited for its place to come into sight made, and put in the place's stead among the rows shown.</summary>
+    private UIComponent MadeLater(HexAgentChat chat, HexAgentEntry entry, UIComponent place)
+    {
+        UIComponent made = FittedRowOf(chat, entry);
+        int at = agentRowsShown.FindIndex(shown => ReferenceEquals(shown.Row, place));
+        if (at >= 0)
+            agentRowsShown[at] = agentRowsShown[at] with { Row = made };
+        if (System.Environment.TickCount64 < agentsArrivingUntil)
+            SlideRowIn(made, Math.Min(agentsArrived++, 8) * 0.025f);
+        return made;
     }
 
     // Whether the next rows drawn are just put there, the view having been opened again, see PlaceAgentsView
@@ -380,13 +469,22 @@ internal sealed partial class DawnScene
                 return Bubble(entry, skin);
 
             case HexAgentEntryKind.Text:
-                return AgentMarkdown(entry.Text, thinking: false);
+            {
+                // A picture it links under its words, small, a click opening it full screen
+                UIComponent said = AgentMarkdown(entry.Text, thinking: false);
+                if (PictureStrip(PicturesIn(entry.Text, asked: false), Origin.Left) is not { } pictures)
+                    return said;
+                var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 };
+                both.Add(said);
+                both.Add(pictures);
+                return both;
+            }
 
             case HexAgentEntryKind.Thinking:
                 return AgentMarkdown(entry.Text, thinking: true);
 
             case HexAgentEntryKind.Note:
-                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(UIRichText.Literal(entry.Text), 0.125f, dim: true));
+                return new Panel { Fill = UIFill.Horizontal, Padding = new UIEdges(2, 0, 2, 0) }.With(Text(NoteText(entry.Text), 0.125f, dim: true));
 
             case HexAgentEntryKind.Error:
             {
@@ -396,8 +494,14 @@ internal sealed partial class DawnScene
                 return card;
             }
 
+            case HexAgentEntryKind.Approval:
+                return ApprovalRow(chat, entry, skin);
+
+            case HexAgentEntryKind.Question:
+                return QuestionRow(chat, entry, skin);
+
             default:
-                return ToolRow(chat, entry, skin);
+                return Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
         }
     }
 
@@ -453,11 +557,29 @@ internal sealed partial class DawnScene
             Radius = 10,
             Padding = new UIEdges(13, 10, 13, 10)
         });
-        FollowWidth(width => bubble.Size = new Vector2(Math.Clamp(longest, 60.0f, Math.Max(64.0f, width - 12.0f) * AGENTS_BUBBLE), 0));
+        // The widest it may be is kept over the narrowest, a side bar narrower than that as Hex comes up made the clamp throw
+        FollowWidth(width => bubble.Size = new Vector2(Math.Clamp(longest, 60.0f, Math.Max(64.0f, (width - 12.0f) * AGENTS_BUBBLE)), 0));
         var stack = bubble.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 2 });
         stack.Add(Text(shown, scale));
         if (under is not null)
             stack.Add(Text(under, 0.125f, dim: true));
+
+        // The pictures pasted with it, small under the words, the bubble as wide as they need
+        if (PictureStrip(PicturesIn(entry.Text, asked: true), Origin.Left) is StackPanel pictures)
+        {
+            float wide = pictures.Children.Sum(each => each.Size.X) + pictures.Spacing * (pictures.Children.Count - 1);
+            longest = Math.Max(longest == float.MaxValue ? 0 : longest, wide + padding);
+            stack.Add(pictures);
+        }
+
+        // Held by Hex for the agent, it can go now rather than when the agent next says something, or back to the box
+        if (entry.Queued && IsHeld(entry))
+        {
+            var actions = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Size = new Vector2(0, 22) });
+            actions.Add(new Button { Label = Said("agents_panel.send_now"), Icon = "send", Style = "button_flat", Size = new Vector2(96, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => SendHeldNow(entry) });
+            actions.Add(new Button { Label = Said("agents_panel.edit_short"), Icon = "edit", Style = "button_flat", Size = new Vector2(64, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => EditHeld(entry) });
+        }
+
         if (entry.Queued || entry.Unheard)
             bubble.Opacity = 0.6f;
         return holder;
@@ -470,7 +592,7 @@ internal sealed partial class DawnScene
     {
         Vector4 hover = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         Vector4 rule = skin?.BorderColor ?? new Vector4(1, 1, 1, 0.1f);
-        string seconds = entry.Seconds.ToString("0.0");
+        string seconds = entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         string state = entry.State switch
         {
             HexAgentToolState.Running => Said("agents_panel.tool_running", ("seconds", seconds)),
@@ -485,8 +607,21 @@ internal sealed partial class DawnScene
         if (name.StartsWith("hex_", StringComparison.Ordinal)) name = name[4..];
         name = name.Replace('_', ' ');
         name = string.IsNullOrWhiteSpace(name) ? "Tool" : char.ToUpperInvariant(name[0]) + name[1..];
-        var holder = new Panel { Fill = UIFill.Horizontal, Color = entry.Open ? hover with { W = hover.W * 0.6f } : null, Radius = 6 };
+        // A subagent is one row, what it was sent to do and where it's got to, its own steps folded into it
+        if (SubagentOf(entry) is { } subagent)
+        {
+            name = subagent.Name;
+            preview = entry.Steps > 0
+                ? Said("agents_panel.subagent_steps", ("count", entry.Steps.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("step", entry.Progress ?? subagent.About))
+                : subagent.About;
+        }
+        // A bubble of its own, a shade over the chat and a little more when it's open, its state a line along the bottom,
+        // blue while it runs, green when it went and red when it failed. A failed one filled red was most of the chat red
+        var holder = new Panel { Fill = UIFill.Horizontal, Color = hover with { W = hover.W * (entry.Open ? 0.75f : 0.45f) }, Radius = 8, Padding = new UIEdges(0, 0, 0, 2) };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
+        // A blue gutter down its left while it runs, as a group of calls has
+        if (entry.State == HexAgentToolState.Running)
+            holder.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(3, 24), Position = new Vector2(1, -3), Radius = 1.5f, Color = RUNNING_BLUE });
         Button head = stack.Add(new Button
         {
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },
@@ -495,7 +630,6 @@ internal sealed partial class DawnScene
             LabelScale = 0.15f,
             Size = new Vector2(0, 30),
             Fill = UIFill.Horizontal,
-            Danger = entry.State == HexAgentToolState.Failed,
             Animated = false,
             Tooltip = $"{entry.ToolName}, {state}\n{preview}",
             Padding = new UIEdges(4, 0, compact ? 24 : 90, 0),
@@ -505,9 +639,17 @@ internal sealed partial class DawnScene
                 chat.Touch(entry);
             }
         });
+        // The file it was given after its name, with the icon of its kind as the file tree has it, when there's room
+        string? file = SubagentOf(entry) is null ? FileOfCall(entry) : null;
+        // A button's label is written in one colour, so the file's icon here is the label's, only the button's own icon
+        // takes a colour of its own
+        string fileIcon = file is null ? string.Empty : $"$({HexExplorer.FileIcon(file)})";
         FollowWidth(width =>
         {
-            string fitted = UIRichText.Literal(OneLine(name, Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f))));
+            int room = Math.Max(4, (int)((width - (compact ? 46.0f : 132.0f)) / 6.2f));
+            string fitted = UIRichText.Literal(OneLine(name, room));
+            if (file is not null && room - name.Length - 3 >= 6)
+                fitted += $"  {fileIcon} {UIRichText.Literal(OneLine(Path.GetFileName(file), room - name.Length - 3))}";
             if (head.Label != fitted)
                 head.Label = fitted;
         });
@@ -559,30 +701,28 @@ internal sealed partial class DawnScene
             }
         }
 
+        // Kept in from the bubble's round corners
+        holder.Add(new Panel { Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Padding = new UIEdges(8, 0, 8, 0), Color = Vector4.Zero })
+            .With(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Radius = 1, Color = ToolStateColour(entry.State, skin) });
         return holder;
     }
 
-    /// <summary>Prefer the useful argument over JSON scaffolding; plain or partial tool input remains readable.</summary>
-    internal static string ToolPreview(string? input)
+    /// <summary>The colour of the line under a tool's bubble, blue while it runs, green when it went, red when it failed.</summary>
+    internal static Vector4 ToolStateColour(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
     {
-        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(input);
-            JsonElement root = document.RootElement;
-            if (root.ValueKind == JsonValueKind.String) return root.GetString() ?? string.Empty;
-            if (root.ValueKind == JsonValueKind.Object)
-            {
-                foreach (string key in new[] { "command", "cmd", "query", "pattern", "file_path", "path", "filename", "url", "description", "prompt" })
-                    if (root.TryGetProperty(key, out JsonElement value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
-                        return value.GetString()!;
-                return string.Join(" · ", root.EnumerateObject().Take(3).Select(property =>
-                    property.Value.ValueKind == JsonValueKind.String ? $"{property.Name}: {property.Value.GetString()}" : property.Name));
-            }
-        }
-        catch (JsonException) { }
-        return input.Trim();
-    }
+        HexAgentToolState.Running => RUNNING_BLUE with { W = 0.9f },
+        HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.9f },
+        _ => (skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.75f }
+    };
+
+    // The rows' helpers live in HexAgentRows, shared by the side panel and Noon, said here by their short names
+    internal static string ToolPreview(string? input) => HexAgentRows.ToolPreview(input);
+    internal static string NoteText(string text) => HexAgentRows.NoteText(text);
+    internal static (string Name, string About)? SubagentOf(HexAgentEntry entry) => HexAgentRows.SubagentOf(entry);
+    internal static string Lines(string text, int most) => HexAgentRows.Lines(text, most);
+    internal static string OneLine(string text, int most) => HexAgentRows.OneLine(text, most);
+    internal static string ToolTitle(string name) => HexAgentRows.ToolTitle(name);
+    internal static string ToolIcon(string name) => HexAgentRows.ToolIcon(name);
 
     private static string ToolDetails(string input)
     {
@@ -603,52 +743,18 @@ internal sealed partial class DawnScene
         foreach (var (entry, label) in agentsRunningTimes)
         {
             if (entry.State == HexAgentToolState.Running)
-                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0")));
+                label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
         }
-    }
 
-    /// <summary>A text cut to so many lines, the rest said as how many more there were.</summary>
-    internal static string Lines(string text, int most)
-    {
-        string[] lines = text.Replace("\r", string.Empty).Trim('\n').Split('\n');
-        return lines.Length <= most ? string.Join('\n', lines) : string.Join('\n', lines.Take(most)) + $"\n... {lines.Length - most} more lines";
-    }
-
-
-    /// <summary>A text as one line of so many characters at the most.</summary>
-    internal static string OneLine(string text, int most)
-    {
-        string line = string.Join(' ', text.Split(['\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(part => part.Trim())).Trim();
-        most = Math.Max(1, most);
-        return line.Length <= most ? line : most <= 3 ? new string('.', most) : line[..(most - 3)] + "...";
-    }
-
-    /// <summary>A tool's name as a row says it, Hex's without the mcp__hex__ a host puts in front.</summary>
-    internal static string ToolTitle(string name)
-    {
-        int at = name.LastIndexOf("__", StringComparison.Ordinal);
-        return name.StartsWith("mcp__", StringComparison.Ordinal) && at > 4 ? name[(at + 2)..] : name;
-    }
-
-    /// <summary>The icon of a tool by what kind of tool it is, a command, a file changed or read, a search, Hex's own.</summary>
-    internal static string ToolIcon(string name)
-    {
-        string tool = ToolTitle(name).ToLowerInvariant();
-        return tool switch
+        // A group's time, all of its calls together, going on while one of them runs
+        foreach (var (time, calls) in agentsGroupTimes.Values)
         {
-            "bash" or "command" or "command_execution" or "shell" or "hex_terminal_run" or "hex_terminal" or "hex_terminal_send" or "hex_run_task" => "terminal",
-            "edit" or "write" or "multiedit" or "file_change" or "apply_patch" or "notebookedit" => "diff",
-            "read" or "hex_read" or "hex_skim" or "hex_editor" or "hex_open" => "file-code",
-            "grep" or "glob" or "hex_search" or "hex_find_in_files" or "hex_files" or "hex_refs" or "hex_references" => "search",
-            "hex_symbols" or "hex_outline" or "hex_definition" or "hex_symbol_info" => "symbol-class",
-            "hex_map" => "list-tree",
-            "websearch" or "webfetch" or "web_search" => "globe",
-            "todowrite" or "todo_list" => "checklist",
-            "task" or "agent" => "organization",
-            _ when tool.StartsWith("hex_notebook", StringComparison.Ordinal) => "notebook",
-            _ when tool.StartsWith("hex_", StringComparison.Ordinal) => "robot",
-            _ => "tools"
-        };
+            string said = calls.Sum(call => call.Seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
+            if (time.Text != said)
+                time.Text = said;
+        }
+
+        TickQuestionTimes();
     }
 
     // What was asked split from the file put in front of it, which the bubble says under it rather than in it

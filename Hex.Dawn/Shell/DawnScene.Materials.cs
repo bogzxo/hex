@@ -94,6 +94,7 @@ internal sealed partial class DawnScene
         center.Outline = skin.BorderColor;
         center.Glass = null;
         bottom.Glass = null;
+        DressNoon(skin, card, inset, radius, glassy);
 
         // What's inside the cards is the card, the lists have no boxes of their own and the code is the card's colour
         treeScroll.Color = layersScroll.Color = inspectorScroll.Color = none;

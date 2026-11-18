@@ -146,6 +146,68 @@ internal sealed partial class DawnScene
         test.Check("mcp: arguments a tool doesn't take come back as its failure, with what it does take", () =>
             HexMcpTestClient.Failed(answer) && Answered().Contains("'path' is required", StringComparison.Ordinal));
 
+        // Every tool is told which chat's agent is calling, not only the agents' own, and a client that isn't one is told none
+        Task<McpToolResult>? asChat = null, asNobody = null;
+        test.Run(() =>
+        {
+            asChat = McpTools.CallAs("hex_harness_stats", [], CancellationToken.None, 4242);
+            asNobody = McpTools.Call("hex_harness_stats", [], CancellationToken.None);
+        });
+        test.WaitFor(() => asChat?.IsCompleted == true && asNobody?.IsCompleted == true, 5.0f);
+        test.Check("mcp: a tool that isn't about agents knows the chat calling it, and none for a client that isn't one", () =>
+            asChat is { IsCompletedSuccessfully: true } && asNobody is { IsCompletedSuccessfully: true }
+            && asChat.Result.ToJson().ToJsonString().Contains("in chat 4242", StringComparison.Ordinal)
+            && !asNobody.Result.ToJson().ToJsonString().Contains("in chat", StringComparison.Ordinal)
+            && McpTools.Tools.Count > 0 && !McpToolList().First(tool => tool.Meta.Name == "hex_agent_wait").NeedsEditor
+            && McpToolList().First(tool => tool.Meta.Name == "hex_click").NeedsEditor);
+
+        // The step the editor takes while Dusk is on screen answers the calls about agents and stops at the first that
+        // drives the editor, which waits for the editor to come back. Taken here by hand, the self test's Hex has no Dusk
+        bool agentAnswered = false, editorWaited = false;
+        Task<McpToolResult>? behindEditor = null;
+        test.Run(() =>
+        {
+            Task<McpToolResult> agents = McpTools.CallAs("hex_agent_list", [], CancellationToken.None, null);
+            behindEditor = McpTools.Call("hex_editor", [], CancellationToken.None);
+            TickAgentsOffscreen(0.016f);
+            agentAnswered = agents.IsCompleted;
+            editorWaited = !behindEditor.IsCompleted && mcpCalls.Count == 1;
+        });
+        test.WaitFor(() => behindEditor?.IsCompleted == true, 5.0f);
+        test.Check("mcp: behind Dusk a call about agents is answered and one that drives the editor waits for it to come back", () =>
+            agentAnswered && editorWaited && behindEditor is { IsCompletedSuccessfully: true });
+
+        // Files written and changed through Hex, on the disk with their line endings kept, and in the editor when the file is
+        // open with changes nobody saved, where it's one step to undo
+        string written = Path.Combine(testFolder, "selftest_mcp_written.txt");
+        Ask("hex_write", new JsonObject { ["path"] = written, ["content"] = "one\r\ntwo\r\nthree\r\n" });
+        test.Check("mcp: hex_write makes a file with what it was given", () =>
+            !HexMcpTestClient.Failed(answer) && File.ReadAllText(written) == "one\r\ntwo\r\nthree\r\n");
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "two\nthree", ["new_string"] = "2\n3" });
+        test.Check("mcp: hex_edit changes it on the disk, its line endings kept, and says the line", () =>
+            !HexMcpTestClient.Failed(answer) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n" && Answered().Contains(":2", StringComparison.Ordinal));
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "nowhere", ["new_string"] = "x" });
+        test.Check("mcp: hex_edit of text that isn't there fails and changes nothing", () =>
+            HexMcpTestClient.Failed(answer) && Answered().Contains("isn't in it", StringComparison.Ordinal) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n");
+        test.Run(() =>
+        {
+            Context.Documents.Open(written);
+            code.Document.MoveTo(new UITextPosition(0, 0));
+            code.Document.Insert("zero\n");
+        });
+        Ask("hex_edit", new JsonObject { ["path"] = written, ["old_string"] = "one", ["new_string"] = "1" });
+        test.Check("mcp: a file open with unsaved changes is changed in the editor, not on the disk", () =>
+            !HexMcpTestClient.Failed(answer) && code.Text.StartsWith("zero\n1\n", StringComparison.Ordinal) && File.ReadAllText(written) == "one\r\n2\r\n3\r\n");
+        test.Run(() =>
+        {
+            if (Context.Documents.Find(written) is { } open)
+            {
+                open.Editor.Text = File.ReadAllText(written);
+                CloseDocument(open);
+            }
+            File.Delete(written);
+        });
+
         TestAgentMcp(test, Ask);
 
         // Hung up on, the status bar's item stays a while (a client that connects for every call doesn't have the bar

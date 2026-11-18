@@ -133,6 +133,14 @@ internal sealed partial class DawnScene
         return OperatingSystem.IsWindows() ? "pwsh" : "sh";
     }
 
+    /// <summary>
+    /// Git told not to page what it prints, wherever a statement of the line starts with it. A pager waits on a key nobody
+    /// presses and the call never sees its exit (git diff did). Put in the line rather than the shell's environment, which
+    /// is the person's own terminal and keeps its pager for them.
+    /// </summary>
+    internal static string McpNoPager(string command) =>
+        System.Text.RegularExpressions.Regex.Replace(command, @"(^|[;&|(]\s*)git(\s+)(?!--no-pager)", "$1git --no-pager$2");
+
     /// <summary>A command line with a marker echoed after it that says its exit code, the way the shell writes that.</summary>
     internal static string McpMarked(string command, string shell, string marker) => shell switch
     {
@@ -190,6 +198,15 @@ internal sealed partial class DawnScene
     private IEnumerable<McpToolResult?> TerminalRun(JsonObject arguments)
     {
         string command = (arguments.String("command") ?? string.Empty).Trim();
+
+        // A read or a search of the workspace by the shell, turned back as the agent's own shell is, or an agent kept
+        // off grep and cat by its guard ran them here instead (Codex did, through this very tool)
+        if (HexHarnessGuard.ForCommand(command, [.. explorer.workspace.Folders]) is { } instead)
+        {
+            yield return McpToolResult.Error($"This reads the workspace the long way, Hex answers it from its index, use {instead}. hex_terminal_run is for builds, tests, git and anything outside the workspace.");
+            yield break;
+        }
+
         if (command.Length == 0)
         {
             yield return McpToolResult.Error("Say the command line in command.");
@@ -219,7 +236,11 @@ internal sealed partial class DawnScene
         }
 
         string marker = $"__HEX_{Guid.NewGuid().ToString("N")[..8]}";
-        view.Send(McpMarked(command, McpShellOf(tab.Profile), marker) + "\r");
+        // Whatever was left on the shell's line is cleared first, Escape in PowerShell and cmd and Ctrl+U in the others.
+        // A key that landed in the terminal before went in front of the command (".git", "wgit") and broke it
+        string shell = McpShellOf(tab.Profile);
+        view.Send(shell == "sh" ? "\u0015" : "\u001b");
+        view.Send(McpMarked(McpNoPager(command), shell, marker) + "\r");
 
         long until = System.Environment.TickCount64 + (long)(Math.Clamp(arguments.Number("timeout") ?? 120.0, 1.0, 600.0) * 1000.0);
         (string Output, int? Exit) ran = (string.Empty, null);

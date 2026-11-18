@@ -37,26 +37,36 @@ internal static class HexModeSwitch
         return true;
     }
 
-    public static Button Add(TitleBar bar, HexMode current, Action swap)
+    /// <summary>
+    /// The faces on the title bar, Dawn, Noon and Dusk, the one showing marked and the others taking you there through
+    /// <paramref name="pick"/>. Hands back a button of the row, which is what the row is found by.
+    /// </summary>
+    public static Button Add(TitleBar bar, HexFace current, Action<HexFace> pick)
     {
         var row = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2.0f, Anchor = Origin.Right, Pivot = Origin.Right });
-        Button? destination = null;
-        foreach (HexMode mode in (ReadOnlySpan<HexMode>)[HexMode.Dawn, HexMode.Dusk])
+        foreach (HexFace face in (ReadOnlySpan<HexFace>)[HexFace.Dawn, HexFace.Noon, HexFace.Dusk])
+            row.Add(new Button(face.Name()) { Icon = face.Icon(), Style = "button_flat", Animated = false });
+        Button first = (Button)row.Children[0];
+        Select(first, current, pick);
+        SetScale(first, bar.Module?.Compositor.Scale ?? 1.0f);
+        return first;
+    }
+
+    /// <summary>The face showing marked on the row, the rest made to take you to theirs. Dawn and Noon trade places without a new scene.</summary>
+    public static void Select(Button? anyInRow, HexFace current, Action<HexFace> pick)
+    {
+        if (anyInRow?.Parent is not StackPanel row)
+            return;
+
+        foreach (Button button in row.Children.OfType<Button>())
         {
-            bool active = mode == current;
-            var button = row.Add(new Button(mode.ToString())
-            {
-                Icon = mode == HexMode.Dawn ? "code" : "terminal",
-                Style = "button_flat",
-                Selected = active,
-                Animated = false,
-                Tooltip = HexText.Get(active ? "modes.active" : "modes.switch", ("name", mode.ToString())),
-                OnPressed = active ? null : swap
-            });
-            if (!active)
-                destination = button;
+            // Known by the name it shows, which isn't the enum's own for the agents' face
+            if (Enum.GetValues<HexFace>().Where(each => each.Name() == button.Label).Select(each => (HexFace?)each).FirstOrDefault() is not { } face)
+                continue;
+            bool active = face == current;
+            button.Selected = active;
+            button.Tooltip = HexText.Get(active ? "modes.active" : "modes.switch", ("name", face.Name()));
+            button.OnPressed = active ? null : () => pick(face);
         }
-        SetScale(destination, bar.Module?.Compositor.Scale ?? 1.0f);
-        return destination!;
     }
 }

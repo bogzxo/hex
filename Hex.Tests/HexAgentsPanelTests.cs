@@ -112,15 +112,15 @@ public sealed class HexAgentsPanelTests : IDisposable
     [Fact]
     public void Tools_are_named_and_given_icons_by_what_they_do()
     {
-        Assert.Equal("hex_search", DawnScene.ToolTitle("mcp__hex__hex_search"));
-        Assert.Equal("Bash", DawnScene.ToolTitle("Bash"));
-        Assert.Equal("search", DawnScene.ToolIcon("mcp__hex__hex_search"));
-        Assert.Equal("terminal", DawnScene.ToolIcon("command"));
-        Assert.Equal("diff", DawnScene.ToolIcon("Edit"));
-        Assert.Equal("notebook", DawnScene.ToolIcon("mcp__hex__hex_notebook_run"));
-        Assert.Equal("tools", DawnScene.ToolIcon("something_else"));
-        Assert.Equal("a b c", DawnScene.OneLine("a\n  b\tc", 40));
-        Assert.Equal("abcdefg...", DawnScene.OneLine("abcdefghijklmnop", 10));
+        Assert.Equal("hex_search", HexAgentRows.ToolTitle("mcp__hex__hex_search"));
+        Assert.Equal("Bash", HexAgentRows.ToolTitle("Bash"));
+        Assert.Equal("search", HexAgentRows.ToolIcon("mcp__hex__hex_search"));
+        Assert.Equal("terminal", HexAgentRows.ToolIcon("command"));
+        Assert.Equal("diff", HexAgentRows.ToolIcon("Edit"));
+        Assert.Equal("notebook", HexAgentRows.ToolIcon("mcp__hex__hex_notebook_run"));
+        Assert.Equal("tools", HexAgentRows.ToolIcon("something_else"));
+        Assert.Equal("a b c", HexAgentRows.OneLine("a\n  b\tc", 40));
+        Assert.Equal("abcdefg...", HexAgentRows.OneLine("abcdefghijklmnop", 10));
     }
 
     [Theory]
@@ -132,13 +132,13 @@ public sealed class HexAgentsPanelTests : IDisposable
     [InlineData("{\"recursive\":true}", "recursive")]
     [InlineData(null, "")]
     public void Tool_previews_show_useful_arguments_and_tolerate_raw_input(string? input, string expected) =>
-        Assert.Equal(expected, DawnScene.ToolPreview(input));
+        Assert.Equal(expected, HexAgentRows.ToolPreview(input));
 
     [Fact]
     public void Tool_labels_fit_even_when_the_panel_is_narrow()
     {
-        Assert.Equal("..", DawnScene.OneLine("long input", 2));
-        Assert.Equal(".", DawnScene.OneLine("long input", 0));
+        Assert.Equal("..", HexAgentRows.OneLine("long input", 2));
+        Assert.Equal(".", HexAgentRows.OneLine("long input", 0));
     }
 
     /// <summary>A plugin of the catalog loaded against a hex with what an agent system uses, and the run it said.</summary>
@@ -161,6 +161,9 @@ public sealed class HexAgentsPanelTests : IDisposable
                 _ => new StringValue(string.Empty)
             })),
             ("temp", new StringValue(folder)),
+            ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
+            ("harness_check", Natives.Function("harness_check", args =>
+                HexHarnessGuard.ForCommand(args.Text(0, string.Empty), [folder]) is { } instead ? new StringValue(instead) : Values.Null)),
             ("home", new StringValue(folder)),
             ("exists", Natives.Function("exists", args => Values.Bool(File.Exists(args.Text(0)) || Directory.Exists(args.Text(0))))),
             ("read", Natives.Function("read", args => new StringValue(File.ReadAllText(args.Text(0))))),
@@ -190,6 +193,206 @@ public sealed class HexAgentsPanelTests : IDisposable
 
     private static string[] Arguments(HIDLRuntime runtime, ObjectValue run, ObjectValue chat) =>
         [.. ((ListValue)runtime.Invoke(run.Properties["arguments"], new StringValue("hi"), chat)).Items.Select(Values.Text)];
+
+    // What a run's message writes on the agent's stdin for something asked, as JSON
+    private static string Said(HIDLRuntime runtime, ObjectValue run, ObjectValue chat, string text) =>
+        HexJson.FromHidl(runtime.Invoke(run.Properties["message"], new StringValue(text), chat))!.ToJsonString();
+
+    [Fact]
+    public void Pasted_pictures_go_to_claude_as_image_blocks_and_to_codex_as_files()
+    {
+        Directory.CreateDirectory(folder);
+        string picture = Path.Combine(folder, "pasted.png");
+        File.WriteAllBytes(picture, [0x89, (byte)'P', (byte)'N', (byte)'G', 1, 2, 3]);
+
+        var (claude, _, claudeRun) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code") { Attached = [picture] };
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+        string said = HexJson.FromHidl(claude.Invoke(claudeRun.Properties["message"], new StringValue("what is this"), api))!.ToJsonString();
+        Assert.Contains("\"type\":\"image\"", said);
+        Assert.Contains("\"media_type\":\"image/png\"", said);
+        Assert.Contains($"\"data\":\"{Convert.ToBase64String(File.ReadAllBytes(picture))}\"", said);
+        Assert.True(said.IndexOf("\"type\":\"image\"", StringComparison.Ordinal) < said.IndexOf("what is this", StringComparison.Ordinal), "the picture comes before the words");
+
+        // Nothing pasted, the message is the words alone as it was
+        chat.Attached = [];
+        Assert.DoesNotContain("image", HexJson.FromHidl(claude.Invoke(claudeRun.Properties["message"], new StringValue("plain"), api))!.ToJsonString());
+
+        var (codex, _, codexRun) = Load("codex");
+        var other = new HexAgentChat(2, "codex") { Attached = [picture] };
+        var written = new List<string>();
+        ObjectValue otherApi = HexAgentChatApi.Of(other, folder, write: line => { written.Add(line); return true; });
+        Arguments(codex, codexRun, otherApi);
+        Said(codex, codexRun, otherApi, "what is this");
+        Feed(codex, codexRun, otherApi, """{"id":2,"result":{"thread":{"id":"t-2"}}}""");
+        // Its turn takes the picture by its file
+        Assert.Contains(written, line => line.Contains("\"type\":\"localImage\"", StringComparison.Ordinal)
+            && line.Contains(HexJson.FromHidl(new StringValue(picture))!.ToJsonString().Trim('"'), StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("claude-opus-5-5", "Claude Opus 5.5")]
+    [InlineData("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5")]
+    [InlineData("claude-3-5-haiku-20241022", "Claude Haiku 3.5")]
+    [InlineData("sonnet[1m]", "Claude Sonnet (1M context)")]
+    [InlineData("opus", "Claude Opus")]
+    [InlineData("gpt-5.1-codex-max", "GPT-5.1-Codex-Max")]
+    [InlineData("gemini-2.5-pro", "Gemini 2.5 Pro")]
+    [InlineData("o3", "o3")]
+    [InlineData("", null)]
+    public void Models_are_said_in_full(string id, string? expected) => Assert.Equal(expected, HexAgentModels.Name(id));
+
+    [Fact]
+    public void Claude_code_is_asked_its_models_as_a_run_starts_and_the_picker_has_them()
+    {
+        ObjectValue? said = null;
+        var (runtime, hex, run) = Load("claude_code");
+        hex.Properties["agent"] = Natives.Action("agent", args => said = args.Object(0));
+        var chat = new HexAgentChat(1, "claude_code");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+
+        Arguments(runtime, run, api);
+        string first = Said(runtime, run, api, "hi");
+        Assert.StartsWith("[", first);
+        Assert.Contains("\"subtype\":\"initialize\"", first);
+        Assert.Contains("\"type\":\"user\"", first);
+        // Only the first message of a run goes with it
+        Assert.DoesNotContain("initialize", Said(runtime, run, api, "more"));
+        // Stop interrupts its turn rather than killing it
+        Assert.Contains("\"subtype\":\"interrupt\"", HexJson.FromHidl(runtime.Invoke(run.Properties["stop"], api))!.ToJsonString());
+
+        Feed(runtime, run, api, """{"type":"control_response","response":{"subtype":"success","request_id":"hex-init-1","response":{"commands":[{"name":"compact","description":"Compact"}],"models":[{"value":"default","displayName":"Default (recommended)","description":"Opus 5.5"},{"value":"sonnet","displayName":"Sonnet","description":"Sonnet 5.5"}]}}}""");
+        Assert.NotNull(said);
+        string options = HexJson.FromHidl(((ObjectValue)said!.Value.Properties["run"]).Properties["options"])!.ToJsonString();
+        Assert.Contains("\"label\":\"Default (recommended)\"", options);
+        Assert.Contains("\"value\":\"sonnet\"", options);
+        Assert.DoesNotContain("Haiku", options);
+    }
+
+    [Fact]
+    public void Codex_compacts_its_thread_when_told_to_in_place_of_a_turn()
+    {
+        var (runtime, _, run) = Load("codex");
+        var chat = new HexAgentChat(1, "codex") { Session = "t-9" };
+        var written = new List<string>();
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; });
+        Assert.Equal("/compact", Values.Text(run.Properties["compact"]));
+        Arguments(runtime, run, api);
+        Said(runtime, run, api, "/compact");
+        Feed(runtime, run, api, """{"id":2,"result":{"thread":{"id":"t-9"}}}""");
+        Assert.Contains(written, line => line.Contains("\"method\":\"thread/compact/start\"", StringComparison.Ordinal) && line.Contains("t-9", StringComparison.Ordinal));
+        Assert.DoesNotContain(written, line => line.Contains("turn/start", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Codex_is_asked_its_models_and_the_picker_and_names_have_them()
+    {
+        ObjectValue? said = null;
+        var (runtime, hex, run) = Load("codex");
+        hex.Properties["agent"] = Natives.Action("agent", args => said = args.Object(0));
+        var chat = new HexAgentChat(1, "codex");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: _ => true);
+        Arguments(runtime, run, api);
+        Assert.Contains("\"method\":\"model/list\"", Said(runtime, run, api, "hi"));
+
+        Feed(runtime, run, api, """{"id":4,"result":{"data":[{"id":"gpt-test-9","model":"gpt-test-9","displayName":"GPT Test Nine","description":"For tests"}]}}""");
+        Assert.Equal("GPT Test Nine", HexAgentModels.Name("gpt-test-9"));
+        Assert.NotNull(said);
+        Assert.Contains("\"label\":\"GPT Test Nine\"", HexJson.FromHidl(((ObjectValue)said!.Value.Properties["run"]).Properties["options"])!.ToJsonString());
+    }
+
+    [Fact]
+    public void A_chat_says_the_model_it_runs_over_the_alias_it_was_asked_for()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Options["model"] = "opus";
+        Assert.Equal("Claude Opus", HexAgentModels.Of(chat));
+        chat.Model = "claude-opus-5-5";
+        Assert.Equal("Claude Opus 5.5", HexAgentModels.Of(chat));
+        HexAgentModels.Said("gpt-test-only", "Test Model");
+        Assert.Equal("Test Model", HexAgentModels.Name("gpt-test-only"));
+    }
+
+    [Fact]
+    public void A_question_waits_on_the_person_once_and_says_who_answered()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        var heard = new List<string?>();
+        HexAgentEntry asked = chat.Question("Which way?", ["Rewrite it", "Patch it"], 1, 300, heard.Add);
+        Assert.Equal(1, asked.Recommended);
+        Assert.Same(asked, Assert.Single(chat.Pending));
+
+        Assert.True(chat.Reply(asked, "Patch it, but keep the test"));
+        Assert.False(chat.Reply(asked, "again"));
+        Assert.Equal(["Patch it, but keep the test"], heard);
+        Assert.Equal(HexAgentToolState.Done, asked.State);
+        Assert.Empty(chat.Pending);
+
+        // Nobody answering is an answer of null, the row saying so
+        HexAgentEntry unanswered = chat.Question("And then?", ["A", "B"], 9, 300, heard.Add);
+        Assert.Null(unanswered.Recommended);
+        Assert.True(chat.Reply(unanswered, null));
+        Assert.Equal(HexAgentToolState.Failed, unanswered.State);
+        Assert.Null(heard[^1]);
+    }
+
+    [Fact]
+    public void Claude_codes_leave_asked_is_turned_back_to_hex_or_asked_of_the_person()
+    {
+        Directory.CreateDirectory(folder);
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code");
+        var written = new List<string>();
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; },
+            call: (function, args) => { runtime.Invoke(function, args); return true; });
+        Assert.Contains("--permission-prompt-tool", Arguments(runtime, run, api));
+
+        // A search of the workspace by the shell is refused at once with the Hex tool, nobody asked
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"grep -rn foo ."}}}""");
+        Assert.Empty(chat.Pending);
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"r1\"", StringComparison.Ordinal)
+            && line.Contains("\"behavior\":\"deny\"", StringComparison.Ordinal) && line.Contains("hex_", StringComparison.Ordinal));
+
+        // Anything else waits on a card, and its answer goes back with the input as it was
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"dotnet test"}}}""");
+        HexAgentEntry asked = Assert.Single(chat.Pending);
+        Assert.Equal("dotnet test", asked.Input);
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"r2\"", StringComparison.Ordinal));
+        Assert.True(chat.Decide(asked, true));
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"r2\"", StringComparison.Ordinal)
+            && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal) && line.Contains("dotnet test", StringComparison.Ordinal));
+
+        // Its own questions are cards, its answers going back in the input by each question, its recommended one marked
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which way?","header":"Way","multiSelect":false,"options":[{"label":"Rewrite (Recommended)","description":"a"},{"label":"Patch","description":"b"}]},{"question":"Tests?","header":"Tests","multiSelect":false,"options":[{"label":"Yes","description":"c"},{"label":"No","description":"d"}]}]}}}""");
+        HexAgentEntry[] cards = [.. chat.Pending];
+        Assert.Equal(2, cards.Length);
+        Assert.Equal(0, cards[0].Recommended);
+        Assert.True(chat.Reply(cards[0], "Patch"));
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"q1\"", StringComparison.Ordinal));
+        Assert.True(chat.Reply(cards[1], "Only the fast ones"));
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"q1\"", StringComparison.Ordinal) && line.Contains("\"behavior\":\"allow\"", StringComparison.Ordinal)
+            && line.Contains("\"answers\":{\"Which way?\":\"Patch\",\"Tests?\":\"Only the fast ones\"}", StringComparison.Ordinal));
+
+        // One that takes several answers says so on its card
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q3","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which?","multiSelect":true,"options":[{"label":"x"},{"label":"y"}]}]}}}""");
+        HexAgentEntry several = Assert.Single(chat.Pending);
+        Assert.True(several.Multiple);
+        Assert.True(chat.Reply(several, "x, y"));
+
+        // Nobody answering refuses the tool with word to go on, the other card taken back
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"q2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"A?","options":[{"label":"x"}]},{"question":"B?","options":[{"label":"y"}]}]}}}""");
+        cards = [.. chat.Pending];
+        Assert.True(chat.Reply(cards[0], null));
+        Assert.Empty(chat.Pending);
+        Assert.Contains(written, line => line.Contains("\"request_id\":\"q2\"", StringComparison.Ordinal) && line.Contains("\"behavior\":\"deny\"", StringComparison.Ordinal)
+            && line.Contains("judge best", StringComparison.Ordinal));
+
+        // One it gives up asking is taken back unanswered
+        Feed(runtime, run, api, """{"type":"control_request","request_id":"r3","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"a.txt"}}}""",
+            """{"type":"control_cancel_request","request_id":"r3"}""");
+        Assert.Empty(chat.Pending);
+        Assert.DoesNotContain(written, line => line.Contains("\"request_id\":\"r3\"", StringComparison.Ordinal));
+    }
 
     [Fact]
     public void Claude_codes_stream_json_becomes_rows_a_session_and_what_the_turn_used()
@@ -224,6 +427,55 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void A_claude_subagents_steps_go_on_the_row_of_the_task_that_started_it()
+    {
+        var (runtime, _, run) = Load("claude_code");
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("find where the server starts");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+
+        Feed(runtime, run, api,
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Find the server start","prompt":"Look everywhere for where the MCP server starts and say the file and line.","subagent_type":"Explore"}}]}}""",
+            """{"type":"assistant","parent_tool_use_id":"toolu_task","message":{"content":[{"type":"text","text":"Looking it up.\nThen reading it."},{"type":"tool_use","id":"toolu_s1","name":"mcp__hex__hex_symbols","input":{"query":"StartMcp"}}]}}""",
+            """{"type":"user","parent_tool_use_id":"toolu_task","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_s1","content":"Hex.Dawn/Agents/DawnScene.Mcp.cs:62"}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_task","content":"DawnScene.Mcp.cs:62"}]}}""");
+
+        HexAgentEntry task = Assert.Single(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Tool);
+        Assert.Equal(2, task.Steps);
+        Assert.Equal("hex_symbols StartMcp", task.Progress);
+        Assert.Equal(HexAgentToolState.Done, task.State);
+        Assert.DoesNotContain(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Text);
+        Assert.Equal(("Subagent · Explore", "Find the server start"), HexAgentRows.SubagentOf(task));
+        Assert.Null(HexAgentRows.SubagentOf(new HexAgentEntry(HexAgentEntryKind.Tool, "Read") { ToolName = "Read", Input = "{}" }));
+    }
+
+    [Fact]
+    public void A_chats_messages_stay_unread_until_read_and_reading_only_goes_forward()
+    {
+        var chat = new HexAgentChat(2, "codex");
+        int version = chat.Version;
+        chat.Post(new HexAgentMail(1, 1, "#1", "finding", "the server starts in StartMcp", false));
+        chat.Post(new HexAgentMail(4, 3, "#3", "instruction", "test it next", true));
+        Assert.True(chat.Version > version);
+        Assert.Equal([1L, 4L], chat.UnreadMail().Select(message => message.Seq));
+
+        chat.MailRead(1);
+        Assert.Equal(4, Assert.Single(chat.UnreadMail()).Seq);
+        chat.MailRead(0);
+        Assert.Equal(1, chat.MailSeen);
+        chat.MailRead(4);
+        Assert.Empty(chat.UnreadMail());
+    }
+
+    [Fact]
+    public void A_note_draws_the_icon_it_starts_with_and_nothing_else_of_its_markup()
+    {
+        Assert.Equal("$(mail) " + Horizon.UI.Drawing.UIRichText.Literal("from #3 · finding: a [tag]"), HexAgentRows.NoteText("$(mail) from #3 · finding: a [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("plain [tag]"), HexAgentRows.NoteText("plain [tag]"));
+        Assert.Equal(Horizon.UI.Drawing.UIRichText.Literal("$(not an icon) x"), HexAgentRows.NoteText("$(not an icon) x"));
+    }
+
+    [Fact]
     public void Claude_code_runs_with_hex_as_its_server_and_resumes_its_session()
     {
         var (runtime, _, run) = Load("claude_code");
@@ -232,7 +484,11 @@ public sealed class HexAgentsPanelTests : IDisposable
 
         string[] first = Arguments(runtime, run, api);
         Assert.EndsWith("claude-mcp-1.json", first[8]);
-        Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits", "--allowedTools", "mcp__hex Read"], first);
+        Assert.Equal(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--replay-user-messages", "--verbose", "--mcp-config", first[8], "--permission-mode", "acceptEdits",
+            "--permission-prompt-tool", "stdio", "--append-system-prompt", HexAgentProfiles.HARNESS_RULES, "--agents", first[16], "--allowedTools", "mcp__hex Read"], first);
+        Assert.EndsWith("claude-agents-1.json", first[16]);
+        using (System.Text.Json.JsonDocument agents = System.Text.Json.JsonDocument.Parse(File.ReadAllText(first[16])))
+            Assert.EndsWith(HexAgentProfiles.HARNESS_RULES, agents.RootElement.GetProperty("Explore").GetProperty("prompt").GetString());
         string config = File.ReadAllText(first[8]);
         Assert.Contains("--mcp-connect", config);
         Assert.Contains("\"--agent-chat\"", config);
@@ -319,9 +575,11 @@ public sealed class HexAgentsPanelTests : IDisposable
         var (codex, _, codexRun) = Load("codex");
         var other = new HexAgentChat(5, "codex");
         other.Options["model"] = "gpt-5";
-        string[] codexSaid = [.. ((ListValue)codex.Invoke(codexRun.Properties["arguments"], new StringValue("hi"), HexAgentChatApi.Of(other, folder))).Items.Select(Values.Text)];
-        Assert.Equal("gpt-5", codexSaid[Array.IndexOf(codexSaid, "--model") + 1]);
+        ObjectValue otherApi = HexAgentChatApi.Of(other, folder);
+        string[] codexSaid = [.. ((ListValue)codex.Invoke(codexRun.Properties["arguments"], new StringValue("hi"), otherApi)).Items.Select(Values.Text)];
         Assert.Contains(codexSaid, each => each.Contains("\"--agent-chat\",\"5\""));
+        // The model goes with the thread it starts
+        Assert.Contains("\"model\":\"gpt-5\"", Said(codex, codexRun, otherApi, "hi"));
     }
 
     [Fact]
@@ -395,57 +653,92 @@ public sealed class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
-    public void Codex_items_become_rows_and_its_thread_the_session()
+    public void Codex_speaks_its_app_server_its_items_rows_its_thread_the_session_and_its_limits_and_tokens_said()
     {
         var (runtime, _, run) = Load("codex");
         Assert.Equal("codex", HexExtensions.Text(run, "program"));
         var chat = new HexAgentChat(1, "codex");
         chat.Ask("run the tests");
-        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+        var written = new List<string>();
+        ObjectValue api = HexAgentChatApi.Of(chat, folder, write: line => { written.Add(line); return true; });
+
+        // A turn starts with the handshake and the thread, the turn itself once the thread's ready
+        Arguments(runtime, run, api);
+        string start = Said(runtime, run, api, "run the tests");
+        Assert.Contains("\"method\":\"initialize\"", start);
+        Assert.Contains("\"method\":\"thread/start\"", start);
+        Assert.Contains("\"approvalPolicy\":\"untrusted\"", start);
+        Feed(runtime, run, api, """{"id":2,"result":{"thread":{"id":"t-1"}}}""");
+        Assert.Equal("t-1", chat.Session);
+        Assert.Contains(written, line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal) && line.Contains("\"threadId\":\"t-1\"", StringComparison.Ordinal)
+            && line.Contains("run the tests", StringComparison.Ordinal));
+
+        // Asked while it works, it's steered into the turn
+        Feed(runtime, run, api, """{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress"}}}""");
+        string steer = Said(runtime, run, api, "and the docs");
+        Assert.Contains("\"method\":\"turn/steer\"", steer);
+        Assert.Contains("\"expectedTurnId\":\"turn-1\"", steer);
+
+        // A read of the workspace by the shell is declined, so it goes to Hex's tools, anything else let through
+        Feed(runtime, run, api,
+            """{"method":"item/commandExecution/requestApproval","id":7,"params":{"command":"\"C:\\\\Windows\\\\powershell.exe\" -Command 'grep -rn foo .'","cwd":"C:\\ws"}}""",
+            """{"method":"item/commandExecution/requestApproval","id":8,"params":{"command":"\"C:\\\\Windows\\\\powershell.exe\" -Command 'dotnet test'","cwd":"C:\\ws"}}""");
+        Assert.Contains(written, line => line.Contains("\"id\":7", StringComparison.Ordinal) && line.Contains("\"decline\"", StringComparison.Ordinal));
+        Assert.Contains(written, line => line.Contains("\"id\":8", StringComparison.Ordinal) && line.Contains("\"accept\"", StringComparison.Ordinal));
 
         Feed(runtime, run, api,
-            """{"type":"thread.started","thread_id":"0199a213-81c0-7800-8aa1-bbab2a035a53"}""",
-            """{"type":"turn.started"}""",
-            """{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Running the tests**"}}""",
-            """{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"dotnet test","aggregated_output":"","status":"in_progress"}}""",
-            """{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"dotnet test","aggregated_output":"Failed: 1, Passed: 41","exit_code":1,"status":"failed"}}""",
-            """{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"hex","tool":"hex_read","arguments":{"symbol":"Check"},"status":"in_progress"}}""",
-            """{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"hex","tool":"hex_read","status":"completed","result":"McpSchema.cs:43-88"}}""",
-            """{"type":"item.completed","item":{"id":"item_3","type":"file_change","changes":[{"path":"Hex.Core/Mcp/McpSchema.cs","kind":"update"}],"status":"completed"}}""",
-            """{"type":"item.completed","item":{"id":"item_4","type":"todo_list","items":[{"text":"fix it","completed":true},{"text":"test again","completed":false}]}}""",
-            """{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"One test failed, fixed it."}}""",
-            """{"type":"turn.completed","usage":{"input_tokens":24763,"cached_input_tokens":24448,"output_tokens":122}}""");
+            """{"method":"item/started","params":{"item":{"type":"userMessage","id":"u0"}}}""",
+            """{"method":"item/started","params":{"item":{"type":"commandExecution","id":"c1","command":"\"C:\\\\Windows\\\\powershell.exe\" -Command 'dotnet test'","status":"inProgress"}}}""",
+            """{"method":"item/completed","params":{"item":{"type":"commandExecution","id":"c1","status":"failed","exitCode":1,"aggregatedOutput":"Failed: 1, Passed: 41"}}}""",
+            """{"method":"item/started","params":{"item":{"type":"mcpToolCall","id":"m1","server":"hex","tool":"hex_read","arguments":{"symbol":"Check"},"status":"inProgress"}}}""",
+            """{"method":"item/completed","params":{"item":{"type":"mcpToolCall","id":"m1","server":"hex","tool":"hex_read","status":"completed","result":{"content":"McpSchema.cs:43-88"}}}}""",
+            """{"method":"item/started","params":{"item":{"type":"fileChange","id":"f1","changes":[{"path":"Hex.Core/Mcp/McpSchema.cs","kind":"update"}],"status":"inProgress"}}}""",
+            """{"method":"item/completed","params":{"item":{"type":"fileChange","id":"f1","changes":[{"path":"Hex.Core/Mcp/McpSchema.cs","kind":"update"}],"status":"completed"}}}""",
+            """{"method":"item/completed","params":{"item":{"type":"agentMessage","id":"a1","text":"One test failed, fixed it."}}}""",
+            """{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":24763,"cachedInputTokens":24448,"outputTokens":122},"last":{"inputTokens":24763},"modelContextWindow":258400}}}""",
+            """{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":30000,"cachedInputTokens":24448,"outputTokens":200},"last":{"inputTokens":30000},"modelContextWindow":258400}}}""",
+            """{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":15,"windowDurationMins":300,"resetsAt":1794951000},"secondary":{"usedPercent":35,"windowDurationMins":10080,"resetsAt":1795341600}}}}""",
+            """{"method":"thread/compacted","params":{"threadId":"t-1","turnId":"turn-1"}}""",
+            """{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"completed"}}}""");
 
-        Assert.Equal("0199a213-81c0-7800-8aa1-bbab2a035a53", chat.Session);
-        Assert.Equal(24763, chat.InputTokens);
-        Assert.Equal(122, chat.OutputTokens);
+        // The tokens counted once, each count adding only what's new
+        Assert.Equal(30000, chat.InputTokens);
+        Assert.Equal(200, chat.OutputTokens);
+        Assert.Equal(258400, chat.ContextLimit);
         Assert.False(chat.Running);
 
         HexAgentEntry[] tools = [.. chat.Entries.Where(entry => entry.Kind == HexAgentEntryKind.Tool)];
         Assert.Equal(["command", "mcp__hex__hex_read", "file_change"], tools.Select(tool => tool.ToolName));
+        Assert.Equal("dotnet test", tools[0].Input);
         Assert.Equal(HexAgentToolState.Failed, tools[0].State);
-        Assert.Equal("Failed: 1, Passed: 41", tools[0].Output);
         Assert.Equal(HexAgentToolState.Done, tools[1].State);
-        Assert.Equal("update Hex.Core/Mcp/McpSchema.cs", tools[2].Output);
-        Assert.Contains(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Note && entry.Text == "[x] fix it\n[ ] test again");
         Assert.Equal("One test failed, fixed it.", chat.Entries.Last(entry => entry.Kind == HexAgentEntryKind.Text).Text);
+
+        // Both of its windows, and the compaction
+        Assert.Equal(["five_hour", "seven_day"], chat.Limits.Keys.Order().ToArray());
+        Assert.Equal(0.35, chat.Limits["seven_day"].Used, 3);
+        Assert.Equal(1, chat.Compactions);
     }
 
     [Fact]
-    public void Codex_runs_exec_json_with_hex_given_as_config_and_resumes_its_thread()
+    public void Codex_runs_its_app_server_with_hex_given_as_config_and_takes_its_thread_up_again()
     {
         var (runtime, _, run) = Load("codex");
         var chat = new HexAgentChat(1, "codex");
         ObjectValue api = HexAgentChatApi.Of(chat, folder);
 
-        string[] first = Arguments(runtime, run, api);
-        Assert.Equal(["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write",
+        Assert.Equal(["app-server",
             "-c", "mcp_servers.hex.command=\"C:/Hex/Hex.exe\"",
             "-c", "mcp_servers.hex.args=[\"--mcp-connect\",\"--folder\",\"C:/work\",\"--agent-chat\",\"1\"]",
             "-c", "mcp_servers.hex.tool_timeout_sec=660", "-c", "mcp_servers.hex.enabled=true",
-            "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\"", "-"], first);
+            "-c", "mcp_servers.hex.default_tools_approval_mode=\"approve\""], Arguments(runtime, run, api));
+        Assert.Contains(HexAgentProfiles.HARNESS_RULES.Replace("\n", "\\n").Replace("\"", "\\\"")[..40], Said(runtime, run, api, "hi"));
 
+        // A chat that's been in a thread takes it up again
         chat.Session = "thread-1";
-        Assert.Equal(["resume", "thread-1", "-"], Arguments(runtime, run, api)[^3..]);
+        Arguments(runtime, run, api);
+        string again = Said(runtime, run, api, "hi");
+        Assert.Contains("\"method\":\"thread/resume\"", again);
+        Assert.Contains("\"threadId\":\"thread-1\"", again);
     }
 }

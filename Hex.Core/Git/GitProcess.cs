@@ -45,7 +45,8 @@ internal static class GitProcess
     /// Runs git with some arguments in a folder, what's handed in going to its input, and waits for it. Never throws, a
     /// git that isn't there or never finishes comes back as an exit of -1 with the reason.
     /// </summary>
-    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false)
+    public static GitResult Run(string folder, IReadOnlyList<string> arguments, string? input = null, TimeSpan? patience = null, bool unattended = false,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -89,6 +90,12 @@ internal static class GitProcess
         start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         start.Environment["LC_ALL"] = "C";
+        // What the caller sets on top, an index of its own for a checkpoint that leaves the real one alone
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+                start.Environment[name] = value;
+        }
 
         try
         {
@@ -103,11 +110,18 @@ internal static class GitProcess
                     writer.Write(input);
             }
 
-            Task<string> output = git.StandardOutput.ReadToEndAsync();
-            Task<string> error = git.StandardError.ReadToEndAsync();
+            // Closed here rather than left to the process's own Dispose, which leaves its pipes to the finalizer. An idle
+            // Hex makes so little garbage that the collector hardly comes round, and a status every few seconds had
+            // hundreds of pipe handles open within minutes
+            using StreamReader outputReader = git.StandardOutput, errorReader = git.StandardError;
+            Task<string> output = outputReader.ReadToEndAsync();
+            Task<string> error = errorReader.ReadToEndAsync();
             if (!git.WaitForExit(patience ?? Patience))
             {
                 try { git.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+
+                // The reads end once git has gone, before their pipes are closed under them
+                try { Task.WaitAll([output, error], TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
                 return new GitResult(-1, string.Empty, $"git {string.Join(' ', arguments)} took longer than {(patience ?? Patience).TotalSeconds:0} seconds");
             }
 

@@ -57,7 +57,7 @@ let title = compositor.label({
     align: "left",
 });
 
-// Solstice in the weight of a heading and 3.0.0 after it, small and dim: the name is what a person says, the number is
+// Amphetamine in the weight of a heading and 3.1.0 after it, small and dim: the name is what a person says, the number is
 // what a bug report needs
 let release = compositor.stack({
     parent: wordmark,
@@ -71,7 +71,7 @@ let release_name = compositor.label({
     parent: release,
     anchor: "bottom_left",
     pivot: "bottom_left",
-    text: "Solstice",
+    text: "Amphetamine",
     text_scale: 0.19,
     bold: true,
     align: "left",
@@ -81,7 +81,7 @@ let release_number = compositor.label({
     parent: release,
     anchor: "bottom_left",
     pivot: "bottom_left",
-    text: "3.0.0",
+    text: "3.1.0",
     text_scale: 0.14,
     dim: true,
     align: "left",
@@ -229,6 +229,27 @@ let recent = compositor.stack({
     pivot: "left",
     template: "link.hor",
     preview_count: 3,
+    spacing: 2,
+});
+
+// The agents of this workspace, a new one, the last chat to carry on with and how many want looking at, put in by the
+// editor (DawnScene.Welcome FillWelcomeAgents) and kept up as the chats move
+let agents_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
+
+let agents_title = compositor.label({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.agents",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let agents = compositor.stack({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
     spacing: 2,
 });
 

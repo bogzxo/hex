@@ -39,6 +39,14 @@ let strings = {
             heading: "A faster place to build.",
             description: "The latest Hex build for your platform, installed for you. Fast.",
         },
+        channel: {
+            stable: "Stable release",
+            dev: "Nightly build of the development branch",
+            stable_short: "STABLE",
+            dev_short: "NIGHTLY",
+            stable_tip: "The latest release, updated as new versions come out",
+            dev_tip: "Built from the development branch every night, installed beside the stable release as Hex Dev",
+        },
         version: {
             channel: "STABLE RELEASE",
             platform: "{platform}",
@@ -91,6 +99,9 @@ let strings = {
             release_changed: "The latest release changed after your update check. Reopen Hex and check for updates again.",
             downgrade: "A newer version is already installed. Downgrades are not supported.",
             no_release: "No stable Hex release is available yet.",
+            no_nightly: "No nightly build of Hex is available yet.",
+            nightly_only: "Only the development branch's nightly builds can be installed as Hex Dev.",
+            other_channel: "This folder has the {channel} installed. Choose another folder, each keeps its own.",
             rate_limit: "GitHub could not serve this check. Its rate limit may have been reached; try again later.",
             empty_release: "Empty release response.",
             stable_only: "Only stable, published releases can be installed.",
@@ -139,6 +150,8 @@ let strings = {
             available: "Hex {version} is available. Install downloads and verifies the release, then asks about unsaved files before closing Hex. The new Hex Setup installs the update, including the updater and uninstaller. Close any other Hex or Dusk windows first.",
             prepare_failed: "Could not start the update. Install portable copies using Hex Setup first. {reason}",
             command: "Check for Updates",
+            setup_command: "Open Hex Setup",
+            setup_failed: "Couldn't open Hex Setup. {reason}",
         },
     },
 };

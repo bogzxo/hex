@@ -51,7 +51,7 @@ internal sealed partial class DawnScene
             var entry = chat.Ask(payload, "Only this instruction", "Only this instruction", file + ":1:1–2:1");
             return entry.Text == payload && entry.AskedText == "Only this instruction" && entry.ContextLocation == file + ":1:1–2:1";
         });
-        test.Run(() => { agentsInput.Text = ""; agentsInput.OnChanged!(""); });
+        test.Run(() => { agentsInput.Text = ""; agentsInput.OnChanged!(); });
         test.Check("agent: erasing an instruction removes its captured context", () => agentDraftContext is null);
         test.Run(() => NewAgentChat());
         test.Check("agent: starting a new chat clears the captured draft", () => agentDraftContext is null && agentsInput.Text.Length == 0);

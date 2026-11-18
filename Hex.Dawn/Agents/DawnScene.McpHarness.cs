@@ -53,7 +53,7 @@ internal sealed partial class DawnScene
                 (index, args, budget) => index.Map(args.String("under"), Math.Clamp(args.Integer("depth") ?? 2, 0, 8), budget)),
 
             Harnessed(new McpTool("hex_files", "Find files",
-                "Files by part of their name or path, best first, with their line counts. Words between spaces or slashes all have to fit.",
+                "Files by part of their name or path, best first, with their line counts. Words between spaces or slashes all have to fit. Use it in place of ls, find, dir, Get-ChildItem or Glob.",
                 McpSchema.Object([
                     ("query", McpSchema.String("Part of a file's name or path, \"mcp schema\" or \"Agents/Mcp\".")),
                     ("most", McpSchema.Integer("At most this many, 30 by default.")), Max()], "query"), ReadOnly: true),
@@ -69,7 +69,7 @@ internal sealed partial class DawnScene
                 (index, args, budget) => index.Symbols(args.String("query") ?? string.Empty, args.String("kind"), args.String("path"), Math.Clamp(args.Integer("most") ?? 25, 1, 500), budget)),
 
             Harnessed(new McpTool("hex_search", "Search code",
-                "Search the workspace's text, ranked rather than in file order. Declarations of what was asked first (marked *), then files by name and how many places they have, places grouped under their file, lines cut short around the match.",
+                "Search the workspace's text, ranked rather than in file order. Declarations of what was asked first (marked *), then files by name and how many places they have, places grouped under their file, lines cut short around the match. Use it in place of grep, rg, findstr, Select-String or Grep.",
                 McpSchema.Object([
                     ("query", McpSchema.String("What to look for.")),
                     ("regex", McpSchema.Flag("The query is a .NET regular expression.")),
@@ -90,7 +90,7 @@ internal sealed partial class DawnScene
                 (index, args, budget) => index.References(args.String("name") ?? string.Empty, args.String("glob"), Math.Clamp(args.Integer("most") ?? 80, 1, 2000), budget)),
 
             Harnessed(new McpTool("hex_read", "Read a declaration",
-                "Read one declaration out of a file by its name, a method or a class with the comments above it to where it ends, instead of the whole file. Or lines of a file by range. Line numbers in front. Without a path the best declaration of that name anywhere.",
+                "Read one declaration out of a file by its name, a method or a class with the comments above it to where it ends, instead of the whole file. Or lines of a file by range. Line numbers in front. Without a path the best declaration of that name anywhere. Use it in place of cat, head, tail, Get-Content or reading a whole file to see one part of it.",
                 McpSchema.Object([
                     ("path", McpSchema.String("The file, inside the workspace or whole, or just its name when only one file has it.")),
                     ("symbol", McpSchema.String("The name of what to read, Name or Container.Name.")),
@@ -100,7 +100,7 @@ internal sealed partial class DawnScene
                 (index, args, budget) => index.Read(args.String("path"), args.String("symbol"), args.Integer("start_line"), args.Integer("end_line"), args.Flag("numbers", true), budget)),
 
             Harnessed(new McpTool("hex_skim", "Skim files",
-                "What files are without reading them, each its size, language, the summary or comment it starts with and its outline with line numbers. Several files at once, a comma between them, or a glob.",
+                "What files are without reading them, each its size, language, the summary or comment it starts with and its outline with line numbers. Several files at once, a comma between them, or a glob. Use it in place of opening files to find out what they are.",
                 McpSchema.Object([
                     ("paths", McpSchema.String("The files, a comma between them, or a glob like \"Hex.Core/Mcp/*.cs\".")),
                     ("depth", McpSchema.Integer("How deep the outline goes, 0 is only the top, 2 by default.")), Max()], "paths"), ReadOnly: true),
@@ -119,7 +119,7 @@ internal sealed partial class DawnScene
                     HexCodeIndex index = Harness;
                     HexAgentProfile? profile = HexAgentProfiles.For(McpServer.CallingClient.Value);
                     return Task.FromResult(McpToolResult.Text($"{index.Current().Files.Length} files indexed, {index.FromCache} of them out of the cache on disk, generation {index.Generation}."
-                        + $" You are {McpServer.CallingClient.Value ?? "a client"}, {(profile is null ? "with no agent profile" : $"profile {profile.Name}")}, budget {HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, null)} characters.\n"
+                        + $" You are {McpServer.CallingClient.Value ?? "a client"}{(McpServer.CallingChat.Value is { } chat ? $" in chat {chat}" : string.Empty)}, {(profile is null ? "with no agent profile" : $"profile {profile.Name}")}, budget {HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, null)} characters.\n"
                         + index.Stats.Describe()));
                 })
         ];

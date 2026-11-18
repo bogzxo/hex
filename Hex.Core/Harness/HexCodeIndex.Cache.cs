@@ -90,6 +90,7 @@ internal sealed partial class HexCodeIndex
     {
         lock (looking)
             SaveCacheNow(force: true);
+        Stats.Save();
     }
 
     // Under the lock. Written to a file beside it and moved over it, a Hex killed halfway leaves the old one whole

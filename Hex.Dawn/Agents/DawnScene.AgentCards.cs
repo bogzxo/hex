@@ -1,0 +1,252 @@
+using System.Globalization;
+using System.Numerics;
+
+using Horizon.Rendering;
+using Horizon.UI.Drawing;
+using Horizon.UI.Skinning;
+
+namespace Hex.Dawn;
+
+// An agent as a card, the same in the Agents view's list and in Noon's fleet. Along the top a badge of its agent system
+// and who started it, with how it's doing at the right (working and for how long in blue, done, failed in red, stopped,
+// or a dot when it finished unseen), its name under that, and under the name its model, what it cost, what's waiting for
+// it or what it's doing now. The whole card is the button. A card is made once for what the list is and its words are
+// put right in place after that, so a running agent's clock or its next tool never makes the card again under a click.
+internal sealed partial class DawnScene
+{
+    // A card's height, room under its three lines for the bar of its context with a gap either side of it, the bar sat
+    // against the line above it at seventy
+    private const float AGENT_CARD = 82.0f;
+
+    // Where a card's three lines start down from its top, an even padding above and below and the same gap between
+    private const float CARD_TOP = 10.0f, CARD_TITLE = 29.0f, CARD_UNDER = 52.0f;
+
+    // How far up from the card's foot its context bar sits
+    private const float CONTEXT_BAR_FOOT = 9.0f;
+
+    // The size of a card's small lines and of its name, a step up from what read too small at 100% scale
+    private const float CARD_SMALL = 0.12f, CARD_NAME = 0.155f;
+
+    // How thick the bar of a card's context is, thin enough to sit under its lines without being another line
+    private const float CONTEXT_BAR = 3.0f;
+
+    /// <summary>A card on screen and what puts its words right as its agent moves on, at the width it's at.</summary>
+    private sealed record AgentCard(UIComponent Root, Action<float> Refresh);
+
+    /// <summary>
+    /// What a list of cards is made from as a number, the chats, their order and states, never their clocks or their
+    /// tools. A string of them was made a few times a second for nothing to have changed, most of what the panel
+    /// allocated standing still.
+    /// </summary>
+    private long AgentCardsKey(List<(HexAgentChat Chat, int Step)> chats)
+    {
+        long key = 17;
+        for (int i = 0; i < chats.Count; i++)
+        {
+            var (chat, step) = chats[i];
+            key = key * 31 + chat.Id;
+            key = key * 31 + step;
+            key = key * 31 + string.GetHashCode(StateWord(chat), StringComparison.Ordinal);
+            key = key * 31 + (chat.Unread ? 1 : 0) + (chat == agentChat ? 2 : 0);
+            key = key * 31 + string.GetHashCode(chat.Shown, StringComparison.Ordinal);
+            key = key * 31 + (chat.Parent ?? -1);
+        }
+
+        return key;
+    }
+
+    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable)
+    {
+        UISkin? skin = Skin;
+        float indent = step * CHAT_STEP;
+        var root = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, AGENT_CARD), Padding = new UIEdges(indent, 0, 0, 0), Color = Vector4.Zero };
+        var pick = root.Add(new Button
+        {
+            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = chat == agentChat,
+            Tooltip = $"#{chat.Id} {chat.Shown}"
+        });
+        pick.OnPressed = () =>
+        {
+            OpenAgentChat(chat);
+            if (Face == Hex.Shell.HexFace.Noon)
+                agentsInput.Focus();
+        };
+        pick.OnContextMenu = at => ContextMenu.Show(chrome, at, ChatMenu(chat));
+
+        // The badge, the agent system's letters on a tint of its colour
+        HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == chat.Agent);
+        string system = profile?.Name ?? chat.Agent;
+        Vector4 tint = AgentTint(chat.Agent, skin);
+        var badge = root.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
+        badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
+
+        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        var state = root.Add(new Label { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP - 1), TextScale = CARD_SMALL, Align = Origin.Right });
+        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
+        var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+
+        // How full its context is, a thin bar along the card's foot in the colour of how full, there once the agent said
+        var contextRow = root.Add(new Panel
+        {
+            Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, CONTEXT_BAR), Position = new Vector2(0, CONTEXT_BAR_FOOT),
+            Padding = new UIEdges(10, 0, 10, 0), Color = Vector4.Zero, Visible = false
+        });
+        var context = contextRow.Add(new HexShareBar { Fill = UIFill.Both, Track = (skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f)) with { W = 0.5f } });
+
+        if (closable)
+        {
+            var close = root.Add(new Button { Icon = "close", Style = "button_flat", Size = new Vector2(20, 20), Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(-4, -CARD_TOP + 3), Animated = false, Tooltip = Said("agents_panel.chat_close") });
+            close.OnPressed = () => CloseAgentChat(chat);
+        }
+
+        // What the card was last written from, its words made again only when one of these moved. Every refresh made its
+        // strings anew, a few times a second for every card, which was most of what the fleet made standing still
+        (int Version, int Seconds, bool Unread, int Mail, int Width, string? Model, bool Stopped) drawn = (-1, -1, false, -1, -1, null, false);
+
+        void Refresh(float width)
+        {
+            var now = (chat.Version, chat.Running ? (int)chat.TurnSeconds : -1, chat.Unread, chat.UnreadMailCount(), (int)width, chat.Model, chat.Stopped);
+            if (now == drawn)
+                return;
+            drawn = now;
+            float room = width - indent;
+            string? model = HexAgentModels.Of(chat);
+            // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
+            // The model goes with what it used under its name, where the model and what it cost read together
+            string starter = chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
+            string status = AgentStatusText(chat, skin);
+            if (state.Text != status)
+                state.Text = status;
+
+            // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
+            // Measured without its colour tags, which the font would count as letters
+            string bare = System.Text.RegularExpressions.Regex.Replace(status, @"\[/?color[^\]]*\]", string.Empty);
+            float stateWidth = Skin?.Font.Measure(bare, state.TextScale).X ?? 100.0f;
+            string said = UIRichText.Literal(FitText(starter, from.TextScale, room - 38 - stateWidth - (closable ? 30 : 10) - 10));
+            if (from.Text != said)
+                from.Text = said;
+
+            said = UIRichText.Literal(FitText(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), name.TextScale, room - 24));
+            if (name.Text != said)
+                name.Text = said;
+
+            // What it's doing now while it works, its model, tokens, cost and what's waiting for it otherwise
+            int unread = chat.UnreadMail().Length;
+            string? doing = chat.Running && chat.Entries.LastOrDefault(entry => entry.Kind == HexAgentEntryKind.Tool) is { State: HexAgentToolState.Running } tool
+                ? (SubagentOf(tool) is { } subagent ? $"{subagent.Name} · {tool.Progress ?? subagent.About}" : $"{ToolTitle(tool.ToolName ?? "tool")} {ToolPreview(tool.Input)}")
+                : null;
+            // Cut to the card's width either way, a long model's name in front of the tokens ran past its edge. The mail's
+            // icon is put on after the cut, cut into it would have left its name as text
+            string mail = unread > 0 ? $" · $(mail) {unread}" : string.Empty;
+            float mailWidth = mail.Length > 0 ? 40.0f : 0.0f;
+            // The model stays in front of what it's doing, it was gone from the card for as long as a tool ran
+            if (doing is not null)
+                said = UIRichText.Literal(FitText(model is { Length: > 0 } ? $"{model} · {doing}" : doing, under.TextScale, room - 24));
+            else
+            {
+                string used = string.Join(" · ", new[]
+                {
+                    model,
+                    chat.InputTokens + chat.OutputTokens > 0 ? $"{HexAgentLimits.Tokens(chat.InputTokens + chat.OutputTokens)} tokens" : null,
+                    chat.Cost > 0 ? "$" + chat.Cost.ToString("0.000", CultureInfo.InvariantCulture) : null
+                }.Where(part => !string.IsNullOrEmpty(part)));
+                said = UIRichText.Literal(FitText(used, under.TextScale, room - 24 - mailWidth)) + (used.Length > 0 ? mail : mail.TrimStart(' ', '·'));
+            }
+            if (under.Text != said)
+                under.Text = said;
+
+            bool known = chat.ContextLimit > 0 && chat.ContextUsed > 0;
+            contextRow.Visible = known;
+            if (known)
+            {
+                float share = Math.Clamp((float)chat.ContextUsed / chat.ContextLimit, 0.0f, 1.0f);
+                context.Share = share;
+                context.Colour = ContextColour(share);
+                contextRow.Tooltip = Said("noon.context_of", ("used", Count(chat.ContextUsed)), ("limit", Count(chat.ContextLimit)), ("share", (share * 100).ToString("0", CultureInfo.InvariantCulture)));
+            }
+        }
+
+        return new AgentCard(root, Refresh);
+    }
+
+    /// <summary>
+    /// A line cut with an ellipsis to the most of it that fits in <paramref name="width"/> pixels at a scale, measured in the
+    /// skin's font. Whole when it fits or there's no font.
+    /// </summary>
+    private string FitText(string text, float scale, float width)
+    {
+        if (Skin?.Font is not { } font || font.Measure(text, scale, markup: false).X <= width)
+            return text;
+        int low = 1, high = text.Length;
+        while (low < high)
+        {
+            int middle = (low + high + 1) / 2;
+            if (font.Measure(OneLine(text, middle), scale, markup: false).X <= width)
+                low = middle;
+            else
+                high = middle - 1;
+        }
+
+        return OneLine(text, Math.Max(4, low));
+    }
+
+    // How an agent is doing in a word or two and its time, in the colour of it
+    private static string AgentStatusText(HexAgentChat chat, UISkin? skin)
+    {
+        string time = Took(chat.TurnSeconds);
+        // In the texts, not written here in English
+        if (chat.Running)
+            return $"[color:{HexColour(RUNNING_BLUE)}]$(loading~spin) {Said("agents_panel.card_working", ("time", time))}[/color]";
+        if (chat.Failed)
+            return $"[color:{HexColour(skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f))}]$(error) {Said("agents_panel.card_failed")}[/color]";
+        if (chat.Stopped)
+            return $"$(debug-stop) {Said("agents_panel.card_stopped")}";
+        if (chat.Unread)
+            return $"[color:{HexColour(skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f))}]$(circle-filled) {Said("agents_panel.card_done", ("time", time))}[/color]";
+        return chat.Entries.Count == 0 ? Said("agents_panel.card_new") : Said("agents_panel.card_done", ("time", time));
+    }
+
+    /// <summary>Seconds said short, 12s, 11m, 1h 5m, the same whatever the machine's language writes numbers in.</summary>
+    internal static string Took(double seconds) =>
+        seconds < 60 ? $"{seconds.ToString("0", CultureInfo.InvariantCulture)}s" : seconds < 3600 ? $"{(seconds / 60).ToString("0", CultureInfo.InvariantCulture)}m" : $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
+
+    /// <summary>An agent system's letters for its badge, CC for Claude Code, CO for Codex.</summary>
+    internal static string Initials(string name)
+    {
+        string[] words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string letters = words.Length > 1 ? string.Concat(words.Take(2).Select(word => word[0])) : name.Length > 1 ? name[..2] : name;
+        return letters.ToUpperInvariant();
+    }
+
+    /// <summary>The blue of something going on, the same in every look, a theme's selection colour is its accent in some.</summary>
+    internal static readonly Vector4 RUNNING_BLUE = new(0.38f, 0.62f, 1.0f, 1.0f);
+
+    // The colour of an agent system's badge, its own as its extension says it (hex.agent's colour, colour_light on a light
+    // theme), so it reads as that system wherever it's shown. One that says none has one of the theme's, the same every
+    // time for the same system
+    private static Vector4 AgentTint(string agent, UISkin? skin)
+    {
+        IReadOnlyList<HexAgentProfile> all = HexAgentProfiles.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].Id != agent)
+                continue;
+            string? said = skin?.Palette.LightField == true ? all[i].ColourOnLight ?? all[i].Colour : all[i].Colour;
+            if (said is { Length: > 0 } && ColorPicker.FromHex(said) is { } own)
+                return own with { W = 1.0f };
+            break;
+        }
+
+        Vector4[] tints =
+        [
+            skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f),
+            (skin?.Palette.Selection ?? new Vector4(0.38f, 0.62f, 1.0f, 1.0f)) with { W = 1.0f },
+            skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f),
+            skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
+        ];
+        int hash = 0;
+        foreach (char c in agent)
+            hash = hash * 31 + c;
+        return tints[Math.Abs(hash) % tints.Length];
+    }
+}

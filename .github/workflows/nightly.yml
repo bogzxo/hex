@@ -1,0 +1,104 @@
+# Every night, the development branch built for every platform the way a release is (build.yml) and put out as a
+# prerelease tagged nightly- and the run's number, the dev channel's update. Hex Dev and Hex Setup's nightly choice take
+# the newest of them, a release rather than the run's artefacts because those can't be downloaded without a GitHub
+# token. Nothing is built on a night the branch hasn't moved, and only the last few nightlies are kept.
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One nightly at a time, a manual one waits for the scheduled one
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  BRANCH: development
+  # How many nightlies are kept, the oldest past it deleted with their tags
+  KEEP: 7
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.look.outputs.build }}
+      sha: ${{ steps.look.outputs.sha }}
+      tag: ${{ steps.look.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+
+      # Built only when the branch moved since the last nightly, or when somebody asked for one by hand
+      - id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          last="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName,isPrerelease \
+            --jq '[.[] | select(.isPrerelease and (.tagName | startswith("nightly-")))] | sort_by(.tagName | ltrimstr("nightly-") | tonumber) | last | .tagName // ""')"
+          built=""
+          if [ -n "$last" ]; then
+            built="$(gh release view "$last" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)"
+          fi
+          if [ "$built" = "$sha" ] && [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "The development branch is still at $sha, the last nightly ($last)."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=nightly-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.changes.outputs.sha }}
+      channel: dev
+      nightly: ${{ needs.changes.outputs.tag }}
+
+  release:
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.changes.outputs.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # The prerelease at the commit it was built from, titled with the version it's on its way to and the run, which is
+      # how Hex Setup and Hex Dev name it (3.1.0 nightly 57)
+      - name: Nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.changes.outputs.tag }}
+          SHA: ${{ needs.changes.outputs.sha }}
+        run: |
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n 1)"
+          run="${TAG#nightly-}"
+          short="${SHA:0:7}"
+          notes="The development branch at $SHA, built $(date -u '+%d %B %Y'). A nightly build, for trying what's coming. Install it with Hex Setup's Nightly choice, beside the stable release as Hex Dev."
+          gh release create "$TAG" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --target "$SHA" --prerelease \
+            --title "Hex $version nightly $run ($short)" --notes "$notes"
+
+      - name: Keep the last few
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,isPrerelease \
+            --jq '[.[] | select(.isPrerelease and (.tagName | startswith("nightly-")))] | sort_by(.tagName | ltrimstr("nightly-") | tonumber) | reverse | .[env.KEEP | tonumber:] | .[].tagName' \
+          | while read -r old; do
+              [ -n "$old" ] && gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            done

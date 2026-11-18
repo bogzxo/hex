@@ -251,6 +251,27 @@ public sealed class HexHarnessTests : IDisposable
     }
 
     [Fact]
+    public void A_file_the_index_leaves_out_is_read_from_the_disk_by_range()
+    {
+        string outside = Path.Combine(Path.GetTempPath(), "hex-unindexed-" + Guid.NewGuid().ToString("N")[..8] + ".hor");
+        File.WriteAllLines(outside, ["one", "two", "three", "four"]);
+        try
+        {
+            var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+            string said = index.Read(outside, null, 2, 3, true, 4000).Text;
+            Assert.Contains("from the disk", said);
+            Assert.Contains("2  two", said);
+            Assert.Contains("3  three", said);
+            Assert.DoesNotContain("four", said);
+            Assert.Contains("No file of the workspace", index.Read(outside + ".gone", null, null, null, true, 4000).Text);
+        }
+        finally
+        {
+            File.Delete(outside);
+        }
+    }
+
+    [Fact]
     public void The_same_question_twice_is_kept()
     {
         var slow = new HexCodeIndex(() => [folder]) { StaleAfter = 60_000 };
@@ -258,6 +279,28 @@ public sealed class HexHarnessTests : IDisposable
         string second = slow.Symbols("Check", null, null, 10, 4000).Text;
         Assert.Same(first, second);
         Assert.Contains("hex_symbols  2  1", slow.Stats.Describe());
+    }
+
+    [Fact]
+    public void A_read_of_one_file_is_kept_across_edits_to_another_and_not_to_its_own()
+    {
+        string mine = Path.Combine(folder, "Kept.cs");
+        string other = Path.Combine(folder, "Other.cs");
+        File.WriteAllText(mine, "class Kept { void A() { } }\n");
+        File.WriteAllText(other, "class Other { }\n");
+        var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+        string first = index.Read("Kept.cs", null, null, null, true, 4000).Text;
+
+        // Another file changed, the generation moved, the read is the one kept
+        File.WriteAllText(other, "class Other { int x; }\n");
+        File.SetLastWriteTimeUtc(other, DateTime.UtcNow.AddSeconds(5));
+        Assert.True(index.Current(force: true).Generation > 1);
+        Assert.Same(first, index.Read("Kept.cs", null, null, null, true, 4000).Text);
+
+        // Its own file changed, it's read again
+        File.WriteAllText(mine, "class Kept { void A() { } void B() { } }\n");
+        File.SetLastWriteTimeUtc(mine, DateTime.UtcNow.AddSeconds(10));
+        Assert.Contains("void B", index.Read("Kept.cs", null, null, null, true, 4000).Text);
     }
 
     [Fact]

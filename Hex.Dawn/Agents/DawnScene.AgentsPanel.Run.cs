@@ -29,7 +29,7 @@ internal sealed partial class DawnScene
     private void SendToAgent()
     {
         string asked = agentsInput.Text.Trim();
-        if (asked.Length == 0)
+        if (asked.Length == 0 && agentImages.Count == 0)
             return;
 
         if (agentChat?.Running == true)
@@ -62,7 +62,18 @@ internal sealed partial class DawnScene
         agentsInput.Text = string.Empty;
         RememberAsked(asked);
         agentDraftContext = null;
-        StartAgent(agentChat, run.Extension, run.Run, prompt, asked, location);
+
+        // The pictures pasted in go with it, for its extension to hand over while the turn is being started
+        HexAgentChat sending = agentChat;
+        sending.Attached = TakeAgentImages(ref prompt, ref asked);
+        try
+        {
+            StartAgent(sending, run.Extension, run.Run, prompt, asked, location);
+        }
+        finally
+        {
+            sending.Attached = [];
+        }
     }
 
     /// <summary>
@@ -82,7 +93,39 @@ internal sealed partial class DawnScene
 
     private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
     {
-        chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
+        // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
+        // background), and a second run on the same session had two agents writing over each other. What's asked waits in
+        // its inbox and starts the next run once that one has gone (AfterAgentTurn)
+        if (agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat && !each.Process.Exited))
+        {
+            string said = prompt.Length > 0 ? prompt : asked;
+            var message = new HexAgentMail(hub.NextMailSeq(), null, FROM_PERSON, "instruction", said, Directive: true) { To = chat.Id };
+            chat.Post(message);
+            hub.MailOf(chat).Add(message, HexMailRoute.Inbox);
+            chat.Note(Said("agents_panel.after_run", ("asked", OneLine(asked, 80))));
+            return;
+        }
+
+        // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
+        prompt = UnreadPrompt(chat, prompt);
+        // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes). The
+        // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
+        HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
+        agentsStarting.Add(chat);
+        TakeCheckpoint(turn, () =>
+        {
+            // Stopped while the checkpoint was taken, it isn't started at all
+            if (agentsStarting.Remove(chat))
+                LaunchAgent(chat, extension, run, prompt);
+        });
+    }
+
+    // The chats whose turn has begun and whose agent waits for its checkpoint before it's started
+    private readonly HashSet<HexAgentChat> agentsStarting = [];
+
+    /// <summary>A chat's agent started on what it was asked, the row of it already in the chat.</summary>
+    private void LaunchAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt)
+    {
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
         string? found = HexAgentProcess.Find(program);
         if (found is null)
@@ -96,7 +139,7 @@ internal sealed partial class DawnScene
         if (mcpHost is null && StartMcp())
             chat.Note(Said("agents_panel.mcp_started"));
 
-        ObjectValue chatObject = ChatObject(chat);
+        ObjectValue chatObject = ChatObject(chat, extension);
         List<string> arguments = [];
         if (HexExtensions.FunctionOf(run, "arguments") is { } making)
         {
@@ -148,8 +191,11 @@ internal sealed partial class DawnScene
             || !extension.Invoke(message, [new StringValue(text), chatObject], out IRuntimeValue made))
             return null;
 
-        string line = made is StringValue said ? said.Value : HexJson.FromHidl(made)?.ToJsonString() ?? string.Empty;
-        return line.ReplaceLineEndings(" ");
+        // A list is several lines, for an agent that's spoken to in steps (Codex's app-server, its handshake and its thread
+        // before the turn), each a line of its own
+        static string LineOf(IRuntimeValue value) =>
+            (value is StringValue said ? said.Value : HexJson.FromHidl(value)?.ToJsonString() ?? string.Empty).ReplaceLineEndings(" ");
+        return made is ListValue lines ? string.Join("\n", lines.Items.Select(LineOf).Where(line => line.Length > 0)) : LineOf(made);
     }
 
     /// <summary>The run of a chat that can be told more while it works, null when there's none.</summary>
@@ -163,6 +209,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void SteerAgent(HexAgentChat chat, string asked, bool typed = true)
     {
+        // Somebody's word to an agent sitting in a long wait for its agents, or to one that can't be told more as it
+        // works, goes by the mail. Said on its stdin it would only be read once the wait was over, minutes later, or never
+        if (typed && chat.Running && (AgentWaiting(chat) || SteeredRun(chat) is null))
+        {
+            TellWorkingAgent(chat, asked);
+            return;
+        }
+
         if (SteeredRun(chat) is not { } run)
             return;
 
@@ -176,10 +230,22 @@ internal sealed partial class DawnScene
             agentsInput.Text = string.Empty;
             RememberAsked(asked);
             agentDraftContext = null;
+            chat.Attached = TakeAgentImages(ref prompt, ref asked);
         }
 
-        HexAgentEntry entry = chat.Steer(prompt, location is null ? null : asked, location);
-        if (MessageLine(run.Extension, run.Run, prompt, run.ChatObject) is { } line && run.Process.Send(line))
+        HexAgentEntry entry = chat.Steer(prompt, location is null && chat.Attached.Count == 0 ? null : asked, location);
+        string? line = MessageLine(run.Extension, run.Run, prompt, run.ChatObject);
+        chat.Attached = [];
+
+        // What somebody typed is held by Hex until the agent next says something, where it would be taken in anyway, so
+        // it can be put back in the box and changed meanwhile. Written to the agent's stdin there was no taking it back
+        if (line is not null && typed)
+        {
+            heldSteers.Add((chat, entry, line, asked));
+            return;
+        }
+
+        if (line is not null && run.Process.Send(line))
             return;
 
         entry.Queued = false;
@@ -188,11 +254,33 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
+    /// What's in the box sent to a working agent as an instruction from the person watching. It wakes a wait for its
+    /// agents at once, or waits in its inbox and starts its next turn when it isn't read before this one ends. The row of
+    /// it stands in the chat where it was said, as anything asked does.
+    /// </summary>
+    private void TellWorkingAgent(HexAgentChat chat, string asked)
+    {
+        string prompt = AgentDraftPrompt(asked);
+        agentsInput.Text = string.Empty;
+        RememberAsked(asked);
+        agentDraftContext = null;
+        // By the mail a picture is its path, which the agent reads when it takes the message in
+        TakeAgentImages(ref prompt, ref asked);
+        HexAgentEntry entry = chat.Steer(prompt);
+        entry.Queued = false;
+        chat.Touch(entry);
+        string said = DeliverFromPerson(chat, prompt);
+        chat.Note(said);
+    }
+
+    /// <summary>
     /// The extension saying the agent's turn is over. Something asked since that the agent hasn't taken in yet starts
     /// it working again, so the turn goes on. Otherwise it's over, and the agent's stdin closed so it finishes.
     /// </summary>
     private void FinishAgentTurn(HexAgentChat chat)
     {
+        // What's held for it goes now, its turn going on with it rather than ending with it unsaid
+        FlushSteers(chat);
         if (chat.HasQueued && SteeredRun(chat) is not null)
             return;
 
@@ -201,24 +289,88 @@ internal sealed partial class DawnScene
             run.Process.CloseInput();
     }
 
-    /// <summary>Stops a chat's agent, it and everything it started killed.</summary>
+    // How long an agent told to stop has to end its turn itself before it's killed
+    private const long AGENT_STOP_MS = 5000;
+
+    // The chats whose agents were told to stop and when they're killed if they haven't by then
+    private readonly Dictionary<HexAgentChat, long> agentsStopping = [];
+
+    /// <summary>
+    /// Stops a chat's agent and everything it started. One whose run says how (run's stop, Claude Code's interrupt, Codex's
+    /// turn/interrupt) is told to stop its turn, its session left whole to go on from, and killed only if it hasn't
+    /// within a few seconds. Any other is killed.
+    /// </summary>
     private void StopAgent(HexAgentChat? chat)
     {
         if (chat is null)
             return;
 
+        // What was held for it goes with the run, kept it went to the next run's agent as soon as it said anything
+        heldSteers.RemoveAll(held => held.Chat == chat);
+
+        // One still waiting for its checkpoint is never started, its turn over as it is
+        if (agentsStarting.Remove(chat))
+            chat.Done();
+
         foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
         {
-            run.Process.Dispose();
-            agentRuns.Remove(run);
-            run.Chat.Note(Said("agents_panel.stopped"));
-            run.Chat.Done();
-            run.Chat.Stopped = true;
+            if (!agentsStopping.ContainsKey(chat) && run.Chat.Running && run.Process.TakesInput && StopLine(run) is { Length: > 0 } line && run.Process.Send(line))
+            {
+                agentsStopping[chat] = System.Environment.TickCount64 + AGENT_STOP_MS;
+                continue;
+            }
+
+            KillAgentRun(run);
         }
 
         // The agents it started go with it, nobody's waiting for them now
         foreach (HexAgentChat started in agentChats.Where(each => each.Parent == chat.Id && each.Running).ToList())
             StopAgent(started);
+    }
+
+    /// <summary>A run's agent killed and its chat said to be stopped.</summary>
+    private void KillAgentRun(AgentRun run)
+    {
+        run.Process.Dispose();
+        agentRuns.Remove(run);
+        agentsStopping.Remove(run.Chat);
+        run.Chat.Note(Said("agents_panel.stopped"));
+        run.Chat.Done();
+        run.Chat.Stopped = true;
+    }
+
+    /// <summary>What a run's extension writes to stop its agent's turn, null when it says nothing (and it's killed).</summary>
+    private static string? StopLine(AgentRun run)
+    {
+        if (HexExtensions.FunctionOf(run.Run, "stop") is not { } stop || !run.Extension.Invoke(stop, [run.ChatObject], out IRuntimeValue made) || made is NullValue)
+            return null;
+        return made is StringValue said ? said.Value : HexJson.FromHidl(made)?.ToJsonString().ReplaceLineEndings(" ");
+    }
+
+    /// <summary>
+    /// Every tick, the agents told to stop. One whose turn ended is stopped, its process kept for the next message, one
+    /// that went on past its time killed.
+    /// </summary>
+    private void TickStopping()
+    {
+        if (agentsStopping.Count == 0)
+            return;
+        long now = System.Environment.TickCount64;
+        foreach (var (chat, deadline) in agentsStopping.ToArray())
+        {
+            if (!chat.Running)
+            {
+                agentsStopping.Remove(chat);
+                chat.Note(Said("agents_panel.stopped"));
+                chat.Stopped = true;
+            }
+            else if (now >= deadline)
+            {
+                foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
+                    KillAgentRun(run);
+                agentsStopping.Remove(chat);
+            }
+        }
     }
 
     /// <summary>
@@ -227,10 +379,16 @@ internal sealed partial class DawnScene
     /// </summary>
     private void TakeAgentLines()
     {
+        TickStopping();
+        TickCompactAfter();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];
             bool exited = run.Process.Exited;
+
+            // The agent said something, so it's between steps, and what was held for it goes in now
+            if (!run.Process.Lines.IsEmpty)
+                FlushSteers(run.Chat);
             for (int taken = 0; taken < AGENTS_LINES_A_TICK && run.Process.Lines.TryDequeue(out var line); taken++)
                 TakeAgentLine(run, line.Line, line.Error);
 
@@ -243,6 +401,8 @@ internal sealed partial class DawnScene
             run.Chat.Done();
             run.Process.Dispose();
             agentRuns.RemoveAt(r);
+            if (!agentRuns.Any(other => other.Chat == run.Chat))
+                AfterAgentTurn(run.Chat);
         }
     }
 
@@ -273,12 +433,17 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What an extension says what its agent did on, a chat's rows, a turn that went wrong marked so on its run.</summary>
-    private ObjectValue ChatObject(HexAgentChat chat) =>
+    private ObjectValue ChatObject(HexAgentChat chat, HexExtension extension) =>
         HexAgentChatApi.Of(chat, explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory(), () =>
         {
             foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat))
                 run.SaidWrong = true;
-        }, () => FinishAgentTurn(chat), () => TakeAgentMessage(chat));
+        }, () => FinishAgentTurn(chat), () => TakeAgentMessage(chat),
+            // A line for the agent's stdin from its extension, an answer to something it asked (Codex's approvals) or the
+            // next step of a conversation it holds with the agent (a turn started once its thread is)
+            line => agentRuns.FirstOrDefault(run => run.Chat == chat && run.Process.TakesInput)?.Process.Send(line) == true,
+            // An approval's answer handed back to the extension's own function
+            (function, arguments) => extension.Invoke(function, arguments, out _));
 
     /// <summary>The agent saying it took in a message, the first of a run being what it was started with.</summary>
     private void TakeAgentMessage(HexAgentChat chat)

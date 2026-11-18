@@ -21,9 +21,11 @@ internal sealed partial class DawnScene
 
     private void BuildModes()
     {
-        modeToggle = HexModeSwitch.Add((TitleBar)top, HexMode.Dawn, SwapMode);
+        modeToggle = HexModeSwitch.Add((TitleBar)top, HexFace.Dawn, PickFace);
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
+        HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
+        HexAgentProcess.Woken = Engine.WindowManager.Wake;
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)
@@ -32,11 +34,41 @@ internal sealed partial class DawnScene
                 LetGo();
 
                 // The editor stops ticking in Dusk, an agent's call that swapped (a click on the toggle) is answered now or
-                // it would wait out its whole timeout
-                mcpCurrent?.Finish(McpToolResult.Text("Done, and Hex swapped to Dusk, the terminal. The next call brings the editor back."));
+                // it would wait out its whole timeout. One about agents goes on in the background step
+                if (mcpCurrent is { NeedsEditor: true } driving)
+                {
+                    driving.Finish(McpToolResult.Text("Done, and Hex swapped to Dusk, the terminal. The next call brings the editor back."));
+                    mcpCurrent = null;
+                }
                 agentPointer.Release();
             }
         };
+    }
+
+    /// <summary>
+    /// While Dusk is on screen, the agents go on as they would in the editor. Their output is read, the statuses the
+    /// waiting tools look at are made, and the calls that don't need the editor are answered. One that does brings the
+    /// editor back, as it always did.
+    /// </summary>
+    private void TickAgentsOffscreen(float dt)
+    {
+        TakeAgentLines();
+        PublishAgentStatuses();
+        RunMcpCalls(behind: true);
+
+        // A self test that went over to Dusk goes on there, to see what goes on behind it and to come back. Only with Dusk
+        // really on screen, a step of the test taking this step by hand would have run itself again inside itself
+        if (HexModes.Current == HexMode.Dusk)
+            UpdateSelfTest(dt);
+    }
+
+    /// <summary>A face picked on the title bar, Dusk swapping the scene and Dawn and Noon trading places in this one.</summary>
+    private void PickFace(HexFace face)
+    {
+        if (face == HexFace.Dusk)
+            SwapMode();
+        else
+            ShowFace(face);
     }
 
     /// <summary>To Dusk, in the folder that's open, the window's own when Hex.exe started it.</summary>
@@ -60,7 +92,16 @@ internal sealed partial class DawnScene
     /// <summary>Back from Dusk, the code given the keyboard again if it's what's showing.</summary>
     public override void OnReturned()
     {
-        if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
+        // Noon picked in Dusk comes back as Noon, anything else as the face that was left
+        if (HexModes.FaceWanted is { } wanted)
+        {
+            HexModes.FaceWanted = null;
+            ShowFace(wanted);
+        }
+
+        if (Face == HexFace.Noon)
+            agentsInput.Focus();
+        else if (!HexModeSwitch.RestoreFocus(compositor, focusBeforeMode) && (document.View == HexView.Code || document.IsText))
             code.Focus();
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
 

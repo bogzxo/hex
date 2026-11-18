@@ -57,8 +57,47 @@ chat, a step in. Click a row to open it, use its cross to close it (along with t
 it to stop it, copy what it said last, or open the chat that started it. The list's head folds it away and counts the
 chats that are working. While any are working, the activity bar's robot breathes, and its tooltip says how many.
 
-An agent that Claude Code or Codex steers can be told more while it works. Send stays beside Stop, and what you send
-waits in a faded bubble marked queued until the agent takes it in.
+Any working agent can be told more. Send stays beside Stop. Claude Code takes what you send on its stdin, a faded
+bubble marked queued until it takes it in. An agent sitting in `hex_agent_wait` for the agents it started (which can
+last minutes) gets it as an instruction in its mail instead, which wakes the wait at once, and Codex, which can't be
+told more mid-step, finds it in its inbox or starts its next turn with it. Each chat keeps where it was scrolled to as
+you go between them.
+
+Paste a picture into the box (a screenshot, an image copied in a browser) and it becomes a chip over the pickers, its
+cross leaving it out again. Sent, it goes with the message, Claude Code getting it as an image block of the message and
+Codex as an `--image` file, and every agent sees its path at the end of the message too. Extensions get them as
+`chat.images()`, each `{ path, media_type, data }` with `data` in base64. Pasted pictures are kept in the
+`agent_images` folder beside Hex's settings for a fortnight. The box wraps by how wide its letters really are, so a line
+of prose runs to its edge.
+
+The chats say what their agent system did along the way, each a quiet row. Its context compacted (by itself or asked,
+and the tokens before and after), a call tried again (a run of retries is one row saying the latest), and coming close
+to its plan's limit or going over it, with when that resets. Noon's Details column has a Limits section with the same,
+and a bar of how much of the limit is used.
+
+Under the chats, in the Agents view and at the foot of Noon's fleet, the Agent systems panel has a block for each
+system Hex can run. Whether it's installed and its version, the models its chats are on, how many are working, the
+chats, tokens and cost of this session, the fullest context of its chats with a bar, its compactions and retries, its
+limit and when that resets, and what Hex's harness saved it, each line under the system's name beside an icon. The
+panel's head folds every system to a line, folded in Dawn and open in Noon, and each system's own head folds it alone.
+Its words are put right in place as things move, it's never made again under a click. What the harness saved is
+counted across restarts, kept in `harness/stats.tsv` beside Hex's settings, so delete that file to start the count again.
+
+## Keeping agents on the harness
+
+Agents are told to use the harness in their system prompt, and still drift back to grep and cat as a long session
+leaves the prompt far behind. So Claude Code runs with Hex as its PreToolUse hook (`Hex.exe --harness-hook`, given in a
+settings file of the chat's own with `--settings`). Before Claude Code runs its shell, Grep or Glob, Hex looks at the
+call, and a search or read of the workspace (`grep`, `rg`, `find`, `ls`, `cat`, `head`, `tail`, `sed -n`,
+`Select-String`, `Get-Content` and the like as the first command of the line) is turned back with the Hex tool that does
+it. A grep that filters a pipe, builds, tests, git and anything outside the workspace are left alone. Claude Code's
+setting Keep it on the harness picks how hard, turned back (the default), reminded (the call runs with the Hex tool said
+beside it) or left alone. Codex and Antigravity have no such hook and are told more firmly in their instructions.
+
+An agent's bridge (`Hex.exe --mcp-connect`) outlives the Hex it talks to. When Hex restarts into a build of itself, the
+bridge fails the calls that were cut off (so the agent makes them again), holds what the agent says meanwhile, waits up
+to three minutes for a Hex to come back on the folder, shakes hands with it as the agent did and tells the agent the
+tools may have changed.
 
 ## Agents starting agents
 
@@ -68,16 +107,50 @@ the chat that started them, so they can be watched and talked to like any other.
 
 - `hex_agent_list()` lists the agent systems that can be started, with the models and options they offer, and every
   chat with its id, name, state and which chat started it. It also says which chat you are.
-- `hex_agent_spawn(prompt, name?, agent?, model?, options?)` starts one and returns its id at once. The prompt has to
-  stand on its own, because the new agent doesn't see the conversation that started it. Its last message is what
-  comes back.
+- `hex_agent_spawn(prompt, name?, agent?, model?, options?, permissions?, approvals?)` starts one and returns its id
+  at once. The prompt has to stand on its own, because the new agent doesn't see the conversation that started it.
+  Its last message is what comes back. `permissions: { allow: [...], deny: [...] }` says what it may do without asking
+  and may never do, in its agent system's own rules (Claude Code's `Bash(git status:*)` or `Edit` go to
+  `--allowedTools` and `--disallowedTools`, Antigravity's `command(git status)` to its run's `--settings`, which in agy 1.5 is one whole command line, a prefix
+  or a `*` among other words matching nothing, `command(*)` for any). Codex has no rules
+  of the kind, its `sandbox` option says what it may do.
+- What a spawned agent asks leave to do beyond its rules (Claude Code's and Codex's approvals) comes to the agent that started it
+  as a message of kind question, which wakes its wait or starts its next turn, and `hex_agent_approve(id, allow,
+  request?)` answers it. The card is in the agent's chat for the person as well, whoever answers first decides.
+  `approvals: "person"` leaves them to the person alone. Only the agent that started it may answer for it.
+  Antigravity can't ask headless, what it wasn't let do is a note at the end of its turn instead.
 - `hex_agent_wait(ids?, mode?, timeout?)` waits until they finish and hands back what they said. By default it waits
   for all the running agents you started. `mode: "any"` returns when the first one finishes. A timeout reports which
   are still running. The wait happens off the editor's thread, so the agents waited for keep using Hex's tools in the
   meantime.
 - `hex_agent_read(id, full?, most?)` gives a chat's last reply, or with `full` the whole chat.
-- `hex_agent_send(id, text)` starts another turn of a finished chat, or steers a running one that can be steered.
+- `hex_agent_send(id, text)` is an instruction. It starts another turn of a finished chat, and a running one takes it
+  in as it works when it can be told more (Claude Code) or finds it in its inbox when it can't (Codex), starting its
+  next turn with it if it hasn't read it by then.
+- `hex_agent_message(text, to?, kind?)` tells another agent of the family something while both keep working, the
+  parent by default. Its kind is a finding, a question, an answer, progress, blocked or an instruction. A chat started
+  by another uses it to report what it finds as soon as it matters, ask, or say it's stuck.
+- `hex_agent_inbox()` reads the messages not read yet, oldest first.
 - `hex_agent_stop(id)` stops a chat and the chats it started.
+- The models `hex_agent_list` offers come from each agent system: Claude Code's initialize, Codex's `model/list` and
+  Antigravity's `agy models`, kept from one start to the next, so a new model shows without an extension being
+  brought up to date.
+- `hex_agent_close(id, clear?)` deletes the chat of an agent you started, and the chats it started, once its work is
+  done. With `clear` the chat stays and is emptied instead, its rows, mail and session gone, so the next
+  `hex_agent_send` starts it afresh. Only the agent that started it may close or clear it.
+
+So one agent can coordinate others, a more capable model keeping the judgement while cheaper ones explore, implement and
+test. `hex_agent_wait` returns as soon as a message comes for the agent waiting (`messages: false` waits on
+regardless), so what one finds steers the rest straight away. A message to an agent that's waiting wakes its wait
+rather than going in on its stdin, which it would only read once the wait was over. Only chats of one family talk, the
+chat somebody started and everything under it. Each message is a line in both chats, to or from whom, its kind and how
+it starts, and what a chat wasn't working to read goes in front of what it's next asked.
+
+What Claude Code and Codex are told in their system prompt (`HexAgentProfiles.HARNESS_RULES`, `hex.harness_rules` to
+an extension) says to find and read code through the harness before the shell, to run commands with
+`hex_terminal_run`, and how to coordinate. The shell stays theirs for anything the harness doesn't do. Claude Code's
+own Explore subagent is given the same rules (`--agents`), and what one of its subagents does is a single row, its
+latest step and how many it's taken, in place of a row for each.
 
 Two limits apply: agents can start agents only 2 deep, and at most 6 agents started by agents run at once. A chat's
 bridge tells Hex which chat it is (`--agent-chat`, tagged at the pipe's door), which is how Hex knows whose agents are

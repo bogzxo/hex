@@ -201,6 +201,7 @@ internal sealed partial class DawnScene : Scene
         BuildQuiet();
         BuildTerminal();
         BuildAgentsPanel();
+        BuildNoon();
         StartRemote();
         BuildSideTree();
         BuildExtensionViews();
@@ -273,9 +274,14 @@ internal sealed partial class DawnScene : Scene
         // The folders of last time and the files that were open in them, unless the editor was told what to open
         explorer.RestoreWorkspace();
 
-        // A folder it was started on (dawn -window folder in a terminal) is the workspace instead
-        if (options.Folder is not null)
+        // A folder it was started on (dawn -window folder in a terminal) is the workspace instead, unless it's a folder of
+        // the workspace of last time, which is kept whole (a restart on its first folder lost the others)
+        if (options.Folder is not null && !explorer.workspace.Folders.Any(folder =>
+                string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             explorer.OpenFolder(options.Folder);
+
+        // The agents' chats of this workspace as they were when Hex last had it open
+        BringBackChats();
 
         // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
         // The self test is left where it starts, its checks expect the designer the way it always was
@@ -351,6 +357,21 @@ internal sealed partial class DawnScene : Scene
         Engine.Graphics.ClearColor = new Vector4(0.065f, 0.07f, 0.092f, 1.0f);
     }
 
+    // What each stretch of the update allocated while the ticks are weighed (HexTicks.Weighing), for the self test that
+    // measures what the editor makes standing still. The tick lists' own stretch counts its steps as well
+    internal static readonly string[] WEIGHED_STRETCHES = ["window", "designer", "lists", "tick lists", "bars", "components", "fit"];
+    internal readonly long[] weighedStretches = new long[WEIGHED_STRETCHES.Length];
+    private long weighedFrom;
+
+    private void Weigh(int stretch)
+    {
+        if (!HexTicks.Weighing)
+            return;
+        long now = GC.GetAllocatedBytesForCurrentThread();
+        weighedStretches[stretch] += now - weighedFrom;
+        weighedFrom = now;
+    }
+
     // When Hex last said something, and how long that stays in the status bar
     private long saidAt;
     private const long SAID_FOR = 10_000;
@@ -390,6 +411,7 @@ internal sealed partial class DawnScene : Scene
     public override void UpdateState(float dt)
     {
         Profile.Begin();
+        weighedFrom = HexTicks.Weighing ? GC.GetAllocatedBytesForCurrentThread() : 0;
 
         // A unit of the camera per pixel of the window, whatever the window is resized to. The UI does the scaling
         Vector2 viewport = Engine.WindowManager.ViewportSize;
@@ -405,12 +427,15 @@ internal sealed partial class DawnScene : Scene
 
         UpdateZoomSettings(dt);
         UpdateShortcutHints();
-        UpdateWindow();
+        UpdateWindow(dt);
         Profile.Mark("window");
+        Weigh(0);
         UpdateDesigner(dt);
         Profile.Mark("designer");
+        Weigh(1);
         RebuildMarked();
         Profile.Mark("lists");
+        Weigh(2);
 
         // The three stretches of the tick that are lists of steps, see DeclareTicks. Each step is timed by its own name
         // with the profile on, the mark after each list is for what little is left over
@@ -420,32 +445,36 @@ internal sealed partial class DawnScene : Scene
         Profile.Mark("late");
         panelTicks.Run(dt);
         Profile.Mark("panel");
+        Weigh(3);
 
         UpdateStatusBar();
         UpdateCrumbs();
         Profile.Mark("bars");
+        Weigh(4);
 
         base.UpdateState(dt);
         Profile.Mark("components");
+        Weigh(5);
 
         // The editor fitted round the canvas last, after the components moved along, a side sliding in or out has taken
         // its step by now and the middle is sized to what it will be laid out as. Fitted first, it was a step behind and
         // the right side shook a few pixels to and fro for as long as the slide took
         FitChrome();
         Profile.Mark("fit");
+        Weigh(6);
         Profile.End();
 
         UpdateSelfTest(dt);
     }
 
     /// <summary>A dialog that was answered, the x of the window, its colours and the canvas put where it is.</summary>
-    private void UpdateWindow()
+    private void UpdateWindow(float dt)
     {
         UpdateDialog();
         UpdateClosing();
         UpdateHosted();
         UpdateRenderScale();
-        Hex.Shell.HexModes.Update();
+        Hex.Shell.HexModes.Update(dt);
         ColourChrome();
         PlaceCanvas();
     }
@@ -543,7 +572,15 @@ internal sealed partial class DawnScene : Scene
             .Add("markdown", UpdateMarkdownPreview)
             .Add("terminal", UpdateTerminal)
             .Add("remote", UpdateRemote)
+            // The agent of a selection, the harness, the Agents panel and the server, a step each so each is weighed
+            .Add("agent", UpdateAgent)
+            .Add("harness", UpdateHarness)
+            .Add("agents_panel", UpdateAgentsPanel)
             .Add("mcp", UpdateMcp)
+            .Add("noon", UpdateNoon)
+            .Add("chats_kept", UpdateChatsKept)
+            .Add("dev_restart", UpdateDevRestart)
+            .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)
             .Add("asked_console", running.RunAskedConsole)
             .Add("panel", UpdatePanel);

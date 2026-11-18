@@ -62,7 +62,9 @@ internal sealed partial class HexCodeIndex
                 }
             }
 
-            return new HexAnswer(said.Finish("skim fewer files at once or lower depth"), plain);
+            // Files named one by one are all it took in, a glob or one that wasn't found could match a file made since
+            bool named = missing.Count == 0 && !paths.Contains('*') && !paths.Contains('?');
+            return new HexAnswer(said.Finish("skim fewer files at once or lower depth"), plain) { From = named ? [.. files.Distinct()] : null };
         });
 
     private static string Kilobytes(long length) => length < 1024 ? $"{length} bytes" : $"{length / 1024.0:0.#} KB";
@@ -116,38 +118,10 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Files(string query, int most, int budget) =>
         Ask("hex_files", $"{query}\n{most}\n{budget}", index =>
         {
-            string[] words = query.Replace('\\', '/').Split([' ', '/'], StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length == 0)
+            if (query.Replace('\\', '/').Split([' ', '/'], StringSplitOptions.RemoveEmptyEntries).Length == 0)
                 return HexAnswer.Wrong("Say part of a file's name or path in query.");
 
-            var found = new List<(HexIndexedFile File, int Score)>();
-            foreach (HexIndexedFile file in index.Files)
-            {
-                string name = Path.GetFileName(file.Path), bare = Path.GetFileNameWithoutExtension(file.Path);
-                int score = 0;
-                foreach (string word in words)
-                {
-                    int each = bare.Equals(word, StringComparison.OrdinalIgnoreCase) || name.Equals(word, StringComparison.OrdinalIgnoreCase) ? 100
-                        : name.StartsWith(word, StringComparison.OrdinalIgnoreCase) ? 80
-                        : name.Contains(word, StringComparison.OrdinalIgnoreCase) ? 60
-                        : file.Relative.Contains(word, StringComparison.OrdinalIgnoreCase) ? 30
-                        : Subsequence(name, word) ? 10 : 0;
-                    if (each == 0)
-                    {
-                        score = 0;
-                        break;
-                    }
-
-                    score += each;
-                }
-
-                if (score > 0)
-                    found.Add((file, score));
-            }
-
-            found.Sort((a, b) => a.Score != b.Score ? b.Score.CompareTo(a.Score) : a.File.Relative.Length != b.File.Relative.Length
-                ? a.File.Relative.Length.CompareTo(b.File.Relative.Length) : string.Compare(a.File.Relative, b.File.Relative, StringComparison.OrdinalIgnoreCase));
-
+            List<(HexIndexedFile File, int Score)> found = FindFiles(index, query);
             var said = new HexBudget(budget);
             said.Line(found.Count == 0 ? $"No file's name or path has {query}." : $"{found.Count} files fit {query}, best first.");
             foreach (var (file, _) in found.Take(most))
@@ -159,6 +133,45 @@ internal sealed partial class HexCodeIndex
             long plain = index.Files.Sum(file => (long)file.Path.Length + 1) / 4 + found.Sum(each => (long)each.File.Path.Length + 1);
             return new HexAnswer(said.Finish("say more of the name"), plain);
         });
+
+    /// <summary>
+    /// The files whose name or path has every word of what was asked, best first, for hex_files and for an @ in the
+    /// agents' box. A whole name before the start of one, then anywhere in the name, the path, the letters in order.
+    /// </summary>
+    public static List<(HexIndexedFile File, int Score)> FindFiles(HexIndexSnapshot index, string query)
+    {
+        string[] words = query.Replace('\\', '/').Split([' ', '/'], StringSplitOptions.RemoveEmptyEntries);
+        var found = new List<(HexIndexedFile File, int Score)>();
+        if (words.Length == 0)
+            return found;
+        foreach (HexIndexedFile file in index.Files)
+        {
+            string name = Path.GetFileName(file.Path), bare = Path.GetFileNameWithoutExtension(file.Path);
+            int score = 0;
+            foreach (string word in words)
+            {
+                int each = bare.Equals(word, StringComparison.OrdinalIgnoreCase) || name.Equals(word, StringComparison.OrdinalIgnoreCase) ? 100
+                    : name.StartsWith(word, StringComparison.OrdinalIgnoreCase) ? 80
+                    : name.Contains(word, StringComparison.OrdinalIgnoreCase) ? 60
+                    : file.Relative.Contains(word, StringComparison.OrdinalIgnoreCase) ? 30
+                    : Subsequence(name, word) ? 10 : 0;
+                if (each == 0)
+                {
+                    score = 0;
+                    break;
+                }
+
+                score += each;
+            }
+
+            if (score > 0)
+                found.Add((file, score));
+        }
+
+        found.Sort((a, b) => a.Score != b.Score ? b.Score.CompareTo(a.Score) : a.File.Relative.Length != b.File.Relative.Length
+            ? a.File.Relative.Length.CompareTo(b.File.Relative.Length) : string.Compare(a.File.Relative, b.File.Relative, StringComparison.OrdinalIgnoreCase));
+        return found;
+    }
 
     // Whether the letters of a word are in a name in order, rd for Read
     private static bool Subsequence(string name, string word)

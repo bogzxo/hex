@@ -23,6 +23,8 @@ internal sealed class InstallerScene : Scene
     private readonly UIModule dialogs;
     private readonly StackPanel card;
     private readonly Button customize;
+    private readonly Button channelStable, channelDev;
+    private InstallChannel channel;
     private readonly WindowPanel optionsWindow;
     private readonly ToggleButton desktopHex, desktopDusk, applicationMenu, menuDusk, windowsAppPaths;
     private InstallChoices choices;
@@ -40,6 +42,7 @@ internal sealed class InstallerScene : Scene
     {
         this.options = options;
         installRoot = options.Target;
+        channel = options.Channel;
         choices = InstallTransaction.ReadChoices(installRoot);
         camera = AddEntity(new Camera2D(Engine.WindowManager.ViewportSize));
         ActiveCamera = camera;
@@ -78,6 +81,11 @@ internal sealed class InstallerScene : Scene
         customize.Visible = !options.Uninstall && !options.Update;
         customize.OnPressed = ShowInstallChoices;
         target = layout.Get<Label>("target");
+        channelStable = layout.Get<Button>("channel_stable");
+        channelDev = layout.Get<Button>("channel_dev");
+        channelStable.OnPressed = () => PickChannel(InstallChannel.Stable);
+        channelDev.OnPressed = () => PickChannel(InstallChannel.Dev);
+        ShowChannel();
         version.Text = InstallText.Get("version.platform", ("platform", InstallPaths.Rid));
         target.Text = UIRichText.Literal(installRoot);
         browse.Visible = !options.Update && !options.Uninstall;
@@ -114,6 +122,8 @@ internal sealed class InstallerScene : Scene
         FinishFolderPick();
         browse.Enabled = !busy && !completed && folderPick is null;
         customize.Enabled = !busy && !completed && folderPick is null;
+        // An update or an uninstall is of the installation that's there, its channel isn't for changing
+        channelStable.Enabled = channelDev.Enabled = !busy && !completed && folderPick is null && !options.Update && !options.Uninstall;
         menuDusk.Enabled = applicationMenu.State;
         if (folderPick is not null || optionsWindow.Visible) primary.Enabled = false;
         if (closeAsked) { closeAsked = false; RequestClose(); }
@@ -132,7 +142,7 @@ internal sealed class InstallerScene : Scene
             Report(new(InstallText.Get("status.waiting"), .02f));
             await InstallerHandoff.WaitForParent(pid, options.ParentStart, token);
         }
-        var latest = await new ReleaseClient().Latest(InstallPaths.Rid, token);
+        var latest = await new ReleaseClient().Latest(InstallPaths.Rid, channel, token);
         if (options.Version is not null && latest.Version != options.Version)
             throw new IOException(InstallText.Get("errors.release_changed"));
         InstallerDestination.ValidateVersion(installRoot, latest);
@@ -182,6 +192,36 @@ internal sealed class InstallerScene : Scene
             cancel.Label = InstallText.Get("actions.close");
             cancel.Enabled = true;
         });
+    }
+
+    /// <summary>
+    /// The other Hex picked, stable or the nightly build. Its own folder put in unless somebody chose one, and its newest
+    /// release looked for, the one found before was the other channel's.
+    /// </summary>
+    private void PickChannel(InstallChannel picked)
+    {
+        if (picked == channel || busy || completed || options.Update || options.Uninstall)
+            return;
+        if (installRoot == InstallChannels.DefaultRoot(channel))
+        {
+            installRoot = InstallChannels.DefaultRoot(picked);
+            target.Text = UIRichText.Literal(installRoot);
+            choices = InstallTransaction.ReadChoices(installRoot);
+        }
+        channel = picked;
+        release = null;
+        ShowChannel();
+        primary.Enabled = false;
+        status.Text = InstallText.Get("status.checking");
+        Check();
+    }
+
+    // The channel picked marked and what it is said beside it
+    private void ShowChannel()
+    {
+        channelStable.Selected = channel == InstallChannel.Stable;
+        channelDev.Selected = channel == InstallChannel.Dev;
+        version.Text = InstallText.Get($"channel.{channel.Word()}");
     }
 
     private void Report(InstallProgress update) => changes.Enqueue(() => { status.Text = UIRichText.Literal(update.Message); progress.Progress = update.Fraction; });

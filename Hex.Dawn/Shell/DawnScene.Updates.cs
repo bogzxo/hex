@@ -25,9 +25,11 @@ internal sealed partial class DawnScene
         ReadInstallerStrings();
         checkingHexUpdate = true;
         ReleaseAsset? release = null;
+        // A nightly build updates from the newest nightly, the stable one from the newest release
+        InstallChannel channel = HexChannel;
         StartWork("hex-update-check", InstallText.Get("updates.checking"), async context =>
         {
-            release = await new ReleaseClient().Latest(InstallPaths.Rid, context.Token);
+            release = await new ReleaseClient().Latest(InstallPaths.Rid, channel, context.Token);
         }, result =>
         {
             checkingHexUpdate = false;
@@ -36,7 +38,8 @@ internal sealed partial class DawnScene
                 Note(InstallText.Get("updates.check_failed", ("reason", result.Error ?? InstallText.Get("updates.cancelled"))), error: true);
                 return;
             }
-            if (ReleaseClient.VersionOf(release.Version) <= ReleaseClient.VersionOf(HexAbout.Version))
+            string installed = channel == InstallChannel.Dev ? Hex.Shell.HexVersion.Nightly : HexAbout.Version;
+            if (!InstallChannels.IsNewer(channel, release.Version, installed))
             {
                 Note(InstallText.Get("updates.current"));
                 return;
@@ -45,6 +48,39 @@ internal sealed partial class DawnScene
                 new DialogChoice(InstallText.Get("actions.install_update"), () => PrepareHexUpdate(release)),
                 new DialogChoice(InstallText.Get("actions.later")));
         }, seen: false, cancellable: true);
+    }
+
+    // Which Hex this is, the nightly build of the development branch or a stable release
+    private static InstallChannel HexChannel => Hex.Shell.HexVersion.Dev ? InstallChannel.Dev : InstallChannel.Stable;
+
+    /// <summary>
+    /// Hex Setup opened, the copy that came with this Hex, run from a folder of its own so it can replace this one. Said
+    /// in a note when there's none, a Hex built from its source has no setup beside it.
+    /// </summary>
+    private void OpenHexSetup()
+    {
+        ReadInstallerStrings();
+        string root = Path.TrimEndingDirectorySeparator(Hex.Core.HexHost.ProgramFolder);
+        string bundled = Path.Combine(root, "installer");
+        if (!File.Exists(Path.Combine(bundled, InstallPaths.InstallerExecutable)))
+        {
+            Note(InstallText.Get("errors.no_installer"), error: true);
+            return;
+        }
+
+        try
+        {
+            string copy = InstallerHandoff.CopyInstaller(bundled);
+            // This installation said when Setup manages it, so it opens on this Hex and its channel
+            string[] args = File.Exists(Path.Combine(root, InstallPaths.Manifest))
+                ? ["--target", root, "--channel", HexChannel.Word()]
+                : ["--channel", HexChannel.Word()];
+            InstallerHandoff.StartInstallerCopy(copy, args);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Note(InstallText.Get("updates.setup_failed", ("reason", e.Message)), error: true);
+        }
     }
 
     private void PrepareHexUpdate(ReleaseAsset release)

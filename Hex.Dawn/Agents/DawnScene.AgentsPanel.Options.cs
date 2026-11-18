@@ -32,11 +32,21 @@ internal sealed partial class DawnScene
         agentsOptions = made.Get<StackPanel>("agents_options");
 
         // Up and Down in the box go through what was asked before, Escape stops what's going on
-        commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && RecallAsked(-1), whileTyping: true, first: true);
-        commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && RecallAsked(1), whileTyping: true, first: true);
+        // Only from the box's first line up and its last line down, between its lines they move the caret
+        commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == 0 && RecallAsked(-1), whileTyping: true, first: true);
+        commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
+        commands.Keys.Add(Key.Tab, () => TakeFirstSlash() || TakeFirstMention(), whileTyping: true, first: true);
         commands.Keys.Add(Key.Escape, () =>
         {
-            if (compositor.Focus != agentsInput || agentChat?.Running != true)
+            // The window of what the harness saved goes first, wherever the keyboard is
+            if (harnessWindow is { } open)
+            {
+                open.Close();
+                return true;
+            }
+
+            // Only the person stops an agent with Escape, an agent's own Escape is for closing what it opened
+            if (compositor.Focus != agentsInput || agentChat?.Running != true || agentKeysPressing > 0)
                 return false;
             StopAgent(agentChat);
             return true;
@@ -100,7 +110,10 @@ internal sealed partial class DawnScene
         string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
 
         bool compact = agentsCompose.Bounds.Width < 300;
-        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))))}";
+        // The choices are in it too, an agent system says its models as it starts (Claude Code's handshake) and the menu
+        // made with the old ones kept them
+        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))
+            + ":" + string.Join(",", option.Choices.Select(choice => choice.Value + "~" + choice.Label))))}";
         if (said == agentsOptionsDrawn) return;
         agentsOptionsDrawn = said;
         Empty(agentsOptions);
@@ -142,12 +155,42 @@ internal sealed partial class DawnScene
             }
             ContextMenu.Show(chrome, settings.Bounds.PointAt(Origin.TopLeft), menu);
         };
+        // The model the next turn runs on, a picker of its own by the box as the thinking is, it was only in the gear's menu
+        // and the person had to go into it to see which one the chat would ask
+        float taken = 0.0f;
+        if (options.FirstOrDefault(option => option.Key == "model") is { } models && models.Choices.Length > 0)
+        {
+            string value = Values.Text(extensions.SettingOf(extension, models.Key));
+            string current = value.Length == 0 ? Said("agents_panel.model_default")
+                : models.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
+            float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
+            float room = MathF.Max(32, MathF.Min(MathF.Min(wide, 180), agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - 150));
+            Button modelButton = agentsOptions.Add(Picker(room >= 80 ? current : string.Empty, "sparkle", false,
+                Said("agents_panel.model_tip", ("model", current)), () => { }));
+            modelButton.Size = new System.Numerics.Vector2(room, 32);
+            taken = room;
+            modelButton.OnPressed = () =>
+            {
+                var menu = new Menu(models.Title);
+                foreach (var (choiceValue, label) in models.Choices)
+                {
+                    string selected = choiceValue;
+                    menu.Add(label, () =>
+                    {
+                        extensions.SetSetting(extension, models.Key, new StringValue(selected), tell: true);
+                        agentsOptionsDrawn = string.Empty;
+                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, models.Key)) == selected;
+                }
+                ContextMenu.Show(chrome, modelButton.Bounds.PointAt(Origin.TopLeft), menu);
+            };
+        }
+
         if (thinking is not null)
         {
             string value = Values.Text(extensions.SettingOf(extension, thinking.Key));
             string current = value.Length == 0 ? Said("agents_panel.thinking_auto")
                 : thinking.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
-            float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - 48));
+            float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - taken - 48));
             agentsThinking = agentsOptions.Add(Picker(room >= 60 ? current : string.Empty, "lightbulb", false,
                 Said("agents_panel.thinking_tip", ("level", current)), () => { }));
             agentsThinking.Size = new System.Numerics.Vector2(room, 32);
@@ -238,10 +281,6 @@ internal sealed partial class DawnScene
         Say(Said("agents_panel.copied"));
     }
 
-    /// <summary>What the harness has saved this run, in a card, its last line being the whole of it.</summary>
-    private void ShowHarnessSaved()
-    {
-        string described = Harness.Stats.Describe().TrimEnd();
-        Notify(described.Split('\n')[^1]);
-    }
+    // The window of what the harness saved while it's up, so a second press closes it
+    private WindowPanel? harnessWindow;
 }

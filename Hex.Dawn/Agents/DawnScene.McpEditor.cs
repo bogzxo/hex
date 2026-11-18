@@ -87,13 +87,34 @@ internal sealed partial class DawnScene
             References, Timeout: 30.0f)
     ];
 
-    /// <summary>A path an agent gave, whole, a relative one taken from the first folder of the workspace.</summary>
+    /// <summary>
+    /// A path an agent gave, whole. A relative one is taken from the first folder of the workspace, or, with more than
+    /// one folder, from the folder its first part names (the harness's answers say hex/Hex.Dawn/... then) or whichever
+    /// folder has it. A file that's nowhere yet goes where its first part names, the first folder otherwise.
+    /// </summary>
     private string McpPath(string path)
     {
         if (Path.IsPathRooted(path))
             return Path.GetFullPath(path);
-        string root = explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
-        return Path.GetFullPath(Path.Combine(root, path));
+        IReadOnlyList<string> folders = explorer.workspace.Folders;
+        string first = folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
+        string plain = Path.GetFullPath(Path.Combine(first, path));
+        if (folders.Count < 2 || File.Exists(plain) || Directory.Exists(plain))
+            return plain;
+
+        string[] parts = path.Replace('\\', '/').Split('/', 2);
+        string? named = parts.Length == 2 ? folders.FirstOrDefault(folder => string.Equals(WorkspacePaths.FolderName(folder), parts[0], StringComparison.OrdinalIgnoreCase)) : null;
+        string? underNamed = named is null ? null : Path.GetFullPath(Path.Combine(named, parts[1]));
+        if (underNamed is not null && (File.Exists(underNamed) || Directory.Exists(underNamed)))
+            return underNamed;
+        foreach (string folder in folders.Skip(1))
+        {
+            string under = Path.GetFullPath(Path.Combine(folder, path));
+            if (File.Exists(under) || Directory.Exists(under))
+                return under;
+        }
+
+        return underNamed ?? plain;
     }
 
     private string McpWhere(HexDocument shown) => shown.Path ?? $"{shown.Name} (not saved anywhere yet)";

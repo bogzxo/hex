@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 // The scene as what the parts of the editor with a class of their own are handed (DawnContext). Each of these is the
 // scene's own doing passed on, what's new is the events and the sources the parts add, which the rest of the scene
 // raises and asks at the moments it used to call into them by name.
-internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals, IPanels, IStrings, IEditorWindow
+internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWork, IWindows, ISettingsHost, ITerminals, IPanels, IStrings, IEditorWindow, IAgents
 {
     private DawnContext? context;
 
@@ -31,7 +31,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
     private HexGit git = null!;
 
     /// <summary>What a part of the editor is made with.</summary>
-    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, commands, options,
+    private DawnContext Context => context ??= new DawnContext(this, this, this, this, this, this, this, this, this, this, this, commands, options,
         () => Engine.WindowManager.Wake(), () => Engine.WindowManager.RequestFrames(), () => Engine.Input.Keyboard, () => compositor.Focus is not null);
 
     /* The documents */

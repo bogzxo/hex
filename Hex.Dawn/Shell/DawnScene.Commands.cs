@@ -190,6 +190,7 @@ internal sealed partial class DawnScene
         commands.Add("Help/help", Said("commands.release_notes"), ShowChangelog, icon: "history");
         ReadInstallerStrings();
         commands.Add("Help/help", Hex.Installation.InstallText.Get("updates.command"), CheckForHexUpdates, icon: "cloud-download");
+        commands.Add("Help/help", Hex.Installation.InstallText.Get("updates.setup_command"), OpenHexSetup, icon: "package");
         commands.Add("Help/developer/developer", Said("commands.own_layout"), () => Open(EDITOR_LAYOUT), icon: "layout");
         commands.Add("Help/about", Said("commands.about"), ShowAbout, icon: "info");
     }

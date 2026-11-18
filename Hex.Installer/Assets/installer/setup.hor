@@ -50,9 +50,11 @@ let heading = compositor.label({ parent: body, size: vec(552, 42), text: "@insta
 let description = compositor.label({ parent: body, size: vec(552, 42), text: "@installer.install.description", text_scale: 0.145, dim: true, wrap: true, align: "top_left" });
 let package_gap = compositor.spacer({ parent: body, size: vec(0, 12) });
 let package = compositor.stack({ parent: body, size: vec(552, 28), direction: "horizontal", spacing: 10 });
-let channel_badge = compositor.stack({ parent: package, size: vec(112, 26), padding: vec(8, 4, 8, 4), radius: 6, color: vec(1, 0.72, 0.28, 0.075), outline: vec(1, 0.72, 0.28, 0.15) });
-let channel = compositor.label({ parent: channel_badge, size: vec(96, 18), text: "@installer.version.channel", text_scale: 0.105, color: vec(0.97, 0.77, 0.44, 1), align: "center" });
-let version = compositor.label({ parent: package, size: vec(296, 26), text: "@installer.version.channel", text_scale: 0.125, dim: true, align: "left", wrap: true });
+// Which Hex, the stable release or the development branch's nightly build, each installed in a folder of its own
+let channel_badge = compositor.stack({ parent: package, size: vec(180, 26), padding: vec(2, 2, 2, 2), spacing: 2, direction: "horizontal", radius: 6, color: vec(1, 0.72, 0.28, 0.075), outline: vec(1, 0.72, 0.28, 0.15) });
+let channel_stable = compositor.button({ parent: channel_badge, size: vec(86, 22), label: "@installer.channel.stable_short", style: "button_flat", lbl_scale: 0.105, animated: false, tooltip: "@installer.channel.stable_tip" });
+let channel_dev = compositor.button({ parent: channel_badge, size: vec(86, 22), label: "@installer.channel.dev_short", style: "button_flat", lbl_scale: 0.105, animated: false, tooltip: "@installer.channel.dev_tip" });
+let version = compositor.label({ parent: package, size: vec(228, 26), text: "@installer.channel.stable", text_scale: 0.125, dim: true, align: "left", wrap: true });
 let customize = compositor.button({ parent: package, size: vec(124, 28), label: "@installer.integration.customize", style: "button_flat", icon: "settings-gear", lbl_scale: 0.125, animated: false, hover: "glow", hover_time: 0.12 });
 let destination_gap = compositor.spacer({ parent: body, size: vec(0, 18) });
 let destination = compositor.stack({
