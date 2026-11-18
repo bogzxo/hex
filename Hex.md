@@ -99,8 +99,8 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
       start so the picker has them before the first run
   - The hex server's entry in .agents/mcp_config.json keeps the last chat's id in the folder, as Gemini's
     .gemini/settings.json does, ignored in Hex's repository
-- [ ] Images in the chat log seen inline (pictures pasted into a message and ones an agent shows or reads), and opened
-      full screen with zooming and panning (asked 2026-11-18)
+- [x] Images in the chat log seen inline (pictures pasted into a message and ones an agent shows or reads), and opened
+      full screen with zooming and panning (asked 2026-11-18), 3a31fbd
 - [ ] Agentic's UX rounds (asked 2026-11-18): two gpt-6-luna reviewers score it, the changes made, three rounds, aiming
       for 8/10. Round 1 scored 7 and 6 (parity with Cursor 5 and 3.5): an Inbox, change review with checkpoints, a
       plan, keys for approvals, a collapsible fleet with a filter, pending decisions on top of Details, ANSI in errors.
