@@ -60,14 +60,22 @@ internal static class HexCheckpoints
         }
     }
 
-    /// <summary>The top folder of the repository a path is in, null when it's in none.</summary>
+    /// <summary>
+    /// The top folder of the repository a path is in, the nearest folder up from it with a .git of its own (a folder, or a
+    /// file for a worktree or a submodule), null when it's in none. Found by walking up rather than asking git, which says
+    /// the path with its links resolved (/private/var for /var on macOS) and then matched none of the workspace's own.
+    /// </summary>
     public static string? TopOf(string path)
     {
-        string? folder = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
-        if (folder is null || !Directory.Exists(folder))
-            return null;
-        GitResult top = GitProcess.Run(folder, ["rev-parse", "--show-toplevel"]);
-        return top.Ok ? Path.GetFullPath(top.Output.Trim()) : null;
+        string? folder = Path.GetFullPath(Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? path);
+        for (; folder is not null; folder = Path.GetDirectoryName(folder))
+        {
+            string git = Path.Combine(folder, ".git");
+            if (Directory.Exists(git) || File.Exists(git))
+                return Path.TrimEndingDirectorySeparator(folder);
+        }
+
+        return null;
     }
 
     // How far below a folder that isn't a repository its repositories are looked for, a folder of a few projects side by side
