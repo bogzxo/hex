@@ -16,9 +16,10 @@ internal sealed partial class DawnScene
             NewAgentChat();
         }, icon: "add");
         commands.Add("Agents/harness", Said("agents_panel.saved"), ShowHarnessSaved, icon: "graph");
-        commands.Add("Agents/chats", Said("noon.command_next"), () => StepAgent(1), "Alt+PageDown", "arrow-down").IsEnabled = InNoon;
-        commands.Add("Agents/chats", Said("noon.command_previous"), () => StepAgent(-1), "Alt+PageUp", "arrow-up").IsEnabled = InNoon;
-        commands.Add("Agents/chats", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up").IsEnabled =
+        // Heard while typing too, the box has the keyboard whenever Agentic is up and they never type anything
+        commands.Add("Agents/chats", Said("noon.command_next"), () => StepAgent(1), "Alt+PageDown", "arrow-down", UIKeyUse.BoundWhileTyping).IsEnabled = InNoon;
+        commands.Add("Agents/chats", Said("noon.command_previous"), () => StepAgent(-1), "Alt+PageUp", "arrow-up", UIKeyUse.BoundWhileTyping).IsEnabled = InNoon;
+        commands.Add("Agents/chats", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => InNoon() && agentChat?.Parent is { } parent && ChatById(parent) is not null;
         commands.Add("Agents/chats", Said("noon.command_needs_me"), NextNeedingMe, "Ctrl+Alt+.", "bell", UIKeyUse.BoundWhileTyping);
         commands.Add("Agents/chats", Said("noon.command_compact"), () => CompactAgent(agentChat), icon: "fold").IsEnabled = () => CanCompact(agentChat);

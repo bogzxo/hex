@@ -132,6 +132,8 @@ internal sealed partial class DawnScene
         ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
+        ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
+        ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
