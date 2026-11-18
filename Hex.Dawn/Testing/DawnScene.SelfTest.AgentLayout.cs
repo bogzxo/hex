@@ -371,6 +371,13 @@ internal sealed partial class DawnScene
 
         // A row right-clicked offers its text to copy or to pick out of in a window, and the whole chat as Markdown
         bool menuSays = false, windowSelects = false;
+        // Scrolled to first, a row is made once it comes into sight
+        test.Run(() =>
+        {
+            HexAgentEntry first = longChat!.Entries.First(entry => entry.Kind == HexAgentEntryKind.Text);
+            agentsScroll.ScrollTo(agentsRows.IndexOf(agentRowsShown.First(shown => ReferenceEquals(shown.Entry, first)).Row));
+        });
+        test.Settle(0.2f);
         test.Run(() =>
         {
             HexAgentEntry said = longChat!.Entries.First(entry => entry.Kind == HexAgentEntryKind.Text);

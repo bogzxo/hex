@@ -138,18 +138,18 @@ temp folder, one per kind of build.
 ### The chat in a VirtualStack — 18 November 2026
 
 The same test on the dev build once the chat's rows went into a `VirtualStack` (only the rows near what's in sight
-measured, laid out and painted). The release build wasn't measured again.
+measured, laid out and painted), then with a chat put on screen making its rows only as they come into sight. The
+release build wasn't measured again.
 
-| Phase | Update ms (before / after) | Update KB a turn (before / after) |
+| Phase | Update ms (before / stack / made in sight) | Update KB a turn (before / stack / made in sight) |
 | --- | ---: | ---: |
-| Idle | 0.62 / 0.41 | 13.2 / 13.3 |
-| Switching | 0.94 / 1.62 | 258.7 / 140.7 |
-| Scrolling | 0.45 / 0.18 | 10.5 / 9.0 |
-| Streaming | 0.48 / 0.40 | 42.9 / 26.2 |
-| Groups | 0.66 / 0.17 | 9.8 / 5.5 |
+| Idle | 0.62 / 0.41 / 0.40 | 13.2 / 13.3 / 14.1 |
+| Switching | 0.94 / 1.62 / 1.07 | 258.7 / 140.7 / 44.6 |
+| Scrolling | 0.45 / 0.18 / 0.18 | 10.5 / 9.0 / 10.6 |
+| Streaming | 0.48 / 0.40 / 0.25 | 42.9 / 26.2 / 14.2 |
+| Groups | 0.66 / 0.17 / 0.17 | 9.8 / 5.5 / 8.6 |
 
-Switching takes longer, a chat put on screen still makes every row it keeps and the stack then asks for those in sight
-again. Making rows only as they come into sight is what would bring it down.
+Idle allocating 13 KB a turn is untouched by either, it's what's left to bring down.
 
 ## Evidence
 

@@ -295,8 +295,15 @@ internal sealed partial class DawnScene
                     continue;
                 }
 
-                // Made again in its place, a tool that finished giving a little pop
+                // One not made yet is made as its entry is whenever it comes into sight, nothing to make again
                 UIComponent was = agentRowsShown[i].Row;
+                if (!member && agentsRows.IsWaiting(was))
+                {
+                    agentRowsShown[i] = (entry, version, was);
+                    continue;
+                }
+
+                // Made again in its place, a tool that finished giving a little pop
                 UIComponent made = member ? GroupedPlace() : FittedRowOf(chat, entry);
                 agentsRows.Replace(was, made);
                 agentRowFits.Remove(was);
@@ -307,22 +314,55 @@ internal sealed partial class DawnScene
                 continue;
             }
 
+            int at = agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping);
+
+            // A whole chat put on screen has its rows made only as they come into sight, the dozen or two at its end
+            // first, where every row it keeps was made at once
+            if (fresh && !member)
+            {
+                UIComponent place = new Panel { Size = Vector2.Zero, Color = Vector4.Zero };
+                agentsRows.InsertLater(at, place, entry, () => MadeLater(chat, entry, place));
+                agentRowsShown.Add((entry, version, place));
+                continue;
+            }
+
             UIComponent row = member ? GroupedPlace() : FittedRowOf(chat, entry);
-            agentsRows.Insert(agentsTyping is null ? agentsRows.Children.Count : agentsRows.IndexOf(agentsTyping), row, entry);
+            agentsRows.Insert(at, row, entry);
             agentRowsShown.Add((entry, version, row));
 
-            // A whole chat brought up comes in quickly a few rows at a time, a row that just came slides in on its own,
-            // what was asked from the right where its bubble is
+            // A row that just came slides in on its own, what was asked from the right where its bubble is
             if (member)
                 continue;
-            if (arriving)
-                SlideRowIn(row, Math.Min(i, 8) * 0.025f);
-            else if (!fresh && !still)
+            if (!fresh && !still)
                 SlideRowIn(row, 0.0f, entry.Kind == HexAgentEntryKind.User ? 16.0f : 0.0f);
+        }
+
+        // Rows made in the moment after another chat came on screen come in quickly a few at a time, as a whole chat did
+        if (arriving)
+        {
+            agentsArrivingUntil = System.Environment.TickCount64 + ARRIVING_MS;
+            agentsArrived = 0;
         }
 
         ShowTyping(chat, still);
         FitAgentRows();
+    }
+
+    // How long after a chat comes on screen the rows made for it slide in, and how many have so far
+    private const long ARRIVING_MS = 300;
+    private long agentsArrivingUntil;
+    private int agentsArrived;
+
+    /// <summary>A row that waited for its place to come into sight made, and put in the place's stead among the rows shown.</summary>
+    private UIComponent MadeLater(HexAgentChat chat, HexAgentEntry entry, UIComponent place)
+    {
+        UIComponent made = FittedRowOf(chat, entry);
+        int at = agentRowsShown.FindIndex(shown => ReferenceEquals(shown.Row, place));
+        if (at >= 0)
+            agentRowsShown[at] = agentRowsShown[at] with { Row = made };
+        if (System.Environment.TickCount64 < agentsArrivingUntil)
+            SlideRowIn(made, Math.Min(agentsArrived++, 8) * 0.025f);
+        return made;
     }
 
     // Whether the next rows drawn are just put there, the view having been opened again, see PlaceAgentsView

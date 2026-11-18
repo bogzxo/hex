@@ -15,14 +15,44 @@ internal sealed class HexAgentRowList
     private readonly Dictionary<UIComponent, long> keys = new(ReferenceEqualityComparer.Instance);
     private long made;
 
+    // The rows still to be made, by the place each holds, made as it comes into sight
+    private readonly Dictionary<UIComponent, Func<UIComponent>> waiting = new(ReferenceEqualityComparer.Instance);
+
     public HexAgentRowList(VirtualStack shown)
     {
         Shown = shown;
-        shown.Make = index => rows[index];
+        shown.Make = Make;
         shown.KeyOf = index => keys[rows[index]];
         // A row of nothing (a call its group's row draws) takes no room before it's ever been seen either
         shown.EstimateHeight = (index, _) => rows[index].Visible ? shown.Estimate : 0.0f;
     }
+
+    // A row as the list on screen asks for it, made now if it was waiting to be
+    private UIComponent Make(int index)
+    {
+        UIComponent place = rows[index];
+        if (!waiting.Remove(place, out Func<UIComponent>? make))
+            return place;
+
+        UIComponent made = make();
+        rows[index] = made;
+        keys[made] = keys[place];
+        keys.Remove(place);
+        return made;
+    }
+
+    /// <summary>
+    /// A row put in at a place to be made only once it comes into sight, <paramref name="place"/> holding its place until
+    /// then. A chat of a few hundred rows put on screen makes the dozen or two that show.
+    /// </summary>
+    public UIComponent InsertLater(int index, UIComponent place, object of, Func<UIComponent> make)
+    {
+        waiting[place] = make;
+        return Insert(index, place, of);
+    }
+
+    /// <summary>Whether a row is still a place waiting to be made, which is made from what its entry is when it is.</summary>
+    public bool IsWaiting(UIComponent row) => waiting.ContainsKey(row);
 
     /// <summary>The list on screen, which has the rows near what's in sight among its children.</summary>
     public VirtualStack Shown { get; }
@@ -63,6 +93,7 @@ internal sealed class HexAgentRowList
         Moved(at);
         rows.RemoveAt(at);
         keys.Remove(row);
+        waiting.Remove(row);
         Shown.ItemCount = rows.Count;
         if (row.Parent == Shown)
             Shown.Remove(row);
@@ -83,6 +114,7 @@ internal sealed class HexAgentRowList
         rows[at] = now;
         keys[now] = keys[was];
         keys.Remove(was);
+        waiting.Remove(was);
         if (was.Parent == Shown)
             Shown.Remove(was);
     }
@@ -103,6 +135,7 @@ internal sealed class HexAgentRowList
             if (rows[i] == keep)
                 continue;
             keys.Remove(rows[i]);
+            waiting.Remove(rows[i]);
             rows.RemoveAt(i);
         }
 
