@@ -16,8 +16,14 @@ internal static class InstallerDestination
 
     public static void ValidateVersion(string root, ReleaseAsset? release)
     {
-        if (release is not null && File.Exists(Path.Combine(root, InstallPaths.Manifest)) &&
-            ReleaseClient.VersionOf(release.Version) < ReleaseClient.VersionOf(InstallTransaction.ReadManifest(root).Version))
+        if (release is null || !File.Exists(Path.Combine(root, InstallPaths.Manifest)))
+            return;
+        // One channel's installation is never turned into the other's, each keeps its folder, its entries and its updates
+        InstallChannel installed = InstallChannels.Of(root);
+        if (installed != release.Channel)
+            throw new IOException(InstallText.Get("errors.other_channel", ("channel", InstallText.Get($"channel.{installed.Word()}"))));
+        string had = InstallTransaction.ReadManifest(root).Version;
+        if (InstallChannels.IsNewer(release.Channel, had, release.Version))
             throw new IOException(InstallText.Get("errors.downgrade"));
     }
 }

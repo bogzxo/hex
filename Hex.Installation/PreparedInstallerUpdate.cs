@@ -6,13 +6,14 @@ public sealed class PreparedInstallerUpdate : IDisposable
     public string Executable { get; }
     public string Package { get; }
     public string Version { get; }
+    public InstallChannel Channel { get; }
     private bool handedOff;
 
-    private PreparedInstallerUpdate(string executable, string package, string version) =>
-        (Executable, Package, Version) = (executable, package, version);
+    private PreparedInstallerUpdate(string executable, string package, string version, InstallChannel channel) =>
+        (Executable, Package, Version, Channel) = (executable, package, version, channel);
 
     public IReadOnlyList<string> Arguments(string root) =>
-        [.. InstallerHandoff.UpdateArguments(root, Version), "--package", Package];
+        [.. InstallerHandoff.UpdateArguments(root, Version, Channel), "--package", Package];
 
     /// <summary>Download once, validate the entire package, then copy its new installer and all runtime dependencies.</summary>
     public static async Task<PreparedInstallerUpdate> Prepare(ReleaseAsset release, Action<InstallProgress>? progress,
@@ -28,13 +29,13 @@ public sealed class PreparedInstallerUpdate : IDisposable
             cancel.ThrowIfCancellationRequested();
             progress?.Invoke(new(InstallText.Get("status.verifying"), .75f));
             // The normal package validator rejects unsafe archives before any executable can be started.
-            InstallTransaction.Prepare(zip, stage, Path.Combine(work, "empty"), release.Version, cancel);
+            InstallTransaction.Prepare(zip, stage, Path.Combine(work, "empty"), release.Version, cancel, channel: release.Channel);
             cancel.ThrowIfCancellationRequested();
             executable = InstallerHandoff.CopyInstaller(Path.Combine(stage, "installer"));
             string package = Path.Combine(Path.GetDirectoryName(executable)!, "hex-update-package.zip");
             File.Move(zip, package);
             cancel.ThrowIfCancellationRequested();
-            return new(executable, package, release.Version);
+            return new(executable, package, release.Version, release.Channel);
         }
         catch
         {

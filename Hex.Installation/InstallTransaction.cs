@@ -33,7 +33,7 @@ public static class InstallTransaction
                 await ReleaseClient.Verify(release, zip, cancel);
             }
             progress?.Invoke(new(InstallText.Get("status.verifying"), .74f));
-            Prepare(zip, stage, root, release.Version, cancel, choices);
+            Prepare(zip, stage, root, release.Version, cancel, choices, release.Channel);
             cancel.ThrowIfCancellationRequested();
             ensureStopped();
             progress?.Invoke(new(InstallText.Get("status.registering"), .9f));
@@ -79,7 +79,8 @@ public static class InstallTransaction
         return InstallChoices.FromJson(JsonNode.Parse(File.ReadAllText(Path.Combine(root, InstallPaths.Manifest)))?["integration"]);
     }
 
-    public static void Prepare(string zip, string stage, string root, string version, CancellationToken cancel = default, InstallChoices? choices = null)
+    public static void Prepare(string zip, string stage, string root, string version, CancellationToken cancel = default, InstallChoices? choices = null,
+        InstallChannel channel = InstallChannel.Stable)
     {
         choices ??= ReadChoices(root);
         if (Directory.Exists(stage)) throw new IOException(InstallText.Get("errors.stage_exists"));
@@ -131,7 +132,8 @@ public static class InstallTransaction
             }
         var record = new JsonObject
         {
-            ["product"] = "bogzxo.Hex", ["schema"] = 1, ["version"] = version,
+            // Which Hex it is, so an update comes from the same kind of release and its entries keep their own names
+            ["product"] = "bogzxo.Hex", ["schema"] = 1, ["version"] = version, ["channel"] = channel.Word(),
             ["integration"] = choices.ToJson(),
             ["files"] = new JsonArray(files.Select(f => (JsonNode?)JsonValue.Create(f)).ToArray())
         };
@@ -173,7 +175,12 @@ public static class InstallTransaction
         else PlatformRegistration.Unregister(root);
     }
 
-    public static void Uninstall(string root) => Uninstall(root, () => PlatformRegistration.Unregister(root), () => RestoreRegistration(root));
+    public static void Uninstall(string root)
+    {
+        // Which it was asked before its record goes, its entries are taken off by that channel's names once it has
+        InstallChannel channel = InstallChannels.Of(root);
+        Uninstall(root, () => PlatformRegistration.Unregister(root, channel), () => RestoreRegistration(root));
+    }
 
     internal static void Uninstall(string root, Action unregister, Action restoreRegistration)
     {
