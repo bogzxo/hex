@@ -25,6 +25,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void BringBackChats()
     {
+        faceAtStart = FaceNamed(options.Face);
         if (options.SelfTest || options.Check.Length > 0)
             return;
 
@@ -48,6 +49,8 @@ internal sealed partial class DawnScene
         agentChatsMade = Math.Max(agentChatsMade, state?["made"]?.GetValue<int>() ?? 0);
         if (state?["open"]?.GetValue<int>() is { } open && ChatById(open) is { } opened)
             agentChat = opened;
+        // The face the workspace was left in, unless the command line said one
+        faceAtStart ??= FaceNamed(state?["face"]?.GetValue<string>());
         agentsListDrawn = string.Empty;
         agentsDrawn = (-1, -1);
     }
@@ -55,6 +58,13 @@ internal sealed partial class DawnScene
     /// <summary>The chats that moved written every few seconds, and another workspace's swapped in once nothing works.</summary>
     private void UpdateChatsKept(float dt)
     {
+        // Put on screen once the window is up, the face is laid out at its size
+        if (faceAtStart is { } face)
+        {
+            faceAtStart = null;
+            ShowFace(face);
+        }
+
         if (chatsKept is null || (chatsKeptIn -= dt) > 0.0f)
             return;
         chatsKeptIn = CHATS_KEPT_EVERY;
@@ -75,9 +85,21 @@ internal sealed partial class DawnScene
         chatsKept.Keep(kept, new JsonObject
         {
             ["open"] = agentChat?.Id,
-            ["made"] = agentChatsMade
+            ["made"] = agentChatsMade,
+            ["face"] = Face.ToString()
         });
     }
+
+    // The face to start in, said on the command line or kept with the workspace, null for Dawn as ever
+    private Hex.Shell.HexFace? faceAtStart;
+
+    // A face by its name, Agentic going for Noon, null for one that isn't (Dusk is a mode of its own)
+    private static Hex.Shell.HexFace? FaceNamed(string? name) => name?.Trim().ToLowerInvariant() switch
+    {
+        "noon" or "agentic" or "agents" => Hex.Shell.HexFace.Noon,
+        "dawn" or "editor" => Hex.Shell.HexFace.Dawn,
+        _ => null
+    };
 
     // This workspace's chats kept and put away, and the other one's brought out, their older rows left in their files
     private void SwapKeptChats(string folder)

@@ -252,6 +252,7 @@ internal static partial class Program
           --harness-hook           Claude Code's PreToolUse hook, turns a shell search of the workspace back to Hex's tools
           --mcp                    MCP stdio bridge, starts one editor if needed; --window --mcp opens the editor with its server
           --view <design|code|table>  which view a file comes up in
+          --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes
           --size <w>x<h>           the window's size, maximised otherwise

@@ -13,7 +13,7 @@ internal readonly record struct HexLaunchFile(string Path, int Line, int Column)
 internal static class HexLaunch
 {
     // The options that take the one argument after them
-    private static readonly string[] withValue = ["--open", "--workspace", "--size", "--scale", "--view", "--line", "--folder", "--goto", "-g", "--cwd"];
+    private static readonly string[] withValue = ["--open", "--workspace", "--size", "--scale", "--view", "--line", "--folder", "--goto", "-g", "--cwd", "--face"];
 
     // The options that take every argument after them up to the next option
     private static readonly string[] withValues = ["--check", "--selftest", "--console"];
