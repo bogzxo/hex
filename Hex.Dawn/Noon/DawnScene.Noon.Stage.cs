@@ -308,12 +308,12 @@ internal sealed partial class DawnScene
     /// A checkpoint of every repository of the workspace as a turn begins, taken off the editor's thread, for that turn's
     /// changes to be seen against and put back from.
     /// </summary>
-    private void TakeCheckpoint(HexAgentEntry asked)
+    private void TakeCheckpoint(HexAgentEntry asked, Action then)
     {
         string[] folders = [.. explorer.workspace.Folders];
         var taken = new List<(string, string)>();
         checkpoints.AddOrUpdate(asked, taken);
-        _ = Task.Run(() =>
+        InBackground("checkpoint", () =>
         {
             var tops = new HashSet<string>(PlatformPaths.Comparer);
             var made = new List<(string, string)>();
@@ -325,9 +325,13 @@ internal sealed partial class DawnScene
                     made.Add((top, tree));
             }
 
+            return made;
+        }, made =>
+        {
             lock (taken)
                 taken.AddRange(made);
-        });
+            then();
+        }, quiet: true);
     }
 
     // Whether a tool writes files by its name, the edits and writes of every agent system

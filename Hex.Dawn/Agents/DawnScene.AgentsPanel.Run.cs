@@ -96,7 +96,7 @@ internal sealed partial class DawnScene
         // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
         // background), and a second run on the same session had two agents writing over each other. What's asked waits in
         // its inbox and starts the next run once that one has gone (AfterAgentTurn)
-        if (agentRuns.Any(each => each.Chat == chat && !each.Process.Exited))
+        if (agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat && !each.Process.Exited))
         {
             string said = prompt.Length > 0 ? prompt : asked;
             var message = new HexAgentMail(hub.NextMailSeq(), null, FROM_PERSON, "instruction", said, Directive: true) { To = chat.Id };
@@ -108,8 +108,24 @@ internal sealed partial class DawnScene
 
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
         prompt = UnreadPrompt(chat, prompt);
-        // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes)
-        TakeCheckpoint(chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation));
+        // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes). The
+        // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
+        HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
+        agentsStarting.Add(chat);
+        TakeCheckpoint(turn, () =>
+        {
+            // Stopped while the checkpoint was taken, it isn't started at all
+            if (agentsStarting.Remove(chat))
+                LaunchAgent(chat, extension, run, prompt);
+        });
+    }
+
+    // The chats whose turn has begun and whose agent waits for its checkpoint before it's started
+    private readonly HashSet<HexAgentChat> agentsStarting = [];
+
+    /// <summary>A chat's agent started on what it was asked, the row of it already in the chat.</summary>
+    private void LaunchAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt)
+    {
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
         string? found = HexAgentProcess.Find(program);
         if (found is null)
@@ -288,6 +304,10 @@ internal sealed partial class DawnScene
     {
         if (chat is null)
             return;
+
+        // One still waiting for its checkpoint is never started, its turn over as it is
+        if (agentsStarting.Remove(chat))
+            chat.Done();
 
         foreach (AgentRun run in agentRuns.Where(run => run.Chat == chat).ToList())
         {
