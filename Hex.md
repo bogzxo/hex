@@ -140,6 +140,20 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - [x] What the harness saved drawn the way Horizon's performance overlay draws a frame (asked 2026-11-18): a large
       figure and tiles with meters, a bar cut into each tool's part of the saving, a table of numbers in columns with
       a meter a row, the agent systems the same (a3a9957, 8ec705d)
+- [x] Hex 3.1.0 Amphetamine (asked 2026-11-18), the welcome page saying what Agentic brought (6874358)
+- [x] Pasted pictures as small ones of themselves in the box opening full screen, the full screen view no longer leaving
+      its small one white, room on the chat cards for their context bar (asked 2026-11-18, 08b5b61), the family window's
+      chips pressable again and it and the savings window solid (088d48f)
+- [ ] A review by gpt-6.2-sol (UX, 7/10) and claude-sonnet-5-5 (code) on 2026-11-18. Fixed: restore never deleting what
+      the checkpoint couldn't have had, checkpoints pinned by refs and given longer, hunk undo keeping encoding and
+      position and not writing over a newer write, a failed checkpoint no longer holding its agent (65d42c0), held
+      messages, waiting questions, unreadable chat files and chats past the cap (b0fbe5b), totals, the fleet under a
+      press, texts and number formats (d1ff128), chats written off the editor's thread (d0a8848), Review first, the
+      family's one section, savings and model labels (e5a1091). Left: what a turn changed from its successful writes
+      rather than tool names, review in the editor's diff with next and previous, search over past chats' text, @ on
+      its own and arrow keys in its list, the Inbox's badge telling decisions from unread, a plan to approve before
+      it runs, mail marked read only once its agent starts, a stable id for approvals, a limit on agents starting
+      each other by mail, earlier rows read page by page, PATH looked through off the editor's thread
 - [x] Worktrees per agent left out, the person's call (2026-11-18): agents work together on the one project in the
       workspace, checkpoints, review and restore being how an agent's changes are undone
 - [x] The agent that starts another closes its chat or clears it to start afresh, hex_agent_close (asked 2026-11-18)
