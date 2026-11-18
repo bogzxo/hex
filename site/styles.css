@@ -482,12 +482,12 @@ h2 + p strong {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--border);
   list-style: none;
 
+  /* The lines between the cards are each card's own, so a row that isn't full has nothing grey where a card isn't */
   & li {
     padding: 1.5rem;
-    background: var(--background);
+    outline: 1px solid var(--border);
   }
 
   & h3 {
@@ -499,6 +499,27 @@ h2 + p strong {
   & p {
     color: var(--dim);
     font-size: 0.98rem;
+  }
+}
+
+/* A list that's meant as one line is one on a wide screen, however many cards it has */
+@media (width >= 70rem) {
+  .features.row {
+    grid-template-columns: none;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+
+    & li {
+      padding: 1.25rem;
+    }
+
+    & h3 {
+      font-size: 1.05rem;
+    }
+
+    & p {
+      font-size: 0.92rem;
+    }
   }
 }
 
@@ -544,6 +565,13 @@ h2 + p strong {
 
   & figure.wide {
     grid-column: 1 / -1;
+  }
+}
+
+/* Pictures that come in twos or fours sit two to a row, where there's the room for two */
+@media (width >= 44rem) {
+  .gallery.pairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
