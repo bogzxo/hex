@@ -187,7 +187,27 @@ skills), said by its extension and offered by Hex in the composer, the Agents me
 ## Plan milestones (docs/agent-workspace-plan.md)
 
 - [x] M0
-- [ ] M1, left: Welcome row, Agentic themes, VirtualStack in the engine, a noon self-test suite
+- [ ] M1, left: below
+  - [x] Agentic themes, solstice_noon and solstice_day_noon, a teal accent while Agentic is up, Dawn's back as it's
+        left, a look without a Noon theme as it was (5342a6a)
+  - [x] Welcome's Agents row, New Agent, Continue "<last chat>", how many want looking at (1aa4204)
+  - [x] VirtualStack in the engine with its tests (horizon 1901c2a). Not yet under the chat, the Agents view still
+        pages its rows by hand (200 in memory)
+  - [x] The noon self test suite, the title bar's button and the key, the themes, the side bar's width after, the
+        welcome row (1aa4204)
+  - [ ] The chat's rows in a VirtualStack (1.6), the family view's mail (1.7)
+  - [x] The horizon in Agentic, running while an agent works, red when one fails (17.3, ab90d37)
+  - [x] --face on the command line, the last face kept with the workspace's chats (1.9, 476fdde)
+  - [x] "Open in Agentic" on a chat's menu in the side bar (1.10, there already)
+  - [x] Suites noon-keys and noon-looks (df0356e, which also has Alt+Page Up, Page Down and Home heard while the box
+        has the keyboard, they never were in Agentic), noon-fleet for what the fleet has now (family blocks, totals,
+        closing a family)
+  - [ ] Suites noon-panel, noon-mail (two tagged MCP clients of a family, needs the mail rows of 1.6), dusk-noon
+        (needs the self test to host Dusk), noon-fleet's stand-in agent that spawns, and hex_agent_brief (not built)
+  - The fleet is drawn again from a string key every quarter second (AgentCardsKey), a version hash would allocate
+    nothing (plan 12.5)
+  - The settings self test's "tab_size 3 on Workspace is written to the folder's file alone" fails on 0829def too,
+    before any of this
 - [ ] M2 and on
 
 ## Known failures that aren't new
