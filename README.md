@@ -121,18 +121,31 @@ You can also make Dusk your default terminal where the platform supports it; [th
 
 ## Bring your own agent. Or don't.
 
-![Hex Agentic with two Claude Code chats in the fleet, one open with its tool calls and answer, and its tokens, cost, context and files in Details](images/readme/agentic.png)
+![Hex Agentic with five Claude Code chats in the fleet, one of them started by another, the open chat's tool calls, allowed request, to-do list and answer in the middle, and its tokens, cost, context, tools and files in Details](images/readme/agentic.png)
 
-*Agentic, the agents' face, in its teal. Two small Claude Code chats asked about the demo project; the fleet on the
-left, the chat in the middle, what it cost and touched on the right.*
+*Agentic, the agents' face, in its teal. Five small Claude Code chats at work on the demo project. This one was asked
+to add envelopes to the mixer, asked leave to build, ticked off its list and said what it left undecided.*
 
 Hex doesn't sell you an AI subscription. **Agentic** is a face of its own beside Dawn and Dusk that runs your
-installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card
-saying its model, tokens, cost and how full its context is. An Inbox for everything an agent is waiting on you for.
-Agents can start and steer other agents. Your provider's usage charges still belong to your provider.
+installed Claude Code, Codex or Antigravity CLI, with your own account. Your provider's usage charges still belong to
+your provider. What's in it:
 
-**Changes you can take back.** Every turn of an agent is checkpointed, so what it wrote can be reviewed hunk by
-hunk, kept or undone one at a time, or restored whole.
+- **The fleet.** Every chat on the left as a card: its agent system, model, tokens, cost, what it's doing right now
+  and a thin bar of how full its context is. A filter over them, and a panel under them of each system's version,
+  session totals and what the harness saved it.
+- **Agents that start agents.** One chat can start others, of any system and model, and they sit under it a step in.
+  *Check the maths* above was started by *Review the mixer*, which waited for it and reported for both.
+- **The chat.** Tool calls folded into quiet groups you can open, requests with what was answered, the agent's
+  to-do list ticked off as it goes. A box with `@` for files and declarations, `/` for the system's commands, pasted
+  pictures, and pickers for the model and how hard it thinks.
+- **Details.** On the right, the chat's turns, tokens in and out, cost, how much came from the cache, your plan's
+  limits, which tools it used and how many went through Hex, and the files it touched.
+- **Four tabs.** Chat, Inbox, Changes and Plan, on **Alt+1** to **Alt+4**. Plan is the agent's to-do list by itself.
+
+| | |
+| --- | --- |
+| [![The Inbox: a request from one agent to run dotnet build with Allow and Deny, and two cards for chats that finished](images/readme/agentic-inbox.png)](images/readme/agentic-inbox.png) | [![Changes: one turn's edit to Mixer.cs opened hunk by hunk, each with Keep and Undo, and Restore the turn above](images/readme/agentic-review.png)](images/readme/agentic-review.png) |
+| **The Inbox.** Everything any agent is waiting on you for in one place: leave to run something, a question, a chat that finished while you were elsewhere. **Ctrl+Alt+Y** allows, **Ctrl+Alt+N** denies. | **Changes you can take back.** Every turn is checkpointed as it begins. Diff it, review it hunk by hunk keeping or undoing each, or restore the whole turn. |
 
 Agents can also connect over MCP. Hex exposes **71 tools**: repository maps, symbol search, references, focused code
 reads, screenshots, editor commands, the debugger, notebooks and terminals, so an agent can ask for one method instead

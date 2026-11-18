@@ -210,14 +210,33 @@
         <h2>Bring your own agent. Or don't.</h2>
         <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
-          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: two Claude Code chats in a list on the left, one of them open in the middle with its question, tool calls and answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
+          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: five Claude Code chats in a list on the left, one of them started by another, the open chat in the middle with its tool calls, an allowed request, a ticked to-do list and its answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
         </figure>
-        <p class="note">Two small Claude Code chats asked about the demo project. The fleet on the left, the chat in the middle, what it cost and touched on the right.</p>
+        <p class="note">Five small Claude Code chats at work on the demo project. This one was asked to add envelopes to the mixer, asked leave to build, ticked off its list and said what it left undecided.</p>
+
+        <div class="gallery">
+          <figure class="rise">
+            <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
+            <figcaption><b>The Inbox.</b> Everything any agent is waiting on you for, in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
+            <figcaption><b>Changes you can take back.</b> Every turn is checkpointed. Keep or undo each hunk, or restore the whole turn.</figcaption>
+          </figure>
+        </div>
 
         <ul class="features">
           <li class="rise">
-            <h3>Changes you can take back</h3>
-            <p>Every turn of an agent is checkpointed, so what it wrote can be reviewed hunk by hunk, kept or undone one at a time, or restored whole.</p>
+            <h3>The fleet</h3>
+            <p>Every chat is a card: its agent system, model, tokens, cost, what it's doing right now and a thin bar of how full its context is.</p>
+          </li>
+          <li class="rise">
+            <h3>Agents that start agents</h3>
+            <p>One chat can start others, of any system and model, and they sit under it a step in. It waits for them and reports for all.</p>
+          </li>
+          <li class="rise">
+            <h3>Details, down to the cent</h3>
+            <p>Turns, tokens in and out, cost, how much came from the cache, your plan's limits, which tools went through Hex and the files it touched.</p>
           </li>
           <li class="rise">
             <h3>One method, not the whole bloody file</h3>

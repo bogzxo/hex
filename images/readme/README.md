@@ -22,7 +22,9 @@ calling `hex_screenshot`. That's why the status bar says Agent on the right. `te
 | `markdown.png` | `notes.md` in its preview |
 | `designer.png` | `Assets/hex/welcome.hor`, Hex's own welcome page, in the designer with its Open Folder button selected |
 | `settings.png` | Settings at Appearance, Profiles |
-| `agentic.png` | Agentic with two Claude Code chats on Claude Haiku 5.5, started with `hex_agent_spawn` and asked read-only questions about the demo. The Claude Code extension was copied beside Hex.exe first. The limits in Details are the account's own |
+| `agentic.png` | Agentic with five Claude Code chats on Claude Haiku 5.5, started with `hex_agent_spawn` (one of them by another chat). The open one was asked to add envelopes to `Mixer.cs` and did, the build it asked leave for allowed from the Inbox. The Claude Code extension was copied beside Hex.exe first. The limits in Details are the account's own. The first line of each prompt is what Hex tells an agent started by another |
+| `agentic-inbox.png` | The Inbox while that chat waited for leave to run `dotnet build`, with the cards of two chats that had finished |
+| `agentic-review.png` | Changes for that chat, Review pressed on its turn's `Mixer.cs` |
 | `light.png`, `graphite.png`, `glass.png` | The same file and layout after File, Preferences, Look: Solstice Day, Graphite and Fluid Glass |
 | `sunset.png` | The same in the Flat look with Dawn's theme set to Sunset |
 | `terminal.png` | Dusk, Solstice Dusk, PowerShell |
@@ -31,6 +33,9 @@ The project in the pictures is a small demonstration, a mixer of sines in two C#
 git repository of five commits. It builds and runs; it isn't a claim about anything else. Dusk runs a showcase script
 that prints the demo folder's listing and six real Hex commits, followed by ANSI colour swatches. Its prompt is
 shortened to `PS Signal>`. Screenshot settings were kept apart from the user's and from the benchmark's.
+
+csharp-ls can take up to a minute to come up on a project. No code picture was taken until it had, which is told by
+Roslyn's own hints arriving in the problems list and the status bar saying `C#, csharp-ls`.
 
 One thing was worked round. After the demo's files were changed on disk under an open tab, csharp-ls reported syntax
 errors the file didn't have until Run: Restart Language Server. `git.png` and `search.png` were taken after that.
