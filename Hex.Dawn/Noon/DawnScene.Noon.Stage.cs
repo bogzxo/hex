@@ -523,7 +523,9 @@ internal sealed partial class DawnScene
             // As much of what was asked as the card's width has room for beside its button, measured in the font, it was
             // cut at seventy letters however wide the card was
             string title = Said("noon.changes_turn", ("number", number.ToString(CultureInfo.InvariantCulture)), ("asked", OneLine(asked.AskedText ?? asked.Text, 400)));
-            float room = noonChanges.Bounds.Width - 40 - (checkpointed ? 160 : 0) - 24;
+            // The card's inside, less the scroll's padding and bar, the card's own padding and the icon, and the button beside
+            // it. Measured plain, the title is bold and a bold letter is wider, so a tenth is left over for it
+            float room = (noonChanges.Bounds.Width - 70 - (checkpointed ? 170 : 0)) * 0.9f;
             head.Add(new Label
             {
                 Text = $"$(history) {UIRichText.Literal(room > 100 ? FitText(title, 0.135f, room) : OneLine(title, 70))}",

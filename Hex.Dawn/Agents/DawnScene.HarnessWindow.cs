@@ -78,7 +78,7 @@ internal sealed partial class DawnScene
         var head = column.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 54), Color = Vector4.Zero });
         head.Add(new Label
         {
-            Text = $"[color:{HexColour(good)}]{share * 100:0}[/color][dim]%[/dim]", TextScale = 0.34f, Bold = true, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(-1, 2)
+            Text = $"[color:{HexColour(good)}]{share * 100:0}[/color][color:{HexColour(skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1))}]%[/color]", TextScale = 0.34f, Bold = true, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(-1, 2)
         });
         head.Add(new Label { Text = UIRichText.Literal(Said("agents_panel.harness_saved_word")), TextScale = 0.12f, Dim = true, Anchor = Origin.BottomLeft, Pivot = Origin.BottomLeft });
         var tiles = head.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 18, Anchor = Origin.TopRight, Pivot = Origin.TopRight });
@@ -118,12 +118,13 @@ internal sealed partial class DawnScene
         column.Add(new Label { Text = UIRichText.Literal(Said("agents_panel.harness_about")), TextScale = 0.11f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
     }
 
-    // A tile of the head, its small heading, its number large with its unit dim after it, and a hair of a meter under them
+    // A tile of the head, its small heading with its unit, its number large, and a hair of a meter under them. The unit
+    // after the number ran into the next tile
     private static void HarnessTile(StackPanel tiles, string heading, string value, string unit, double share, Vector4 colour, Vector4 track)
     {
-        var tile = tiles.Add(new StackPanel { Spacing = 2, Size = new Vector2(96, 54) });
-        tile.Add(new Label { Text = UIRichText.Literal(heading.ToUpperInvariant()), TextScale = 0.1f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
-        tile.Add(new Label { Text = $"{UIRichText.Literal(value)} [dim]{UIRichText.Literal(unit)}[/dim]", TextScale = 0.16f, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        var tile = tiles.Add(new StackPanel { Spacing = 3, Size = new Vector2(104, 54) });
+        tile.Add(new Label { Text = UIRichText.Literal($"{heading} · {unit}".ToUpperInvariant()), TextScale = 0.095f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        tile.Add(new Label { Text = UIRichText.Literal(value), TextScale = 0.19f, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         tile.Add(new HexShareBar { Share = (float)Math.Clamp(share, 0, 1), Colour = colour, Track = track, Fill = UIFill.Horizontal, Size = new Vector2(0, 3) });
     }
 
