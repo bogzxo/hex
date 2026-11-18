@@ -89,6 +89,9 @@ internal sealed partial class HexCodeIndex
         return snapshot;
     }
 
+    /// <summary>The index as the last look left it, without looking, for the editor's thread where a walk would stall it.</summary>
+    public HexIndexSnapshot Latest => snapshot;
+
     /// <summary>The generation of the last look, without looking.</summary>
     public long Generation => snapshot.Generation;
 
