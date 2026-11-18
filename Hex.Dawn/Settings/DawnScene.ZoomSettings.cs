@@ -39,6 +39,8 @@ internal sealed partial class DawnScene
         FlushZoomSettings(report: false);
         // The chats as they are at the last, what moved since the last few seconds' write
         KeepChats();
+        // Written on a thread of their own, waited for so the last of them is on the disk before Hex goes
+        chatsKept?.Flush();
         debugger?.DetachOnClose();
         extensions?.StopWatching();
         StopRemote();

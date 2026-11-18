@@ -111,6 +111,8 @@ internal sealed partial class DawnScene
     // This workspace's chats kept and put away, and the other one's brought out, their older rows left in their files
     private void SwapKeptChats(string folder)
     {
+        // This folder's chats on the disk before the other's are read
+        chatsKept?.Flush();
         hub.History = null;
         foreach (HexAgentChat chat in agentChats.ToList())
             agentChats.Remove(chat);

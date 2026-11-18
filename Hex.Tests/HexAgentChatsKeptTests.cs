@@ -26,7 +26,9 @@ public sealed class HexAgentChatsKeptTests
             var second = new HexAgentChat(5, "codex") { Parent = 3, Depth = 1, Name = "Scout" };
             second.Ask("look round");
 
-            new HexAgentChatsKept(folder).Keep([first, second], new JsonObject { ["open"] = 5, ["made"] = 7 });
+            var kept = new HexAgentChatsKept(folder);
+            kept.Keep([first, second], new JsonObject { ["open"] = 5, ["made"] = 7 });
+            kept.Flush();
 
             var (chats, state) = new HexAgentChatsKept(folder).Read();
             Assert.Equal([3, 5], chats.Select(chat => chat.Id).ToArray());
@@ -57,16 +59,19 @@ public sealed class HexAgentChatsKeptTests
             var moving = new HexAgentChat(2, "claude_code");
             moving.Ask("move");
             kept.Keep([still, moving], new JsonObject());
+            kept.Flush();
 
             string stillFile = Path.Combine(folder, $"chat-{still.Key}.json");
             DateTime stillAt = File.GetLastWriteTimeUtc(stillFile);
             File.SetLastWriteTimeUtc(stillFile, stillAt.AddMinutes(-5));
             moving.Say("moved");
             kept.Keep([still, moving], new JsonObject());
+            kept.Flush();
             Assert.Equal(stillAt.AddMinutes(-5), File.GetLastWriteTimeUtc(stillFile));
             Assert.Equal("moved", new HexAgentChatsKept(folder).Read().Chats[1].Entries.Last().Text);
 
             kept.Keep([moving], new JsonObject());
+            kept.Flush();
             Assert.False(File.Exists(stillFile));
             Assert.Single(new HexAgentChatsKept(folder).Read().Chats);
         }
@@ -85,7 +90,9 @@ public sealed class HexAgentChatsKeptTests
         {
             var chat = new HexAgentChat(1, "claude_code");
             chat.Ask("hello");
-            new HexAgentChatsKept(folder).Keep([chat], new JsonObject());
+            var keeping = new HexAgentChatsKept(folder);
+            keeping.Keep([chat], new JsonObject());
+            keeping.Flush();
             string stray = Path.Combine(folder, "chat-gone.json");
             File.WriteAllText(stray, "{}");
             Directory.CreateDirectory(Path.Combine(folder, "history"));

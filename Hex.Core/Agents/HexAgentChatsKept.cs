@@ -61,41 +61,76 @@ internal sealed class HexAgentChatsKept
     /// </summary>
     public void Keep(IReadOnlyList<HexAgentChat> chats, JsonObject state)
     {
+        // What moved made into text here, on the thread that owns the chats, and written to the disk on a thread of its own
+        // in the order it was made. Written here, a streaming agent's chat was a file write every few seconds on the
+        // editor's thread
+        var writes = new List<(string Path, string? Text)>();
+        var keys = new JsonArray();
+        var now = new HashSet<string>(StringComparer.Ordinal);
+        foreach (HexAgentChat chat in chats)
+        {
+            now.Add(chat.Key);
+            keys.Add((JsonNode)chat.Key);
+            long stamp = Stamp(chat);
+            if (written.TryGetValue(chat.Key, out long was) && was == stamp)
+                continue;
+
+            writes.Add((FileOf(chat.Key), HexAgentChatStore.Write(chat).ToJsonString()));
+            written[chat.Key] = stamp;
+        }
+
+        // Its older rows went with it when it was closed, one only past the most kept has them tidied as it's read back
+        foreach (string gone in written.Keys.Where(key => !now.Contains(key)).ToArray())
+        {
+            written.Remove(gone);
+            writes.Add((FileOf(gone), null));
+        }
+
+        state["chats"] = keys;
+        string list = state.ToJsonString();
+        if (list != listWritten)
+        {
+            writes.Add((Path.Combine(Folder, LIST), list));
+            listWritten = list;
+        }
+
+        if (writes.Count == 0)
+            return;
+        string folder = Folder;
+        lock (writing)
+            lastWrite = lastWrite.ContinueWith(_ => WriteAll(folder, writes), TaskScheduler.Default);
+    }
+
+    // The writes made so far, one after another
+    private readonly Lock writing = new();
+    private Task lastWrite = Task.CompletedTask;
+
+    // A batch of writes, a file's text or its deletion for null, never throwing past here
+    private static void WriteAll(string folder, List<(string Path, string? Text)> writes)
+    {
         try
         {
-            Directory.CreateDirectory(Folder);
-            var keys = new JsonArray();
-            var now = new HashSet<string>(StringComparer.Ordinal);
-            foreach (HexAgentChat chat in chats)
+            Directory.CreateDirectory(folder);
+            foreach (var (path, text) in writes)
             {
-                now.Add(chat.Key);
-                keys.Add((JsonNode)chat.Key);
-                long stamp = Stamp(chat);
-                if (written.TryGetValue(chat.Key, out long was) && was == stamp)
-                    continue;
-
-                WriteOver(FileOf(chat.Key), HexAgentChatStore.Write(chat).ToJsonString());
-                written[chat.Key] = stamp;
-            }
-
-            // Its older rows went with it when it was closed, one only past the most kept has them tidied as it's read back
-            foreach (string gone in written.Keys.Where(key => !now.Contains(key)).ToArray())
-            {
-                written.Remove(gone);
-                File.Delete(FileOf(gone));
-            }
-
-            state["chats"] = keys;
-            string list = state.ToJsonString();
-            if (list != listWritten)
-            {
-                WriteOver(Path.Combine(Folder, LIST), list);
-                listWritten = list;
+                if (text is null)
+                    File.Delete(path);
+                else
+                    WriteOver(path, text);
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
         }
+    }
+
+    /// <summary>Waits for what's been kept to be on the disk, as Hex closes or before another folder's chats are read.</summary>
+    public void Flush()
+    {
+        Task last;
+        lock (writing)
+            last = lastWrite;
+        last.Wait(TimeSpan.FromSeconds(10));
     }
 
     /// <summary>
