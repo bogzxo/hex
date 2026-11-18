@@ -104,19 +104,54 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
 
         suitesAsked = asked;
-        foreach (var (name, _, run) in SelfTestSuites)
-        {
-            if (!asked.Contains(name))
-                continue;
 
-            // How long each part takes is said after it, the slow ones are the ones to look at
-            var took = new System.Diagnostics.Stopwatch();
-            test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
-            MakeTestFiles();
-            run(test);
-            test.Run(TidyAfterSuite);
-            test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
+        // HEX_SELFTEST_REPEAT runs the parts asked for that many times over in the one process, and weighs what's left
+        // after each round, so something a part keeps that it shouldn't shows as a number climbing round by round
+        int rounds = int.TryParse(System.Environment.GetEnvironmentVariable(REPEAT_VARIABLE), out int repeat) ? Math.Clamp(repeat, 1, MOST_ROUNDS) : 1;
+        for (int round = 1; round <= rounds; round++)
+        {
+            foreach (var (name, _, run) in SelfTestSuites)
+            {
+                if (!asked.Contains(name))
+                    continue;
+
+                // How long each part takes is said after it, the slow ones are the ones to look at
+                var took = new System.Diagnostics.Stopwatch();
+                test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
+                MakeTestFiles();
+                run(test);
+                test.Run(TidyAfterSuite);
+                test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
+            }
+
+            if (rounds > 1)
+            {
+                int done = round;
+                test.Settle(1.0f);
+                test.Run(() => WeighRound(done, rounds));
+            }
         }
+    }
+
+    private const string REPEAT_VARIABLE = "HEX_SELFTEST_REPEAT";
+
+    // Rounds are minutes each for some parts, fifty is a long evening already
+    private const int MOST_ROUNDS = 50;
+
+    /// <summary>
+    /// Helper method to say what the process holds once a round of the parts is over, the heap after a full collection
+    /// rather than whatever the last collection happened to leave, beside what the system counts as the process's.
+    /// </summary>
+    private static void WeighRound(int round, int rounds)
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        GCMemoryInfo info = GC.GetGCMemoryInfo();
+        Console.WriteLine($"[Hex self-test] round {round} of {rounds}: heap {GC.GetTotalMemory(false) / 1048576.0:0.0} MB, "
+            + $"committed {info.TotalCommittedBytes / 1048576.0:0.0} MB, working set {self.WorkingSet64 / 1048576.0:0.0} MB, "
+            + $"private {self.PrivateMemorySize64 / 1048576.0:0.0} MB, handles {self.HandleCount}, threads {self.Threads.Count}");
     }
 
     /// <summary>
