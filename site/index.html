@@ -42,6 +42,7 @@
   <main id="main">
     <div class="hero" id="top">
       <div class="wrap">
+        <div class="pitch">
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
         <p class="lede"><strong>This is Hex. It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file.</p>
@@ -50,11 +51,13 @@
           <a class="button quiet" href="#numbers">Show me the receipts</a>
           <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
         </div>
+        </div>
 
+        <div class="proof">
         <figure class="shot" style="margin-inline: 0">
           <picture>
-            <source media="(prefers-color-scheme: light)" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw">
-            <img src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
+            <source media="(prefers-color-scheme: light)" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw">
+            <img src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
           </picture>
         </figure>
         <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
@@ -65,6 +68,7 @@
           <li><b>49.3 MiB</b><span>zipped, all three faces and their assets</span></li>
           <li><b>0</b><span>browsers shipped inside it</span></li>
         </ul>
+        </div>
       </div>
     </div>
 
@@ -198,7 +202,7 @@
         <h2>Dusk. A whole fucking terminal.</h2>
         <p>Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
-          <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
+          <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
         </figure>
         <p class="note">PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.</p>
       </div>
@@ -210,7 +214,7 @@
         <h2>Bring your own agent. Or don't.</h2>
         <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
-          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: five Claude Code chats in a list on the left, one of them started by another, the open chat in the middle with its tool calls, an allowed request, a ticked to-do list and its answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
+          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: five Claude Code chats in a list on the left, one of them started by another, the open chat in the middle with its tool calls, an allowed request, a ticked to-do list and its answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
         </figure>
         <p class="note">Five small Claude Code chats at work on the demo project. This one was asked to add envelopes to the mixer, asked leave to build, ticked off its list and said what it left undecided.</p>
 

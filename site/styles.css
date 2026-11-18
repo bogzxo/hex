@@ -44,7 +44,7 @@
   --accent: var(--dawn);
   --sans: Inter, ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: Hack, ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
-  --measure: 68rem;
+  --measure: 80rem;
   --gap: clamp(1rem, 0.5rem + 2vw, 2rem);
 
   accent-color: var(--accent);
@@ -303,6 +303,40 @@ kbd {
 
 .hero .shot {
   margin-block-start: clamp(2rem, 1rem + 4vw, 4rem);
+}
+
+/* On a wide screen the words and the proof of them sit side by side, the picture and the load times beside the title */
+@media (min-width: 70rem) {
+  .hero .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(2rem, 4vw, 4rem);
+    align-items: center;
+  }
+
+  .hero h1 {
+    font-size: clamp(3rem, 1rem + 3.6vw, 4.75rem);
+  }
+
+  .hero .shot {
+    margin-block-start: 0;
+  }
+
+  .hero .receipts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+
+    & li {
+      padding: 1rem 1.1rem;
+    }
+
+    & b {
+      font-size: clamp(1.35rem, 0.6rem + 1.1vw, 1.9rem);
+    }
+
+    & span {
+      font-size: 0.82rem;
+    }
+  }
 }
 
 figcaption,
