@@ -9,6 +9,14 @@ internal sealed partial class DawnScene
         int entry = language == "cpp" ? 2 : 0, target = language == "cpp" ? 5 : language == "python" ? 3 : 4;
         var setting = new HexBreakpoint(Condition: language == "python" ? "False" : "false");
         void RunTo() { document.Editor.Document.Select(new(target, 0), new(target, 0)); debugger.RunToCursor(); }
+
+        // Without a debugger F5 asks how to build and run the file, and the run stood still on that dialog
+        if (language != "python" && !debugger.CanDebug(file))
+        {
+            test.Check($"Run to Cursor: a {language} debugger is required (netcoredbg for C#, lldb-dap for C++)", () => false);
+            return;
+        }
+
         test.Run(() =>
         {
             Directory.CreateDirectory(root);

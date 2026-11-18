@@ -1,0 +1,893 @@
+/* Hex's page, drawn in Solstice the way Hex is: a plum slate, one accent a mode (Dawn's orange, Dusk's violet,
+   Noon's teal), and Solstice Day when the system is light. The colours are the themes' own, from
+   Hex.Shell/Assets/uix/flat/themes/solstice*.hor. No web fonts and nothing fetched from anywhere else. */
+
+:root {
+  color-scheme: light dark;
+
+  --background: #ffffff;
+  --surface: #f4f2f7;
+  --control: #e6e2ec;
+  --text: #1e1b29;
+  --dim: #5f5970;
+  --border: rgb(31 26 41 / 0.14);
+  --dawn: #b85200;
+  --dusk: #5a45d1;
+  --noon: #1c7d82;
+  --on-accent: #ffffff;
+  --keyword: #b4235f;
+  --type: #0b6e99;
+  --call: #5a45d1;
+  --string: #8a5a00;
+  --comment: #8a8499;
+  --shadow: rgb(31 26 41 / 0.18);
+
+  @media (prefers-color-scheme: dark) {
+    --background: #18171f;
+    --surface: #201f2a;
+    --control: #2c2a38;
+    --text: #ece9f2;
+    --dim: #a6a0b5;
+    --border: rgb(255 255 255 / 0.1);
+    --dawn: #da854d;
+    --dusk: #a99bff;
+    --noon: #64c3c8;
+    --on-accent: #18171f;
+    --keyword: #f28fb5;
+    --type: #8ccbea;
+    --call: #c5b8ff;
+    --string: #e9c88f;
+    --comment: #857f97;
+    --shadow: rgb(0 0 0 / 0.5);
+  }
+
+  --accent: var(--dawn);
+  --sans: Inter, ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: Hack, ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --measure: 80rem;
+  --gap: clamp(1rem, 0.5rem + 2vw, 2rem);
+
+  accent-color: var(--accent);
+  scrollbar-color: var(--dim) var(--background);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font: 1.0625rem/1.6 var(--sans);
+  text-rendering: optimizeLegibility;
+}
+
+/* A section wears the accent of the mode it's about */
+.dusk { --accent: var(--dusk); }
+.noon { --accent: var(--noon); }
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+img,
+svg {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+kbd {
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--border);
+  border-block-end-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 1rem;
+  inset-block-start: -4rem;
+  z-index: 10;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+
+  &:focus {
+    inset-block-start: 1rem;
+  }
+}
+
+.wrap {
+  inline-size: min(100% - 2 * var(--gap), var(--measure));
+  margin-inline: auto;
+}
+
+/* The bar across the top */
+
+.bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 5;
+  border-block-end: 1px solid var(--border);
+  background: color-mix(in oklab, var(--background) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+
+  & .wrap {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    min-block-size: 3.5rem;
+  }
+
+  & nav {
+    display: flex;
+    gap: 1.25rem;
+    margin-inline-start: auto;
+  }
+
+  /* Where the links wouldn't fit in a row the bar is the name and the way to the repository, nothing that scrolls */
+  @media (width < 62rem) {
+    & nav,
+    & .get {
+      display: none;
+    }
+
+    & .repo {
+      margin-inline-start: auto;
+    }
+  }
+
+  & nav a {
+    color: var(--dim);
+    font-size: 0.95rem;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--text);
+    }
+  }
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+
+  /* Hex's own icon, Hex.Shell/Assets/hex_icon.png */
+  & img {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+  }
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.2rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: translate 0.15s ease;
+
+  &:hover {
+    translate: 0 -1px;
+    background: color-mix(in oklab, var(--accent) 88%, var(--text));
+  }
+
+  &.quiet {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+
+    &:hover {
+      background: var(--control);
+    }
+  }
+
+  &.small {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.92rem;
+  }
+}
+
+/* The top of the page */
+
+.hero {
+  padding-block: clamp(3rem, 2rem + 6vw, 6.5rem) clamp(2rem, 1rem + 4vw, 4rem);
+  background:
+    radial-gradient(60rem 28rem at 15% -10%, color-mix(in oklab, var(--dawn) 22%, transparent), transparent 70%),
+    radial-gradient(50rem 26rem at 95% 0%, color-mix(in oklab, var(--dusk) 18%, transparent), transparent 70%);
+
+  & h1 {
+    max-inline-size: 14ch;
+    font-size: clamp(2.6rem, 1.2rem + 7vw, 6rem);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    line-height: 0.95;
+  }
+
+  & h1 em {
+    color: var(--dawn);
+    font-style: normal;
+  }
+
+  & .lede {
+    max-inline-size: 38rem;
+    margin-block-start: 1.5rem;
+    font-size: clamp(1.15rem, 1rem + 0.7vw, 1.45rem);
+    line-height: 1.45;
+  }
+
+  & .sub {
+    max-inline-size: 38rem;
+    margin-block-start: 0.75rem;
+    color: var(--dim);
+  }
+
+  & .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-block-start: 2rem;
+  }
+}
+
+/* Where the words have little room (a phone), Download takes the whole row with its words in the middle and the
+   other two share the row under it. Asked of the words' own box, so it holds wherever that box is narrow */
+.pitch {
+  container: pitch / inline-size;
+}
+
+@container pitch (inline-size < 30rem) {
+  .actions .button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .actions .button:first-child {
+    flex-basis: 100%;
+  }
+}
+
+/* A finger wants more to land on than a pointer does */
+@media (pointer: coarse) {
+  .button,
+  .bar nav a {
+    min-block-size: 44px;
+  }
+
+  .bar nav a {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+.shot {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem -1.5rem var(--shadow);
+
+  & img {
+    inline-size: 100%;
+  }
+}
+
+.hero .shot {
+  margin-block-start: clamp(2rem, 1rem + 4vw, 4rem);
+}
+
+/* On a wide screen the words and the proof of them sit side by side, the picture and the load times beside the title */
+@media (min-width: 70rem) {
+  .hero .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(2rem, 4vw, 4rem);
+    align-items: center;
+  }
+
+  .hero h1 {
+    font-size: clamp(3rem, 1rem + 3.6vw, 4.75rem);
+  }
+
+  .hero .shot {
+    margin-block-start: 0;
+  }
+
+  .hero .receipts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+
+    & li {
+      padding: 1rem 1.1rem;
+    }
+
+    & b {
+      font-size: clamp(1.35rem, 0.6rem + 1.1vw, 1.9rem);
+    }
+
+    & span {
+      font-size: 0.82rem;
+    }
+  }
+}
+
+figcaption,
+.note {
+  margin-block-start: 0.75rem;
+  color: var(--dim);
+  font-size: 0.92rem;
+}
+
+/* The numbers under the picture */
+
+.receipts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-block-start: var(--gap);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--border);
+  list-style: none;
+
+  & li {
+    padding: 1.25rem 1.4rem;
+    background: var(--surface);
+  }
+
+  & b {
+    display: block;
+    font-size: clamp(1.8rem, 1.3rem + 1.6vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & span {
+    color: var(--dim);
+    font-size: 0.92rem;
+  }
+}
+
+/* Sections */
+
+section {
+  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
+}
+
+section + section {
+  border-block-start: 1px solid var(--border);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block-end: 1rem;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  &::before {
+    content: "";
+    inline-size: 0.6rem;
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+}
+
+h2 {
+  max-inline-size: 22ch;
+  font-size: clamp(1.9rem, 1.3rem + 2.6vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+h2 + p,
+.intro {
+  max-inline-size: 42rem;
+  margin-block-start: 1.25rem;
+  color: var(--dim);
+  font-size: 1.1rem;
+}
+
+.intro strong,
+h2 + p strong {
+  color: var(--text);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--gap);
+  align-items: center;
+  margin-block-start: clamp(2rem, 1rem + 3vw, 3.5rem);
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-block-start: clamp(2rem, 1rem + 3vw, 3.5rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  list-style: none;
+
+  /* The lines between the cards are each card's own, so a row that isn't full has nothing grey where a card isn't */
+  & li {
+    padding: 1.5rem;
+    outline: 1px solid var(--border);
+  }
+
+  & h3 {
+    margin-block-end: 0.5rem;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+  }
+
+  & p {
+    color: var(--dim);
+    font-size: 0.98rem;
+  }
+}
+
+/* A list that's meant as one line is one on a wide screen, however many cards it has */
+@media (width >= 70rem) {
+  .features.row {
+    grid-template-columns: none;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+
+    & li {
+      padding: 1.25rem;
+    }
+
+    & h3 {
+      font-size: 1.05rem;
+    }
+
+    & p {
+      font-size: 0.92rem;
+    }
+  }
+}
+
+/* The gallery. Each picture is a link to itself, which is what it stays without script */
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--gap);
+  margin-block-start: clamp(2rem, 1rem + 3vw, 3.5rem);
+
+  & figure {
+    margin: 0;
+  }
+
+  & a {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    cursor: zoom-in;
+    transition: border-color 0.2s ease, translate 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+      border-color: var(--accent);
+      translate: 0 -3px;
+      box-shadow: 0 1rem 2.5rem -1.25rem var(--shadow);
+    }
+  }
+
+  & img {
+    inline-size: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    object-position: top left;
+  }
+
+  & figcaption b {
+    color: var(--text);
+    font-weight: 650;
+  }
+
+  & figure.wide {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Pictures that come in twos or fours sit two to a row, where there's the room for two */
+@media (width >= 44rem) {
+  .gallery.pairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The picture opened up. A modal dialog, so the page behind is inert and Esc closes it */
+
+dialog.lightbox {
+  inline-size: min(100vw - 2rem, 110rem);
+  max-inline-size: none;
+  max-block-size: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2rem 6rem var(--shadow);
+
+  &:modal {
+    overscroll-behavior: contain;
+  }
+
+  &::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background: rgb(12 11 17 / 0.82);
+    backdrop-filter: blur(6px);
+  }
+
+  & img {
+    inline-size: 100%;
+    max-block-size: calc(100dvh - 7.5rem);
+    object-fit: contain;
+    background: #18171f;
+  }
+
+  & footer {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-block-start: 1px solid var(--border);
+  }
+
+  & p {
+    flex: 1;
+    color: var(--dim);
+    font-size: 0.95rem;
+  }
+
+  & form {
+    display: contents;
+  }
+
+  & button {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--control);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.92rem;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--accent);
+    }
+  }
+}
+
+/* The table of what was measured */
+
+.scroller {
+  overflow-x: auto;
+  margin-block-start: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 0.8rem 1.1rem;
+  border-block-end: 1px solid var(--border);
+  text-align: end;
+  white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  text-align: start;
+  white-space: normal;
+}
+
+thead th {
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+tbody th {
+  font-weight: 500;
+}
+
+tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.downloads td,
+.downloads th {
+  text-align: start;
+}
+
+/* A table with little room (a phone) is a card a row instead: the row's name on top, then each cell on a line of its
+   own with the column it was under said in front of it. Asked of the table's own box, not of the screen. The column
+   names are the table's --label-2 and --label-3, since the header row is gone */
+.scroller {
+  container: table / inline-size;
+}
+
+@container table (inline-size < 36rem) {
+  table,
+  tbody,
+  tr,
+  th,
+  td {
+    display: block;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    padding: 0.9rem 1.1rem;
+    border-block-end: 1px solid var(--border);
+
+    &:last-child {
+      border-block-end: 0;
+    }
+  }
+
+  tbody th,
+  tbody td {
+    padding: 0;
+    border: 0;
+    white-space: normal;
+  }
+
+  tbody th {
+    margin-block-end: 0.4rem;
+    font-weight: 650;
+    text-align: start;
+  }
+
+  tbody td {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding-block: 0.2rem;
+    text-align: end;
+
+    &::before {
+      flex: none;
+      color: var(--dim);
+    }
+
+    &:nth-child(2)::before {
+      content: var(--label-2);
+    }
+
+    &:nth-child(3)::before {
+      content: var(--label-3);
+    }
+  }
+}
+
+/* The bars of the launch times, drawn to the numbers in the table */
+
+.bars {
+  display: grid;
+  gap: 1rem;
+  margin-block-start: var(--gap);
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+
+  & div {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr auto;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  & i {
+    display: block;
+    block-size: 1.75rem;
+    inline-size: calc(var(--ms) / 1200 * 100%);
+    border-radius: 5px;
+    background: var(--accent);
+  }
+
+  & b {
+    font-variant-numeric: tabular-nums;
+  }
+
+  & small {
+    color: var(--dim);
+  }
+}
+
+pre {
+  overflow-x: auto;
+  margin: 0;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  line-height: 1.7;
+  tab-size: 4;
+
+  & .k { color: var(--keyword); }
+  & .t { color: var(--type); }
+  & .c { color: var(--call); }
+  & .s { color: var(--string); }
+  & .d { color: var(--comment); }
+}
+
+.nots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--gap);
+  margin-block-start: clamp(2rem, 1rem + 3vw, 3.5rem);
+
+  & h3 {
+    margin-block-end: 0.6rem;
+    font-size: 1.35rem;
+  }
+
+  & p {
+    color: var(--dim);
+  }
+}
+
+.end {
+  padding-block: 2.5rem;
+  border-block-start: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 0.92rem;
+
+  & .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 2rem;
+    justify-content: space-between;
+  }
+}
+
+/* Things come up a little as they scroll into sight. Decoration only, so where a browser can't it's left out,
+   and so it is for anyone who asked for less motion */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    @keyframes rise {
+      from {
+        opacity: 0;
+        translate: 0 1.5rem;
+      }
+    }
+
+    .rise {
+      animation: rise auto linear backwards;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+  }
+}
+
+/* A picture grows out of its place in the gallery and goes back into it */
+
+::view-transition-group(shot) {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+::view-transition-old(shot),
+::view-transition-new(shot) {
+  block-size: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  .button,
+  .gallery a {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .bars i {
+    background: CanvasText;
+  }
+}

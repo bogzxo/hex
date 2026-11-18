@@ -4,6 +4,9 @@ These are measurements of the local **Hex 2.8.0 “thickboy” development worki
 to Hex and Horizon. They replace the Hex 2.0.0 figures formerly in the README. They are not measurements of the
 existing `v2.8.0` download, a Debug build, or a self-test session.
 
+The README's figures are newer, from 3.1.0 on 18 November, [further down](#the-readmes-numbers-310--18-november-2026).
+The method below is the one they were taken by.
+
 ## Results
 
 Ten measured launches per mode, after **one discarded launch of Dawn and one discarded launch of Dusk** to populate
@@ -249,6 +252,42 @@ working set (a first launch, see above) and 636 to 639 handles, so the chats lea
 
 Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
 CPU, handles and threads every half second from the outside, the self-tests say the rest.
+
+## The README's numbers, 3.1.0 — 18 November 2026
+
+The 4 November procedure again, on Hex 3.1.0 Amphetamine at `98c6516` (Horizon `c04f3e2`), both trees clean when it
+was published. `FolderProfile.pubxml` as before, only the output directory overridden. Ten measured launches a mode
+after one discarded launch of each. These are the figures in the README.
+
+| Metric | Dawn median | Dawn min–max | Dusk median | Dusk min–max |
+| --- | ---: | ---: | ---: | ---: |
+| Process start → `main` | 16.5 ms | 15–31 ms | 16.5 ms | 14–23 ms |
+| Process start → window shown with the loading screen | 456 ms | 433–576 ms | 389 ms | 366–408 ms |
+| Process start → first rendered scene | **852 ms** | 821–1010 ms | **516 ms** | 484–534 ms |
+| Idle working set | **201.4 MiB** | 199.2–204.5 MiB | **117.2 MiB** | 115.8–117.5 MiB |
+| Idle private bytes | 250.0 MiB | 247.3–253.8 MiB | 171.1 MiB | 170.3–171.8 MiB |
+| Idle CPU, % of one logical core | 2.96% | 1.24–9.30% | 0.76% | 0.00–4.67% |
+
+| Published package | Bytes | MiB |
+| --- | ---: | ---: |
+| Entire publish folder, 245 files | 116,967,039 | 111.5 |
+| ZIP of that folder | 51,727,803 | 49.3 |
+| `Hex.exe` within the folder | 53,654,528 | 51.2 |
+
+Dawn's first frame is 360 ms later than 2.8.0's 492 and its working set 52 MiB more. The device is made by 316 ms and
+the window is shown at 456, then setting the scene up takes about 340 ms where Dusk's takes 115. That is where to
+look. The machine was not quiet, the user's own Hex with its language servers and the agent running the script were
+up throughout, and the measurements earlier today gave 683 ms (three launches). The driver is 621.14 now
+(`32.0.16.2114`), it was 621.01 on 4 November. Executable SHA-256
+`171C799EE2F76A9F30876F88E2EA1B75466E05F46687417BDCE1E0DC221F9A74`. `machine.json` says local changes were included
+because the README and the script were being edited by then, the binary was published before either was touched.
+
+`measure-readme.ps1` starts Dusk with `--window` now. Without it, a Dusk already running on the machine took the
+launch as a tab and the measured process left before its first frame.
+
+Evidence: [samples](benchmarks/2026-11-18/samples.json), [machine](benchmarks/2026-11-18/machine.json),
+[package byte counts](benchmarks/2026-11-18/package.json),
+[startup markers](benchmarks/2026-11-18/startup-markers.txt).
 
 ## Evidence
 
