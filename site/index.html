@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
+  <title>Hex. Modern Motherfucking Code Editor</title>
+  <meta name="description" content="Hex is a native code editor, a proper terminal and a place for your agents. C# compiled to native code, drawn through Vulkan. No Electron, no account, no telemetry.">
+  <link rel="canonical" href="https://bogzxo.github.io/hex/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Hex. Modern Motherfucking Code Editor">
+  <meta property="og:description" content="It opens, you write code, and it gets the fuck out of your way. A native editor, terminal and agent workspace. No Electron.">
+  <meta property="og:url" content="https://bogzxo.github.io/hex/">
+  <meta property="og:image" content="https://bogzxo.github.io/hex/images/editor-1600.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c8703a'/%3E%3Cpath d='M10 8v16M22 8v16M10 16h12' stroke='%2318171f' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="gallery.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the content</a>
+
+  <header class="bar">
+    <div class="wrap">
+      <a class="mark" href="#top" aria-label="Hex, to the top"><span aria-hidden="true">H</span>Hex</a>
+      <nav aria-label="On this page">
+        <a href="#numbers">Numbers</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#features">Features</a>
+        <a href="#dusk">Dusk</a>
+        <a href="#agents">Agents</a>
+        <a href="#looks">Looks</a>
+        <a href="#build">Build</a>
+        <a href="https://github.com/bogzxo/hex">GitHub</a>
+      </nav>
+      <a class="button small" href="#get-it">Download</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="hero" id="top">
+      <div class="wrap">
+        <h1>Modern <em>Motherfucking</em> Code Editor</h1>
+        <p class="lede"><strong>This is Hex. It opens, you write code, and it gets the fuck out of your way.</strong></p>
+        <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file.</p>
+        <div class="actions">
+          <a class="button" href="#get-it">Download Hex 3.1</a>
+          <a class="button quiet" href="#numbers">Show me the receipts</a>
+          <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
+        </div>
+
+        <figure class="shot" style="margin-inline: 0">
+          <picture>
+            <source media="(prefers-color-scheme: light)" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw">
+            <img src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
+          </picture>
+        </figure>
+        <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
+
+        <ul class="receipts" aria-label="Measured on the 3.1.0 build">
+          <li><b>516 ms</b><span>to Dusk's first frame, from a cold process</span></li>
+          <li><b>852 ms</b><span>to Dawn's, its window up at 456</span></li>
+          <li><b>49.3 MiB</b><span>zipped, all three faces and their assets</span></li>
+          <li><b>0</b><span>browsers shipped inside it</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <section id="numbers">
+      <div class="wrap">
+        <p class="eyebrow">Measured, not vibes</p>
+        <h2>Fast as fuck, with receipts</h2>
+        <p>Fresh measurements of <strong>Hex 3.1.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained. Taken on 18 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Ten launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
+
+        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn 852 milliseconds, ranging 821 to 1010. Dusk 516 milliseconds, ranging 484 to 534.">
+          <div><span>Dawn</span><i style="--ms: 852"></i><span><b>852 ms</b> <small>821–1010</small></span></div>
+          <div class="dusk"><span>Dusk</span><i style="--ms: 516"></i><span><b>516 ms</b> <small>484–534</small></span></div>
+        </div>
+
+        <div class="scroller rise" tabindex="0" role="region" aria-label="What was measured">
+          <table>
+            <thead>
+              <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>852 ms</strong></td><td><strong>516 ms</strong></td></tr>
+              <tr><th scope="row">First-frame range, 10 launches each</th><td>821–1010 ms</td><td>484–534 ms</td></tr>
+              <tr><th scope="row">Process start to window shown, median</th><td>456 ms</td><td>389 ms</td></tr>
+              <tr><th scope="row">Idle working set, median</th><td><strong>201.4 MiB</strong></td><td><strong>117.2 MiB</strong></td></tr>
+              <tr><th scope="row">Idle CPU, median, of one logical core</th><td>2.96%</td><td>0.76%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers. This is one machine, and a busy one. It's not a race rigged against somebody else's editor. <strong>Dawn got slower and we're saying so:</strong> 2.8.0 measured 492 ms. 3.1 sets up a whole agent workspace before its first frame and it shows. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method, raw samples and reproduction commands</a>.</p>
+
+        <div class="split">
+          <div>
+            <h3>A game engine underneath. Seriously.</h3>
+            <p class="intro">Hex is C# compiled ahead of time to native code. No JIT warming up while you stare at a splash screen. The <a href="https://github.com/bogzxo/horizon">Horizon engine</a> draws the interface through <strong>Vulkan</strong>, with rendering on its own thread. On macOS, MoltenVK bridges that to Metal.</p>
+            <p class="intro">There's no DOM to lay out, no browser to haul around, and no reason a text editor should need either.</p>
+          </div>
+          <pre class="rise"><code><span class="d">// Hex.exe, start to first frame</span>
+<span class="t">main</span>                      <span class="s">16 ms</span>
+<span class="t">device made</span>              <span class="s">316 ms</span>
+<span class="t">window shown</span>             <span class="s">456 ms</span>
+<span class="t">scene set up</span>             <span class="s">797 ms</span>
+<span class="c">first frame of the scene</span> <span class="k">852 ms</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="gallery">
+      <div class="wrap">
+        <p class="eyebrow">Unedited, 1600 × 900</p>
+        <h2>Look at the bloody thing</h2>
+        <p>Every picture is the real window, straight off the build that was measured. An agent took them, driving Hex through its own MCP server. Open one for the full size.</p>
+
+        <div class="gallery">
+          <figure class="rise">
+            <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, Peak, Render and SampleRate, with Add's signature beside it"></a>
+            <figcaption><b>Completion.</b> The language server's, as you type.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/hover-1600.webp"><img src="images/hover-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
+            <figcaption><b>Hover.</b> Documentation where the pointer is.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/debug-1600.webp"><img src="images/debug-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
+            <figcaption><b>Debugging.</b> Stopped in Render, stack and locals beside it.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/git-1600.webp"><img src="images/git-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
+            <figcaption><b>Git.</b> What changed, word by word, next to the commit box.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/search-1600.webp"><img src="images/search-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
+            <figcaption><b>Search.</b> The whole workspace, grouped by file.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Jupyter notebook with a Markdown heading, two Python cells, a line of printed output and the top of two plots"></a>
+            <figcaption><b>Notebooks.</b> A real Python kernel, real plots.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
+            <figcaption><b>Markdown.</b> Tables and maths, drawn natively.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/designer-1600.webp"><img src="images/designer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
+            <figcaption><b>Designer.</b> Hex's own welcome page, open in Hex.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Appearance with seven looks to pick from: Solstice, Solstice Day, Graphite, Fluid Glass, Frosted Glass, Flat and Visual Studio"></a>
+            <figcaption><b>Settings.</b> Searchable, with the looks up top.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <p class="eyebrow">Dawn, the editor</p>
+        <h2>Lightweight doesn't mean “does fuck all”</h2>
+        <ul class="features">
+          <li class="rise">
+            <h3>Code</h3>
+            <p>Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and <code>.editorconfig</code>. Sixteen language servers come declared, C# to Rust.</p>
+          </li>
+          <li class="rise">
+            <h3>Git</h3>
+            <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls. Keep the context next to the code instead of juggling windows to find out what you changed.</p>
+          </li>
+          <li class="rise">
+            <h3>Find your shit</h3>
+            <p>Quick Open, a command palette of 360 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.</p>
+          </li>
+          <li class="rise">
+            <h3>Run, debug and test</h3>
+            <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches. .NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
+          </li>
+          <li class="rise">
+            <h3>Documents that do things</h3>
+            <p>Jupyter notebooks with real kernels and outputs; native Markdown previews with tables and maths. Kernels are separate tools, not secretly bundled into the download number.</p>
+          </li>
+          <li class="rise">
+            <h3>Build interfaces</h3>
+            <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source. Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="dusk" class="dusk">
+      <div class="wrap">
+        <p class="eyebrow">Dusk, the terminal</p>
+        <h2>Dusk. A whole fucking terminal.</h2>
+        <p>Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
+        <figure class="shot rise" style="margin: var(--gap) 0 0">
+          <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
+        </figure>
+        <p class="note">PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.</p>
+      </div>
+    </section>
+
+    <section id="agents" class="noon">
+      <div class="wrap">
+        <p class="eyebrow">Agentic, the agents' face</p>
+        <h2>Bring your own agent. Or don't.</h2>
+        <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
+        <figure class="shot rise" style="margin: var(--gap) 0 0">
+          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 72rem) 68rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: two Claude Code chats in a list on the left, one of them open in the middle with its question, tool calls and answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
+        </figure>
+        <p class="note">Two small Claude Code chats asked about the demo project. The fleet on the left, the chat in the middle, what it cost and touched on the right.</p>
+
+        <ul class="features">
+          <li class="rise">
+            <h3>Changes you can take back</h3>
+            <p>Every turn of an agent is checkpointed, so what it wrote can be reviewed hunk by hunk, kept or undone one at a time, or restored whole.</p>
+          </li>
+          <li class="rise">
+            <h3>One method, not the whole bloody file</h3>
+            <p>Over MCP Hex exposes <strong>71 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals. Off until you enable it.</p>
+          </li>
+          <li class="rise">
+            <h3>86% that never went near a context window</h3>
+            <p>Writing Hex's README took 54 harness calls that handed back 154,000 characters where grep and whole-file reads would have read 1,077,000.</p>
+          </li>
+        </ul>
+        <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents and MCP, the long version</a>.</p>
+      </div>
+    </section>
+
+    <section id="looks">
+      <div class="wrap">
+        <p class="eyebrow">Appearance</p>
+        <h2>Make it look how you want</h2>
+        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, or float the panels in glass. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
+        <div class="gallery">
+          <figure class="rise">
+            <a href="images/light-1600.webp"><img src="images/light-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
+            <figcaption><b>Solstice Day.</b> For a bright room.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/graphite-1600.webp"><img src="images/graphite-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Graphite, a neutral dark grey"></a>
+            <figcaption><b>Graphite.</b> Quiet.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating with a blue accent"></a>
+            <figcaption><b>Fluid Glass.</b> Panels that float.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/sunset-1600.webp"><img src="images/sunset-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Sunset theme, a warm plum with rounded panels"></a>
+            <figcaption><b>Sunset.</b> Something warmer.</figcaption>
+          </figure>
+        </div>
+        <p class="note">Same code, different mood.</p>
+      </div>
+    </section>
+
+    <section id="nots">
+      <div class="wrap">
+        <p class="eyebrow">The fine print, in the open</p>
+        <h2>What it doesn't do</h2>
+        <div class="nots">
+          <div class="rise">
+            <h3>It doesn't track you</h3>
+            <p>No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code. It does make network requests for features that need them: update checks, changelogs, extension, debugger and language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that <code>git fetch</code> works by fucking magic.</p>
+          </div>
+          <div class="rise">
+            <h3>It doesn't require an installer</h3>
+            <p>The portable archive works too. Hex uses a writable <code>settings</code> folder beside the executable when available, with the platform's application-data folder as a fallback.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="get-it">
+      <div class="wrap">
+        <p class="eyebrow">Hex 3.1.0 Amphetamine</p>
+        <h2>Get it</h2>
+        <p>Pick your machine. <strong>Setup</strong> handles installation, shortcuts and updates. <strong>Portable</strong> is a ZIP you unpack and run. Neither needs a separate .NET installation.</p>
+        <div class="scroller downloads" tabindex="0" role="region" aria-label="Downloads">
+          <table>
+            <thead>
+              <tr><th scope="col">System</th><th scope="col">Setup</th><th scope="col">Portable</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Windows</th>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe">ARM64</a></td>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip">ARM64</a></td>
+              </tr>
+              <tr>
+                <th scope="row">Linux</th>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip">ARM64</a></td>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip">ARM64</a></td>
+              </tr>
+              <tr>
+                <th scope="row">macOS</th>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip">Intel</a></td>
+                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip">Intel</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Windows needs 10 1809 or newer. Linux needs a Vulkan loader and driver. macOS needs 11 or newer; the build is unsigned, so <code>xattr -dr com.apple.quarantine /path/to/Hex</code> if macOS blocks it. <a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
+      </div>
+    </section>
+
+    <section id="build">
+      <div class="wrap">
+        <p class="eyebrow">From source</p>
+        <h2>Build the bloody thing</h2>
+        <p>Use the SDK in <code>global.json</code>, currently a .NET 11 release candidate. A standalone checkout needs Horizon's <code>development</code> branch as well as Hex's extensions.</p>
+        <pre class="rise" style="margin-block-start: var(--gap)"><code><span class="c">git</span> clone --branch development --recursive https://github.com/bogzxo/hex.git
+<span class="c">cd</span> hex
+<span class="c">git</span> clone --branch development --recursive https://github.com/bogzxo/horizon.git horizon
+<span class="c">dotnet</span> build Hex/Hex.csproj
+
+<span class="d"># the Windows x64 native build measured above</span>
+<span class="c">dotnet</span> publish Hex/Hex.csproj -p:PublishProfile=FolderProfile</code></pre>
+        <p class="note">Found a bug? <a href="https://github.com/bogzxo/hex/issues">Open an issue</a> with your OS, Hex version and steps to reproduce it. Want to fix it? Send a focused pull request and say how you tested it. <a href="https://github.com/bogzxo/hex/blob/master/docs/hacking.md">Hacking on Hex</a> covers the source and self-tests.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="end">
+    <div class="wrap">
+      <span>Hex, by <a href="https://github.com/bogzxo">bogzxo</a>. Drawn in Solstice, like the editor.</span>
+      <span>No analytics. No cookies. No web fonts. It's a page.</span>
+    </div>
+  </footer>
+
+  <dialog class="lightbox" closedby="any" aria-label="Screenshot, full size">
+    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" width="1600" height="900" alt="">
+    <footer>
+      <p></p>
+      <button type="button" data-step="-1" aria-label="Previous picture">←</button>
+      <button type="button" data-step="1" aria-label="Next picture">→</button>
+      <form method="dialog"><button autofocus>Close</button></form>
+    </footer>
+  </dialog>
+</body>
+</html>

@@ -36,7 +36,8 @@ function Measure-Launch([string]$mode, [int]$index) {
     $arguments = if ($mode -eq 'dawn') {
         @('--window', '--fresh', '--size', '1600x900', '--folder', $Repository,
           '--open', (Join-Path $Repository 'Hex.Dawn/Shell/DawnScene.cs'))
-    } else { @('--dusk', '--size', '1600x900', '--cwd', $Repository) }
+    } else { @('--dusk', '--window', '--size', '1600x900', '--cwd', $Repository) }
+    # --window on both, a Hex already running would otherwise take the launch as a tab and this one would leave
     # Start-Process joins ArgumentList with spaces on Windows PowerShell; quote every argument.
     $quoted = ($arguments | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ' '
     $process = Start-Process -FilePath (Join-Path $PublishedDirectory 'Hex.exe') -WorkingDirectory $PublishedDirectory `

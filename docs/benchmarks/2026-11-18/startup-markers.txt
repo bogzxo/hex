@@ -1,0 +1,220 @@
+== dawn-0 (discarded warmup)
+[Startup] main at 25 ms.
+[Startup] engine made at 45 ms.
+[Startup] editor made at 278 ms.
+[Startup] window being made at 278 ms.
+[Startup] device made ahead of the window at 326 ms.
+[Startup] window made at 333 ms.
+[Startup] device made at 374 ms.
+[Startup] window shown with the loading screen at 438 ms.
+[Startup] scene set up at 784 ms.
+[Startup] first frame of the scene shown at 840 ms.
+== dawn-1
+[Startup] main at 20 ms.
+[Startup] engine made at 42 ms.
+[Startup] device made ahead of the window at 389 ms.
+[Startup] editor made at 417 ms.
+[Startup] window being made at 417 ms.
+[Startup] window made at 441 ms.
+[Startup] device made at 511 ms.
+[Startup] window shown with the loading screen at 576 ms.
+[Startup] scene set up at 929 ms.
+[Startup] first frame of the scene shown at 989 ms.
+== dawn-10
+[Startup] main at 16 ms.
+[Startup] engine made at 35 ms.
+[Startup] editor made at 308 ms.
+[Startup] window being made at 308 ms.
+[Startup] device made ahead of the window at 320 ms.
+[Startup] window made at 341 ms.
+[Startup] device made at 400 ms.
+[Startup] window shown with the loading screen at 458 ms.
+[Startup] scene set up at 788 ms.
+[Startup] first frame of the scene shown at 842 ms.
+== dawn-2
+[Startup] main at 17 ms.
+[Startup] engine made at 41 ms.
+[Startup] editor made at 313 ms.
+[Startup] window being made at 313 ms.
+[Startup] device made ahead of the window at 323 ms.
+[Startup] window made at 345 ms.
+[Startup] device made at 401 ms.
+[Startup] window shown with the loading screen at 461 ms.
+[Startup] scene set up at 795 ms.
+[Startup] first frame of the scene shown at 851 ms.
+== dawn-3
+[Startup] main at 31 ms.
+[Startup] engine made at 57 ms.
+[Startup] device made ahead of the window at 379 ms.
+[Startup] editor made at 421 ms.
+[Startup] window being made at 421 ms.
+[Startup] window made at 440 ms.
+[Startup] device made at 508 ms.
+[Startup] window shown with the loading screen at 571 ms.
+[Startup] scene set up at 940 ms.
+[Startup] first frame of the scene shown at 1010 ms.
+== dawn-4
+[Startup] main at 17 ms.
+[Startup] engine made at 36 ms.
+[Startup] device made ahead of the window at 312 ms.
+[Startup] editor made at 320 ms.
+[Startup] window being made at 320 ms.
+[Startup] window made at 343 ms.
+[Startup] device made at 394 ms.
+[Startup] window shown with the loading screen at 454 ms.
+[Startup] scene set up at 800 ms.
+[Startup] first frame of the scene shown at 852 ms.
+== dawn-5
+[Startup] main at 16 ms.
+[Startup] engine made at 37 ms.
+[Startup] device made ahead of the window at 299 ms.
+[Startup] editor made at 308 ms.
+[Startup] window being made at 308 ms.
+[Startup] window made at 326 ms.
+[Startup] device made at 379 ms.
+[Startup] window shown with the loading screen at 433 ms.
+[Startup] scene set up at 773 ms.
+[Startup] first frame of the scene shown at 825 ms.
+== dawn-6
+[Startup] main at 20 ms.
+[Startup] engine made at 44 ms.
+[Startup] editor made at 318 ms.
+[Startup] window being made at 318 ms.
+[Startup] device made ahead of the window at 325 ms.
+[Startup] window made at 346 ms.
+[Startup] device made at 405 ms.
+[Startup] window shown with the loading screen at 466 ms.
+[Startup] scene set up at 802 ms.
+[Startup] first frame of the scene shown at 863 ms.
+== dawn-7
+[Startup] main at 15 ms.
+[Startup] engine made at 33 ms.
+[Startup] device made ahead of the window at 295 ms.
+[Startup] editor made at 312 ms.
+[Startup] window being made at 312 ms.
+[Startup] window made at 328 ms.
+[Startup] device made at 381 ms.
+[Startup] window shown with the loading screen at 438 ms.
+[Startup] scene set up at 767 ms.
+[Startup] first frame of the scene shown at 821 ms.
+== dawn-8
+[Startup] main at 16 ms.
+[Startup] engine made at 34 ms.
+[Startup] device made ahead of the window at 306 ms.
+[Startup] editor made at 312 ms.
+[Startup] window being made at 312 ms.
+[Startup] window made at 338 ms.
+[Startup] device made at 389 ms.
+[Startup] window shown with the loading screen at 444 ms.
+[Startup] scene set up at 798 ms.
+[Startup] first frame of the scene shown at 856 ms.
+== dawn-9
+[Startup] main at 16 ms.
+[Startup] engine made at 35 ms.
+[Startup] device made ahead of the window at 309 ms.
+[Startup] editor made at 323 ms.
+[Startup] window being made at 323 ms.
+[Startup] window made at 339 ms.
+[Startup] device made at 391 ms.
+[Startup] window shown with the loading screen at 448 ms.
+[Startup] scene set up at 784 ms.
+[Startup] first frame of the scene shown at 839 ms.
+== dusk-0 (discarded warmup)
+[Startup] main at 30 ms.
+[Startup] window being made at 252 ms.
+[Startup] device made ahead of the window at 311 ms.
+[Startup] window made at 321 ms.
+[Startup] device made at 357 ms.
+[Startup] window shown with the loading screen at 419 ms.
+[Startup] scene set up at 530 ms.
+[Startup] first frame of the scene shown at 543 ms.
+== dusk-1
+[Startup] main at 22 ms.
+[Startup] window being made at 218 ms.
+[Startup] device made ahead of the window at 304 ms.
+[Startup] window made at 317 ms.
+[Startup] device made at 351 ms.
+[Startup] window shown with the loading screen at 406 ms.
+[Startup] scene set up at 515 ms.
+[Startup] first frame of the scene shown at 527 ms.
+== dusk-10
+[Startup] main at 16 ms.
+[Startup] window being made at 205 ms.
+[Startup] device made ahead of the window at 303 ms.
+[Startup] window made at 312 ms.
+[Startup] device made at 343 ms.
+[Startup] window shown with the loading screen at 394 ms.
+[Startup] scene set up at 508 ms.
+[Startup] first frame of the scene shown at 521 ms.
+== dusk-2
+[Startup] main at 14 ms.
+[Startup] window being made at 201 ms.
+[Startup] device made ahead of the window at 293 ms.
+[Startup] window made at 306 ms.
+[Startup] device made at 339 ms.
+[Startup] window shown with the loading screen at 385 ms.
+[Startup] scene set up at 480 ms.
+[Startup] first frame of the scene shown at 491 ms.
+== dusk-3
+[Startup] main at 23 ms.
+[Startup] window being made at 223 ms.
+[Startup] device made ahead of the window at 317 ms.
+[Startup] window made at 327 ms.
+[Startup] device made at 358 ms.
+[Startup] window shown with the loading screen at 408 ms.
+[Startup] scene set up at 518 ms.
+[Startup] first frame of the scene shown at 534 ms.
+== dusk-4
+[Startup] main at 15 ms.
+[Startup] window being made at 200 ms.
+[Startup] device made ahead of the window at 288 ms.
+[Startup] window made at 297 ms.
+[Startup] device made at 329 ms.
+[Startup] window shown with the loading screen at 380 ms.
+[Startup] scene set up at 487 ms.
+[Startup] first frame of the scene shown at 501 ms.
+== dusk-5
+[Startup] main at 18 ms.
+[Startup] window being made at 202 ms.
+[Startup] device made ahead of the window at 297 ms.
+[Startup] window made at 308 ms.
+[Startup] device made at 339 ms.
+[Startup] window shown with the loading screen at 383 ms.
+[Startup] scene set up at 472 ms.
+[Startup] first frame of the scene shown at 484 ms.
+== dusk-6
+[Startup] main at 15 ms.
+[Startup] window being made at 196 ms.
+[Startup] device made ahead of the window at 277 ms.
+[Startup] window made at 287 ms.
+[Startup] device made at 316 ms.
+[Startup] window shown with the loading screen at 366 ms.
+[Startup] scene set up at 474 ms.
+[Startup] first frame of the scene shown at 489 ms.
+== dusk-7
+[Startup] main at 17 ms.
+[Startup] window being made at 210 ms.
+[Startup] device made ahead of the window at 304 ms.
+[Startup] window made at 314 ms.
+[Startup] device made at 341 ms.
+[Startup] window shown with the loading screen at 393 ms.
+[Startup] scene set up at 505 ms.
+[Startup] first frame of the scene shown at 521 ms.
+== dusk-8
+[Startup] main at 15 ms.
+[Startup] window being made at 212 ms.
+[Startup] device made ahead of the window at 295 ms.
+[Startup] window made at 305 ms.
+[Startup] device made at 337 ms.
+[Startup] window shown with the loading screen at 392 ms.
+[Startup] scene set up at 504 ms.
+[Startup] first frame of the scene shown at 516 ms.
+== dusk-9
+[Startup] main at 17 ms.
+[Startup] window being made at 200 ms.
+[Startup] device made ahead of the window at 289 ms.
+[Startup] window made at 298 ms.
+[Startup] device made at 328 ms.
+[Startup] window shown with the loading screen at 379 ms.
+[Startup] scene set up at 504 ms.
+[Startup] first frame of the scene shown at 516 ms.
