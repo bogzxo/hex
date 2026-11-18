@@ -45,7 +45,8 @@ internal sealed partial class DawnScene
                 return true;
             }
 
-            if (compositor.Focus != agentsInput || agentChat?.Running != true)
+            // Only the person stops an agent with Escape, an agent's own Escape is for closing what it opened
+            if (compositor.Focus != agentsInput || agentChat?.Running != true || agentKeysPressing > 0)
                 return false;
             StopAgent(agentChat);
             return true;
