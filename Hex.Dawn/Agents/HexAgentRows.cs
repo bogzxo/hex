@@ -118,7 +118,9 @@ internal static class HexAgentRows
     /// <summary>A text as one line of so many characters at the most.</summary>
     public static string OneLine(string text, int most)
     {
-        string line = string.Join(' ', text.Split(['\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(part => part.Trim())).Trim();
+        // A line already, the usual for a row's text, is only trimmed, nothing split and joined for it
+        string line = text.AsSpan().IndexOfAny('\n', '\r', '\t') < 0 ? text.Trim()
+            : string.Join(' ', text.Split(['\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(part => part.Trim())).Trim();
         most = Math.Max(1, most);
         return line.Length <= most ? line : most <= 3 ? new string('.', most) : line[..(most - 3)] + "...";
     }
