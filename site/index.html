@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <!-- Day or Night as it was pinned with the switch in the bar, before anything's drawn so the page never flashes the other -->
-  <script>try { document.querySelector('meta[name="color-scheme"]').content = localStorage.getItem("color-scheme") ?? "light dark"; } catch {}</script>
+  <script>try { const scheme = localStorage.getItem("color-scheme"); if (scheme === "light" || scheme === "dark") document.querySelector('meta[name="color-scheme"]').content = scheme; } catch {}</script>
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
   <title>Hex. Modern Motherfucking Code Editor</title>
@@ -20,8 +20,8 @@
   <link rel="icon" type="image/png" sizes="64x64" href="images/hex-64.png">
   <link rel="apple-touch-icon" href="images/hex.png">
   <link rel="stylesheet" href="styles.css">
-  <script type="module" src="gallery.js"></script>
-  <!-- Plain scripts, not modules, so they work on the page opened from a file as well (a browser won't run a module from file://) -->
+  <!-- Plain scripts also work when the page is opened from disk. -->
+  <script defer src="gallery.js"></script>
   <script defer src="request.js"></script>
   <script defer src="theme.js"></script>
 </head>
@@ -40,13 +40,9 @@
         <a href="#looks">Looks</a>
         <a href="#build">Build</a>
       </nav>
-      <!-- Solstice Day or Solstice, the way Hex's own looks go. Two states: the system's, and the other one pinned. Both
-           its words and pictures are in it and the one that isn't what pressing does is hidden by the stylesheet -->
-      <button type="button" class="button small quiet scheme" id="scheme" hidden>
-        <svg class="to-day" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
+      <button type="button" class="button small quiet icon-button scheme" id="scheme" aria-label="Switch to Solstice Night" hidden>
+        <svg class="to-day" hidden viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
         <svg class="to-night" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z" fill="currentColor"/></svg>
-        <span class="to-day sr-only">Switch to Solstice Day</span>
-        <span class="to-night sr-only">Switch to Solstice Night</span>
       </button>
       <a class="button small quiet repo" href="https://github.com/bogzxo/hex">GitHub</a>
       <a class="button small get" href="#get-it">Download</a>
@@ -61,7 +57,7 @@
         <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
         <div class="actions">
-          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.1 Amphetamine<!-- /release:button --></a>
+          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.2 Amphetamine<!-- /release:button --></a>
           <a class="button quiet" href="#numbers">Show me the receipts</a>
           <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
           <button type="button" class="button quiet" commandfor="request" command="show-modal">Request a feature</button>
@@ -136,7 +132,7 @@
       <div class="wrap">
         <p class="eyebrow">Unedited, 1600 × 900</p>
         <h2>Look at the bloody thing</h2>
-        <p>Every picture is the real window, straight off the build that was measured. An agent took them, driving Hex through its own MCP server. Open one for the full size.</p>
+        <p>Every picture is the real Hex window. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
         <div class="gallery">
           <figure class="rise">
@@ -351,7 +347,7 @@
 
     <section id="get-it">
       <div class="wrap">
-        <p class="eyebrow"><!-- release:title -->Hex 3.1.1 Amphetamine<!-- /release:title --></p>
+        <p class="eyebrow"><!-- release:title -->Hex 3.1.2 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
         <p>Pick your machine. <strong>Setup</strong> handles installation, shortcuts and updates. <strong>Portable</strong> is a ZIP you unpack and run. Neither needs a separate .NET installation.</p>
         <div class="scroller downloads" tabindex="0" role="region" aria-label="Downloads">
@@ -381,10 +377,15 @@
         <p class="note">Windows needs 10 1809 or newer. Linux needs a Vulkan loader and driver. macOS needs 11 or newer; the build is unsigned, so <code>xattr -dr com.apple.quarantine /path/to/Hex</code> if macOS blocks it. <a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
         <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
         <div class="whats-new"><!-- release:notes -->
-<h3>What's new in 3.1.1 Amphetamine</h3>
-<p>C# completion keeps up with typing again.</p>
-<ul><li>completion is asked before the colours, folds, hints and lenses Hex asks for after every change, which wait until typing stops; csharp-ls answers in turn, and on the engine's solution each completion waited 0.3 to 2 seconds behind them where 0.07 does</li><li>a word the server had nothing for yet (csharp-ls still loading its solution) is asked again as it's typed on, rather than offering nothing until the next word</li><li>a project file changing outside the folder csharp-ls runs in, in a build's output or in a hidden folder, no longer starts it again, which took the engine's solution half a minute to load each time</li><li>a repository's checkpoint is found through a link in its path (macOS's /var), so restoring a turn's changes puts them back there</li></ul>
-<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.1.1">The release on GitHub</a></p>
+<h3>What's new in 3.1.2 Amphetamine</h3>
+<p>Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.</p>
+<details><summary>Everything in 3.1.2</summary><h4>Agentic</h4>
+<ul><li>each agent's card says how it's doing on a badge, Working in blue with a beating dot, Failed in red, a finished chat you haven't seen in the accent</li><li>the tabs' counts are badges, Inbox's in the accent, the Plan's green once every step is done, and the Plan's bar is green the whole way rather than going red at 100%</li><li>Details counts each tool on a badge in the tool's colour</li><li>/ commands complete wherever the word is in the box, Tab takes only that word, Enter sends a command written out in full, and a message that starts with a slash is sent as a message</li><li>the list of / commands walks with held arrow keys, Up goes up it rather than closing it, and it scrolls smoothly past its first page</li><li>a picture opened full screen zooms round the pointer and keeps the part you dragged to in sight</li><li>agents can read git's diff of a file and see which files other chats' plans are about to change</li></ul>
+<h4>the editor</h4>
+<ul><li>the settings window has All, Modified and Commonly used under its search, a press each; what sets a setting sits beside what it says, the key shows when you look at a row, and a changed setting has a dot</li><li>the welcome page uses the whole window, three columns on a wide one, with Getting started for the settings nobody finds by looking</li><li>spelling is checked as you type in comments, text, Markdown and page words, never code</li><li>notification cards slide, fade and make room smoothly instead of jumping</li><li>No AI in Settings or <code>--no-ai</code> leaves the agents out altogether</li></ul>
+<h4>languages</h4>
+<ul><li>the Language Servers window sets up each language a step at a time, and says every server is optional, set up only the ones you want</li><li>a notebook's code cells are read by its language's server, so a missing import is underlined</li><li>servers that wait to be asked what's wrong with a file (TypeScript 7's) are asked</li></ul></details>
+<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.1.2">The release on GitHub</a></p>
 <!-- /release:notes --></div>
       </div>
     </section>
@@ -431,13 +432,30 @@
     </div>
   </footer>
 
-  <dialog class="lightbox" closedby="any" aria-label="Screenshot, full size">
-    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" width="1600" height="900" alt="">
+  <dialog class="lightbox" closedby="any" aria-label="Screenshot gallery">
+    <header>
+      <span class="lightbox-position"></span>
+      <form method="dialog">
+        <button class="button small quiet icon-button" aria-label="Close gallery" autofocus>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </form>
+    </header>
+    <div class="lightbox-stage">
+      <img width="1600" height="900" alt="">
+      <p class="lightbox-error" role="status"></p>
+    </div>
     <footer>
-      <p></p>
-      <button type="button" data-step="-1" aria-label="Previous picture">←</button>
-      <button type="button" data-step="1" aria-label="Next picture">→</button>
-      <form method="dialog"><button autofocus>Close</button></form>
+      <p class="lightbox-caption" role="status"></p>
+      <div class="lightbox-actions">
+        <a class="button small quiet lightbox-original" target="_blank" rel="noopener" aria-label="Full size (opens in a new tab)">Full size</a>
+        <button type="button" class="button small quiet icon-button" data-step="-1" aria-label="Previous screenshot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button type="button" class="button small quiet icon-button" data-step="1" aria-label="Next screenshot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
     </footer>
   </dialog>
 </body>

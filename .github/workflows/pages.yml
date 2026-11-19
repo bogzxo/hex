@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ master ]
-    paths: [ 'site/**', '.github/workflows/pages.yml' ]
+    paths: [ 'site/**', '.github/site-release.py', '.github/workflows/pages.yml' ]
 
 permissions:
   contents: read
@@ -31,17 +31,13 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      # The latest release's version and codename on the Download button, and its notes beside the downloads. A
-      # prerelease is never the latest. With no release to read, the page says what it says in the repository
+      # Match what the download links serve. If the lookup fails, keep the previous deployment live.
       - name: Latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/release.json"; then
-            python3 .github/site-release.py "$RUNNER_TEMP/release.json" site/index.html
-          else
-            echo "::warning::No latest release to read; the page says what it says in the repository."
-          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/release.json"
+          python3 .github/site-release.py "$RUNNER_TEMP/release.json" site/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:

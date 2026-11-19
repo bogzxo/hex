@@ -18,8 +18,18 @@ const BAR = { light: '#ffffff', dark: '#18171f' };
 const system = () => (systemDark.matches ? 'dark' : 'light');
 const shown = () => (meta.content === 'light' || meta.content === 'dark' ? meta.content : system());
 
+function updateButton() {
+  const dark = shown() === 'dark';
+  const label = dark ? 'Switch to Solstice Day' : 'Switch to Solstice Night';
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.querySelector('.to-day').toggleAttribute('hidden', !dark);
+  button.querySelector('.to-night').toggleAttribute('hidden', dark);
+}
+
 function apply(pinned) {
   meta.content = pinned ?? 'light dark';
+  updateButton();
   for (const { bar, media } of bars) {
     if (pinned) {
       bar.removeAttribute('media');
@@ -49,6 +59,8 @@ if (meta && button) {
     keep(pinned);
     apply(pinned);
   });
+
+  systemDark.addEventListener('change', updateButton);
 
   // Switched in another tab of the page, this one follows
   addEventListener('storage', event => {
