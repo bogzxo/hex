@@ -412,6 +412,10 @@ internal sealed partial class DawnScene
         foreach (string suite in list ? ["nothing-of-that-name"] : suites)
             start.ArgumentList.Add(suite);
         start.ArgumentList.Add("--exit");
+        // The size the suites are written for. Without it the window took the screen's, and the checks of what fits a
+        // narrow or crowded editor failed for an agent where they passed for anybody running them by hand
+        start.ArgumentList.Add("--size");
+        start.ArgumentList.Add("1600x900");
         start.Environment["HORIZON_AUDIO"] = "off";
 
         var lines = new List<string>();
