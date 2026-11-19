@@ -16,6 +16,10 @@ internal static class McpSchema
 
     public static JsonObject Integer(string description) => new() { ["type"] = "integer", ["description"] = description };
 
+    /// <summary>A whole number or null, for a field a typed client clears by sending null.</summary>
+    public static JsonObject IntegerOrNull(string description) =>
+        new() { ["type"] = new JsonArray("integer", "null"), ["description"] = description };
+
     public static JsonObject Flag(string description) => new() { ["type"] = "boolean", ["description"] = description };
 
     public static JsonObject OneOf(string description, params string[] choices) =>
@@ -28,6 +32,7 @@ internal static class McpSchema
     public static JsonObject Object(IEnumerable<(string Name, JsonObject Schema)> properties, params string[] required)
     {
         var props = new JsonObject();
+
         foreach (var (name, schema) in properties)
             props[name] = schema;
 
@@ -62,20 +67,31 @@ internal static class McpSchema
             if (properties[name] is not JsonObject property)
                 return $"'{name}' isn't an argument of this tool, it takes {(properties.Count == 0 ? "none" : string.Join(", ", properties.Select(each => each.Key)))}.";
 
-            if (value is null || property["type"]?.GetValue<string>() is not { } type)
+            // A type of several (["integer", "null"]) fits when any of them does, the first being what it's said to be
+            string[] types = property["type"] switch
+            {
+                JsonValue one when one.GetValueKind() == JsonValueKind.String => [one.GetValue<string>()],
+                JsonArray several => [.. several.OfType<JsonValue>().Where(each => each.GetValueKind() == JsonValueKind.String).Select(each => each.GetValue<string>())],
+                _ => []
+            };
+            if (value is null || types.Length == 0)
                 continue;
 
             JsonValueKind kind = value.GetValueKind();
-            bool fits = type switch
+            string type = types[0];
+            bool fits = types.Any(each => each switch
             {
                 "string" => kind == JsonValueKind.String,
                 "number" => kind == JsonValueKind.Number,
-                "integer" => kind == JsonValueKind.Number && value.AsValue().TryGetValue(out double whole) && whole == Math.Floor(whole),
+                // A number off the wire reads as a double, one Hex put in itself as the int it was
+                "integer" => kind == JsonValueKind.Number && (value.AsValue().TryGetValue(out double whole) ? whole == Math.Floor(whole)
+                    : value.AsValue().TryGetValue(out int _) || value.AsValue().TryGetValue(out long _)),
                 "boolean" => kind is JsonValueKind.True or JsonValueKind.False,
                 "object" => kind == JsonValueKind.Object,
                 "array" => kind == JsonValueKind.Array,
+                "null" => kind == JsonValueKind.Null,
                 _ => true
-            };
+            });
 
             if (!fits)
                 return $"'{name}' should be {(type == "integer" ? "a whole number" : "a " + type)}.";

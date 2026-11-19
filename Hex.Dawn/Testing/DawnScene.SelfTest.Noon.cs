@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Nodes;
 
 using Hex.Shell;
 
@@ -62,6 +63,45 @@ internal sealed partial class DawnScene
         test.Run(() => Shot("noon-solstice"));
         test.Settle(0.5f);
 
+        // The server off, Agentic coming up says once a session what switching it on saves
+        int hintsBefore = 0;
+        bool quietBefore = settings.McpHintQuiet;
+        test.Run(() =>
+        {
+            hintsBefore = McpHintsSaid;
+            settings.McpHintQuiet = false;
+            SayMcpHint = true;
+            ForgetMcpHintSaid();
+            ShowFace(HexFace.Dawn);
+            ShowFace(HexFace.Noon);
+        });
+        test.Settle(0.3f);
+        test.Check("noon: with the MCP server off Agentic's card says what it saves, with the way to its setting and Don't Show Again", () =>
+            McpWanted || (McpHintsSaid == hintsBefore + 1
+            && toasts.Cards.Any(card => card.Text == Said("mcp.hint") && card.Actions.Count == 2
+                && card.Actions.Any(action => action.Label == Said("mcp.hint_open"))
+                && card.Actions.Any(action => action.Label == Said("code_server.dont_show_again")))));
+        test.Run(() =>
+        {
+            ShowFace(HexFace.Dawn);
+            ShowFace(HexFace.Noon);
+        });
+        test.Check("noon: and says it once a session, not every time Agentic comes up", () => McpWanted || McpHintsSaid == hintsBefore + 1);
+        test.Run(() =>
+        {
+            settings.McpHintQuiet = true;
+            ForgetMcpHintSaid();
+            ShowFace(HexFace.Dawn);
+            ShowFace(HexFace.Noon);
+        });
+        test.Check("noon: nor at all once Don't Show Again was pressed", () => McpWanted || McpHintsSaid == hintsBefore + 1);
+        test.Run(() =>
+        {
+            settings.McpHintQuiet = quietBefore;
+            SayMcpHint = null;
+        });
+        test.Settle(0.3f);
+
         // Agentic's horizon is the agents', running while one works and red a moment when one fails
         test.Check("noon: the horizon is empty while no agent works", () => HorizonLine is { Share: 0.0f });
         test.Run(() => chat!.Ask("work a while"));
@@ -92,15 +132,25 @@ internal sealed partial class DawnScene
 
         // The tabs over the middle, a request waiting in the Inbox and answered by its key from anywhere
         bool? allowed = null;
+        float planWidthBefore = 0;
         test.Run(() =>
         {
+            planWidthBefore = noonTabPanels[(int)NoonStage.Plan].Size.X;
             chat!.Approval("Run the tests", "dotnet test", answer => allowed = answer);
             chat.Note("[x] Read the loader\n[~] Change the cache\n[ ] Run the tests");
+            foreach (string tool in new[] { "hex_read", "hex_search", "hex_edit", "hex_terminal_run" })
+            {
+                chat.Tool(tool, "mcp__hex__" + tool, "{}");
+                chat.ToolDone(tool, true, "Done");
+            }
             noonWait = 0;
         });
         test.Settle(0.4f);
         test.Check("noon: the Inbox tab counts what waits and the Plan tab how far the agent's list got", () =>
             noonTabButtons[(int)NoonStage.Inbox].Label == TabLabel(NoonStage.Inbox, "1") && noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, "1/3"));
+        test.Check("noon: a count widens its tab to fit it and the tabs still fit the strip", () =>
+            noonTabPanels[(int)NoonStage.Plan].Size.X > planWidthBefore
+            && noonTabPanels.Sum(tab => tab.Size.X) + noonTabs.Spacing * 3 <= noonTabsFitted.Room);
         PressKeys(test, "Alt+2");
         test.Settle(0.4f);
         test.Check("noon: Alt+2 shows the Inbox, the request on a card with Allow and Deny and their keys", () =>
@@ -116,6 +166,72 @@ internal sealed partial class DawnScene
         test.Check("noon: Alt+4 shows the plan, a line an item", () =>
             noonStage == NoonStage.Plan && Descendants(noonPlanRows).OfType<Label>().Count(label => label.Text.Contains("Change the cache", StringComparison.Ordinal)) == 1);
         test.Run(() => Shot("noon-plan"));
+
+        McpServer? planServer = null;
+        Task<JsonNode?>? planReply = null;
+        test.Run(() =>
+        {
+            _ = McpTools;
+            planServer = MakeMcpServer(chat!.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        });
+
+        void PlanCall(string name, string args)
+        {
+            test.Run(() => planReply = planServer!.Handle(new JsonObject
+            {
+                ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "tools/call",
+                ["params"] = new JsonObject { ["name"] = name, ["arguments"] = JsonNode.Parse(args) }
+            }));
+            test.WaitFor(() => planReply?.IsCompleted == true, 5);
+        }
+
+        string PlanReply() => planReply?.Result?["result"]?["content"]?[0]?["text"]?.GetValue<string>() ?? string.Empty;
+
+        PlanCall("hex_plan_update", """{"merge":false,"title":"Fix links","items":[{"id":"read","text":"Find the handler","state":"doing","note":"From chat"},{"text":"Test the link"}]}""");
+        test.Settle(0.5f);
+        test.Check("noon: a tagged MCP plan replaces the legacy checklist and redraws the open tab", () =>
+            PlanReply().StartsWith("Plan: 0 of 2 done.", StringComparison.Ordinal)
+            && noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, "0/2")
+            && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text.Contains("Fix links", StringComparison.Ordinal))
+            && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text.Contains("From chat", StringComparison.Ordinal)));
+
+        PlanCall("hex_plan_update", """{"items":[{"id":"read","state":"done"},{"text":"Test the link","state":"blocked"}]}""");
+        PlanCall("hex_plan_read", "{}");
+        test.Check("noon: the plan tool merges by ID and text, preserving fields and round-tripping with the chat", () =>
+        {
+            HexAgentPlan? restored = HexAgentChatStore.Read(JsonNode.Parse(HexAgentChatStore.Write(chat!).ToJsonString()))?.Plan;
+            return JsonNode.Parse(PlanReply()) is JsonObject saved && JsonNode.DeepEquals(restored?.ToJson(), saved)
+                && restored is { Title: "Fix links", Done: 1, Items.Count: 2 }
+                && restored.Items[0] is { Id: "read", Text: "Find the handler", Note: "From chat" }
+                && restored.Items[1].State == HexPlanState.Blocked;
+        });
+
+        PlanCall("hex_plan_update", """{"items":[{"id":"read","state":"doing"},{"text":"Broken","state":"unknown"}]}""");
+        test.Check("noon: an invalid item leaves the plan unchanged",
+            () => planReply?.Result?["result"]?["isError"]?.GetValue<bool>() == true && chat!.Plan?.Done == 1);
+
+        NoonPlanPatches(test, () => chat!, PlanCall, PlanReply);
+        NoonPlanCoordination(test, () => chat!);
+
+        test.Check("noon: the tools summary gives reads, searches, edits and terminal calls distinct colours", () =>
+        {
+            if (Skin is not { } skin)
+                return false;
+            string[] toolNames = ["hex_read", "hex_search", "hex_edit", "hex_terminal_run"];
+            string[] colours = [.. toolNames.Select(tool => HexColour(HexAgentRows.ToolColour(tool, skin.Palette)!.Value))];
+            return colours.Distinct().Count() == 4 && toolNames.Zip(colours).All(item =>
+                Descendants(noonContextRows).OfType<Label>().Any(label =>
+                    label.Text.Contains($"[color:{item.Second}]", StringComparison.Ordinal)
+                    && label.Text.Contains(item.First, StringComparison.Ordinal)));
+        });
+        SemanticShot(test, "hex-plan-and-tool-colours.png");
+
+        PlanCall("hex_plan_update", """{"merge":false,"items":[]}""");
+        test.Settle(0.5f);
+        test.Check("noon: an explicit empty plan clears the tab without restoring the old checklist", () =>
+            noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, string.Empty)
+            && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text == Said("noon.plan_empty")));
+
         PressKeys(test, "Alt+3");
         test.Settle(0.4f);
         test.Check("noon: Alt+3 shows the changes, none yet for a chat that wrote nothing", () =>
@@ -158,6 +274,8 @@ internal sealed partial class DawnScene
         PressKeys(test, "Ctrl+Alt+B");
         test.Settle(0.3f);
         test.Check("noon: and brings it back", () => noonFleet.Visible && !noonFleetBack.Visible);
+        // The chat is made by a step that hasn't run yet as the steps are put down, so it's asked for as they run
+        TestNoonNarrowFleet(test, () => chat!);
 
         // Solstice Day has its own Noon, a deeper teal on the paper
         test.Run(() => PickLook(HexLooks.SolsticeDay));

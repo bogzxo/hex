@@ -115,15 +115,20 @@ internal sealed partial class HexCodeIndex
         });
 
     /// <summary>hex_files, files whose name or path has what was asked in it, best first, with their sizes.</summary>
-    public HexAnswer Files(string query, int most, int budget) =>
-        Ask("hex_files", $"{query}\n{most}\n{budget}", index =>
+    /// <param name="under">Only files whose path inside the workspace starts with this, as hex_symbols' path.</param>
+    public HexAnswer Files(string query, int most, int budget, string? under = null) =>
+        Ask("hex_files", $"{query}\n{most}\n{budget}\n{under}", index =>
         {
             if (query.Replace('\\', '/').Split([' ', '/'], StringSplitOptions.RemoveEmptyEntries).Length == 0)
                 return HexAnswer.Wrong("Say part of a file's name or path in query.");
 
             List<(HexIndexedFile File, int Score)> found = FindFiles(index, query);
+            string? root = under?.Trim().Replace('\\', '/').TrimStart('.', '/');
+            if (root is { Length: > 0 })
+                found = [.. found.Where(each => each.File.Relative.Replace('\\', '/').StartsWith(root, StringComparison.OrdinalIgnoreCase))];
+            string within = root is { Length: > 0 } ? $" under {root}" : string.Empty;
             var said = new HexBudget(budget);
-            said.Line(found.Count == 0 ? $"No file's name or path has {query}." : $"{found.Count} files fit {query}, best first.");
+            said.Line(found.Count == 0 ? $"No file's name or path{within} has {query}." : $"{found.Count} files{within} fit {query}, best first.");
             foreach (var (file, _) in found.Take(most))
                 said.Line($"{file.Relative}  {file.LineCount} lines");
             if (found.Count > most)

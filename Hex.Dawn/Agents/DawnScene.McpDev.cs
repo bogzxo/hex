@@ -303,7 +303,8 @@ internal sealed partial class DawnScene
             return;
         }
 
-        if (resume is null)
+        // With No AI on there's nowhere for the chats to go back to and no agent to carry on, the build is up and that's all
+        if (resume is null || HexAi.Off)
             return;
 
         foreach (JsonNode? said in resume["chats"] as JsonArray ?? [])

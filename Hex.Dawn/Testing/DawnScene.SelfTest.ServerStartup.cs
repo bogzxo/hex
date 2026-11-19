@@ -17,10 +17,10 @@ internal sealed partial class DawnScene
         test.WaitFor(() => server.Failure is not null, 5);
         test.Check("server startup: closed transport fails before initialization", () => server.Failure is not null && !server.IsReady);
         test.Run(() => languages.ServerStopped(server, reason));
-        test.Check("server startup: failure offers retry and settings", () => toasts.Cards.Any(card =>
+        test.Check("server startup: failure offers retry and the language's setup", () => toasts.Cards.Any(card =>
             card.Text.Contains(reason, StringComparison.Ordinal)
             && card.Actions.Any(action => action.Label == Said("languages.start_again"))
-            && card.Actions.Any(action => action.Label == Said("code_server.open_settings"))));
+            && card.Actions.Any(action => action.Label == Said("code_server.open_setup"))));
         test.Settle(0.3f);
         test.Check("server startup: does not enter an automatic restart loop", () => languages.ServersChanged == changed + 1);
         test.Run(() => toasts.Cards.First(card => card.Text.Contains(reason, StringComparison.Ordinal))
@@ -28,11 +28,11 @@ internal sealed partial class DawnScene
         test.Check("server startup: output action explains when stderr is empty", () =>
             said.Any(row => row.Text == Said("languages.no_server_output")));
         test.Run(() => toasts.Cards.First(card => card.Text.Contains(reason, StringComparison.Ordinal))
-            .Actions.First(action => action.Label == Said("code_server.open_settings")).Pressed());
-        test.Check("server startup: settings action opens settings", () => SettingsPage is not null);
+            .Actions.First(action => action.Label == Said("code_server.open_setup")).Pressed());
+        test.Check("server startup: it opens the Language Servers window at the language", () => serversWindow is not null && serversLanguage == "python");
         test.Run(() =>
         {
-            CloseSettings();
+            serversWindow?.Close();
             foreach (var card in toasts.Cards.Where(card => card.Text.Contains(reason, StringComparison.Ordinal))) card.Close();
             server.Dispose();
         });

@@ -10,6 +10,7 @@ internal sealed partial class DawnScene
         float width = 0;
         Vector2 grip = default;
         HexAgentProfile[] profiles = [];
+        HexExtension[] quieted = [];
         HexExtension? provider = null;
         HexAgentEntry? tool = null;
         float animation = settings.UiAnimation;
@@ -40,6 +41,10 @@ internal sealed partial class DawnScene
         {
             profiles = [.. HexAgentProfiles.All];
             foreach (var profile in profiles) HexAgentProfiles.Forget(profile.Extension);
+            // Their extensions quiet meanwhile, or what an agent system finds out later (Claude Code's commands, asked of
+            // its program as it starts) says who it is again and brings it back in the middle of the test
+            quieted = [.. extensions.All.Where(extension => extension.Enabled && profiles.Any(profile => profile.Extension == extension.Id))];
+            foreach (HexExtension extension in quieted) extension.Enabled = false;
             agentsInput.Text = "Explain the settings loader";
         });
         test.Settle(0.3f);
@@ -536,6 +541,7 @@ internal sealed partial class DawnScene
             extensions.ForgetAgents(provider!);
             extensions.Remove(provider!);
             foreach (var profile in profiles) HexAgentProfiles.Set(profile);
+            foreach (HexExtension extension in quieted) extension.Enabled = true;
         });
         test.Run(() => { running.OpenRunner(); running.runnerWindow!.Size = running.runnerWindow.MinSize; });
         test.Settle(0.2f);

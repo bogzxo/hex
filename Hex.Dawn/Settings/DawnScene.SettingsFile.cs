@@ -393,6 +393,8 @@ internal sealed partial class DawnScene
             ApplyKeyLayer();
         if (now.McpServer != was.McpServer)
             ApplyMcp();
+        if (now.NoAi != was.NoAi)
+            NoAiChanged();
         if (now.GitSmartCommit != was.GitSmartCommit)
             ((IPanels)this).RefreshSide(HexSide.SourceControl);
 

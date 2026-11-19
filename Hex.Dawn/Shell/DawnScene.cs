@@ -167,6 +167,13 @@ internal sealed partial class DawnScene : Scene
 
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
+
+        // Whether this run has agents at all, said before anything of theirs would be made (HexAi). The command line has
+        // the last word, the settings say it otherwise, and it's kept for the run
+        if (options.NoAi)
+            HexAi.Force();
+        else
+            HexAi.Decide(settings.NoAi);
         BuildRenderScale();
         ReadBackdropAhead();
         DeclareMenus();
@@ -200,8 +207,12 @@ internal sealed partial class DawnScene : Scene
         codeEditing.BuildFindBar();
         BuildQuiet();
         BuildTerminal();
-        BuildAgentsPanel();
-        BuildNoon();
+        // The agents' panel and Agentic, never made with No AI on, nothing of them is there to tick or to lay out
+        if (!HexAi.Off)
+        {
+            BuildAgentsPanel();
+            BuildNoon();
+        }
         StartRemote();
         BuildSideTree();
         BuildExtensionViews();
@@ -280,8 +291,9 @@ internal sealed partial class DawnScene : Scene
                 string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
             explorer.OpenFolder(options.Folder);
 
-        // The agents' chats of this workspace as they were when Hex last had it open
-        BringBackChats();
+        // The agents' chats of this workspace as they were when Hex last had it open, none read with No AI on
+        if (!HexAi.Off)
+            BringBackChats();
 
         // A fresh start or one on a folder is on the explorer, for code and for the designer, whatever the side bar was left on.
         // The self test is left where it starts, its checks expect the designer the way it always was
@@ -315,6 +327,7 @@ internal sealed partial class DawnScene : Scene
 
         // Last, an extension's on_start finds the editor up and a file open
         extensions.StartAll();
+        explorer.FoldersChanged += () => extensions.Raise("on_workspace_changed");
         extensions.WatchFolders();
         extensions.StartCatalog();
 
@@ -571,14 +584,21 @@ internal sealed partial class DawnScene : Scene
             .Add("notebooks", UpdateNotebooks)
             .Add("markdown", UpdateMarkdownPreview)
             .Add("terminal", UpdateTerminal)
-            .Add("remote", UpdateRemote)
-            // The agent of a selection, the harness, the Agents panel and the server, a step each so each is weighed
-            .Add("agent", UpdateAgent)
-            .Add("harness", UpdateHarness)
-            .Add("agents_panel", UpdateAgentsPanel)
-            .Add("mcp", UpdateMcp)
-            .Add("noon", UpdateNoon)
-            .Add("chats_kept", UpdateChatsKept)
+            .Add("remote", UpdateRemote);
+
+        // The agent of a selection, the harness, the Agents panel and the server, a step each so each is weighed. With
+        // No AI on the agents' steps aren't in the list at all, the harness and the server are the MCP tools' and stay
+        if (!HexAi.Off)
+            panelTicks.Add("agent", UpdateAgent);
+        panelTicks.Add("harness", UpdateHarness);
+        if (!HexAi.Off)
+            panelTicks.Add("agents_panel", UpdateAgentsPanel);
+        panelTicks
+            .Add("spelling", UpdateSpelling)
+            .Add("mcp", UpdateMcp);
+        if (!HexAi.Off)
+            panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept);
+        panelTicks
             .Add("dev_restart", UpdateDevRestart)
             .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)

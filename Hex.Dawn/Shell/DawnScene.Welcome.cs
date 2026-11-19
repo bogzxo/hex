@@ -29,6 +29,21 @@ internal sealed partial class DawnScene
         private readonly StackPanel news = made.Get<StackPanel>("news");
         public readonly Button CommandsButton = made.Get<Button>("commands");
         public readonly StackPanel Agents = made.Get<StackPanel>("agents");
+        public readonly StackPanel Getting = made.Get<StackPanel>("getting");
+        private readonly StackPanel gettingColumn = made.Get<StackPanel>("getting_column"), footer = made.Get<StackPanel>("footer"),
+            side = made.Get<StackPanel>("side_column");
+        private readonly Spacer top = made.Get<Spacer>("welcome_top"), agentsGap = made.Get<Spacer>("agents_gap");
+        private readonly Label agentsTitle = made.Get<Label>("agents_title");
+
+        // The widest the page goes, and from how wide the agents get a column of their own
+        private const float WIDEST = 1240.0f, THREE_COLUMNS = 980.0f;
+
+        /// <summary>Getting started made again at a width, the scene's (it knows the settings), whenever the column changes width.</summary>
+        public Action<StackPanel, float>? FillGetting;
+
+        /// <summary>How wide Getting started's column was made, for making it again at the same width when what it says changes.</summary>
+        public float GettingWidth { get; private set; }
+
         public void Invalidate() => width = 0;
         private float width;
         private UISkin? measuredWith;
@@ -37,24 +52,60 @@ internal sealed partial class DawnScene
         {
             if (!page.Visible || page.Bounds.Width <= 0.0f)
                 return;
-            float wanted = Math.Clamp(page.Bounds.Width - 104.0f, 160.0f, 760.0f);
+            // The room over the page a share of the window's height, so a tall window doesn't have it all under the page
+            float over = MathF.Round(Math.Clamp(page.Bounds.Height * 0.08f, 32.0f, 112.0f));
+            if (top.Size.Y != over)
+                top.Size = top.Size with { Y = over };
+
+            float wanted = Math.Clamp(page.Bounds.Width - 104.0f, 160.0f, WIDEST);
             if (wanted == width && measuredWith == skin)
                 return;
             width = wanted;
             measuredWith = skin;
-            bool stacked = width < 560.0f;
+            bool stacked = width < 560.0f, three = width >= THREE_COLUMNS;
             columns.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+            columns.Spacing = three ? 56.0f : 40.0f;
             content.Size = content.Size with { X = width };
             columns.Size = columns.Size with { X = width };
-            subtitle.Size = subtitle.Size with { X = width };
-            float column = stacked ? width : (width - columns.Spacing) * 0.5f;
-            start.Size = start.Size with { X = column };
+            subtitle.Size = subtitle.Size with { X = Math.Min(width, 640.0f) };
+
+            // Getting started the widest of three, its rows a description and a switch each; two halves on a middling page
+            float room = width - columns.Spacing * (three ? 2 : 1);
+            float column = stacked ? width : three ? MathF.Floor(room * 0.29f) : MathF.Floor(room * 0.5f);
+            float getting = stacked ? width : three ? room - column * 2.0f : column;
             recent.Size = recent.Size with { X = column };
+            gettingColumn.Size = gettingColumn.Size with { X = getting };
+            side.Size = side.Size with { X = column };
+            side.Visible = three;
+
+            // The agents in their own column on a wide page, under the recent files otherwise
+            StackPanel agentsIn = three ? side : recent;
+            if (Agents.Parent != agentsIn)
+            {
+                agentsIn.Add(agentsGap);
+                agentsIn.Add(agentsTitle);
+                agentsIn.Add(Agents);
+            }
+            // Heading the column of its own level with the other two, the gap's own spacing gone with it
+            agentsGap.Visible = !three;
+
+            // The row of what to start with, each as wide as its words, one over the other a line each on a narrow page
+            start.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+            start.Size = start.Size with { X = width };
             foreach (Button action in start.Children.OfType<Button>())
             {
-                action.Size = new Vector2(column, 36);
-                action.Align = Origin.Left;
+                action.Size = new Vector2(stacked ? width : WordsWidth(action, skin), 36);
+                action.Align = stacked ? Origin.Left : Origin.Center;
             }
+            footer.Direction = stacked ? UIDirection.Vertical : UIDirection.Horizontal;
+            foreach (Button help in footer.Children.OfType<Button>())
+            {
+                help.Size = new Vector2(stacked ? width : WordsWidth(help, skin), 30);
+                help.Align = Origin.Left;
+            }
+
+            GettingWidth = getting;
+            FillGetting?.Invoke(Getting, getting);
             foreach (UIComponent row in List.Children)
             {
                 if (row is Label hint)
@@ -83,6 +134,10 @@ internal sealed partial class DawnScene
                 }
             }
         }
+
+        // How wide a button is to say its icon and its words, with the room a button has round them
+        private static float WordsWidth(Button button, UISkin? skin) => skin is null ? 160.0f
+            : MathF.Ceiling(skin.Font.Measure($"$({button.Icon}) {button.Label}", button.LabelScale).X + skin.ButtonPadding.Total.X + 16.0f);
 
         // A long name loses its middle first, the full path still there on hover.
         private static void FitFile(Button link, float column, UISkin? skin)
@@ -155,6 +210,10 @@ internal sealed partial class DawnScene
         }
         foreach (WelcomeSizing sizing in welcomeSizes)
             sizing.Fit(compositor.Skin);
+
+        // Getting started says how the language servers are, made again once they've been looked for or set up
+        if (welcoming && gettingSetupShown != languages.SetupVersion)
+            RefillGettingStarted();
     }
 
     /// <summary>The welcome made in a panel, the canvas of the empty layout or the code panel for the plain one.</summary>
@@ -171,14 +230,18 @@ internal sealed partial class DawnScene
         var openFile = made.Get<Button>("open_file");
         newLayout.OnPressed = () => Show(NewDocument());
         openFile.OnPressed = OpenPressed;
-        PutNewFile(into == codeScroll, newLayout, openFile, made.Get<Button>("commands"));
+        var (newFile, newProject) = PutNewFile(openFile);
         var openFolder = made.Get<Button>("open_folder");
         openFolder.OnPressed = () => explorer.AskFolder(explorer.OpenFolder);
-        if (into == codeScroll && openFolder.Parent is { } start)
-        {
-            start.MoveChild(openFolder, 1);
-            start.MoveChild(openFile, 2);
-        }
+
+        // The row in order: Open Folder first, the one primary, then what's quieter. On the plain welcome a file before a
+        // layout, somebody who writes Go wants one; on the designer's a layout first
+        Button[] order = into == codeScroll
+            ? [openFolder, newFile, openFile, newProject, newLayout]
+            : [openFolder, newLayout, newFile, openFile, newProject];
+        if (openFolder.Parent is StackPanel row)
+            for (int i = 0; i < order.Length; i++)
+                row.MoveChild(order[i], i);
         made.Get<Button>("commands").OnPressed = CommandPalette;
         made.Get<Button>("commands").Label = WithCommandShortcut(Said("welcome.commands"), "menus.command_palette");
         made.Get<Button>("keys").OnPressed = OpenKeysWindow;
@@ -192,12 +255,20 @@ internal sealed partial class DawnScene
         made.Get<Label>("release_number").Text = Hex.Shell.HexVersion.Number;
 
         FillWelcomeNews(made);
-        var sizing = new WelcomeSizing(page, made);
-        if (welcomeSizes.Count == 0)
+        var sizing = new WelcomeSizing(page, made) { FillGetting = FillGettingStarted };
+        if (welcomeSizes.Count == 0 && !HexAi.Off)
             agentsChanged += FillWelcomeAgents;
         welcomeSizes.Add(sizing);
         FillWelcomeRecent(sizing);
-        FillWelcomeAgents(sizing);
+
+        // No agents' row with No AI on, its title and the gap over it go with it
+        if (HexAi.Off)
+        {
+            foreach (string part in (ReadOnlySpan<string>)["agents_gap", "agents_title", "agents"])
+                made.Get<UIComponent>(part).Visible = false;
+        }
+        else
+            FillWelcomeAgents(sizing);
         return page;
     }
 
@@ -261,6 +332,145 @@ internal sealed partial class DawnScene
         }
 
         sizing.Invalidate();
+    }
+
+    // What Getting started said last, by the language servers' and the settings' versions, made again when either moves
+    private int gettingSetupShown = -1;
+
+    /// <summary>
+    /// Getting started: the settings that help and that nobody finds by looking, in groups. Each a row of its name (which
+    /// opens it in the settings), how it is now, and what changes it there and then: a switch for one that's on or off,
+    /// a button for the rest. The ones about agents go with No AI on.
+    /// </summary>
+    private void FillGettingStarted(StackPanel list, float width)
+    {
+        foreach (UIComponent child in list.Children.ToArray())
+            list.Remove(child);
+        gettingSetupShown = languages.SetupVersion;
+
+        void Group(string key)
+        {
+            list.Add(new Spacer { Size = new Vector2(width, list.Children.Count == 0 ? 2 : 12) });
+            list.Add(new Label { Text = Said("welcome.getting_" + key), Dim = true, TextScale = 0.13f, Size = new Vector2(width, 22), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+        }
+
+        // A row: its icon, its name over how it is now, and its switch or button at the right
+        void Row(string icon, string name, string said, string? key, UIComponent control)
+        {
+            float controlWidth = control.Size.X;
+            float words = MathF.Max(120, width - 28 - controlWidth - 16);
+            var row = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(width, 0) };
+            row.Add(new Label { Text = $"$({icon})", TextScale = 0.16f, Size = new Vector2(20, 40), Align = Origin.Center, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            var text = row.Add(new StackPanel { Spacing = 0, Size = new Vector2(words, 0), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            text.Add(new Button
+            {
+                Label = Said("welcome.getting_" + name),
+                Style = "button_flat",
+                LabelScale = 0.15f,
+                Align = Origin.Left,
+                Animated = false,
+                Size = new Vector2(words, 24),
+                Tooltip = key is not null ? Said("welcome.getting_in_settings") : string.Empty,
+                Anchor = Origin.TopLeft,
+                Pivot = Origin.TopLeft,
+                OnPressed = key is not null ? () => OpenSettingAt(key) : null
+            });
+            // Under the name's words, which start after the flat button's padding
+            var about = text.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 0, Size = new Vector2(words, 0), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            about.Add(new Spacer { Size = new Vector2(compositor.Skin?.ButtonPadding.Left ?? 12, 1) });
+            about.Add(new Label { Text = said, Dim = true, TextScale = 0.125f, Wrap = true, Size = new Vector2(words - 24, 0), Align = Origin.TopLeft, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            row.Add(control);
+            list.Add(row);
+        }
+
+        // A setting that's on or off as a switch, changed the way the settings change it
+        UIComponent Switch(string key)
+        {
+            bool on = SettingFlag(key);
+            var toggle = new ToggleButton(on ? Said("extensions_window.on") : Said("extensions_window.off"), on) { Size = new Vector2(84, 30), Style = "switch", Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
+            toggle.OnPressed = () =>
+            {
+                SetSettingFlag(key, toggle.State);
+                RefillGettingStarted();
+            };
+            return toggle;
+        }
+
+        Button Action(string label, Action pressed, bool primary = false) => new()
+        {
+            Label = Said("welcome.getting_" + label),
+            Style = primary ? "button" : "button_flat",
+            Primary = primary,
+            LabelScale = 0.14f,
+            Size = new Vector2(96, 30),
+            Animated = false,
+            Anchor = Origin.TopLeft,
+            Pivot = Origin.TopLeft,
+            OnPressed = pressed
+        };
+
+        Group("writing");
+        Row("whole-word", "spelling", Said("welcome.getting_spelling_about"), "spell_check", Switch("spell_check"));
+        Row("wand", "format", Said("welcome.getting_format_about"), "format_on_save", Switch("format_on_save"));
+
+        // The workspace's languages, and how many things are left before they work
+        Group("languages");
+        List<HexServerEntry> here = languages.WorkspaceEntries();
+        var steps = here.Select(entry => (Entry: entry, Steps: languages.SetupStepsFor(entry))).ToList();
+        int left = steps.Sum(pair => HexServerSetup.LeftOf(pair.Steps));
+        var waiting = steps.Where(pair => HexServerSetup.LeftOf(pair.Steps) > 0).Select(pair => languages.LanguageNameOf(pair.Entry)).ToList();
+        string servers = here.Count == 0 ? Said("welcome.getting_servers_none")
+            : steps.Any(pair => pair.Steps.Any(step => step.State == SetupState.Checking)) ? Said("welcome.getting_servers_checking")
+            : left > 0 ? Said("welcome.getting_servers_left", ("count", left.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("languages", Joined(waiting)))
+            : Said("welcome.getting_servers_ready", ("languages", Joined([.. here.Select(languages.LanguageNameOf)])));
+        Row("server-process", "servers", servers, null, left > 0 ? Action("set_up", () => OpenLanguageServers(), primary: true) : Action("open", () => OpenLanguageServers()));
+
+        Group("look_keys");
+        string look = UISkins.Theme is { } theme ? $"{UISkins.Current.Title}, {theme}" : UISkins.Current.Title;
+        Row("paintcan", "look", Said("welcome.getting_look_about", ("look", look)), "look", Action("change", () => OpenSettingAt("look")));
+        Row("keyboard", "vs_keys", Said("welcome.getting_vs_keys_about"), "visual_studio_keys", Switch("visual_studio_keys"));
+        Row("arrow-swap", "import", Said("welcome.getting_import_about"), null, Action("import_now", ImportVsCodeSettings));
+
+        Group("ai");
+        Row("circle-slash", "no_ai", Said("welcome.getting_no_ai_about"), "no_ai", Switch("no_ai"));
+        if (!HexAi.Off)
+            Row("plug", "mcp", Said("welcome.getting_mcp_about"), "mcp_server", Switch("mcp_server"));
+    }
+
+    /// <summary>Every welcome page's Getting started made again at the width it was, after something it says changed.</summary>
+    private void RefillGettingStarted()
+    {
+        foreach (WelcomeSizing sizing in welcomeSizes)
+            if (sizing.GettingWidth > 0)
+                FillGettingStarted(sizing.Getting, sizing.GettingWidth);
+    }
+
+    // The settings' source a key is one of, the one the settings window would change it through
+    private ISettingsSource? SettingSourceOf(string key)
+    {
+        var sources = new List<ISettingsSource> { new EditorSource(this) };
+        sources.AddRange(settingSources.Select(added => added.Source()));
+        return sources.FirstOrDefault(source => source.Settings.Any(setting => setting.Key == key));
+    }
+
+    // Whether a setting that's on or off is on, as the settings window reads it
+    private bool SettingFlag(string key) => SettingSourceOf(key)?.Get(key) is Horizon.HIDL.Runtime.BooleanValue { Value: true };
+
+    // A setting that's on or off changed through its source, applied and saved the way the settings window does it
+    private void SetSettingFlag(string key, bool on)
+    {
+        if (SettingSourceOf(key) is not { } source)
+            return;
+        source.Set(key, new Horizon.HIDL.Runtime.BooleanValue(on));
+        SaveSettings();
+        SettingsPage?.Refresh(key);
+    }
+
+    /// <summary>The settings, brought up scrolled to one setting with it picked out.</summary>
+    private void OpenSettingAt(string key)
+    {
+        OpenSettings(null);
+        settingsView?.Reveal(key);
     }
 
     private static void WelcomeAgentButton(StackPanel list, string icon, string label, string tip, Action pressed) =>
@@ -365,14 +575,12 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// A New File put in the Start list, made like Open File beside it. On the plain welcome it goes first and New Layout
-    /// goes to the bottom, somebody who writes Go wants a file before a layout, on the designer's welcome it sits after
-    /// New Layout. New Project goes in under it.
+    /// A New File and a New Project put in the row of what to start with, made like Open File beside them. Where they go in
+    /// the row is MakeWelcome's to say.
     /// </summary>
-    private void PutNewFile(bool plain, Button newLayout, Button like, Button last)
+    private (Button NewFile, Button NewProject) PutNewFile(Button like)
     {
-        if (like.Parent is not { } start)
-            return;
+        StackPanel start = (StackPanel)like.Parent!;
 
         var newFile = new Button
         {
@@ -391,13 +599,9 @@ internal sealed partial class DawnScene
             OnPressed = NewFileFromWelcome,
         };
 
-        int IndexOf(UIComponent child) => start.Children.ToList().IndexOf(child);
+        start.Add(newFile);
 
-        start.Insert(plain ? IndexOf(newLayout) : IndexOf(newLayout) + 1, newFile);
-        if (plain)
-            start.MoveChild(newLayout, IndexOf(last));
-
-        // New Project right under New File, a whole folder of a language to start from rather than one file
+        // New Project beside New File, a whole folder of a language to start from rather than one file
         var newProject = new Button
         {
             Label = Said("new_project.welcome"),
@@ -412,7 +616,8 @@ internal sealed partial class DawnScene
             Animated = like.Animated,
             OnPressed = ShowNewProject,
         };
-        start.Insert(IndexOf(newFile) + 1, newProject);
+        start.Add(newProject);
+        return (newFile, newProject);
     }
 
     /// <summary>The welcome's New File, asked for by name in the first folder of the workspace, a scratchpad with none open.</summary>

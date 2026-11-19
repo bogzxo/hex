@@ -268,9 +268,12 @@ internal sealed partial class DawnScene
             _ => ToolIcon(call.ToolName ?? string.Empty)
         };
         string name = ShortToolName(call), preview = ToolPreview(call.Input);
+        Vector4? toolColour = HexAgentRows.ToolColour(call.ToolName ?? string.Empty, skin?.Palette);
         var button = line.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.125f, Icon = icon,
+            IconColor = call.State == HexAgentToolState.Done ? toolColour : skin?.ControlTextColor,
+            LabelColor = toolColour,
             Padding = new UIEdges(8, 0, 56, 0), Tooltip = $"{call.ToolName}\n{preview}"
         });
         // Opened and folded in place under its line, nothing made again, as a group is

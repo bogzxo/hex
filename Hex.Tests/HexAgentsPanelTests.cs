@@ -13,7 +13,7 @@ namespace Hex.Tests;
 /// their agents print (recorded from the real thing's formats) into rows, and the arguments they run their agents with.
 /// </summary>
 [Collection(Timed.NAME)]
-public sealed class HexAgentsPanelTests : IDisposable
+public sealed partial class HexAgentsPanelTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "hex-panel-" + Guid.NewGuid().ToString("N")[..8]);
 
@@ -119,6 +119,12 @@ public sealed class HexAgentsPanelTests : IDisposable
         Assert.Equal("diff", HexAgentRows.ToolIcon("Edit"));
         Assert.Equal("notebook", HexAgentRows.ToolIcon("mcp__hex__hex_notebook_run"));
         Assert.Equal("tools", HexAgentRows.ToolIcon("something_else"));
+        var palette = new Horizon.UI.Skinning.UIPalette();
+        Assert.Equal(palette.Syntax.Property, HexAgentRows.ToolColour("mcp__hex__hex_read", palette));
+        Assert.Equal(palette.Syntax.Type, HexAgentRows.ToolColour("hex_search", palette));
+        Assert.Equal(palette.Syntax.Number, HexAgentRows.ToolColour("hex_edit", palette));
+        Assert.Equal(palette.Syntax.Keyword, HexAgentRows.ToolColour("hex_terminal_read", palette));
+        Assert.Null(HexAgentRows.ToolColour("web_search", palette));
         Assert.Equal("a b c", HexAgentRows.OneLine("a\n  b\tc", 40));
         Assert.Equal("abcdefg...", HexAgentRows.OneLine("abcdefghijklmnop", 10));
     }
@@ -133,6 +139,17 @@ public sealed class HexAgentsPanelTests : IDisposable
     [InlineData(null, "")]
     public void Tool_previews_show_useful_arguments_and_tolerate_raw_input(string? input, string expected) =>
         Assert.Equal(expected, HexAgentRows.ToolPreview(input));
+
+    [Fact]
+    public void Tool_input_is_shown_without_web_escapes()
+    {
+        string shown = HexAgentRows.Readable("{\"command\":\"a \\u0026\\u0026 b 2\\u003E/dev/null --x=\\u0027y\\u0027\",\"n\":1}");
+        Assert.Contains("a && b 2>/dev/null --x='y'", shown);
+        Assert.DoesNotContain("\\u00", shown);
+        // What JSON itself has to escape still is
+        Assert.Contains("\\\"q\\\"", HexAgentRows.Readable("{\"t\":\"\\\"q\\\"\"}"));
+        Assert.Equal("not json", HexAgentRows.Readable("not json"));
+    }
 
     [Fact]
     public void Tool_labels_fit_even_when_the_panel_is_narrow()

@@ -67,8 +67,9 @@ internal sealed partial class DawnScene
         });
         pick.OnPressed = () =>
         {
+            // Opened first, a narrow fleet giving the middle back, and the box given the keys only when it's the stage up
             OpenAgentChat(chat);
-            if (Face == Hex.Shell.HexFace.Noon)
+            if (Face == Hex.Shell.HexFace.Noon && noonStage == NoonStage.Chat)
                 agentsInput.Focus();
         };
         pick.OnContextMenu = at => ContextMenu.Show(chrome, at, ChatMenu(chat));
@@ -77,11 +78,13 @@ internal sealed partial class DawnScene
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == chat.Agent);
         string system = profile?.Name ?? chat.Agent;
         Vector4 tint = AgentTint(chat.Agent, skin);
-        var badge = root.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
-        badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
+        // A pill of the system's letters in its own colour, the same badge as the card's state across from it
+        root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.085f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1) });
 
         var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
-        var state = root.Add(new Label { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP - 1), TextScale = CARD_SMALL, Align = Origin.Right });
+        // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
+        // as one more line of the card's small print
+        var state = root.Add(new Badge { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP + 2), TextScale = CARD_SMALL });
         var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
         var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
 
@@ -114,19 +117,15 @@ internal sealed partial class DawnScene
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
             string starter = chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
-            string status = AgentStatusText(chat, skin);
-            if (state.Text != status)
-                state.Text = status;
+            ShowAgentStatus(state, chat);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
-            // Measured without its colour tags, which the font would count as letters
-            string bare = System.Text.RegularExpressions.Regex.Replace(status, @"\[/?color[^\]]*\]", string.Empty);
-            float stateWidth = Skin?.Font.Measure(bare, state.TextScale).X ?? 100.0f;
+            float stateWidth = (Skin?.Font.Measure(state.Text, state.TextScale, markup: false).X ?? 100.0f) + 40.0f;
             string said = UIRichText.Literal(FitText(starter, from.TextScale, room - 38 - stateWidth - (closable ? 30 : 10) - 10));
             if (from.Text != said)
                 from.Text = said;
 
-            said = UIRichText.Literal(FitText(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), name.TextScale, room - 24));
+            said = UIRichText.Literal(FitText(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), name.TextScale, room - 24, name.Bold));
             if (name.Text != said)
                 name.Text = said;
 
@@ -171,17 +170,19 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// A line cut with an ellipsis to the most of it that fits in <paramref name="width"/> pixels at a scale, measured in the
-    /// skin's font. Whole when it fits or there's no font.
+    /// skin's font, a bold line measured a bold letter's width wider so a bold cut doesn't still run past the edge.
+    /// Whole when it fits or there's no font.
     /// </summary>
-    private string FitText(string text, float scale, float width)
+    private string FitText(string text, float scale, float width, bool bold = false)
     {
-        if (Skin?.Font is not { } font || font.Measure(text, scale, markup: false).X <= width)
+        UITextStyle style = bold ? UITextStyle.Bold : UITextStyle.None;
+        if (Skin?.Font is not { } font || font.MeasureLine(text, scale, style, default, markup: false) <= width)
             return text;
         int low = 1, high = text.Length;
         while (low < high)
         {
             int middle = (low + high + 1) / 2;
-            if (font.Measure(OneLine(text, middle), scale, markup: false).X <= width)
+            if (font.MeasureLine(OneLine(text, middle), scale, style, default, markup: false) <= width)
                 low = middle;
             else
                 high = middle - 1;
@@ -190,20 +191,22 @@ internal sealed partial class DawnScene
         return OneLine(text, Math.Max(4, low));
     }
 
-    // How an agent is doing in a word or two and its time, in the colour of it
-    private static string AgentStatusText(HexAgentChat chat, UISkin? skin)
+    // How an agent is doing in a word or two and its time, on its badge in the tone of it: working in blue with a beating
+    // dot, failed in red, done and unseen in the accent with a dot, stopped, done and new quiet. In the texts, not English here
+    private static void ShowAgentStatus(Badge badge, HexAgentChat chat)
     {
         string time = Took(chat.TurnSeconds);
-        // In the texts, not written here in English
-        if (chat.Running)
-            return $"[color:{HexColour(RUNNING_BLUE)}]$(loading~spin) {Said("agents_panel.card_working", ("time", time))}[/color]";
-        if (chat.Failed)
-            return $"[color:{HexColour(skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f))}]$(error) {Said("agents_panel.card_failed")}[/color]";
-        if (chat.Stopped)
-            return $"$(debug-stop) {Said("agents_panel.card_stopped")}";
-        if (chat.Unread)
-            return $"[color:{HexColour(skin?.Palette.Accent ?? new Vector4(0.85f, 0.42f, 0.3f, 1.0f))}]$(circle-filled) {Said("agents_panel.card_done", ("time", time))}[/color]";
-        return chat.Entries.Count == 0 ? Said("agents_panel.card_new") : Said("agents_panel.card_done", ("time", time));
+        (string text, UIBadgeTone tone, string icon, bool dot) = chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
+            : chat.Failed ? (Said("agents_panel.card_failed"), UIBadgeTone.Danger, "error", false)
+            : chat.Stopped ? (Said("agents_panel.card_stopped"), UIBadgeTone.Neutral, "debug-stop", false)
+            : chat.Unread ? (Said("agents_panel.card_done", ("time", time)), UIBadgeTone.Accent, "", true)
+            : (chat.Entries.Count == 0 ? Said("agents_panel.card_new") : Said("agents_panel.card_done", ("time", time)), UIBadgeTone.Neutral, "", false);
+        badge.Text = text;
+        badge.Tone = tone;
+        badge.Icon = icon;
+        badge.Dot = dot;
+        badge.Pulse = chat.Running;
+        badge.Opacity = tone == UIBadgeTone.Neutral && !chat.Stopped ? 0.7f : 1.0f;
     }
 
     /// <summary>Seconds said short, 12s, 11m, 1h 5m, the same whatever the machine's language writes numbers in.</summary>

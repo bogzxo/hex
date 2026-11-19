@@ -19,7 +19,12 @@ internal sealed partial class DawnScene
 
     private StatusItem caretItem = null!, selectionItem = null!, indentItem = null!, endingsItem = null!, languageItem = null!;
     private StatusItem coordsItem = null!, componentsItem = null!, zoomItem = null!, skinItem = null!, screenItem = null!;
-    private StatusItem codeZoomItem = null!, runningItem = null!;
+    private StatusItem codeZoomItem = null!, runningItem = null!, setupItem = null!;
+
+    // The language the status bar's Set up is for, null when the file's has nothing left to do
+    private string? setupItemFor;
+    private HexDocument? setupShownFor;
+    private int setupShownVersion = -1;
     private string runningShown = string.Empty;
     private float codeZoomShown = -1.0f;
 
@@ -77,6 +82,10 @@ internal sealed partial class DawnScene
         indentItem.IsVisible = Code;
         endingsItem = statusBar.Add("CRLF", right: true, pressed: SwapLineEndings, tooltip: Said("status_bar.endings_tip"));
         endingsItem.IsVisible = Code;
+        // Set up, beside the language, only while the file's language still has something to do (no server, a project
+        // never restored), opening the Language Servers window at it
+        setupItem = statusBar.Add(Said("status_bar.set_up"), right: true, pressed: () => OpenLanguageServers(setupItemFor), tooltip: Said("status_bar.set_up_tip"));
+        setupItem.IsVisible = () => Code() && setupItemFor is not null;
         languageItem = statusBar.Add("HIDL", right: true, pressed: ChangeLanguageMode, tooltip: Said("language_mode.status_tip"));
         languageItem.IsVisible = Code;
         codeZoomItem = statusBar.Add(string.Empty, right: true, pressed: () => ZoomCode(0.0f), tooltip: Said("status_bar.code_zoom_tip"));
@@ -177,6 +186,20 @@ internal sealed partial class DawnScene
                 languagesShown = languages.ServersChanged;
                 var (icon, language) = KindOf(document);
                 languageItem.Text = $"$({(starting ? "loading~spin" : icon)}) {language}";
+            }
+
+            // What the file's language still needs, looked at again when the file or what's found changes
+            if (setupShownFor != document || setupShownVersion != languages.SetupVersion)
+            {
+                setupShownFor = document;
+                setupShownVersion = languages.SetupVersion;
+                setupItemFor = null;
+                if (document.Path is { } path && LanguageServers.RegistrationFor(path) is { } registration && languages.ServerEntry(registration.Name) is { } entry)
+                {
+                    List<SetupStep> steps = languages.SetupStepsFor(entry);
+                    if (!steps.Any(step => step.State == SetupState.Checking) && HexServerSetup.LeftOf(steps) > 0)
+                        setupItemFor = entry.Name;
+                }
             }
             if (settings.CodeZoom != codeZoomShown)
             {

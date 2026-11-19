@@ -404,6 +404,9 @@ public sealed class HexAgentSystemsTests : IDisposable
             """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}""");
         Assert.Contains(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Note && entry.Text == "[x] Read it\n[~] Fix it");
         Assert.DoesNotContain(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Tool);
+        // The same list in the Plan tab, structured, by chat.plan
+        Assert.Equal([("Read it", HexPlanState.Done), ("Fix it", HexPlanState.Doing)], chat.Plan!.Items.Select(item => (item.Text, item.State)));
+        Assert.Equal("t1", chat.Plan.NativeKey);
 
         chat.Steer("and this");
         var (runtime, hex, _, _) = Load("claude_code");
@@ -427,8 +430,10 @@ public sealed class HexAgentSystemsTests : IDisposable
         Hear("""{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":510460,"outputTokens":12},"last":{"inputTokens":61000},"modelContextWindow":475000}}}""");
         Hear("""{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":93.0,"windowDurationMins":10080,"resetsAt":1795286849},"secondary":null,"rateLimitReachedType":null}}}""");
         Hear("""{"method":"error","params":{"error":{"message":"stream disconnected"},"willRetry":true}}""");
+        Hear("""{"method":"turn/plan/updated","params":{"turnId":"t","explanation":null,"plan":[{"step":"Read","status":"completed"},{"step":"Fix","status":"inProgress"},{"step":"Test","status":"pending"}]}}""");
         Hear("""{"method":"turn/completed","params":{"turn":{"id":"t","status":"completed"}}}""");
 
+        Assert.Equal([("Read", HexPlanState.Done), ("Fix", HexPlanState.Doing), ("Test", HexPlanState.Pending)], chat.Plan!.Items.Select(item => (item.Text, item.State)));
         Assert.Equal(1, chat.Compactions);
         Assert.Equal(61000, chat.ContextUsed);
         Assert.Equal(475000, chat.ContextLimit);
@@ -437,6 +442,38 @@ public sealed class HexAgentSystemsTests : IDisposable
         Assert.Equal(1, chat.Retries);
         Assert.Contains(chat.Entries, entry => entry.Text.StartsWith("Close to the limit, weekly limit · 93% used", StringComparison.Ordinal));
         Assert.False(chat.Running);
+    }
+
+    [Fact]
+    public void Codex_steer_responses_resolve_the_matching_queued_bubbles()
+    {
+        var (runtime, hex, _, _) = Load("codex");
+        ObjectValue run = (ObjectValue)Agents(runtime, hex);
+        var chat = new HexAgentChat(1, "codex");
+        chat.Ask("start");
+        ObjectValue api = HexAgentChatApi.Of(chat, folder);
+        void Hear(string json) => runtime.Invoke(run.Properties["on_event"], api, HexJson.Parse(json)!);
+
+        Hear("""{"id":3,"result":{"turn":{"id":"turn"}}}""");
+        HexAgentEntry first = chat.Steer("accepted");
+        HexAgentEntry second = chat.Steer("rejected");
+        runtime.Invoke(run.Properties["message"], new StringValue(first.Text), api);
+        runtime.Invoke(run.Properties["message"], new StringValue(second.Text), api);
+
+        Hear("""{"method":"item/started","params":{"item":{"type":"userMessage","id":"echo"}}}""");
+        Assert.True(first.Queued);
+        Assert.True(second.Queued);
+
+        Hear("""{"id":12,"error":{"message":"Turn changed"}}""");
+        Assert.True(first.Queued);
+        Assert.False(second.Queued);
+        Assert.True(second.Unheard);
+        Assert.Contains(chat.Entries, entry => entry.Kind == HexAgentEntryKind.Note && entry.Text == "Turn changed");
+
+        Hear("""{"id":11,"result":{"turnId":"turn"}}""");
+        Assert.False(first.Queued);
+        Assert.False(first.Unheard);
+        Assert.False(chat.HasQueued);
     }
 
     [Fact]

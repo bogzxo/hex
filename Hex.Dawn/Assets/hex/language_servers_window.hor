@@ -1,0 +1,27 @@
+// The Language Servers window, what's needed for each language and the settings of each, out of the settings and the
+// cards that said a server wasn't installed. Down the left, Overview, All languages and Advanced, then the workspace's
+// own languages; on the right the page picked. The pages are made in code, see DawnScene.LanguageServersWindow.
+#define layout
+
+let window = compositor.window({
+    size: vec(1040, 700),
+    z: 10,
+    padding: vec(0, 0, 0, 0),
+    intro: "pop",
+    intro_time: 0.18,
+    min_size: vec(720, 460),
+    title: "@server_window.title",
+    icon: "server-process",
+});
+
+let servers_frame = compositor.panel({ parent: window, fill: "both", padding: vec(0, 0, 0, 0), color: vec(0, 0, 0, 0) });
+
+// The pages, right of the list, scrolled
+let servers_body = compositor.panel({ parent: servers_frame, fill: "both", padding: vec(252, 0, 0, 0), color: vec(0, 0, 0, 0), clip: true });
+let servers_scroll = compositor.scroll({ parent: servers_body, fill: "both", padding: vec(20, 16, 18, 20) });
+let servers_page = compositor.stack({ parent: servers_scroll, fill: "horizontal", spacing: 14 });
+
+// The list down the left, over the page's panel so it takes its own presses
+let servers_nav_panel = compositor.panel({ parent: servers_frame, anchor: "left", pivot: "left", fill: "vertical", size: vec(240, 0), clip: true });
+let servers_nav_scroll = compositor.scroll({ parent: servers_nav_panel, fill: "both", padding: vec(10, 12, 8, 12) });
+let servers_nav = compositor.stack({ parent: servers_nav_scroll, fill: "horizontal", spacing: 2 });

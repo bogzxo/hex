@@ -22,7 +22,7 @@ internal sealed partial class HexExtensions
             [
                 .. Talking(extension), .. Screens(extension), .. Files(extension), .. Asking(extension), .. Prompting(extension),
                 .. Sides(), .. Programs(extension), .. About(extension), .. Edits(extension), .. Problems(extension),
-                .. Watching(extension), .. Timers(extension), .. Caret(), .. Agents(extension), .. Projects(extension)
+                .. Watching(extension), .. Timers(extension), .. Caret(), .. (Hex.Core.HexAi.Off ? [] : Agents(extension)), .. Projects(extension)
             ]);
         }
 

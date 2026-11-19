@@ -28,6 +28,8 @@ public static class SettingsPageTexts
         Filter = Said("filter"),
         FilterTooltip = Said("filter_tip"),
         FilterModified = Said("filter_modified"),
+        ChipModified = Said("chip_modified"),
+        ChipAll = Said("chip_all"),
         FilterId = Said("filter_id"),
         FilterSection = Said("filter_section"),
         ClearTooltip = Said("clear_tip"),

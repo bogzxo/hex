@@ -73,12 +73,15 @@ internal sealed partial class HexLanguages
             .IsVisible = () => context.Workspace.Roots.Count > 0 || HexDebugging.IsPython(context.Documents.Current.Path);
 
         // What changes on the disk in the folders the servers were started in, for what isn't open in them
-        with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null).Select(server => server.RootDirectory));
+        // and in the folders of those that stopped for want of a project, where one being made starts them again
+        with.Workspace.WatchToo(() => LanguageServers.Running.Where(server => server.Failure is null
+            || (ServerEntry(server.Name) is { } entry && !HasWhatItNeeds(entry, server.RootDirectory))).Select(server => server.RootDirectory));
         with.Workspace.FilesChanged += ServerFilesChanged;
         with.Workspace.Deleting += StopServersUnder;
 
         // What was found of the servers looked for again as the settings open, in case something was installed since
-        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION, MakeServerEditor, () => ProbeServers(ServerEntries), ForgetServerEditor);
+        // One row, the Language Servers window opened from it; what was here (a row a server, the form that adds one) is there
+        with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION);
     }
 
     /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
@@ -212,7 +215,8 @@ internal sealed partial class HexLanguages
     // Helper method to say which files a server is for and how it is started, which stops the one that was running (done
     // when the task is, off the editor's thread)
     private Task RegisterServer(HexServerEntry entry) =>
-        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions, entry.Settings);
+        // Its settings with the user's own laid over them (HexLanguages.Setup)
+        LanguageServers.Register(entry.Name, CommandOf(entry), entry.Arguments, entry.LanguageId, entry.Extensions, SettingsOf(entry), entry.InitializationOptions, entry.LanguageIds, entry.PullDiagnostics);
 
     /// <summary>
     /// Stops a server, its files let go of. It starts again with the next file of its that is opened, or with
@@ -296,6 +300,10 @@ internal sealed partial class HexLanguages
         ServersChanged++;
         server.Open(path, of.Editor.Text);
         Console.WriteLine($"[Hex] {Path.GetFileName(path)} is linted by {server.Name}, started in {root}.");
+
+        // A list waiting on a server that went (started again for a project, the file moved) is asked of this one
+        if (of.Editor.CompletionOpen)
+            of.Editor.Complete(of.Editor.CompletionTyped);
     }
 
     // The server's reading thread has something, the window's thread wakes for it
@@ -322,9 +330,10 @@ internal sealed partial class HexLanguages
 
         string id = CodeLanguages.LanguageIdOf(of.Editor.Highlighter);
         string extension = Path.GetExtension(bare);
-        if (serverEntries.Find(entry => entry.LanguageId.Equals(id, StringComparison.OrdinalIgnoreCase)) is { Extensions: [var first, ..] } wanted
+        // A file coloured as JavaScript goes to the TypeScript server as a .js, which it reads as JavaScript, not as a .ts
+        if (serverEntries.Find(entry => entry.Reads(id)) is { } wanted && wanted.ExtensionFor(id) is { } wantedExtension
             && !wanted.Extensions.Any(known => known.Equals(extension, StringComparison.OrdinalIgnoreCase)))
-            return Path.ChangeExtension(bare, first);
+            return Path.ChangeExtension(bare, wantedExtension);
         return bare;
     }
 
@@ -494,6 +503,8 @@ internal sealed partial class HexLanguages
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
                 string full = Path.GetFullPath(path);
+                if (notebookShadows.Count > 0 && NotebookFound(server, full, found))
+                    continue;
                 HexDocument? of = context.Documents.Find(full);
                 if (of is null || !linters.TryGetValue(of, out LanguageServer? current) || !ReferenceEquals(current, server))
                     continue;
@@ -511,6 +522,8 @@ internal sealed partial class HexLanguages
         ServersStopped();
         AskNext();
         UpdateServerCompletions();
+        if (notebookShadows.Count > 0)
+            UpdateNotebooks(dt);
         UpdateInstallStatus();
     }
 
@@ -524,10 +537,14 @@ internal sealed partial class HexLanguages
                 server.FilesChanged(changes);
         }
 
-        // A project of a server's that reads them only as it starts, the server started again a moment after
+        // A project of a server's that reads them only as it starts, the server started again a moment after. And one that
+        // stopped for want of a project (csharp-ls on a lone .cs) started once a project's made where it ran: it had gone,
+        // so nothing of its was "running" to start again and it stayed stopped until Hex did
         foreach (HexServerEntry entry in serverEntries)
         {
-            if (changes.Any(change => entry.ReloadsFor(change.Path) && servers.Any(server => server.Name == entry.Name && server.Failure is null && ReloadsServer(server, change.Path))))
+            if (changes.Any(change => entry.ReloadsFor(change.Path) && servers.Any(server => server.Name == entry.Name && server.Failure is null && ReloadsServer(server, change.Path)))
+                || changes.Any(change => change.Change != LanguageServerFileChange.Deleted && entry.NeedsFor(change.Path)
+                    && servers.Any(server => server.Name == entry.Name && server.Failure is not null && ReloadsServer(server, change.Path))))
                 reloadIn[entry] = RELOAD_DELAY;
         }
     }
@@ -544,11 +561,14 @@ internal sealed partial class HexLanguages
         if (!PlatformPaths.IsUnder(full, root))
             return false;
 
-        // The folders it's in, the file's own name (.editorconfig) left out
+        // The folders it's in, the file's own name (.editorconfig) left out. A build's or a restore's own folders aren't a
+        // project changing: csharp-ls 0.29 restores a project itself as it loads it, the restore wrote obj's assets and
+        // props, Hex started it again for them a moment later, and the completion it was working on never came back
         string[] parts = Path.GetRelativePath(root, full).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         foreach (string part in parts.AsSpan(0, parts.Length - 1))
         {
-            if (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || (part.Length > 1 && part[0] == '.' && part != ".."))
+            if (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || (part.Length > 1 && part[0] == '.' && part != ".."))
                 return false;
         }
 

@@ -1,6 +1,8 @@
+using System.Numerics;
 using System.Text.Json;
 
 using Horizon.UI.Drawing;
+using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
@@ -31,6 +33,27 @@ internal static class HexAgentRows
         }
         catch (JsonException) { }
         return input.Trim();
+    }
+
+    /// <summary>
+    /// A tool's input laid out to be read, its JSON indented and with what JSON writers escape for a web page's sake
+    /// written as itself: a shell command's && came out as &&, its quotes as ' and its 2> as 2>. What
+    /// JSON has to escape (a quote inside a text, a backslash, a line break) still is. Input that isn't JSON as it was.
+    /// </summary>
+    public static string Readable(string input)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(input);
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+                document.RootElement.WriteTo(writer);
+            return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch (JsonException)
+        {
+            return input;
+        }
     }
 
     /// <summary>
@@ -102,18 +125,34 @@ internal static class HexAgentRows
         string tool = ToolTitle(name).ToLowerInvariant();
         return tool switch
         {
-            "bash" or "command" or "command_execution" or "shell" or "hex_terminal_run" or "hex_terminal" or "hex_terminal_send" or "hex_run_task" => "terminal",
-            "edit" or "write" or "multiedit" or "file_change" or "apply_patch" or "notebookedit" => "diff",
+            "bash" or "command" or "command_execution" or "shell" or "hex_terminal_run" or "hex_terminal" or "hex_terminal_send" or "hex_terminal_read" or "hex_run_task" or "hex_task_output" => "terminal",
+            "edit" or "write" or "multiedit" or "file_change" or "apply_patch" or "notebookedit" or "hex_edit" or "hex_write" => "diff",
             "read" or "hex_read" or "hex_skim" or "hex_editor" or "hex_open" => "file-code",
             "grep" or "glob" or "hex_search" or "hex_find_in_files" or "hex_files" or "hex_refs" or "hex_references" => "search",
             "hex_symbols" or "hex_outline" or "hex_definition" or "hex_symbol_info" => "symbol-class",
             "hex_map" => "list-tree",
             "websearch" or "webfetch" or "web_search" => "globe",
-            "todowrite" or "todo_list" => "checklist",
+            "todowrite" or "todo_list" or "hex_plan_update" or "hex_plan_read" => "checklist",
             "task" or "agent" => "organization",
             _ when tool.StartsWith("hex_notebook", StringComparison.Ordinal) => "notebook",
             _ when tool.StartsWith("hex_", StringComparison.Ordinal) => "robot",
             _ => "tools"
+        };
+    }
+
+    public static Vector4? ToolColour(string name, UIPalette? palette)
+    {
+        if (palette is null || !ToolTitle(name).StartsWith("hex_", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return ToolIcon(name) switch
+        {
+            "file-code" => palette.Syntax.Property,
+            "search" or "symbol-class" or "list-tree" => palette.Syntax.Type,
+            "diff" => palette.Syntax.Number,
+            "terminal" => palette.Syntax.Keyword,
+            "checklist" or "notebook" => palette.Syntax.Reference,
+            _ => palette.Accent
         };
     }
 }

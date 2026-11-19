@@ -4,7 +4,7 @@
 let theme = {
     title: "Solstice Noon",
     base: "solstice",
-    accent_color: vec(0.290, 0.686, 0.706, 1),
-    highlight_color: vec(0.392, 0.765, 0.784, 1),
-    selection_color: vec(0.290, 0.686, 0.706, 0.28)
+    accent_color: vec(0.263, 0.485, 0.505, 1),
+    highlight_color: vec(0.315, 0.546, 0.561, 1),
+    selection_color: vec(0.263, 0.485, 0.505, 0.28)
 };

@@ -53,12 +53,18 @@ internal sealed partial class HexExtensions
             string program = args.Text(0);
             string[] arguments = args.Has(1) && args[1] is ListValue listed ? [.. listed.Items.Select(Values.Text)] : [];
             IRuntimeValue then = args[2];
-            context.Work.InBackground($"{extension.Name}: {program}", () => ProgramOutput(program, arguments),
+            string? folder = args.Has(3) ? args.Text(3) : null;
+            if (string.IsNullOrEmpty(folder)) folder = context.Workspace.Folders.FirstOrDefault();
+            string? input = args.Has(4) ? args.Text(4) : null;
+            context.Work.InBackground($"{extension.Name}: {program}", () => ProgramOutput(program, arguments, folder, input),
                 said => Answered(extension, then, said is null ? Values.Null : new StringValue(said)), quiet: true);
         })),
         ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
         // What an agent is told in its system prompt about the harness, the same for every agent system
         ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
+        // What the agent of a chat is told about its Plan tab and the agents beside it, for its own system prompt and
+        // never its subagents', which share its chat's connection
+        ("plan_rules", new StringValue(HexAgentProfiles.PLAN_RULES)),
         // Whether a shell command reads or searches the workspace the long way, the Hex tool to use instead when it does,
         // null when it doesn't, for a system whose own approvals Hex answers (Codex's app-server)
         ("harness_check", Natives.Function("harness_check", args =>
@@ -97,30 +103,31 @@ internal sealed partial class HexExtensions
 
     /// <summary>
     /// What a program printed run with arguments, found the way an agent's program is (PATH, the system's PATH as it is now,
-    /// a .cmd through cmd), its stdin closed so one that waits on it ends. Null when it isn't there, can't be started or
-    /// doesn't end in time (it's killed then).
+    /// a .cmd through cmd). Optional input is written before closing stdin. Returns null if the process cannot start
+    /// or times out.
     /// </summary>
-    internal static string? ProgramOutput(string program, string[] arguments)
+    internal static string? ProgramOutput(string program, string[] arguments, string? folder = null, string? input = null)
     {
         if (HexAgentProcess.Find(program) is not { } found)
             return null;
         try
         {
-            System.Diagnostics.ProcessStartInfo start = HexAgentProcess.StartInfo(found, arguments, System.Environment.CurrentDirectory);
+            System.Diagnostics.ProcessStartInfo start = HexAgentProcess.StartInfo(found, arguments, folder ?? System.Environment.CurrentDirectory);
             start.RedirectStandardOutput = start.RedirectStandardError = start.RedirectStandardInput = true;
             start.UseShellExecute = false;
             start.CreateNoWindow = true;
             using var process = System.Diagnostics.Process.Start(start);
             if (process is null)
                 return null;
-            process.StandardInput.Close();
             Task<string> output = process.StandardOutput.ReadToEndAsync(), error = process.StandardError.ReadToEndAsync();
+            Task writing = CloseProgramInput(process, input);
             if (!process.WaitForExit(PROGRAM_OUTPUT_MS))
             {
                 process.Kill(entireProcessTree: true);
                 return null;
             }
 
+            writing.GetAwaiter().GetResult();
             string said = output.Result + error.Result;
             return said.Length > PROGRAM_OUTPUT_MOST ? said[..PROGRAM_OUTPUT_MOST] : said;
         }
@@ -128,6 +135,13 @@ internal sealed partial class HexExtensions
         {
             return null;
         }
+    }
+
+    private static async Task CloseProgramInput(System.Diagnostics.Process process, string? input)
+    {
+        using StreamWriter writer = process.StandardInput;
+        if (input is not null)
+            await writer.WriteLineAsync(input).ConfigureAwait(false);
     }
 
     // The most a read_lines takes at once, a log that grew more than that is read on from where this stopped

@@ -87,6 +87,9 @@ internal sealed partial class HexExtensions
             foreach (string inside in Directory.GetDirectories(full).Order(StringComparer.OrdinalIgnoreCase))
             {
                 if (HexExtensionCatalog.IsLegacyMarkdownPreview(inside)) continue;
+
+                // An agent system isn't found at all with No AI on, not loaded, not started and not in the lists
+                if (Hex.Core.HexAi.Off && HexExtensionCatalog.IsAgentSystem(inside)) continue;
                 // One by a folder name that's been found already isn't loaded twice, the first one found is it
                 if (!File.Exists(Path.Combine(inside, HexExtension.FILE)) || all.Any(found => found.Id.Equals(Path.GetFileName(inside), StringComparison.OrdinalIgnoreCase)))
                     continue;

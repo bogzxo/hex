@@ -66,7 +66,8 @@ internal static class HexWhatsNew
     };
 
     /// <summary>The lines for a version by its three numbers, what's unreleased first.</summary>
-    public static IReadOnlyList<HexNewsItem> For(string version) => [.. unreleased, .. releases.GetValueOrDefault(version, [])];
+    public static IReadOnlyList<HexNewsItem> For(string version) =>
+        [.. unreleased.Concat(releases.GetValueOrDefault(version, [])).Where(item => !(HexAi.Off && item.Side == HexSide.Agents))];
 
     /// <summary>Every line there is, for the tests to check each one goes somewhere that exists.</summary>
     public static IEnumerable<HexNewsItem> All => unreleased.Concat(releases.Values.SelectMany(items => items));

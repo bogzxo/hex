@@ -170,8 +170,12 @@ internal sealed partial class DawnScene
             languages.ServerEntry("csharp") is { Command: "csharp-ls", Repo: "razzmatazz/csharp-language-server", Install.Length: > 0, Update: "dotnet tool update -g csharp-ls", VersionArguments: ["--version"] }
             && languages.ServerEntry("markdown") is { Install: "", Update: "", Repo.Length: > 0 } && languages.ServerEntries.Count >= 9
             && languages.ServerEntry("d") is { Command: "serve-d", Repo: "Pure-D/serve-d", VersionArguments: ["--version"] });
-        // A server added in the settings, through the form under the servers, for a language with none and for one with
-        test.Run(() => OpenSettings());
+        // A server added through the form on the Language Servers window's Advanced page, for a language with none and for one with
+        test.Run(() =>
+        {
+            OpenLanguageServers();
+            ShowServersPage(ServersPage.Advanced);
+        });
         test.Settle(0.3f);
         string NameOf(string id) => CodeLanguages.Languages().First(language => language.Id == id).Name;
         test.Check("language servers: one added for a language with none, a bar between its files, is a server of its own and in the list", () =>
@@ -179,8 +183,7 @@ internal sealed partial class DawnScene
             languages.FillServerForm(NameOf("lua"), "lua| .luau ", "lua-ls-selftest");
             languages.PressAddServer();
             return languages.ServerEntry("lua") is { Command: "lua-ls-selftest", Extensions: [".lua", ".luau"] } lua && languages.IsAdded(lua)
-                && LanguageServers.RegistrationFor("main.lua") is { Name: "lua" } && settings.AddedServers.Any(server => server.Language == "lua")
-                && languages.serverStatus.ContainsKey("lua");
+                && LanguageServers.RegistrationFor("main.lua") is { Name: "lua" } && settings.AddedServers.Any(server => server.Language == "lua");
         });
         test.Run(() => languages.FocusServerForm());
         test.Settle(0.5f);
@@ -195,11 +198,11 @@ internal sealed partial class DawnScene
             languages.RemoveServer("lua");
             return instead && languages.ServerEntry("python") is { Command: "pyright-langserver" } && languages.ServerEntry("lua") is null
                 && LanguageServers.RegistrationFor("x.py") is { Name: "python" } && LanguageServers.RegistrationFor("main.lua") is null
-                && settings.AddedServers.Count == 0 && !languages.serverStatus.ContainsKey("lua");
+                && settings.AddedServers.Count == 0;
         });
         test.Check("language servers: the files typed are read with a bar between two and a dot on each", () =>
             HexLanguages.ParseExtensions(" d | .di|*.dd||. ") is [".d", ".di", ".dd"]);
-        test.Run(CloseSettings);
+        test.Run(() => serversWindow?.Close());
 
         test.Check("language servers: versions are found in what a program prints and put in order by their numbers", () =>
             HexServerCatalog.FindVersion("clangd version 19.1.2 (https://github.com/llvm/llvm-project 7ba7d8e)") == "19.1.2"
@@ -220,16 +223,21 @@ internal sealed partial class DawnScene
 
         string nowhere = Path.Combine(folder, "csharp-ls.exe");
         test.Run(() => OpenSettings(HexLanguages.SERVER_SECTION));
-        test.Check("language servers: a row a server in the settings, with what was found of each under them", () =>
-            SettingsPage?.Enter(HexLanguages.SERVER_KEY + "csharp", new StringValue(nowhere)) == true && languages.serverStatus.ContainsKey("csharp")
-            && SettingsPage.Settings.Any(setting => setting.Key == HexLanguages.SERVER_KEY + "markdown" && setting.Buttons is [HexLanguages.CHOOSE, HexLanguages.DOWNLOAD, HexLanguages.CHANGES]));
-        test.Check("language servers: where a server is set in the settings is what it is started with, and empty is back to the PATH", () =>
+        test.Check("language servers: the settings have one row for them, which opens the Language Servers window, and a search for gopls finds it", () =>
+            SettingsPage?.Settings.Where(setting => setting.Group == HexLanguages.SERVER_SECTION).ToList() is [{ Key: HexLanguages.WINDOW_ROW, ButtonsOnly: true } row]
+            && row.Keywords.Contains("gopls", StringComparison.Ordinal));
+        test.Run(() => SettingsPage?.OnButton?.Invoke(HexLanguages.WINDOW_ROW, 0));
+        test.Check("language servers: Open on it opens the window", () => serversWindow is not null && serversShown == ServersPage.Overview);
+        test.Run(CloseSettings);
+        test.Check("language servers: where a server is set is what it is started with, and empty is back to the PATH", () =>
         {
+            HexServerEntry csharp = languages.ServerEntry("csharp")!;
+            languages.SetServerPath(csharp, nowhere);
             bool set = settings.ServerPaths["csharp"] == nowhere && LanguageServers.Registered.Any(entry => entry.Name == "csharp" && entry.Command == nowhere);
-            SettingsPage!.Reset(HexLanguages.SERVER_KEY + "csharp");
+            languages.SetServerPath(csharp, string.Empty);
             return set && !settings.ServerPaths.ContainsKey("csharp") && LanguageServers.Registered.Any(entry => entry.Name == "csharp" && entry.Command == "csharp-ls");
         });
-        test.Run(CloseSettings);
+        test.Run(() => serversWindow?.Close());
 
         TestLanguageModes(test, folder);
         TestLanguageReach(test, folder);

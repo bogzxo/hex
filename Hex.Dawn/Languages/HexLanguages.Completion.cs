@@ -26,6 +26,10 @@ internal sealed partial class HexLanguages
         public bool Answered;
         public bool Incomplete;
         public UICompletionRequest? Offered;
+
+        // Which server it was asked of. One started again meanwhile (a project changed) never answers for the one
+        // before, the list said it was asking until something else was typed
+        public LanguageServer? Server;
     }
 
     private readonly Dictionary<HexDocument, ServerAsking> serverAsked = [];
@@ -55,7 +59,7 @@ internal sealed partial class HexLanguages
         string prefix = line[start..caret.Column];
 
         // The same word, which the editor narrows down by itself, unless the server wants asking as it goes
-        if (serverAsked.TryGetValue(of, out ServerAsking? asked) && asked.Word == word)
+        if (serverAsked.TryGetValue(of, out ServerAsking? asked) && asked.Word == word && ReferenceEquals(asked.Server, server))
         {
             asked.Typed = editor.CompletionTyped;
             if (!asked.Answered)
@@ -91,6 +95,7 @@ internal sealed partial class HexLanguages
             Version = doc.Version,
             Prefix = prefix,
             Typed = editor.CompletionTyped,
+            Server = server,
 
             // What it said before stays on offer while it is asked again
             Offered = again ? asked!.Offered : null

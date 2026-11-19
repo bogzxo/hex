@@ -382,7 +382,12 @@ public sealed class McpDoorTests
         try
         {
             string user = Path.Combine(folder, "user.hor");
+            // On as it comes
             File.WriteAllText(user, "let settings = {\n    editor: {\n        minimap: false\n    }\n};\n");
+            Assert.True(new HexSettings(user).McpServer);
+
+            // Switched off by the user, a folder's settings can't switch it back on
+            File.WriteAllText(user, "let settings = {\n    editor: {\n        mcp_server: false\n    }\n};\n");
             File.WriteAllText(HexSettings.WorkspacePathOf(folder), "let settings = {\n    editor: {\n        mcp_server: true,\n        tab_size: 2\n    }\n};\n");
 
             var settings = new HexSettings(user);

@@ -44,6 +44,20 @@ opens a window; it reports a connection error on stderr if no matching server is
 connections are supported. The status count says MCP connections: three chats are three connections, not necessarily
 three independent agents. Tool traffic stays on stdout and bridge diagnostics stay on stderr.
 
+## No AI
+
+Hex without any of its agents is **No AI**, under Editor, Run and debug in the settings, or `--no-ai` for the one run.
+It takes Agentic, the Agents view and its robot, the Agents menu and its keys, the chats kept with a workspace, the
+agents' row of the welcome page and the extensions that are agent systems (Claude Code, Codex, Antigravity, whose files
+say who their agent is with `hex.agent`) out of Hex altogether. None of it is made as the editor starts rather than
+made and hidden, so there's nothing of it to start up or to tick, and a workspace left in Agentic opens in Dawn. The
+switch is read as Hex starts, so changing it puts up a card with a restart on it.
+
+The MCP server isn't an agent of Hex's, it's the door for one outside it, so No AI leaves it to its own setting. On, it
+has every tool for finding code and driving the editor as ever, and none of those about Hex's own agents: the
+`hex_agent_*` tools, `hex_ask`, the `hex_plan_*` tools and `hex_harness_stats`. Switch Agents (MCP server) off as well
+for a Hex nothing drives.
+
 ## Asking about code in Hex
 
 Open **Agents** from the activity bar to start a chat with a provider. **Explain with Agent** and **Change with Agent**
@@ -82,6 +96,38 @@ limit and when that resets, and what Hex's harness saved it, each line under the
 panel's head folds every system to a line, folded in Dawn and open in Noon, and each system's own head folds it alone.
 Its words are put right in place as things move, it's never made again under a click. What the harness saved is
 counted across restarts, kept in `harness/stats.tsv` beside Hex's settings, so delete that file to start the count again.
+
+## Slash commands
+
+Type `/` in the composer to see commands for the selected provider. The list keeps every match and scrolls with
+the wheel or its scrollbar. Up/Down selects a command, Tab or Enter completes it, and Escape dismisses the menu.
+Enter after completion sends the command and its arguments. Descriptions appear on a second line where the provider
+supplies them, with the full description in the tooltip. Metadata arriving while the menu is open refreshes it.
+
+Hex handles `/help`, `/new`, `/clear`, `/resume`, `/stop` and `/status` locally. New and clear retain the previous
+chat in history. Model, reasoning and permission options are also commands when a provider exposes the corresponding
+picker: use `/model`, `/effort` or `/permissions` to choose, or supply a listed value. A chat's option overrides
+apply to its next turn; a choice made before starting a chat changes the provider default.
+
+| Provider | Native command support |
+| --- | --- |
+| Claude Code | Commands, skills, descriptions, argument hints and aliases from its SDK handshake. Local command output and errors are shown in the transcript. |
+| Codex | `/compact` uses thread compaction; `/review [instructions]` starts an inline review (uncommitted changes by default); `/skills` refreshes the workspace skill catalog; `/mcp` lists MCP servers. Discovered enabled skills can be invoked as `/skill-name [arguments]` using structured skill input. |
+| Antigravity | Built-ins are discovered through print-mode `/help`, skills through `/skills`. CLI-owned commands run separately in print mode; skills use the normal chat stream. |
+
+Codex terminal-only commands are not sent to the model as ordinary prose. Its supported catalog is explicit;
+`/skills` discovers custom skills before their first invocation. Claude loads the workspace command and skill
+catalog in the background on startup and when switching workspaces. Antigravity has a small fallback catalog
+if discovery is unavailable.
+
+Commands are sent without the editor's file-context prefix. Pending inbox messages remain unread until an ordinary
+prompt can carry them. Remove image attachments before running a listed command. Native commands wait until the
+current turn finishes; a plain `/compact` can instead be queued through Hex's existing compaction mechanism.
+
+Extensions advertise `run.commands` as `[{ name, about, hint }]`; `description` and `argumentHint` are accepted
+as aliases for the metadata fields. A provider with no slash parser can set `run.strict_commands: true` to reject
+unlisted commands in the composer. Each adapter remains responsible for translating its advertised native commands
+into its actual protocol, and for displaying success or failure.
 
 ## Keeping agents on the harness
 

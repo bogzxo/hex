@@ -18,9 +18,15 @@ public static partial class HexIdentity
 {
     /// <summary>
     /// The icon of the windows of both modes, Hex's own, Dusk is no other program for having a terminal in it. The nightly
-    /// build's is grey with a yellow H, so it's never taken for the stable one beside it.
+    /// build's is grey with a yellow H, so it's never taken for the stable one beside it, and a Debug build's all grey, the
+    /// Hex being worked on told from the one it's worked on in.
     /// </summary>
-    public static string ICON { get; } = HexVersion.Dev ? "Assets/hex_icon_dev.png" : "Assets/hex_icon.png";
+    public static string ICON { get; } =
+#if DEBUG
+        "Assets/hex_icon_gray.png";
+#else
+        HexVersion.Dev ? "Assets/hex_icon_dev.png" : "Assets/hex_icon.png";
+#endif
 
     /// <summary>The mode the process was started in, Dawn until <see cref="Claim"/> says otherwise.</summary>
     public static HexMode Mode { get; private set; } = HexMode.Dawn;

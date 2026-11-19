@@ -24,8 +24,8 @@ internal sealed partial class DawnScene
     private int agentsRecall;
 
     // A path with a line, Hex.Core/Mcp/McpServer.cs:47, in what an agent says, in backticks or not
-    private static readonly Regex PlaceInText = new(@"(?<link>!?\[[^\]\r\n]*\]\((?:[^()\r\n]|\([^()\r\n]*\))*\))|(?<ticks>`+)(?<code>.*?)\k<ticks>|(?<path>(?:[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)", RegexOptions.Compiled);
-    private static readonly Regex CodePlace = new(@"\A(?<path>(?:[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)\z", RegexOptions.Compiled);
+    private static readonly Regex PlaceInText = new(@"(?<link>!?\[[^\]\r\n]*\]\((?:[^()\r\n]|\([^()\r\n]*\))*\))|(?<ticks>`+)(?<code>.*?)\k<ticks>|(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)", RegexOptions.Compiled);
+    private static readonly Regex CodePlace = new(@"\A(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)\z", RegexOptions.Compiled);
 
     private void BuildAgentsOptions(UILayout made)
     {
@@ -33,11 +33,15 @@ internal sealed partial class DawnScene
 
         // Up and Down in the box go through what was asked before, Escape stops what's going on
         // Only from the box's first line up and its last line down, between its lines they move the caret
-        commands.Keys.Add(Key.Up, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == 0 && RecallAsked(-1), whileTyping: true, first: true);
-        commands.Keys.Add(Key.Down, () => compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
-        commands.Keys.Add(Key.Tab, () => TakeFirstSlash() || TakeFirstMention(), whileTyping: true, first: true);
+        // The / commands' list takes them first in the box itself, where a held key repeats and the caret stays put. As a
+        // shortcut it moved once a press, and Up took the caret to the start of the line too, which closed the list
+        agentsInput.OnUpDown = MoveSlash;
+        commands.Keys.Add(Key.Up, () => agentsSlash is null && compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == 0 && RecallAsked(-1), whileTyping: true, first: true);
+        commands.Keys.Add(Key.Down, () => agentsSlash is null && compositor.Focus == agentsInput && agentsInput.Document.Caret.Line == agentsInput.Document.LineCount - 1 && RecallAsked(1), whileTyping: true, first: true);
+        agentsInput.OnTab = () => TakeFirstSlash() || TakeFirstMention();
         commands.Keys.Add(Key.Escape, () =>
         {
+            if (DismissSlash()) return true;
             // The window of what the harness saved goes first, wherever the keyboard is
             if (harnessWindow is { } open)
             {
@@ -101,6 +105,16 @@ internal sealed partial class DawnScene
         return options;
     }
 
+    private string AgentOptionValue(HexExtension extension, string key) =>
+        agentChat?.Options.GetValueOrDefault(key) ?? Values.Text(extensions.SettingOf(extension, key));
+
+    private void SetAgentOption(HexExtension extension, string key, string value)
+    {
+        if (agentChat is { } chat) chat.Options[key] = value;
+        else extensions.SetSetting(extension, key, new StringValue(value), tell: true);
+        agentsOptionsDrawn = string.Empty;
+    }
+
     /// <summary>The row of pickers over the box, made again when the agent, a choice or the file on screen changes.</summary>
     private void DrawAgentOptions()
     {
@@ -112,7 +126,7 @@ internal sealed partial class DawnScene
         bool compact = agentsCompose.Bounds.Width < 300;
         // The choices are in it too, an agent system says its models as it starts (Claude Code's handshake) and the menu
         // made with the old ones kept them
-        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : Values.Text(extensions.SettingOf(extension, option.Key)))
+        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : AgentOptionValue(extension, option.Key))
             + ":" + string.Join(",", option.Choices.Select(choice => choice.Value + "~" + choice.Label))))}";
         if (said == agentsOptionsDrawn) return;
         agentsOptionsDrawn = said;
@@ -148,9 +162,9 @@ internal sealed partial class DawnScene
                     string chosen = value;
                     choices.Add(named, () =>
                     {
-                        extensions.SetSetting(extension, option.Key, new StringValue(chosen), tell: true);
+                        SetAgentOption(extension, option.Key, chosen);
                         agentsOptionsDrawn = string.Empty;
-                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, option.Key)) == chosen;
+                    }).IsChecked = () => AgentOptionValue(extension, option.Key) == chosen;
                 }
             }
             ContextMenu.Show(chrome, settings.Bounds.PointAt(Origin.TopLeft), menu);
@@ -160,7 +174,7 @@ internal sealed partial class DawnScene
         float taken = 0.0f;
         if (options.FirstOrDefault(option => option.Key == "model") is { } models && models.Choices.Length > 0)
         {
-            string value = Values.Text(extensions.SettingOf(extension, models.Key));
+            string value = AgentOptionValue(extension, models.Key);
             string current = value.Length == 0 ? Said("agents_panel.model_default")
                 : models.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
             float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
@@ -177,9 +191,9 @@ internal sealed partial class DawnScene
                     string selected = choiceValue;
                     menu.Add(label, () =>
                     {
-                        extensions.SetSetting(extension, models.Key, new StringValue(selected), tell: true);
+                        SetAgentOption(extension, models.Key, selected);
                         agentsOptionsDrawn = string.Empty;
-                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, models.Key)) == selected;
+                    }).IsChecked = () => AgentOptionValue(extension, models.Key) == selected;
                 }
                 ContextMenu.Show(chrome, modelButton.Bounds.PointAt(Origin.TopLeft), menu);
             };
@@ -187,7 +201,7 @@ internal sealed partial class DawnScene
 
         if (thinking is not null)
         {
-            string value = Values.Text(extensions.SettingOf(extension, thinking.Key));
+            string value = AgentOptionValue(extension, thinking.Key);
             string current = value.Length == 0 ? Said("agents_panel.thinking_auto")
                 : thinking.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
             float room = MathF.Max(32, MathF.Min(96, agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - taken - 48));
@@ -203,9 +217,9 @@ internal sealed partial class DawnScene
                     string selected = choiceValue;
                     menu.Add(label, () =>
                     {
-                        extensions.SetSetting(extension, thinking.Key, new StringValue(selected), tell: true);
+                        SetAgentOption(extension, thinking.Key, selected);
                         agentsOptionsDrawn = string.Empty;
-                    }).IsChecked = () => Values.Text(extensions.SettingOf(extension, thinking.Key)) == selected;
+                    }).IsChecked = () => AgentOptionValue(extension, thinking.Key) == selected;
                 }
                 ContextMenu.Show(chrome, thinkingButton.Bounds.PointAt(Origin.TopLeft), menu);
             };
@@ -254,7 +268,7 @@ internal sealed partial class DawnScene
                 Match place = match.Groups["code"].Success ? CodePlace.Match(match.Groups["code"].Value) : match;
                 if (!place.Success) return match.Value;
                 string path = place.Groups["path"].Value, line = place.Groups["line"].Value;
-                return File.Exists(McpPath(path)) ? $"[{path}:{line}]({path}:{line})" : match.Value;
+                return AgentFilePath(path) is not null ? $"[{path}:{line}]({path}:{line})" : match.Value;
             });
         }
 

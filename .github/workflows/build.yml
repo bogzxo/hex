@@ -175,6 +175,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Starting Pages again once the release is out
+      actions: write
     steps:
       # RELEASE_NOTES.md is what the release says
       - uses: actions/checkout@v4
@@ -188,6 +192,7 @@ jobs:
           merge-multiple: true
 
       - name: Release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
         # A tag with a dash in it (v1.6.0-rc.1), or notes whose title says preview, go out as a prerelease, which the
@@ -200,3 +205,12 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           if head -n 1 RELEASE_NOTES.md | grep -qi 'preview\|prerelease'; then prerelease="--prerelease"; fi
           gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.exe --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file RELEASE_NOTES.md $prerelease
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      # The page says the latest release's version, codename and notes. A release made with the workflow's own token
+      # doesn't start other workflows, but asking for one by hand does. A prerelease isn't the latest, nothing to say
+      - name: Page
+        if: steps.release.outputs.prerelease == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref master || echo "::warning::Pages didn't start; run it by hand so the page says the release."

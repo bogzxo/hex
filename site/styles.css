@@ -3,43 +3,35 @@
    Hex.Shell/Assets/uix/flat/themes/solstice*.hor. No web fonts and nothing fetched from anywhere else. */
 
 :root {
+  /* The system's choice, unless the Day/Night switch in the bar pinned one (theme.js sets the color-scheme <meta>, and
+     these follow it). Without script the page follows the system and nothing breaks */
   color-scheme: light dark;
 
-  --background: #ffffff;
-  --surface: #f4f2f7;
-  --control: #e6e2ec;
-  --text: #1e1b29;
-  --dim: #5f5970;
-  --border: rgb(31 26 41 / 0.14);
-  --dawn: #b85200;
-  --dusk: #5a45d1;
-  --noon: #1c7d82;
-  --on-accent: #ffffff;
-  --keyword: #b4235f;
-  --type: #0b6e99;
-  --call: #5a45d1;
-  --string: #8a5a00;
-  --comment: #8a8499;
-  --shadow: rgb(31 26 41 / 0.18);
-
-  @media (prefers-color-scheme: dark) {
-    --background: #18171f;
-    --surface: #201f2a;
-    --control: #2c2a38;
-    --text: #ece9f2;
-    --dim: #a6a0b5;
-    --border: rgb(255 255 255 / 0.1);
-    --dawn: #da854d;
-    --dusk: #a99bff;
-    --noon: #64c3c8;
-    --on-accent: #18171f;
-    --keyword: #f28fb5;
-    --type: #8ccbea;
-    --call: #c5b8ff;
-    --string: #e9c88f;
-    --comment: #857f97;
-    --shadow: rgb(0 0 0 / 0.5);
+  &:has(> head > meta[name="color-scheme"][content="dark"]) {
+    color-scheme: dark;
   }
+
+  &:has(> head > meta[name="color-scheme"][content="light"]) {
+    color-scheme: light;
+  }
+
+  /* Solstice Day, then Solstice */
+  --background: light-dark(#ffffff, #18171f);
+  --surface: light-dark(#f4f2f7, #201f2a);
+  --control: light-dark(#e6e2ec, #2c2a38);
+  --text: light-dark(#1e1b29, #ece9f2);
+  --dim: light-dark(#5f5970, #a6a0b5);
+  --border: light-dark(rgb(31 26 41 / 0.14), rgb(255 255 255 / 0.1));
+  --dawn: light-dark(#b85200, #da854d);
+  --dusk: light-dark(#5a45d1, #a99bff);
+  --noon: light-dark(#1c7d82, #64c3c8);
+  --on-accent: light-dark(#ffffff, #18171f);
+  --keyword: light-dark(#b4235f, #f28fb5);
+  --type: light-dark(#0b6e99, #8ccbea);
+  --call: light-dark(#5a45d1, #c5b8ff);
+  --string: light-dark(#8a5a00, #e9c88f);
+  --comment: light-dark(#8a8499, #857f97);
+  --shadow: light-dark(rgb(31 26 41 / 0.18), rgb(0 0 0 / 0.5));
 
   --accent: var(--dawn);
   --sans: Inter, ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -55,6 +47,75 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* What's only in one look, a screenshot of it, the switch's word and picture for going to the other. Day's by default,
+   Night's where the system is dark and Day wasn't pinned, or where Night was. Shown the way each is otherwise shown */
+.night-only,
+.to-day {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(:has(> head > meta[name="color-scheme"][content="light"])) {
+    & .day-only,
+    & .to-night {
+      display: none;
+    }
+
+    & img.night-only,
+    & svg.to-day {
+      display: block;
+    }
+
+    & span.to-day {
+      display: inline;
+    }
+  }
+}
+
+:root:has(> head > meta[name="color-scheme"][content="dark"]) {
+  & .day-only,
+  & .to-night {
+    display: none;
+  }
+
+  & img.night-only,
+  & svg.to-day {
+    display: block;
+  }
+
+  & span.to-day {
+    display: inline;
+  }
+}
+
+/* Said to a screen reader, not drawn */
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The Day/Night switch in the bar, square, its picture in the middle. Hidden until its script is there to make it work */
+.bar .scheme {
+  position: relative;
+  padding-inline: 0.5rem;
+  justify-content: center;
+
+  /* A line of text tall, so it stands as high as the buttons with words beside it */
+  & svg {
+    inline-size: 1lh;
+    block-size: 1lh;
+    padding: 0.1lh;
+  }
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 html {
@@ -186,6 +247,16 @@ kbd {
     & .repo {
       margin-inline-start: auto;
     }
+
+    /* The Day/Night switch goes with GitHub on the right, there as it is on a wide screen, once its script has
+       shown it */
+    & .scheme:not([hidden]) {
+      margin-inline-start: auto;
+    }
+
+    & .scheme:not([hidden]) + .repo {
+      margin-inline-start: 0;
+    }
   }
 
   & nav a {
@@ -252,6 +323,72 @@ kbd {
   }
 }
 
+/* A button that's a <button> rather than a link looks the same as one */
+button.button {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+/* Asking for an extension or a feature */
+.request:modal {
+  inline-size: min(34rem, 100% - 2rem);
+  padding: clamp(1.25rem, 1rem + 2vw, 2rem);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: 0 1.5rem 4rem -1.5rem var(--shadow);
+  /* Scrolling in it, or over what's behind it, doesn't scroll the page */
+  overscroll-behavior: contain;
+
+  & h2 {
+    font-size: 1.5rem;
+  }
+
+  & > p {
+    margin-block-start: 0.6rem;
+    color: var(--dim);
+  }
+
+  & .choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    gap: 0.75rem;
+    margin-block: 1.25rem;
+  }
+
+  & .choice {
+    display: grid;
+    align-content: start;
+    gap: 0.35rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--accent);
+      background: var(--control);
+    }
+
+    & span {
+      color: var(--dim);
+      font-size: 0.92rem;
+    }
+  }
+}
+
+.request::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: color-mix(in oklab, black 55%, transparent);
+}
+
 /* The top of the page */
 
 .hero {
@@ -286,26 +423,39 @@ kbd {
     color: var(--dim);
   }
 
+  /* The buttons share the rows they wrap onto evenly and each row fills the width, so their edges line up rather
+     than one left on a row of its own. Balance where it's had, plain wrapping where it isn't */
   & .actions {
     display: flex;
     flex-wrap: wrap;
+    flex-wrap: balance;
     gap: 0.75rem;
     margin-block-start: 2rem;
+
+    /* Words that don't fit a phone go onto a second line in the button rather than out past the screen */
+    & .button {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      justify-content: safe center;
+      text-align: center;
+      white-space: normal;
+      text-wrap: balance;
+    }
   }
 }
 
-/* Where the words have little room (a phone), Download takes the whole row with its words in the middle and the
-   other two share the row under it. Asked of the words' own box, so it holds wherever that box is narrow */
+/* The small word under the buttons that it isn't finished and won't be */
+.hero .wip {
+  margin-block-start: 1.25rem;
+}
+
+/* Where the words have little room (a phone), Download takes the whole row and the other three share the rows under
+   it. Asked of the words' own box, so it holds wherever that box is narrow */
 .pitch {
   container: pitch / inline-size;
 }
 
 @container pitch (inline-size < 30rem) {
-  .actions .button {
-    flex: 1 1 0;
-    justify-content: center;
-  }
-
   .actions .button:first-child {
     flex-basis: 100%;
   }
@@ -687,6 +837,149 @@ tbody tr:last-child > * {
 .downloads td,
 .downloads th {
   text-align: start;
+}
+
+/* The harness's tools, a name and what it answers with, two to a row where there's room */
+.harness-head {
+  margin-block-start: calc(var(--gap) * 1.5);
+  font-size: 1.3rem;
+}
+
+.harness-head + p {
+  max-inline-size: 60rem;
+  margin-block-start: 0.6rem;
+  color: var(--dim);
+}
+
+.harness {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-block: var(--gap) 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--border);
+
+  & > div {
+    padding: 0.9rem 1.1rem;
+    background: var(--surface);
+  }
+
+  & dt code {
+    color: var(--accent);
+    font-weight: 650;
+  }
+
+  & dd {
+    margin: 0.3rem 0 0;
+    color: var(--dim);
+    font-size: 0.92rem;
+  }
+}
+
+/* Agents yours, or none at all: the two side by side where there's room, as big as each other, one over the other on
+   a phone. No AI in a frame of its own so it reads as the other way, not a footnote of the first */
+.choose-ai {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  column-gap: calc(var(--gap) * 2);
+  row-gap: 0;
+
+  /* Each half spans the same three rows, its eyebrow, its heading and its words, so the two headings start on one line
+     and their words on another however each wraps */
+  & > div {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    align-content: start;
+  }
+
+  & .eyebrow {
+    align-self: end;
+  }
+
+  & h2 {
+    align-self: start;
+  }
+
+  & > div > p:not(.eyebrow) {
+    margin-block-start: 1rem;
+  }
+}
+
+/* No AI the other way, as big as the first, a rule between them: beside it on a wide screen, over it on a phone */
+.no-ai {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--gap) * -1);
+    border-inline-start: 1px solid var(--border);
+  }
+
+  & strong {
+    color: var(--text);
+  }
+}
+
+/* One over the other, the rule goes across between them */
+@container agents-head (inline-size < 54rem) {
+  .no-ai {
+    margin-block-start: var(--gap);
+    padding-block-start: var(--gap);
+
+    &::before {
+      inset-block: 0 auto;
+      inset-inline: 0;
+      border-inline-start: 0;
+      border-block-start: 1px solid var(--border);
+    }
+  }
+}
+
+#agents > .wrap {
+  container: agents-head / inline-size;
+}
+
+/* What's new in the latest release, under the downloads, from its notes. A big release's sections fold away */
+.whats-new {
+  margin-block-start: var(--gap);
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+
+  & h3 {
+    font-size: 1.15rem;
+  }
+
+  & h4,
+  & h5 {
+    margin: 1.1rem 0 0;
+    font-size: 1rem;
+  }
+
+  & p {
+    margin-block-start: 0.6rem;
+  }
+
+  & ul {
+    margin: 0.6rem 0 0;
+    padding-inline-start: 1.2rem;
+  }
+
+  & li + li {
+    margin-block-start: 0.3rem;
+  }
+
+  & summary {
+    margin-block-start: 0.9rem;
+    color: var(--accent);
+    cursor: pointer;
+  }
 }
 
 /* A table with little room (a phone) is a card a row instead: the row's name on top, then each cell on a line of its

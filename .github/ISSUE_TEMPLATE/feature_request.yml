@@ -1,0 +1,21 @@
+name: Feature request
+description: Something Hex itself should do that it doesn't yet
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should Hex do?
+      description: The editor, the terminal, the agents, the harness, wherever it belongs.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What's it for?
+      description: What you're doing when you miss it, and what you do instead now.
+  - type: input
+    id: version
+    attributes:
+      label: Hex version
+      placeholder: 3.1.1 Amphetamine

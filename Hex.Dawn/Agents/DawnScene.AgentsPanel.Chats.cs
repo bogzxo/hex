@@ -226,20 +226,34 @@ internal sealed partial class DawnScene
             menu.Add(Said("agents_panel.chat_open_noon"), () => { ShowFace(HexFace.Noon); OpenAgentChat(chat); }, icon: "robot");
         if (chat.Parent is { } parent && ChatById(parent) is { } starter)
             menu.Add(Said("agents_panel.chat_open_parent", ("name", ChatName(parent))), () => OpenAgentChat(starter), icon: "arrow-up");
-        menu.Add(Said("agents_panel.stop"), () => StopAgent(chat), icon: "debug-stop").IsEnabled = () => chat.Running;
+        menu.AddSeparator();
+        menu.Add(Said("agents_panel.chat_rename"), () => RenameAgentChat(chat), icon: "edit");
         menu.Add(Said("agents_panel.chat_copy"), () =>
         {
             UICompositor.Copy(chat.LastReply(int.MaxValue));
             Say(Said("agents_panel.copied"));
         }, icon: "copy").IsEnabled = () => chat.LastReply().Length > 0;
+        menu.Add(Said("agents_panel.chat_stop"), () => StopAgent(chat), icon: "debug-stop").IsEnabled = () => chat.Running;
         menu.AddSeparator();
-        menu.Add(Said("agents_panel.chat_close"), () => CloseAgentChat(chat), icon: "close");
+        // Said with its subagents only when it has some, they go with it
+        bool started = agentChats.Any(each => each.Parent == chat.Id);
+        menu.Add(Said(started ? "agents_panel.chat_close_all" : "agents_panel.chat_close"), () => CloseAgentChat(chat), icon: "close");
         return menu;
+    }
+
+    /// <summary>A chat called something of somebody's own, what it was asked coming back when the name is left empty.</summary>
+    private void RenameAgentChat(HexAgentChat chat)
+    {
+        string now = chat.Shown;
+        AskText(Said("agents_panel.rename_title"), Said("agents_panel.rename_message"), now, Said("agents_panel.rename_go"),
+            named => chat.Rename(named), selected: (0, now.Length));
     }
 
     /// <summary>A chat put on screen, what was being written for the one before left behind.</summary>
     private void OpenAgentChat(HexAgentChat chat)
     {
+        // Picked from a narrow window's fleet, the middle comes back, the chat already open included
+        FleetPicked();
         if (agentChat == chat)
             return;
 

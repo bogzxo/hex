@@ -184,6 +184,8 @@ internal sealed partial class HexSettings
     public bool Minimap = true;
 
     /// <summary>Whether the names of parameters and the like are written faintly in among the code, inlay hints.</summary>
+    public bool SpellCheck;
+    public string SpellCheckLanguage = string.Empty;
     public bool InlayHints = true;
 
     /// <summary>Whether a declaration has how many places use it written small over it, Visual Studio's code lens.</summary>
@@ -204,10 +206,24 @@ internal sealed partial class HexSettings
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
     /// <summary>
-    /// Whether agents can drive Hex over MCP, its server up on a pipe only this user on this machine can open. Off as it
-    /// comes, and never a folder's to switch on (see WorkspaceKeys), a repository somebody cloned mustn't open the door.
+    /// Whether agents can drive Hex over MCP, its server up on a pipe only this user on this machine can open. On as it
+    /// comes, so an agent started anywhere on the machine finds the harness without a trip to the settings, and only the
+    /// user's own settings switch it, never a folder's (see WorkspaceKeys), so a repository somebody cloned can't change it.
     /// </summary>
-    public bool McpServer;
+    public bool McpServer = true;
+
+    /// <summary>
+    /// Whether Hex is without its agents, No AI. Agentic, the Agents panel, the chats and the extensions that are agent
+    /// systems never made, and the MCP server's tools about agents left out of it (see HexAi). Read as the editor
+    /// starts, so a change takes a restart.
+    /// </summary>
+    public bool NoAi;
+
+    /// <summary>
+    /// Whether Don't show again was pressed on the card Agentic puts up while the server is off, saying what switching
+    /// it on saves.
+    /// </summary>
+    public bool McpHintQuiet;
 
     /// <summary>Whether the workspace's repositories are fetched from their remotes every few minutes, for behind to be known.</summary>
     public bool GitAutoFetch = true;
@@ -246,6 +262,40 @@ internal sealed partial class HexSettings
 
     /// <summary>Where each language server is, by its name in language_servers.hor, for one that isn't the file's command on the PATH.</summary>
     public readonly Dictionary<string, string> ServerPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What each language server is told beyond its catalog's settings, by its name, in the same shape (sections, then
+    /// their keys), changed on its language's Settings page in the Language Servers window and laid over the catalog's
+    /// as it starts.
+    /// </summary>
+    public readonly Dictionary<string, System.Text.Json.Nodes.JsonObject> ServerSettings = new(StringComparer.OrdinalIgnoreCase);
+
+    // The servers' own settings written the way the settings file has them, each server's an object of its sections
+    internal HIDLObject ServerSettingsObject()
+    {
+        static IRuntimeValue Value(System.Text.Json.Nodes.JsonNode? node) => node switch
+        {
+            System.Text.Json.Nodes.JsonObject inside => Hidl(inside).ToValue(),
+            System.Text.Json.Nodes.JsonArray items => new ListValue([.. items.Select(Value)]),
+            System.Text.Json.Nodes.JsonValue value when value.TryGetValue(out bool flag) => Values.Bool(flag),
+            System.Text.Json.Nodes.JsonValue value when value.TryGetValue(out double number) => new NumberValue((float)number),
+            System.Text.Json.Nodes.JsonValue value when value.TryGetValue(out string? text) => new StringValue(text),
+            _ => new StringValue(string.Empty)
+        };
+
+        static HIDLObject Hidl(System.Text.Json.Nodes.JsonObject json)
+        {
+            var made = new HIDLObject();
+            foreach (var (key, node) in json.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                made.Add(key, Value(node));
+            return made;
+        }
+
+        var all = new HIDLObject();
+        foreach (var (name, told) in ServerSettings.Where(pair => pair.Value.Count > 0).OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            all.Add(name, Hidl(told));
+        return all;
+    }
 
     /// <summary>
     /// Which language the files of a glob are, VS Code's files.associations, "*.weird" to python. The most specific

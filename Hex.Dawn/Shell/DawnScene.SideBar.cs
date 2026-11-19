@@ -48,6 +48,10 @@ internal sealed partial class DawnScene
         get => LayoutTools ? designSide : codeSide;
         set
         {
+            // There's no Agents view with No AI on, a side bar left on it (or asked for it) is on the explorer instead
+            if (value == HexSide.Agents && HexAi.Off)
+                value = HexSide.Explorer;
+
             // The outline and the toolbox belong to their kind of file, the rest are the same whatever's open. Source
             // Control turned into the outline the moment a code tab was clicked after a layout's, and back again
             if (value is HexSide.Outline or HexSide.Design)
@@ -96,11 +100,23 @@ internal sealed partial class DawnScene
         layout.Get<Button>("act_tests").OnPressed = ToggleTestExplorer;
         layout.Get<Button>("act_git").OnPressed = () => ShowSide(HexSide.SourceControl);
         layout.Get<Button>("act_agents").OnPressed = () => ShowSide(HexSide.Agents);
+
+        // No robot on the activity bar with No AI on, there's no Agents view for it to bring up
+        layout.Get<Button>("act_agents").Visible = !HexAi.Off;
         layout.Get<Button>("act_settings").OnPressed = OpenSettings;
         layout.Get<Button>("act_extensions").OnPressed = ShowExtensions;
 
         // VS Code's keys for its Extensions view, which is the settings' Extensions here
         commands.Add("View/sides", Said("activity.extensions_command"), ShowExtensions, "Ctrl+Shift+X", "extensions", UIKeyUse.BoundWhileTyping);
+
+        // The Language Servers window, at its Overview, and the workspace set up from it in one go
+        commands.Add("View/sides", Said("server_window.command"), () => OpenLanguageServers(), icon: "server-process");
+        commands.Add("View/sides", Said("server_window.command_set_up"), () =>
+        {
+            OpenLanguageServers();
+            languages.SetupEverything(languages.WorkspaceEntries());
+        }, icon: "play");
+        languages.OpenSetup = language => OpenLanguageServers(language);
 
         // Tab from a button of the activity bar goes on to the side it shows, the next stop after the bar, VS Code's order
         foreach (string act in (string[])["act_explorer", "act_search", "act_outline", "act_design", "act_debug", "act_tests", "act_git", "act_agents", "act_settings", "act_extensions"])
@@ -137,6 +153,7 @@ internal sealed partial class DawnScene
     private void FollowExtensions()
     {
         FollowExtensionsWindow();
+        FollowLanguageServersWindow();
         if (!extensionsUp || extensionsWindow is not null)
             return;
 
@@ -190,7 +207,7 @@ internal sealed partial class DawnScene
         {
             RebuildTree();
             treeDirty = false;
-            agentsInput.Focus();
+            agentsInput?.Focus();
             return;
         }
 

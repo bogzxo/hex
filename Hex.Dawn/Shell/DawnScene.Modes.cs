@@ -25,7 +25,8 @@ internal sealed partial class DawnScene
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
         HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
-        HexAgentProcess.Woken = Engine.WindowManager.Wake;
+        if (!HexAi.Off)
+            HexAgentProcess.Woken = Engine.WindowManager.Wake;
         HexModes.Leaving += mode =>
         {
             if (mode == HexMode.Dawn)
@@ -52,8 +53,12 @@ internal sealed partial class DawnScene
     /// </summary>
     private void TickAgentsOffscreen(float dt)
     {
-        TakeAgentLines();
-        PublishAgentStatuses();
+        // With No AI on there are no agents to read, only the MCP server's calls go on
+        if (!HexAi.Off)
+        {
+            TakeAgentLines();
+            PublishAgentStatuses();
+        }
         RunMcpCalls(behind: true);
 
         // A self test that went over to Dusk goes on there, to see what goes on behind it and to come back. Only with Dusk

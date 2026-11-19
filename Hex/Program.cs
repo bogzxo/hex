@@ -79,6 +79,10 @@ internal static partial class Program
         // The terminal's components known to layouts before the first module is made, both modes have them
         Horizon.UI.Components.TerminalKinds.Register();
 
+        // No AI for this run, said before either mode is made so Dusk's selector has no Agentic on it either
+        if (args.Contains(Hex.Core.HexAi.ARGUMENT, StringComparer.OrdinalIgnoreCase))
+            Hex.Core.HexAi.Force();
+
         HexMode mode = HexIdentity.ModeOf(args, Environment.ProcessPath);
         HexIdentity.Claim(mode);
 
@@ -253,6 +257,7 @@ internal static partial class Program
           --mcp                    MCP stdio bridge, starts one editor if needed; --window --mcp opens the editor with its server
           --view <design|code|table>  which view a file comes up in
           --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
+          --no-ai                  this run without any of the agents, No AI whatever the settings say
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes
           --size <w>x<h>           the window's size, maximised otherwise

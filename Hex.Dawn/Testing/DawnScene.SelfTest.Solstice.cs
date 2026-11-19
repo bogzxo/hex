@@ -43,7 +43,7 @@ internal sealed partial class DawnScene
             CloseAll();
         });
         test.Settle(0.3f);
-        test.Check("solstice: the welcome page starts at the left with what's new on it", () =>
+        test.Check("solstice: the welcome page has what's new on it", () =>
             (welcome is { Visible: true } ? welcome : plainPage) is { Visible: true } page
             && Descendants(page).OfType<StackPanel>().Any(stack => stack.Children.OfType<Button>().Any(button => button.Label == Said("whats_new.go_agents"))));
         test.Run(() => Shot("solstice-welcome"));

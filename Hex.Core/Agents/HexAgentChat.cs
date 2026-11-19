@@ -138,8 +138,11 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>How many agents up it was started from, 0 for one somebody started.</summary>
     public int Depth { get; init; }
 
-    /// <summary>What it was called by the agent that started it, shown in place of what it was asked when there is one.</summary>
-    public string? Name { get; init; }
+    /// <summary>
+    /// What it was called by the agent that started it, or renamed to from its card, shown in place of what it was asked
+    /// when there is one. Null goes back to what it was asked.
+    /// </summary>
+    public string? Name { get; set; }
 
     // The most messages a chat keeps, the oldest go after that
     private const int MOST_MAIL = 100;
@@ -281,6 +284,24 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>Goes up with every change, the panel redraws when it's moved.</summary>
     public int Version { get; private set; }
 
+    /// <summary>Called something else from its card, nothing going back to what it was asked. Kept with the chat.</summary>
+    public void Rename(string? name)
+    {
+        string? named = string.IsNullOrWhiteSpace(name) ? null : name.Trim().ReplaceLineEndings(" ");
+        if (named == Name)
+            return;
+        Name = named;
+        Version++;
+    }
+
+    public HexAgentPlan? Plan { get; private set; }
+
+    public void SetPlan(HexAgentPlan plan)
+    {
+        Plan = plan;
+        Version++;
+    }
+
     /// <summary>How many rows have been dropped off the top, for the panel to know its rows from the start.</summary>
     public int Dropped { get; private set; }
 
@@ -312,6 +333,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public void Clear()
     {
         Restore(string.Empty, [], 0);
+        Plan = null;
         Session = null;
         Key = Guid.NewGuid().ToString("N");
         InputTokens = OutputTokens = CacheRead = ContextUsed = 0;
@@ -386,13 +408,14 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>Whether something asked is still waiting for the agent to take it in.</summary>
     public bool HasQueued => entries.Any(entry => entry.Queued);
 
-    /// <summary>The first thing still queued taken in by the agent, false when there's nothing queued.</summary>
-    public bool Taken()
+    /// <summary>Resolve the first queued message that matches the prompt, or the oldest when no prompt was given.</summary>
+    public bool Taken(string? prompt = null, bool accepted = true)
     {
-        if (entries.FirstOrDefault(entry => entry.Queued) is not { } taken)
+        if (entries.FirstOrDefault(entry => entry.Queued && (prompt is null || entry.Text == prompt)) is not { } taken)
             return false;
 
         taken.Queued = false;
+        taken.Unheard = !accepted;
         Touch(taken);
         return true;
     }
@@ -507,7 +530,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// </summary>
     public bool Progress(string id, string step)
     {
-        if (ToolOfTurn(id) is not { } tool)
+        // Looked for back past what was asked since, not only in this turn. A subagent sent off in the background goes on
+        // after its call came back, and a message typed to the agent meanwhile started a new turn as far as the rows go,
+        // so every step it took after that was let go of and it was nowhere to be seen
+        if ((ToolOfTurn(id) ?? entries.FindLast(entry => entry.Kind == HexAgentEntryKind.Tool && entry.ToolId == id)) is not { } tool)
             return false;
 
         tool.Steps++;

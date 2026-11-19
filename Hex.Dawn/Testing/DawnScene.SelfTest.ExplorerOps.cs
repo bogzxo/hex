@@ -115,19 +115,17 @@ internal sealed partial class DawnScene
     {
         string nowhere = Path.Combine(folder, "nowhere", OperatingSystem.IsWindows() ? "gopls.exe" : "gopls"), goFile = Path.Combine(folder, "quiet.go");
         int before = 0;
-        test.Run(() => OpenSettings(HexLanguages.SERVER_SECTION));
         test.Run(() =>
         {
-            SettingsPage?.Enter(HexLanguages.SERVER_KEY + "go", new StringValue(nowhere));
-            CloseSettings();
+            languages.SetServerPath(languages.ServerEntry("go")!, nowhere);
             languages.SayMissing = true;
             languages.ForgetMissingSaid();
             before = languages.MissingNotices.Count;
             languages.SayIfMissing(goFile);
         });
-        test.Check("explorer ops: a missing gopls's card has Don't Show Again beside the other two", () =>
+        test.Check("explorer ops: a missing gopls's card has Don't Show Again beside Set up", () =>
             languages.MissingNotices.Count == before + 1
-            && toasts.Cards.Any(card => card.Text.Contains("gopls", StringComparison.Ordinal) && card.Actions.Count == 3
+            && toasts.Cards.Any(card => card.Text.Contains("gopls", StringComparison.Ordinal) && card.Actions.Count == 2
                 && card.Actions.Any(action => action.Label == Said("code_server.dont_show_again"))));
         test.Run(() =>
         {
@@ -161,12 +159,7 @@ internal sealed partial class DawnScene
         {
             languages.MissingCards = true;
             languages.SayMissing = false;
-            OpenSettings(HexLanguages.SERVER_SECTION);
-        });
-        test.Run(() =>
-        {
-            SettingsPage?.Reset(HexLanguages.SERVER_KEY + "go");
-            CloseSettings();
+            languages.SetServerPath(languages.ServerEntry("go")!, string.Empty);
         });
         test.Wait();
     }

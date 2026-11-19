@@ -74,7 +74,7 @@ internal sealed partial class DawnScene
         editor.OnLensAbovePressed = (lens, box) => PressReferenceLens(prepared, lens, box);
         editor.ArtPath = name => ArtFileOf(prepared, name);
         editor.ArtSkin = () => stage.Skin;
-        editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point);
+        editor.OnContextMenu = point => codeEditing.ShowCodeMenu(prepared, point, AddSpellingMenu);
     }
 
     /// <summary>

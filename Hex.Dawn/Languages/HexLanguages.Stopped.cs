@@ -66,7 +66,12 @@ internal sealed partial class HexLanguages
         {
             context.Notices.Notify(context.Strings.Said("languages.server_start_failed", ("server", shown), ("why", why)), error: true,
                 (context.Strings.Said("languages.start_again"), () => RestartStoppedServer(server)),
-                (context.Strings.Said("code_server.open_settings"), () => context.Windows.OpenSettings(SERVER_SECTION)),
+                // Its language in the Language Servers window, where what it needs and where it is are
+            (context.Strings.Said("code_server.open_setup"), () =>
+            {
+                if (OpenSetup is { } open) open(server.Name);
+                else context.Windows.OpenSettings(SERVER_SECTION);
+            }),
                 (context.Strings.Said("languages.show_server_output"), () => ShowServerOutput(server)));
             return;
         }

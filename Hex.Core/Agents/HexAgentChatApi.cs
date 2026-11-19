@@ -89,6 +89,30 @@ internal static class HexAgentChatApi
         ("text", Natives.Action("text", args => chat.Say(args.Text(0, string.Empty)))),
         ("thinking", Natives.Action("thinking", args => chat.Think(args.Text(0, string.Empty)))),
         ("note", Natives.Action("note", args => chat.Note(args.Text(0, string.Empty)))),
+        // The agent system's own to-do list, structured, into the chat's Plan tab: plan({ steps: [{ id, text, status }],
+        // title, key, at }) or plan(steps). A step's text can be said as text, content or step, its status in the system's
+        // words (in_progress, inProgress, completed). key is the update's own id (a tool call's), so it's taken once, at
+        // its time by the system's clock, so an older one doesn't undo a newer. What hex_plan_update wrote stays
+        ("plan", Natives.Action("plan", args =>
+        {
+            if (!args.Has(0))
+                return;
+            ObjectValue said = args[0] is ObjectValue given ? given : Natives.Object();
+            IRuntimeValue? listed = args[0] is ListValue ? args[0] : said.Properties.GetValueOrDefault("steps");
+            if (listed is not ListValue steps)
+                return;
+
+            var native = new List<HexAgentPlan.NativeStep>();
+            foreach (ObjectValue step in steps.Items.OfType<ObjectValue>().Take(200))
+            {
+                string? text = TextOf(step, "text") ?? TextOf(step, "content") ?? TextOf(step, "step");
+                if (text is not null)
+                    native.Add(new(TextOf(step, "id"), text, HexAgentPlan.StateOf(TextOf(step, "status") ?? TextOf(step, "state"))));
+            }
+
+            if (HexAgentPlan.TakeNative(chat.Plan, native, TextOf(said, "title"), NumberOf(said, "at", 0), TextOf(said, "key")) is { } plan)
+                chat.SetPlan(plan);
+        })),
         ("error", Natives.Action("error", args =>
         {
             chat.Error(args.Has(0) ? HexJson.Short(args[0]) : string.Empty);
@@ -147,6 +171,11 @@ internal static class HexAgentChatApi
                 taken();
             else
                 chat.Taken();
+        })),
+        ("steer_result", Natives.Action("steer_result", args =>
+        {
+            if (args.Has(0) && args[0] is StringValue prompt && args.Has(1) && args[1] is BooleanValue accepted)
+                chat.Taken(prompt.Value, accepted.Value);
         })),
         ("done", Natives.Action("done", _ =>
         {

@@ -31,6 +31,8 @@ internal sealed partial class DawnScene
         string asked = agentsInput.Text.Trim();
         if (asked.Length == 0 && agentImages.Count == 0)
             return;
+        if (HandleAgentCommand(asked))
+            return;
 
         if (agentChat?.Running == true)
         {
@@ -56,8 +58,9 @@ internal sealed partial class DawnScene
             agentChats.Add(agentChat);
         }
 
-        string prompt = AgentDraftPrompt(asked);
-        string? location = agentDraftContext is { } context
+        bool slash = IsAgentSlash(asked);
+        string prompt = slash ? asked : AgentDraftPrompt(asked);
+        string? location = !slash && agentDraftContext is { } context
             ? $"{context.Path}:{context.Line}:{context.Column}–{context.EndLine}:{context.EndColumn}" : null;
         agentsInput.Text = string.Empty;
         RememberAsked(asked);
@@ -91,12 +94,19 @@ internal sealed partial class DawnScene
         return $"[from {where}] The file open in the editor is {where}.{selected}\n\n---\n{asked}";
     }
 
+    /// <summary>
+    /// Whether a chat's agent is starting or has a run not taken off agentRuns yet, whatever its turn says. An exited
+    /// process counts until TakeAgentLines has read its last lines and removed it, so a new turn can't start while the old
+    /// run's Done is still to come and land on it. What is asked meanwhile waits in its mail and AfterAgentTurn starts it.
+    /// </summary>
+    private bool AgentRunBusy(HexAgentChat chat) => agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat);
+
     private void StartAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string asked, string? contextLocation = null)
     {
         // Its turn said over, the agent can still be going of its own (Claude Code woken by a task of its own in the
         // background), and a second run on the same session had two agents writing over each other. What's asked waits in
         // its inbox and starts the next run once that one has gone (AfterAgentTurn)
-        if (agentsStarting.Contains(chat) || agentRuns.Any(each => each.Chat == chat && !each.Process.Exited))
+        if (AgentRunBusy(chat))
         {
             string said = prompt.Length > 0 ? prompt : asked;
             var message = new HexAgentMail(hub.NextMailSeq(), null, FROM_PERSON, "instruction", said, Directive: true) { To = chat.Id };
@@ -107,7 +117,9 @@ internal sealed partial class DawnScene
         }
 
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
-        prompt = UnreadPrompt(chat, prompt);
+        // Provider commands must remain at the start; unread mail waits for the next ordinary prompt.
+        if (!IsAgentSlash(prompt))
+            prompt = PlanPrompt(chat, UnreadPrompt(chat, prompt));
         // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes). The
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
@@ -118,6 +130,29 @@ internal sealed partial class DawnScene
             if (agentsStarting.Remove(chat))
                 LaunchAgent(chat, extension, run, prompt);
         });
+    }
+
+    /// <summary>
+    /// What a chat's agent is asked with where its plan stands in front, when it has steps left: the step going on, the
+    /// next and any blocked, by ID. A go ahead in a later turn, a turn after a restart or a compaction, otherwise starts with
+    /// nothing saying the tab's rows are there to move on. Nothing for a chat without a plan or with every step closed.
+    /// </summary>
+    internal static string PlanPrompt(HexAgentChat chat, string prompt)
+    {
+        if (chat.Plan is not { Unfinished: true } plan || prompt.Length == 0)
+            return prompt;
+
+        static string Row(HexPlanItem item) => $"{item.Id ?? "?"} \"{OneLine(item.Text, 80)}\"";
+        var parts = new List<string>();
+        if (plan.Doing is { } doing)
+            parts.Add("doing " + Row(doing));
+        if (plan.Items.FirstOrDefault(item => item.State == HexPlanState.Pending) is { } next)
+            parts.Add("next " + Row(next));
+        HexPlanItem[] blocked = [.. plan.Items.Where(item => item.State == HexPlanState.Blocked).Take(3)];
+        if (blocked.Length > 0)
+            parts.Add("blocked " + string.Join(", ", blocked.Select(Row)));
+        return $"[Your Plan tab: {plan.Done} of {plan.Items.Count} done, {string.Join("; ", parts)}. If this message carries that work on, "
+            + "move those rows by ID with hex_plan_update as steps start, finish or block, hex_plan_read has them all.]\n\n" + prompt;
     }
 
     // The chats whose turn has begun and whose agent waits for its checkpoint before it's started
@@ -207,18 +242,18 @@ internal sealed partial class DawnScene
     /// the agent can't be told more as it goes, the box kept as it is for when it's done. Not <paramref name="typed"/>,
     /// it's another agent saying it (hex_agent_send), and the box and the file on screen are nothing to do with it.
     /// </summary>
-    private void SteerAgent(HexAgentChat chat, string asked, bool typed = true)
+    private bool SteerAgent(HexAgentChat chat, string asked, bool typed = true)
     {
         // Somebody's word to an agent sitting in a long wait for its agents, or to one that can't be told more as it
         // works, goes by the mail. Said on its stdin it would only be read once the wait was over, minutes later, or never
         if (typed && chat.Running && (AgentWaiting(chat) || SteeredRun(chat) is null))
         {
             TellWorkingAgent(chat, asked);
-            return;
+            return true;
         }
 
         if (SteeredRun(chat) is not { } run)
-            return;
+            return false;
 
         string prompt = asked;
         string? location = null;
@@ -242,15 +277,24 @@ internal sealed partial class DawnScene
         if (line is not null && typed)
         {
             heldSteers.Add((chat, entry, line, asked));
-            return;
+            return true;
         }
 
         if (line is not null && run.Process.Send(line))
-            return;
+            return true;
+
+        // Another agent's message that couldn't be written stays in its mail to be read later, so its row is taken back
+        // rather than saying it was never heard
+        if (!typed)
+        {
+            chat.Withdraw(entry);
+            return false;
+        }
 
         entry.Queued = false;
         entry.Unheard = true;
         chat.Touch(entry);
+        return false;
     }
 
     /// <summary>

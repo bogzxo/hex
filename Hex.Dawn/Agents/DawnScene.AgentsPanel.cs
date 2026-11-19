@@ -102,6 +102,7 @@ internal sealed partial class DawnScene
             // No words offered back as it's typed, the list came up over the box and took Enter
             CompletionSource = _ => null
         });
+        agentsInput.OnContextMenu = point => ShowSpellingMenu(agentsInput, point);
         agentsCompose.MoveChild(agentsInput, 0);
         BuildAgentImages();
 
@@ -127,6 +128,8 @@ internal sealed partial class DawnScene
         {
             if (Engine.Input.Keyboard.Shift)
                 return false;
+            if (TakeFirstSlash(sending: true))
+                return true;
             SendToAgent();
             return true;
         };
@@ -225,6 +228,8 @@ internal sealed partial class DawnScene
         agentChat = null;
         agentDraftContext = null;
         agentsInput.Text = string.Empty;
+        // Begun from a narrow window's fleet, the middle comes back before the box takes the keys
+        FleetPicked();
         agentsInput.Focus();
     }
 

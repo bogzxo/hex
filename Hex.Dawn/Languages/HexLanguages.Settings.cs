@@ -19,6 +19,9 @@ internal sealed partial class HexLanguages
     // What a server's row is keyed by, after this its name
     internal const string SERVER_KEY = "server_path_";
 
+    // The settings' one row, which opens the Language Servers window
+    internal const string WINDOW_ROW = "language_servers_window";
+
     // What a server's buttons say, which is what a press is told apart by. Download says the same as Install now, the two
     // were different widths and threw the rows' buttons out of line, and the self test still asks for it by that name
     internal const string CHOOSE = "Choose...", INSTALL = "Install or update", DOWNLOAD = INSTALL, CHANGES = "What changed";
@@ -110,15 +113,12 @@ internal sealed partial class HexLanguages
         public ServerSource(HexLanguages languages)
         {
             this.languages = languages;
+            // One row that opens the Language Servers window, found by every server's name and language too, gopls finds it
+            string words = string.Join(' ', languages.ServerEntries.SelectMany(entry => new[] { entry.Command, entry.Name, languages.LanguageNameOf(entry) }));
             Settings =
             [
-                new("server_updates", HexText.Get("language_settings.updates"), UIFormKind.Flag,
-                    HexText.Get("language_settings.updates_help"),
-                    SERVER_SECTION, Buttons: [HexText.Get("language_settings.check_now")]),
-                new(MISSING_CARDS, HexText.Get("code_server.missing_cards"), UIFormKind.Flag, HexText.Get("code_server.missing_cards_help"), SERVER_SECTION),
-                .. languages.ServerEntries.Select(entry => new UISetting(SERVER_KEY + entry.Name, entry.Command, UIFormKind.Text, HelpOf(entry), SERVER_SECTION,
-                    Buttons: entry.Repo.Length > 0 ? [CHOOSE, INSTALL, CHANGES] : [CHOOSE, INSTALL],
-                    Placeholder: HexText.Get("language_settings.on_the_path", ("command", entry.Command))))
+                new(WINDOW_ROW, HexText.Get("server_window.settings_row"), UIFormKind.Flag, HexText.Get("server_window.settings_row_help"), SERVER_SECTION,
+                    Buttons: [HexText.Get("server_window.open")], ButtonsOnly: true, Keywords: "language server servers lsp install " + words)
             ];
         }
 
@@ -181,6 +181,12 @@ internal sealed partial class HexLanguages
 
         public void Press(string key, int which)
         {
+            if (key == WINDOW_ROW)
+            {
+                languages.OpenSetup?.Invoke(null);
+                return;
+            }
+
             if (key == "server_updates")
             {
                 languages.CheckServerUpdates(asked: true);

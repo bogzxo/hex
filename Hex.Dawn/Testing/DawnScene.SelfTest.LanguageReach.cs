@@ -46,11 +46,11 @@ internal sealed partial class DawnScene
         string nowhere = Path.Combine(folder, "nowhere", OperatingSystem.IsWindows() ? "gopls.exe" : "gopls");
         string first = Path.Combine(folder, "a.go"), second = Path.Combine(folder, "b.go");
         int saidBefore = 0;
-        test.Run(() => OpenSettings(HexLanguages.SERVER_SECTION));
+        HexServerEntry go = null!;
         test.Run(() =>
         {
-            SettingsPage?.Enter(HexLanguages.SERVER_KEY + "go", new StringValue(nowhere));
-            CloseSettings();
+            go = languages.ServerEntry("go")!;
+            languages.SetServerPath(go, nowhere);
             languages.SayMissing = true;
             saidBefore = languages.MissingNotices.Count;
             System.IO.File.WriteAllText(first, "package main\n\nfunc main() {}\n");
@@ -58,25 +58,26 @@ internal sealed partial class DawnScene
             Open(first);
         });
         test.Wait();
-        test.Check("language servers: a .go with no gopls says so once, with the command that installs it and a button to copy it", () =>
-            languages.MissingNotices.Count == saidBefore + 1 && languages.MissingNotices[^1] == Said("code_server.missing", ("command", "gopls"), ("install", "go install golang.org/x/tools/gopls@latest"))
-            && toasts.Cards.Any(card => card.Text.Contains("go install golang.org/x/tools/gopls@latest", StringComparison.Ordinal)
-                && card.Actions.Any(action => action.Label == Said("code_server.copy_install")) && card.Actions.Any(action => action.Label == Said("code_server.open_settings"))));
+        string setUp = string.Empty;
+        test.Check("language servers: a .go with no gopls says so once, with a button that sets Go up", () =>
+        {
+            setUp = Said("code_server.set_up", ("language", languages.LanguageNameOf(go)));
+            return languages.MissingNotices.Count == saidBefore + 1
+                && languages.MissingNotices[^1] == Said("code_server.missing_set_up", ("language", languages.LanguageNameOf(go)), ("command", "gopls"))
+                && toasts.Cards.Any(card => card.Text.Contains("gopls", StringComparison.Ordinal) && card.Actions.Any(action => action.Label == setUp));
+        });
         test.Run(() => Open(second));
         test.Wait();
         test.Check("language servers: and a second .go says nothing more", () => languages.MissingNotices.Count == saidBefore + 1);
+        test.Run(() => toasts.Cards.First(card => card.Text.Contains("gopls", StringComparison.Ordinal)).Actions.First(action => action.Label == setUp).Pressed());
+        test.Check("language servers: Set up opens the Language Servers window at Go", () => serversWindow is not null && serversShown == ServersPage.Language && serversLanguage == "go");
         test.Run(() =>
         {
             foreach (var card in toasts.Cards.Where(card => card.Text.Contains("gopls", StringComparison.Ordinal)))
                 card.Close();
-
+            serversWindow?.Close();
             languages.SayMissing = false;
-            OpenSettings(HexLanguages.SERVER_SECTION);
-        });
-        test.Run(() =>
-        {
-            SettingsPage?.Reset(HexLanguages.SERVER_KEY + "go");
-            CloseSettings();
+            languages.SetServerPath(go, string.Empty);
         });
         test.Wait();
     }

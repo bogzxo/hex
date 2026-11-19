@@ -14,6 +14,8 @@
     <ApplicationIcon>..\Hex.Shell\Assets\hex_icon.ico</ApplicationIcon>
     <!-- The nightly build's grey with a yellow H, told from the stable one at a glance in Explorer and the taskbar -->
     <ApplicationIcon Condition="'$(HexChannel)' == 'dev'">..\Hex.Shell\Assets\hex_icon_dev.ico</ApplicationIcon>
+    <!-- A Debug build, the one built from the source to work on, grey, never taken for an installed Hex on the taskbar -->
+    <ApplicationIcon Condition="'$(Configuration)' == 'Debug'">..\Hex.Shell\Assets\hex_icon_gray.ico</ApplicationIcon>
 
     <!-- The console a Debug Hex gets only from whoever started it, see app.manifest -->
     <ApplicationManifest>app.manifest</ApplicationManifest>

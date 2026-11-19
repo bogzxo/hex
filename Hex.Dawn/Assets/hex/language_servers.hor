@@ -19,6 +19,13 @@
 //            folder that was never restored restored as it opens (HexLanguages.Restore)
 //   needs    the files it won't run without somewhere in the folder it runs in, by name or *.extension. Where there's
 //            none it isn't started and the file is only coloured, csharp-ls stops the moment it starts on a lone .cs
+//   init     what it's told as it starts (the protocol's initializationOptions), VS Code's HTML, CSS and JSON servers
+//            only format when told provideFormatter here
+//   pull_diagnostics  true for a server that never says what's wrong unless asked (TypeScript 7's), which it then is a
+//            moment after a file stops changing. Left out, a server isn't told the editor asks, csharp-ls told so stopped
+//            saying and its underlines came and went with every answer caught as it reloaded
+//   languages the language id a file is opened with by its extension, where it isn't the entry's language
+//            ({ js: "javascript" }), a server reads a file by the id it's given
 //   settings what it's told to be, by its sections the way VS Code's settings have them, said as it starts and
 //            whenever it asks (serve-d only says what's wrong with a file outside a dub project as it's opened when
 //            told d.lintOnFileOpen is "always"). {root} in a text is the folder the server runs in, serve-d completes
@@ -30,19 +37,119 @@
 //
 // Where a server is can be set in the settings as well, which wins over the command here. ruff lints Python quicker than
 // pyright, swap the python entry for it if you'd rather (`pip install ruff`, command "ruff", args ["server"]).
+// The programs a server runs on or is installed with, written once and named by the servers that need them (tools:,
+// and tools_optional: for one that adds something but isn't needed). The Language Servers window checks each the way
+// the check says (its command and arguments, a version at least min), and has a step for every one that isn't there:
+// the command that installs it, shown and run with a button, or its download page where there's no command for this
+// system. A command or an install can differ by system, { windows: ..., macos: ..., linux: ... }.
+let tools = {
+    node: {
+        name: "Node.js and npm", command: "node", args: ["--version"], min: "18",
+        about: "Runs the servers that come from npm, and installs them.",
+        install: {
+            windows: "winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install node"
+        },
+        download: "https://nodejs.org/en/download"
+    },
+    dotnet: {
+        name: ".NET SDK", command: "dotnet", args: ["--version"], min: "8",
+        about: "Builds and restores .NET projects, which C# needs to know a project's types. csharp-ls is installed with it too.",
+        install: {
+            windows: "winget install --id Microsoft.DotNet.SDK.10 -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install --cask dotnet-sdk"
+        },
+        download: "https://dotnet.microsoft.com/download"
+    },
+    jdk: {
+        name: "Java JDK 21", command: "java", args: ["-version"], min: "21",
+        about: "What jdtls runs on. A JDK 21 or later on the PATH.",
+        install: {
+            windows: "winget install --id Microsoft.OpenJDK.21 -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install openjdk@21"
+        },
+        download: "https://learn.microsoft.com/java/openjdk/download"
+    },
+    python: {
+        name: "Python", command: { windows: "python", macos: "python3", linux: "python3" }, args: ["--version"], min: "3.9",
+        about: "Runs Python code, and the environments a project's packages are in.",
+        install: {
+            windows: "winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install python"
+        },
+        download: "https://www.python.org/downloads/"
+    },
+    go: {
+        name: "Go", command: "go", args: ["version"], min: "1.21",
+        about: "The Go toolchain, which gopls is installed with and reads modules through.",
+        install: {
+            windows: "winget install --id GoLang.Go -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install go"
+        },
+        download: "https://go.dev/dl/"
+    },
+    rustup: {
+        name: "Rust (rustup)", command: "rustup", args: ["--version"],
+        about: "Rust's toolchain installer. rust-analyzer is one of its components.",
+        install: {
+            windows: "winget install --id Rustlang.Rustup -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install rustup"
+        },
+        download: "https://rustup.rs/"
+    },
+    cargo: {
+        name: "Cargo", command: "cargo", args: ["--version"], needs: ["rustup"],
+        about: "Rust's build tool, which installs Taplo.",
+        install: "rustup default stable",
+        download: "https://rustup.rs/"
+    },
+    dcompiler: {
+        name: "D compiler", command: { windows: "dmd", macos: "ldc2", linux: "dmd" }, args: ["--version"],
+        about: "serve-d finds D's standard library through it.",
+        install: {
+            windows: "winget install --id DLang.DMD -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install ldc"
+        },
+        download: "https://dlang.org/download.html"
+    },
+    cmake: {
+        name: "CMake", command: "cmake", args: ["--version"],
+        about: "Writes compile_commands.json for a CMake project, which is how clangd knows its flags.",
+        install: {
+            windows: "winget install --id Kitware.CMake -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install cmake"
+        },
+        download: "https://cmake.org/download/"
+    },
+    shellcheck: {
+        name: "ShellCheck", command: "shellcheck", args: ["--version"],
+        about: "Finds bugs in shell scripts. bash-language-server shows what it finds when it's there.",
+        install: {
+            windows: "winget install --id koalaman.shellcheck -e --accept-source-agreements --accept-package-agreements",
+            macos: "brew install shellcheck"
+        },
+        download: "https://github.com/koalaman/shellcheck#installing"
+    }
+};
+
 let servers = {
     csharp: {
         command: "csharp-ls", args: ["--solution", "{solution}"], language: "csharp", extensions: [".cs"],
+        tools: ["dotnet"], project: ["dotnet-project", "dotnet-restore"],
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
         repo: "razzmatazz/csharp-language-server", version: ["--version"],
         // Analyzer rules come from the project's .editorconfig and analyzer packages.
         settings: { csharp: { analyzersEnabled: true } },
-        reload: ["*.csproj", "*.fsproj", "*.sln", "*.slnx", "*.props", "*.targets", "global.json", "project.assets.json", ".editorconfig", "*.globalconfig"],
+        // Not project.assets.json: csharp-ls (0.29 on) restores a project itself as it loads it and watches what it
+        // needs, so a restore's output starting it again only threw away what it was loading and the completion asked
+        // meanwhile. Hex's own restore of a folder never restored (HexLanguages.Restore) goes with it, csharp-ls does it
+        reload: ["*.csproj", "*.fsproj", "*.sln", "*.slnx", "*.props", "*.targets", "global.json", ".editorconfig", "*.globalconfig"],
         needs: ["*.csproj", "*.fsproj", "*.sln", "*.slnx"]
     },
     python: {
         command: "pyright-langserver", args: ["--stdio"], language: "python", extensions: [".py", ".pyi"],
+        tools: ["node"], project: ["python-environment"],
         about: "Python, Microsoft's type checker. Comes with pyright from npm or pip.",
         install: "npm install -g pyright", update: "npm install -g pyright@latest",
         repo: "microsoft/pyright"
@@ -54,6 +161,7 @@ let servers = {
     },
     cpp: {
         command: "clangd", args: [], language: "cpp", extensions: [".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx"],
+        tools_optional: ["cmake"], project: ["compile-commands"],
         about: "C and C++. Comes with LLVM (Homebrew's is keg-only, set where it is: /opt/homebrew/opt/llvm/bin/clangd), or on its own from clangd's releases. On Linux it's the distribution's clangd package.",
         install: {
             windows: "winget install --id LLVM.LLVM -e --accept-source-agreements --accept-package-agreements",
@@ -65,17 +173,60 @@ let servers = {
         },
         repo: "clangd/clangd", version: ["--version"]
     },
+    // The web, three servers that keep out of each other's way: one file goes to one of them by its extension, a page's
+    // own <style> and <script> are the HTML server's (it has CSS and JavaScript inside it), so nothing is said twice.
+    // HTML, CSS and JSON are one install, vscode-langservers-extracted, VS Code's own servers taken out of it.
     typescript: {
-        command: "typescript-language-server", args: ["--stdio"], language: "typescript", extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
-        about: "TypeScript and JavaScript, over the TypeScript compiler, which is installed with it.",
-        install: "npm install -g typescript-language-server typescript", update: "npm install -g typescript-language-server@latest typescript@latest",
-        repo: "typescript-language-server/typescript-language-server", version: ["--version"]
+        // TypeScript 7's compiler is its own language server, native and quick. typescript-language-server wrapped the old
+        // tsserver.js, which 7 hasn't got, and stopped on start saying it found no TypeScript (for a TypeScript 5 on the
+        // machine set command "typescript-language-server" and args ["--stdio"] in the settings)
+        command: "tsc", args: ["--lsp", "--stdio"], language: "typescript", extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+        tools: ["node"], project: ["tsconfig"],
+        // The id a file is opened with is how the server reads it, a .js read as TypeScript was all type errors and JSX in
+        // a .tsx was nothing it knew
+        languages: { tsx: "typescriptreact", js: "javascript", jsx: "javascriptreact", mjs: "javascript", cjs: "javascript" },
+        // It never says what's wrong unless it's asked
+        pull_diagnostics: true,
+        about: "TypeScript and JavaScript, TypeScript 7's own compiler as the server. A project's own tsconfig.json or jsconfig.json is what it checks by.",
+        install: "npm install -g typescript", update: "npm install -g typescript@latest",
+        repo: "microsoft/typescript-go", version: ["--version"],
+        reload: ["tsconfig.json", "jsconfig.json"]
+    },
+    html: {
+        command: "vscode-html-language-server", args: ["--stdio"], language: "html", extensions: [".html", ".htm", ".xhtml"],
+        tools: ["node"],
+        about: "HTML, VS Code's own, with the CSS and JavaScript inside a page. One of the servers in vscode-langservers-extracted.",
+        install: "npm install -g vscode-langservers-extracted", update: "npm install -g vscode-langservers-extracted@latest",
+        repo: "hrsh7th/vscode-langservers-extracted",
+        // It only formats, and only looks into a page's <style> and <script>, when told to as it starts
+        init: { provideFormatter: true, embeddedLanguages: { css: true, javascript: true }, configurationSection: ["html", "css", "javascript"] },
+        settings: {
+            html: { validate: { scripts: true, styles: true }, format: { enable: true, wrapLineLength: 120 }, suggest: { html5: true }, hover: { documentation: true, references: true }, autoClosingTags: true },
+            css: { validate: true },
+            javascript: { validate: { enable: true } }
+        }
+    },
+    css: {
+        command: "vscode-css-language-server", args: ["--stdio"], language: "css", extensions: [".css", ".scss", ".less"],
+        tools: ["node"],
+        languages: { scss: "scss", less: "less" },
+        about: "CSS, SCSS and Less, VS Code's own, colours and all. One of the servers in vscode-langservers-extracted.",
+        install: "npm install -g vscode-langservers-extracted", update: "npm install -g vscode-langservers-extracted@latest",
+        repo: "hrsh7th/vscode-langservers-extracted",
+        init: { provideFormatter: true },
+        settings: {
+            css: { validate: true, completion: { triggerPropertyValueCompletion: true, completePropertyWithSemicolon: true }, hover: { documentation: true, references: true } },
+            scss: { validate: true, completion: { triggerPropertyValueCompletion: true, completePropertyWithSemicolon: true }, hover: { documentation: true, references: true } },
+            less: { validate: true, completion: { triggerPropertyValueCompletion: true, completePropertyWithSemicolon: true }, hover: { documentation: true, references: true } }
+        }
     },
     json: {
         command: "vscode-json-language-server", args: ["--stdio"], language: "json", extensions: [".json"],
+        tools: ["node"],
         about: "JSON, VS Code's own, with the schemas a file names. One of the servers in vscode-langservers-extracted.",
         install: "npm install -g vscode-langservers-extracted", update: "npm install -g vscode-langservers-extracted@latest",
-        repo: "hrsh7th/vscode-langservers-extracted"
+        repo: "hrsh7th/vscode-langservers-extracted",
+        init: { provideFormatter: true }
     },
     markdown: {
         command: "marksman", args: ["server"], language: "markdown", extensions: [".md"],
@@ -84,6 +235,7 @@ let servers = {
     },
     d: {
         command: "serve-d", args: [], language: "d", extensions: [".d", ".di"],
+        tools: ["dcompiler"],
         about: "D, the server code-d is built on, over DCD and D-Scanner. One program, downloaded from its releases (or built with dub) and put on the PATH or set here. It asks to download DCD the first time it starts, which is what it completes with, and finds the standard library through a D compiler on the PATH (dmd or ldc2).",
         repo: "Pure-D/serve-d", version: ["--version"],
         reload: ["dub.json", "dub.sdl"],
@@ -91,11 +243,13 @@ let servers = {
     },
     yaml: {
         command: "yaml-language-server", args: ["--stdio"], language: "yaml", extensions: [".yaml", ".yml"],
+        tools: ["node"],
         about: "YAML, Red Hat's, with schemas by the file's name. It has no releases on GitHub, npm is where its versions are.",
         install: "npm install -g yaml-language-server", update: "npm install -g yaml-language-server@latest"
     },
     go: {
         command: "gopls", args: [], language: "go", extensions: [".go"],
+        tools: ["go"], project: ["go-module"],
         about: "Go, the Go team's own. Installed with the go tool, into the bin folder of GOPATH (put that on the PATH or set where it is here).",
         install: "go install golang.org/x/tools/gopls@latest",
         version: ["version"],
@@ -103,6 +257,7 @@ let servers = {
     },
     java: {
         command: "jdtls", args: [], language: "java", extensions: [".java"],
+        tools: ["jdk"],
         about: "Java, Eclipse's JDT language server, Maven and Gradle projects included. Wants a JDK 21 or later on the PATH. Its download has the jdtls launcher in its bin folder, put that on the PATH or set it here (jdtls.bat on Windows, which wants Python too).",
         install: { macos: "brew install jdtls" },
         update: { macos: "brew upgrade jdtls" },
@@ -110,6 +265,7 @@ let servers = {
     },
     rust: {
         command: "rust-analyzer", args: [], language: "rust", extensions: [".rs"],
+        tools: ["rustup"],
         about: "Rust, rust-analyzer, with cargo for the project. Comes with rustup as a component of the toolchain.",
         install: "rustup component add rust-analyzer", update: "rustup update",
         version: ["--version"],
@@ -117,24 +273,28 @@ let servers = {
     },
     bash: {
         command: "bash-language-server", args: ["start"], language: "shellscript", extensions: [".sh", ".bash"],
+        tools: ["node"], tools_optional: ["shellcheck"],
         about: "Bash and other shell scripts, with ShellCheck's findings when shellcheck is on the PATH as well.",
         install: "npm install -g bash-language-server", update: "npm install -g bash-language-server@latest",
         repo: "bash-lsp/bash-language-server", version: ["--version"]
     },
     toml: {
         command: "taplo", args: ["lsp", "stdio"], language: "toml", extensions: [".toml"],
+        tools: ["cargo"],
         about: "TOML, Cargo.toml and pyproject.toml among them, with schemas by the file's name. Taplo's command line built with its server.",
         install: "cargo install taplo-cli --locked --features lsp", update: "cargo install taplo-cli --locked --features lsp --force",
         repo: "tamasfe/taplo", version: ["--version"]
     },
     docker: {
         command: "docker-langserver", args: ["--stdio"], language: "dockerfile", extensions: [".dockerfile", ".containerfile"],
+        tools: ["node"],
         about: "Dockerfiles and Containerfiles, whatever they're called, by their colouring. Comes from npm.",
         install: "npm install -g dockerfile-language-server-nodejs", update: "npm install -g dockerfile-language-server-nodejs@latest",
         repo: "rcjsuen/dockerfile-language-server-nodejs"
     },
     svelte: {
         command: "svelteserver", args: ["--stdio"], language: "svelte", extensions: [".svelte"],
+        tools: ["node"],
         about: "Svelte components, the script, the styles and the markup. Comes from npm as svelte-language-server.",
         install: "npm install -g svelte-language-server", update: "npm install -g svelte-language-server@latest"
     }

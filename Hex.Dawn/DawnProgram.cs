@@ -27,6 +27,7 @@ public static partial class DawnProgram
     private const string ARGUMENT_FRESH = "--fresh";
     private const string ARGUMENT_MCP = "--mcp";
     private const string ARGUMENT_FACE = "--face";
+    private const string ARGUMENT_NO_AI = Hex.Core.HexAi.ARGUMENT;
 
     // The self test's folders in the temp folder, each run's ending in its process id
     private const string SELF_TEST_FOLDER = "horizon-hex-selftest-";
@@ -59,6 +60,7 @@ public static partial class DawnProgram
     /// <item><c>--fresh</c> starts clean, on the explorer, with no workspace, tabs, backups or last file of before. Settings and keys are read as ever.</item>
     /// <item><c>--mcp</c> puts the MCP server up for agents whatever the settings say (Hex.exe started by a client with it is the bridge to it instead, see McpBridge).</item>
     /// <item><c>--face noon</c> starts in Agentic, <c>--face dawn</c> in the editor, the face the workspace was left in otherwise.</item>
+    /// <item><c>--no-ai</c> starts without any of the agents whatever the settings say, No AI for the one run (see HexAi).</item>
     /// <item><c>--exit</c> closes the editor once its checks or its self-test are done, with an exit code of 1 if anything failed.</item>
     /// </list>
     /// </summary>
@@ -76,6 +78,9 @@ public static partial class DawnProgram
                 TryClear(folder);
         }
     }
+
+    // The self test's part that checks No AI, which has the whole run without the agents
+    internal const string NO_AI_SUITE = "no-ai";
 
     // The folders this run's self test works in, taken away as it ends
     private static string[] selfTestFolders = [];
@@ -141,6 +146,8 @@ public static partial class DawnProgram
             Fresh: args.Contains(ARGUMENT_FRESH),
             Mcp: args.Contains(ARGUMENT_MCP),
             Face: ValueOf(args, ARGUMENT_FACE),
+            // The self test of No AI is a run without the agents, there's no taking them out of one that has them
+            NoAi: args.Contains(ARGUMENT_NO_AI) || (selfTest && ValuesOf(args, ARGUMENT_SELF_TEST).Contains(NO_AI_SUITE, StringComparer.OrdinalIgnoreCase)),
             Suites: ValuesOf(args, ARGUMENT_SELF_TEST),
             // The editor testing itself starts out the same size every time, unless it is told which
             Scale: float.TryParse(ValueOf(args, ARGUMENT_SCALE), CultureInfo.InvariantCulture, out float scale) ? scale : selfTest ? 1.0f : null);

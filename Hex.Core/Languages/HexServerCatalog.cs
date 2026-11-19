@@ -26,6 +26,8 @@ namespace Hex.Core;
 /// The files a server won't run without somewhere in its folder ("*.csproj", "*.sln"), by name or *.extension. Where
 /// there's none it isn't started, csharp-ls stops the moment it starts on a lone file. Empty for a server that runs anywhere.
 /// </param>
+/// <param name="InitializationOptions">What it's told as it's initialized, null for nothing (VS Code's HTML server looking into a page's styles and scripts).</param>
+/// <param name="LanguageIds">The language id of a file by its extension where it isn't <paramref name="LanguageId"/>, ".js" javascript for the TypeScript server. Null for none.</param>
 internal sealed record HexServerEntry(
     string Name,
     string Command,
@@ -39,8 +41,29 @@ internal sealed record HexServerEntry(
     string[]? VersionArguments,
     string[]? Reload = null,
     System.Text.Json.Nodes.JsonObject? Settings = null,
-    string[]? Needs = null)
+    string[]? Needs = null,
+    System.Text.Json.Nodes.JsonObject? InitializationOptions = null,
+    IReadOnlyDictionary<string, string>? LanguageIds = null,
+    bool PullDiagnostics = false,
+    string[]? Tools = null,
+    string[]? ToolsOptional = null,
+    string[]? Project = null)
 {
+    /// <summary>Whether a language id is one this server reads, its own or one of a file's (javascript for the TypeScript server).</summary>
+    public bool Reads(string languageId) =>
+        LanguageId.Equals(languageId, StringComparison.OrdinalIgnoreCase)
+        || (LanguageIds?.Values.Any(id => id.Equals(languageId, StringComparison.OrdinalIgnoreCase)) ?? false);
+
+    /// <summary>The first of its extensions a language id goes with, null for none of them.</summary>
+    public string? ExtensionFor(string languageId)
+    {
+        if (LanguageIds?.FirstOrDefault(pair => pair.Value.Equals(languageId, StringComparison.OrdinalIgnoreCase)) is { Key: { } extension })
+            return extension;
+        return LanguageId.Equals(languageId, StringComparison.OrdinalIgnoreCase)
+            ? Extensions.FirstOrDefault(known => LanguageIds?.ContainsKey(known) != true) ?? Extensions.FirstOrDefault()
+            : null;
+    }
+
     /// <summary>Whether a file is one whose change has the server started again, by its name ("*.csproj" or a whole name).</summary>
     public bool ReloadsFor(string path) => Matches(Reload, path);
 
@@ -99,7 +122,14 @@ internal static partial class HexServerCatalog
                 Texts(server, "version"),
                 Texts(server, "reload"),
                 server.Properties.GetValueOrDefault("settings") is ObjectValue settings ? Json(settings) as System.Text.Json.Nodes.JsonObject : null,
-                Texts(server, "needs")));
+                Texts(server, "needs"),
+                server.Properties.GetValueOrDefault("init") is ObjectValue init ? Json(init) as System.Text.Json.Nodes.JsonObject : null,
+                LanguageIdsOf(server),
+                server.Properties.GetValueOrDefault("pull_diagnostics") is BooleanValue { Value: true },
+                // What it needs, the tools it runs on and is installed with and the checks of its project (HexServerSetup)
+                Texts(server, "tools"),
+                Texts(server, "tools_optional"),
+                Texts(server, "project")));
         }
 
         return entries;
@@ -127,6 +157,18 @@ internal static partial class HexServerCatalog
 
     /// <summary>What language_servers.hor calls the system Hex is running on, windows, macos or linux.</summary>
     public static string SystemName => OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
+
+    // languages: { ".js": "javascript", ".tsx": "typescriptreact" }, the extensions taken the way extensions are written
+    private static Dictionary<string, string>? LanguageIdsOf(ObjectValue server)
+    {
+        if (server.Properties.GetValueOrDefault("languages") is not ObjectValue languages)
+            return null;
+        var ids = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (extension, id) in languages.Properties)
+            if (id is StringValue { Value.Length: > 0 } text)
+                ids[extension.StartsWith('.') ? extension : "." + extension] = text.Value;
+        return ids.Count > 0 ? ids : null;
+    }
 
     private static string[]? Texts(ObjectValue of, string key) =>
         of.Properties.GetValueOrDefault(key) is ListValue list ? [.. list.Items.OfType<StringValue>().Select(item => item.Value)] : null;

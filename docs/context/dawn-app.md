@@ -38,6 +38,7 @@ Scope: `hex/Hex.Dawn/` except `Testing/` and `Tests/` (HexTestExplorer lives in 
 | `--fresh` | `Fresh` | no workspace/tabs/backups restore |
 | `--window` | (none) | never hand over to a running Dawn |
 | `--mcp` | `Mcp` | MCP server up for this run |
+| `--no-ai` | `NoAi` | No AI for this run (`HexAi.Force`, also in `Program.Main` so Dusk's selector has no Agentic); setting `no_ai`. `HexAi.Off` gates the agents panel, Noon, chats, agent ticks, Agents menu, agent extensions (`HexExtensionCatalog.IsAgentSystem`) and agent MCP tools (`AgentsOnly`). `--selftest no-ai` implies it |
 
 Env: `HEX_PROFILE=<ms>` writes slow ticks and per-step cost (`Shell/HexProfiler.cs`), `HEX_CONSOLE=on` (debug console, Program.cs).
 
