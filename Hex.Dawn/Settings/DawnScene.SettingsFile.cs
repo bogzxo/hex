@@ -26,11 +26,9 @@ internal sealed partial class DawnScene
     // Whether the { } said yet that Ctrl+, goes back, once a run is enough
     private bool settingsBackSaid;
 
-    // What watches the file for a change from outside, the file it watches, and when it last heard of one
-    private FileSystemWatcher? settingsWatcher;
+    // What watches the file for a change from outside, and the file it watches
+    private readonly HexFileWatch settingsWatch = new();
     private string? settingsWatched;
-    private long settingsChangedAt;
-    private int settingsChanged;
 
     /// <summary>
     /// The settings file in a tab like any other, VS Code's Open User Settings (JSON), for whoever would rather type than
@@ -230,26 +228,13 @@ internal sealed partial class DawnScene
         if (Path.GetDirectoryName(path) is not { } folder || !Directory.Exists(folder))
             return;
 
-        try
-        {
-            var watcher = new FileSystemWatcher(folder, Path.GetFileName(path)) { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size };
-            watcher.Changed += SettingsFileTouched;
-            watcher.Created += SettingsFileTouched;
-            watcher.Renamed += SettingsFileTouched;
-            watcher.EnableRaisingEvents = true;
-            settingsWatcher = watcher;
-        }
-        catch (Exception e)
-        {
-            Say(Said("settings_window.no_watch", ("name", Path.GetFileName(path)), ("reason", e.Message)), error: true);
-        }
+        if (settingsWatch.Watch(folder, Path.GetFileName(path), NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size) is { } reason)
+            Say(Said("settings_window.no_watch", ("name", Path.GetFileName(path)), ("reason", reason)), error: true);
     }
 
     private void StopWatchingSettings()
     {
-        settingsWatcher?.Dispose();
-        settingsWatcher = null;
-        Interlocked.Exchange(ref settingsChanged, 0);
+        settingsWatch.Stop();
 
         // What it had wrong goes with it, it isn't the settings file any more
         if (settingsWatched is { } was && settingsProblems.ContainsKey(was))
@@ -261,30 +246,13 @@ internal sealed partial class DawnScene
         settingsWatched = null;
     }
 
-    // On a thread of the pool, noted for the editor's thread to reload once the burst settles
-    private void SettingsFileTouched(object sender, FileSystemEventArgs e)
-    {
-        Interlocked.Exchange(ref settingsChangedAt, Stopwatch.GetTimestamp());
-        Interlocked.Exchange(ref settingsChanged, 1);
-        Horizon.Engine.GameEngine.Instance?.WindowManager.Wake();
-    }
-
     /// <summary>A change to the file from outside reloaded once it has settled. Every tick, nothing to do most of them.</summary>
     private void UpdateSettingsFile()
     {
         UpdateWorkspaceSettings();
         UpdateWorkspaceSettingsFile();
-        if (Volatile.Read(ref settingsChanged) == 0)
-            return;
-
-        if (Stopwatch.GetElapsedTime(Interlocked.Read(ref settingsChangedAt)).TotalSeconds < SETTINGS_SETTLE)
-        {
-            Horizon.Engine.GameEngine.Instance?.WindowManager.RequestFrames();
-            return;
-        }
-
-        Interlocked.Exchange(ref settingsChanged, 0);
-        TakeInSettingsFile();
+        if (settingsWatch.TakeSettled(SETTINGS_SETTLE))
+            TakeInSettingsFile();
     }
 
     /// <summary>A document saved, the settings read again when it's the settings file or the folder's.</summary>
@@ -412,10 +380,8 @@ internal sealed partial class DawnScene
 
     // What watches the workspace settings file, the folder it watches (its .hex, or the folder .hex would be made in while there's
     // none) and for what, the file as Hex last read or wrote it, and when a change was last heard of
-    private FileSystemWatcher? workspaceWatcher;
+    private readonly HexFileWatch workspaceWatch = new();
     private string? workspaceWatched, workspaceWatchedFor, workspaceKnown;
-    private long workspaceChangedAt;
-    private int workspaceChanged;
 
     /// <summary>
     /// The workspace settings file in a tab, VS Code's Open Workspace Settings (JSON). Created first with an empty editor
@@ -470,52 +436,21 @@ internal sealed partial class DawnScene
 
         workspaceWatched = folder;
         workspaceWatchedFor = watchFor;
-        try
-        {
-            var watcher = new FileSystemWatcher(folder, watchFor) { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size };
-            watcher.Changed += WorkspaceSettingsTouched;
-            watcher.Created += WorkspaceSettingsTouched;
-            watcher.Deleted += WorkspaceSettingsTouched;
-            watcher.Renamed += WorkspaceSettingsTouched;
-            watcher.EnableRaisingEvents = true;
-            workspaceWatcher = watcher;
-        }
-        catch (Exception e)
-        {
-            Say(Said("settings_window.no_watch", ("name", HexSettings.WORKSPACE_FILE), ("reason", e.Message)), error: true);
-        }
+        if (workspaceWatch.Watch(folder, watchFor, NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size, deletes: true) is { } reason)
+            Say(Said("settings_window.no_watch", ("name", HexSettings.WORKSPACE_FILE), ("reason", reason)), error: true);
     }
 
     private void StopWatchingWorkspaceSettings()
     {
-        workspaceWatcher?.Dispose();
-        workspaceWatcher = null;
+        workspaceWatch.Stop();
         workspaceWatched = workspaceWatchedFor = null;
-        Interlocked.Exchange(ref workspaceChanged, 0);
-    }
-
-    // On a thread of the pool, noted for the editor's thread to reload once the burst settles
-    private void WorkspaceSettingsTouched(object sender, FileSystemEventArgs e)
-    {
-        Interlocked.Exchange(ref workspaceChangedAt, Stopwatch.GetTimestamp());
-        Interlocked.Exchange(ref workspaceChanged, 1);
-        Horizon.Engine.GameEngine.Instance?.WindowManager.Wake();
     }
 
     /// <summary>A change to the workspace settings file from outside reloaded once it has settled. Every tick, nothing to do most of them.</summary>
     private void UpdateWorkspaceSettingsFile()
     {
-        if (Volatile.Read(ref workspaceChanged) == 0)
-            return;
-
-        if (Stopwatch.GetElapsedTime(Interlocked.Read(ref workspaceChangedAt)).TotalSeconds < SETTINGS_SETTLE)
-        {
-            Horizon.Engine.GameEngine.Instance?.WindowManager.RequestFrames();
-            return;
-        }
-
-        Interlocked.Exchange(ref workspaceChanged, 0);
-        TakeInWorkspaceSettingsFile();
+        if (workspaceWatch.TakeSettled(SETTINGS_SETTLE))
+            TakeInWorkspaceSettingsFile();
     }
 
     /// <summary>The workspace settings file Hex just wrote, known so the watch doesn't read Hex's own save back in, and watched now it's there.</summary>
