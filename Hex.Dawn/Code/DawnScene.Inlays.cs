@@ -58,7 +58,7 @@ internal sealed partial class DawnScene
         if (ReferenceEquals(code.Highlighter, CodeLanguages.Hidl))
         {
             inlaysWorking = true;
-            string text = code.Text;
+            string text = CodeText(code);
             InBackground("inlays", () => (IReadOnlyList<UICodeInlay>)Hex.Core.HidlInlays.Of(text), Take, quiet: true);
         }
         else if (languages.AskInlays(of, Take))

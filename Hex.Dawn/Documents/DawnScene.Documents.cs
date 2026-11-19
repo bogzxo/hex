@@ -570,6 +570,7 @@ internal sealed partial class DawnScene
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
         if (crumbFoldersFor.Of == gone) crumbFoldersFor = default;
+        if (ReferenceEquals(codeTextKept.Of, gone.Editor?.Document)) ForgetCodeText();
         if (peeking?.From == gone) peeking = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;

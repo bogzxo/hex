@@ -80,7 +80,7 @@ internal sealed partial class DawnScene
                 return;
             semanticsWorking = true;
             ownSemanticsFor = (of, version);
-            string text = editor.Text;
+            string text = CodeText(editor);
             InBackground("semantics", () => (IReadOnlyList<Horizon.UI.Scripting.SemanticSpan>)own(text), found =>
             {
                 semanticsWorking = false;
