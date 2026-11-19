@@ -140,10 +140,6 @@ internal sealed partial class HexRunning
         repl.Write(coloured + "\n");
     }
 
-    private void FitConsole()
-    {
-    }
-
     // The lines --console asked for, run one at a time once the values of the file are in
     private Queue<string>? consoleAskedFor;
 

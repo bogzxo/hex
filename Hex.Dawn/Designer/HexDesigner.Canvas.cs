@@ -236,6 +236,10 @@ internal sealed partial class HexDesigner
     /// </summary>
     private void HoldHover(UIComponent? under)
     {
+        // The same thing under a pointer that stood still, every tick, nothing to let go of and take again
+        if (under is null ? heldHovers.Count == 0 : heldHovers.Count > 0 && heldHovers[0] == under && heldHovers[^1].Parent is null)
+            return;
+
         foreach (var held in heldHovers)
             held.HoverHeld = false;
         heldHovers.Clear();
