@@ -17,7 +17,7 @@ let agents_harness = compositor.button({ parent: agents_head, anchor: "right", p
 
 // The model, the tokens, what it cost and how long the turn took, quietly under the head
 let agents_meta = compositor.panel({ parent: agents_view, anchor: "top", pivot: "top", pos: vec(0, -34), size: vec(0, 20), fill: "horizontal", padding: vec(4, 0, 4, 0), clip: true });
-let agents_subtitle = compositor.label({ parent: agents_meta, anchor: "left", pivot: "left", align: "left", text: "", text_scale: 0.115, dim: true });
+let agents_subtitle = compositor.label({ parent: agents_meta, anchor: "left", pivot: "left", align: "left", text: "", text_scale: 0.125, dim: true });
 
 let agents_body = compositor.panel({ parent: agents_view, fill: "both", padding: vec(4, 58, 4, 132), clip: true });
 let agents_scroll = compositor.scroll({ parent: agents_body, fill: "both", padding: vec(0, 2, 8, 6) });

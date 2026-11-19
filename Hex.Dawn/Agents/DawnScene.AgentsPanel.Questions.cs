@@ -25,7 +25,7 @@ internal sealed partial class DawnScene
             Color = accent with { W = waiting ? 0.12f : 0.05f }
         };
         var stack = card.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 5 });
-        stack.Add(Text($"[color:{HexColour(accent)}]$(question)[/color] {UIRichText.Literal(entry.Text)}", 0.14f));
+        stack.Add(Text($"[color:{HexColour(AccentText(skin))}]$(question)[/color] {UIRichText.Literal(entry.Text)}", 0.14f));
         string[] choices = entry.Choices ?? [];
 
         if (!waiting)
@@ -78,7 +78,7 @@ internal sealed partial class DawnScene
         box.OnSubmitted = _ => Own();
         own.Add(new Button { Label = Said("agents_panel.question_send"), Icon = "send", Size = new Vector2(90, 24), LabelScale = 0.125f, Animated = false, OnPressed = Own });
 
-        Label left = stack.Add(Text(QuestionLeft(entry), 0.12f, dim: true));
+        Label left = stack.Add(Text(QuestionLeft(entry), 0.125f, dim: true));
         agentsQuestionTimes[entry] = left;
         return card;
     }

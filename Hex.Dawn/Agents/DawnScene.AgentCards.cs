@@ -25,7 +25,7 @@ internal sealed partial class DawnScene
     private const float CONTEXT_BAR_FOOT = 9.0f;
 
     // The size of a card's small lines and of its name, a step up from what read too small at 100% scale
-    private const float CARD_SMALL = 0.12f, CARD_NAME = 0.155f;
+    private const float CARD_SMALL = 0.125f, CARD_NAME = 0.155f;
 
     // How thick the bar of a card's context is, thin enough to sit under its lines without being another line
     private const float CONTEXT_BAR = 3.0f;
@@ -79,7 +79,7 @@ internal sealed partial class DawnScene
         string system = profile?.Name ?? chat.Agent;
         Vector4 tint = AgentTint(chat.Agent, skin);
         // A pill of the system's letters in its own colour, the same badge as the card's state across from it
-        root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.085f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1) });
+        root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1) });
 
         var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
         // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
@@ -98,8 +98,8 @@ internal sealed partial class DawnScene
 
         if (closable)
         {
-            var close = root.Add(new Button { Icon = "close", Style = "button_flat", Size = new Vector2(20, 20), Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(-4, -CARD_TOP + 3), Animated = false, Tooltip = Said("agents_panel.chat_close") });
-            close.OnPressed = () => CloseAgentChat(chat);
+            var close = root.Add(new Button { Icon = "close", Style = "button_flat", Size = new Vector2(24, 24), Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(-3, -CARD_TOP + 5), Animated = false, Tooltip = Said("agents_panel.chat_close") });
+            close.OnPressed = () => AskCloseAgentChat(chat);
         }
 
         // What the card was last written from, its words made again only when one of these moved. Every refresh made its
@@ -221,8 +221,24 @@ internal sealed partial class DawnScene
         return letters.ToUpperInvariant();
     }
 
-    /// <summary>The blue of something going on, the same in every look, a theme's selection colour is its accent in some.</summary>
-    internal static readonly Vector4 RUNNING_BLUE = new(0.38f, 0.62f, 1.0f, 1.0f);
+    /// <summary>
+    /// The blue of something going on, not a theme's selection colour, which is its accent in some. A deeper one on a light
+    /// look, where the bright one was under 3:1 on white.
+    /// </summary>
+    internal static Vector4 RunningBlue(UISkin? skin) => skin?.Palette.LightField == true ? new Vector4(0.169f, 0.384f, 0.784f, 1.0f) : new Vector4(0.38f, 0.62f, 1.0f, 1.0f);
+
+    /// <summary>
+    /// The look's accent as words or an icon are drawn in it: the accent itself on a light look, lifted towards white on a
+    /// dark one, where Noon's teal was under 4.5:1 on the ground. The accent itself stays the colour of a fill.
+    /// </summary>
+    internal static Vector4 AccentText(UISkin? skin)
+    {
+        Vector4 accent = skin?.Palette.Accent ?? new Vector4(0.29f, 0.69f, 0.71f, 1.0f);
+        return skin?.Palette.LightField == true ? accent with { W = 1 } : Vector4.Lerp(accent with { W = 1 }, Vector4.One, 0.35f);
+    }
+
+    // The running blue of the look on now
+    private Vector4 RUNNING_BLUE => RunningBlue(compositor.Skin);
 
     // The colour of an agent system's badge, its own as its extension says it (hex.agent's colour, colour_light on a light
     // theme), so it reads as that system wherever it's shown. One that says none has one of the theme's, the same every

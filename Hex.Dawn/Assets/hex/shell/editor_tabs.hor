@@ -132,7 +132,7 @@ let play_button = compositor.button({
 
 let run_target_button = compositor.button({
     parent: toolbar,
-    size: vec(18, 28),
+    size: vec(24, 28),
     tooltip: "@run_target.tip",
     hover: "none",
     hover_amount: 1.5,
@@ -150,7 +150,8 @@ let configuration_button = compositor.button({
     hover: "none",
     hover_amount: 1.5,
     hover_time: 0.08,
-    label: "Debug",
+    // Said in code, "Config: Debug" and the arrow of its menu (DawnScene.ShowRunTarget)
+    label: "",
     lbl_scale: 0.13,
     style: "button_flat",
     animated: false,

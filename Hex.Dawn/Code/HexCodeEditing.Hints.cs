@@ -271,7 +271,7 @@ internal sealed partial class HexCodeEditing
         foreach (var (caption, box) in new (string, UIComponent)[] { ("Hex", hex), ("R", red), ("G", green), ("B", blue), (context.Strings.Said("code_hints.colour_alpha_short"), opacity) })
         {
             var column = fields.Add(new StackPanel { Spacing = 3.0f, Anchor = Origin.Bottom, Pivot = Origin.Bottom });
-            column.Add(new Label { Text = caption, TextScale = 0.12f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+            column.Add(new Label { Text = caption, TextScale = 0.125f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
             column.Add(box);
         }
 
@@ -279,7 +279,7 @@ internal sealed partial class HexCodeEditing
         var others = code.Swatches.Where(other => other != swatch).Select(other => other.Color).Distinct().Take(SWATCH_CHOICES).ToList();
         if (others.Count > 0)
         {
-            shown.Body.Add(new Label { Text = context.Strings.Said("code_hints.colour_in_file"), TextScale = 0.12f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
+            shown.Body.Add(new Label { Text = context.Strings.Said("code_hints.colour_in_file"), TextScale = 0.125f, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
             var chips = shown.Body.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Anchor = Origin.Left, Pivot = Origin.Left });
             foreach (Vector4 other in others)
             {

@@ -164,6 +164,9 @@ internal sealed partial class DawnScene
     /// another tab opens it. It was the height set to the tabs' and back in one go, a snap, and the editor over it a tick
     /// behind, which flashed a gap or the two over each other.
     /// </summary>
+    // The filter's clear button, found once
+    private Button? problemsClear;
+
     private void FoldPanel(bool fold)
     {
         panelFolded = fold;
@@ -253,6 +256,12 @@ internal sealed partial class DawnScene
         bool fold = settings.PanelCollapsed;
         if (fold != panelFolded || !panelFoldSettled)
             FoldPanel(fold);
+
+        // The cross that empties the filter only while there's something in it to empty
+        problemsClear ??= layout.Get<Button>("problems_clear");
+        bool filtered = problemsFilter.Text.Length > 0;
+        if (problemsClear.Visible != filtered)
+            problemsClear.Visible = filtered;
 
         panelRowsWait -= dt;
         if (!bottom.Visible || panelRowsWait > 0.0f)

@@ -166,12 +166,35 @@ internal sealed partial class DawnScene
         // The x of the window asks first when something isn't saved, see AskBeforeClosing
         Hex.Shell.HexModes.OnClose(Hex.Shell.HexMode.Dawn, () =>
         {
-            if (closeConfirmed || !anyUnsaved)
+            if (closeConfirmed)
+                return true;
+
+            // As a persistent process the editor is put away on its own thread, after the question if there is one
+            if (!anyUnsaved && !PersistentProcess)
                 return true;
 
             closeAsked = true;
+            Engine.WindowManager.Wake();
             return false;
         });
+    }
+
+    /// <summary>
+    /// Whether closing the window puts the editor away and leaves Hex asleep with its device and window (DawnResident), so
+    /// the next start is a new editor in a moment. The persistent_process setting, only for a Hex other starts can find
+    /// (it has the pipe) and never a self test. File, Exit quits for real.
+    /// </summary>
+    private bool PersistentProcess => DawnResident.Possible && Remote.Owned && !options.SelfTest &&
+        (settings.PersistentProcess || System.Environment.GetEnvironmentVariable("HEX_PERSISTENT") == "1");
+
+    // File, Exit asked, Hex quits for real whatever PersistentProcess says
+    private bool quitting;
+
+    /// <summary>Closes Hex for real, asking first about anything unsaved, rather than putting it to sleep the way the x does.</summary>
+    private void Quit()
+    {
+        quitting = true;
+        AskBeforeClosing();
     }
 
     /// <summary>Called every tick, keeps up what the window's thread reads and asks the question it asked for.</summary>
@@ -181,6 +204,13 @@ internal sealed partial class DawnScene
         foreach (var open in documents)
             unsaved |= open.Modified || open.CodeEdited;
         anyUnsaved = unsaved;
+
+        // Made as Hex woke (DawnResident), the window it was asleep in comes back with this on it
+        if (DawnResident.Waking)
+        {
+            DawnResident.Waking = false;
+            Engine.WindowManager.BringToFront();
+        }
 
         if (closeAsked)
         {
@@ -301,10 +331,19 @@ internal sealed partial class DawnScene
 
     private void QuitNow()
     {
+        // An update going in quits for real, the new Hex takes over
+        bool restarting = restartInto is not null;
         // A failed update handoff leaves the editor and its backups available.
         if (!StartRestart()) return;
         // What wasn't saved was saved or thrown away when asked, there's nothing to bring back next time
         Backups.DropAll();
+
+        if (!restarting && !quitting && PersistentProcess)
+        {
+            Sleep();
+            return;
+        }
+
         debugger.Quit();
         closeConfirmed = true;
         Engine.WindowManager.Close();

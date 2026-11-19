@@ -168,6 +168,7 @@ internal sealed partial class DawnScene
         ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
+        ("noon-states", "Agentic's states: the fleet in groups, a request pinned over the box, closing a working chat asking first, an error's Try again, a plan's Go", TestNoonStates),
         ("noon-fleet", "Agentic's fleet, a family as a block with the ones started a step in, the totals, and the family closed with its top", TestNoonFleet),
         ("noon-mail", "Messages between a family's agents through hex_agent_message, in Details and in the family's window, filtered, hundreds with few rows made", TestNoonMail),
         ("noon-mail-turn", "An instruction for an agent whose turn is over but whose process is still going is kept once and starts its next turn once, what the person types is kept as well", TestNoonMailTurn),

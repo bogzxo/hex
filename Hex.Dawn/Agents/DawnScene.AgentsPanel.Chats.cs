@@ -38,7 +38,7 @@ internal sealed partial class DawnScene
         agentsListHead = agentsList.Add(new Button
         {
             Style = "button_flat", Align = Origin.Left, Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal,
-            Size = new Vector2(0, CHATS_HEAD), LabelScale = 0.115f, Animated = false
+            Size = new Vector2(0, CHATS_HEAD), LabelScale = 0.125f, Animated = false
         });
         agentsListHead.OnPressed = () =>
         {
@@ -209,7 +209,9 @@ internal sealed partial class DawnScene
     {
         agentsList.Position = new Vector2(0, -(agentsHeadHeight - 2.0f));
         // The card sits on the bottom, the harness's line that was under it being in the head now
-        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f);
+        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f + AgentsWaitStripTall);
+        if (agentsWaitStrip is not null)
+            agentsWaitStrip.Position = new Vector2(0, agentsComposeTall + 6.0f);
     }
 
     private string ChatName(int id) => ChatById(id) is { } chat ? $"#{id} {chat.Shown}" : $"#{id}";
@@ -237,7 +239,7 @@ internal sealed partial class DawnScene
         menu.AddSeparator();
         // Said with its subagents only when it has some, they go with it
         bool started = agentChats.Any(each => each.Parent == chat.Id);
-        menu.Add(Said(started ? "agents_panel.chat_close_all" : "agents_panel.chat_close"), () => CloseAgentChat(chat), icon: "close");
+        menu.Add(Said(started ? "agents_panel.chat_close_all" : "agents_panel.chat_close"), () => AskCloseAgentChat(chat), icon: "close");
         return menu;
     }
 
@@ -260,6 +262,29 @@ internal sealed partial class DawnScene
         agentChat = chat;
         agentDraftContext = null;
         agentsInput.Text = string.Empty;
+    }
+
+    /// <summary>
+    /// A chat closed when the person says so: at once when nothing in it is working or waiting, otherwise once they've said
+    /// yes to how many agents that stops, closing can't be undone.
+    /// </summary>
+    private void AskCloseAgentChat(HexAgentChat chat)
+    {
+        List<HexAgentChat> family = FamilyOf(chat);
+        int working = family.Count(each => each.Running || each.Pending.Any());
+        if (working == 0)
+        {
+            CloseAgentChat(chat);
+            return;
+        }
+
+        string yes = Said("agents_panel.close_go");
+        string text = working == 1 ? Said("agents_panel.close_text_one") : Said("agents_panel.close_text", ("count", working.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Context.Windows.Ask(Said("agents_panel.close_title"), text, [Said("git.discard_no"), yes], answer =>
+        {
+            if (answer == yes && agentChats.Contains(chat))
+                CloseAgentChat(chat);
+        }, risky: yes);
     }
 
     /// <summary>A chat closed, its agent stopped, and the agents it started closed with it.</summary>

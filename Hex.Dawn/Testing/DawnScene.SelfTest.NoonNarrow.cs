@@ -63,6 +63,9 @@ internal sealed partial class DawnScene
         // Another chat picked
         test.Click(() => chrome.ToWorld(noonFleetBack.Bounds.Center));
         test.Settle(0.5f);
+        // Under a group's heading at 200% it can be past the fleet's foot, where a person scrolls to it
+        test.Run(() => noonFleetScroll.ScrollIntoView(noonFleetRows.Children[FleetShown().FindIndex(each => each.Chat == picked)]));
+        test.Settle(0.4f);
         test.Click(() => CardAt(picked!));
         test.Settle(0.4f);
         test.Check("noon narrow: picking another chat gives the chat back, that one in it with the box's keyboard", () =>

@@ -73,6 +73,14 @@ internal sealed partial class DawnScene
         try
         {
             UIComponent row = RowOf(chat, entry);
+            // The last row of a turn that's over has the turn's line under it, how long it took, its calls and its files
+            if (TurnFooter(chat, entry) is { } footer)
+            {
+                var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 6 };
+                both.Add(row);
+                both.Add(footer);
+                row = both;
+            }
             if (fits.Count > 0)
                 agentRowFits[row] = fits;
             // Right-clicked, what it says can be copied, or opened as text to pick any part of it out
@@ -145,12 +153,22 @@ internal sealed partial class DawnScene
         float available = Math.Max(80, width - (compact ? 0 : 80));
         agentsHistory.Position = new Vector2(-34, compact ? -32 : 0);
         agentsNew.Position = new Vector2(0, compact ? -32 : 0);
+        // The harness goes down a line with them, and off the head where there's no room beside the turn's line for it.
+        // Left where it was it sat over the provider. In Agentic it's the fleet's own line that says it
+        bool harness = !compact || width >= 260;
+        agentsHarness.Position = new Vector2(-68, compact ? -32 : 0);
+        agentsHarness.Visible = harness && Face != Hex.Shell.HexFace.Noon;
+        // Agentic's list has its own New over it, a second + over the chat said the same thing twice
+        agentsNew.Visible = Face != Hex.Shell.HexFace.Noon;
         agentsMeta.Fill = UIFill.None;
         agentsMeta.Anchor = Origin.TopLeft;
         agentsMeta.Pivot = Origin.TopLeft;
-        agentsMeta.Size = new Vector2(Math.Max(0, width - (compact ? 70 : 0)), 20);
+        agentsMeta.Size = new Vector2(Math.Max(0, width - (compact ? (agentsHarness.Visible ? 104 : 70) : 0)), 20);
         agentsMeta.Position = new Vector2(0, compact ? -40 : -34);
-        agentsHeadHeight = compact ? 74 : 58;
+        // In Agentic with Details beside it, the turn's line said again what Details says, the chat goes up into its room
+        bool told = Face == Hex.Shell.HexFace.Noon && noonContext is { Visible: true };
+        agentsMeta.Visible = !told;
+        agentsHeadHeight = compact ? 74 : told ? 38 : 58;
         PlaceAgentsList();
         agentsChips.Size = new Vector2(available, 32);
         HexAgentProfile? picked = agents.FirstOrDefault(agent => agent.Id == current);
@@ -199,6 +217,9 @@ internal sealed partial class DawnScene
     private readonly Dictionary<string, (long Checked, string Program, bool Missing)> agentPrograms = [];
     private const long AGENT_PROGRAM_EVERY = 15_000;
 
+    // What the looks on the pool found, by agent, waiting to be taken in on the editor's thread
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Program, bool Missing)> agentProgramsLooked = new();
+
     private enum AgentStates { Ready, Running, Missing }
 
     private AgentStates StateOf(HexAgentProfile agent)
@@ -214,10 +235,27 @@ internal sealed partial class DawnScene
         long now = System.Environment.TickCount64;
         // Looked for again every fifteen seconds, soon enough to see one installed meanwhile. Each look goes through every
         // folder of PATH and the system's PATH as it is now, and every two seconds it was most of what the panel made
-        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program || now - cached.Checked > AGENT_PROGRAM_EVERY)
+        // A look that came back from the pool since, taken in
+        if (agentProgramsLooked.TryRemove(agent.Id, out var looked) && agentPrograms.TryGetValue(agent.Id, out var had) && had.Program == looked.Program)
+            agentPrograms[agent.Id] = had with { Missing = looked.Missing };
+
+        if (!agentPrograms.TryGetValue(agent.Id, out var cached) || cached.Program != program)
         {
+            // The first look is here and now, the panel has to say something
             cached = (now, program, HexAgentProcess.Find(program) is null);
             agentPrograms[agent.Id] = cached;
+        }
+        else if (now - cached.Checked > AGENT_PROGRAM_EVERY)
+        {
+            // Every look after on the pool, what it was standing until it comes back. Here it was a tick of 28 ms and 194 KB
+            // every fifteen seconds with nothing else going on, the worst tick of an idle Hex
+            agentPrograms[agent.Id] = cached with { Checked = now };
+            string id = agent.Id;
+            _ = Task.Run(() =>
+            {
+                agentProgramsLooked[id] = (program, HexAgentProcess.Find(program) is null);
+                Engine.WindowManager.RequestFrames();
+            });
         }
         return cached.Missing ? AgentStates.Missing : AgentStates.Ready;
     }
@@ -297,6 +335,9 @@ internal sealed partial class DawnScene
             // of nothing so the rows still go one to an entry. The first row goes by what the whole group is
             bool member = InToolGroup(chat, i);
             int version = member ? entry.Version : Groupable(entry) ? ToolGroupKey(chat, i) : entry.Version;
+            // A row made again once its turn is over, for the turn's line under it, or once it no longer ends it
+            if (!member)
+                version = version * 2 + (EndsTurn(chat, i) ? 1 : 0);
             if (i < agentRowsShown.Count)
             {
                 if (agentRowsShown[i].Version == version)
@@ -436,7 +477,7 @@ internal sealed partial class DawnScene
             browse.Pivot = Origin.Left;
             browse.Primary = true;
             agentsRows.Add(browse);
-            agentsRows.Add(Text(Said("agents_panel.draft_hint"), 0.12f, dim: true));
+            agentsRows.Add(Text(Said("agents_panel.draft_hint"), 0.125f, dim: true));
             return;
         }
         agentsRows.Add(Text(Said("agents_panel.welcome_title"), 0.17f));
@@ -489,8 +530,17 @@ internal sealed partial class DawnScene
             case HexAgentEntryKind.Error:
             {
                 Vector4 error = skin?.Palette.Error ?? new Vector4(1, 0.35f, 0.35f, 1);
+                // The words in the text colour, readable on the tint, the icon saying it's an error, and what to do about it
+                // when it's what the chat ended on
                 var card = new Panel { Fill = UIFill.Horizontal, Color = error with { W = 0.1f }, Radius = 6, Padding = new UIEdges(9, 6, 9, 6) };
-                card.Add(Text($"[color:{HexColour(error)}]{UIRichText.Literal(entry.Text)}[/color]", 0.125f));
+                var inside = card.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
+                inside.Add(Text($"[color:{HexColour(error)}]$(error)[/color] {UIRichText.Literal(entry.Text)}", 0.135f));
+                if (chat.Entries.LastOrDefault() == entry)
+                {
+                    var actions = inside.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Size = new Vector2(0, 26), Anchor = Origin.Left, Pivot = Origin.Left });
+                    actions.Add(new Button { Label = Said("agents_panel.error_retry"), Icon = "refresh", Style = "button_flat", Size = new Vector2(104, 26), LabelScale = 0.125f, Animated = false, OnPressed = () => { if (agentChat == chat) RetryAgent(); } });
+                    actions.Add(new Button { Label = Said("agents_panel.error_copy"), Icon = "copy", Style = "button_flat", Size = new Vector2(108, 26), LabelScale = 0.125f, Animated = false, OnPressed = () => { UICompositor.Copy(entry.Text); Say(Said("agents_panel.error_copied")); } });
+                }
                 return card;
             }
 
@@ -575,9 +625,9 @@ internal sealed partial class DawnScene
         // Held by Hex for the agent, it can go now rather than when the agent next says something, or back to the box
         if (entry.Queued && IsHeld(entry))
         {
-            var actions = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Size = new Vector2(0, 22) });
-            actions.Add(new Button { Label = Said("agents_panel.send_now"), Icon = "send", Style = "button_flat", Size = new Vector2(96, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => SendHeldNow(entry) });
-            actions.Add(new Button { Label = Said("agents_panel.edit_short"), Icon = "edit", Style = "button_flat", Size = new Vector2(64, 22), LabelScale = 0.115f, Animated = false, OnPressed = () => EditHeld(entry) });
+            var actions = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Size = new Vector2(0, 24) });
+            actions.Add(new Button { Label = Said("agents_panel.send_now"), Icon = "send", Style = "button_flat", Size = new Vector2(104, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => SendHeldNow(entry) });
+            actions.Add(new Button { Label = Said("agents_panel.edit_short"), Icon = "edit", Style = "button_flat", Size = new Vector2(70, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => EditHeld(entry) });
         }
 
         if (entry.Queued || entry.Unheard)
@@ -620,13 +670,14 @@ internal sealed partial class DawnScene
         var holder = new Panel { Fill = UIFill.Horizontal, Color = hover with { W = hover.W * (entry.Open ? 0.75f : 0.45f) }, Radius = 8, Padding = new UIEdges(0, 0, 0, 2) };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
         Vector4? toolColour = HexAgentRows.ToolColour(entry.ToolName ?? string.Empty, skin?.Palette);
-        // A blue gutter down its left while it runs, as a group of calls has
-        if (entry.State == HexAgentToolState.Running)
-            holder.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(3, 24), Position = new Vector2(1, -3), Radius = 1.5f, Color = RUNNING_BLUE });
+        // How it's going said the one way every tool row says it: a thin outline round the one running or the one that
+        // failed, nothing on one that went. A bar down one side and a line along the bottom was two colour codes at once,
+        // and a long turn a column of green
+        holder.Outline = ToolOutline(entry.State, skin);
         Button head = stack.Add(new Button
         {
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },
-            IconColor = entry.State == HexAgentToolState.Done ? toolColour : skin?.ControlTextColor,
+            IconColor = entry.State switch { HexAgentToolState.Done => toolColour, HexAgentToolState.Failed => skin?.Palette.Error, _ => skin?.ControlTextColor },
             LabelColor = toolColour,
             Style = "button_flat",
             Align = Origin.Left,
@@ -704,16 +755,21 @@ internal sealed partial class DawnScene
             }
         }
 
-        // Kept in from the bubble's round corners
-        holder.Add(new Panel { Anchor = Origin.Bottom, Pivot = Origin.Bottom, Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Padding = new UIEdges(8, 0, 8, 0), Color = Vector4.Zero })
-            .With(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 2), Radius = 1, Color = ToolStateColour(entry.State, skin) });
         return holder;
     }
+
+    /// <summary>The outline of a tool's row or group, the running blue while it runs, the error's red once it failed, none once it went.</summary>
+    internal static Vector4 ToolOutline(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
+    {
+        HexAgentToolState.Running => RunningBlue(skin) with { W = 0.55f },
+        HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.55f },
+        _ => Vector4.Zero
+    };
 
     /// <summary>The colour of the line under a tool's bubble, blue while it runs, green when it went, red when it failed.</summary>
     internal static Vector4 ToolStateColour(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
     {
-        HexAgentToolState.Running => RUNNING_BLUE with { W = 0.9f },
+        HexAgentToolState.Running => RunningBlue(skin) with { W = 0.9f },
         HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.9f },
         _ => (skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.75f }
     };

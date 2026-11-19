@@ -13,6 +13,17 @@ internal enum HexAgentLimitState { Ok, Warning, Hit }
 /// </summary>
 internal sealed record HexAgentLimit(string Kind, HexAgentLimitState State, double Used, DateTimeOffset? Resets, string? Message)
 {
+    private static long said;
+
+    /// <summary>
+    /// How much of it is gone as the bars show it: all of it once the system refused, whatever share it said (Claude Code
+    /// leaves the share out of a refusal, or says the last it had, and the bar sat short of full with nothing left).
+    /// </summary>
+    public double Used { get; init; } = State == HexAgentLimitState.Hit ? Math.Max(Used, 1.0) : Used;
+
+    /// <summary>The order it was said in, across every chat, so the account's latest word on a limit is the one shown.</summary>
+    public long Said { get; } = Interlocked.Increment(ref said);
+
     /// <summary>The state from the words the systems use for it, allowed, allowed_warning, warning, rejected, hit.</summary>
     public static HexAgentLimitState StateOf(string? said) => said?.ToLowerInvariant() switch
     {
@@ -53,12 +64,17 @@ internal static class HexAgentLimits
     };
 
     /// <summary>
-    /// The latest of each kind of limit any of some chats was told, the one most used when several were, since a plan's
-    /// limits are the account's and every chat on it sees the same. Session first, then the week.
+    /// The latest of each kind of limit any of some chats was told, since a plan's limits are the account's and every chat
+    /// on it sees the same, so the last said is the truest. Not the most used or the worst of them: a chat idle since an
+    /// earlier window kept saying that window's share, or its refusal after the window had reset. A limit whose window has
+    /// reset since it was said starts again empty. Session first, then the week.
     /// </summary>
-    public static HexAgentLimit[] Across(IEnumerable<HexAgentChat> chats) =>
+    public static HexAgentLimit[] Across(IEnumerable<HexAgentChat> chats) => Across(chats, DateTimeOffset.Now);
+
+    internal static HexAgentLimit[] Across(IEnumerable<HexAgentChat> chats, DateTimeOffset now) =>
         [.. chats.SelectMany(chat => chat.Limits.Values).GroupBy(limit => limit.Kind)
-            .Select(kind => kind.OrderByDescending(limit => limit.State).ThenByDescending(limit => limit.Used).First())
+            .Select(kind => kind.MaxBy(limit => limit.Said)!)
+            .Select(limit => limit.Resets is { } resets && resets <= now ? limit with { State = HexAgentLimitState.Ok, Used = 0, Resets = null, Message = null } : limit)
             .OrderBy(limit => Order(limit.Kind)).ThenBy(limit => limit.Kind, StringComparer.Ordinal)];
 
     /// <summary>When a limit resets said against now, in 40m, in 3h 10m, or the day and time when it's further off.</summary>

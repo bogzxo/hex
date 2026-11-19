@@ -15,9 +15,12 @@ internal sealed partial class DawnScene
     private string? renderFallbackSaid;
 
     /// <summary>Puts the settings' render scale in force and has the Render scale now row kept up with what it comes to.</summary>
+    // Heard from the window's scaler, which outlives an editor put away (DawnScene.Resident)
+    private Action<Horizon.Rendering.Scaling.RenderScalePlan>? renderPlanHeard;
+
     private void BuildRenderScale()
     {
-        Engine.WindowManager.Scaling.PlanChanged += _ => renderPlanChanged = true;
+        Engine.WindowManager.Scaling.PlanChanged += renderPlanHeard = _ => renderPlanChanged = true;
         ApplyRenderScale();
     }
 

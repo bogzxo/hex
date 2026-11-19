@@ -214,8 +214,8 @@ internal sealed partial class DawnScene
 
         AddTerminalCommands();
 
-        // Through the window manager, on the window's thread, asking first like its x does
-        commands.Add("File/exit", Said("menus.exit"), () => Engine.WindowManager.Close(), "Alt+F4", "close");
+        // Closed for real, asking first about anything unsaved, where the window's x only hides a Hex that stays running
+        commands.Add("File/exit", Said("menus.exit"), Quit, "Alt+F4", "close");
     }
 
     /// <summary>

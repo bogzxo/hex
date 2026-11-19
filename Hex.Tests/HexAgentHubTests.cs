@@ -121,6 +121,30 @@ public sealed class HexAgentHubTests
     }
 
     [Fact]
+    public void TheAccountsLimitIsTheLatestSaidFullWhenRefusedAndEmptyOnceReset()
+    {
+        var now = DateTimeOffset.UnixEpoch.AddDays(20000);
+        var old = new HexAgentChat(1, "claude_code");
+        var fresh = new HexAgentChat(2, "claude_code");
+
+        // An idle chat's higher share from before doesn't hide the latest word
+        old.Limited(new HexAgentLimit("seven_day", HexAgentLimitState.Ok, 0.90, now.AddDays(1), null));
+        fresh.Limited(new HexAgentLimit("seven_day", HexAgentLimitState.Ok, 0.40, now.AddDays(1), null));
+        Assert.Equal(0.40, HexAgentLimits.Across([old, fresh], now)[0].Used);
+
+        // Refused without a share, or with the last one it had, the bar is full
+        fresh.Limited(new HexAgentLimit("five_hour", HexAgentLimitState.Hit, -1, now.AddHours(1), null));
+        Assert.Equal(1.0, HexAgentLimits.Across([old, fresh], now)[0].Used);
+        fresh.Limited(new HexAgentLimit("five_hour", HexAgentLimitState.Hit, 0.93, now.AddHours(1), null));
+        Assert.Equal(1.0, HexAgentLimits.Across([old, fresh], now)[0].Used);
+
+        // Its window reset since, it starts again empty
+        HexAgentLimit after = HexAgentLimits.Across([old, fresh], now.AddHours(2))[0];
+        Assert.Equal(HexAgentLimitState.Ok, after.State);
+        Assert.Equal(0, after.Used);
+    }
+
+    [Fact]
     public void AChatKeepsItsLatestRowsAndTheRestGoToItsFileWhichGoesWithIt()
     {
         string folder = Path.Combine(Path.GetTempPath(), "hex-history-" + Guid.NewGuid().ToString("N")[..8]);

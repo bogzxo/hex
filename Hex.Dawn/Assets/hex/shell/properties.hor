@@ -26,7 +26,8 @@ let inspector_title = compositor.label({
     text: "@properties.title",
     text_scale: 0.14,
     bold: true,
-    dim: true,
+    // The same head as the side bar's on the left, 0.14, bold and not dim
+    dim: false,
 });
 
 let hide_right = compositor.button({
@@ -35,7 +36,7 @@ let hide_right = compositor.button({
     pivot: "right",
     icon: "chevron-right",
     style: "button_flat",
-    size: vec(26, 22),
+    size: vec(26, 24),
     lbl_scale: 0.13,
     animated: false,
     tooltip: "@properties.hide",

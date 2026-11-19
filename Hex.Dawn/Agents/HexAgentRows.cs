@@ -150,7 +150,8 @@ internal static class HexAgentRows
             "file-code" => palette.Syntax.Property,
             "search" or "symbol-class" or "list-tree" => palette.Syntax.Type,
             "diff" => palette.Syntax.Number,
-            "terminal" => palette.Syntax.Keyword,
+            // A call's lavender, not the keyword's pink, which in Solstice sat next to the error's red and read as a failure
+            "terminal" => palette.Syntax.Call,
             "checklist" or "notebook" => palette.Syntax.Reference,
             _ => palette.Accent
         };

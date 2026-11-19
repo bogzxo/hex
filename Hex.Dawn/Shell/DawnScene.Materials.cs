@@ -105,6 +105,22 @@ internal sealed partial class DawnScene
         if (welcome is not null)
             welcome.Color = card;
 
+        // A picture's view the code's ground, its size in the quiet text, and the bars floating over the code (find, the
+        // debugger's) the look's raised panel with its edge. They were a fixed blue-grey, out of every look but the
+        // first one Hex had
+        if (imageView is not null)
+        {
+            imageView.Color = codeScroll.Color;
+            imageInfo.Color = skin.Palette.DimText;
+        }
+        foreach (Panel floating in (ReadOnlySpan<Panel?>)[codeEditing?.findBar, debugBar])
+        {
+            if (floating is null)
+                continue;
+            floating.Color = skin.Palette.Control with { W = 1.0f };
+            floating.Outline = skin.BorderColor;
+        }
+
         // The terminals of the panel under the editor round cornered like Dusk's, inside the card
         if (terminalPanel is not null)
             terminalPanel.PaneRadius = flush ? 0.0f : TERMINAL_RADIUS;

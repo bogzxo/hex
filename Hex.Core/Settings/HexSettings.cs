@@ -64,6 +64,15 @@ internal sealed partial class HexSettings
     public bool ReopenLast;
 
     /// <summary>
+    /// Persistent Process: closing the window puts the editor away and leaves Hex asleep with its graphics device and its
+    /// window hidden, so starting it again makes the editor in a moment. File, Exit quits for real.
+    /// </summary>
+    public bool PersistentProcess;
+
+    /// <summary>Whether the persistent process starts asleep with the system, so Hex is ready from the first start.</summary>
+    public bool PersistentAtLogin;
+
+    /// <summary>
     /// The picture behind the code (see DawnScene.Backdrop), whether it's there, which (empty for the girl that comes with
     /// Hex), how big against its pixels, how far from the bottom right corner it is, along and up, and how much of it shows.
     /// </summary>

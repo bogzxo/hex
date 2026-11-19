@@ -150,6 +150,8 @@ public static class EditorSettingsCatalog
         new("visual_studio_keys", HexText.Get("settings_catalog.visual_studio_keys_title"), UIFormKind.Flag, HexText.Get("settings_catalog.visual_studio_keys_help"), CODE),
 
         new("reopen_last", HexText.Get("settings_catalog.reopen_last_title"), UIFormKind.Flag, HexText.Get("settings_catalog.reopen_last_help"), FILES),
+        new("persistent_process", HexText.Get("settings_catalog.persistent_process_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_process_help"), FILES),
+        new("persistent_at_login", HexText.Get("settings_catalog.persistent_at_login_title"), UIFormKind.Flag, HexText.Get("settings_catalog.persistent_at_login_help"), FILES),
         new("trim_whitespace", HexText.Get("settings_catalog.trim_whitespace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.trim_whitespace_help"), FILES),
         new("final_newline", HexText.Get("settings_catalog.final_newline_title"), UIFormKind.Flag, HexText.Get("settings_catalog.final_newline_help"), FILES),
         new("auto_save", HexText.Get("settings_catalog.auto_save_title"), UIFormKind.Flag, HexText.Get("settings_catalog.auto_save_help"), FILES),
@@ -316,6 +318,8 @@ public static class EditorSettingsCatalog
         ["mcp_server"] = Values.Bool(true),
         ["no_ai"] = Values.Bool(false),
         ["reopen_last"] = Values.Bool(false),
+        ["persistent_process"] = Values.Bool(false),
+        ["persistent_at_login"] = Values.Bool(false),
         ["trim_whitespace"] = Values.Bool(true),
         ["final_newline"] = Values.Bool(false),
         ["auto_save"] = Values.Bool(false),

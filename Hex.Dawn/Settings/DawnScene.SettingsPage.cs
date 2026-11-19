@@ -355,6 +355,8 @@ internal sealed partial class DawnScene
             "backdrop_wrap_margin" => new NumberValue(hex.settings.BackdropWrapMargin),
             "wrap_flow" => new NumberValue(hex.settings.WrapFlow),
             "reopen_last" => Values.Bool(hex.settings.ReopenLast),
+            "persistent_process" => Values.Bool(hex.settings.PersistentProcess),
+            "persistent_at_login" => Values.Bool(hex.settings.PersistentAtLogin),
             "effects" => new StringValue(hex.settings.Effects),
             "effect_sparks" => Values.Bool(hex.settings.EffectSparks),
             "effect_motion" => Values.Bool(hex.settings.EffectMotion),
@@ -669,6 +671,19 @@ internal sealed partial class DawnScene
                     break;
                 case ("reopen_last", BooleanValue reopen):
                     settings.ReopenLast = reopen.Value;
+                    break;
+                case ("persistent_process", BooleanValue persistent):
+                    settings.PersistentProcess = persistent.Value;
+                    // Starting with the system is the persistent process's, it goes when that does
+                    if (!persistent.Value && settings.PersistentAtLogin)
+                        settings.PersistentAtLogin = false;
+                    HexStartup.Apply(settings.PersistentProcess && settings.PersistentAtLogin);
+                    break;
+                case ("persistent_at_login", BooleanValue atLogin):
+                    settings.PersistentAtLogin = atLogin.Value;
+                    if (atLogin.Value)
+                        settings.PersistentProcess = true;
+                    HexStartup.Apply(settings.PersistentProcess && settings.PersistentAtLogin);
                     break;
                 case ("canvas_handles", BooleanValue handles):
                     settings.CanvasHandles = handles.Value;

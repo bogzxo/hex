@@ -26,7 +26,14 @@ internal static class HexModeSwitch
             return;
         bool accent = skin.CornerRadius > 0.0f && HexLooks.Flush(skin);
         foreach (Button button in row.Children.OfType<Button>())
+        {
             button.Primary = accent && button.Selected;
+            // On a dark look the words on the accent are the ground's colour, white on Solstice's orange was 3.6:1 and
+            // the dark ground on it 4.9:1. A light look's white on its deeper accent reads already
+            System.Numerics.Vector4? ink = button.Primary && !skin.Palette.LightField ? skin.Palette.Field with { W = 1.0f } : null;
+            button.LabelColor = ink;
+            button.IconColor = ink;
+        }
     }
 
     public static bool RestoreFocus(UICompositor compositor, UIComponent? previous)

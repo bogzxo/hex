@@ -39,12 +39,14 @@ internal sealed partial class HexDesigner
             button.OnPressed = pressed;
         }
 
-        Tool("move_up", "Move up the tree, earlier among its siblings (Ctrl+Up)", () => MoveSelected(-1));
-        Tool("move_down", "Move down the tree, later among its siblings (Ctrl+Down)", () => MoveSelected(1));
-        Tool("move_out", "Move out of the container it is in (Ctrl+Left)", () => MoveSelectedAcross(inwards: false));
-        Tool("move_in", "Move into the container before it (Ctrl+Right)", () => MoveSelectedAcross(inwards: true));
-        Tool("duplicate", "Make a copy next to it (Ctrl+D)", DuplicateSelected);
-        Tool("remove", "Delete it and everything in it (Del)", DeleteAll);
+        // Their tooltips in the strings with the rest of Hex's words
+        string Tip(string key) => context.Strings.Said("designer_tools." + key);
+        Tool("move_up", Tip("move_up"), () => MoveSelected(-1));
+        Tool("move_down", Tip("move_down"), () => MoveSelected(1));
+        Tool("move_out", Tip("move_out"), () => MoveSelectedAcross(inwards: false));
+        Tool("move_in", Tip("move_in"), () => MoveSelectedAcross(inwards: true));
+        Tool("duplicate", Tip("duplicate"), DuplicateSelected);
+        Tool("remove", Tip("remove"), DeleteAll);
     }
 
     /// <summary>What the file on screen can do, at the right end of the tabs.</summary>

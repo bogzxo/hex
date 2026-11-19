@@ -223,8 +223,52 @@ internal sealed partial class DawnScene
                 }
                 ContextMenu.Show(chrome, thinkingButton.Bounds.PointAt(Origin.TopLeft), menu);
             };
+            taken += room;
+        }
+
+        // What the agent may do without asking, out of the gear's menu, where nobody saw whether the next turn would ask or
+        // just act. Its word when there's room, the shield always, a warning in its place when it asks for nothing at all
+        if (options.FirstOrDefault(option => PERMISSION_KEYS.Contains(option.Key)) is { Choices.Length: > 0 } permission)
+        {
+            string value = AgentOptionValue(extension, permission.Key);
+            string current = value.Length == 0 ? Said("agents_panel.model_default")
+                : permission.Choices.FirstOrDefault(choice => choice.Value == value).Label ?? value;
+            bool open = UNGUARDED.Contains(value);
+            float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
+            float room = MathF.Max(32, MathF.Min(MathF.Min(wide, 140), agentsCompose.Bounds.Width - context.Size.X - settings.Size.X - taken - 48));
+            Button permissionButton = agentsOptions.Add(Picker(room >= 80 ? current : string.Empty, open ? "warning" : "shield", false,
+                Said("agents_panel.permission_tip", ("mode", current)), () => { }));
+            permissionButton.Size = new System.Numerics.Vector2(room, 32);
+            // A button's label is plain text, the warning's colour is its own, not markup in the words
+            if (open && Skin is { } skin)
+            {
+                permissionButton.LabelColor = skin.Palette.Warning;
+                permissionButton.IconColor = skin.Palette.Warning;
+            }
+            agentsPermission = permissionButton;
+            permissionButton.OnPressed = () =>
+            {
+                var menu = new Menu(permission.Title);
+                foreach (var (choiceValue, label) in permission.Choices)
+                {
+                    string selected = choiceValue;
+                    menu.Add(label, () =>
+                    {
+                        SetAgentOption(extension, permission.Key, selected);
+                        agentsOptionsDrawn = string.Empty;
+                    }, icon: UNGUARDED.Contains(choiceValue) ? "warning" : string.Empty).IsChecked = () => AgentOptionValue(extension, permission.Key) == selected;
+                }
+                ContextMenu.Show(chrome, permissionButton.Bounds.PointAt(Origin.TopLeft), menu);
+            };
         }
     }
+
+    // The option keys agent systems name what may be done without asking by, and the values that ask for nothing at all
+    private static readonly string[] PERMISSION_KEYS = ["permission_mode", "permissionMode", "mode", "sandbox", "approval_policy"];
+    private static readonly string[] UNGUARDED = ["bypassPermissions", "anything", "danger-full-access", "never"];
+
+    // The permission picker as last drawn, for the tests
+    private Button? agentsPermission;
 
     private static Button Picker(string label, string icon, bool selected, string tooltip, Action pressed) => new()
     {

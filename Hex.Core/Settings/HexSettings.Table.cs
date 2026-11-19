@@ -55,6 +55,8 @@ internal sealed partial class HexSettings
         Speed("middle_scroll_speed", settings => settings.MiddleScrollSpeed, (settings, value) => settings.MiddleScrollSpeed = value),
         Flag("canvas_handles", settings => settings.CanvasHandles, (settings, value) => settings.CanvasHandles = value),
         Flag("reopen_last", settings => settings.ReopenLast, (settings, value) => settings.ReopenLast = value),
+        Flag("persistent_process", settings => settings.PersistentProcess, (settings, value) => settings.PersistentProcess = value),
+        Flag("persistent_at_login", settings => settings.PersistentAtLogin, (settings, value) => settings.PersistentAtLogin = value),
         Flag("backdrop", settings => settings.BackdropOn, (settings, value) => settings.BackdropOn = value),
         Flag("backdrop_wrap", settings => settings.BackdropWrap, (settings, value) => settings.BackdropWrap = value),
         Flag("backdrop_terminal", settings => settings.BackdropTerminal, (settings, value) => settings.BackdropTerminal = value),

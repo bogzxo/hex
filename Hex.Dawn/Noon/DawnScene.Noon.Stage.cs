@@ -816,7 +816,38 @@ internal sealed partial class DawnScene
         noonPlanRows.Add(ContextText(Said("noon.plan_progress", ("done", done.ToString(CultureInfo.InvariantCulture)), ("all", all.ToString(CultureInfo.InvariantCulture))), dim: true));
         // Steps done are good news the whole way, green, not the context's green to amber to red
         noonPlanRows.Add(ContextBar((float)done / all, MathF.Max(120, noonPlan.Bounds.Width - 30), Skin?.Palette.Success ?? new Vector4(0.35f, 0.75f, 0.45f, 1.0f)));
-        Vector4 accent = Skin?.Palette.Accent ?? new Vector4(0.29f, 0.69f, 0.71f, 1.0f);
+
+        // A plan the agent stopped on, steps still to do and none being done, waits for the person's go: asking for a plan
+        // tells it to. Go says so in the chat, Change the plan puts words in the box to be finished
+        if (agentChat is { Running: false } chat && plan.Items.Any(item => item.State == HexPlanState.Pending) && !plan.Items.Any(item => item.State == HexPlanState.Doing))
+        {
+            // Greyed out where nothing can be sent, an agent system not installed
+            bool can = CanComposeAgent();
+            noonPlanRows.Add(ContextText(Said("noon.plan_waiting"), dim: true));
+            var go = noonPlanRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 30), Anchor = Origin.Left, Pivot = Origin.Left });
+            go.Add(new Button
+            {
+                Label = Said("noon.plan_go"), Icon = "play", Primary = true, Enabled = can, Size = new Vector2(84, 28), LabelScale = 0.13f, Animated = false,
+                OnPressed = () =>
+                {
+                    if (agentChat != chat || chat.Running)
+                        return;
+                    ShowStage(NoonStage.Chat);
+                    agentsInput.Text = Said("noon.plan_go_text");
+                    SendToAgent();
+                }
+            });
+            go.Add(new Button
+            {
+                Label = Said("noon.plan_change"), Icon = "edit", Style = "button_flat", Enabled = can, Size = new Vector2(150, 28), LabelScale = 0.13f, Animated = false,
+                OnPressed = () =>
+                {
+                    ShowStage(NoonStage.Chat);
+                    agentsInput.Text = Said("noon.plan_change_text");
+                    agentsInput.Focus();
+                }
+            });
+        }
         string dim = HexColour(Skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1.0f));
         foreach (HexPlanItem item in plan.Items)
         {
@@ -824,7 +855,7 @@ internal sealed partial class DawnScene
             string line = item.State switch
             {
                 HexPlanState.Done => $"[color:{HexColour(Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f))}]$(pass-filled)[/color] [color:{dim}]{text}[/color]",
-                HexPlanState.Doing => $"[color:{HexColour(accent)}]$(loading~spin)[/color] [b]{text}[/b]",
+                HexPlanState.Doing => $"[color:{HexColour(AccentText(Skin))}]$(loading~spin)[/color] [b]{text}[/b]",
                 HexPlanState.Blocked => $"$(warning) {text}",
                 HexPlanState.Dropped => $"$(close) [color:{dim}]{text}[/color]",
                 _ => $"$(circle-large-outline) {text}"

@@ -78,6 +78,10 @@ internal sealed partial class DuskScene : Scene
 
         root = layout.Get<StackPanel>("root");
         top = layout.Get<TitleBar>("top");
+#if DEBUG
+        // A Debug build's mark is the grey Hex as it is, not tinted the look's accent, as Dawn's is
+        top.IconColor = System.Numerics.Vector4.One;
+#endif
         menu = layout.Get<MenuBar>("menu");
         panel = layout.Get<TerminalPanel>("terminal");
         statusBar = layout.Get<StatusBar>("status");

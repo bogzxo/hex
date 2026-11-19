@@ -66,6 +66,10 @@ internal sealed partial class DawnScene
                 test.Check($"noon looks: {named}, Agentic is in the look's Noon theme where it has one", () =>
                     NoonThemeOf(UISkins.Find(settings.EditorSkin), settings.EditorTheme) is not { } noon || compositor.Skin?.Theme == noon);
                 string shot = $"noon-{look.Name.Replace(' ', '-').ToLowerInvariant()}-{scale * 100:0}";
+                // A scale or a look changed takes a few frames to be drawn at, the first change of the run the longest.
+                // Taken straight after the checks, the picture was of a frame from before it, an empty canvas
+                test.Run(() => Engine.WindowManager.RequestFrames());
+                test.Settle(0.5f);
                 test.Run(() =>
                 {
                     if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)

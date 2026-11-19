@@ -123,7 +123,7 @@ public sealed partial class HexAgentsPanelTests : IDisposable
         Assert.Equal(palette.Syntax.Property, HexAgentRows.ToolColour("mcp__hex__hex_read", palette));
         Assert.Equal(palette.Syntax.Type, HexAgentRows.ToolColour("hex_search", palette));
         Assert.Equal(palette.Syntax.Number, HexAgentRows.ToolColour("hex_edit", palette));
-        Assert.Equal(palette.Syntax.Keyword, HexAgentRows.ToolColour("hex_terminal_read", palette));
+        Assert.Equal(palette.Syntax.Call, HexAgentRows.ToolColour("hex_terminal_read", palette));
         Assert.Null(HexAgentRows.ToolColour("web_search", palette));
         Assert.Equal("a b c", HexAgentRows.OneLine("a\n  b\tc", 40));
         Assert.Equal("abcdefg...", HexAgentRows.OneLine("abcdefghijklmnop", 10));

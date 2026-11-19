@@ -18,6 +18,9 @@ internal sealed partial class DawnScene
     // Until when the line says the last task failed, in the ticks of Environment.TickCount64
     private long horizonFailedUntil;
 
+    // The failure the status bar was last told of, by when its red ends
+    private long horizonFailureSaid;
+
     // Made once, they're asked every tick. Work that goes without saying so isn't on the line, and of the rest the
     // newest that knows how far it got is the one the line follows
     private static readonly Func<WorkItem, bool> seenWork = item => !item.Key.StartsWith(QUIET_BACKGROUND, StringComparison.Ordinal);
@@ -89,6 +92,16 @@ internal sealed partial class DawnScene
 
         HexHorizonState state = running ? HexHorizonState.Running
             : System.Environment.TickCount64 < Volatile.Read(ref horizonFailedUntil) ? HexHorizonState.Failed : HexHorizonState.Idle;
+
+        // Red is said in words too, once a failure, on the status bar where it stays until it's pressed (which opens the
+        // output with why). The line going red was all there was, gone in eight seconds and nothing for anybody who can't
+        // tell red from the rest
+        long failedUntil = Volatile.Read(ref horizonFailedUntil);
+        if (state == HexHorizonState.Failed && failedUntil != horizonFailureSaid)
+        {
+            horizonFailureSaid = failedUntil;
+            Say(Said("status_bar.work_failed"), error: true);
+        }
 
         // As far as whatever knows how far it is has got, a task in a terminal never does. With none that knows the line
         // is full and fainter, something is going and that's all that can be said

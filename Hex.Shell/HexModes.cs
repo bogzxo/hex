@@ -141,6 +141,18 @@ public static class HexModes
         make = null;
     }
 
+    /// <summary>
+    /// Forgets what a mode's scene left with this (its step in the background, its say in closing), as the scene is thrown
+    /// away with the program going on, so nothing holds on to it or calls it.
+    /// </summary>
+    public static void Forget(HexMode mode)
+    {
+        background.Remove(mode);
+        closing.Remove(mode);
+        if (closing.Count == 0 && GameEngine.Instance?.WindowManager is { } window)
+            window.CloseRequested = null;
+    }
+
     /// <summary>The other mode.</summary>
     public static HexMode Other => Current == HexMode.Dawn ? HexMode.Dusk : HexMode.Dawn;
 

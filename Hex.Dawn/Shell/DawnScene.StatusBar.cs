@@ -62,7 +62,16 @@ internal sealed partial class DawnScene
         bool Design() => LayoutTools;
 
         problemsItem = statusBar.Add("$(error) 0  $(warning) 0", pressed: () => ShowPanel(PROBLEMS_PAGE), tooltip: Said("status_bar.problems_tip"));
-        messageItem = statusBar.Add(string.Empty, pressed: () => ShowPanel(OUTPUT_PAGE), tooltip: Said("status_bar.message_tip"));
+        // Pressed, the output with all of it, and an error that was waiting for the press let go of
+        messageItem = statusBar.Add(string.Empty, pressed: () =>
+        {
+            ShowPanel(OUTPUT_PAGE);
+            if (saidError)
+            {
+                saidError = false;
+                saidAt = System.Environment.TickCount64 - SAID_FOR;
+            }
+        }, tooltip: Said("status_bar.message_tip"));
 
         // How much is selected, first of the right side so it grows out into the gap. After Ln and Col it pushed them and
         // everything before them a hundred pixels to the left as a selection was made and back again as it went
@@ -130,7 +139,8 @@ internal sealed partial class DawnScene
         UpdateReferenceLenses();
         UpdateSemantics();
 
-        if (messageItem.Text.Length > 0 && System.Environment.TickCount64 - saidAt > SAID_FOR)
+        // An error stays until it's pressed or something else is said, gone after ten seconds like the rest nobody saw it
+        if (messageItem.Text.Length > 0 && !saidError && System.Environment.TickCount64 - saidAt > SAID_FOR)
         {
             messageItem.Text = string.Empty;
             messageItem.Color = null;

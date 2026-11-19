@@ -182,7 +182,11 @@ internal sealed partial class DawnScene : ITerminalHostUi
     {
         terminals.Update(dt);
 
-        if (!terminalFontSet && Horizon.Graphics.GraphicsDevice.IsAvailable)
+        // Only once a terminal is wanted, its page up or a tab made (a task, an agent's), not as Hex starts. Built at the
+        // first tick it was half a second of a first launch for a terminal nobody had opened, the code font's box drawing,
+        // blocks and braille made into its field
+        bool wanted = terminalPanel.Tabs.Count > 0 || (PanelOpen && bottom.Selected == CONSOLE_PAGE);
+        if (!terminalFontSet && wanted && Horizon.Graphics.GraphicsDevice.IsAvailable)
         {
             terminalFontSet = true;
             terminalPanel.Font = UIFont.Shared(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM, terminal: true);

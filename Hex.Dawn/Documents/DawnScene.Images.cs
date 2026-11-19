@@ -40,7 +40,7 @@ internal sealed partial class DawnScene
         imagePicture = layout.Get<Image>("image_picture");
         imageInfo = layout.Get<Label>("image_info");
         documentClosed += FreePicture;
-        Engine.WindowManager.Exclusive += _ => FreeClosedPictures();
+        Engine.WindowManager.Exclusive += picturesFreed = _ => FreeClosedPictures();
     }
 
     /// <summary>

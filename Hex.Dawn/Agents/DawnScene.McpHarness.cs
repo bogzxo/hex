@@ -18,6 +18,9 @@ internal sealed partial class DawnScene
 
     private HexCodeIndex? harness;
 
+    // Its cache written as the process ends, taken off as the editor is put away (DawnScene.Resident)
+    private EventHandler? harnessExit;
+
     // The workspace's folders for the index, written on the editor's thread and read on the pipe's
     private volatile string[] harnessRoots = [];
 
@@ -34,7 +37,7 @@ internal sealed partial class DawnScene
                 return made;
 
             harness = new HexCodeIndex(() => harnessRoots, options.SelfTest ? null : Path.Combine(TerminalFiles.UserFolder, "harness"));
-            AppDomain.CurrentDomain.ProcessExit += (_, _) => harness?.SaveCache();
+            AppDomain.CurrentDomain.ProcessExit += harnessExit = (_, _) => harness?.SaveCache();
             return harness;
         }
     }

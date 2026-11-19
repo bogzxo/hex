@@ -36,6 +36,7 @@ let icon = compositor.image({
     parent: brand,
     anchor: "left",
     pivot: "left",
+    // The build's own mark, grey in a Debug build (DawnScene.MakeWelcome puts HexIdentity.ICON here)
     file: "Assets/hex_icon.png",
     size: vec(72, 72),
 });

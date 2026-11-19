@@ -34,7 +34,7 @@ internal sealed partial class DawnScene
     private void DrawAgentsItem()
     {
         int working = agentChats.Count(chat => chat.Running), wanting = AgentsWanting();
-        string said = (working > 0 ? $"$(loading~spin) {Said("agents_item.working", ("count", working.ToString(System.Globalization.CultureInfo.InvariantCulture)))}" : $"$(robot) {Said("agents_item.agents", ("count", agentChats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}")
+        string said = (working > 0 ? $"$(loading~spin) {Said("agents_item.working", ("count", working.ToString(System.Globalization.CultureInfo.InvariantCulture)))}" : $"$(robot) {Said(agentChats.Count == 1 ? "agents_item.agents_one" : "agents_item.agents", ("count", agentChats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}")
             + (wanting > 0 ? $"  $(bell-dot) {wanting}" : string.Empty);
         if (said == agentsItemSaid)
             return;

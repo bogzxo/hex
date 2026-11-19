@@ -236,7 +236,7 @@ internal sealed partial class DawnScene
     private void ClearAgentChat()
     {
         if (agentChat is { } chat)
-            CloseAgentChat(chat);
+            AskCloseAgentChat(chat);
     }
 
     /// <summary>
@@ -315,6 +315,7 @@ internal sealed partial class DawnScene
         }
         DrawAgentImages();
         FitAgentsCompose();
+        DrawAgentsLatest();
         DrawAgentSlash();
         DrawAgentMention();
 
@@ -360,6 +361,7 @@ internal sealed partial class DawnScene
         DrawAgentOptions();
         TickRunningTimes();
         DrawAgentsHead();
+        DrawAgentsWaiting();
         DrawHarnessSaved();
 
         // The dots wait out a quiet moment by the clock, not by the chat changing

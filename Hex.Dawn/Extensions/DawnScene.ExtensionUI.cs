@@ -39,7 +39,8 @@ internal sealed partial class DawnScene : IExtensionScreens
 
     void IExtensionScreens.TitleNote(HexExtension by, string text)
     {
-        titleNote = text;
+        // A :shortcode: of an emoji is text the title bar has no picture for, it showed as ":cry:", left out with the gap before it
+        titleNote = System.Text.RegularExpressions.Regex.Replace(text, @"\s*:[a-z0-9_+\-]+:", string.Empty).Trim();
         titleNoteBy = by;
         tabsDirty = true;
     }

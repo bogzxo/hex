@@ -61,12 +61,16 @@ internal sealed partial class DawnScene
             ? Said("run_target.run_tip", ("name", chosen.Label), ("detail", chosen.Detail))
             : tools ? Said("toolbar.play_tip") : FileRunTip();
         play.Visible = chosen is not null || Runnable(document);
+        // The arrow stays with code, it's how something else is picked to run when the file has nothing. The configuration
+        // only beside a Run button, a file with nothing to run showed a word, Debug, that read as a button to debug with
+        bool running = !tools && play.Visible;
         layout.Get<Button>("run_target_button").Visible = !tools;
 
-        // Debug or Release beside them, what builds and runs build (DawnScene.SolutionMenus)
+        // Debug or Release beside them, what builds and runs build (DawnScene.SolutionMenus), said as the configuration
+        // it is with the arrow of a menu, not the bare word
         var configuration = layout.Get<Button>("configuration_button");
-        configuration.Visible = !tools;
-        configuration.Label = explorer.workspace.Configuration;
+        configuration.Visible = running;
+        configuration.Label = Said("solution.configuration_label", ("name", explorer.workspace.Configuration)) + " $(chevron-down)";
         ShowLaunchProfile(chosen, tools);
         layout.Get<UIComponent>("tools_rule3").Visible = play.Visible || !tools;
     }

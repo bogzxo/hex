@@ -16,7 +16,7 @@ let left = compositor.stack({
 let tree_head = compositor.panel({
     parent: left,
     fill: "horizontal",
-    size: vec(0, 22),
+    size: vec(0, 24),
     color: vec(0, 0, 0, 0),
 });
 
@@ -25,7 +25,7 @@ let tree_title = compositor.label({
     anchor: "left",
     pivot: "left",
     text: "@side.explorer",
-    text_scale: 0.15,
+    text_scale: 0.14,
     bold: true,
     dim: false,
 });
@@ -35,21 +35,21 @@ let tree_switch_view = compositor.button({
     parent: tree_head,
     anchor: "right",
     pivot: "right",
-    pos: vec(-96, 0),
-    size: vec(22, 22),
+    pos: vec(-100, 0),
+    size: vec(24, 24),
     icon: "list-tree",
     tooltip: "@solution.switch_tip",
     style: "button_flat",
     animated: false,
 });
 
-// The explorer's buttons, VS Code's, a new file and a new folder where the selection is, every folder closed, and the files read again
+// The explorer's buttons, 24 square a pitch of 25 apart, VS Code's, a new file and a new folder where the selection is, every folder closed, and the files read again
 let tree_new_file = compositor.button({
     parent: tree_head,
     anchor: "right",
     pivot: "right",
-    pos: vec(-72, 0),
-    size: vec(22, 22),
+    pos: vec(-75, 0),
+    size: vec(24, 24),
     icon: "new-file",
     tooltip: "@side.new_file_tip",
     style: "button_flat",
@@ -60,8 +60,8 @@ let tree_new_folder = compositor.button({
     parent: tree_head,
     anchor: "right",
     pivot: "right",
-    pos: vec(-48, 0),
-    size: vec(22, 22),
+    pos: vec(-50, 0),
+    size: vec(24, 24),
     icon: "new-folder",
     tooltip: "@side.new_folder_tip",
     style: "button_flat",
@@ -72,8 +72,8 @@ let tree_collapse = compositor.button({
     parent: tree_head,
     anchor: "right",
     pivot: "right",
-    pos: vec(-24, 0),
-    size: vec(22, 22),
+    pos: vec(-25, 0),
+    size: vec(24, 24),
     icon: "collapse-all",
     tooltip: "@side.collapse_tip",
     style: "button_flat",
@@ -84,7 +84,7 @@ let tree_refresh = compositor.button({
     parent: tree_head,
     anchor: "right",
     pivot: "right",
-    size: vec(22, 22),
+    size: vec(24, 24),
     icon: "refresh",
     tooltip: "@side.refresh_tip",
     style: "button_flat",
