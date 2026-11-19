@@ -11,7 +11,7 @@ namespace Hex.Dawn;
 
 /// <summary>
 /// A picture to look at closely, the whole of it fitted at first (a small one at its own size) and zoomed by the wheel
-/// round the middle, by + and - and their buttons, 0 back to fitted and 1 to one pixel a pixel, dragged to see another
+/// round the pointer, by + and - and their buttons round the middle of what's in sight, 0 back to fitted and 1 to one pixel a pixel, dragged to see another
 /// part of it, Escape asking for it to be closed. For the pictures in the agents' chat seen full screen.
 /// </summary>
 internal sealed class HexPictureView : UIComponent
@@ -46,10 +46,17 @@ internal sealed class HexPictureView : UIComponent
         }
     }
 
-    /// <summary>Zoomed by a factor from how it's drawn now.</summary>
-    public void ZoomBy(float factor)
+    /// <summary>
+    /// Zoomed by a factor from how it's drawn now, round a point of the room (the middle of what's in sight when none),
+    /// what's under that point staying under it. It zoomed round the picture's own middle, so a part dragged into sight
+    /// went off to one side with every step.
+    /// </summary>
+    public void ZoomBy(float factor, Vector2? around = null)
     {
-        Zoom = Math.Clamp(Shown * factor, LEAST, MOST);
+        float was = Shown;
+        Zoom = Math.Clamp(was * factor, LEAST, MOST);
+        Vector2 from = (around ?? Bounds.Center) - Bounds.Center;
+        offset = from - (from - offset) * (Zoom / was);
         OnZoomed?.Invoke();
     }
 
@@ -92,7 +99,9 @@ internal sealed class HexPictureView : UIComponent
 
     protected override bool OnScroll(float delta)
     {
-        ZoomBy(delta > 0 ? STEP : 1.0f / STEP);
+        // Round the pointer, the way a picture viewer zooms
+        Vector2? pointer = Module is { } module ? module.ToLocal(module.Compositor.Pointer.Position) : null;
+        ZoomBy(delta > 0 ? STEP : 1.0f / STEP, pointer is { } at && Bounds.Contains(at) ? at : null);
         return true;
     }
 

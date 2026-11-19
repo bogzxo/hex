@@ -85,6 +85,7 @@ internal sealed partial class DawnScene
             // picking one, so the commit never went in
             CompletionSource = _ => null
         });
+        commitMessage.OnContextMenu = point => ShowSpellingMenu(commitMessage, point);
         commitPlaceholder = commitWell.Add(new Label
         {
             Anchor = Origin.TopLeft,

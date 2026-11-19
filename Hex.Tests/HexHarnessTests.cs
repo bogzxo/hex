@@ -223,6 +223,15 @@ public sealed class HexHarnessTests : IDisposable
     }
 
     [Fact]
+    public void Files_keep_to_a_path_as_symbols_do()
+    {
+        string said = Index().Files("cs", 10, 4000, "Core/Mcp").Text;
+        Assert.Contains("Core/Mcp/McpSchema.cs", said);
+        Assert.DoesNotContain("Core/Queue.cs", said);
+        Assert.Contains("under Core/Mcp", said);
+    }
+
+    [Fact]
     public void The_budget_cuts_and_says_how_much_it_left_out()
     {
         File.WriteAllText(Path.Combine(folder, "many.cs"), string.Join('\n', Enumerable.Range(0, 400).Select(i => $"var check{i} = Check(); // padding padding padding")));

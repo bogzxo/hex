@@ -429,7 +429,8 @@ internal sealed partial class DawnScene
         ShowExplorerHead(Side);
         PlaceSearchView(Side == HexSide.Search);
         PlaceCommitBox(Side == HexSide.SourceControl);
-        PlaceAgentsView(Side == HexSide.Agents);
+        if (!HexAi.Off)
+            PlaceAgentsView(Side == HexSide.Agents);
         PlaceSideHeads();
 
         switch (Side)

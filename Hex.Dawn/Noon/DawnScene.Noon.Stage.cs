@@ -7,6 +7,7 @@ using Hex.Shell;
 using Horizon.Rendering;
 using Horizon.UI;
 using Horizon.UI.Components;
+using Horizon.UI.Skinning;
 
 namespace Hex.Dawn;
 
@@ -33,6 +34,64 @@ internal sealed partial class DawnScene
     private NoonStage noonStage = NoonStage.Chat;
     private StackPanel noonTabs = null!;
     private readonly Button[] noonTabButtons = new Button[4];
+    private readonly Panel[] noonTabPanels = new Panel[4], noonTabLines = new Panel[4];
+    private readonly Label[] noonTabKeys = new Label[4];
+    private const float TAB_MIN = 60.0f, TAB_GAP = 10.0f;
+    // What the tabs were last fitted to: the room, the counts, and the skin with its theme, text scale and accent, so a
+    // switch of theme or font that leaves the width as it was still measures them again
+    private (float Room, (int, int, int, int) Counts, UISkin? Skin, string? Theme, float Scale, Vector4 Accent, float Gui) noonTabsFitted = (-1, (-1, -1, -1, -1), null, null, 0, default, 0);
+
+    /// <summary>
+    /// The tabs sized to what's in them, the icon, the label with its count and the key, the keys left off when the strip
+    /// is too narrow for all four with them. Fitted again as a count or the room moves.
+    /// </summary>
+    private void FitNoonTabs(float room)
+    {
+        if (Skin is not { } skin)
+            return;
+        var fitted = (room, noonTabsSaid, skin, skin.Theme, skin.TextScale, skin.AccentColor, compositor.Scale);
+        if (noonTabsFitted == fitted)
+            return;
+
+        // The way the button measures itself: its icon as $(name) before the label at its scale, and the room its style
+        // leaves round that, the art's own or the skin's button padding
+        UIEdges padding = skin.TryGetRegion("button_flat", out var region) ? region.ContentOr(skin.ButtonPadding) : skin.ButtonPadding;
+        Span<float> compact = stackalloc float[4];
+        Span<float> expanded = stackalloc float[4];
+        float withKeys = noonTabs.Spacing * (expanded.Length - 1);
+        for (int i = 0; i < 4; i++)
+        {
+            Button button = noonTabButtons[i];
+            float words = skin.Font.Measure($"$({button.Icon}) {button.Label}", button.LabelScale).X;
+            float label = words + padding.Total.X;
+
+            // The count's badge straight after the name, its room added to the tab
+            Badge count = noonTabCounts[i];
+            if (count.Visible)
+            {
+                float line = skin.Font.LineHeight * TAB_COUNT_SCALE;
+                float badge = MathF.Ceiling(MathF.Max(skin.Font.Measure(count.Text, TAB_COUNT_SCALE, markup: false).X + 14.0f, line * 1.45f));
+                count.Position = new Vector2(button.Padding.Left + words + TAB_COUNT_GAP, 0);
+                label += badge + TAB_COUNT_GAP;
+            }
+            float hint = TAB_GAP + skin.Font.Measure(STAGE_KEYS[i], noonTabKeys[i].TextScale).X + 8.0f;
+            compact[i] = MathF.Max(TAB_MIN, MathF.Ceiling(label));
+            expanded[i] = MathF.Max(TAB_MIN, MathF.Ceiling(label + hint));
+            withKeys += expanded[i];
+        }
+
+        bool keys = withKeys <= room;
+        for (int i = 0; i < 4; i++)
+        {
+            float width = keys ? expanded[i] : compact[i];
+            noonTabPanels[i].Size = new Vector2(width, 26);
+            noonTabKeys[i].Visible = keys;
+            noonTabLines[i].Size = new Vector2(MathF.Max(8, width - 16), 2);
+            noonTabLines[i].Color = skin.AccentColor with { W = 1 };
+        }
+
+        noonTabsFitted = fitted;
+    }
     private ScrollPanel noonInbox = null!, noonChanges = null!, noonPlan = null!;
     private StackPanel noonInboxRows = null!, noonChangesRows = null!, noonPlanRows = null!;
 
@@ -44,6 +103,11 @@ internal sealed partial class DawnScene
     private long noonStageAt;
     private const long STAGE_REDRAW_MS = 400;
     private (int Inbox, int Changes, int Done, int All) noonTabsSaid = (-1, -1, -1, -1);
+
+    // A tab's count as a badge after its name, the inbox's in the accent (it waits on you), the plan's green once it's all
+    // done. They were the name and a number run together, "Changes  8"
+    private readonly Badge[] noonTabCounts = new Badge[4];
+    private const float TAB_COUNT_SCALE = 0.105f, TAB_COUNT_GAP = 6.0f;
 
     private static readonly string[] STAGE_KEYS = ["Alt+1", "Alt+2", "Alt+3", "Alt+4"];
 
@@ -60,23 +124,27 @@ internal sealed partial class DawnScene
             Icon = "layout-sidebar-left", Style = "button_flat", Size = new Vector2(30, 26), Animated = false, Visible = false,
             Tooltip = Said("noon.fleet_show", ("key", FLEET_KEY)), OnPressed = () => ShowFleet(true)
         });
-        commands.Add("Agents/chats", Said("noon.command_fleet"), () => ShowFleet(noonFleetHidden), FLEET_KEY, "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
+        commands.Add("Agents/chats", Said("noon.command_fleet"), ToggleFleet, FLEET_KEY, "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
         foreach (NoonStage stage in Enum.GetValues<NoonStage>())
         {
             NoonStage shown = stage;
             // The key dim at the tab's right, over the button so a press still lands on it, the keys were only in tooltips
-            var tab = noonTabs.Add(new Panel { Size = new Vector2(146, 26), Color = Vector4.Zero });
+            var tab = noonTabs.Add(new Panel { Size = new Vector2(TAB_MIN, 26), Color = Vector4.Zero });
+            noonTabPanels[(int)stage] = tab;
             noonTabButtons[(int)stage] = tab.Add(new Button
             {
                 Icon = StageIcon(stage), Label = TabLabel(stage, string.Empty), Style = "button_flat", Fill = UIFill.Both, Align = Origin.Left,
-                LabelScale = 0.13f, Animated = false, Padding = new UIEdges(8, 0, 40, 0),
+                LabelScale = 0.13f, Animated = false, Padding = new UIEdges(8, 0, 8, 0),
                 Tooltip = Said("noon.stage_tip", ("name", Said($"noon.stage_{stage.ToString().ToLowerInvariant()}")), ("key", STAGE_KEYS[(int)stage])),
                 OnPressed = () => ShowStage(shown)
             });
-            tab.Add(new Label
+            noonTabCounts[(int)stage] = tab.Add(new Badge { Anchor = Origin.Left, Pivot = Origin.Left, TextScale = TAB_COUNT_SCALE, Visible = false });
+            noonTabKeys[(int)stage] = tab.Add(new Label
             {
                 Text = UIRichText.Literal(STAGE_KEYS[(int)stage]), TextScale = 0.11f, Dim = true, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
             });
+            // The selected tab's mark, an accent line under it besides its fill
+            noonTabLines[(int)stage] = tab.Add(new Panel { Anchor = Origin.Bottom, Pivot = Origin.Bottom, Size = new Vector2(TAB_MIN, 2), Radius = 1, Visible = false });
         }
 
         (noonInbox, noonInboxRows) = StagePanel();
@@ -93,11 +161,20 @@ internal sealed partial class DawnScene
 
     private bool InAgentic() => Face == HexFace.Noon;
 
-    // A tab's name and its count when it has one, its key is a label of its own at the tab's right
+    // A tab's name, its count is a badge after it and its key a label of its own at the tab's right
     private string TabLabel(NoonStage stage, string count)
     {
         string name = Said($"noon.stage_{stage.ToString().ToLowerInvariant()}");
         return count.Length > 0 ? $"{name}  {count}" : name;
+    }
+
+    // A tab's count on its badge, hidden for none
+    private void TabCount(NoonStage stage, string count, UIBadgeTone tone)
+    {
+        Badge badge = noonTabCounts[(int)stage];
+        badge.Text = count;
+        badge.Tone = tone;
+        badge.Visible = count.Length > 0;
     }
 
     private static string StageIcon(NoonStage stage) => stage switch
@@ -135,7 +212,11 @@ internal sealed partial class DawnScene
         noonChanges.Visible = noonStage == NoonStage.Changes;
         noonPlan.Visible = noonStage == NoonStage.Plan;
         for (int i = 0; i < noonTabButtons.Length; i++)
+        {
             noonTabButtons[i].Selected = i == (int)noonStage;
+            noonTabLines[i].Visible = i == (int)noonStage;
+        }
+
         if (noonStage == NoonStage.Chat)
             agentsInput.Focus();
     }
@@ -167,17 +248,18 @@ internal sealed partial class DawnScene
         noonStageAt = now;
 
         // Counted again only as the agents move, going through every turn's tool calls each tick allocated while nothing did
-        var (_, done, all) = PlanOf(agentChat);
+        HexAgentPlan? plan = HexAgentPlan.Of(agentChat);
+        int done = plan?.Done ?? 0, all = plan?.Items.Count ?? 0;
         // The changes' count, the files the latest turn that wrote any wrote
         var counts = (InboxCount(), agentChat is null ? 0 : ChangedFilesOf(agentChat, latestOnly: true).FirstOrDefault().Files?.Count ?? 0, done, all);
         if (counts != noonTabsSaid)
         {
             noonTabsSaid = counts;
-            noonTabButtons[(int)NoonStage.Inbox].Label = TabLabel(NoonStage.Inbox, counts.Item1 > 0 ? counts.Item1.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
-            noonTabButtons[(int)NoonStage.Changes].Label = TabLabel(NoonStage.Changes, counts.Item2 > 0 ? counts.Item2.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
-            noonTabButtons[(int)NoonStage.Plan].Label = TabLabel(NoonStage.Plan, all > 0 ? $"{done}/{all}" : string.Empty);
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
             // The inbox's count in the accent while something waits, it's what wants the person
-            noonTabButtons[(int)NoonStage.Inbox].Primary = counts.Item1 > 0;
+            TabCount(NoonStage.Inbox, counts.Item1 > 0 ? counts.Item1.ToString(invariant) : string.Empty, UIBadgeTone.Accent);
+            TabCount(NoonStage.Changes, counts.Item2 > 0 ? counts.Item2.ToString(invariant) : string.Empty, UIBadgeTone.Neutral);
+            TabCount(NoonStage.Plan, all > 0 ? $"{done}/{all}" : string.Empty, all > 0 && done == all ? UIBadgeTone.Success : UIBadgeTone.Neutral);
         }
 
         switch (noonStage)
@@ -718,48 +800,39 @@ internal sealed partial class DawnScene
 
     /* Plan */
 
-    // The agent's to-do list as it last wrote it, a row of [x], [~] or [ ] a line (DawnScene's note of Claude Code's
-    // TodoWrite and Codex's plan), how many are done and how many there are
-    private static (string[] Items, int Done, int All) PlanOf(HexAgentChat? chat)
-    {
-        if (chat is null)
-            return ([], 0, 0);
-        for (int i = chat.Entries.Count - 1; i >= 0; i--)
-        {
-            HexAgentEntry entry = chat.Entries[i];
-            if (entry.Kind != HexAgentEntryKind.Note || entry.Text.Length < 4)
-                continue;
-            string[] lines = entry.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (lines.Length == 0 || !lines.All(line => line.StartsWith("[x] ", StringComparison.Ordinal) || line.StartsWith("[~] ", StringComparison.Ordinal) || line.StartsWith("[ ] ", StringComparison.Ordinal)))
-                continue;
-            return (lines, lines.Count(line => line.StartsWith("[x]", StringComparison.Ordinal)), lines.Length);
-        }
-
-        return ([], 0, 0);
-    }
-
     private void DrawPlan()
     {
         ClearRows(noonPlanRows);
-        var (items, done, all) = PlanOf(agentChat);
-        if (all == 0)
+        if (HexAgentPlan.Of(agentChat) is not { Items.Count: > 0 } plan)
         {
             StageEmpty(noonPlanRows, "checklist", Said("noon.plan_empty"), CanComposeAgent() ? (Said("noon.plan_ask"), "edit", AskForPlan) : null);
             return;
         }
 
+        if (plan.Title is { Length: > 0 } title)
+            noonPlanRows.Add(ContextText(title, dim: false));
+
+        int done = plan.Done, all = plan.Items.Count;
         noonPlanRows.Add(ContextText(Said("noon.plan_progress", ("done", done.ToString(CultureInfo.InvariantCulture)), ("all", all.ToString(CultureInfo.InvariantCulture))), dim: true));
-        noonPlanRows.Add(ContextBar((float)done / all, MathF.Max(120, noonPlan.Bounds.Width - 30)));
+        // Steps done are good news the whole way, green, not the context's green to amber to red
+        noonPlanRows.Add(ContextBar((float)done / all, MathF.Max(120, noonPlan.Bounds.Width - 30), Skin?.Palette.Success ?? new Vector4(0.35f, 0.75f, 0.45f, 1.0f)));
         Vector4 accent = Skin?.Palette.Accent ?? new Vector4(0.29f, 0.69f, 0.71f, 1.0f);
-        foreach (string item in items)
+        string dim = HexColour(Skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1.0f));
+        foreach (HexPlanItem item in plan.Items)
         {
-            string text = item[4..];
-            string line = item[1] switch
+            string text = UIRichText.Literal(item.Text);
+            string line = item.State switch
             {
-                'x' => $"[color:{HexColour(Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f))}]$(pass-filled)[/color] [color:{HexColour(Skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1.0f))}]{UIRichText.Literal(text)}[/color]",
-                '~' => $"[color:{HexColour(accent)}]$(loading~spin)[/color] [b]{UIRichText.Literal(text)}[/b]",
-                _ => $"$(circle-large-outline) {UIRichText.Literal(text)}"
+                HexPlanState.Done => $"[color:{HexColour(Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f))}]$(pass-filled)[/color] [color:{dim}]{text}[/color]",
+                HexPlanState.Doing => $"[color:{HexColour(accent)}]$(loading~spin)[/color] [b]{text}[/b]",
+                HexPlanState.Blocked => $"$(warning) {text}",
+                HexPlanState.Dropped => $"$(close) [color:{dim}]{text}[/color]",
+                _ => $"$(circle-large-outline) {text}"
             };
+            if (item.Agent is { } agent)
+                line += $" [color:{dim}]#{agent}[/color]";
+            if (item.Note is { Length: > 0 } note)
+                line += $"\n[color:{dim}]{UIRichText.Literal(note)}[/color]";
             noonPlanRows.Add(new Label { Text = line, TextScale = 0.145f, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
         }
     }

@@ -44,6 +44,25 @@ internal sealed partial class DawnScene
                 test.Check($"noon looks: {named}, Agentic's columns are laid out and the title bar marks Noon", () =>
                     noonView.Visible && noonFleet.Bounds.Width > 0 && noonCenter.Bounds.Width > 0 && noonFleet.Bounds.Height > 0
                     && modeToggle.Parent!.Children.OfType<Button>().Single(button => button.Selected).Label == HexFace.Noon.Name());
+                test.Check($"noon looks: {named}, the stage tabs are sized to their content, in the strip, and only the picked one is marked", () =>
+                    noonTabPanels.All(tab => tab.Size.X >= TAB_MIN && tab.Bounds.Max.X <= noonCenter.Bounds.Max.X + 0.5f)
+                    && noonTabPanels.Select(tab => tab.Size.X).Distinct().Count() > 1
+                    && noonTabLines.Count(line => line.Visible) == 1 && noonTabLines[(int)noonStage].Visible
+                    && noonTabKeys.All(key => key.Visible == noonTabKeys[0].Visible));
+                // A strip too narrow for the keys drops them and the tabs still fit, then it comes back at the room it had
+                test.Check($"noon looks: {named}, a narrow strip drops the tabs' keys, the tabs still fit and they come back with the room", () =>
+                {
+                    float room = noonTabsFitted.Room;
+                    FitNoonTabs(float.MaxValue);
+                    float expandedWidth = noonTabPanels.Sum(tab => tab.Size.X) + noonTabs.Spacing * (noonTabPanels.Length - 1);
+                    FitNoonTabs(expandedWidth - 1);
+                    bool compact = noonTabKeys.All(key => !key.Visible)
+                        && noonTabPanels.Sum(tab => tab.Size.X) + noonTabs.Spacing * (noonTabPanels.Length - 1) <= expandedWidth - 1;
+                    FitNoonTabs(expandedWidth);
+                    bool expanded = noonTabKeys.All(key => key.Visible);
+                    FitNoonTabs(room);
+                    return compact && expanded;
+                });
                 test.Check($"noon looks: {named}, Agentic is in the look's Noon theme where it has one", () =>
                     NoonThemeOf(UISkins.Find(settings.EditorSkin), settings.EditorTheme) is not { } noon || compositor.Skin?.Theme == noon);
                 string shot = $"noon-{look.Name.Replace(' ', '-').ToLowerInvariant()}-{scale * 100:0}";

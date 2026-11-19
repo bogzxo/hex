@@ -39,6 +39,7 @@ internal static class HexAgentChatStore
             ["stopped"] = chat.Stopped,
             ["key"] = chat.Key,
             ["dropped"] = chat.Dropped,
+            ["plan"] = chat.Plan?.ToStored(),
             ["rows"] = rows
         };
     }
@@ -133,6 +134,8 @@ internal static class HexAgentChatStore
         // The same key, so the rows it sent to its file before are still its own, and how many of them there were
         if (said["key"]?.GetValue<string>() is { Length: > 0 } fileKey)
             chat.Key = fileKey;
+        if (said["plan"] is JsonObject plan)
+            chat.SetPlan(HexAgentPlan.FromJson(plan));
         chat.Restore(said["title"]?.GetValue<string>() ?? string.Empty, rows, said["dropped"]?.GetValue<int>() ?? 0);
         return chat;
     }

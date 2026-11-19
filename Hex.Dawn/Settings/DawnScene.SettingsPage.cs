@@ -320,6 +320,8 @@ internal sealed partial class DawnScene
             "wrap_code" => Values.Bool(hex.settings.WrapCode),
             "git_blame" => Values.Bool(hex.settings.GitBlame),
             "minimap" => Values.Bool(hex.settings.Minimap),
+            "spell_check" => Values.Bool(hex.settings.SpellCheck),
+            "spell_check_language" => new StringValue(hex.settings.SpellCheckLanguage),
             "inlay_hints" => Values.Bool(hex.settings.InlayHints),
             "code_lens_references" => Values.Bool(hex.settings.CodeLensReferences),
             "semantic_highlighting" => Values.Bool(hex.settings.SemanticHighlighting),
@@ -335,6 +337,7 @@ internal sealed partial class DawnScene
             "git_line_length" => new NumberValue(hex.settings.GitLineLength),
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "mcp_server" => Values.Bool(hex.settings.McpServer),
+            "no_ai" => Values.Bool(hex.settings.NoAi),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
             "backdrop_terminal" => Values.Bool(hex.settings.BackdropTerminal),
@@ -473,6 +476,12 @@ internal sealed partial class DawnScene
                     foreach (HexDocument open in hex.documents)
                         open.Editor.Minimap = minimap.Value;
                     break;
+                case ("spell_check", BooleanValue spelling):
+                    settings.SpellCheck = spelling.Value;
+                    break;
+                case ("spell_check_language", StringValue spellingLanguage):
+                    settings.SpellCheckLanguage = spellingLanguage.Value.Trim();
+                    break;
                 case ("inlay_hints", BooleanValue inlays):
                     settings.InlayHints = inlays.Value;
                     hex.ForgetInlays();
@@ -499,6 +508,10 @@ internal sealed partial class DawnScene
                 case ("mcp_server", BooleanValue agents):
                     settings.McpServer = agents.Value;
                     hex.ApplyMcp();
+                    break;
+                case ("no_ai", BooleanValue noAi):
+                    settings.NoAi = noAi.Value;
+                    hex.NoAiChanged();
                     break;
                 case ("backdrop", BooleanValue on):
                     settings.BackdropOn = on.Value;

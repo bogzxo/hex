@@ -1,6 +1,7 @@
 # Hex's page, https://bogzxo.github.io/hex/. The site folder as it is, there's nothing to build. Published when the
 # stable branch's site changes, or by hand from any branch. Pages has to be switched on for the repository first,
-# Settings, Pages, Source: GitHub Actions.
+# Settings, Pages, Source: GitHub Actions. A release published by Build runs this again, so the page says it (a
+# release made by hand needs Pages run by hand, Actions, Pages, Run workflow).
 
 name: Pages
 
@@ -29,6 +30,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: actions/configure-pages@v5
+
+      # The latest release's version and codename on the Download button, and its notes beside the downloads. A
+      # prerelease is never the latest. With no release to read, the page says what it says in the repository
+      - name: Latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/release.json"; then
+            python3 .github/site-release.py "$RUNNER_TEMP/release.json" site/index.html
+          else
+            echo "::warning::No latest release to read; the page says what it says in the repository."
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

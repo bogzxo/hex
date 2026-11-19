@@ -619,12 +619,15 @@ internal sealed partial class DawnScene
         // blue while it runs, green when it went and red when it failed. A failed one filled red was most of the chat red
         var holder = new Panel { Fill = UIFill.Horizontal, Color = hover with { W = hover.W * (entry.Open ? 0.75f : 0.45f) }, Radius = 8, Padding = new UIEdges(0, 0, 0, 2) };
         var stack = holder.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 });
+        Vector4? toolColour = HexAgentRows.ToolColour(entry.ToolName ?? string.Empty, skin?.Palette);
         // A blue gutter down its left while it runs, as a group of calls has
         if (entry.State == HexAgentToolState.Running)
             holder.Add(new Panel { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(3, 24), Position = new Vector2(1, -3), Radius = 1.5f, Color = RUNNING_BLUE });
         Button head = stack.Add(new Button
         {
             Icon = entry.State switch { HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading", HexAgentToolState.Failed => "error", _ => ToolIcon(entry.ToolName ?? string.Empty) },
+            IconColor = entry.State == HexAgentToolState.Done ? toolColour : skin?.ControlTextColor,
+            LabelColor = toolColour,
             Style = "button_flat",
             Align = Origin.Left,
             LabelScale = 0.15f,
@@ -724,18 +727,7 @@ internal sealed partial class DawnScene
     internal static string ToolTitle(string name) => HexAgentRows.ToolTitle(name);
     internal static string ToolIcon(string name) => HexAgentRows.ToolIcon(name);
 
-    private static string ToolDetails(string input)
-    {
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(input);
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
-                document.RootElement.WriteTo(writer);
-            return Encoding.UTF8.GetString(stream.ToArray());
-        }
-        catch (JsonException) { return input; }
-    }
+    private static string ToolDetails(string input) => HexAgentRows.Readable(input);
 
     /// <summary>The times of the tools still running brought up to now, a few times a second.</summary>
     private void TickRunningTimes()
@@ -768,18 +760,77 @@ internal sealed partial class DawnScene
         return (text[(at + marker.Length)..], close > 6 ? text[6..close] : null);
     }
 
-    // A link in what an agent said, a file of the workspace opened (at a line when it says one), anything else left alone
     private void OpenAgentLink(string target)
     {
-        string path = target;
-        int line = 0;
-        int colon = target.LastIndexOf(':');
-        if (colon > 2 && int.TryParse(target[(colon + 1)..], out int number))
-            (path, line) = (target[..colon], number);
+        target = target.Trim();
+        if (Uri.TryCreate(target, UriKind.Absolute, out Uri? url) && url.Scheme is "http" or "https")
+        {
+            OpenInBrowser(url.AbsoluteUri);
+            return;
+        }
 
-        string full = McpPath(path);
-        if (File.Exists(full))
-            OpenAt(full, Math.Max(0, line - 1), 0);
+        int line = 0, column = 0;
+        if (TakeAgentLinkNumber(ref target, ':', out int last))
+        {
+            if (TakeAgentLinkNumber(ref target, ':', out line))
+                column = last;
+            else
+                line = last;
+        }
+        else
+            TakeAgentLinkNumber(ref target, '#', out line);
+
+        if (AgentFilePath(target) is { } full)
+        {
+            ShowFace(Hex.Shell.HexFace.Dawn);
+            OpenAt(full, Math.Max(0, line - 1), Math.Max(0, column - 1));
+        }
+    }
+
+    private static bool TakeAgentLinkNumber(ref string path, char separator, out int number)
+    {
+        number = 0;
+        int at = path.LastIndexOf(separator);
+        int first = separator == '#' ? at + 2 : at + 1;
+        if (at <= 1 || first >= path.Length || (separator == '#' && path[at + 1] != 'L')
+            || !int.TryParse(path.AsSpan(first), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number))
+            return false;
+
+        path = path[..at];
+        return true;
+    }
+
+    private string? AgentFilePath(string path)
+    {
+        if (path.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Uri.TryCreate(path, UriKind.Absolute, out Uri? file) || !file.IsFile)
+                return null;
+            path = file.LocalPath;
+        }
+
+        // The Markdown file links emitted by agents on Windows can start with a slash before the drive.
+        if (OperatingSystem.IsWindows() && path.Length > 3 && path[0] == '/' && char.IsAsciiLetter(path[1]) && path[2] == ':')
+            path = path[1..];
+
+        try
+        {
+            string full = McpPath(path);
+            if (File.Exists(full))
+                return full;
+            if (path.Contains('%'))
+            {
+                full = McpPath(Uri.UnescapeDataString(path));
+                if (File.Exists(full))
+                    return full;
+            }
+        }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or IOException)
+        {
+            // The link is neither a web URL nor a valid path on this platform.
+        }
+
+        return null;
     }
 }
 

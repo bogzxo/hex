@@ -154,12 +154,13 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Run(() => Shot("settings-row-reset"));
-        // Just after the name and the key small after it, not off at the far end of the row
+        // Just after the name, before the key (which only shows while the row is looked at), not off at the far end of the row
         test.Check("settings rows: the reset sits just after the name, not off at the far end of the row", () =>
             page.RowBounds("wrap_code") is { } row && page.RowParts("wrap_code") is { } parts && !row.Reset.IsEmpty
-            && (parts.Key.IsEmpty ? row.Title.Max.X : MathF.Max(row.Title.Max.X, parts.Key.Max.X)) is var named && row.Reset.Min.X >= named - 1 && row.Reset.Min.X - named <= 40);
-        test.Check("settings rows: and no row is wider than about 1600 at the page's zoom", () =>
-            page.Settings.Select(setting => page.RowBounds(setting.Key)).All(bounds => bounds is not { } shown || shown.Row.Width <= 1600.0f * page.ZoomNow + 2.0f));
+            && row.Reset.Min.X >= row.Title.Max.X - 1 && row.Reset.Min.X - row.Title.Max.X <= 40
+            && (parts.Key.IsEmpty || parts.Key.Min.X >= row.Reset.Max.X - 1));
+        test.Check("settings rows: and no row is wider than about 1000 at the page's zoom, what sets it beside what it says", () =>
+            page.Settings.Select(setting => page.RowBounds(setting.Key)).All(bounds => bounds is not { } shown || shown.Row.Width <= 1000.0f * page.ZoomNow + 2.0f));
         test.Check("settings rows: on a window wide enough that they'd have been wider", () => SettingsWindow!.Bounds.Width > 1100);
         test.Run(() => page.Reset("wrap_code"));
 

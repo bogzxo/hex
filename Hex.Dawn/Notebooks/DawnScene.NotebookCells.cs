@@ -134,6 +134,7 @@ internal sealed partial class DawnScene
 
         if (typing && notebook.Selected < cellViews.Count)
             EditCell(notebook, notebook.Selected);
+        ShowCellDiagnostics(notebook);
     }
 
     private NotebookCellView MakeCellView(HexNotebook notebook, NotebookCell cell)
@@ -218,7 +219,11 @@ internal sealed partial class DawnScene
         editor.Escaped = () => StopEditing(notebook);
         if (cell.Kind == CellKind.Code)
         {
-            editor.CompletionSource = asked => KernelCompletions(notebook, asked);
+            // The language's server where there's one, what it knows of the code without anything having run, the
+            // kernel's (what's in its memory) otherwise
+            editor.CompletionSource = asked => languages.NotebookServed(notebook)
+                ? languages.NotebookCompletions(notebook, notebook.Model.Cells.IndexOf(cell), asked) ?? KernelCompletions(notebook, asked)
+                : KernelCompletions(notebook, asked);
             editor.HoverSource = (asked, at) => KernelHover(notebook, asked, at);
         }
     }

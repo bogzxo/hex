@@ -49,22 +49,31 @@ internal sealed partial class HexLanguages
     /// <summary>How many times a document's server said what it said of the names is out of date, 0 for none.</summary>
     internal int SemanticRefreshesOf(HexDocument of) => linters.TryGetValue(of, out LanguageServer? server) ? server.SemanticRefreshes : 0;
 
-    /// <summary>C# in the colours the settings say, ReSharper's, Visual Studio's or whatever the skin has.</summary>
+    /// <summary>
+    /// C# in the colours the settings say, ReSharper's, Visual Studio's or whatever the skin has, and TypeScript and
+    /// JavaScript the same way. Their servers say which name is a property, a method or a field as C#'s does, but the
+    /// skin's colours have no word for any of them, so a member was the colour of plain text in the code and in the
+    /// completion list both, where C#'s were told apart.
+    /// </summary>
     internal void ApplyCSharpColors()
     {
-        switch (settings.CSharpColors)
+        foreach (string scope in MEMBER_COLOURED)
         {
-            case "visual_studio":
-                CodeLanguages.SetColors(CSHARP_SCOPE, UISyntaxColors.VisualStudioDark(), UISyntaxColors.VisualStudioLight());
-                break;
-            case "skin":
-                CodeLanguages.ForgetColors(CSHARP_SCOPE);
-                break;
-            default:
-                CodeLanguages.SetColors(CSHARP_SCOPE, UISyntaxColors.ReSharperDark(), UISyntaxColors.ReSharperLight());
-                break;
+            switch (settings.CSharpColors)
+            {
+                case "visual_studio":
+                    CodeLanguages.SetColors(scope, UISyntaxColors.VisualStudioDark(), UISyntaxColors.VisualStudioLight());
+                    break;
+                case "skin":
+                    CodeLanguages.ForgetColors(scope);
+                    break;
+                default:
+                    CodeLanguages.SetColors(scope, UISyntaxColors.ReSharperDark(), UISyntaxColors.ReSharperLight());
+                    break;
+            }
         }
     }
 
-    private const string CSHARP_SCOPE = "source.cs";
+    // C#, and the languages of the TypeScript server, by their grammars' scopes
+    private static readonly string[] MEMBER_COLOURED = ["source.cs", "source.ts", "source.tsx", "source.js", "source.js.jsx"];
 }

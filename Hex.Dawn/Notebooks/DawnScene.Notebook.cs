@@ -133,6 +133,7 @@ internal sealed partial class DawnScene
         notebook.Changed = false;
         notebook.Selected = Math.Clamp(notebook.Selected, 0, Math.Max(0, notebook.Model.Cells.Count - 1));
         notebook.Remake = true;
+        CellsToServer(notebook, now: true);
     }
 
     /// <summary>The cells changed, their JSON written a moment from now (now, for a change that isn't typing).</summary>
@@ -140,6 +141,29 @@ internal sealed partial class DawnScene
     {
         notebook.Changed = true;
         notebook.WriteIn = now ? 0.0f : NOTEBOOK_WRITE_AFTER;
+        CellsToServer(notebook, now);
+    }
+
+    // The code cells as they are now, for the language's server to read as one file (HexLanguages.Notebooks), what it says
+    // coming back under each cell's code
+    private void CellsToServer(HexNotebook notebook, bool now)
+    {
+        if (notebook.Unreadable is not null || notebook.Document.Path is not { } path || notebook.Document.DiffOf is not null)
+            return;
+
+        languages.NotebookSaid ??= ShowCellDiagnostics;
+        languages.NotebookChanged(notebook, path, ExtensionOfLanguage(notebook.Model.Language),
+            [.. notebook.Model.Cells.Select(cell => (cell.Source, cell.Kind == CellKind.Code))], now);
+    }
+
+    // What the server said of a notebook's cells, under each one's code when it's the notebook on screen
+    private void ShowCellDiagnostics(object said)
+    {
+        if (notebookShown is not { } notebook || !ReferenceEquals(notebook, said))
+            return;
+
+        foreach (NotebookCellView view in cellViews)
+            view.Editor.Diagnostics = languages.NotebookDiagnostics(notebook, notebook.Model.Cells.IndexOf(view.Cell));
     }
 
     // Helper method to write the cells into the document as its JSON, one step to undo, only when it's something else
@@ -202,6 +226,7 @@ internal sealed partial class DawnScene
         }
 
         StopKernel(notebook);
+        languages.NotebookClosed(notebook);
     }
 
     /// <summary>

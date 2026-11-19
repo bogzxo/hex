@@ -7,18 +7,19 @@ let welcome = compositor.panel({
     color: vec(0.065, 0.07, 0.092, 1),
 });
 
-// Scroll on short windows. The working column starts at the left where the eye does, it isn't centred, so the page
-// reads from the same edge as the code that replaces it. The room over and under the page is spacers scrolled with it
+// Scroll on short windows. The page grows with the window to 1240 wide and sits in the middle of it: a column of 760 at
+// the left of a 1920 window left two thirds of it empty. The room over and under the page is spacers scrolled with it
 // rather than the scroll's padding, which it clips inside of: scrolled, the page went 48 pixels under the pane's top.
+// DawnScene.Welcome sizes the room over it to the window's height.
 let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(56, 0, 32, 0) });
 let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
 let welcome_top = compositor.spacer({ parent: welcome_body, size: vec(0, 48) });
 let page = compositor.stack({
     parent: welcome_body,
-    anchor: "top_left",
-    pivot: "top_left",
+    anchor: "top",
+    pivot: "top",
     size: vec(760, 0),
-    spacing: 28,
+    spacing: 32,
 });
 let welcome_bottom = compositor.spacer({ parent: welcome_body, size: vec(0, 32) });
 
@@ -36,7 +37,7 @@ let icon = compositor.image({
     anchor: "left",
     pivot: "left",
     file: "Assets/hex_icon.png",
-    size: vec(56, 56),
+    size: vec(72, 72),
 });
 
 // The name over what this release is called, the two as one block beside the icon
@@ -52,7 +53,7 @@ let title = compositor.label({
     anchor: "left",
     pivot: "left",
     text: "@welcome.title",
-    text_scale: 0.46,
+    text_scale: 0.56,
     bold: true,
     align: "left",
 });
@@ -99,29 +100,15 @@ let subtitle = compositor.label({
     align: "left",
 });
 
-let columns = compositor.stack({
+// What to start with, in one row under the words: Open Folder first and the one primary, the rest quiet beside it.
+// DawnScene.Welcome puts New File and New Project in, orders the row for the designer's welcome or the plain one, and
+// sizes each to its words. Stacked a line each where the page is narrow
+let start = compositor.stack({
     parent: page,
     anchor: "top_left",
     pivot: "top_left",
-    spacing: 40,
+    spacing: 8,
     direction: "horizontal",
-});
-
-let start = compositor.stack({
-    parent: columns,
-    anchor: "top",
-    pivot: "top",
-    spacing: 4,
-});
-
-let start_title = compositor.label({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    text: "@welcome.start",
-    text_scale: 0.17,
-    bold: true,
-    align: "left",
 });
 
 let new_layout = compositor.button({
@@ -131,7 +118,7 @@ let new_layout = compositor.button({
     icon: "new-file",
     label: "@welcome.new_layout",
     style: "button_flat",
-    lbl_scale: 0.16,
+    lbl_scale: 0.15,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -144,7 +131,7 @@ let open_file = compositor.button({
     icon: "go-to-file",
     label: "@welcome.open_file",
     style: "button_flat",
-    lbl_scale: 0.16,
+    lbl_scale: 0.15,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -158,23 +145,20 @@ let open_folder = compositor.button({
     label: "@welcome.open_folder",
     style: "button",
     primary: true,
-    lbl_scale: 0.16,
+    lbl_scale: 0.15,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
 
-let commands = compositor.button({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    icon: "symbol-misc",
-    label: "@welcome.commands",
-    style: "button_flat",
-    lbl_scale: 0.16,
-    hover: "none",
-    hover_amount: 4,
-    hover_time: 0.08,
+// Two columns under the row: what's been going on (what's new, recent files, the agents) on the left, and getting Hex
+// set up on the right, a row a setting worth knowing with how it is now. One over the other where the page is narrow
+let columns = compositor.stack({
+    parent: page,
+    anchor: "top_left",
+    pivot: "top_left",
+    spacing: 40,
+    direction: "horizontal",
 });
 
 let recent_column = compositor.stack({
@@ -233,7 +217,8 @@ let recent = compositor.stack({
 });
 
 // The agents of this workspace, a new one, the last chat to carry on with and how many want looking at, put in by the
-// editor (DawnScene.Welcome FillWelcomeAgents) and kept up as the chats move
+// editor (DawnScene.Welcome FillWelcomeAgents) and kept up as the chats move. A column of their own on a wide page
+// (side_column, after Getting started), under the recent files otherwise: DawnScene.Welcome moves them
 let agents_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
 
 let agents_title = compositor.label({
@@ -253,52 +238,96 @@ let agents = compositor.stack({
     spacing: 2,
 });
 
-let help_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
+// Getting started: the settings worth knowing about that nobody finds by looking, grouped, each saying how it is now with
+// the switch or the button that changes it there and then. Put in by the editor, see DawnScene.Welcome FillGettingStarted
+let getting_column = compositor.stack({
+    parent: columns,
+    anchor: "top",
+    pivot: "top",
+    spacing: 4,
+});
 
-let help_title = compositor.label({
-    parent: recent_column,
+let getting_title = compositor.label({
+    parent: getting_column,
     anchor: "left",
     pivot: "left",
-    text: "@welcome.help",
+    text: "@welcome.getting_started",
     text_scale: 0.17,
     bold: true,
     align: "left",
 });
 
+let getting = compositor.stack({
+    parent: getting_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+});
+
+// The third column on a wide page, the agents' (see agents_title)
+let side_column = compositor.stack({
+    parent: columns,
+    anchor: "top",
+    pivot: "top",
+    spacing: 4,
+});
+
+// Help, quietly at the foot: the commands with their key, the keys, the HIDL reference, the release notes
+let footer = compositor.stack({
+    parent: page,
+    anchor: "top_left",
+    pivot: "top_left",
+    spacing: 4,
+    direction: "horizontal",
+});
+
+let commands = compositor.button({
+    parent: footer,
+    anchor: "left",
+    pivot: "left",
+    icon: "symbol-misc",
+    label: "@welcome.commands",
+    style: "button_flat",
+    lbl_scale: 0.135,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
+});
+
 let keys = compositor.button({
-    parent: recent_column,
+    parent: footer,
     anchor: "left",
     pivot: "left",
     icon: "keyboard",
     label: "@welcome.keys",
     style: "button_flat",
-    lbl_scale: 0.16,
+    lbl_scale: 0.135,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
 
 let language = compositor.button({
-    parent: recent_column,
+    parent: footer,
     anchor: "left",
     pivot: "left",
     icon: "book",
     label: "@welcome.language",
     style: "button_flat",
-    lbl_scale: 0.16,
+    lbl_scale: 0.135,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
 
 let changes = compositor.button({
-    parent: recent_column,
+    parent: footer,
     anchor: "left",
     pivot: "left",
     icon: "history",
     label: "@welcome.changes",
     style: "button_flat",
-    lbl_scale: 0.16,
+    lbl_scale: 0.135,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,

@@ -61,7 +61,7 @@ internal sealed partial class DawnScene
             return;
 
         int number = RequestNumber(chat, asked);
-        string detail = string.IsNullOrWhiteSpace(asked.Input) ? string.Empty : $"\n{OneLine(asked.Input!, 600)}";
+        string detail = string.IsNullOrWhiteSpace(asked.Input) ? string.Empty : $"\n{OneLine(HexAgentRows.Readable(asked.Input!), 600)}";
         string text = $"#{chat.Id} {MailName(chat)} asks leave (request {number}): {asked.Text}{detail}\n"
             + $"Answer with hex_agent_approve (id {chat.Id}, request {number}, allow true or false). It waits until you do, or the person answers on its card.";
         Deliver(parent, chat, "question", text, directive: true);

@@ -1,3 +1,31 @@
+# Hex 3.1.2 Amphetamine
+
+Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.
+
+## Agentic
+
+- each agent's card says how it's doing on a badge, Working in blue with a beating dot, Failed in red, a finished chat you haven't seen in the accent
+- the tabs' counts are badges, Inbox's in the accent, the Plan's green once every step is done, and the Plan's bar is green the whole way rather than going red at 100%
+- Details counts each tool on a badge in the tool's colour
+- / commands complete wherever the word is in the box, Tab takes only that word, Enter sends a command written out in full, and a message that starts with a slash is sent as a message
+- the list of / commands walks with held arrow keys, Up goes up it rather than closing it, and it scrolls smoothly past its first page
+- a picture opened full screen zooms round the pointer and keeps the part you dragged to in sight
+- agents can read git's diff of a file and see which files other chats' plans are about to change
+
+## the editor
+
+- the settings window has All, Modified and Commonly used under its search, a press each; what sets a setting sits beside what it says, the key shows when you look at a row, and a changed setting has a dot
+- the welcome page uses the whole window, three columns on a wide one, with Getting started for the settings nobody finds by looking
+- spelling is checked as you type in comments, text, Markdown and page words, never code
+- notification cards slide, fade and make room smoothly instead of jumping
+- No AI in Settings or `--no-ai` leaves the agents out altogether
+
+## languages
+
+- the Language Servers window sets up each language a step at a time, and says every server is optional, set up only the ones you want
+- a notebook's code cells are read by its language's server, so a missing import is underlined
+- servers that wait to be asked what's wrong with a file (TypeScript 7's) are asked
+
 # Hex 3.1.1 Amphetamine
 
 C# completion keeps up with typing again.

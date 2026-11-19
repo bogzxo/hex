@@ -45,7 +45,12 @@ internal static class HexModeSwitch
     {
         var row = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 2.0f, Anchor = Origin.Right, Pivot = Origin.Right });
         foreach (HexFace face in (ReadOnlySpan<HexFace>)[HexFace.Dawn, HexFace.Noon, HexFace.Dusk])
+        {
+            // No Agentic with No AI on, the row is the editor and the terminal
+            if (face == HexFace.Noon && Hex.Core.HexAi.Off)
+                continue;
             row.Add(new Button(face.Name()) { Icon = face.Icon(), Style = "button_flat", Animated = false });
+        }
         Button first = (Button)row.Children[0];
         Select(first, current, pick);
         SetScale(first, bar.Module?.Compositor.Scale ?? 1.0f);

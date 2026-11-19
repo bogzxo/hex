@@ -269,7 +269,7 @@ internal sealed partial class DawnScene
             treeScroll.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, treeScroll)));
         if (sideTree.Visible)
             sideTree.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, sideTree)));
-        if (agentsView.Visible && Face != HexFace.Noon)
+        if (agentsView is { Visible: true } && Face != HexFace.Noon)
             agentsView.Size = new Vector2(leftWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(left, agentsView)));
         HoldSideWidth(leftWidth);
         inspectorScroll.Size = new Vector2(rightWidth, MathF.Max(MIN_FLEXIBLE, height - Spoken(right, inspectorScroll)));

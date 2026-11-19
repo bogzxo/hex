@@ -26,18 +26,22 @@ internal sealed partial class HexLanguages
     private IReadOnlyList<CodeLanguage> CodeLanguagesList => codeLanguages ??= CodeLanguages.Languages();
 
     /// <summary>What a server's language is called, by its id, its name in language_servers.hor for one Hex doesn't colour.</summary>
-    private string LanguageNameOf(HexServerEntry entry) =>
+    internal string LanguageNameOf(HexServerEntry entry) =>
         CodeLanguagesList.FirstOrDefault(language => language.Id.Equals(entry.LanguageId, StringComparison.OrdinalIgnoreCase))?.Name ?? entry.Name;
 
     /// <summary>The panel of the servers and the form that adds one, for the section under the servers' rows.</summary>
-    private StackPanel MakeServerEditor()
+    private StackPanel MakeServerEditor(bool rows = true)
     {
-        var panel = new StackPanel { Spacing = 8.0f, Padding = new UIEdges(14.0f, 10.0f, 10.0f, 14.0f) };
-        panel.Add(Heading(context.Strings.Said("language_settings.on_this_machine")));
-        serverRows = panel.Add(new StackPanel { Spacing = 6.0f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
-        FillServerRows();
+        var panel = new StackPanel { Spacing = 8.0f, Padding = new UIEdges(rows ? 14.0f : 0.0f, 10.0f, 10.0f, 14.0f), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
 
-        panel.Add(new Spacer { Size = new Vector2(EDITOR_WIDTH, 8.0f) });
+        // The servers there are, a line each, where the settings had them; the Language Servers window says them itself
+        if (rows)
+        {
+            panel.Add(Heading(context.Strings.Said("language_settings.on_this_machine")));
+            serverRows = panel.Add(new StackPanel { Spacing = 6.0f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            FillServerRows();
+            panel.Add(new Spacer { Size = new Vector2(EDITOR_WIDTH, 8.0f) });
+        }
         panel.Add(Heading(context.Strings.Said("language_settings.add_title")));
         panel.Add(new Label
         {

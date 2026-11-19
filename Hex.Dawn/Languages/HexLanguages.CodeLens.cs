@@ -30,6 +30,11 @@ internal sealed partial class HexLanguages
         if (!CanServe(of, "referencesProvider") || !Serves(of, "documentSymbolProvider", out LanguageServer server, out string path))
             return false;
 
+        // What a page or a sheet "declares" is every tag and every rule, which nothing refers to the way code does, and an
+        // HTML file had "0 references" over every line of it
+        if (server.LanguageIdOf(path) is "html" or "css" or "scss" or "less" or "json" or "jsonc" or "yaml" or "markdown" or "toml" or "xml")
+            return false;
+
         When(server.Symbols(path).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result ?? [] : (IReadOnlyList<LanguageServerSymbol>)[], TaskScheduler.Default), then);
         return true;
     }

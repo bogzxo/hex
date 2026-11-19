@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> AgentMailTools() =>
     [
         new(new McpTool("hex_agent_message", "Message another agent",
-            "Tell another agent of your family something while you both keep working, your parent by default (the chat that started you), or a chat you started, or one your parent started. Say what you found as soon as it matters to the others, ask what you need to know, say when you're blocked, give instructions. An agent that can be told more as it works takes it in at once, the rest find it in hex_agent_inbox, and an instruction starts a finished agent working on it.",
+            "Tell another agent of your family something while you both keep working, your parent by default (the chat that started you), or a chat you started, or one your parent started. Another chat whose open plan step names a file yours does can be told too, to agree who goes first. Say what you found as soon as it matters to the others, ask what you need to know, say when you're blocked, give instructions. An agent that can be told more as it works takes it in at once, the rest find it in hex_agent_inbox, and an instruction starts a finished agent working on it.",
             McpSchema.Object([
                 ("text", McpSchema.String("What to tell it, complete in itself, path:line for code.")),
                 ("to", McpSchema.Integer("The chat, your parent's when left out.")),
@@ -64,10 +64,19 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        // Chats of other families in the same checkout talk only to sort out work on the same files: when their open plan
+        // steps name a file in common, or to answer one that wrote to them. Never an instruction, which would start or steer
+        // an agent somebody else is running
         if (from is not null && RootOf(from) != RootOf(to))
         {
-            yield return McpToolResult.Error($"#{to.Id} isn't of your family, only chats started from the same one talk to each other.");
-            yield break;
+            bool coordinating = ShareClaim(from, to) || from.Mail.Any(message => message.From == to.Id);
+            if (!coordinating || kind == "instruction")
+            {
+                yield return McpToolResult.Error(coordinating
+                    ? $"#{to.Id} isn't of your family, so it can be told findings, questions, answers and progress about the files you share, not instructions."
+                    : $"#{to.Id} isn't of your family. Chats of different families talk when their open plan steps name the same file (hex_plan_update with files) or to answer one that wrote to them.");
+                yield break;
+            }
         }
 
         if (string.IsNullOrWhiteSpace(text))
@@ -121,10 +130,18 @@ internal sealed partial class DawnScene
 
         if (to.Running && SteeredRun(to) is not null)
         {
-            log.Add(message, HexMailRoute.Steered);
-            to.MailRead(message.Seq);
-            SteerAgent(to, MailText(message), typed: false);
-            return $"{MailName(to)} takes it in as it works.";
+            // Everything it hasn't read goes in together, oldest first, so a message kept in its inbox earlier (it couldn't
+            // be told more yet) isn't passed over by this one. Read only once written to the run, a write that fails
+            // leaves them all in its mail
+            HexAgentMail[] unread = to.UnreadMail();
+            if (unread.Length == 0)
+                unread = [message];
+            if (SteerAgent(to, string.Join("\n\n", unread.Select(MailText)), typed: false))
+            {
+                log.Add(message, HexMailRoute.Steered);
+                to.MailRead(unread[^1].Seq);
+                return $"{MailName(to)} takes it in as it works.";
+            }
         }
 
         to.Note($"$(mail) from {message.FromName} · {kind}: {line}");
@@ -137,6 +154,13 @@ internal sealed partial class DawnScene
 
         if (directive && !to.Stopped && extensions.AgentRuns.TryGetValue(to.Agent, out var run))
         {
+            // Already posted. AfterAgentTurn will start it once the previous run's output has drained.
+            if (AgentRunBusy(to))
+            {
+                log.Add(message, HexMailRoute.Inbox);
+                return $"{MailName(to)} is finishing its last turn. The instruction is in its inbox and its next turn starts on it.";
+            }
+
             log.Add(message, HexMailRoute.StartedTurn);
             StartAgent(to, run.Extension, run.Run, string.Empty, text);
             return $"{MailName(to)} had finished, it's working on it now. hex_agent_wait waits for it.";

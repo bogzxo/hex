@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <!-- Day or Night as it was pinned with the switch in the bar, before anything's drawn so the page never flashes the other -->
+  <script>try { document.querySelector('meta[name="color-scheme"]').content = localStorage.getItem("color-scheme") ?? "light dark"; } catch {}</script>
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
   <title>Hex. Modern Motherfucking Code Editor</title>
@@ -19,6 +21,9 @@
   <link rel="apple-touch-icon" href="images/hex.png">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="gallery.js"></script>
+  <!-- Plain scripts, not modules, so they work on the page opened from a file as well (a browser won't run a module from file://) -->
+  <script defer src="request.js"></script>
+  <script defer src="theme.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to the content</a>
@@ -35,6 +40,14 @@
         <a href="#looks">Looks</a>
         <a href="#build">Build</a>
       </nav>
+      <!-- Solstice Day or Solstice, the way Hex's own looks go. Two states: the system's, and the other one pinned. Both
+           its words and pictures are in it and the one that isn't what pressing does is hidden by the stylesheet -->
+      <button type="button" class="button small quiet scheme" id="scheme" hidden>
+        <svg class="to-day" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
+        <svg class="to-night" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z" fill="currentColor"/></svg>
+        <span class="to-day sr-only">Switch to Solstice Day</span>
+        <span class="to-night sr-only">Switch to Solstice Night</span>
+      </button>
       <a class="button small quiet repo" href="https://github.com/bogzxo/hex">GitHub</a>
       <a class="button small get" href="#get-it">Download</a>
     </div>
@@ -45,21 +58,23 @@
       <div class="wrap">
         <div class="pitch">
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
-        <p class="lede"><strong>This is Hex. It opens, you write code, and it gets the fuck out of your way.</strong></p>
-        <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file.</p>
+        <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
+        <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
         <div class="actions">
-          <a class="button" href="#get-it">Download Hex 3.1</a>
+          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.1 Amphetamine<!-- /release:button --></a>
           <a class="button quiet" href="#numbers">Show me the receipts</a>
           <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
+          <button type="button" class="button quiet" commandfor="request" command="show-modal">Request a feature</button>
         </div>
+        <p class="note wip">Hex is a work in progress. More features are always on the way :)</p>
         </div>
 
         <div class="proof">
         <figure class="shot" style="margin-inline: 0">
-          <picture>
-            <source media="(prefers-color-scheme: light)" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw">
-            <img src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
-          </picture>
+          <!-- One picture a look, the stylesheet showing the one the page is in. A <source media> only knows the system's
+               choice, never the switch's -->
+          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
+          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
         </figure>
         <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
 
@@ -99,7 +114,7 @@
           </table>
         </div>
 
-        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers. This is one machine, and a busy one. It's not a race rigged against somebody else's editor. <strong>Dawn got slower and we're saying so:</strong> 2.8.0 measured 492 ms. 3.1 sets up a whole agent workspace before its first frame and it shows. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method, raw samples and reproduction commands</a>.</p>
+        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers. This is one machine, and a busy one. It's not a race rigged against somebody else's editor. <strong>Dawn got slower and I'm saying so:</strong> 2.8.0 measured 492 ms. 3.1 sets up a whole agent workspace before its first frame and it shows, don't like this regression? Disable AI through the global NoAI toggle. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method, raw samples and reproduction commands</a>.</p>
 
         <div class="split">
           <div>
@@ -125,8 +140,16 @@
 
         <div class="gallery">
           <figure class="rise">
-            <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, Peak, Render and SampleRate, with Add's signature beside it"></a>
-            <figcaption><b>Completion.</b> The language server's, as you type.</figcaption>
+            <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
+            <figcaption><b>Completion.</b> The language server's, as you type, every member in its own colour.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
+            <figcaption><b>The web.</b> HTML, CSS and SCSS, with CSS completing inside a page's own <code>&lt;style&gt;</code>.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
+            <figcaption><b>TypeScript.</b> TypeScript 7's own server, the native one: type errors as you go and members after a dot.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/hover-1600.webp"><img src="images/hover-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
@@ -157,8 +180,8 @@
             <figcaption><b>Designer.</b> Hex's own welcome page, open in Hex.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Appearance with seven looks to pick from: Solstice, Solstice Day, Graphite, Fluid Glass, Frosted Glass, Flat and Visual Studio"></a>
-            <figcaption><b>Settings.</b> Searchable, with the looks up top.</figcaption>
+            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used chips under it, the sections down the left, and each setting with what sets it right beside what it says"></a>
+            <figcaption><b>Settings.</b> Searchable, and one press shows only what you changed.</figcaption>
           </figure>
         </div>
       </div>
@@ -171,7 +194,7 @@
         <ul class="features">
           <li class="rise">
             <h3>Code</h3>
-            <p>Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and <code>.editorconfig</code>. Sixteen language servers come declared, C# to Rust.</p>
+            <p>Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them: TypeScript 7's native server, and VS Code's own for HTML, CSS and JSON, each file going to one of them so nothing is said twice.</p>
           </li>
           <li class="rise">
             <h3>Git</h3>
@@ -211,13 +234,23 @@
 
     <section id="agents" class="noon">
       <div class="wrap">
-        <p class="eyebrow">Agentic, the agents' face</p>
-        <h2>Bring your own agent. Or don't.</h2>
-        <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
+        <!-- The two ways Hex goes with agents, side by side and as loud as each other: yours, or none at all -->
+        <div class="choose-ai">
+          <div>
+            <p class="eyebrow">Agentic, the agents' face</p>
+            <h2>Bring your own agent. Or don't.</h2>
+            <p>Hex doesn't sell you an AI subscription. <strong>Agentic</strong> runs your installed Claude Code, Codex or Antigravity CLI, with your own account. A fleet of chats side by side, each card saying its model, tokens, cost and how full its context is. Your provider's usage charges still belong to your provider.</p>
+          </div>
+          <div class="no-ai" id="no-ai">
+            <p class="eyebrow">No AI, one switch</p>
+            <h2>None of it. Not even loaded.</h2>
+            <p><strong>No AI</strong> in Settings, or <code>Hex --no-ai</code>, takes the agents out at the root instead of hiding them: Agentic, the agent extensions, their commands and their MCP tools are never loaded, and the first frame comes about 310 ms sooner. The editor, terminal and language servers stay as they are.</p>
+          </div>
+        </div>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
-          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: five Claude Code chats in a list on the left, one of them started by another, the open chat in the middle with its tool calls, an allowed request, a ticked to-do list and its answer, and on the right its model, tokens, cost, context, limits, tools and the files it touched">
+          <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: a Claude Code chat working on Hex itself, its card on the left with a Working badge, the chat in the middle with its tool calls, Changes and Plan tabs with their counts as badges, and on the right its model, tokens, cost, context, limits, how many times it used each tool and the files it touched">
         </figure>
-        <p class="note">Five small Claude Code chats at work on the demo project. This one was asked to add envelopes to the mixer, asked leave to build, ticked off its list and said what it left undecided.</p>
+        <p class="note">Claude Code at work on Hex itself, the chat that built this release. The badges say how each agent is doing, what changed and how far its plan has got.</p>
 
         <div class="gallery pairs">
           <figure class="rise">
@@ -252,7 +285,23 @@
             <p>Writing Hex's README took 54 harness calls that handed back 154,000 characters where grep and whole-file reads would have read 1,077,000.</p>
           </li>
         </ul>
-        <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents and MCP, the long version</a>.</p>
+
+        <h3 class="harness-head">The harness: answers, not file dumps</h3>
+        <p>An agent's bill on an existing <strong>massive</strong> codebase is mostly what it reads. Hex keeps a live index of the workspace and answers an agent from it in <code>path:line</code>, so the agent gets the lines it asked about instead of a grep's worth of noise or a 3,000-line file for one method. These are the real tools, and Hex counts the input tokens each one saved in a window of its own.</p>
+        <dl class="harness">
+          <div><dt><code>hex_map</code></dt><dd>The folders a few levels down, the languages in each and the main types they declare. Where to start in a codebase it's never seen.</dd></div>
+          <div><dt><code>hex_symbols</code></dt><dd>Where a name is declared, ranked: exact first, then by its capitals (<code>QM</code> finds <code>QueueMcp</code>). One line a hit.</dd></div>
+          <div><dt><code>hex_search</code></dt><dd>Text or a regex across the workspace, ranked and grouped by file, lines cut to the match. In place of grep, rg and Select-String.</dd></div>
+          <div><dt><code>hex_refs</code></dt><dd>Everywhere a name is used, by whole word and outside comments and strings, declarations marked.</dd></div>
+          <div><dt><code>hex_skim</code></dt><dd>What files are without opening them: size, language, the comment they start with and their outline with line numbers.</dd></div>
+          <div><dt><code>hex_read</code></dt><dd>One declaration by its name, a method or a class with its comments, instead of the whole file.</dd></div>
+          <div><dt><code>hex_edit</code></dt><dd>Replace exact text in a file without reading it first, through the editor, so undo and the index keep up.</dd></div>
+          <div><dt><code>hex_terminal_run</code></dt><dd>Run a build or the tests and get the exit code and what it printed, long output cut in the middle.</dd></div>
+          <div><dt><code>hex_changes</code></dt><dd>What moved in the workspace since the last answer, so an agent catches up on a diff rather than reading everything again.</dd></div>
+        </dl>
+        <p class="note">Any MCP client can use them, not only the agents Hex runs. The server is off until you switch it on.</p>
+
+        <p class="note"><a href="https://github.com/bogzxo/hex/blob/master/docs/agents.md">Agents, MCP and No AI, the long version</a>.</p>
       </div>
     </section>
 
@@ -302,7 +351,7 @@
 
     <section id="get-it">
       <div class="wrap">
-        <p class="eyebrow">Hex 3.1.0 Amphetamine</p>
+        <p class="eyebrow"><!-- release:title -->Hex 3.1.1 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
         <p>Pick your machine. <strong>Setup</strong> handles installation, shortcuts and updates. <strong>Portable</strong> is a ZIP you unpack and run. Neither needs a separate .NET installation.</p>
         <div class="scroller downloads" tabindex="0" role="region" aria-label="Downloads">
@@ -330,6 +379,13 @@
           </table>
         </div>
         <p class="note">Windows needs 10 1809 or newer. Linux needs a Vulkan loader and driver. macOS needs 11 or newer; the build is unsigned, so <code>xattr -dr com.apple.quarantine /path/to/Hex</code> if macOS blocks it. <a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
+        <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
+        <div class="whats-new"><!-- release:notes -->
+<h3>What's new in 3.1.1 Amphetamine</h3>
+<p>C# completion keeps up with typing again.</p>
+<ul><li>completion is asked before the colours, folds, hints and lenses Hex asks for after every change, which wait until typing stops; csharp-ls answers in turn, and on the engine's solution each completion waited 0.3 to 2 seconds behind them where 0.07 does</li><li>a word the server had nothing for yet (csharp-ls still loading its solution) is asked again as it's typed on, rather than offering nothing until the next word</li><li>a project file changing outside the folder csharp-ls runs in, in a build's output or in a hidden folder, no longer starts it again, which took the engine's solution half a minute to load each time</li><li>a repository's checkpoint is found through a link in its path (macOS's /var), so restoring a turn's changes puts them back there</li></ul>
+<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.1.1">The release on GitHub</a></p>
+<!-- /release:notes --></div>
       </div>
     </section>
 
@@ -350,10 +406,28 @@
     </section>
   </main>
 
+  <!-- Asking for something: an extension goes to hex-extensions, a feature of Hex's own to Hex. Both open a new issue
+       on the request form, which labels it enhancement -->
+  <dialog id="request" class="request" closedby="any" aria-labelledby="request-title">
+    <h2 id="request-title">What should it be?</h2>
+    <p>Either way it's an issue on GitHub, labelled as a request, that I read.</p>
+    <div class="choices">
+      <a class="choice" href="https://github.com/bogzxo/hex-extensions/issues/new?template=extension_request.yml&amp;labels=enhancement">
+        <b>An extension</b>
+        <span>A language, a tool, a look or a task runner, something Hex loads rather than ships with built in.</span>
+      </a>
+      <a class="choice" href="https://github.com/bogzxo/hex/issues/new?template=feature_request.yml&amp;labels=enhancement">
+        <b>A feature</b>
+        <span>Something Hex itself should do natively, in the editor, the terminal, the agents or the harness.</span>
+      </a>
+    </div>
+    <button type="button" class="button quiet small" commandfor="request" command="close" autofocus>Never mind</button>
+  </dialog>
+
   <footer class="end">
     <div class="wrap">
       <span>Hex, by <a href="https://github.com/bogzxo">bogzxo</a>. Drawn in Solstice, like the editor.</span>
-      <span>No analytics. No cookies. No web fonts. It's a page.</span>
+      <span>No analytics. No cookies. No web fonts. It's a static HTML5 page, following modern web-dev practices.</span>
     </div>
   </footer>
 

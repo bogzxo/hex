@@ -37,7 +37,9 @@ internal sealed partial class DawnScene
     /// <summary>The status bar's item and the server, when the settings or the command line say so.</summary>
     private void BuildMcp()
     {
-        BuildAgent();
+        // The Explain and Change with Agent commands, and the status bar's agents, none of them with No AI on
+        if (!HexAi.Off)
+            BuildAgent();
         mcpItem = statusBar.Add("$(robot)", right: true, pressed: () =>
         {
             OpenSettings(null);
@@ -45,7 +47,8 @@ internal sealed partial class DawnScene
         }, tooltip: Said("mcp.status_tip", ("clients", string.Empty)));
         mcpItem.IsVisible = () => mcpClientsShown > 0 || System.Environment.TickCount64 - mcpLastOn < MCP_LINGER_MS;
         ApplyMcp();
-        BuildAgentsItem();
+        if (!HexAi.Off)
+            BuildAgentsItem();
     }
 
     /// <summary>
@@ -136,8 +139,14 @@ internal sealed partial class DawnScene
     /// <summary>A server for one client, its tools the editor's, those about agents told which chat it's for when it's one's.</summary>
     private McpServer MakeMcpServer(string? tag)
     {
-        string usual = Said("mcp.instructions");
-        IMcpTools tools = int.TryParse(tag, out int chat) ? new HexMcpCaller(mcpTools!, chat) : mcpTools!;
+        // Without the agents' tools there's no telling a client about starting agents of its own
+        string usual = Said(HexAi.Off ? "mcp.instructions_plain" : "mcp.instructions");
+        bool chatBound = int.TryParse(tag, out int chat);
+        // A chat's own connection can write its Plan tab, so its agent is told how that tab is kept, for a system that
+        // reads the server's instructions rather than being told in its prompt (Antigravity). Others aren't offered it
+        if (chatBound && !HexAi.Off)
+            usual += "\n\n" + HexAgentProfiles.PLAN_RULES;
+        IMcpTools tools = chatBound ? new HexMcpCaller(mcpTools!, chat) : mcpTools!;
         return new(tools, "hex", HexAbout.Version, usual)
         {
             // An agent system an extension said (hex.agent) has its own said after Hex's, picked by who the client is
@@ -329,7 +338,7 @@ internal sealed class HexMcpCaller(HexMcpTools tools, int chat) : IMcpTools
 {
     public const string CALLER = "_hex_caller";
 
-    public IReadOnlyList<McpTool> Tools => tools.Tools;
+    public IReadOnlyList<McpTool> Tools => tools.ChatTools;
 
     public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel) => tools.CallAs(name, arguments, cancel, chat);
 }
@@ -340,14 +349,22 @@ internal sealed class HexMcpTools : IMcpTools
     private readonly DawnScene hex;
     private readonly Dictionary<string, HexMcpTool> byName;
 
+    /// <summary>The tools as a client that isn't a chat's sees them, without those that only write a chat's own (hex_plan_update).</summary>
     public IReadOnlyList<McpTool> Tools { get; }
+
+    /// <summary>Every tool, as a chat's own connection sees them.</summary>
+    public IReadOnlyList<McpTool> ChatTools { get; }
+
+    // What only a chat's agent can do, there being no chat to do it to on another connection
+    private static readonly HashSet<string> CHAT_ONLY = ["hex_plan_update"];
 
     public HexMcpTools(DawnScene hex)
     {
         this.hex = hex;
         List<HexMcpTool> all = hex.McpToolList();
         byName = all.ToDictionary(tool => tool.Meta.Name, StringComparer.Ordinal);
-        Tools = [.. all.Select(tool => tool.Meta)];
+        ChatTools = [.. all.Select(tool => tool.Meta)];
+        Tools = [.. ChatTools.Where(tool => !CHAT_ONLY.Contains(tool.Name))];
     }
 
     public Task<McpToolResult> Call(string name, JsonObject arguments, CancellationToken cancel) => CallAs(name, arguments, cancel, null);

@@ -121,11 +121,32 @@ internal static partial class HexExtensionCatalog
         }
     }
 
-    /// <summary>The folders of a catalog that are extensions, their extension.hor in them, by name.</summary>
+    /// <summary>
+    /// The folders of a catalog that are extensions, their extension.hor in them, by name. With No AI on the agent
+    /// systems aren't among them, there's nothing for them to be installed into.
+    /// </summary>
     public static IEnumerable<string> Extensions(string catalog) =>
         Directory.Exists(catalog)
-            ? Directory.GetDirectories(catalog).Where(folder => !IsLegacyMarkdownPreview(folder) && File.Exists(Path.Combine(folder, FILE))).Order(StringComparer.OrdinalIgnoreCase)
+            ? Directory.GetDirectories(catalog).Where(folder => !IsLegacyMarkdownPreview(folder) && File.Exists(Path.Combine(folder, FILE))
+                && !(HexAi.Off && IsAgentSystem(folder))).Order(StringComparer.OrdinalIgnoreCase)
             : [];
+
+    /// <summary>
+    /// Whether the extension in a folder is an agent system (Claude Code, Codex, Antigravity), known by its file saying
+    /// who its agent is with hex.agent. Read as text rather than run, an extension No AI leaves out never runs at all.
+    /// </summary>
+    public static bool IsAgentSystem(string folder)
+    {
+        try
+        {
+            string file = Path.Combine(folder, FILE);
+            return File.Exists(file) && File.ReadAllText(file).Contains("hex.agent(", StringComparison.Ordinal);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// An extension of the catalog put in a folder, installed or brought up to date. Its files are written over the ones

@@ -24,7 +24,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> AgentsTools() =>
     [
         new(new McpTool("hex_agent_list", "List agents and chats",
-            "The agent systems that can be started (their ids and the models they offer) and the chats of Hex's Agents panel, each with its id, name, agent, model, state (running, done, failed, stopped) and which chat started it. Says which chat you are when you're one.",
+            "The agent systems that can be started (their ids and the models they offer) and the chats of Hex's Agents panel, each with its id, name, agent, model, state (running, done, failed, stopped), which chat started it, and the plan step it is doing with the files its open steps name. Says which chat you are when you're one.",
             McpSchema.Empty()), AgentsList),
         new(new McpTool("hex_agent_spawn", "Start a background agent",
             "Start another agent in the background on a task of its own, scouting, research, a review, a part of the work, of any agent system and model listed by hex_agent_list. It's a chat of the Agents panel under yours, runs on its own while you go on, and has Hex's tools too. Give it everything it needs to know, it doesn't see your conversation. Its last message is what you get back. Returns its id at once, hex_agent_wait waits for it.",
@@ -149,8 +149,9 @@ internal sealed partial class DawnScene
         said.Append("\nChats:\n");
         if (agentChats.Count == 0)
             said.Append("none\n");
+        // Each with the step it's doing and the files its open steps name, what chats in the same checkout coordinate on
         foreach (HexHubRow status in agentStatuses.Values.OrderBy(status => status.Id))
-            said.Append(StatusLine(status)).Append('\n');
+            said.Append(StatusLine(status)).Append(PlanLine(status.Chat)).Append('\n');
         yield return McpToolResult.Text(said.ToString().TrimEnd());
     }
 

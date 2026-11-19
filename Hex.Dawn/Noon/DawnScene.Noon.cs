@@ -35,18 +35,57 @@ internal sealed partial class DawnScene
 
     private TextBox noonFleetFilter = null!;
 
-    // Whether the person put the fleet away, and the button over the middle that brings it back
+    // Whether the person put the fleet away on a wide window, and the button over the middle that brings it back
     private bool noonFleetHidden;
     private Button noonFleetBack = null!;
 
-    /// <summary>The fleet shown or put away, the middle taking its room.</summary>
+    // On a window too narrow for the fleet beside the chat, whether it's been opened in the chat's place. Any pick (a
+    // card, even the chat already open, a key, a new chat) puts the middle back (FleetPicked). The wide window's choice is
+    // left alone, so widening the window again shows the fleet the way it was
+    private bool noonFleetOpened;
+    private bool noonNarrow;
+
+    /// <summary>
+    /// The fleet shown or put away. On a wide window the middle takes its room and that's remembered. On a narrow one it
+    /// takes the middle's place for a pick, the middle coming back as one is picked or it's put away again.
+    /// </summary>
     private void ShowFleet(bool shown)
     {
-        noonFleetHidden = !shown;
+        if (noonNarrow)
+        {
+            noonFleetOpened = shown;
+            if (Face == HexFace.Noon)
+            {
+                // Laid out now, so the keyboard only goes to what's on screen: the filter while the fleet is the page,
+                // the chat's box once it's gone if the chat is the stage up (the inbox or the changes keep no box)
+                FitNoon();
+                if (shown)
+                    noonFleetFilter.Focus();
+                else if (noonStage == NoonStage.Chat)
+                    agentsInput.Focus();
+                else if (compositor.Focus == noonFleetFilter)
+                    compositor.Focus = null;
+            }
+        }
+        else
+            noonFleetHidden = !shown;
         noonFleetDrawn = NOT_DRAWN;
         noonWait = 0.0f;
         Engine.WindowManager.RequestFrames();
     }
+
+    /// <summary>
+    /// A chat picked (or a new one begun) from wherever: the fleet opened over a narrow window gives the middle back, the
+    /// same chat picked again too, which nothing changing about the chat on screen would never have told.
+    /// </summary>
+    private void FleetPicked()
+    {
+        if (noonFleetOpened)
+            ShowFleet(false);
+    }
+
+    /// <summary>The fleet's key, putting it away when it's on screen and bringing it when it isn't, whatever the width.</summary>
+    private void ToggleFleet() => ShowFleet(!noonFleet.Visible);
 
     // How wide the chat's column is at most, centred in the middle
     private const float NOON_COLUMN = 920.0f;
@@ -151,7 +190,17 @@ internal sealed partial class DawnScene
         if (face == Face)
             return;
 
+        // No Agentic with No AI on, it was never made. A workspace left in it, --face noon or a call asking for it
+        // stays in Dawn
+        if (face == HexFace.Noon && HexAi.Off)
+        {
+            Say(Said("no_ai.no_agentic"));
+            return;
+        }
+
         Face = face;
+        // The fleet opened over a narrow window is for one pick, Noon comes back with the chat
+        noonFleetOpened = false;
         bool noon = face == HexFace.Noon;
         body.Visible = !noon;
         noonView.Visible = noon;
@@ -164,6 +213,8 @@ internal sealed partial class DawnScene
             // The stage it was left on, the chat unless another was picked
             ApplyStage();
             noonStageDrawn = NOT_DRAWN;
+            // And the server off, what switching it on saves, once a session
+            HintMcp();
         }
         else
         {
@@ -242,17 +293,30 @@ internal sealed partial class DawnScene
         bool context = width >= NOON_CONTEXT_FROM;
         noonContext.Visible = context;
         // The fleet away when it's been put away, or the window is too narrow for it beside a chat worth reading, the
-        // tabs' button bringing it back
-        bool fleet = !noonFleetHidden && width >= NOON_FLEET_FROM;
+        // tabs' button bringing it back. Brought back on a narrow window it takes the whole room in the chat's place
+        // rather than squeezing the chat, until a chat is picked or it's put away
+        bool narrow = width < NOON_FLEET_FROM;
+        if (narrow != noonNarrow)
+        {
+            noonNarrow = narrow;
+            noonFleetOpened = false;
+            noonFleetDrawn = NOT_DRAWN;
+        }
+        bool over = narrow && noonFleetOpened;
+        bool fleet = narrow ? over : !noonFleetHidden;
         noonFleet.Visible = fleet;
+        noonCenter.Visible = !over;
         noonFleetBack.Visible = !fleet;
-        float middle = width - (fleet ? NOON_FLEET : 0.0f) - (context ? NOON_CONTEXT : 0.0f);
+        float fleetWidth = over ? width : NOON_FLEET;
         noonView.Size = new Vector2(width, height);
 
-        noonFleet.Size = new Vector2(NOON_FLEET, height);
+        noonFleet.Size = new Vector2(fleetWidth, height);
         float systems = noonSystems is not null && SystemsTall(noonSystems) is > 0 and var tall ? tall + noonFleet.Spacing : 0.0f;
-        noonFleetScroll.Size = new Vector2(NOON_FLEET - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - NOON_FILTER - noonFleet.Spacing - systems - NOON_HARNESS - noonFleet.Spacing));
+        noonFleetScroll.Size = new Vector2(fleetWidth - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - NOON_FILTER - noonFleet.Spacing - systems - NOON_HARNESS - noonFleet.Spacing));
+        if (over)
+            return;
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
+        float middle = width - (fleet ? fleetWidth : 0.0f) - (context ? NOON_CONTEXT : 0.0f);
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
         float side = MathF.Floor((middle - column) * 0.5f);
         if (MathF.Abs(noonCenter.Padding.Left - side) > 0.5f)
@@ -262,6 +326,7 @@ internal sealed partial class DawnScene
         var stage = new Vector2(middle - noonCenter.Padding.Total.X, height - noonCenter.Padding.Total.Y - NOON_TABS);
         agentsView.Size = stage;
         noonInbox.Size = noonChanges.Size = noonPlan.Size = stage;
+        FitNoonTabs(stage.X - (noonFleetBack.Visible ? noonFleetBack.Size.X + noonTabs.Spacing : 0.0f));
         noonContext.Size = new Vector2(NOON_CONTEXT, height);
         noonContextScroll.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X, MathF.Max(40, height - noonContext.Padding.Total.Y - 28));
     }
@@ -283,13 +348,10 @@ internal sealed partial class DawnScene
 
         // The cards made again only when the agents or how they're doing changed, their words put right in place otherwise
         // Narrowed by the filter, a new list only while something's typed in it
-        List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
         string filter = noonFleetFilter.Text.Trim();
-        if (filter.Length > 0)
-            order = order.FindAll(each => each.Chat.Shown.Contains(filter, StringComparison.OrdinalIgnoreCase) || each.Chat.Agent.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                || $"#{each.Chat.Id}".Contains(filter, StringComparison.Ordinal) || (HexAgentModels.Of(each.Chat) ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase));
+        List<(HexAgentChat Chat, int Step)> order = FleetShown();
         long said = AgentCardsKey(order) * 31 + string.GetHashCode(filter, StringComparison.Ordinal);
-        float width = NOON_FLEET - noonFleet.Padding.Total.X - 6;
+        float width = noonFleet.Size.X - noonFleet.Padding.Total.X - 6;
         // Not made again under a held button, a card made again between the press and the letting go lost the click, the
         // same as Details and the tabs wait for it
         if (said != noonFleetDrawn && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
@@ -341,6 +403,22 @@ internal sealed partial class DawnScene
             ("agents", agentChats.Count.ToString()), ("running", running.ToString()),
             ("cost", cost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)), ("mail", mail.ToString())));
     }
+
+    /// <summary>
+    /// The cards the fleet shows, top to bottom: every chat in the list's order, narrowed by what's typed in the fleet's
+    /// filter. The fleet draws these and its keys go round them, so the next is always the card under this one.
+    /// </summary>
+    internal List<(HexAgentChat Chat, int Step)> FleetShown()
+    {
+        List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
+        string filter = noonFleetFilter?.Text.Trim() ?? string.Empty;
+        return filter.Length == 0 ? order : order.FindAll(each => FleetFits(each.Chat, filter));
+    }
+
+    // Whether a chat's name, agent system, number or model has what's typed in the fleet's filter
+    private static bool FleetFits(HexAgentChat chat, string filter) =>
+        chat.Shown.Contains(filter, StringComparison.OrdinalIgnoreCase) || chat.Agent.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || $"#{chat.Id}".Contains(filter, StringComparison.Ordinal) || (HexAgentModels.Of(chat) ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase);
 
     // The fleet's totals as they were last written
     private (int Agents, int Running, long Cents, int Mail) noonSummaryDrawn = (-1, -1, -1, -1);
@@ -547,25 +625,56 @@ internal sealed partial class DawnScene
             int harness = tools.Where(pair => pair.Key.StartsWith("hex_", StringComparison.Ordinal)).Sum(pair => pair.Value);
             ContextSection(Said("noon.tools", ("harness", harness.ToString()), ("all", tools.Values.Sum().ToString())));
             foreach (var (tool, count) in tools.OrderByDescending(pair => pair.Value).Take(10))
-                ContextLine(ToolIcon(tool), $"{tool} × {count}");
+            {
+                Label row = ContextLine(ToolIcon(tool), tool);
+                if (HexAgentRows.ToolColour(tool, Skin?.Palette) is { } ink)
+                    row.Text = $"[color:{HexColour(ink)}]$({ToolIcon(tool)}) {UIRichText.Literal(tool)}[/color]";
+
+                // How many times, a count's badge at the line's right end in the tool's own colour, the counts one column
+                // down Details rather than "× 27" run on after each name
+                row.Add(new Badge
+                {
+                    Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture), TextScale = 0.105f,
+                    Colour = HexAgentRows.ToolColour(tool, Skin?.Palette), Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-4, 0)
+                });
+            }
         }
 
         if (files.Count > 0)
         {
             ContextSection(Said("noon.files"));
             string? folder = explorer.workspace.Folders.FirstOrDefault();
+            // Each file by its name first and the folder it's in after it, the full path in the tooltip
+            var rows = new List<(string Path, string Shown)>();
             foreach (string file in files.Take(noonFilesAll ? FILES_KEPT : FILES_SHOWN))
             {
                 string path = Path.IsPathRooted(file) || folder is null ? file : Path.Combine(folder, file);
-                string shown = folder is not null && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) ? Path.GetRelativePath(folder, path) : file;
+                rows.Add((path, folder is not null && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) ? Path.GetRelativePath(folder, path) : file));
+            }
+
+            List<string> everyShown = rows.ConvertAll(row => row.Shown);
+            // What a row's text has to fit in, as the button measures it: its icon and label at its scale in the room its
+            // style leaves inside the row
+            const float FILE_SCALE = 0.135f;
+            float across = noonContextScroll.Size.X - noonContextScroll.Padding.Total.X - 6.0f;
+            if (Skin is { } rowSkin)
+                across -= (rowSkin.TryGetRegion("button_flat", out var flat) ? flat.ContentOr(rowSkin.ButtonPadding) : rowSkin.ButtonPadding).Total.X;
+            foreach (var (path, shown) in rows)
+            {
+                string opened = path, icon = HexExplorer.FileIcon(path);
+                (string name, string where) = Skin?.Font is { } font
+                    ? FileRowParts(shown, everyShown, text => font.Measure($"$({icon}) {UIRichText.Literal(text)}", FILE_SCALE).X, across)
+                    : (Path.GetFileName(shown), string.Empty);
                 noonContextRows.Add(new Button
                 {
-                    Icon = HexExplorer.FileIcon(path), IconColor = explorer.FileIconColor(path),
-                    Label = UIRichText.Literal(OneLine(shown, 40)), Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal,
-                    Size = new Vector2(0, 22), LabelScale = 0.135f, Animated = false, OnPressed = () =>
+                    Icon = icon, IconColor = explorer.FileIconColor(path),
+                    // Plain text, a button's label doesn't read colour markup, the name and then its folder after a dot
+                    Label = UIRichText.Literal(where.Length > 0 ? name + FILE_DOT + where : name),
+                    Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = path,
+                    Size = new Vector2(0, 22), LabelScale = FILE_SCALE, Animated = false, OnPressed = () =>
                     {
                         ShowFace(HexFace.Dawn);
-                        Open(path);
+                        Open(opened);
                     }
                 });
             }
@@ -586,6 +695,60 @@ internal sealed partial class DawnScene
 
     // Whether Details shows every file it keeps, or the first few
     private bool noonFilesAll;
+
+    // What a row's name and its folder are written with between them
+    internal const string FILE_DOT = " · ";
+
+    /// <summary>
+    /// A file of Details as its name and the folder it's in, whichever of these is the most that fits <paramref name="room"/>
+    /// as <paramref name="width"/> measures it. The whole name always when it fits. The nearest folder after it, or when
+    /// another file of the list has the same name the shortest run of folders that tells them apart, and when that
+    /// doesn't fit the one folder that differs alone. A name that still doesn't fit is cut in the middle, its end kept.
+    /// </summary>
+    internal static (string Name, string Where) FileRowParts(string shown, IReadOnlyList<string> all, Func<string, float> width, float room)
+    {
+        string name = Path.GetFileName(shown);
+        string[] parents = FolderNames(shown);
+        bool Fits(string called, string folder) => width(folder.Length > 0 ? called + FILE_DOT + folder : called) <= room;
+
+        // The folders to tell it from the files of its name, the nearest one at the least. Down to none for a file without
+        string[][] others = [.. all.Where(other => other != shown && string.Equals(Path.GetFileName(other), name, StringComparison.OrdinalIgnoreCase)).Select(FolderNames)];
+        int need = Math.Min(1, parents.Length);
+        while (need < parents.Length && others.Any(up => up.Length >= need && up[^need..].SequenceEqual(parents[^need..], StringComparer.OrdinalIgnoreCase)))
+            need++;
+        string whole = string.Join(Path.DirectorySeparatorChar, parents[^need..]);
+        if (Fits(name, whole))
+            return (name, whole);
+
+        // The folder that differs alone, nothing of the folders for a file whose name tells it from the rest
+        string differing = others.Length > 0 && parents.Length > 0 ? parents[^need] : string.Empty;
+        if (Fits(name, differing))
+            return (name, differing);
+
+        // The whole name before any shortening of it: the folder that differs cut in the middle to what's left
+        for (int length = differing.Length - 1; length >= 6; length--)
+            if (Fits(name, Elide(differing, length)))
+                return (name, Elide(differing, length));
+
+        // Only then the name cut too, the folder at its shortest
+        string least = Elide(differing, 6);
+        for (int length = name.Length - 1; length >= 6; length--)
+            if (Fits(Elide(name, length), least))
+                return (Elide(name, length), least);
+        return (Elide(name, 6), least);
+    }
+
+    private static string[] FolderNames(string path) => (Path.GetDirectoryName(path) ?? string.Empty).Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+
+    // A text cut in the middle to this many characters with "...", more of its end kept than its start, what tells
+    // DawnScene.SelfTest.NoonKeys.cs from its NoonLooks.cs is at the end, with the extension
+    private static string Elide(string text, int length)
+    {
+        if (text.Length <= length || length < 6)
+            return text;
+        int keep = length - 3, tail = (keep * 11 + 19) / 20;
+        return text[..(keep - tail)] + "..." + text[^tail..];
+    }
 
     // The file each call was given, worked out once, its input never changing, rather than its JSON read again each time
     // Details is made
@@ -650,11 +813,12 @@ internal sealed partial class DawnScene
             : Vector4.Lerp(warn, bad, Math.Clamp((share - 0.8f) / 0.15f, 0.0f, 1.0f));
     }
 
-    // A bar of how full the context is, in its colour by how full
-    private Panel ContextBar(float share, float? across = null)
+    // A bar of how full the context is, in its colour by how full, or of anything else in a colour of its own (the Plan's
+    // steps done, which went red as the last one was ticked off, the colour of a context about to run out)
+    private Panel ContextBar(float share, float? across = null, Vector4? colour = null)
     {
         UISkin? skin = Skin;
-        Vector4 fill = ContextColour(share);
+        Vector4 fill = colour ?? ContextColour(share);
         float width = across ?? NOON_CONTEXT - noonContext.Padding.Total.X - 10;
         var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
         track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = fill });

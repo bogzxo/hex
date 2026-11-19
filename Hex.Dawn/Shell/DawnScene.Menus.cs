@@ -132,8 +132,10 @@ internal sealed partial class DawnScene
         commands.Declare("Test", "tests");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
-        // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness saved
-        commands.Declare("Agents", "open", "chats", "harness");
+        // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness
+        // saved. Not there at all with No AI on, nothing goes in it
+        if (!HexAi.Off)
+            commands.Declare("Agents", "open", "chats", "harness");
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in

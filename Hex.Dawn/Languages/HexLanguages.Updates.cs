@@ -76,7 +76,11 @@ internal sealed partial class HexLanguages
                 CheckServerUpdates(asked: false);
             else if (settings.ServerUpdates)
                 OfferServerUpdates();
+            SetupChanged();
         });
+
+        // The tools too, so the status bar's Set up knows what a language still needs without the window having been opened
+        ProbeSetup(tools: null, servers: []);
     }
 
     /// <summary>Finds out where some servers are and which version, then does something on the editor's thread.</summary>
@@ -341,9 +345,12 @@ internal sealed partial class HexLanguages
     /// Nothing is typed into it, a command that asks something is told no. Cancelled, the command and everything it
     /// started are ended; taking more than ten minutes, likewise, and it's taken to have hung.
     /// </summary>
-    private static async Task<int> RunCommandLine(string line, WorkContext context)
+    private static async Task<int> RunCommandLine(string line, WorkContext context, string? folder = null)
     {
         var info = InstallStartInfo(line);
+        // A project's command (dotnet restore, cmake) runs in the project's folder
+        if (folder is not null && Directory.Exists(folder))
+            info.WorkingDirectory = folder;
 
         void Heard(string? said)
         {

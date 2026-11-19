@@ -1,3 +1,8 @@
+using System.Numerics;
+
+using Hex.Shell;
+
+using Horizon.Rendering;
 using Horizon.UI.Components;
 
 namespace Hex.Dawn;
@@ -79,6 +84,65 @@ internal sealed partial class DawnScene
             Descendants(agentRowsShown[^1].Row).OfType<NotebookMarkdownTable>().Count() == 1
             && Descendants(agentRowsShown[^1].Row).OfType<Label>().Any(label => label.Text.Contains("A streamed continuation.")));
         SemanticShot(test, "agents-markdown-narrow.png");
+
+        string spaced = Path.Combine(testFolder, "agent link (target).txt");
+        string fileLink = (OperatingSystem.IsWindows() ? "/" : "") + spaced.Replace('\\', '/') + ":2:3";
+        const string webLink = "https://example.com/docs_(Hex)";
+        string? clickedWeb = null;
+        test.Run(() =>
+        {
+            File.WriteAllText(spaced, "first\nsecond\n");
+            ShowFace(HexFace.Noon);
+            reply!.Text = $"[Web docs]({webLink})\n\n[Open file](<{fileLink}>)";
+            agentChat!.Touch(reply);
+        });
+        test.Settle(0.4f);
+
+        Vector2 LinkPoint(string target)
+        {
+            foreach (Label label in Descendants(agentRowsShown[^1].Row).OfType<Label>())
+            {
+                if (!label.RichText.HasLinks)
+                    continue;
+
+                for (float y = label.Bounds.Max.Y - 2; y > label.Bounds.Min.Y; y -= 3)
+                {
+                    for (float x = label.Bounds.Min.X + 2; x < label.Bounds.Max.X; x += 3)
+                    {
+                        Vector2 point = new(x, y);
+                        if (label.RichText.LinkAt(point, label.Bounds, Origin.TopLeft).SequenceEqual(target))
+                            return label.Module!.ToWorld(point);
+                    }
+                }
+            }
+
+            return Vector2.Zero;
+        }
+
+        test.Run(() =>
+        {
+            foreach (Label label in Descendants(agentRowsShown[^1].Row).OfType<Label>())
+            {
+                Action<string>? open = label.OnLink;
+                label.OnLink = target =>
+                {
+                    if (target.StartsWith("https:", StringComparison.Ordinal))
+                        clickedWeb = target;
+                    else
+                        open?.Invoke(target);
+                };
+            }
+        });
+        test.Click(() => LinkPoint(webLink));
+        test.Check("agents markdown: the whole web link reaches the click handler, including parentheses", () => clickedWeb == webLink);
+        test.Click(() => LinkPoint(fileLink));
+        test.Check("agents markdown: a file link from Noon shows Dawn at the specified line and column", () =>
+            Face == HexFace.Dawn && document?.Path is { } opened && PlatformPaths.Same(opened, spaced)
+            && code.Document.Caret == new UITextPosition(1, 2));
+        test.Run(() => OpenAgentLink(new Uri(file).AbsoluteUri + "#L1"));
+        test.Check("agents markdown: file URIs also open in the editor", () =>
+            document?.Path is { } opened && PlatformPaths.Same(opened, file)
+            && code.Document.Caret == new UITextPosition(0, 0));
         test.Run(() =>
         {
             ClearAgentChat();
@@ -86,6 +150,8 @@ internal sealed partial class DawnScene
             settings.UiAnimation = motion;
             ApplyPanelSizes();
             ShowSide(HexSide.Explorer);
+            if (OpenDocument(spaced) is { } linkTarget)
+                CloseDocument(linkTarget);
             CloseNow();
         });
     }

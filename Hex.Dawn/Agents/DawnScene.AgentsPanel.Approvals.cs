@@ -24,7 +24,7 @@ internal sealed partial class DawnScene
         var stack = card.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
         stack.Add(Text($"[color:{HexColour(warning)}]$(shield)[/color] {UIRichText.Literal(entry.Text)}", 0.14f));
         if (!string.IsNullOrWhiteSpace(entry.Input))
-            stack.Add(Text(UIRichText.Literal(Lines(entry.Input!, 8)), 0.13f, dim: true).Also(label => label.CodeFont = code.Font));
+            stack.Add(Text(UIRichText.Literal(Lines(HexAgentRows.Readable(entry.Input!), 8)), 0.13f, dim: true).Also(label => label.CodeFont = code.Font));
 
         if (waiting)
         {

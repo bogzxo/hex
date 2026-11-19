@@ -28,35 +28,23 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// The chats in the order the fleet shows them, each that somebody started followed by the ones it started, a step in
-    /// each time.
+    /// Every chat in the order the fleet and the list show them (ChatsInOrder), the newest that somebody started first,
+    /// each followed by the ones it started. Not narrowed by the fleet's filter, what waits on the person (the inbox, the
+    /// next that needs looking at) is everybody's whatever is typed there.
     /// </summary>
-    internal List<HexAgentChat> FleetOrder()
-    {
-        var order = new List<HexAgentChat>(agentChats.Count);
-        void Under(HexAgentChat chat, int depth)
-        {
-            order.Add(chat);
-            if (depth < 16)
-            {
-                foreach (HexAgentChat started in hub.Children(chat))
-                    Under(started, depth + 1);
-            }
-        }
+    /// <remarks>
+    /// It walked the chats its own way once, the oldest first, so with three chats Alt+Page Down went to the card over
+    /// this one rather than under it.
+    /// </remarks>
+    internal List<HexAgentChat> FleetOrder() => ChatsInOrder().ConvertAll(each => each.Chat);
 
-        foreach (HexAgentChat chat in agentChats)
-        {
-            if (chat.Parent is not { } parent || ChatById(parent) is null)
-                Under(chat, 0);
-        }
-
-        return order;
-    }
-
-    /// <summary>The next or the one before in the fleet's order, round from the end to the start.</summary>
+    /// <summary>
+    /// The next or the one before of the cards the fleet shows, round from the end to the start. In Noon only those the
+    /// fleet's filter lets through, the keys never going to a chat that isn't on screen.
+    /// </summary>
     private void StepAgent(int by)
     {
-        List<HexAgentChat> order = FleetOrder();
+        List<HexAgentChat> order = Face == HexFace.Noon ? FleetShown().ConvertAll(each => each.Chat) : FleetOrder();
         if (order.Count == 0)
             return;
         int at = agentChat is null ? -1 : order.IndexOf(agentChat);

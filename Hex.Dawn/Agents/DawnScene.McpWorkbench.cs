@@ -83,9 +83,21 @@ internal sealed partial class DawnScene
             null, RunAway: SelfTestRun)
     ];
 
-    /// <summary>Every tool, in the order tools/list says them.</summary>
-    internal List<HexMcpTool> McpToolList() => [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. TerminalTools(), .. DebugTools()];
+    /// <summary>
+    /// Every tool, in the order tools/list says them. With No AI on, the ones about agents aren't among them: starting,
+    /// waiting on and writing to Hex's own agents (hex_agent_*), asking the person from a chat (hex_ask), the plans of
+    /// Agentic and the count of what the harness saved them. What a client outside finds code and drives the editor with
+    /// is all still there.
+    /// </summary>
+    internal List<HexMcpTool> McpToolList() => HexAi.Off
+        ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
+            Behind(FileTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
+        : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
+        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+
+    /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
+    internal static bool AgentsOnly(string tool) =>
+        tool.StartsWith("hex_agent_", StringComparison.Ordinal) || tool is "hex_ask" or "hex_harness_stats" || tool.StartsWith("hex_plan_", StringComparison.Ordinal);
 
     /// <summary>Tools that do their work without the editor on screen, so an agent calling them leaves the person in Dusk.</summary>
     private static IEnumerable<HexMcpTool> Behind(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { NeedsEditor = false });

@@ -1,3 +1,5 @@
+using Horizon.UI.Scripting;
+
 namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
@@ -16,13 +18,22 @@ internal sealed partial class DawnScene
             prior = code.CompletionSource;
             code.CompletionSource = _ => new(0,
             [
-                new("First", Insert: "first", ResolveDocumentation: () => { firstRequests++; return first.Task; }),
-                new("Second", Insert: "second", ResolveDocumentation: () => { secondRequests++; return second.Task; })
+                new("PropertyName", Insert: "first", Kind: "property", ResolveDocumentation: () => { firstRequests++; return first.Task; }),
+                new("MethodName", Insert: "second", Kind: "method", ResolveDocumentation: () => { secondRequests++; return second.Task; })
             ]);
             code.Focus();
             code.Complete();
         });
         test.WaitFor(() => firstRequests == 1, 5);
+        test.Check("Completion colours: properties and methods use their syntax kinds and unknown kinds use name ink", () =>
+            code.Completions is { Count: 2 } choices
+            && UICompletionKinds.SyntaxOf(choices[0].Kind) == SyntaxKind.Property
+            && UICompletionKinds.SyntaxOf(choices[1].Kind) == SyntaxKind.Method
+            && UICompletionKinds.SyntaxOf("field") == SyntaxKind.Field
+            && UICompletionKinds.SyntaxOf("class") == SyntaxKind.Class
+            && UICompletionKinds.SyntaxOf("unknown") == SyntaxKind.Name);
+        test.Settle(0.4f);
+        SemanticShot(test, "completion-colours.png");
         test.Check("Completion docs: only the highlighted item is requested", () => firstRequests == 1 && secondRequests == 0);
         test.Run(() => code.MoveCompletion(1));
         test.WaitFor(() => secondRequests == 1, 5);

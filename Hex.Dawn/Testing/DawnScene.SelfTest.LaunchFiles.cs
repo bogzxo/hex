@@ -117,16 +117,17 @@ internal sealed partial class DawnScene
         test.Check("launch: started on code the empty layout has no tab, and the status bar says nothing of HIDL or where the caret is", () =>
             PlainStart && documents.Count == 1 && docTabs.Tabs.Count == 0
             && languageItem.IsVisible?.Invoke() == false && caretItem.IsVisible?.Invoke() == false);
-        // Keyboard Shortcuts went to the Help column with Solstice's welcome, New Layout is the Start list's last
-        test.Check("launch: its Start list leads with Open Folder and Open File, then New File, New Project, the palette and New Layout last", () =>
+        // The action bar: Open Folder first (the one primary), then New File, Open File, New Project, New Layout last. The
+        // palette and the rest of help went to the footer
+        test.Check("launch: its action bar leads with Open Folder, then New File, Open File, New Project and New Layout last", () =>
             plainPage is not null && Descendant<Button>(plainPage, button => Says(button, "welcome.new_file"))?.Parent is { } start
             && IndexIn(start, "welcome.open_folder") == start.Children.ToList().FindIndex(child => child is Button)
-            && IndexIn(start, "welcome.open_folder") < IndexIn(start, "welcome.open_file")
-            && IndexIn(start, "welcome.open_file") < IndexIn(start, "welcome.new_file")
-            && IndexIn(start, "welcome.new_file") + 1 == IndexIn(start, "new_project.welcome")
-            && IndexIn(start, "new_project.welcome") < IndexIn(start, "welcome.commands")
-            && IndexIn(start, "welcome.commands") < IndexIn(start, "welcome.new_layout")
-            && IndexIn(start, "welcome.new_layout") == start.Children.Count - 1);
+            && IndexIn(start, "welcome.open_folder") < IndexIn(start, "welcome.new_file")
+            && IndexIn(start, "welcome.new_file") < IndexIn(start, "welcome.open_file")
+            && IndexIn(start, "welcome.open_file") < IndexIn(start, "new_project.welcome")
+            && IndexIn(start, "new_project.welcome") < IndexIn(start, "welcome.new_layout")
+            && IndexIn(start, "welcome.new_layout") == start.Children.Count - 1
+            && IndexIn(start, "welcome.commands") < 0);
 
         test.Run(() => Open(goFile));
         test.Settle(0.3f);

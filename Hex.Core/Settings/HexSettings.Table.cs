@@ -67,6 +67,8 @@ internal sealed partial class HexSettings
         Flag("wrap_code", settings => settings.WrapCode, (settings, value) => settings.WrapCode = value),
         Flag("git_blame", settings => settings.GitBlame, (settings, value) => settings.GitBlame = value),
         Flag("minimap", settings => settings.Minimap, (settings, value) => settings.Minimap = value),
+        Flag("spell_check", settings => settings.SpellCheck, (settings, value) => settings.SpellCheck = value),
+        Text("spell_check_language", settings => settings.SpellCheckLanguage, (settings, value) => settings.SpellCheckLanguage = value.Trim()),
         Flag("inlay_hints", settings => settings.InlayHints, (settings, value) => settings.InlayHints = value),
         Flag("code_lens_references", settings => settings.CodeLensReferences, (settings, value) => settings.CodeLensReferences = value),
         Flag("semantic_highlighting", settings => settings.SemanticHighlighting, (settings, value) => settings.SemanticHighlighting = value),
@@ -81,6 +83,8 @@ internal sealed partial class HexSettings
         Flag("visual_studio_keys_chosen", settings => settings.VisualStudioKeysChosen, (settings, value) => settings.VisualStudioKeysChosen = value),
         Choice("csharp_colors", settings => settings.CSharpColors, (settings, value) => settings.CSharpColors = value, "resharper", "visual_studio", "skin"),
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
+        Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
+        Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),
         Choice("git_pull_mode", settings => settings.GitPullMode, (settings, value) => settings.GitPullMode = value, "default", "merge", "rebase", "ff_only"),
@@ -180,6 +184,17 @@ internal sealed partial class HexSettings
         Special("language_server_paths",
             (settings, values) => Names(values, "language_server_paths", settings.ServerPaths),
             (settings, written) => written.Add("language_server_paths", Named(settings.ServerPaths, paths: true))),
+        Special("language_server_settings",
+            (settings, values) =>
+            {
+                if (values.GetValueOrDefault("language_server_settings") is not ObjectValue servers)
+                    return;
+                settings.ServerSettings.Clear();
+                foreach (var (name, told) in servers.Properties)
+                    if (HexServerCatalog.Json(told) is System.Text.Json.Nodes.JsonObject json)
+                        settings.ServerSettings[name] = json;
+            },
+            (settings, written) => written.Add("language_server_settings", settings.ServerSettingsObject())),
         Special("files_associations",
             (settings, values) =>
             {

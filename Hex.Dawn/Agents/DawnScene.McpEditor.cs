@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
             Outline),
 
         new(new McpTool("hex_find_in_files", "Find in files",
-            "Search the workspace's folders for text or a regex and list the places, file, line, column and the line itself.",
+            "Every match of text or a regex in file order, with columns, for a folder outside the workspace or when every match counts. hex_search ranks and groups matches in fewer tokens.",
             McpSchema.Object([
                 ("query", McpSchema.String("What to look for.")),
                 ("regex", McpSchema.Flag("The query is a regular expression.")),
@@ -66,7 +66,7 @@ internal sealed partial class DawnScene
             FindInFilesTool, Timeout: 60.0f),
 
         new(new McpTool("hex_definition", "Go to definition",
-            "Go to where the name at a place in the current file is declared (F12), through HIDL or the file's language server, and say where that is.",
+            "Where the symbol at a line and column of the open file is declared, asked of HIDL or its language server, the editor going there (F12). To find a declaration by name, hex_symbols.",
             McpSchema.Object([
                 ("line", McpSchema.Integer("Line of the name, the caret's by default.")),
                 ("column", McpSchema.Integer("Column of the name."))])),
@@ -80,7 +80,7 @@ internal sealed partial class DawnScene
             SymbolInfo, Timeout: 20.0f),
 
         new(new McpTool("hex_references", "Find references",
-            "List everywhere the name at a place in the current file is used (Shift+F12), file, line and the line itself.",
+            "The uses of the exact symbol at a line and column of the open file, asked of its language server (Shift+F12). For every use of a name across the workspace by text, hex_refs is faster.",
             McpSchema.Object([
                 ("line", McpSchema.Integer("Line of the name, the caret's by default.")),
                 ("column", McpSchema.Integer("Column of the name."))]), ReadOnly: true),

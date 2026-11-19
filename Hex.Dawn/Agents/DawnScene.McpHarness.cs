@@ -56,8 +56,9 @@ internal sealed partial class DawnScene
                 "Files by part of their name or path, best first, with their line counts. Words between spaces or slashes all have to fit. Use it in place of ls, find, dir, Get-ChildItem or Glob.",
                 McpSchema.Object([
                     ("query", McpSchema.String("Part of a file's name or path, \"mcp schema\" or \"Agents/Mcp\".")),
+                    ("path", McpSchema.String("Only files whose path inside the workspace starts with this.")),
                     ("most", McpSchema.Integer("At most this many, 30 by default.")), Max()], "query"), ReadOnly: true),
-                (index, args, budget) => index.Files(args.String("query") ?? string.Empty, Math.Clamp(args.Integer("most") ?? 30, 1, 500), budget)),
+                (index, args, budget) => index.Files(args.String("query") ?? string.Empty, Math.Clamp(args.Integer("most") ?? 30, 1, 500), budget, args.String("path"))),
 
             Harnessed(new McpTool("hex_symbols", "Find declarations",
                 "Where things are declared by name, ranked (exact, other case, start of the name, its capitals like QM for QueueMcp, anywhere in it). Container.Name narrows to what's in something. One line each, path:line kind Container.Name and the declaration. Use before grep.",
@@ -82,7 +83,7 @@ internal sealed partial class DawnScene
                     args.String("glob"), args.Integer("context") ?? 0, Math.Clamp(args.Integer("most") ?? 60, 1, 2000), budget)),
 
             Harnessed(new McpTool("hex_refs", "Where a name is used",
-                "Everywhere a name is used, by the whole word outside comments and strings, its declarations marked *, grouped by file. By text, so no file needs to be open, hex_references asks a language server instead.",
+                "Every use of a name across the workspace, found by its whole word in the index outside comments and strings, no file open and no language server. Declarations marked *, grouped by file. For the exact symbol at a place in the open file, hex_references.",
                 McpSchema.Object([
                     ("name", McpSchema.String("The name, Container.Name is taken as Name.")),
                     ("glob", McpSchema.String("Only files that fit this glob.")),

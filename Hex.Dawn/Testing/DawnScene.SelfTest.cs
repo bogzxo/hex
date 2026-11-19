@@ -163,12 +163,15 @@ internal sealed partial class DawnScene
         ("native-shortcuts", "Windows key messages through the native keyboard and application shortcut dispatcher", TestNativeShortcuts),
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
+        ("agent-commands", "Slash command scrolling, descriptions, keyboard navigation and local dispatch", TestAgentCommands),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
         ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),
         ("noon-fleet", "Agentic's fleet, a family as a block with the ones started a step in, the totals, and the family closed with its top", TestNoonFleet),
         ("noon-mail", "Messages between a family's agents through hex_agent_message, in Details and in the family's window, filtered, hundreds with few rows made", TestNoonMail),
+        ("noon-mail-turn", "An instruction for an agent whose turn is over but whose process is still going is kept once and starts its next turn once, what the person types is kept as well", TestNoonMailTurn),
+        ("noon-mail-steer", "A message steered into a working agent takes the unread ones before it with it, is read only once written, and stays unread in its inbox when the write fails", TestNoonMailSteer),
         ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
         ("dusk-noon", "Agentic and Dusk in the one window, the agents going on behind Dusk and Dusk's Noon button bringing Agentic back", TestDuskNoon),
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
@@ -281,6 +284,7 @@ internal sealed partial class DawnScene
         ("middle-scroll", "middle-click autoscroll and hold-to-scroll without moving the caret", TestMiddleScroll),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
         ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
+        (DawnProgram.NO_AI_SUITE, "No AI, a run without the agents: no Agentic, Agents view, menu, commands, agent systems, agents' ticks or MCP tools about agents. Only when named, the run is without them", TestNoAi),
         ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
         ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
         ("window-click", "a press on a window of the editor leaves it where it is", TestWindowClick),
@@ -383,6 +387,11 @@ internal sealed partial class DawnScene
         ("shell", "the shell round the editor, the side bar one width whatever is in it, empty notes, the title over the welcome, long tabs, Extensions lit, the explorer's buttons", TestShellLayout),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
+        ("getting-started", "the welcome page's Getting started, a link each to the settings nobody finds by looking, as wide as Start's, each opening its setting", TestGettingStarted),
+        ("servers-window", "the Language Servers window: Overview finds the workspace's languages, a step's command shown and run (and one queued behind it), a failure with its log, a server's own settings changed and reset, every page", TestServersWindow),
+        ("spelling", "spelling through Windows' spell checker, a comment in code but no names or strings, an HTML page's words and comments and its style's and script's comments but no tags or code, .txt and Markdown", TestSpelling),
+        ("webshots", "the page's pictures of the web, a page, its sheet and TypeScript through their servers, written to HEX_SELFTEST_SHOTS", TestWebShots),
+        ("web", "the web through its servers, TypeScript and JavaScript read as themselves, CSS and SCSS, and CSS completing inside a page's <style>, each when its server is on this machine", TestWeb),
         ("d", "D through serve-d, coloured, DCD asked for and completion after a dot and of a word, when serve-d is on this machine", TestD),
         ("dialogs", "Hex's own dialog for files and folders, opening, saving over, picking and making a folder", TestDialogs),
         ("newproject", "New Project, a kind picked, a bad name and a taken folder refused, a Go module and a Java project made, opened and their servers named", TestNewProject),
@@ -456,6 +465,7 @@ internal sealed partial class DawnScene
         ("typing", "typing fast into a big C# file and a big .hor, every tick timed, no stutter allowed", TestTypingSpeed),
         ("uicost", "what the UI costs sitting still, typing, the wheel, a window dragged and a notebook scrolled, said and not checked", TestUICost),
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
+        ("notebookserver", "a notebook's code read by pyright, what's wrong under the cell it's in, Jupyter's own lines left alone and completion with no kernel, when pyright is on this machine", TestNotebookServer),
         ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
         ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
         ("code-surface", "code rendering, compact find and pinned-scope visibility", TestSurface),
@@ -502,7 +512,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon")).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

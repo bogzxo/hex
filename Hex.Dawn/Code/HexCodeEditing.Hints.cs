@@ -37,7 +37,7 @@ internal sealed partial class HexCodeEditing
 
     /* The editor's context menu */
 
-    internal void ShowCodeMenu(HexDocument at, Vector2 point)
+    internal void ShowCodeMenu(HexDocument at, Vector2 point, Action<CodeEditor, UITextPosition, Menu>? addSpelling = null)
     {
         CodeEditor editor = at.Editor;
 
@@ -48,6 +48,8 @@ internal sealed partial class HexCodeEditing
 
         bool hasSelection = editor.Document.HasSelection;
         var shown = new Menu("code");
+        addSpelling?.Invoke(editor, clicked, shown);
+        if (shown.Items.Count > 0) shown.AddSeparator();
         shown.Add(context.Strings.Said("code_hints.go_to_declared"), GoToDefinition, "F12", "target");
         shown.Add(context.Strings.Said("code_hints.find_everywhere"), FindReferences, "Shift+F12", "references");
         shown.Add(context.Strings.Said("code_hints.rename_it"), RenameSymbol, "F2", "edit");

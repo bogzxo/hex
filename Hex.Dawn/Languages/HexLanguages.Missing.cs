@@ -61,33 +61,20 @@ internal sealed partial class HexLanguages
         string name = registration.Name;
         string command = Path.GetFileNameWithoutExtension(registration.Command);
         HexServerEntry? entry = ServerEntry(name);
-        string install = entry is not null && !IsAdded(entry) ? entry.Install : string.Empty;
 
-        // Every card has the same three, how it's got, the settings and Don't show again. One with no command line to copy
-        // (marksman, serve-d) is downloaded, its releases opened the way Install in the settings does
-        (string Label, Action Pressed) getIt = install.Length > 0
-            ? (context.Strings.Said("code_server.copy_install"), () =>
-            {
-                UIClipboard.Copy(install);
-                context.Notices.Say(context.Strings.Said("code_server.install_copied", ("install", install)));
-            })
-            : (context.Strings.Said("code_server.get_it"), () =>
-            {
-                if (entry is not null) InstallServer(entry);
-                else context.Windows.OpenSettings(SERVER_SECTION);
-            });
-        (string Label, Action Pressed) settingsButton = (context.Strings.Said("code_server.open_settings"), () => context.Windows.OpenSettings(SERVER_SECTION));
+        // Two buttons: Set up, which opens the Language Servers window at the language (what it needs, the commands, a
+        // button each), and Don't show again. The card used to copy a command for somebody to run themselves, and didn't
+        // know the command needed npm, or a JDK, before it could
+        string language = entry is not null ? LanguageNameOf(entry) : command;
+        (string Label, Action Pressed) setUp = (context.Strings.Said("code_server.set_up", ("language", language)), () =>
+        {
+            if (OpenSetup is { } open) open(entry?.Name);
+            else context.Windows.OpenSettings(SERVER_SECTION);
+        });
         (string Label, Action Pressed) quiet = (context.Strings.Said("code_server.dont_show_again"), () => QuietMissing(name));
 
-        string said = install.Length > 0
-            ? context.Strings.Said("code_server.missing", ("command", command), ("install", install))
-            : context.Strings.Said("code_server.missing_no_install", ("command", command));
-        if (MissingNpm(install))
-        {
-            said += " " + NpmHint;
-            getIt = (context.Strings.Said("language_updates.get_npm"), OpenNpmSetup);
-        }
-        context.Notices.Notify(said, error: false, getIt, settingsButton, quiet);
+        string said = context.Strings.Said("code_server.missing_set_up", ("language", language), ("command", command));
+        context.Notices.Notify(said, error: false, setUp, quiet);
         MissingNotices.Add(said);
     }
 }
