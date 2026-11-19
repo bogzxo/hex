@@ -203,6 +203,7 @@ internal static partial class McpBridge
         var session = new McpBridgeSession();
         var writing = new Lock();
         NamedPipeClientStream? pipe = first;
+        // Said by the stdin thread, read by this one
         bool clientGone = false;
 
         void ToClient(string line)
@@ -249,7 +250,7 @@ internal static partial class McpBridge
             }
 
             // The client's done, Hex hears the end of the stream and lets the session go
-            clientGone = true;
+            Volatile.Write(ref clientGone, true);
             try { Volatile.Read(ref pipe)?.Dispose(); } catch (Exception) { }
         }) { IsBackground = true, Name = "mcp stdin" };
         fromClient.Start();
@@ -272,7 +273,7 @@ internal static partial class McpBridge
 
             Volatile.Write(ref pipe, null);
             try { talking.Dispose(); } catch (Exception) { }
-            if (clientGone)
+            if (Volatile.Read(ref clientGone))
                 return;
 
             Say($"Hex {pid} went, waiting for it to come back");
@@ -286,7 +287,7 @@ internal static partial class McpBridge
                 return;
             }
 
-            if (again() is not { } back || clientGone)
+            if (again() is not { } back || Volatile.Read(ref clientGone))
                 return;
             pid = back.Pid;
             foreach (string line in session.Replay())
