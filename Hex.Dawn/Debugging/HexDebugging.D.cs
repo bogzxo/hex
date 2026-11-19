@@ -18,7 +18,24 @@ internal sealed partial class HexDebugging
     internal static bool IsD(string? path) => path is not null && Path.GetExtension(path).ToLowerInvariant() is ".d" or ".di";
 
     /// <summary>Whether a file is one there's a debugger for here, C# with netcoredbg, D with lldb-dap.</summary>
-    internal bool CanDebug(string? path) => !IsDebuggerSourcePath(path) && ((IsCSharp(path) && Netcoredbg() is not null) || ((IsD(path) || IsNativeSource(path)) && LldbDap() is not null) || (IsPython(path) && PythonAdapter() is not null));
+    /// <remarks>
+    /// Asked by the Run command's menu entry every time the menus are drawn, and finding a debugger is a walk of the PATH
+    /// and the disk, so the answer for a file is kept a moment. An install is seen within that moment.
+    /// </remarks>
+    internal bool CanDebug(string? path)
+    {
+        long now = Environment.TickCount64;
+        if (canDebugKept is { } kept && kept.Path == path && now - kept.At < CAN_DEBUG_KEPT_MS)
+            return kept.Can;
+        bool can = CanDebugNow(path);
+        canDebugKept = (path, now, can);
+        return can;
+    }
+
+    private (string? Path, long At, bool Can)? canDebugKept;
+    private const long CAN_DEBUG_KEPT_MS = 2000;
+
+    private bool CanDebugNow(string? path) => !IsDebuggerSourcePath(path) && ((IsCSharp(path) && Netcoredbg() is not null) || ((IsD(path) || IsNativeSource(path)) && LldbDap() is not null) || (IsPython(path) && PythonAdapter() is not null));
 
     /// <summary>Whether any D file has a breakpoint, what has F5 debug a D file rather than run it.</summary>
     internal bool DBreakpoints() => breakpoints.Any(pair => IsD(pair.Key) && DebugBreakpointsOf(pair.Key).Count > 0);
