@@ -102,7 +102,7 @@ internal sealed partial class DawnScene : IDocuments, IWorkspace, INotices, IWor
 
     /// <summary>The document open in Hex for a file, null if it isn't open.</summary>
     private HexDocument? OpenDocument(string path) =>
-        documents.Find(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), Path.GetFullPath(path), PlatformPaths.Comparison));
+        documents.Find(open => open.Path is { } at && PlatformPaths.Same(at, path));
 
     event Action<HexDocument> IDocuments.Opened { add => documentOpened += value; remove => documentOpened -= value; }
     event Action<HexDocument> IDocuments.Saved { add => documentSaved += value; remove => documentSaved -= value; }

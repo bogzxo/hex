@@ -11,8 +11,7 @@ internal sealed partial class DawnScene
 
     private List<OutlineEntry> outlineKept = [];
     private (HexDocument? Of, int Version) outlineKeptFor = (null, -1);
-    private int outlineVersionSeen = -1;
-    private long outlineChangedAt;
+    private HexSettle<int> outlineSettle = new(OUTLINE_SETTLE_MS);
     private bool outlineWorking;
 
     /// <summary>
@@ -32,15 +31,7 @@ internal sealed partial class DawnScene
         if (outlineKeptFor.Version == version || outlineWorking)
             return outlineKept;
 
-        long now = System.Environment.TickCount64;
-        if (outlineVersionSeen != version)
-        {
-            outlineVersionSeen = version;
-            outlineChangedAt = now;
-            return outlineKept;
-        }
-
-        if (now - outlineChangedAt < OUTLINE_SETTLE_MS)
+        if (!outlineSettle.Settled(version, System.Environment.TickCount64))
             return outlineKept;
 
         WorkOutOutline(version);

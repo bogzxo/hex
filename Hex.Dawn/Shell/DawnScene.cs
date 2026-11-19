@@ -320,8 +320,7 @@ internal sealed partial class DawnScene : Scene
 
         // A folder it was started on (dawn -window folder in a terminal) is the workspace instead, unless it's a folder of
         // the workspace of last time, which is kept whole (a restart on its first folder lost the others)
-        if (options.Folder is not null && !explorer.workspace.Folders.Any(folder =>
-                string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
+        if (options.Folder is { } startedOn && !explorer.workspace.Folders.Any(folder => PlatformPaths.Same(folder, startedOn)))
             explorer.OpenFolder(options.Folder);
 
         // The agents' chats of this workspace as they were when Hex last had it open, none read with No AI on

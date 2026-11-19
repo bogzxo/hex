@@ -1011,7 +1011,7 @@ internal sealed partial class HexDebugging
         {
             showingDisassembly = false;
             context.Documents.OpenAt(file, frame.Line, frame.Column);
-            if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
+            if (context.Documents.Current is { Path: { } open } shown && PlatformPaths.Same(open, file))
                 shown.Editor.ExecutionLine = frame.Line;
         }
         RefreshPinnedTip();

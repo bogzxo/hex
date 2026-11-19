@@ -20,8 +20,9 @@ internal sealed partial class DawnScene
 
     private (HexDocument? Of, int Version, int Refreshes) semanticsFor = (null, -1, 0);
     private (HexDocument? Of, int Version) ownSemanticsFor = (null, -1);
-    private int semanticsVersionSeen = -1, semanticsTries;
-    private long semanticsChangedAt, semanticsRetryAt;
+    private int semanticsTries;
+    private long semanticsRetryAt;
+    private HexSettle<int> semanticsSettle = new(SEMANTICS_SETTLE_MS);
     private bool semanticsWorking;
 
     // When the server was last asked, and how long it has to answer before it's asked again
@@ -58,14 +59,7 @@ internal sealed partial class DawnScene
         else if (!sameText)
         {
             // A change once the typing stops for a moment
-            if (semanticsVersionSeen != version)
-            {
-                semanticsVersionSeen = version;
-                semanticsChangedAt = now;
-                return;
-            }
-
-            if (now - semanticsChangedAt < SEMANTICS_SETTLE_MS)
+            if (!semanticsSettle.Settled(version, now))
                 return;
         }
 

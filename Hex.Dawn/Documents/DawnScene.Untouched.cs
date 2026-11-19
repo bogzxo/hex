@@ -11,7 +11,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private static bool Untouched(HexDocument saving, string path, string written) =>
         saving.DiskText is { } disk && saving.Path is { } own
-        && Path.GetFullPath(own).Equals(Path.GetFullPath(path), PlatformPaths.Comparison)
+        && PlatformPaths.Same(own, path)
         && written == saving.SavedCode && saving.CrLf == saving.SavedCrLf
         && File.Exists(path) && ReadNow(path) == disk;
 

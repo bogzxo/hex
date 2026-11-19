@@ -137,7 +137,7 @@ internal sealed partial class DawnScene
             return false;
         }
 
-        HexDocument? open = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(path), PlatformPaths.Comparison));
+        HexDocument? open = documents.Find(other => other.Path is not null && PlatformPaths.Same(other.Path, path));
         if (open is null)
         {
             if (!Open(path))

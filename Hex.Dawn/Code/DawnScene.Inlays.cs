@@ -12,8 +12,7 @@ internal sealed partial class DawnScene
     private const long INLAYS_SETTLE_MS = 300;
 
     private (HexDocument? Of, int Version) inlaysFor = (null, -1);
-    private int inlaysVersionSeen = -1;
-    private long inlaysChangedAt;
+    private HexSettle<int> inlaysSettle = new(INLAYS_SETTLE_MS);
     private bool inlaysWorking;
     private (object? Server, int Refresh) inlaysSource;
     private int inlaysGeneration;
@@ -33,14 +32,7 @@ internal sealed partial class DawnScene
         long now = System.Environment.TickCount64;
         if (inlaysFor.Of == document)
         {
-            if (inlaysVersionSeen != version)
-            {
-                inlaysVersionSeen = version;
-                inlaysChangedAt = now;
-                return;
-            }
-
-            if (now - inlaysChangedAt < INLAYS_SETTLE_MS)
+            if (!inlaysSettle.Settled(version, now))
                 return;
         }
 

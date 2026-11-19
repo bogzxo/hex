@@ -554,9 +554,10 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ForgetClosed(HexDocument gone)
     {
-        if (lensSeen.Of == gone) lensSeen = (null, -1);
+        lensSettle.Reset();
         if (inlaysFor.Of == gone) inlaysFor = (null, -1);
-        if (foldingFor.Of == gone || foldingSeen.Of == gone) ForgetNativeFolding();
+        if (foldingFor.Of == gone) ForgetNativeFolding();
+        foldingSettle.Reset();
         if (semanticsFor.Of == gone) semanticsFor = (null, -1, 0);
         if (ownSemanticsFor.Of == gone) ownSemanticsFor = (null, -1);
         if (conflictsFor.Of == gone) conflictsFor = (null, -1);
