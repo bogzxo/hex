@@ -74,8 +74,7 @@ internal static class HexAgentRows
     /// </summary>
     public static (string Name, string About)? SubagentOf(HexAgentEntry entry)
     {
-        string tool = ToolTitle(entry.ToolName ?? string.Empty).ToLowerInvariant();
-        if (tool is not ("task" or "agent") && entry.Steps == 0)
+        if (!IsSubagent(entry))
             return null;
 
         string kind = string.Empty, about = ToolPreview(entry.Input);
@@ -94,6 +93,18 @@ internal static class HexAgentRows
 
         string name = kind.Length > 0 ? $"Subagent · {kind}" : "Subagent";
         return (name, about);
+    }
+
+    /// <summary>
+    /// Whether a tool row is a subagent, by its name and its steps alone, nothing parsed or made. The rows ask it of every
+    /// call several times a redraw, ten times a second while an agent streams.
+    /// </summary>
+    public static bool IsSubagent(HexAgentEntry entry)
+    {
+        if (entry.Steps > 0)
+            return true;
+        string tool = ToolTitle(entry.ToolName ?? string.Empty);
+        return tool.Equals("task", StringComparison.OrdinalIgnoreCase) || tool.Equals("agent", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A text cut to so many lines, the rest said as how many more there were.</summary>

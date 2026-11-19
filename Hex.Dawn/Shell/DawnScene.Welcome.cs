@@ -162,7 +162,7 @@ internal sealed partial class DawnScene
 
     /// <summary>Whether the welcome is what is on screen, nothing of anybody's open and the layout Hex started with untouched.</summary>
     private bool Welcoming => (welcomeWanted || !options.SelfTest) && documents.Count == 1 && document == startedWith
-        && document is { Path: null, IsText: false, Modified: false } && !document.Module.Root.Children.Any();
+        && document is { Path: null, IsText: false, Modified: false } && document.Module.Root.Children.Count == 0;
 
     /// <summary>Every tick, the welcome put up or taken down for what is open.</summary>
     private void UpdateWelcome()

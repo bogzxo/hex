@@ -271,7 +271,7 @@ internal sealed partial class DawnScene
     private void AskCloseAgentChat(HexAgentChat chat)
     {
         List<HexAgentChat> family = FamilyOf(chat);
-        int working = family.Count(each => each.Running || each.Pending.Any());
+        int working = family.Count(each => each.Running || each.HasPending);
         if (working == 0)
         {
             CloseAgentChat(chat);
@@ -306,8 +306,13 @@ internal sealed partial class DawnScene
     /// <summary>The robot of the activity bar breathing while agents work, saying how many, so it shows with the view away.</summary>
     private void DrawAgentsActivity()
     {
-        int working = agentChats.Count(chat => chat.Running);
-        if (working == agentsWorkingShown || agentsActivity is null)
+        if (agentsActivity is null)
+            return;
+        int working = 0;
+        foreach (HexAgentChat chat in agentChats)
+            if (chat.Running)
+                working++;
+        if (working == agentsWorkingShown)
             return;
 
         agentsWorkingShown = working;

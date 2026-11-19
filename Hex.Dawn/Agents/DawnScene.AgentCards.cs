@@ -130,7 +130,7 @@ internal sealed partial class DawnScene
                 name.Text = said;
 
             // What it's doing now while it works, its model, tokens, cost and what's waiting for it otherwise
-            int unread = chat.UnreadMail().Length;
+            int unread = chat.UnreadMailCount();
             string? doing = chat.Running && chat.Entries.LastOrDefault(entry => entry.Kind == HexAgentEntryKind.Tool) is { State: HexAgentToolState.Running } tool
                 ? (SubagentOf(tool) is { } subagent ? $"{subagent.Name} · {tool.Progress ?? subagent.About}" : $"{ToolTitle(tool.ToolName ?? "tool")} {ToolPreview(tool.Input)}")
                 : null;

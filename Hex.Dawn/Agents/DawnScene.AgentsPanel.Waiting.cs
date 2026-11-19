@@ -26,9 +26,13 @@ internal sealed partial class DawnScene
     private void DrawAgentsWaiting()
     {
         HexAgentChat? chat = agentChat;
-        HexAgentEntry? waiting = chat is null ? null
-            : HexAgentHub.Approvals(chat).FirstOrDefault() ?? chat.Pending.FirstOrDefault(entry => entry.Kind == HexAgentEntryKind.Question);
-        int others = agentChats.Count(each => each != chat && each.Pending.Any());
+        // Plain looks, this runs ten times a second and nothing waits most of the time
+        HexAgentEntry? waiting = chat is not { HasPending: true } ? null
+            : HexAgentHub.Approvals(chat).FirstOrDefault() ?? chat.FirstPending(HexAgentEntryKind.Question);
+        int others = 0;
+        foreach (HexAgentChat each in agentChats)
+            if (each != chat && each.HasPending)
+                others++;
         var now = (chat?.Id ?? -1, waiting, others, (int)agentsView.Size.X);
         if (now == agentsWaitStripDrawn)
             return;

@@ -694,7 +694,7 @@ internal sealed partial class DawnScene
             }
         });
         // The file it was given after its name, with the icon of its kind as the file tree has it, when there's room
-        string? file = SubagentOf(entry) is null ? FileOfCall(entry) : null;
+        string? file = !HexAgentRows.IsSubagent(entry) ? FileOfCall(entry) : null;
         // A button's label is written in one colour, so the file's icon here is the label's, only the button's own icon
         // takes a colour of its own
         string fileIcon = file is null ? string.Empty : $"$({HexExplorer.FileIcon(file)})";
@@ -797,7 +797,10 @@ internal sealed partial class DawnScene
         // A group's time, all of its calls together, going on while one of them runs
         foreach (var (time, calls) in agentsGroupTimes.Values)
         {
-            string said = calls.Sum(call => call.Seconds).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
+            double seconds = 0.0;
+            foreach (HexAgentEntry call in calls)
+                seconds += call.Seconds;
+            string said = seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
             if (time.Text != said)
                 time.Text = said;
         }

@@ -456,7 +456,7 @@ internal sealed partial class DawnScene
     private enum FleetGroup { NeedsYou, Working, Rest }
 
     private static FleetGroup GroupOf(HexAgentChat chat) =>
-        chat.Pending.Any() || (chat.Failed && chat.Unread) || (chat.UnreadMailCount() > 0 && !chat.Running) ? FleetGroup.NeedsYou
+        chat.HasPending || (chat.Failed && chat.Unread) || (chat.UnreadMailCount() > 0 && !chat.Running) ? FleetGroup.NeedsYou
         : chat.Running ? FleetGroup.Working
         : FleetGroup.Rest;
 

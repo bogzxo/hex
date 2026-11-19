@@ -482,8 +482,32 @@ internal sealed partial class HexAgentChat(int id, string agent)
     }
 
     /// <summary>The approvals and questions still waiting for the person.</summary>
-    public IEnumerable<HexAgentEntry> Pending => entries.Where(entry =>
-        (entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null));
+    public IEnumerable<HexAgentEntry> Pending => entries.Where(IsPending);
+
+    /// <summary>Whether an approval or a question waits for the person, a plain look the panels take every tick.</summary>
+    public bool HasPending
+    {
+        get
+        {
+            foreach (HexAgentEntry entry in entries)
+                if (IsPending(entry))
+                    return true;
+            return false;
+        }
+    }
+
+    /// <summary>The first of a kind of thing waiting for the person, an approval or a question, null for none.</summary>
+    public HexAgentEntry? FirstPending(HexAgentEntryKind kind)
+    {
+        foreach (HexAgentEntry entry in entries)
+            if (entry.Kind == kind && IsPending(entry))
+                return entry;
+        return null;
+    }
+
+    /// <summary>Whether an entry waits for the person, an approval not answered or a question not replied to.</summary>
+    public static bool IsPending(HexAgentEntry entry) =>
+        (entry.Kind == HexAgentEntryKind.Approval && entry.Answer is not null) || (entry.Kind == HexAgentEntryKind.Question && entry.Respond is not null);
 
     /// <summary>What the agent said, a row of its own.</summary>
     public HexAgentEntry Say(string text) => Add(new HexAgentEntry(HexAgentEntryKind.Text, text));

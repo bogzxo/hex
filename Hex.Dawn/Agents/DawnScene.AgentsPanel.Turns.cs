@@ -26,7 +26,7 @@ internal sealed partial class DawnScene
                 return entries[next].Kind == HexAgentEntryKind.User;
         }
 
-        return !chat.Running && !chat.Pending.Any();
+        return !chat.Running && !chat.HasPending;
     }
 
     /// <summary>The turn's line for a row that ends one, null for any other row.</summary>

@@ -110,16 +110,24 @@ internal sealed partial class DawnScene
             return (commitMessage, SpellingMode.Prose);
         if (document?.Editor is not { } editor || Face == HexFace.Noon)
             return (null, default);
-        string extension = Path.GetExtension(document.Path ?? string.Empty).ToLowerInvariant();
-        return extension switch
+        // Asked every tick, so the extension is looked at where it is, not lowered into a string of its own each time
+        ReadOnlySpan<char> extension = Path.GetExtension((document.Path ?? string.Empty).AsSpan());
+        if (IsAny(extension, ".md", ".markdown", ".mdown"))
+            return (editor, SpellingMode.Markdown);
+        if (IsAny(extension, ".txt", ".text"))
+            return (editor, SpellingMode.Prose);
+        if (editor.Highlighter is null)
+            return (null, default);
+        // A page's words are written for people as much as a comment is, only its comments were checked
+        return IsAny(extension, ".html", ".htm", ".xhtml") ? (editor, SpellingMode.Markup) : (editor, SpellingMode.Comments);
+
+        static bool IsAny(ReadOnlySpan<char> extension, params ReadOnlySpan<string> names)
         {
-            ".md" or ".markdown" or ".mdown" => (editor, SpellingMode.Markdown),
-            ".txt" or ".text" => (editor, SpellingMode.Prose),
-            // A page's words are written for people as much as a comment is, only its comments were checked
-            ".html" or ".htm" or ".xhtml" when editor.Highlighter is not null => (editor, SpellingMode.Markup),
-            _ when editor.Highlighter is not null => (editor, SpellingMode.Comments),
-            _ => (null, default)
-        };
+            foreach (string name in names)
+                if (extension.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
     }
 
     private void ResetSpelling(SpellingTarget? target)

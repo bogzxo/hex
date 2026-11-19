@@ -61,6 +61,9 @@ internal sealed partial class DawnScene
 
     private void UpdateAgent()
     {
+        // Nothing hinted is the usual tick, and that tick copied an empty table
+        if (agentHintVersions.Count == 0)
+            return;
         foreach (var (target, version) in agentHintVersions.ToArray())
         {
             if (!documents.Contains(target) || target.Editor.Document.Version != version)

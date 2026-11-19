@@ -102,6 +102,8 @@ internal sealed partial class DawnScene
         int open = 0;
         foreach (HexAgentChat chat in agentChats)
         {
+            if (chat.FirstPending(HexAgentEntryKind.Question) is null)
+                continue;
             foreach (HexAgentEntry question in chat.Pending.Where(entry => entry.Kind == HexAgentEntryKind.Question).ToArray())
             {
                 if (question.Deadline is { } deadline && now >= deadline)
