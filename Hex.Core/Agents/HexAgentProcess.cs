@@ -146,6 +146,9 @@ internal sealed class HexAgentProcess : IDisposable
         var running = new HexAgentProcess(process);
         process.Start();
 
+        // Said before the readers start, which close it as the program goes: set after them, a program that went at once
+        // was left taking input
+        running.inputOpen = keepInput;
         new Thread(() => running.Read(process.StandardOutput, false)) { IsBackground = true, Name = "agent stdout" }.Start();
         new Thread(() => running.Read(process.StandardError, true)) { IsBackground = true, Name = "agent stderr" }.Start();
 
@@ -157,11 +160,12 @@ internal sealed class HexAgentProcess : IDisposable
                 process.StandardInput.Flush();
             else
                 process.StandardInput.Close();
-            running.inputOpen = keepInput;
         }
         catch (IOException)
         {
             // It went before it read what it was asked, which its own output says why
+            lock (running.inputGate)
+                running.inputOpen = false;
         }
 
         return running;
