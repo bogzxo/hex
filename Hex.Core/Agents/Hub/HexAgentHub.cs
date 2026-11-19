@@ -149,7 +149,9 @@ internal sealed class HexAgentHub
     private static HexHubRow RowOf(HexAgentChat chat, int reply) => new(chat.Id, chat.Shown, chat.Agent,
         // The model's id as the agent runs it, which an agent can start another with, the alias it was asked for until it says
         chat.Model is { Length: > 0 } running ? running : chat.Options.GetValueOrDefault("model"), chat.Parent, chat.Depth, StateWord(chat),
-        chat.Running ? string.Empty : chat.LastReply(reply), chat.TurnSeconds, chat.Cost, chat.Version, chat, chat.UnreadMail());
+        chat.Running ? string.Empty : chat.LastReply(reply), chat.TurnSeconds, chat.Cost, chat.Version, chat,
+        // Nothing unread is the usual, a row is made again for every line an agent streams
+        chat.UnreadMailCount() > 0 ? chat.UnreadMail() : []);
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
     public static string StateWord(HexAgentChat chat) =>

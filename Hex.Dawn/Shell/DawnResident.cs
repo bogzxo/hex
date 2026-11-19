@@ -108,7 +108,7 @@ internal static class DawnResident
         // Hidden already, said again so the engine holds its frames (a start with the system never showed it at all)
         engine.WindowManager.Hide();
         engine.WindowManager.Dormant = true;
-        _ = Task.Run(() =>
+        DawnScene.OffThread("giving memory back while asleep", () =>
         {
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);

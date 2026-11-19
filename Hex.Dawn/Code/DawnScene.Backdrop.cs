@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
 
         string path = BackdropPath;
         bool wrap = settings.BackdropWrap;
-        _ = Task.Run(() =>
+        OffThread("the backdrop's picture", () =>
         {
             Texture.DecodeAhead(path);
             if (wrap)

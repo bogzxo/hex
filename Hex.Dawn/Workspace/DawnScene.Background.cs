@@ -24,6 +24,31 @@ internal sealed partial class DawnScene
     private int backgroundNumber;
     private const string QUIET_BACKGROUND = "background quiet ";
 
+    /// <summary>
+    /// Something done on the pool that nothing waits for, what went wrong in it said in the log rather than lost with
+    /// the task nobody looked at.
+    /// </summary>
+    internal static void OffThread(string what, Action run) => _ = Task.Run(() =>
+    {
+        try
+        {
+            run();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[Hex] {what} went wrong off the editor's thread, {e.GetType().Name}: {e.Message}");
+        }
+    });
+
+    /// <summary>The index handed the workspace's folders and set looking, so it's looking by the time it's searched.</summary>
+    private HexCodeIndex WakeIndex()
+    {
+        harnessRoots = [.. WorkspaceRoots()];
+        HexCodeIndex index = Harness;
+        OffThread("the index's look", () => index.Look());
+        return index;
+    }
+
     /// <summary>Whether something is being done in the background right now.</summary>
     private bool Working => Volatile.Read(ref workGoing) > 0;
 

@@ -15,10 +15,7 @@ internal sealed partial class DawnScene
     {
         codeEditing.Declarations = name =>
         {
-            harnessRoots = [.. WorkspaceRoots()];
-            HexCodeIndex index = Harness;
-            HexIndexSnapshot now = index.Current();
-            Task.Run(() => index.Look());
+            HexIndexSnapshot now = WakeIndex().Current();
 
             // Only files of the same kind as the one F12 was pressed in, a shader's beam isn't a Python script's
             string kind = document.Path is { } here ? Path.GetExtension(here) : string.Empty;

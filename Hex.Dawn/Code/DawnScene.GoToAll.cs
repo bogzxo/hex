@@ -38,9 +38,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private UIChoiceSearch SymbolSearch(bool withTexts)
     {
-        harnessRoots = [.. WorkspaceRoots()];
-        HexCodeIndex index = Harness;
-        Task.Run(() => index.Look());
+        HexCodeIndex index = WakeIndex();
 
         // The line under a declaration with its parts as {0} and so on, the words of it taken here
         string inside = Said("go_to_all.detail", ("kind", "{0}"), ("container", "{1}"), ("file", "{2}"), ("line", "{3}"));

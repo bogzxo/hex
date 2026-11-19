@@ -143,7 +143,7 @@ internal sealed partial class DawnScene
             // every fifteen seconds with nothing else going on, the worst tick of an idle Hex
             agentPrograms[agent.Id] = cached with { Checked = now };
             string id = agent.Id;
-            _ = Task.Run(() =>
+            OffThread("looking for an agent's program", () =>
             {
                 agentProgramsLooked[id] = (program, HexAgentProcess.Find(program) is null);
                 Engine.WindowManager.RequestFrames();
