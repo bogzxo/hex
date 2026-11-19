@@ -569,6 +569,7 @@ internal sealed partial class DawnScene
             outlineKept = [];
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
+        if (crumbFoldersFor.Of == gone) crumbFoldersFor = default;
         if (peeking?.From == gone) peeking = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
