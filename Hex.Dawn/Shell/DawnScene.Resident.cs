@@ -29,6 +29,7 @@ internal sealed partial class DawnScene
         KeepChats();
         chatsKept?.Flush();
         harness?.SaveCache();
+        explorer.FlushKept();
 
         Quietly(StopMcp);
         foreach (AgentRun run in agentRuns.ToList())
