@@ -38,6 +38,14 @@ internal sealed partial class DawnScene : Scene
     private const float SETTLE_SECONDS = 3.0f;
     private float settleIn = SETTLE_SECONDS;
 
+    // What the start leaves until the editor has been up a moment, nothing the first frames need (see AfterStart)
+    private const float AFTER_START_SECONDS = 1.0f;
+    private readonly List<Action> afterStart = [];
+    private float afterStartIn = AFTER_START_SECONDS;
+
+    /// <summary>Has something of the start done once the editor has been on screen a moment, off the first frames' path.</summary>
+    private void AfterStart(Action run) => afterStart.Add(run);
+
     // The least the parts of the editor that take whatever room is left are given, and how much of the height
     // the canvas gets at most.
     private const float MIN_FLEXIBLE = 80;
@@ -259,7 +267,12 @@ internal sealed partial class DawnScene : Scene
         debugger.InstallsItself = !options.SelfTest;
         BuildProperties();
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: commands, debugger, tests, properties");
-        languages.StartChecks();
+        // The servers' look round the machine spawns shells, which raced the first frame for the processor, so it waits
+        // until the editor is up. A self test has them at once, its checks look
+        if (options.SelfTest)
+            languages.StartChecks();
+        else
+            AfterStart(languages.StartChecks);
         languages.RestoreWhereNeeded();
         BuildEffects();
         BuildModes();
@@ -350,8 +363,17 @@ internal sealed partial class DawnScene : Scene
         // Last, an extension's on_start finds the editor up and a file open
         extensions.StartAll();
         explorer.FoldersChanged += () => extensions.Raise("on_workspace_changed");
-        extensions.WatchFolders();
-        extensions.StartCatalog();
+        // Watching the extensions' folders and reading the catalog are nothing the first frame needs
+        if (options.SelfTest)
+        {
+            extensions.WatchFolders();
+            extensions.StartCatalog();
+        }
+        else
+        {
+            AfterStart(extensions.WatchFolders);
+            AfterStart(extensions.StartCatalog);
+        }
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
@@ -463,6 +485,13 @@ internal sealed partial class DawnScene : Scene
 
         if (settleIn > 0.0f && (settleIn -= dt) <= 0.0f)
             GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
+
+        if (afterStart.Count > 0 && (afterStartIn -= dt) <= 0.0f)
+        {
+            foreach (Action run in afterStart)
+                run();
+            afterStart.Clear();
+        }
         Profile.Mark("collection");
 
         UpdateZoomSettings(dt);
