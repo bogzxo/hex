@@ -23,6 +23,16 @@ internal sealed partial class HexLanguages
         }));
     }
 
+    /// <summary>
+    /// Something to do with a server's answer once it's in, on the editor's thread, with <paramref name="fallback"/> for
+    /// one that failed or was cancelled. What fourteen asks wrote as a ContinueWith of their own, a task more each.
+    /// </summary>
+    private void When<T>(Task<T> asked, T fallback, Action<T> then)
+    {
+        asked.ContinueWith(_ => context.Wake(), TaskScheduler.Default);
+        answers.Add((asked, () => then(asked.IsCompletedSuccessfully ? asked.Result : fallback)));
+    }
+
     /// <summary>Every tick, the answers that are in done, and the edits a server asked for made.</summary>
     private void UpdateAnswers()
     {
@@ -617,7 +627,7 @@ internal sealed partial class HexLanguages
         if (!EditsCurrent(snapshot, action.Edits.Keys.Append(origin))) return;
         if (action.Resolve is { } resolve)
         {
-            When(resolve().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default), resolved =>
+            When(resolve(), null, resolved =>
             {
                 if (resolved is null) context.Notices.Say(context.Strings.Said("code_server.resolve_failed"), error: true);
                 else TakeAction(server, resolved, snapshot, origin);

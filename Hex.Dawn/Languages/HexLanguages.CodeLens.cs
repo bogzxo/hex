@@ -45,7 +45,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "codeLensProvider", out LanguageServer server, out _))
             return false;
 
-        When(server.ResolveLens(lens).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : null, TaskScheduler.Default), then);
+        When(server.ResolveLens(lens), null, then);
         return true;
     }
 
@@ -55,7 +55,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "referencesProvider", out LanguageServer server, out string path))
             return false;
 
-        When(server.References(path, line, character).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : [], TaskScheduler.Default), then);
+        When(server.References(path, line, character), [], then);
         return true;
     }
 }

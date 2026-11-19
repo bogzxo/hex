@@ -21,7 +21,7 @@ internal sealed partial class HexLanguages
 
         // Always answered, a server that fell over says nothing rather than leaving the hints waiting on it for good
         FlushEditsToServer(server);
-        When(server.InlayHints(path, 0, of.Editor.Document.LineCount).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : [], TaskScheduler.Default), then);
+        When(server.InlayHints(path, 0, of.Editor.Document.LineCount), [], then);
         return true;
     }
 }

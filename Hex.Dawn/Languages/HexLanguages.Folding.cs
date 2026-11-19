@@ -12,6 +12,6 @@ internal sealed partial class HexLanguages
     {
         if (FoldingSourceOf(of) is not {} server || of.Path is not {} path) { take(null); return; }
         FlushEditsToServer(server);
-        When(server.FoldingRanges(path, of.Editor.Document.LineCount).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : null, TaskScheduler.Default), take);
+        When(server.FoldingRanges(path, of.Editor.Document.LineCount), null, take);
     }
 }
