@@ -46,10 +46,23 @@ internal sealed partial class HexTestExplorer
         IReadOnlyDictionary<string, string[]>? FrameworkNames = null);
 
     private readonly record struct TestIdentity(string Project, string Name);
-    private static TestIdentity Identity(string project, string name)
+    private static TestIdentity Identity(string project, string name) => new(ProjectKey(project), name);
+
+    // The project of an identity the way every one of its tests is keyed by, worked out once for each path. The rows ask
+    // for it several times a test on every rebuild, and a full path and an upper-cased copy each time was most of that.
+    // A relative one hangs on the folder Hex runs in, so it's worked out every time
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> projectKeys = new(StringComparer.Ordinal);
+
+    private static string ProjectKey(string project)
     {
+        if (projectKeys.TryGetValue(project, out string? key))
+            return key;
+
         string full = Path.GetFullPath(project);
-        return new(OperatingSystem.IsWindows() ? full.ToUpperInvariant() : full, name);
+        key = OperatingSystem.IsWindows() ? full.ToUpperInvariant() : full;
+        if (Path.IsPathFullyQualified(project))
+            projectKeys.TryAdd(project, key);
+        return key;
     }
 
     // The rows' colours, the skin has no green of its own
