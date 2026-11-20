@@ -119,7 +119,12 @@ internal sealed partial class DawnScene
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
         // Provider commands must remain at the start; unread mail waits for the next ordinary prompt.
         if (!IsAgentSlash(prompt))
+        {
             prompt = PlanPrompt(chat, UnreadPrompt(chat, prompt));
+            // What the person changed of its plan in the Plan tab goes in front too, so the agent keeps their changes
+            if (TakePlanTold(chat) is { } told)
+                prompt = $"{told}\n\n{prompt}";
+        }
         // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes). The
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);

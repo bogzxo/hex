@@ -239,6 +239,8 @@ internal sealed partial class DawnScene
     /// <summary>The tabs' counts put right and the stage on screen drawn again when the agents moved, a few times a second.</summary>
     private void DrawNoonStage()
     {
+        // What the person changed of a working agent's plan, told it once they've stopped for a moment
+        TellPlansQuietly();
         // The middle's width in it too, a stage's titles are fitted to it
         long key = ((hub.Version * 31 + (agentChat?.Id ?? -1)) * 31 + (int)noonStage) * 31 + (int)(noonCenter.Bounds.Width / 24);
         if (key == noonStageDrawn)
@@ -453,74 +455,4 @@ internal sealed partial class DawnScene
     private (string Allow, string Deny) DecideLabels(HexAgentEntry request) => KeyedRequest()?.Request == request
         ? (Said("noon.allow_key", ("key", ALLOW_KEY)), Said("noon.deny_key", ("key", DENY_KEY)))
         : (Said("agents_panel.allow"), Said("agents_panel.deny"));
-
-    /* Plan */
-
-    private void DrawPlan()
-    {
-        ClearRows(noonPlanRows);
-        if (HexAgentPlan.Of(agentChat) is not { Items.Count: > 0 } plan)
-        {
-            StageEmpty(noonPlanRows, "checklist", Said("noon.plan_empty"), CanComposeAgent() ? (Said("noon.plan_ask"), "edit", AskForPlan) : null);
-            return;
-        }
-
-        if (plan.Title is { Length: > 0 } title)
-            noonPlanRows.Add(ContextText(title, dim: false));
-
-        int done = plan.Done, all = plan.Items.Count;
-        noonPlanRows.Add(ContextText(Said("noon.plan_progress", ("done", done.ToString(CultureInfo.InvariantCulture)), ("all", all.ToString(CultureInfo.InvariantCulture))), dim: true));
-        // Steps done are good news the whole way, green, not the context's green to amber to red
-        noonPlanRows.Add(ContextBar((float)done / all, MathF.Max(120, noonPlan.Bounds.Width - 30), Skin?.Palette.Success ?? new Vector4(0.35f, 0.75f, 0.45f, 1.0f)));
-
-        // A plan the agent stopped on, steps still to do and none being done, waits for the person's go: asking for a plan
-        // tells it to. Go says so in the chat, Change the plan puts words in the box to be finished
-        if (agentChat is { Running: false } chat && plan.Items.Any(item => item.State == HexPlanState.Pending) && !plan.Items.Any(item => item.State == HexPlanState.Doing))
-        {
-            // Greyed out where nothing can be sent, an agent system not installed
-            bool can = CanComposeAgent();
-            noonPlanRows.Add(ContextText(Said("noon.plan_waiting"), dim: true));
-            var go = noonPlanRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 30), Anchor = Origin.Left, Pivot = Origin.Left });
-            go.Add(new Button
-            {
-                Label = Said("noon.plan_go"), Icon = "play", Primary = true, Enabled = can, Size = new Vector2(84, 28), LabelScale = 0.13f, Animated = false,
-                OnPressed = () =>
-                {
-                    if (agentChat != chat || chat.Running)
-                        return;
-                    ShowStage(NoonStage.Chat);
-                    agentsInput.Text = Said("noon.plan_go_text");
-                    SendToAgent();
-                }
-            });
-            go.Add(new Button
-            {
-                Label = Said("noon.plan_change"), Icon = "edit", Style = "button_flat", Enabled = can, Size = new Vector2(150, 28), LabelScale = 0.13f, Animated = false,
-                OnPressed = () =>
-                {
-                    ShowStage(NoonStage.Chat);
-                    agentsInput.Text = Said("noon.plan_change_text");
-                    agentsInput.Focus();
-                }
-            });
-        }
-        string dim = HexColour(Skin?.Palette.DimText ?? new Vector4(0.6f, 0.6f, 0.6f, 1.0f));
-        foreach (HexPlanItem item in plan.Items)
-        {
-            string text = UIRichText.Literal(item.Text);
-            string line = item.State switch
-            {
-                HexPlanState.Done => $"[color:{HexColour(Skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f))}]$(pass-filled)[/color] [color:{dim}]{text}[/color]",
-                HexPlanState.Doing => $"[color:{HexColour(AccentText(Skin))}]$(loading~spin)[/color] [b]{text}[/b]",
-                HexPlanState.Blocked => $"$(warning) {text}",
-                HexPlanState.Dropped => $"$(close) [color:{dim}]{text}[/color]",
-                _ => $"$(circle-large-outline) {text}"
-            };
-            if (item.Agent is { } agent)
-                line += $" [color:{dim}]#{agent}[/color]";
-            if (item.Note is { Length: > 0 } note)
-                line += $"\n[color:{dim}]{UIRichText.Literal(note)}[/color]";
-            noonPlanRows.Add(new Label { Text = line, TextScale = 0.145f, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
-        }
-    }
 }
