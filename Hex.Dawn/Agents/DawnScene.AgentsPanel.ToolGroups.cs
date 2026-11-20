@@ -123,11 +123,14 @@ internal sealed partial class DawnScene
     /// <summary>What a group is drawn from, its calls and how each is, and whether it's open, so it's made again when that moves.</summary>
     private int ToolGroupKey(HexAgentChat chat, int start)
     {
+        // Its calls gone through in place, a list of them was made for every group each time the rows were looked over,
+        // with every line an agent streams
         var hash = new HashCode();
-        foreach (HexAgentEntry call in ToolGroupAt(chat, start))
+        IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+        for (int i = start; i < entries.Count && Groupable(entries[i]); i++)
         {
-            hash.Add(call);
-            hash.Add(call.Version);
+            hash.Add(entries[i]);
+            hash.Add(entries[i].Version);
         }
 
         // Not whether it's open, a press opens it in place without the row being made again

@@ -517,9 +517,10 @@ internal sealed partial class DawnScene
     {
         if (agentsActivity is null)
             return;
+        // By their places, every tick, where going through the hub's list made a new enumerator each time
         int working = 0;
-        foreach (HexAgentChat chat in agentChats)
-            if (chat.Running)
+        for (int i = 0; i < agentChats.Count; i++)
+            if (agentChats[i].Running)
                 working++;
         if (working == agentsWorkingShown)
             return;
