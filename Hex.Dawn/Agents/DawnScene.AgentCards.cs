@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
         UISkin? skin = Skin;
         float indent = step * CHAT_STEP;
         var root = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, AGENT_CARD), Padding = new UIEdges(indent, 0, 0, 0), Color = Vector4.Zero };
-        var pick = root.Add(new Button
+        var pick = root.Add(new AgentCardButton(this, chat)
         {
             Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = chat == agentChat,
             Tooltip = $"#{chat.Id} {chat.Shown}"
@@ -87,6 +87,8 @@ internal sealed partial class DawnScene
         var state = root.Add(new Badge { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP + 2), TextScale = CARD_SMALL });
         var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
         var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        // A double click on the name renames it in place, the box over it while it does (DawnScene.AgentsPanel.Rename)
+        pick.Title = name;
 
         // How full its context is, a thin bar along the card's foot in the colour of how full, there once the agent said
         var contextRow = root.Add(new Panel
@@ -102,6 +104,9 @@ internal sealed partial class DawnScene
             close.OnPressed = () => AskCloseAgentChat(chat);
         }
 
+        // Over everything else on it, the box a name being renamed is typed in
+        ChatCardMade(chat, root, pick, name);
+
         // What the card was last written from, its words made again only when one of these moved. Every refresh made its
         // strings anew, a few times a second for every card, which was most of what the fleet made standing still
         (int Version, int Seconds, bool Unread, int Mail, int Width, string? Model, bool Stopped) drawn = (-1, -1, false, -1, -1, null, false);
@@ -113,6 +118,7 @@ internal sealed partial class DawnScene
                 return;
             drawn = now;
             float room = width - indent;
+            FitChatRename(chat, room);
             string? model = HexAgentModels.Of(chat);
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
