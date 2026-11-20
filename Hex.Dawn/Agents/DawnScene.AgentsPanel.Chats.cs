@@ -236,6 +236,8 @@ internal sealed partial class DawnScene
             Say(Said("agents_panel.copied"));
         }, icon: "copy").IsEnabled = () => chat.LastReply().Length > 0;
         menu.Add(Said("agents_panel.chat_stop"), () => StopAgent(chat), icon: "debug-stop").IsEnabled = () => chat.Running;
+        if (HasRunningStarted(chat))
+            menu.Add(Said("agents_panel.chat_stop_all"), () => StopAgent(chat, withStarted: true), icon: "debug-stop");
         menu.AddSeparator();
         // Said with its subagents only when it has some, they go with it
         bool started = agentChats.Any(each => each.Parent == chat.Id);
@@ -291,7 +293,7 @@ internal sealed partial class DawnScene
         foreach (HexAgentChat started in agentChats.Where(each => each.Parent == chat.Id).ToList())
             CloseAgentChat(started);
 
-        StopAgent(chat);
+        StopAgent(chat, withStarted: true);
         agentChats.Remove(chat);
         if (agentChat == chat)
         {

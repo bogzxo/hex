@@ -3943,6 +3943,8 @@ let strings = {
         chat_rename: "Rename…",
         chat_copy: "Copy last response",
         chat_stop: "Stop agent",
+        chat_stop_all: "Stop it and its agents",
+        started_carry_on: "The agents it started carry on ({chats}). Its menu's Stop it and its agents stops them too.",
         chat_close: "Close chat",
         chat_close_all: "Close chat and sub-agents",
         permission_tip: "What the agent may do without asking: {mode}. Applies to the next message.",

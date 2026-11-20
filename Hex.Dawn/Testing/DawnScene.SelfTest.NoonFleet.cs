@@ -132,9 +132,14 @@ internal sealed partial class DawnScene
             && Started() is { Length: 2 } started && started.All(chat => chat.Running)
             && ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Skip(1).Take(2).All(chat => chat.Parent == lead!.Id));
 
+        // Stopping its turn leaves them working, the person stopping it to say something is still waiting for them
         test.Run(() => StopAgent(lead));
+        test.Settle(0.5f);
+        test.Check("noon fleet: stopping the one that started them stops its turn and leaves them running", () => Started() is { Length: 2 } started && started.All(chat => chat.Running));
+
+        test.Run(() => StopAgent(lead, withStarted: true));
         test.WaitFor(() => Started().All(chat => !chat.Running), 10.0f);
-        test.Check("noon fleet: stopping the one that started them stops them", () => Started() is { Length: 2 } started && started.All(chat => !chat.Running));
+        test.Check("noon fleet: stopping it with its agents stops them", () => Started() is { Length: 2 } started && started.All(chat => !chat.Running));
 
         test.Run(() =>
         {

@@ -420,7 +420,8 @@ internal sealed partial class DawnScene
         }
 
         bool was = chat.Running;
-        StopAgent(chat);
+        // An agent stopping one it started stops what that one started too, nothing else is waiting for them
+        StopAgent(chat, withStarted: true);
         yield return McpToolResult.Text(was ? $"Stopped #{chat.Id}." : $"#{chat.Id} wasn't running.");
     }
 
