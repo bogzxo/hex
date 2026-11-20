@@ -227,7 +227,7 @@ internal sealed partial class DawnScene
         else
             menu.Add(Said("agents_panel.chat_open_noon"), () => { ShowFace(HexFace.Noon); OpenAgentChat(chat); }, icon: "robot");
         if (chat.Parent is { } parent && ChatById(parent) is { } starter)
-            menu.Add(Said("agents_panel.chat_open_parent", ("name", ChatName(parent))), () => OpenAgentChat(starter), icon: "arrow-up");
+            menu.Add(Said("agents_panel.chat_open_parent"), () => OpenAgentChat(starter), icon: "arrow-up");
         menu.AddSeparator();
         menu.Add(Said("agents_panel.chat_rename"), () => RenameAgentChat(chat), icon: "edit");
         menu.Add(Said("agents_panel.chat_copy"), () =>

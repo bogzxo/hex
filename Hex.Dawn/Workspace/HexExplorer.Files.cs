@@ -115,7 +115,7 @@ internal sealed partial class HexExplorer
     internal void RevealInSystem(string path) => RevealInExplorer(path);
 
     /// <summary>A file or a folder shown in the machine's own file explorer, picked there.</summary>
-    private void RevealInExplorer(string path)
+    internal void RevealInExplorer(string path)
     {
         try
         {

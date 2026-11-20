@@ -258,7 +258,7 @@ internal sealed partial class DawnScene
                     Icon = icon, IconColor = explorer.FileIconColor(path),
                     // Plain text, a button's label doesn't read colour markup, the name and then its folder after a dot
                     Label = UIRichText.Literal(where.Length > 0 ? name + FILE_DOT + where : name),
-                    Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = path,
+                    Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = path, OnContextMenu = at => FileRowMenu(at, opened),
                     Size = new Vector2(0, 22), LabelScale = FILE_SCALE, Animated = false, OnPressed = () =>
                     {
                         ShowFace(HexFace.Dawn);
@@ -276,6 +276,17 @@ internal sealed partial class DawnScene
                         noonWait = 0.0f;
                     });
         }
+    }
+
+    // What a file of Details can be shown in, from its row's menu
+    private void FileRowMenu(Vector2 at, string path)
+    {
+        var menu = new Menu("agent file");
+        menu.Add(Said("noon.file_open"), () => { ShowFace(HexFace.Dawn); Open(path); }, icon: "go-to-file");
+        menu.AddSeparator();
+        menu.Add(Said("noon.file_reveal"), () => { ShowFace(HexFace.Dawn); RevealInExplorer(path); }, icon: "files");
+        menu.Add(Said("noon.file_reveal_system"), () => explorer.RevealInExplorer(path), icon: "link-external");
+        ContextMenu.Show(chrome, at, menu);
     }
 
     // The files Details keeps of a chat, the newest, and how many of them show until the rest are asked for
