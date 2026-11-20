@@ -200,9 +200,9 @@ internal sealed partial class DawnScene
             () => !document.IsText || IsNotebook(document) || IsMarkdown(document) || running.HasTable || ViewsFor(document).Any();
 
         // The size of everything, beside Appearance rather than inside it, a menu in a menu in a menu is a long way down
-        Menu size = commands.AddMenu("View/appearance", Said("menus.editor_scale"), "zoom-in");
+        Menu size = commands.AddMenu("View/appearance", Said("menus.interface_size"), "zoom-in");
         foreach (float scale in Scales)
-            size.Add(DescribeScale(scale), () => SetScale(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
+            size.Add(DescribeSize(scale), () => SetInterfaceSize(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
 
         // The layout debugger is the designer's, in the Layout menu with what it draws under it
         layoutDebugger.AddTo(commands, "Layout/skin/debugger:switch", "Layout/skin/debugger:options",

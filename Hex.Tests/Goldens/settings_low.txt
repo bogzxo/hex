@@ -9,6 +9,7 @@ panel_hidden = false
 properties_hidden = false
 panel_collapsed = true
 snap = -1000000
+interface_size = 0.75
 code_zoom = 0.5
 scroll_speed = 0.25
 middle_scroll_speed = 0.25

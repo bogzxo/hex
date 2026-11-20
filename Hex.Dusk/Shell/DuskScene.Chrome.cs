@@ -13,20 +13,24 @@ namespace Hex.Dusk;
 // and the title.
 internal sealed partial class DuskScene
 {
-    // How big the menus in the title bar are written, at a scale of one
+    // How big the menus in the title bar are written
     private const float MENU_TEXT = 0.14f;
 
-    private void SetScale(float scale)
+    /// <summary>
+    /// Sets how big the whole window is drawn, its title bar and its menus as much as the terminals' bars, on top of the
+    /// screen's own scale. Dawn's interface size, the same factor and the same steps (the terminal's font is its own).
+    /// </summary>
+    private void SetInterfaceSize(float size)
     {
-        scale = Hex.Shell.HexFrame.NearestScale(scale);
-        compositor.Scale = scale;
+        size = Hex.Shell.HexFrame.NearestScale(size);
+        compositor.Scale = size;
         if (HexModes.Together)
-            HexModes.Scale = scale;
+            HexModes.InterfaceSize = size;
 
-        // The title bar is the window's and the size of the system's whatever the rest is drawn at
-        menu.TextScale = MENU_TEXT / scale;
-        HexModeSwitch.SetScale(modeToggle, scale);
-        settings.Scale = scale;
+        // The title bar grows with the rest, it was kept at the system's size and its words were the only ones that didn't
+        top.PixelSized = false;
+        menu.TextScale = MENU_TEXT;
+        settings.Scale = size;
     }
 
     /// <summary>The panel gets whatever the window has between the title bar and the status bar.</summary>

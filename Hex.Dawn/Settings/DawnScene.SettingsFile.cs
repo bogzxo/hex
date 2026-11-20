@@ -335,6 +335,8 @@ internal sealed partial class DawnScene
         HexSettings now = settings;
         if (now.EditorSkin != was.EditorSkin || now.EditorTheme != was.EditorTheme)
             UseEditorSkin(now.EditorSkin, now.EditorTheme, save: false);
+        if (now.InterfaceSize != was.InterfaceSize)
+            SetInterfaceSize(now.InterfaceSize, remember: false);
 
         foreach (HexDocument open in documents)
         {

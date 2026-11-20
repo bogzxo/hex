@@ -300,7 +300,7 @@ internal sealed partial class DawnScene : Scene
         // The window has no frame of the system's, the title bar is the editor's and so are the edges
         compositor.ResizesWindow = true;
 
-        SetScale(options.Scale ?? HexModes.Scale ?? ReadScale() ?? ScaleFor(Engine.WindowManager.ViewportSize), remember: false);
+        SetInterfaceSize(StartingInterfaceSize(), remember: false);
 
         nameBox.OnChanged = text =>
         {

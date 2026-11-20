@@ -222,23 +222,25 @@ internal sealed partial class DawnScene
             extensions.SettingOf(told!, "game") is StringValue { Value: var game } && game == picked && Heard("game", new StringValue(picked))
             && Descendants(SettingsPage!).OfType<TextBox>().Any(box => box.Text == picked) && SettingsPage!.IsModified?.Invoke(GAME) == true);
 
-        // Dawn's size, on the same page, has its reset while it isn't the one the window says
+        // The interface size, on the same page, has its reset while it isn't 100%, and the reset is 100% whatever the window
         float sizeWas = 1.0f;
         test.Run(() =>
         {
             sizeWas = compositor.Scale;
             SettingsPage!.Find(string.Empty);
-            SettingsPage.Enter("size", new StringValue(DescribeScale(UsualScale == 2.0f ? 1.5f : 2.0f)));
+            SettingsPage.Enter(INTERFACE_SIZE, new StringValue(DescribeSize(1.5f)));
         });
         test.Wait();
-        test.Check("settings: Dawn's size other than the window's has a reset", () => compositor.Scale != UsualScale && SettingsPage!.IsModified?.Invoke("size") == true);
-        test.Run(() => SettingsPage!.Reset("size"));
+        test.Check("settings: an interface size other than 100% has a reset, and is kept in the settings", () =>
+            compositor.Scale == 1.5f && settings.InterfaceSize == 1.5f && SettingsPage!.IsModified?.Invoke(INTERFACE_SIZE) == true);
+        test.Run(() => SettingsPage!.Reset(INTERFACE_SIZE));
         test.Wait();
-        test.Check("settings: which puts the window's back", () => compositor.Scale == UsualScale && SettingsPage!.IsModified?.Invoke("size") == false);
+        test.Check("settings: which puts 100% back", () =>
+            compositor.Scale == 1.0f && settings.InterfaceSize == 1.0f && SettingsPage!.IsModified?.Invoke(INTERFACE_SIZE) == false);
 
         test.Run(() =>
         {
-            SetScale(sizeWas, remember: false);
+            SetInterfaceSize(sizeWas, remember: false);
             CloseSettings();
             extensions.Remove(told!);
             settings.ExtensionSettings.Remove("told_extension");

@@ -23,10 +23,10 @@ public static class HexModes
     public static bool Together => make is not null;
 
     /// <summary>
-    /// How big the modes are drawn while they share the window, whichever set it last, null until one has. Each takes it
-    /// up as it comes back on screen, Dawn sized itself by the window and Dusk by its own setting and the two didn't match.
+    /// The interface size of the modes while they share the window, whichever set it last, null until one has. Each takes
+    /// it up as it comes back on screen, Dawn sized itself by the window and Dusk by its own setting and the two didn't match.
     /// </summary>
-    public static float? Scale { get; set; }
+    public static float? InterfaceSize { get; set; }
 
     /// <summary>
     /// The face the editor is to show as it comes back on screen, Noon when it was picked from Dusk, taken (and put back

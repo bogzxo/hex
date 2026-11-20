@@ -48,7 +48,7 @@ internal sealed partial class DawnScene
         test.Check("engineering: cached math has a texture without a placeholder status", () =>
             cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { RenderStatus: null } math
             && ReferenceEquals(math.Texture, mathTexture));
-        test.Run(() => { UseEditorTheme(theme, save: false); SetScale(scale == 2 ? 1 : 2, remember: false); ZoomCode(1.25f); });
+        test.Run(() => { UseEditorTheme(theme, save: false); SetInterfaceSize(scale == 2 ? 1 : 2, remember: false); ZoomCode(1.25f); });
         test.WaitFor(() => notebookRenders.Count == 0
             && cellViews[2].Outputs.Children.OfType<NotebookPicture>().Single() is { Texture: { IsValid: true }, RenderStatus: null } math
             && !ReferenceEquals(math.Texture, mathTexture), 30);
@@ -67,7 +67,7 @@ internal sealed partial class DawnScene
         test.Settle(0.2f);
         test.Check("engineering: narrow equations remain inside cell width", () =>
             cellViews[2].Outputs.Children.OfType<NotebookPicture>().All(picture => picture.Size.X <= cellViews[2].Body.Size.X + 1));
-        test.Run(() => { SetScale(scale, remember: false); ZoomCode(zoom / settings.CodeZoom); });
+        test.Run(() => { SetInterfaceSize(scale, remember: false); ZoomCode(zoom / settings.CodeZoom); });
         test.Run(() => { PickCell(notebookShown!, 7, false); Shot("engineering-plot"); });
         test.Wait();
         test.WaitFor(() => !notebookShown!.Changed, 3);

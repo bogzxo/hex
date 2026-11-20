@@ -87,7 +87,7 @@ internal sealed partial class DawnScene
             panelPageWas = bottom.Selected;
             ShowPanel(OUTPUT_PAGE);
             panelWanted = 400;
-            SetScale(2.0f, remember: false);
+            SetInterfaceSize(2.0f, remember: false);
         });
         test.Settle(0.5f);
         PressKeys(test, "Ctrl+H");
@@ -146,7 +146,7 @@ internal sealed partial class DawnScene
             panelWanted = panelHeightWas;
             bottom.Select(panelPageWas);
             bottom.Show(panelShownWas, instantly: true);
-            SetScale(findScaleWas, remember: false);
+            SetInterfaceSize(findScaleWas, remember: false);
         });
         test.Settle(0.5f);
         test.Check("surface: returning to the wide layout keeps the same focused find fields", () =>
