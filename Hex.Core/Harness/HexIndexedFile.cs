@@ -29,13 +29,24 @@ internal sealed record HexSymbol(string Name, string Kind, string Container, int
             while (open.Count > 0 && open[^1].Depth >= entry.Depth)
                 open.RemoveAt(open.Count - 1);
 
-            var symbol = new HexSymbol(entry.Name, entry.Icon.Replace("symbol-", string.Empty), open.Count > 0 ? open[^1].Full : string.Empty, entry.Line, entry.Column, entry.Depth);
+            var symbol = new HexSymbol(entry.Name, KindOf(entry.Icon), open.Count > 0 ? open[^1].Full : string.Empty, entry.Line, entry.Column, entry.Depth);
             symbols.Add(symbol);
             open.Add((entry.Depth, symbol.Full));
         }
 
         return symbols;
     }
+
+    // The kinds made so far, by the outline's icon or as the cache on disk says them. There are a dozen or so, and every
+    // symbol of the workspace had its own copy of one
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> kinds = new(StringComparer.Ordinal);
+
+    /// <summary>The kind of an outline icon (symbol-method is method), one string shared by every symbol of that kind.</summary>
+    public static string KindOf(string icon) =>
+        kinds.GetOrAdd(icon, static each => each.Replace("symbol-", string.Empty));
+
+    /// <summary>A kind as the cache on disk said it, the one string kept for it.</summary>
+    public static string SharedKind(string kind) => kinds.GetOrAdd(kind, kind);
 }
 
 /// <summary>
@@ -68,8 +79,24 @@ internal sealed class HexIndexedFile
 
     /// <summary>A file read now, its symbols the outline's.</summary>
     public HexIndexedFile(string path, string relative, long length, long written, string[] read)
-        : this(path, relative, length, written, read.Length, OutlineOf(path, read), false, () => read)
+        : this(path, relative, length, written, read.Length, read.Length == 0 ? [] : OutlineOf(path, string.Join('\n', read)), false, () => read)
     {
+    }
+
+    // A file read now with the text it was split from, which the outline reads as it is rather than joined up again
+    private HexIndexedFile(string path, string relative, long length, long written, string[] read, string text)
+        : this(path, relative, length, written, read.Length, OutlineOf(path, text), false, () => read)
+    {
+    }
+
+    /// <summary>A file read from the disk now, its symbols the outline's, no lines for one that can't be read or isn't text.</summary>
+    public static HexIndexedFile Read(string path, string relative, long length, long written)
+    {
+        if (HexSearch.ReadText(path) is not { } text)
+            return new HexIndexedFile(path, relative, length, written, []);
+
+        // The outline goes by \n alone, the way the lines are split
+        return new HexIndexedFile(path, relative, length, written, HexSearch.SplitLines(text), text.Replace("\r\n", "\n"));
     }
 
     /// <summary>A file as it was kept, by the cache or by a language server's answer, its text read when it's needed.</summary>
@@ -91,14 +118,11 @@ internal sealed class HexIndexedFile
         new(Path, Relative, Length, Written, LineCount, symbols, true, () => Lines);
 
     // What a file declares by the outline Hex draws for it, nothing for one the outline chokes on
-    private static List<HexSymbol> OutlineOf(string path, string[] read)
+    private static List<HexSymbol> OutlineOf(string path, string text)
     {
-        if (read.Length == 0)
-            return [];
-
         try
         {
-            return HexSymbol.Of(HexOutline.Fresh(string.Join('\n', read), path));
+            return HexSymbol.Of(HexOutline.Fresh(text, path));
         }
         catch (Exception)
         {

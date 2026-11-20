@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using Horizon.Content;
 using Horizon.HIDL.Lexing;
 using Horizon.HIDL.Parsing;
@@ -9,6 +10,9 @@ namespace Hex.Core;
 /// <param name="Found">How long what was found is, 0 for a result that isn't a find.</param>
 /// <param name="FoundAt">Where it starts in the line without its indent, the way a row shows the line.</param>
 internal readonly record struct HexResult(string Path, int Line, int Column, string Text, int Found = 0, int FoundAt = -1, bool Warning = false);
+
+/// <summary>A file a walk found, with its length and the time it was last written (UTC ticks) as its folder's listing said them.</summary>
+internal readonly record struct HexWalkedFile(string Path, long Length, long Written);
 
 /// <summary>
 /// The files of a workspace and what's in them: every .hor under some folders, where one is inside of them, every line
@@ -74,8 +78,47 @@ internal static partial class HexSearch
     /// </summary>
     public static List<string> FilesIn(string root, string pattern = "*.hor", Func<string, bool>? keep = null, HexExcludes? excludes = null, HashSet<string>? openNames = null)
     {
-        HexExcludes leftOut = excludes ?? Excluded();
-        var files = new List<string>();
+        List<HexWalkedFile> found = Walk(root, pattern, keep, excludes ?? Excluded(), openNames);
+        var files = new List<string>(found.Count);
+        foreach (HexWalkedFile file in found)
+            files.Add(file.Path);
+        return files;
+    }
+
+    /// <summary>
+    /// Every file under some folders that reads as text by its name, once each, with its length and the time it was
+    /// written as the walk saw them, what the agent harness's index looks at every few seconds. The folder's own listing
+    /// says both, so no file is asked about on its own: that was a call to the file system for every file of the workspace.
+    /// </summary>
+    public static List<HexWalkedFile> TextFilesWithFactsUnder(IReadOnlyList<string> roots)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new List<HexWalkedFile>();
+        HexExcludes excludes = Excluded();
+        var open = new HashSet<string>(roots.Select(root => Path.GetFileName(Path.GetFullPath(root).TrimEnd('\\', '/'))), StringComparer.OrdinalIgnoreCase);
+        foreach (string root in roots)
+        {
+            foreach (HexWalkedFile file in Walk(root, "*", UIFileKinds.IsText, excludes, open))
+            {
+                if (seen.Add(file.Path))
+                    files.Add(file);
+            }
+        }
+
+        return files;
+    }
+
+    // What a folder's listing is read with, the way Directory.GetFiles reads it: nothing skipped for its attributes, a
+    // folder that can't be read an error, and a pattern matched as Windows matches it
+    private static readonly EnumerationOptions Listing = new() { MatchType = MatchType.Win32, AttributesToSkip = 0, IgnoreInaccessible = false };
+
+    // FilesIn's walk, each file with its length and time. A folder is listed once for its files and its folders together,
+    // where it was listed twice and asked whether it had a .gitignore besides
+    private static List<HexWalkedFile> Walk(string root, string pattern, Func<string, bool>? keep, HexExcludes leftOut, HashSet<string>? openNames)
+    {
+        var files = new List<HexWalkedFile>();
+        string? expression = pattern == "*" ? null : FileSystemName.TranslateWin32Expression(pattern);
+        var entries = new List<(string Path, bool Folder, long Length, long Written)>();
 
         // Each folder with where it is inside the root and the .gitignores from the root down to it, shared until a
         // folder has one of its own
@@ -87,30 +130,49 @@ internal static partial class HexSearch
             var (folder, relative, ignores) = pending.Pop();
             try
             {
-                if (leftOut.UseIgnoreFiles && HexIgnoreFile.In(folder, relative) is { } own)
+                entries.Clear();
+                bool hasIgnoreFile = false;
+                foreach (var entry in new FileSystemEnumerable<(string, bool, long, long)>(folder,
+                    static (ref FileSystemEntry entry) => (entry.ToSpecifiedFullPath(), entry.IsDirectory, entry.Length, entry.LastWriteTimeUtc.UtcTicks), Listing))
+                {
+                    entries.Add(entry);
+                    if (!entry.Item2 && Path.GetFileName(entry.Item1.AsSpan()).Equals(HexIgnoreFile.FILE, PlatformPaths.Comparison))
+                        hasIgnoreFile = true;
+                }
+
+                if (leftOut.UseIgnoreFiles && hasIgnoreFile && HexIgnoreFile.In(folder, relative) is { } own)
                     ignores = [.. ignores, own];
 
                 string Inside(string name) => relative.Length == 0 ? name : $"{relative}/{name}";
                 bool Out(string inside, bool isFolder) => leftOut.Skipped(inside, isFolder) || (ignores.Length > 0 && HexIgnoreFile.Ignored(ignores, inside, isFolder));
 
-                foreach (string file in Directory.GetFiles(folder, pattern))
+                foreach (var (file, isFolder, length, written) in entries)
                 {
+                    if (isFolder)
+                        continue;
                     string name = Path.GetFileName(file);
-                    if (!name.StartsWith("~syncthing~") && !Out(Inside(name), false) && (keep is null || keep(file)))
-                        files.Add(file);
+                    if ((expression is null || FileSystemName.MatchesWin32Expression(expression, name, ignoreCase: true))
+                        && !name.StartsWith("~syncthing~", StringComparison.Ordinal) && !Out(Inside(name), false) && (keep is null || keep(file)))
+                        files.Add(new HexWalkedFile(file, length, written));
                 }
 
-                foreach (string inside in Directory.GetDirectories(folder))
+                foreach (var (inside, isFolder, _, _) in entries)
                 {
-                    string under = Inside(Path.GetFileName(inside));
+                    if (!isFolder)
+                        continue;
+                    string name = Path.GetFileName(inside);
+                    string under = Inside(name);
 
                     // A repository of its own inside the folder (the engine and Hex cloned into the workspace the game's
                     // repository is) is out of reach of the .gitignores above it, the way git and ripgrep take it: they
                     // belong to another repository. A workspace whose .gitignore leaves out the repositories cloned into it
-                    // had them walked as if they weren't there, a few files of the top found and nothing of the code
-                    bool repository = Directory.Exists(Path.Combine(inside, ".git"));
-                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true)) || IsRepositoryCopy(inside)
-                        || (File.Exists(Path.Combine(inside, ".git")) && (openNames is null || openNames.Contains(Path.GetFileName(inside)))))
+                    // had them walked as if they weren't there, a few files of the top found and nothing of the code.
+                    // Its .git is asked about once, whether it's a folder, a file or not there
+                    FileAttributes git = new FileInfo(Path.Combine(inside, ".git")).Attributes;
+                    bool repository = (int)git != -1 && git.HasFlag(FileAttributes.Directory);
+                    bool gitFile = (int)git != -1 && !repository;
+                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true)) || IsRepositoryCopy(inside, repository, gitFile)
+                        || (gitFile && (openNames is null || openNames.Contains(name))))
                         continue;
                     pending.Push((inside, under, repository ? [] : ignores));
                 }
@@ -121,7 +183,7 @@ internal static partial class HexSearch
             }
         }
 
-        files.Sort(StringComparer.OrdinalIgnoreCase);
+        files.Sort(static (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Path, b.Path));
         return files;
     }
 
@@ -135,13 +197,19 @@ internal static partial class HexSearch
     internal static bool IsRepositoryCopy(string folder)
     {
         string git = Path.Combine(folder, ".git");
+        return IsRepositoryCopy(folder, Directory.Exists(git), File.Exists(git));
+    }
+
+    // The same with what its .git is already known, a folder, a file or neither
+    private static bool IsRepositoryCopy(string folder, bool gitFolder, bool gitFile)
+    {
         try
         {
-            if (Path.GetFileName(folder).StartsWith('.') && (Directory.Exists(git) || File.Exists(git)))
+            if (Path.GetFileName(folder).StartsWith('.') && (gitFolder || gitFile))
                 return true;
-            if (!File.Exists(git))
+            if (!gitFile)
                 return false;
-            using var reader = new StreamReader(git);
+            using var reader = new StreamReader(Path.Combine(folder, ".git"));
             string? first = reader.ReadLine();
             return first is not null && first.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase)
                 && first.Replace('\\', '/').Contains("/worktrees/", StringComparison.OrdinalIgnoreCase);
@@ -270,19 +338,36 @@ internal static partial class HexSearch
     }
 
     /// <summary>The lines of a file, none for one that can't be read, is huge, or has nothings (zero bytes) in it and isn't text after all.</summary>
-    public static string[] ReadLines(string file)
+    public static string[] ReadLines(string file) => ReadText(file) is { } text ? SplitLines(text) : [];
+
+    /// <summary>The text of a file as it is on the disk, null for one that can't be read, is huge, or has nothings in it and isn't text after all.</summary>
+    internal static string? ReadText(string file)
     {
         try
         {
             if (new FileInfo(file).Length > MOST_READ)
-                return [];
+                return null;
 
             string text = File.ReadAllText(file);
-            return text.Contains('\0') ? [] : text.Replace("\r\n", "\n").Split('\n');
+            return text.Contains('\0') ? null : text;
         }
         catch (Exception)
         {
-            return [];
+            return null;
         }
+    }
+
+    /// <summary>
+    /// The lines of a text, split at each \n with a \r before it taken off too, what replacing \r\n with \n and
+    /// splitting comes to without the whole text made again in between.
+    /// </summary>
+    internal static string[] SplitLines(string text)
+    {
+        var lines = new string[text.AsSpan().Count('\n') + 1];
+        int start = 0, at = 0;
+        for (int end; (end = text.IndexOf('\n', start)) >= 0; start = end + 1)
+            lines[at++] = text[start..(end > start && text[end - 1] == '\r' ? end - 1 : end)];
+        lines[at] = text[start..];
+        return lines;
     }
 }
