@@ -405,30 +405,37 @@ internal sealed partial class DawnScene
                 // The finished group's head is a button that folds it, with the first finished card while it's open and a
                 // row of its own under the rest while it's folded
                 HexChatBand[] bands = FleetBands(order);
-                bool headed = bands.Distinct().Count() > 1 || (chatsFinished.Count > 0 && filter.Length == 0);
+                // Headings over the working, waiting and recent only when there's more than one of them, a single group's
+                // heading said nothing its cards didn't. The finished always have their head, it's how they're opened
+                int main = 0;
+                for (int i = 0; i < bands.Length; i++)
+                    main |= bands[i] == HexChatBand.Finished ? 0 : 1 << (int)bands[i];
+                bool headed = System.Numerics.BitOperations.PopCount((uint)main) > 1;
+                bool any = main != 0;
                 float depth = 0.0f;
                 for (int i = 0; i < order.Count; i++)
                 {
                     var (chat, step) = order[i];
-                    AgentCard card = AgentCardOf(chat, step, closable: false);
+                    bool finished = bands[i] == HexChatBand.Finished;
+                    AgentCard card = AgentCardOf(chat, step, closable: false, quiet: finished && chat != agentChat, rail: bands[i] == HexChatBand.NeedsYou && NeedsYou(chat));
                     UIComponent inner = card.Root;
                     float above = 0.0f;
                     // The heading goes in with the band's first card, one row for each card still, which the keys and the
                     // clicks find by its place
-                    if (headed && (i == 0 || bands[i] != bands[i - 1]))
+                    if ((headed || finished) && (i == 0 || bands[i] != bands[i - 1]))
                     {
                         var with = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
-                        if (bands[i] == HexChatBand.Finished)
+                        if (finished)
                         {
-                            with.Add(FinishedHead());
-                            above = FINISHED_HEAD;
+                            with.Add(FinishedHead(alone: !any && filter.Length == 0, inset: 0.0f));
+                            above = FinishedTall(!any && filter.Length == 0);
                         }
                         else
                         {
                             above = i == 0 ? 18 : 26;
                             with.Add(new Label
                             {
-                                Text = Said(bands[i] switch { HexChatBand.NeedsYou => "noon.fleet_needs_you", HexChatBand.Working => "noon.fleet_working", _ => "noon.fleet_rest" }).ToUpperInvariant(),
+                                Text = Said(bands[i] switch { HexChatBand.NeedsYou => "noon.fleet_needs_you", HexChatBand.Working => "noon.fleet_working", _ => "noon.fleet_rest" }),
                                 TextScale = 0.125f, Dim = true, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, above), Padding = new UIEdges(10, 0, 0, 2), Anchor = Origin.BottomLeft, Pivot = Origin.BottomLeft
                             });
                         }
@@ -443,7 +450,7 @@ internal sealed partial class DawnScene
 
                 // The finished folded away, their head under the rest
                 if (!FinishedShown && chatsFinished.Count > 0 && filter.Length == 0)
-                    noonFleetRows.Add(FinishedHead());
+                    noonFleetRows.Add(FinishedHead(alone: order.Count == 0, inset: 0.0f));
                 SlideCards(noonFleetPlaces, cardsPlaced);
             }
 

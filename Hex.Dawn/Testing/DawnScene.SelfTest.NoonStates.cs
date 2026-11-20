@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
         });
         test.Check("noon states: each group has its heading, and still one row for each card", () =>
             noonFleetRows.Children.Count == FleetShown().Count
-            && new[] { "noon.fleet_needs_you", "noon.fleet_working", "noon.fleet_rest" }.All(key => Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said(key).ToUpperInvariant())));
+            && new[] { "noon.fleet_needs_you", "noon.fleet_working", "noon.fleet_rest" }.All(key => Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said(key))));
         test.Run(() => Shot("noon-states-fleet"));
 
         // Waiting on the person in another chat, the strip says how many and goes there

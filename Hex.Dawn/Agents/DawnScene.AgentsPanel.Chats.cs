@@ -164,29 +164,53 @@ internal sealed partial class DawnScene
     private bool chatsFinishedOpen;
 
     /// <summary>
-    /// The finished group's head: a chevron, how many are in it and how many of those nobody read. The same button in the
-    /// list and the fleet.
+    /// The finished group's head, the same in the list and the fleet: its name after a chevron at the left, set like the
+    /// other groups' headings and lined up with them, and at the right how many nobody read (in the accent, with its dot)
+    /// and how many it holds. The whole row is the button, its hover and press the flat button's. Over it, when nothing
+    /// is working or waiting, a quiet line saying so, so a list folded down to its head doesn't look broken.
     /// </summary>
-    private Button FinishedHead()
+    /// <param name="inset">How far in its words start, the fleet's headings start at its edge and the list's cards ten in.</param>
+    private UIComponent FinishedHead(bool alone = false, float inset = 10.0f)
     {
         var (count, unread) = chatsFinished;
         bool open = FinishedShown;
-        string label = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}";
-        if (unread > 0)
-            label += $"  ·  $(circle-filled) {Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture)))}";
-        return new Button
+        var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
+        // A breath over it, apart from the cards above as the other groups' headings are
+        holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_GAP), Color = Vector4.Zero });
+        if (alone)
+            holder.Add(new Label { Text = Said("agents_panel.finished_none_working"), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_ALONE), Position = new Vector2(inset, 0) });
+
+        var row = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_HEAD), Color = Vector4.Zero });
+        row.Add(new Button
         {
-            Style = "button_flat",
-            Align = Origin.Left,
-            Fill = UIFill.Horizontal,
-            Size = new Vector2(0, FINISHED_HEAD),
-            LabelScale = 0.125f,
-            Animated = false,
-            Label = label,
-            Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"),
-            OnPressed = ToggleFinished
-        };
+            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false,
+            Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), OnPressed = ToggleFinished
+        });
+        row.Add(new Label
+        {
+            Text = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head")}", TextScale = 0.125f, Dim = true, Bold = true,
+            Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(inset, 0), Align = Origin.Left
+        });
+        string many = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        row.Add(new Badge { Text = many, Tone = UIBadgeTone.Neutral, TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
+        if (unread > 0)
+        {
+            // Left of the count, measured off its words, a pill's ends and its dot
+            float countWidth = (Skin?.Font.Measure(many, 0.11f, markup: false).X ?? 8.0f) + 14.0f;
+            row.Add(new Badge
+            {
+                Text = Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture))), Tone = UIBadgeTone.Accent, Dot = true,
+                TextScale = 0.11f, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8 - countWidth - 6, 0)
+            });
+        }
+        return holder;
     }
+
+    /// <summary>How tall the finished group's head is, with its line saying nothing works over it when that's said.</summary>
+    private static float FinishedTall(bool alone) => FINISHED_GAP + FINISHED_HEAD + (alone ? FINISHED_ALONE : 0.0f);
+
+    // How tall the line over a head that's all there is to the list is, and the gap over the head
+    private const float FINISHED_ALONE = 26.0f, FINISHED_GAP = 6.0f;
 
     // How tall the finished group's head is
     private const float FINISHED_HEAD = 24.0f;
@@ -200,12 +224,14 @@ internal sealed partial class DawnScene
     {
         float time = AgentsMotion(AGENTS_SLIDE);
         bool first = was.Count == 0;
+        // Those coming in together (a group opened) one a beat after another, a few at the most
+        int coming = 0;
         foreach (var (chat, card, depth) in now)
         {
             if (time <= 0.0f || first)
                 continue;
             if (!was.TryGetValue(chat, out float before))
-                SlideRowIn(card);
+                SlideRowIn(card, Math.Min(coming++, 5) * 0.035f);
             else if (MathF.Abs(before - depth) > 0.5f)
             {
                 // Drawn where it was and eased to where it is, up being plus
@@ -301,12 +327,14 @@ internal sealed partial class DawnScene
                     if (finished && !headed)
                     {
                         headed = true;
-                        agentsListRows.Add(FinishedHead());
-                        depth += FINISHED_HEAD + agentsListRows.Spacing;
+                        bool alone = i == 0;
+                        agentsListRows.Add(FinishedHead(alone));
+                        depth += FinishedTall(alone) + agentsListRows.Spacing;
                     }
                     if (finished && !shown)
                         continue;
-                    AgentCard card = AgentCardOf(chat, step, closable: true);
+                    // A finished one's name quiet, the working ones read first; one waiting on the person with its rail
+                    AgentCard card = AgentCardOf(chat, step, closable: true, quiet: finished && chat != agentChat, rail: BandAt(i) == HexChatBand.NeedsYou && NeedsYou(chat));
                     agentsListRows.Add(card.Root);
                     chatRowFits.Add(card.Refresh);
                     cardsPlaced.Add((chat.Id, card.Root, depth));

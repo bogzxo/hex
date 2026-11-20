@@ -97,13 +97,17 @@ internal sealed partial class DawnScene
     {
         HexAgentChat? old = null, just = null, working = null;
         bool wasOpen = chatsFinishedOpen;
-        bool HasHead(UIComponent rows) => Descendants(rows).OfType<Button>().Any(button => button.Label.Contains(Said("agents_panel.finished_head", ("count", "1")), StringComparison.Ordinal));
+        // The head by its name and its count's pill
+        bool HasHead(UIComponent rows) => Descendants(rows).OfType<Label>().Any(label => label.Text.EndsWith(Said("agents_panel.finished_head"), StringComparison.Ordinal))
+            && Descendants(rows).OfType<Badge>().Any(badge => badge.Text == "1");
 
         test.Run(() =>
         {
             chatsFinishedOpen = false;
             old = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Old finished" };
             old.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "look at the old thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done long ago")]);
+            // Finished before it was read, the group's head counts it
+            old.Seen = old.Version - 1;
             just = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Just finished" };
             just.Ask("a quick one");
             just.Done();
@@ -180,13 +184,39 @@ internal sealed partial class DawnScene
         });
         test.Wait();
 
+        // Everything finished long ago and nothing open: the fleet is its finished head alone, a quiet line over it
+        HexAgentChat? older = null;
         test.Run(() =>
         {
             StopAgent(working);
-            foreach (HexAgentChat chat in (HexAgentChat?[])[old, just, working])
+            foreach (HexAgentChat chat in (HexAgentChat?[])[just, working])
+                if (chat is not null)
+                    CloseAgentChat(chat);
+            older = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Older finished" };
+            older.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "an older thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done")]);
+            agentChats.Add(older);
+            agentChat = null;
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: with nothing working the fleet says so over the folded head", () =>
+            FleetShown().All(each => each.Chat != old && each.Chat != older)
+            && Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said("agents_panel.finished_none_working")));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_alone.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            foreach (HexAgentChat chat in (HexAgentChat?[])[old, older])
                 if (chat is not null)
                     CloseAgentChat(chat);
             chatsFinishedOpen = wasOpen;
+            ShowFace(HexFace.Dawn);
         });
         test.Settle(0.2f);
     }
