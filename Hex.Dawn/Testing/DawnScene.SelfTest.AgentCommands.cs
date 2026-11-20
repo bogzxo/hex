@@ -6,6 +6,13 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
+    // What's typed in the agents' box, the caret at its end as typing leaves it, which is where the slash list looks
+    private void TypeInAgentBox(string text)
+    {
+        agentsInput.Text = text;
+        agentsInput.Document.MoveTo(new Horizon.UI.Components.UITextPosition(0, text.Length));
+    }
+
     private void TestAgentCommands(HexPointerScript test)
     {
         HexExtension? provider = null;
@@ -32,7 +39,7 @@ internal sealed partial class DawnScene
             NewAgentChat();
             agentPicked = "slash_fixture";
             ShowAgentsPanel();
-            agentsInput.Text = "/task";
+            TypeInAgentBox("/task");
             agentsInput.Focus();
         });
         test.Settle(0.4f);
@@ -57,7 +64,7 @@ internal sealed partial class DawnScene
         PressKeys(test, "Tab");
         test.Settle(0.2f);
         test.Check("commands: Tab inserts the selected command and keeps focus", () => agentsInput.Text == "/task-12 " && compositor.Focus == agentsInput && agentsSlash is null);
-        test.Run(() => { agentsInput.Text = "/task"; agentsInput.Focus(); });
+        test.Run(() => { TypeInAgentBox("/task"); agentsInput.Focus(); });
         test.Settle(0.2f);
         test.Run(() => run.Properties["commands"] = Catalog("Updated description"));
         test.Settle(0.2f);
@@ -66,11 +73,14 @@ internal sealed partial class DawnScene
         PressKeys(test, "Escape");
         test.Settle(0.2f);
         test.Check("commands: Escape dismisses the menu without erasing the draft", () => agentsSlash is null && agentsInput.Text == "/task");
-        test.Run(() => { agentsInput.Text = "/task-31"; agentsInput.Focus(); });
+        test.Run(() => { TypeInAgentBox("/task-31"); agentsInput.Focus(); });
         test.Settle(0.2f);
         PressKeys(test, "Enter");
         test.Settle(0.2f);
-        test.Check("commands: Enter completes rather than sending an unfinished selection", () => agentsInput.Text == "/task-31 " && agentRuns.Count == 0);
+        // Written out in full, Enter sends it rather than completing it to itself (TakeFirstSlash); the fixture's program
+        // isn't there, so nothing runs and the draft stays
+        test.Check("commands: Enter on a command written out in full doesn't complete it to itself, nothing run without its program", () =>
+            agentsInput.Text == "/task-31" && agentRuns.Count == 0);
         test.Run(() => { agentsInput.Text = "/help"; SendToAgent(); });
         test.Settle(0.2f);
         test.Check("commands: help executes locally and lists the last command", () =>
