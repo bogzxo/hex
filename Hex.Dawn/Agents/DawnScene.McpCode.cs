@@ -24,8 +24,11 @@ internal sealed partial class DawnScene
     // How long after a server's up a file it hasn't said anything of is sent it again, for hex_diagnostics
     private const int MCP_DIAGNOSTICS_LATE_NUDGE_MS = 20_000;
 
-    // How long the check after an edit waits for a file's server, the first time for a server longer (it's warming up)
-    private const float MCP_CHECK_SECONDS = 10.0f, MCP_FIRST_CHECK_SECONDS = 15.0f;
+    // How long the check after an edit waits for a file's server, the first time for a server longer (it's warming up).
+    // csharp-ls says what's wrong 0.3 to 1.2 s after a change (measured on Hex.sln with 40 files open), so past this
+    // it's busy, and the answer says it wasn't checked rather than holding the agent: at 10 and 15 s, three edits sat
+    // 15, 24 and 30 s
+    private const float MCP_CHECK_SECONDS = 3.0f, MCP_FIRST_CHECK_SECONDS = 6.0f;
 
     // The servers a check after an edit has waited on before, the first check of each waits longer
     private readonly HashSet<LanguageServer> mcpChecked = new(ReferenceEqualityComparer.Instance);
@@ -1032,6 +1035,10 @@ internal sealed partial class DawnScene
         // for is something it says after the edit was sent, not what it was saying of the text before
         float seconds = mcpChecked.Add(server) ? MCP_FIRST_CHECK_SECONDS : MCP_CHECK_SECONDS;
         long giveUp = System.Environment.TickCount64 + (long)(seconds * 1000);
+
+        // A server that can be asked is, at once, rather than waited on until it publishes by itself (csharp-ls offers
+        // it, whichever comes first is the answer)
+        languages.AgentAskDiagnostics(path, server);
         while (!languages.AgentSaidSince(path, edited) && System.Environment.TickCount64 < giveUp)
             yield return null;
 
@@ -1051,7 +1058,7 @@ internal sealed partial class DawnScene
         if (!languages.AgentSaidSince(path, edited) || found is null)
         {
             int before = found?.Count(each => !each.Warning) ?? -1;
-            yield return $"\n{server.Name}: no answer of the edit after {seconds:0} s (not the same as no errors{(before >= 0 ? $", before it there {(before == 1 ? "was 1 error" : $"were {before} errors")}" : string.Empty)}), hex_diagnostics asks again.";
+            yield return $"\n{server.Name}: not checked yet, its server hadn't answered of the edit after {seconds:0} s (not the same as no errors{(before >= 0 ? $", before it there {(before == 1 ? "was 1 error" : $"were {before} errors")}" : string.Empty)}), hex_diagnostics asks again.";
             yield break;
         }
 

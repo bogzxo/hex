@@ -485,6 +485,7 @@ internal sealed partial class DawnScene
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
+        ("mcp-check", "the check after hex_edit through csharp-ls, timed, one after another and three at once, when csharp-ls is on this machine", TestMcpCheck),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first

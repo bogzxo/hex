@@ -129,6 +129,12 @@ internal sealed partial class HexLanguages
             file.Server.Change(full, ReadText(full));
     }
 
+    /// <summary>
+    /// What's wrong with a file asked of its server now (pull diagnostics), for one that offers it, rather than waited on
+    /// until it publishes by itself. What it says comes in the way the rest does (AgentHeard). False when it can't be asked.
+    /// </summary>
+    internal bool AgentAskDiagnostics(string path, LanguageServer server) => server.AskDiagnosticsNow(Path.GetFullPath(path));
+
     /// <summary>A file an agent changed on the disk told to the server it's open in for an agent, at once rather than at its next question.</summary>
     internal void AgentFileWritten(string path)
     {
