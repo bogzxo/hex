@@ -177,9 +177,13 @@ internal sealed partial class DawnScene
     /// <summary>Shows a file in the explorer, its folders opened up to it.</summary>
     private void RevealInExplorer(HexDocument tab)
     {
-        if (tab.Path is not { } path)
-            return;
+        if (tab.Path is { } path)
+            RevealInExplorer(path);
+    }
 
+    /// <summary>Shows a file in the explorer, its folders opened up to it.</summary>
+    private void RevealInExplorer(string path)
+    {
         if (explorer.workspace.IsEmpty)
             browseDirectory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
         else
