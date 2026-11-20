@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("tabs: clicking a tab shows its layout", () => document == documents[0] && nameBox.Text == "selftest_menu" && designer.treeRows.Count == 3);
 
-        Pick("File", () => "Close");
+        Pick("File", () => Said("documents.close"));
         test.Wait();
         test.Check("close: the layout is gone and the other one is shown", () => documents.Count == 1 && document.Path is null && docTabs.Tabs.Count == 1);
 
