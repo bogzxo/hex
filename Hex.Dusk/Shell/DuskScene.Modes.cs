@@ -51,8 +51,8 @@ internal sealed partial class DuskScene
         ReadBackdrop();
 
         // The editor was made bigger or smaller meanwhile, the terminal follows so the swap doesn't jump
-        if (Hex.Shell.HexModes.Scale is { } shared && shared != compositor.Scale)
-            SetScale(shared);
+        if (Hex.Shell.HexModes.InterfaceSize is { } shared && shared != compositor.Scale)
+            SetInterfaceSize(shared);
         Engine.WindowManager.RequestFrames();
     }
 }

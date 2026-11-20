@@ -114,7 +114,7 @@ internal sealed partial class DawnScene
             && agentsCompose.Radius > 0);
         Capture("agents-narrow");
         float originalScale = compositor.Scale;
-        test.Run(() => { settings.LeftWidth = 320; ApplyPanelSizes(); SetScale(2, remember: false); });
+        test.Run(() => { settings.LeftWidth = 320; ApplyPanelSizes(); SetInterfaceSize(2, remember: false); });
         test.Settle(0.3f);
         test.Check("agents layout: provider and actions fit the rendered sidebar after scaling", () =>
             agentsChips.Bounds.Max.X <= agentsView.Bounds.Max.X + 1 && agentsNew.Bounds.Max.X <= agentsView.Bounds.Max.X + 1
@@ -123,7 +123,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("agents layout: the compact New button clears the draft and focuses the composer", () =>
             agentsInput.Text.Length == 0 && compositor.Focus == agentsInput);
-        test.Run(() => SetScale(originalScale, remember: false));
+        test.Run(() => SetInterfaceSize(originalScale, remember: false));
         TestAgentWelcomeResize(test);
         test.Run(() =>
         {

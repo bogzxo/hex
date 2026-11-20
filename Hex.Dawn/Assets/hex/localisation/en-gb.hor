@@ -528,8 +528,8 @@ let strings = {
             ],
             skin: "Skin",
             skin_tip: "The skin Hex itself is drawn in, any skin in any of its themes",
-            size: "Scale",
-            size_tip: "How large Hex draws itself and the layouts in it",
+            size: "Interface size",
+            size_tip: "How large Hex draws itself, every word with it, on top of the scale the system has for the screen",
             code_size: "Code zoom",
             code_size_tip: "The size of code relative to the rest of the editor (Ctrl+= and Ctrl+- in a code view)",
             panels: "Panels",
@@ -2010,7 +2010,7 @@ let strings = {
         toggle_designer_code: "Switch Editor View",
         layout_debugger_on: "Layout debugger on. Padding is green, gaps are orange.",
         layout_debugger_off: "Layout debugger off",
-        editor_scale: "Editor Scale",
+        interface_size: "Interface Size",
         layout_skin: "Layout Skin",
         exit: "Exit",
         terminal: "Terminal",
@@ -2738,6 +2738,7 @@ let strings = {
     settings_keywords: {
         wrap_code: "word wrap wordwrap line wrap soft wrap editor.wordWrap",
         code_zoom: "font size zoom text size editor.fontSize",
+        interface_size: "scale zoom ui size ui scale text size bigger smaller dpi window.zoomLevel",
         code_font: "font family typeface editor.fontFamily",
         auto_save: "autosave save automatically files.autoSave",
         auto_save_delay: "autosave delay files.autoSaveDelay",
@@ -2785,8 +2786,8 @@ let strings = {
     settings_page: {
         dawn_theme: "Dawn's theme",
         dawn_theme_help: "The skin and the theme Dawn is drawn in, Dusk's is the next row.",
-        size: "Size",
-        size_help: "How big Dawn's own parts are drawn, the menus, the tabs and the panels.",
+        interface_size: "Interface size",
+        interface_size_help: "How big the whole of Hex is drawn, the title bar, the menus, the panels and every word in them, on top of the scale the system has for the screen. 100% is the size other programs are. The code's zoom comes on top of it.",
         panels_help: "The side bar, the right side and the panel under the editor back at the sizes they come at.",
         put_back: "Put back",
         layout_skin: "Layouts are shown in",
@@ -3435,8 +3436,7 @@ let strings = {
     },
 
     chrome: {
-        code_zoom: "the code is at {percent}%, Ctrl+0 puts it back",
-        scale_not_kept: "couldn't keep the scale for next time: {reason}"
+        code_zoom: "the code is at {percent}%, Ctrl+0 puts it back"
     },
 
     dusk_scene: {

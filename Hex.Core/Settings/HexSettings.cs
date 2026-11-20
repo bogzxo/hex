@@ -48,6 +48,16 @@ internal sealed partial class HexSettings
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
 
+    /// <summary>
+    /// How big the whole of the editor is drawn, its bars, menus, panels and every word in them, 1 for 100%. On top of the
+    /// scale the system has for the screen (150% on a laptop Windows scales by that), so 100% is the size every other
+    /// program on that screen is. The code's zoom and the terminal's font come on top of this again.
+    /// </summary>
+    public float InterfaceSize = 1.0f;
+
+    /// <summary>The least and the most <see cref="InterfaceSize"/> goes to.</summary>
+    public const float LEAST_INTERFACE_SIZE = 0.75f, MOST_INTERFACE_SIZE = 2.0f;
+
     /// <summary>How big the code is drawn against the rest of the editor, 1 for the size it comes at.</summary>
     public float CodeZoom = 1.0f;
 

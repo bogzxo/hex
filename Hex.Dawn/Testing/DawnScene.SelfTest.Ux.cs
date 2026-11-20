@@ -40,15 +40,11 @@ internal sealed partial class DawnScene
         test.Run(() => textDialog?.Cancel());
         test.Wait();
         test.Check("ux: dismissing the editor list returns input to the editor", () => compositor.Focus == code);
-        test.Run(() => { wideSideWidth = fittedLeft; SetScale(2.0f, remember: false); });
+        test.Run(() => { wideSideWidth = fittedLeft; SetInterfaceSize(2.0f, remember: false); });
         test.Settle(0.2f);
-        test.Check("ux: mobile title bar and menus follow the chosen UI zoom", () =>
-        {
-            bool nativeChrome = (Engine.WindowManager.Features & Horizon.Platform.PlatformFeatures.Window) != 0;
-            return ((TitleBar)top).PixelSized == nativeChrome
-                && MathF.Abs(menu.TextScale - MENU_TEXT / (nativeChrome ? 2.0f : 1.0f)) < 0.0001f
-                && MathF.Abs(modeToggle.LabelScale - 0.14f / (nativeChrome ? 2.0f : 1.0f)) < 0.0001f;
-        });
+        test.Check("ux: the title bar, its menus and the faces grow with the interface size like every other word", () =>
+            !((TitleBar)top).PixelSized && menu.TextScale == MENU_TEXT && modeToggle.LabelScale == 0.14f
+            && top.Bounds.Height >= ((TitleBar)top).Height - 0.5f);
         test.Check("ux: narrow editor keeps file navigation on its own row", () => tabRow.Direction == UIDirection.Vertical
             && docTabs.Bounds.Max.X <= center.Bounds.Max.X + 1.0f
             && allTabs.Bounds.Max.X <= center.Bounds.Max.X + 1.0f);
@@ -90,16 +86,16 @@ internal sealed partial class DawnScene
             Enumerable.Range(0, docTabs.Tabs.Count).Any(i => MathF.Abs(docTabs.TabBounds(i).Min.X - docTabs.Bounds.Min.X) <= 1));
         test.Run(() => Shot("ux-narrow-editor"));
         test.Settle(0.5f);
-        test.Run(() => SetScale(scale, remember: false));
+        test.Run(() => SetInterfaceSize(scale, remember: false));
         test.Settle(0.2f);
         test.Check("ux: widening retains the overflow selection and editor focus", () => document == overflowPicked && compositor.Focus == code);
         test.Check("ux: widening restores the sidebar preference", () => MathF.Abs(fittedLeft - wideSideWidth) <= 1);
-        test.Run(() => SetScale(2.0f, remember: false));
+        test.Run(() => SetInterfaceSize(2.0f, remember: false));
         test.Settle(0.2f);
         test.Check("ux: narrowing again retains the overflow selection and editor focus", () => document == overflowPicked && compositor.Focus == code
             && docTabs.TabBounds(docTabs.Selected).Min.X >= docTabs.Bounds.Min.X - 1
             && docTabs.TabBounds(docTabs.Selected).Max.X <= docTabs.Bounds.Max.X + 1);
-        test.Run(() => { SetScale(scale, remember: false); CloseAll(); });
+        test.Run(() => { SetInterfaceSize(scale, remember: false); CloseAll(); });
         test.Settle(0.2f);
         test.Run(() => Shot("ux-editor"));
         test.Settle(0.1f);

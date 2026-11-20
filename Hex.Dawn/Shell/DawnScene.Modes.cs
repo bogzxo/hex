@@ -114,8 +114,8 @@ internal sealed partial class DawnScene
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
 
         // Dusk was made bigger or smaller meanwhile, the editor follows so the swap doesn't jump
-        if (HexModes.Scale is { } shared && shared != compositor.Scale)
-            SetScale(shared, remember: true);
+        if (HexModes.InterfaceSize is { } shared && shared != compositor.Scale)
+            SetInterfaceSize(shared, remember: true);
         Engine.WindowManager.RequestFrames();
     }
 }

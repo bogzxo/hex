@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
                 {
                     ShowFace(HexFace.Dawn);
                     PickLook(look);
-                    SetScale(scale, remember: false);
+                    SetInterfaceSize(scale, remember: false);
                     ShowFace(HexFace.Noon);
                     noonWait = 0;
                 });
@@ -85,7 +85,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            SetScale(scaleBefore, remember: false);
+            SetInterfaceSize(scaleBefore, remember: false);
             PickLook(HexLooks.Solstice);
             UseEditorSkin(skinBefore, themeBefore, save: false);
             if (chat is not null)

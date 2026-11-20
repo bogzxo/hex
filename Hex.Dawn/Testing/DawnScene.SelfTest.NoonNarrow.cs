@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
         {
             float pixels = chrome.Root.Bounds.Width * compositor.Scale;
             float scale = HexFrame.Scales.FirstOrDefault(value => pixels / value < NOON_FLEET_FROM - 20);
-            SetScale(scale > 0 ? scale : HexFrame.Scales[^1], remember: false);
+            SetInterfaceSize(scale > 0 ? scale : HexFrame.Scales[^1], remember: false);
             // Even 200% can leave a large display in the wide layout.
             if (scale == 0)
                 compositor.Scale = stage.Scale = pixels / 800.0f;
@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
 
         void Wide()
         {
-            SetScale(scaleBefore, remember: false);
+            SetInterfaceSize(scaleBefore, remember: false);
             noonWait = 0;
         }
 
