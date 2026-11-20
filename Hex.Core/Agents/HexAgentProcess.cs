@@ -136,6 +136,12 @@ internal sealed class HexAgentProcess : IDisposable
     public static HexAgentProcess Start(string found, IReadOnlyList<string> arguments, string folder, string? stdin, IReadOnlyDictionary<string, string>? environment = null, bool keepInput = false)
     {
         ProcessStartInfo info = StartInfo(found, arguments, folder);
+
+        // Builds an agent runs leave no MSBuild nodes waiting behind them for a build that never comes. Several agents
+        // building at once left three dozen of them, four and a half gigabytes, after every one had finished. Unless the
+        // person's own environment says otherwise
+        if (System.Environment.GetEnvironmentVariable("MSBUILDDISABLENODEREUSE") is null)
+            info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
         if (environment is not null)
         {
             foreach (var (name, value) in environment)
