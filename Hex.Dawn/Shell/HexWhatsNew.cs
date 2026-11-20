@@ -41,14 +41,15 @@ internal sealed record HexNewsItem(string Text, string Go, string Icon, HexNewsP
 internal static class HexWhatsNew
 {
     // Built since the last release, in every build until a release takes them
-    private static readonly HexNewsItem[] unreleased =
-    [
-        new("persistent_process", "go_persistent", "zap", HexNewsPlace.Setting, "persistent_process"),
-        new("launch_faster", "go_launch", "dashboard", HexNewsPlace.Setting, "persistent_at_login")
-    ];
+    private static readonly HexNewsItem[] unreleased = [];
 
     private static readonly Dictionary<string, HexNewsItem[]> releases = new(StringComparer.Ordinal)
     {
+        ["3.2.0"] =
+        [
+            new("persistent_process", "go_persistent", "zap", HexNewsPlace.Setting, "persistent_process"),
+            new("launch_faster", "go_launch", "dashboard", HexNewsPlace.Setting, "persistent_at_login")
+        ],
         ["3.1.0"] =
         [
             new("agentic", "go_agents", "robot", HexNewsPlace.Side, Side: HexSide.Agents),

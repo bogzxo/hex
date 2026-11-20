@@ -137,8 +137,9 @@ settings file of the chat's own with `--settings`). Before Claude Code runs its 
 call, and a search or read of the workspace (`grep`, `rg`, `find`, `ls`, `cat`, `head`, `tail`, `sed -n`,
 `Select-String`, `Get-Content` and the like as the first command of the line) is turned back with the Hex tool that does
 it. A grep that filters a pipe, builds, tests, git and anything outside the workspace are left alone. Claude Code's
-setting Keep it on the harness picks how hard, turned back (the default), reminded (the call runs with the Hex tool said
-beside it) or left alone. Codex and Antigravity have no such hook and are told more firmly in their instructions.
+setting Use Hex's tools in the workspace picks how hard: always use Hex's tools (the default, Read, Edit and Write of
+the workspace are turned back too), search and read with Hex's tools, suggest Hex's tools (the call runs with the Hex
+tool said beside it) or don't interfere. Codex and Antigravity have no such hook and are told more firmly in their instructions.
 
 An agent's bridge (`Hex.exe --mcp-connect`) outlives the Hex it talks to. When Hex restarts into a build of itself, the
 bridge fails the calls that were cut off (so the agent makes them again), holds what the agent says meanwhile, waits up

@@ -1,3 +1,23 @@
+# Hex 3.2.0 Amphetamine
+
+Persistent Process: Hex stays ready in the background, so a window opens in a blink.
+
+## the editor
+
+- Persistent Process in Settings (and Speed on the welcome page): closing the window puts Hex to sleep instead of quitting, a few MB of memory and no CPU, and opening Hex again shows a window in well under a second; File, Exit still quits
+- Start with Windows starts Hex asleep when you sign in, so the first window is as quick as the rest
+- Hex starts quicker, the first frame sooner and the work that can wait done a moment after
+- closing the window while it was idle no longer skips asking about unsaved changes
+- the Plan tab no longer jumps to the top when a step or a chat changes
+- the usage limits shown for Claude are the latest it said, and a limit that's been reached shows 100%
+- keys that clashed (Properties and Agentic's fleet, Allow and Deny) only answer where they mean something
+- many places do less work each frame, and work that blocked the window happens beside it
+
+## Agentic
+
+- Claude Code's chat carries on after a /compact instead of failing
+- the setting that keeps Claude Code on Hex's tools says plainly what each choice does
+
 # Hex 3.1.2 Amphetamine
 
 Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.
