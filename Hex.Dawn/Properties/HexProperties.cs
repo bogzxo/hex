@@ -106,11 +106,12 @@ internal sealed partial class HexProperties
         filter = new TextBox { Placeholder = Said("filter"), Visible = false, MaxLength = 80, Anchor = Origin.Top, Pivot = Origin.Top, LeadIcon = "filter" };
         filter.OnChanged = _ => FilterRows?.Invoke(filter.Text);
 
+        title = head;
+        BuildHead(right);
         right.Add(filter);
         right.Add(page);
-        int at = right.Children.ToList().IndexOf(below);
-        right.MoveChild(filter, at);
-        right.MoveChild(page, at + 1);
+        // The side's title, the head, the filter and the rows first down the side, the designer's rows and the values after
+        KeepHeadOverPage();
         context.Window.Grip(page, UIResize.Left, left: false);
 
         // A file of HIDL has its values and its properties, the button over them swaps the one for the other
@@ -196,6 +197,8 @@ internal sealed partial class HexProperties
     {
         Shows = shows;
         page.Visible = shows == HexPropertiesShows.Files;
+        head.Visible = shows == HexPropertiesShows.Files;
+        KeepHeadOverPage();
         // A box to narrow rows down only while there are rows, nothing selected it filtered the hint to select something
         filter.Visible = shows == HexPropertiesShows.Component && document.Selected is not null;
         swap.Visible = canSwap;
@@ -237,8 +240,11 @@ internal sealed partial class HexProperties
     /// <summary>The page laid out in the room the right side has, as wide as the side and as tall as what's left of it.</summary>
     internal void Fit(float width, float height)
     {
+        // The height given is what the side has left with the head in it already
+        head.Size = new Vector2(width, HEAD_HEIGHT);
         page.Size = new Vector2(width, height);
         filter.Size = new Vector2(width, 28.0f);
+        FitHead(width);
     }
 
     /// <summary>Every tick, a project that changed under the rows shown evaluated again.</summary>

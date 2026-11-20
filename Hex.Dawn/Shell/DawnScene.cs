@@ -57,7 +57,10 @@ internal sealed partial class DawnScene : Scene
     private Vector4 DimColor => compositor.Skin?.DimTextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 0.62f);
     private Vector4 ErrorColor => compositor.Skin?.ErrorColor ?? new Vector4(1.0f, 0.45f, 0.4f, 1.0f);
     private Vector4 WarningColor => compositor.Skin?.WarningColor ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
-    private static readonly Vector4 FolderColor = UIFileKinds.FOLDER;
+    // A folder's icon, the skin's text turned down. Folders are the shape of the tree, the colours are left to what the
+    // files are and what git and the problems say of them. It was a blue of its own on every theme, names and all
+    private Vector4 FolderColor => compositor.Skin is { } skin ? skin.TextColor with { W = skin.TextColor.W * FOLDER_ICON } : DimColor;
+    private const float FOLDER_ICON = 0.72f;
 
     public override Camera ActiveCamera { get; protected set; }
 
@@ -659,7 +662,8 @@ internal sealed partial class DawnScene : Scene
             .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)
             .Add("asked_console", running.RunAskedConsole)
-            .Add("panel", UpdatePanel);
+            .Add("panel", UpdatePanel)
+            .Add("tree_title", FitTreeTitle);
     }
 
     // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again

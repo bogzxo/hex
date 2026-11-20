@@ -65,6 +65,7 @@ internal sealed partial class HexProperties
             ProjectRows(rows);
         page.Settings = rows;
         page.Refresh();
+        FillHead(document);
     }
 
     // A row with a value to read and copy and nothing to change, under a heading, with a sentence of what it is
@@ -74,8 +75,11 @@ internal sealed partial class HexProperties
     private void GeneralRows(List<UISetting> rows, string group)
     {
         bool one = shown.Count == 1;
-        rows.Add(one ? new UISetting(NAME, Said(NAME), UIFormKind.Text, Said("name_help_rename"), group) : ReadOnly(NAME, group, "name_help"));
-        rows.Add(ReadOnly(PATH, group, one ? "path_help" : "paths_help"));
+        // Several have how many they are in the head and no name of their own to change, and the folder they share is
+        // said as that rather than as a path of theirs
+        if (one)
+            rows.Add(new UISetting(NAME, Said(NAME), UIFormKind.Text, Said("name_help_rename"), group));
+        rows.Add(one ? ReadOnly(PATH, group, "path_help") : new UISetting(PATH, Said("common_folder"), UIFormKind.Text, Said("paths_help"), group, ReadOnly: true));
         rows.Add(ReadOnly(SIZE, group, "size_help"));
 
         values[NAME] = new StringValue(one ? Path.GetFileName(shown[0].TrimEnd('\\', '/')) : Said("count_items", ("count", shown.Count.ToString(CultureInfo.InvariantCulture))));
@@ -105,7 +109,7 @@ internal sealed partial class HexProperties
             rows.Add(ReadOnly(CREATED, group, "created_help"));
             rows.Add(ReadOnly(MODIFIED, group, "modified_help"));
             values[CREATED] = new StringValue(When(File.GetCreationTime(shown[0])));
-            values[MODIFIED] = new StringValue(When(File.GetLastWriteTime(shown[0])));
+            values[MODIFIED] = new StringValue(When(File.GetLastWriteTime(shown[0]), ago: true));
         }
 
         if (folders > 0)
@@ -116,6 +120,20 @@ internal sealed partial class HexProperties
     }
 
     private static string When(DateTime at) => at.ToString("d MMMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture);
+
+    // Within a day, how long ago with the time of day after it, "3 minutes ago, at 14:53", the date and time before that.
+    // The whole date with how long ago in front was more than the value's box had room for
+    private string When(DateTime at, bool ago)
+    {
+        TimeSpan since = DateTime.Now - at;
+        if (!ago || since < TimeSpan.Zero || since.TotalHours >= 24)
+            return When(at);
+
+        string said = since.TotalSeconds < 60 ? Said("just_now")
+            : since.TotalMinutes < 60 ? Said("minutes_ago", ("count", HexText.Count("minute", (int)since.TotalMinutes)))
+            : Said("hours_ago", ("count", HexText.Count("hour", (int)since.TotalHours)));
+        return Said("ago_at", ("ago", said), ("time", at.ToString("HH:mm", CultureInfo.InvariantCulture)));
+    }
 
     // The folder several files share, what their paths start with
     private static string CommonFolder(List<string> paths)

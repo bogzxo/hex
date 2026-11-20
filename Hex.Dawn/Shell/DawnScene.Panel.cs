@@ -250,6 +250,7 @@ internal sealed partial class DawnScene
             {
                 problemsListed = now;
                 problemRowsStale = true;
+                ExplorerProblemsChanged();
             }
         }
 

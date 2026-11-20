@@ -182,6 +182,7 @@ internal sealed partial class DawnScene
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
+        ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),

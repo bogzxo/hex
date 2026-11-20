@@ -21,6 +21,8 @@ internal sealed partial class DawnScene
         {
             DecorateRows();
             tabsDirty = true;
+            // The Properties' Git rows were made once, before git had said anything of a file just opened
+            properties?.GitChanged();
         };
     }
 
@@ -73,7 +75,7 @@ internal sealed partial class DawnScene
             return;
 
         foreach (var (path, isFolder, row) in explorer.explorerRows)
-            Decorate(row, path, isFolder, isFolder && explorer.workspace.Folders.Any(root => PlatformPaths.Same(root, path)) ? null : isFolder ? FolderColor : null);
+            Decorate(row, path, isFolder, null);
 
         // The files of a folder with no workspace, but not the dim rows that only say something
         foreach (var (path, isFolder, row) in fileRows)
@@ -95,14 +97,30 @@ internal sealed partial class DawnScene
     private void Decorate(UITreeItem row, string path, bool isFolder, Vector4? usual)
     {
         GitFileState state = isFolder ? new GitFileState(git.FolderChange(path), false, false) : git.StateOf(path);
-        row.Color = GitColor(state.Change) ?? usual;
+        Vector4? changed = GitColor(state.Change);
+
+        // What's wrong with a file comes before what git thinks of it, the way VS Code has it: the name in the colour of
+        // the worst of its problems and how many there are before its letter, "2, M"
+        var (errors, warnings) = ProblemsAt(path, isFolder);
+        Vector4? wrong = errors > 0 ? ErrorColor : warnings > 0 ? WarningColor : null;
+        row.Color = wrong ?? changed ?? usual;
         if (explorer.IsCutPath(path)) row.Color = DimColor;
 
-        // A file's letter at the right end in the colour of its change, the same as Source Control has it, a folder only
-        // takes the colour
-        bool lettered = !isFolder && state.Change is not (GitChange.None or GitChange.Ignored);
-        row.Badge = lettered ? state.Letter : string.Empty;
-        row.BadgeColor = lettered ? GitColor(state.Change) : null;
+        if (isFolder)
+        {
+            // A folder has no letter, a dot says something under it changed or is wrong, so a closed one still tells
+            row.Badge = string.Empty;
+            row.BadgeColor = null;
+            row.Dot = wrong ?? (state.Change is GitChange.None or GitChange.Ignored ? null : changed);
+            return;
+        }
+
+        bool lettered = state.Change is not (GitChange.None or GitChange.Ignored);
+        int count = errors + warnings;
+        string letter = lettered ? state.Letter : string.Empty;
+        row.Badge = count > 0 ? letter.Length > 0 ? $"{count}, {letter}" : count.ToString() : letter;
+        row.BadgeColor = wrong ?? (lettered ? changed : null);
+        row.Dot = null;
     }
 
     /// <summary>The colour a tab's title takes from its file's change, null for the skin's.</summary>

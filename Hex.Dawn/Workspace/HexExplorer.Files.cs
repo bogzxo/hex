@@ -133,6 +133,23 @@ internal sealed partial class HexExplorer
         }
     }
 
+    /// <summary>A file opened with the program the system has for its kind, what a double click in the system's file explorer does.</summary>
+    internal void OpenWithSystem(string path)
+    {
+        // A self test doesn't start other programs on the machine it runs on
+        if (options.SelfTest)
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.GetFullPath(path)) { UseShellExecute = true });
+        }
+        catch (Exception e)
+        {
+            context.Notices.Say(context.Strings.Said("explorer_files.not_shown", ("name", Path.GetFileName(path)), ("why", e.Message)), error: true);
+        }
+    }
+
     /// <summary>
     /// On Linux, a file picked in the desktop's file manager (Files, Dolphin, Thunar and the rest answer
     /// org.freedesktop.FileManager1 on the session's bus), false when nothing answered and the folder should be opened instead.

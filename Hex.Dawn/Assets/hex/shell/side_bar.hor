@@ -216,6 +216,8 @@ let side_tree = compositor.tree_view({
     parent: left,
     size: vec(280, 380),
     text_scale: 0.14,
+    // VS Code's 22 and a little, a few more rows than the skin's usual height in the same room
+    row_height: 24,
     radius: 6,
 });
 
