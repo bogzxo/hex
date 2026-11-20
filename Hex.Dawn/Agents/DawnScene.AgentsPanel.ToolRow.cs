@@ -144,14 +144,6 @@ internal sealed partial class DawnScene
         _ => Vector4.Zero
     };
 
-    /// <summary>The colour of the line under a tool's bubble, blue while it runs, green when it went, red when it failed.</summary>
-    internal static Vector4 ToolStateColour(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
-    {
-        HexAgentToolState.Running => RunningBlue(skin) with { W = 0.9f },
-        HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.9f },
-        _ => (skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.75f }
-    };
-
     // The rows' helpers live in HexAgentRows, shared by the side panel and Noon, said here by their short names
     internal static string ToolPreview(string? input) => HexAgentRows.ToolPreview(input);
     internal static string NoteText(string text) => HexAgentRows.NoteText(text);
