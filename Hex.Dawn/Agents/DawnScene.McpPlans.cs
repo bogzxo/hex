@@ -25,7 +25,7 @@ internal sealed partial class DawnScene
     private IEnumerable<HexMcpTool> PlanTools() =>
     [
         new(new McpTool("hex_plan_update", "Update the Plan tab",
-            "Write the to-do list in your Hex chat's Plan tab, which the user watches. Use it when asked for a plan and keep it current as work progresses. Merge by item ID or exact text by default, changing only supplied fields. Set merge to false to replace the list. Returns each changed row's ID and state, and any other chat whose open step names the same files.",
+            "Write the to-do list in your Hex chat's Plan tab, which the user watches. Use it when asked for a plan and keep it current as work progresses. Merge by item ID or exact text by default, changing only supplied fields. Set merge to false to replace the list, for a new task with a new title, the finished steps of the old one moving to an earlier section. The user can change the plan in the tab too, you are told when they do, keep their changes. Returns each changed row's ID and state, and any other chat whose open step names the same files.",
             McpSchema.Object([
                 ("items", new JsonObject { ["type"] = "array", ["items"] = PlanItemSchema() }),
                 ("title", McpSchema.String("Optional title for the plan.")),
@@ -112,12 +112,17 @@ internal sealed partial class DawnScene
                 items[index] = items[index] with { Id = HexAgentPlan.NewId(items) };
         }
 
-        // What the agent system said of its own list (chat.plan) is kept with it, for its next update to be weighed against
-        var plan = (chat.Plan ?? new HexAgentPlan(null, [])) with
-        {
-            Title = args.ContainsKey("title") ? args.String("title")?.Trim() : previous?.Title,
-            Items = items
-        };
+        // What the agent system said of its own list (chat.plan) is kept with it, for its next update to be weighed against.
+        // A new task, the list replaced or a plan all finished given a new title and steps none of its own, puts the old
+        // one's done steps aside under it, so they don't drown the new one. An empty list clears the lot
+        string? title = args.ContainsKey("title") ? args.String("title")?.Trim() : previous?.Title;
+        int kept = previous?.Items.Count ?? 0;
+        bool replaced = previous is null && before is { Items.Count: > 0 };
+        bool next = before is { Items.Count: > 0 } && previous is not null && !previous.Unfinished && title != previous.Title && changed.Count > 0 && changed.All(index => index >= kept);
+        HexAgentPlan plan = items.Count == 0 && replaced ? new HexAgentPlan(title, []) { NativeAt = before!.NativeAt, NativeKey = before.NativeKey }
+            : replaced ? HexAgentPlan.NewTask(before, title, items, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            : next ? HexAgentPlan.NewTask(before, title, items.Skip(kept).ToArray(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            : (chat.Plan ?? new HexAgentPlan(null, [])) with { Title = title, Items = items };
         chat.SetPlan(plan);
 
         var said = new StringBuilder($"Plan: {plan.Done} of {plan.Items.Count} done.");

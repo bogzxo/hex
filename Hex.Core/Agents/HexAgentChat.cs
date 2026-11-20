@@ -296,9 +296,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     public HexAgentPlan? Plan { get; private set; }
 
+    /// <summary>The chat's plan, when each step was done kept with it (HexAgentPlan.Stamped).</summary>
     public void SetPlan(HexAgentPlan plan)
     {
-        Plan = plan;
+        Plan = HexAgentPlan.Stamped(Plan, plan, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         Version++;
     }
 

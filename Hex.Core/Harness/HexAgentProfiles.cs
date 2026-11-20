@@ -62,7 +62,7 @@ internal static class HexAgentProfiles
     public const string PLAN_RULES =
         "Your chat has a Plan tab the user watches. When the user asks for a plan, publish the proposed steps with hex_plan_update and leave future work pending. "
         + "When carrying out a plan, mark the active step doing. As steps finish or become blocked, update them by ID and mark the next active step in the same call, "
-        + "a blocked step with its reason in note. On resume, use hex_plan_read to recover your place. A request for a plan authorizes planning. "
+        + "a blocked step with its reason in note. On resume, use hex_plan_read to recover your place. For a new task, replace the plan (merge false) with a new title, the finished steps are kept aside. The user can change the plan too, when told they did, hex_plan_read and keep their changes. A request for a plan authorizes planning. "
         + "Start implementation when the user requests it. A quick question or a one-step change needs no plan.\n"
         + "Other agents can be working in the same workspace at the same time. hex_agent_list shows every chat and the step it is doing, "
         + "hex_plan_read with a chat id reads the plan of one in your family. Before changing files another running agent is working on, "
