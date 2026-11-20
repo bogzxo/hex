@@ -17,6 +17,11 @@ namespace Hex.Dawn;
 // pointer is made again while it's being clicked.
 internal sealed partial class DawnScene
 {
+    // A colour's markup in a system's lines, taken out where they're measured. Made when Hex is built, the pattern was
+    // looked up in the regex cache and read by the interpreter every time a system's chats moved
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[/?color[^\]]*\]")]
+    private static partial System.Text.RegularExpressions.Regex ColourMarkup { get; }
+
     // The height of a system's head, and how far its lines are put in, under its name past the chevron and the badge
     private const float SYSTEM_HEAD = 24.0f, SYSTEM_INDENT = 46.0f;
 
@@ -381,9 +386,9 @@ internal sealed partial class DawnScene
             if (skin is not null)
             {
                 // Measured without its colour's markup, which isn't drawn
-                string unmarked = System.Text.RegularExpressions.Regex.Replace(status, @"\[/?color[^\]]*\]", string.Empty);
+                string unmarked = ColourMarkup.Replace(status, string.Empty);
                 float room = width - SYSTEM_INDENT - skin.Font.Measure(unmarked, 0.125f).X - 18;
-                bool withVersion = skin.Font.Measure(System.Text.RegularExpressions.Regex.Replace(said, @"\[/?color[^\]]*\]", string.Empty), 0.13f).X <= room;
+                bool withVersion = skin.Font.Measure(ColourMarkup.Replace(said, string.Empty), 0.13f).X <= room;
                 while (!withVersion && shown.Length > 2 && skin.Font.Measure(Named(shown, false), 0.13f).X > room)
                     shown = system.Name[..(shown.EndsWith('…') ? shown.Length - 2 : shown.Length - 1)] + "…";
                 said = Named(shown, withVersion);

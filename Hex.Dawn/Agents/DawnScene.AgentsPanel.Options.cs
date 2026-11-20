@@ -16,7 +16,9 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     private StackPanel agentsOptions = null!;
+    // Emptied for the row to be made again, otherwise the word that it was, the number of what it was made from beside it
     private string agentsOptionsDrawn = string.Empty;
+    private long agentsOptionsKey;
     private Button? agentsThinking;
 
     // What was asked in this run, the newest last, and how far back Up has gone (Count for not at all)
@@ -24,8 +26,13 @@ internal sealed partial class DawnScene
     private int agentsRecall;
 
     // A path with a line, Hex.Core/Mcp/McpServer.cs:47, in what an agent says, in backticks or not
-    private static readonly Regex PlaceInText = new(@"(?<link>!?\[[^\]\r\n]*\]\((?:[^()\r\n]|\([^()\r\n]*\))*\))|(?<ticks>`+)(?<code>.*?)\k<ticks>|(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)", RegexOptions.Compiled);
-    private static readonly Regex CodePlace = new(@"\A(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)\z", RegexOptions.Compiled);
+    // Made when Hex is built, a compiled one is only read by the interpreter in the native build, and every row an agent
+    // writes goes through it
+    [GeneratedRegex(@"(?<link>!?\[[^\]\r\n]*\]\((?:[^()\r\n]|\([^()\r\n]*\))*\))|(?<ticks>`+)(?<code>.*?)\k<ticks>|(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)")]
+    private static partial Regex PlaceInText { get; }
+
+    [GeneratedRegex(@"\A(?<path>(?:/?[A-Za-z]:)?[\w.\-/\\]+\.\w{1,6}):(?<line>\d+)\z")]
+    private static partial Regex CodePlace { get; }
 
     private void BuildAgentsOptions(UILayout made)
     {
@@ -105,6 +112,39 @@ internal sealed partial class DawnScene
         return options;
     }
 
+    /// <summary>
+    /// What the row of pickers is made from, as a number: the width it's compact under, the agent, the file and what's
+    /// attached, and every option with its value and its choices. The choices count, an agent system says its models as it
+    /// starts (Claude Code's handshake) and the menu made with the old ones kept them. Read the way OptionsOf reads them,
+    /// nothing made.
+    /// </summary>
+    private long AgentOptionsKey(string? agent, HexExtension? extension, bool compact)
+    {
+        static long Mix(long key, string? text) => key * 1_000_003 + (text is null ? 7 : string.GetHashCode(text, StringComparison.Ordinal));
+
+        long key = Mix(compact ? 3 : 5, agent) * 31 + (agentWithFile ? 1 : 0);
+        key = key * 1_000_003 + (document?.Path is { } path && document.IsText ? string.GetHashCode(Path.GetFileName(path.AsSpan()), StringComparison.Ordinal) : 0);
+        if (agentDraftContext is { } context)
+            key = Mix(key, context.Path) * 31 + HashCode.Combine(context.Line, context.Column, context.EndLine, context.EndColumn);
+        if (agent is null || !extensions.AgentRuns.TryGetValue(agent, out var run) || !run.Run.Properties.TryGetValue("options", out IRuntimeValue? listed) || listed is not ListValue list)
+            return key;
+
+        foreach (IRuntimeValue item in list.Items)
+        {
+            if (item is not ObjectValue option || HexExtensions.Text(option, "id") is not { } id || !option.Properties.TryGetValue("choices", out IRuntimeValue? choices) || choices is not ListValue each)
+                continue;
+            key = Mix(Mix(key, id), extension is null ? string.Empty : AgentOptionValue(extension, id));
+            foreach (IRuntimeValue choice in each.Items)
+            {
+                if (choice is not ObjectValue made)
+                    continue;
+                key = Mix(Mix(key, Values.Text(made.Properties.GetValueOrDefault("value") ?? Values.Null)), HexExtensions.Text(made, "label"));
+            }
+        }
+
+        return key;
+    }
+
     private string AgentOptionValue(HexExtension extension, string key) =>
         agentChat?.Options.GetValueOrDefault(key) ?? Values.Text(extensions.SettingOf(extension, key));
 
@@ -119,17 +159,17 @@ internal sealed partial class DawnScene
     private void DrawAgentOptions()
     {
         string? agent = AgentFor(agentChat);
-        List<AgentOption> options = OptionsOf(agent);
         HexExtension? extension = agent is not null && extensions.AgentRuns.TryGetValue(agent, out var run) ? run.Extension : null;
-        string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
-
         bool compact = agentsCompose.Bounds.Width < 300;
-        // The choices are in it too, an agent system says its models as it starts (Claude Code's handshake) and the menu
-        // made with the old ones kept them
-        string said = $"{compact}|{agent}|{agentWithFile}|{file}|{AgentDraftCaption()}|{string.Join("|", options.Select(option => option.Key + "=" + (extension is null ? string.Empty : AgentOptionValue(extension, option.Key))
-            + ":" + string.Join(",", option.Choices.Select(choice => choice.Value + "~" + choice.Label))))}";
-        if (said == agentsOptionsDrawn) return;
-        agentsOptionsDrawn = said;
+
+        // What the row is made from as a number, worked out from the extension's values where they are. Ten times a second
+        // the options were made again from them and written out as a string with every choice in it, to find nothing moved
+        long said = AgentOptionsKey(agent, extension, compact);
+        if (agentsOptionsDrawn.Length > 0 && said == agentsOptionsKey) return;
+        agentsOptionsDrawn = "drawn";
+        agentsOptionsKey = said;
+        List<AgentOption> options = OptionsOf(agent);
+        string file = document?.Path is { } path && document.IsText ? Path.GetFileName(path) : string.Empty;
         Empty(agentsOptions);
         agentsThinking = null;
         bool captured = agentDraftContext is not null;
@@ -289,9 +329,22 @@ internal sealed partial class DawnScene
     /// </summary>
     private string WithPlaces(string text)
     {
+        // Words with nothing a place could start with are as they are, nothing split, matched or joined for them
+        if (text.AsSpan().IndexOfAny(PlaceMarks) < 0)
+            return text;
+
         var lines = text.Split('\n');
         char fence = '\0';
         int fenceLength = 0;
+        bool changed = false;
+        MatchEvaluator linked = match =>
+        {
+            if (match.Groups["link"].Success) return match.Value;
+            Match place = match.Groups["code"].Success ? CodePlace.Match(match.Groups["code"].Value) : match;
+            if (!place.Success) return match.Value;
+            string path = place.Groups["path"].Value, line = place.Groups["line"].Value;
+            return AgentFilePath(path) is not null ? $"[{path}:{line}]({path}:{line})" : match.Value;
+        };
         for (int i = 0; i < lines.Length; i++)
         {
             ReadOnlySpan<char> trimmed = lines[i].AsSpan().TrimStart();
@@ -304,20 +357,18 @@ internal sealed partial class DawnScene
                 else if (trimmed[0] == fence && run >= fenceLength && trimmed[run..].Trim().IsEmpty) fence = '\0';
                 continue;
             }
-            if (fence != '\0') continue;
+            if (fence != '\0' || lines[i].AsSpan().IndexOfAny(PlaceMarks) < 0) continue;
 
-            lines[i] = PlaceInText.Replace(lines[i], match =>
-            {
-                if (match.Groups["link"].Success) return match.Value;
-                Match place = match.Groups["code"].Success ? CodePlace.Match(match.Groups["code"].Value) : match;
-                if (!place.Success) return match.Value;
-                string path = place.Groups["path"].Value, line = place.Groups["line"].Value;
-                return AgentFilePath(path) is not null ? $"[{path}:{line}]({path}:{line})" : match.Value;
-            });
+            string was = lines[i];
+            lines[i] = PlaceInText.Replace(was, linked);
+            changed |= !ReferenceEquals(lines[i], was);
         }
 
-        return string.Join('\n', lines);
+        return changed ? string.Join('\n', lines) : text;
     }
+
+    // What every match of PlaceInText has in it, a link's bracket, a backtick or the colon before a line
+    private static readonly System.Buffers.SearchValues<char> PlaceMarks = System.Buffers.SearchValues.Create("[`:");
 
     /// <summary>The last thing asked of the chat on screen asked again, as it was asked.</summary>
     private void RetryAgent()
