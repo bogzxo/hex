@@ -405,7 +405,17 @@ internal sealed partial class DawnScene
                 return QuestionRow(chat, entry, skin);
 
             default:
-                return Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
+            {
+                UIComponent call = Groupable(entry) ? ToolGroupRow(chat, entry, skin) : ToolRow(chat, entry, skin);
+                // Pictures it was asked to show, under its row the way a pasted one is under the bubble, see hex_show_image
+                if (!ShowsPictures(entry) || entry.State != HexAgentToolState.Done || entry.Output is not { } shown
+                    || PictureStrip(PicturesIn(shown, asked: false), Origin.Left) is not { } pictures)
+                    return call;
+                var both = new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 };
+                both.Add(call);
+                both.Add(pictures);
+                return both;
+            }
         }
     }
 

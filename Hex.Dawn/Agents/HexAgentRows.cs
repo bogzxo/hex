@@ -144,6 +144,7 @@ internal static class HexAgentRows
             "grep" or "glob" or "hex_search" or "hex_find_in_files" or "hex_files" or "hex_refs" or "hex_references" => "search",
             "hex_symbols" or "hex_outline" or "hex_definition" or "hex_symbol_info" => "symbol-class",
             "hex_map" => "list-tree",
+            "hex_show_image" => "file-media",
             "websearch" or "webfetch" or "web_search" => "globe",
             "todowrite" or "todo_list" or "hex_plan_update" or "hex_plan_read" => "checklist",
             "task" or "agent" => "organization",

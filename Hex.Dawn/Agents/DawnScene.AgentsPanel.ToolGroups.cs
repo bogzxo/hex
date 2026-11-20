@@ -101,7 +101,7 @@ internal sealed partial class DawnScene
     private static Panel GroupedPlace() => new() { Visible = false, Size = Vector2.Zero };
 
     /// <summary>Whether an entry goes in a group of calls, a tool call that isn't a subagent.</summary>
-    private static bool Groupable(HexAgentEntry entry) => entry.Kind == HexAgentEntryKind.Tool && !HexAgentRows.IsSubagent(entry);
+    private static bool Groupable(HexAgentEntry entry) => entry.Kind == HexAgentEntryKind.Tool && !HexAgentRows.IsSubagent(entry) && !ShowsPictures(entry);
 
     /// <summary>The calls of the group that starts at an entry, it and the groupable ones straight after it.</summary>
     private static List<HexAgentEntry> ToolGroupAt(HexAgentChat chat, int start)

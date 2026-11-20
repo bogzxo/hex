@@ -21,6 +21,20 @@ internal sealed partial class DawnScene
             menu.Add(Said("agents_panel.edit_queued"), () => EditHeld(entry), icon: "edit");
             menu.AddSeparator();
         }
+
+        // The files a tool was called on, each to open and read or to find among the others
+        if (entry.Kind == HexAgentEntryKind.Tool && ToolFiles(entry) is { Count: > 0 } files)
+        {
+            foreach (string file in files)
+            {
+                string name = Path.GetFileName(file);
+                menu.Add(Said("agents_panel.file_open", ("name", name)), () => { ShowFace(Hex.Shell.HexFace.Dawn); OpenAt(file, 0, 0); }, icon: "go-to-file");
+                menu.Add(Said("agents_panel.file_reveal", ("name", name)), () => { ShowFace(Hex.Shell.HexFace.Dawn); RevealInExplorer(file); }, icon: "files");
+                menu.Add(Said("agents_panel.file_reveal_system", ("name", name)), () => explorer.RevealInSystem(file), icon: "link-external");
+            }
+            menu.AddSeparator();
+        }
+
         menu.Add(Said("agents_panel.copy_row"), () =>
         {
             UICompositor.Copy(said);
@@ -35,6 +49,57 @@ internal sealed partial class DawnScene
         }, icon: "copy");
         menu.Add(Said("agents_panel.select_chat"), () => ShowAgentText(ChatAsMarkdown(chat), chat.Shown), icon: "selection");
         return menu;
+    }
+
+    // The most files of one call its menu offers, a call on a list of them names the first few
+    private const int TOOL_FILES_SHOWN = 4;
+
+    // What the agent systems call a file a tool works on, Claude Code's file_path and notebook_path, Hex's path and paths
+    private static readonly string[] FILE_KEYS = ["file_path", "path", "notebook_path", "filePath", "target_file", "paths", "files"];
+
+    /// <summary>The files on the disk a tool call was given, by the names agents give them, the first few that are there.</summary>
+    private List<string> ToolFiles(HexAgentEntry entry)
+    {
+        var found = new List<string>();
+        if (string.IsNullOrWhiteSpace(entry.Input) || entry.Input[0] != '{')
+            return found;
+
+        System.Text.Json.Nodes.JsonObject? input;
+        try
+        {
+            input = System.Text.Json.Nodes.JsonNode.Parse(entry.Input) as System.Text.Json.Nodes.JsonObject;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return found;
+        }
+        if (input is null)
+            return found;
+
+        foreach (string key in FILE_KEYS)
+        {
+            switch (input[key])
+            {
+                case System.Text.Json.Nodes.JsonValue one when one.TryGetValue(out string? path):
+                    Keep(path);
+                    break;
+                case System.Text.Json.Nodes.JsonArray many:
+                    foreach (var each in many)
+                    {
+                        if (each is System.Text.Json.Nodes.JsonValue value && value.TryGetValue(out string? path))
+                            Keep(path);
+                    }
+                    break;
+            }
+        }
+
+        return found;
+
+        void Keep(string path)
+        {
+            if (found.Count < TOOL_FILES_SHOWN && path.Length > 0 && AgentFilePath(path) is { } full && !found.Contains(full, PlatformPaths.Comparer))
+                found.Add(full);
+        }
     }
 
     /// <summary>What a row says as plain text, a tool what it was given and what it said back.</summary>

@@ -93,11 +93,11 @@ internal sealed partial class DawnScene
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
             Behind(FileTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
-        tool.StartsWith("hex_agent_", StringComparison.Ordinal) || tool is "hex_ask" or "hex_harness_stats" || tool.StartsWith("hex_plan_", StringComparison.Ordinal);
+        tool.StartsWith("hex_agent_", StringComparison.Ordinal) || tool is "hex_ask" or "hex_harness_stats" or "hex_show_image" || tool.StartsWith("hex_plan_", StringComparison.Ordinal);
 
     /// <summary>Tools that do their work without the editor on screen, so an agent calling them leaves the person in Dusk.</summary>
     private static IEnumerable<HexMcpTool> Behind(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { NeedsEditor = false });
