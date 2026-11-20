@@ -307,25 +307,6 @@ internal static partial class McpBridge
         }
     }
 
-    private static void Copy(Stream from, Stream to)
-    {
-        byte[] buffer = new byte[64 * 1024];
-        try
-        {
-            while (true)
-            {
-                int read = from.Read(buffer, 0, buffer.Length);
-                if (read <= 0)
-                    return;
-                to.Write(buffer, 0, read);
-                to.Flush();
-            }
-        }
-        catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
-        {
-        }
-    }
-
     private static void Say(string line)
     {
         try
