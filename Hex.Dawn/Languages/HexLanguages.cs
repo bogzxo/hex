@@ -134,7 +134,10 @@ internal sealed partial class HexLanguages
             return inWorkspace;
 
         string folder = Path.GetDirectoryName(full) ?? System.Environment.CurrentDirectory;
-        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(CodeLanguages.WithoutBackupSuffix(full)), StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
+
+        // The file's own extension worked out once, not again for every extension of every server
+        string own = Path.GetExtension(CodeLanguages.WithoutBackupSuffix(full));
+        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(own, StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
         {
             for (string? above = folder; above is not null; above = Path.GetDirectoryName(above))
             {
@@ -156,9 +159,11 @@ internal sealed partial class HexLanguages
     internal void WorkspaceChanged()
     {
         EditWorkspaceChanged();
-        var moved = linters.Where(pair => pair.Key.Path is { } path &&
-            (!PlatformPaths.Same(pair.Value.RootDirectory, ServerRootFor(path))
-                || !PlatformPaths.Comparer.Equals(lintSolutions.GetValueOrDefault(pair.Key), SolutionFor(pair.Key, ServerRootFor(path))))).ToArray();
+
+        // Each file's folder worked out once, it walks up the disk looking for a project
+        var moved = linters.Where(pair => pair.Key.Path is { } path && ServerRootFor(path) is var root &&
+            (!PlatformPaths.Same(pair.Value.RootDirectory, root)
+                || !PlatformPaths.Comparer.Equals(lintSolutions.GetValueOrDefault(pair.Key), SolutionFor(pair.Key, root)))).ToArray();
         foreach (var (document, _) in moved)
         {
             StopLinting(document);
