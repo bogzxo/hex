@@ -420,9 +420,9 @@ public sealed class McpSharedServerTests : IDisposable
         a.Next();
         first.Detach(a.Client);
 
-        WaitFor(() => first.Retired);
-        Assert.True(fake.Runs[0].Disposed);
-        Assert.Empty(servers.Servers);
+        // Retired, its process let go of and taken off the list are three steps on the timer's thread, waited for together:
+        // asked one by one a busy test run caught it between the first and the second
+        WaitFor(() => first.Retired && fake.Runs[0].Disposed && !servers.Servers.Any());
 
         var b = new Agent("b");
         McpSharedServer second = servers.Join(Key(), b.Client);
