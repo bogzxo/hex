@@ -36,7 +36,7 @@ internal sealed class HexPictureView : UIComponent
     private Vector2? grabbed;
 
     /// <summary>How big it's drawn now, the fitted size worked out for the room it has, never bigger than itself.</summary>
-    public float Shown
+    public new float Shown
     {
         get
         {

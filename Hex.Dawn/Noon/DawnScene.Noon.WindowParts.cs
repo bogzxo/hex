@@ -65,13 +65,6 @@ internal sealed partial class DawnScene
         return card;
     }
 
-    /// <summary>A bar of a share, its track and how much of it is filled, in a colour.</summary>
-    private HexShareBar ShareBar(double share, Vector4 colour, float tall = 6.0f)
-    {
-        Vector4 raised = Skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.08f);
-        return new HexShareBar { Share = (float)Math.Clamp(share, 0.0, 1.0), Colour = colour, Track = raised, Fill = UIFill.Horizontal, Size = new Vector2(0, tall) };
-    }
-
     /// <summary>A window's list with nothing in it, an icon, what's missing and a button to the way out.</summary>
     private static StackPanel WindowEmpty(string icon, string text, string? action = null, Action? then = null)
     {
