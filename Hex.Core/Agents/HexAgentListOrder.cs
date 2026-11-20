@@ -142,7 +142,10 @@ internal static class HexAgentListOrder
                 roots.Add(i);
         roots.Sort(Compare);
 
+        // The children of each chat sorted in a stretch at the end of one list, emitted from there and let go of after.
+        // A chat with none (nearly all of them) costs nothing, where each made a comparer and two copies
         var siblings = new List<int>();
+        Comparer<int>? byOrder = null;
         void Emit(int i, int step, HexChatBand family)
         {
             into.Add(new HexChatPlace(i, step, family));
@@ -153,11 +156,12 @@ internal static class HexAgentListOrder
                     siblings.Add(child);
             }
             int many = siblings.Count - from;
-            siblings.Sort(from, many, Comparer<int>.Create(Compare));
-            int[] children = [.. siblings.GetRange(from, many)];
+            if (many == 0)
+                return;
+            siblings.Sort(from, many, byOrder ??= Comparer<int>.Create(Compare));
+            for (int at = from; at < from + many; at++)
+                Emit(siblings[at], step + 1, family);
             siblings.RemoveRange(from, many);
-            foreach (int child in children)
-                Emit(child, step + 1, family);
         }
 
         foreach (int root in roots)
