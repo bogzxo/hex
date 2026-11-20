@@ -134,8 +134,9 @@ internal sealed partial class DawnScene
         if (items.Count == 0)
             items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
 
+        // Every row was coloured for git and its problems as it was made (FolderItem, FileRow), coloured all over again
+        // here it was the same work twice for every row of the explorer
         sideTree.Items = items;
-        DecorateRows();
         if (pendingExplorerSelection is { } pasted)
         {
             // Looked up in a set, a paste or a selection of the whole folder is thousands of paths against thousands of rows
