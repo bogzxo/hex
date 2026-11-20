@@ -98,6 +98,14 @@ internal sealed class McpPipeHost : IDisposable
             return;
         }
 
+        // A proxy for a shared server (Hex --mcp-proxy) is the shared servers' and takes no place among the clients
+        if (tag == McpSharedServers.TAG)
+        {
+            room.Release();
+            McpSharedServers.Shared.Serve(reader, pipe, Changed ?? (() => { }));
+            return;
+        }
+
         McpServer server = makeServer(tag);
         server.Initialized = _ => Changed?.Invoke();
         var session = new McpSession(reader, pipe, server);

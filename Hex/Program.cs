@@ -34,6 +34,11 @@ internal static partial class Program
         if (args.Contains("--harness-hook"))
             return Hex.Core.HexHarnessGuard.Run(args);
 
+        // A heavy stdio server shared through the Hex an agent runs in (McpProxy), before --help or the bridge, which the
+        // server's own command line after -- may look like
+        if (Hex.Core.McpProxy.IsProxyMode(args))
+            return Hex.Core.McpProxy.Run(args);
+
         // A terminal nobody picked a theme for is Solstice's own of Dusk, before any settings are read
         Horizon.UI.Components.TerminalSettings.UsualTheme = Hex.Core.HexSettings.USUAL_TERMINAL_THEME;
 
