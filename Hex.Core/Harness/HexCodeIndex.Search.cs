@@ -36,7 +36,7 @@ internal sealed partial class HexCodeIndex
 
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             string bare = regex ? string.Empty : query;
-            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)), (file, line) => Matches(pattern, line),
+            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)), (_, line) => FirstMatch(pattern, line, null),
                 bare, query, Math.Clamp(context, 0, 5), most, budget, "hex_search");
         });
 
@@ -56,27 +56,30 @@ internal sealed partial class HexCodeIndex
             var pattern = new Regex($@"\b{Regex.Escape(asked)}\b", RegexOptions.CultureInvariant);
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)),
-                (file, line) => Matches(pattern, line).Where(column => !InCommentOrText(file, line, column)),
+                (file, line) => FirstMatch(pattern, line, file),
                 asked, asked, 0, most, budget, "hex_refs");
         });
 
-    private static IEnumerable<int> Matches(Regex pattern, string line)
+    // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
+    // Walked as spans so a line that has nothing costs no allocation, which nearly all of them are.
+    private static int FirstMatch(Regex pattern, string line, HexIndexedFile? outsideOf)
     {
         if (line.Length == 0)
-            yield break;
+            return -1;
 
-        Match match;
         try
         {
-            match = pattern.Match(line);
+            foreach (ValueMatch match in pattern.EnumerateMatches(line))
+            {
+                if (outsideOf is null || !InCommentOrText(outsideOf, line, match.Index))
+                    return match.Index;
+            }
         }
         catch (RegexMatchTimeoutException)
         {
-            yield break;
         }
 
-        for (; match.Success; match = match.NextMatch())
-            yield return match.Index;
+        return -1;
     }
 
     // Whether a place is in a comment or a text, by the line alone, the way a language without // still has its own
@@ -96,7 +99,7 @@ internal sealed partial class HexCodeIndex
     /// The places found, ranked and grouped, and what grep would have said for them, which is what was saved. The plain
     /// way's cost counts every place, not just the ones that fit.
     /// </summary>
-    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, string, IEnumerable<int>> find,
+    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, string, int> find,
         string name, string query, int context, int most, int budget, string tool)
     {
         var files = new List<(HexIndexedFile File, List<Place> Places, int Score)>();
@@ -112,13 +115,7 @@ internal sealed partial class HexCodeIndex
             HashSet<int>? declared = null;
             for (int i = 0; i < lines.Length; i++)
             {
-                int first = -1;
-                foreach (int column in find(file, lines[i]))
-                {
-                    first = column;
-                    break;
-                }
-
+                int first = find(file, lines[i]);
                 if (first < 0)
                     continue;
 
