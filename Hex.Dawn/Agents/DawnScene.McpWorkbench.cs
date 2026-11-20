@@ -91,9 +91,9 @@ internal sealed partial class DawnScene
     /// </summary>
     internal List<HexMcpTool> McpToolList() => HexAi.Off
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
-            Behind(FileTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
+            Behind(FileTools()), Behind(CodeTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. Behind(CodeTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
