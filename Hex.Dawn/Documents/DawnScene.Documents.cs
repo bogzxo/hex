@@ -570,11 +570,12 @@ internal sealed partial class DawnScene
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
         if (crumbFoldersFor.Of == gone) crumbFoldersFor = default;
-        if (ReferenceEquals(codeTextKept.Of, gone.Editor?.Document)) ForgetCodeText();
+        if (ReferenceEquals(codeTextKept.Of, gone.Editor.Document)) ForgetCodeText();
         if (peeking?.From == gone) peeking = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
-        if (ReferenceEquals(definesOf.Text, gone.Editor.Text))
+        // Only when something's kept, asking for the text of a big file that was never joined joined it as it closed
+        if (definesOf.Text is { } defined && ReferenceEquals(defined, gone.Editor.Text))
             definesOf = (null, new Dictionary<string, string>());
         lensFiles.Remove(gone);
         localisationFound.Remove(gone);
