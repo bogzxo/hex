@@ -96,7 +96,9 @@ internal sealed partial class HexLanguages
     {
         if (checking is { IsCompleted: true } done)
         {
-            if (checkingOf is { } of && context.Documents.All.Contains(of) && done.Result is { } found)
+            // A check that threw (a path the import folders couldn't be worked out of) found nothing. Its Result threw on
+            // every tick after, before the check was let go of
+            if (checkingOf is { } of && done.IsCompletedSuccessfully && context.Documents.All.Contains(of) && done.Result is { } found)
             {
                 checkFound[of] = found;
                 context.Documents.DiagnosticsChanged(of);

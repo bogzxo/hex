@@ -427,7 +427,8 @@ internal sealed partial class DawnScene
 
         if (answered.IsFaulted)
             Say(Said("documents.dialog_failed", ("message", answered.Exception?.InnerException?.Message ?? "")), error: true);
-        else if (answered.Result is { } path)
+        // A dialog that was cancelled picked nothing, its Result would throw
+        else if (answered.IsCompletedSuccessfully && answered.Result is { } path)
             picked?.Invoke(path);
     }
 
