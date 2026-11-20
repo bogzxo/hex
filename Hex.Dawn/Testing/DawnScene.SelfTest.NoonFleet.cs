@@ -38,8 +38,9 @@ internal sealed partial class DawnScene
             return at >= 0 && at < noonFleetRows.Children.Count ? noonFleetRows.Children[at] : null;
         }
 
+        // The latest of them to finish first, as every band is the most recently active first
         test.Check("noon fleet: the two a chat started come right after it in the fleet", () =>
-            ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Take(3).SequenceEqual([lead!, scout!, builder!]));
+            ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Take(3).SequenceEqual([lead!, builder!, scout!]));
         test.Check("noon fleet: the ones it started are a step in under it", () =>
             CardOf(lead!) is { } top && CardOf(scout!) is { } first && CardOf(builder!) is { } second
             && first.Padding.Left > top.Padding.Left + 4 && MathF.Abs(second.Padding.Left - first.Padding.Left) < 1);
@@ -84,8 +85,110 @@ internal sealed partial class DawnScene
         test.Run(() => ShowFace(HexFace.Dawn));
         test.Settle(0.2f);
 
+        TestNoonFleetFinished(test);
         if (OperatingSystem.IsWindows())
             TestNoonFleetSpawned(test);
+    }
+
+    // The finished folded away under a group of their own below the working, in the fleet and the side bar's list alike:
+    // a chat read back from an earlier run is finished at once, one that just ended stays up with the working a while,
+    // the group opens and folds and is remembered, the chat open is never hidden and the keys go round what's on screen
+    private void TestNoonFleetFinished(HexPointerScript test)
+    {
+        HexAgentChat? old = null, just = null, working = null;
+        bool wasOpen = chatsFinishedOpen;
+        bool HasHead(UIComponent rows) => Descendants(rows).OfType<Button>().Any(button => button.Label.Contains(Said("agents_panel.finished_head", ("count", "1")), StringComparison.Ordinal));
+
+        test.Run(() =>
+        {
+            chatsFinishedOpen = false;
+            old = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Old finished" };
+            old.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "look at the old thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done long ago")]);
+            just = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Just finished" };
+            just.Ask("a quick one");
+            just.Done();
+            working = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Still working" };
+            working.Ask("keep going");
+            agentChats.Add(old);
+            agentChats.Add(just);
+            agentChats.Add(working);
+            OpenAgentChat(working);
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: working first, the one that just ended under it, the old one folded away", () =>
+            FleetShown().Select(each => each.Chat).Where(chat => chat == old || chat == just || chat == working).SequenceEqual([working!, just!])
+            && ChatsInOrder().Select(each => each.Chat).Last() == old && chatsFinished.Count == 1);
+        test.Check("noon fleet finished: the folded group's head is under the cards, one row for each card besides", () =>
+            HasHead(noonFleetRows) && noonFleetRows.Children.Count == FleetShown().Count + 1);
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_folded.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            OpenAgentChat(working!);
+            StepAgent(1);
+        });
+        test.Check("noon fleet finished: the next agent key skips what's folded", () => agentChat != old);
+
+        test.Run(() =>
+        {
+            ToggleFinished();
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: opened, the group shows its chats under its head", () =>
+            chatsFinishedOpen && FleetShown().Any(each => each.Chat == old) && noonFleetRows.Children.Count == FleetShown().Count && HasHead(noonFleetRows));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_open.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            ToggleFinished();
+            OpenAgentChat(old!);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: the chat open is never folded away", () =>
+            !chatsFinishedOpen && FleetShown().Any(each => each.Chat == old));
+
+        test.Run(() =>
+        {
+            OpenAgentChat(working!);
+            ShowFace(HexFace.Dawn);
+            ShowAgentsPanel();
+            agentsListOpen = true;
+            agentsListDrawn = NOT_DRAWN;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: the side bar's list folds them the same", () =>
+            HasHead(agentsListRows) && !Descendants(agentsListRows).OfType<AgentCardButton>().Any(pick => pick.Chat == old)
+            && Descendants(agentsListRows).OfType<AgentCardButton>().Any(pick => pick.Chat == just));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "list_finished_folded.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            StopAgent(working);
+            foreach (HexAgentChat chat in (HexAgentChat?[])[old, just, working])
+                if (chat is not null)
+                    CloseAgentChat(chat);
+            chatsFinishedOpen = wasOpen;
+        });
+        test.Settle(0.2f);
     }
 
     // A stand-in agent system whose agent is ping, a few seconds of lines and gone (cmd waited for good on the --version

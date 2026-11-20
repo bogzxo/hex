@@ -281,6 +281,12 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>How long the last turn took (or the one going on has), in seconds.</summary>
     public double TurnSeconds { get; private set; }
 
+    /// <summary>When the turn going on (or the last one) started, in Environment.TickCount64's milliseconds, 0 before any.</summary>
+    public long TurnStarted => turnStarted;
+
+    /// <summary>When its last turn ended in this run of Hex, in Environment.TickCount64's milliseconds, 0 for none (one read back ended before).</summary>
+    public long Ended { get; private set; }
+
     /// <summary>Goes up with every change, the panel redraws when it's moved.</summary>
     public int Version { get; private set; }
 
@@ -589,7 +595,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
             return;
 
         Running = false;
-        TurnSeconds = (Environment.TickCount64 - turnStarted) / 1000.0;
+        Ended = Environment.TickCount64;
+        TurnSeconds = (Ended - turnStarted) / 1000.0;
         foreach (HexAgentEntry tool in entries.Where(entry => entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running))
         {
             tool.State = HexAgentToolState.Failed;

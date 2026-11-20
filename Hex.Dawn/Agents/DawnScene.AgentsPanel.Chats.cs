@@ -37,8 +37,14 @@ internal sealed partial class DawnScene
         agentsList = agentsView.Add(new Panel { Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal, Size = new Vector2(0, 0), Visible = false, Padding = new UIEdges(4, 0, 4, 0) });
         agentsListHead = agentsList.Add(new Button
         {
-            Style = "button_flat", Align = Origin.Left, Anchor = Origin.Top, Pivot = Origin.Top, Fill = UIFill.Horizontal,
-            Size = new Vector2(0, CHATS_HEAD), LabelScale = 0.125f, Animated = false
+            Style = "button_flat",
+            Align = Origin.Left,
+            Anchor = Origin.Top,
+            Pivot = Origin.Top,
+            Fill = UIFill.Horizontal,
+            Size = new Vector2(0, CHATS_HEAD),
+            LabelScale = 0.125f,
+            Animated = false
         });
         agentsListHead.OnPressed = () =>
         {
@@ -53,43 +59,170 @@ internal sealed partial class DawnScene
         agentsActivity = layout.Get<Button>("act_agents");
     }
 
-    /// <summary>The chats in the order the list shows them, the newest that somebody started first, each with those it started under it.</summary>
+    /// <summary>
+    /// Every chat in the order the list and the fleet show them (HexAgentListOrder): families together, those waiting on
+    /// the person first, then those working, then those that finished a moment ago, then the finished, the most recently
+    /// active first in each. The finished come last whether they're folded away or not, ChatsShown leaves them out.
+    /// </summary>
     /// <remarks>
-    /// Made again only when the chats or who started whom changed, the same list handed back otherwise, so it's read and
-    /// never changed by whoever asks. It was made, with a set of the ids, every time the list and the fleet looked.
+    /// Made again only when what the order goes by moved (the chats, who started whom, how each is doing, a finished one's
+    /// few minutes running out), the same list handed back otherwise, so it's read and never changed by whoever asks.
     /// </remarks>
     private List<(HexAgentChat Chat, int Step)> ChatsInOrder()
     {
-        long key = 17;
+        long now = Environment.TickCount64;
+        bool lift = !FinishedShown;
+        long key = 17 + (lift ? (agentChat?.Id ?? 0) * 7919L + 1 : 0);
         for (int i = 0; i < agentChats.Count; i++)
-            key = (key * 31 + agentChats[i].Id) * 31 + (agentChats[i].Parent ?? -1);
-        if (key == chatsOrderedFor && chatsOrdered.Count > 0 == agentChats.Count > 0)
+        {
+            HexAgentChat chat = agentChats[i];
+            var facts = HexChatFacts.Of(chat, NeedsYou(chat));
+            key = (key * 31 + chat.Id) * 31 + (chat.Parent ?? -1);
+            key = key * 31 + (int)HexAgentListOrder.BandOf(facts, now);
+            key = key * 31 + HexAgentListOrder.ActiveAt(facts);
+            key = key * 31 + (facts.Unread ? 1 : 0);
+        }
+        if (key == chatsOrderedFor && chatsOrdered.Count == agentChats.Count)
             return chatsOrdered;
 
         chatsOrderedFor = key;
-        var shown = new List<(HexAgentChat, int)>(agentChats.Count);
-        var known = agentChats.Select(chat => chat.Id).ToHashSet();
-        void Under(HexAgentChat chat, int step)
+        chatFacts.Clear();
+        foreach (HexAgentChat chat in agentChats)
+            chatFacts.Add(HexChatFacts.Of(chat, NeedsYou(chat)));
+        HexAgentListOrder.Order(chatFacts, now, agentChat?.Id ?? -1, lift, chatPlaces);
+
+        // New lists rather than the old ones filled again, whoever holds the last one is reading it
+        var ordered = new List<(HexAgentChat, int)>(chatPlaces.Count);
+        var shown = new List<(HexAgentChat, int)>(chatPlaces.Count);
+        var bands = new List<HexChatBand>(chatPlaces.Count);
+        int folded = 0, foldedUnread = 0;
+        foreach (HexChatPlace place in chatPlaces)
         {
-            shown.Add((chat, step));
-            foreach (HexAgentChat started in agentChats.Where(each => each.Parent == chat.Id))
-                Under(started, step + 1);
+            HexAgentChat chat = agentChats[place.Index];
+            ordered.Add((chat, place.Step));
+            bands.Add(place.Band);
+            if (place.Band != HexChatBand.Finished)
+                shown.Add((chat, place.Step));
+            else
+            {
+                folded++;
+                foldedUnread += chat.Unread ? 1 : 0;
+            }
         }
 
-        // Those whose starter was closed are at the top with the rest
-        for (int i = agentChats.Count - 1; i >= 0; i--)
-        {
-            if (agentChats[i].Parent is not { } parent || !known.Contains(parent))
-                Under(agentChats[i], 0);
-        }
-
-        chatsOrdered = shown;
-        return shown;
+        chatsOrdered = ordered;
+        chatsMain = shown;
+        chatBands = bands;
+        chatsFinished = (folded, foldedUnread);
+        return ordered;
     }
 
-    // The chats in order as they were last worked out, and what of the chats they were worked out from
-    private List<(HexAgentChat Chat, int Step)> chatsOrdered = [];
+    /// <summary>
+    /// The chats on screen in the order shown: every one while the finished group is open, the finished left out while
+    /// it's folded (the chat open never, it's lifted out of the finished band then).
+    /// </summary>
+    private List<(HexAgentChat Chat, int Step)> ChatsShown()
+    {
+        List<(HexAgentChat Chat, int Step)> all = ChatsInOrder();
+        return FinishedShown ? all : chatsMain;
+    }
+
+    /// <summary>The band of the chat at a place of ChatsInOrder, its family's.</summary>
+    private HexChatBand BandAt(int at) => at >= 0 && at < chatBands.Count ? chatBands[at] : HexChatBand.Recent;
+
+    /// <summary>Whether a chat waits on the person: an approval or a question, a failure nobody saw, or messages it hasn't read while it's idle.</summary>
+    private static bool NeedsYou(HexAgentChat chat) =>
+        chat.HasPending || (chat.Failed && chat.Unread) || (chat.UnreadMailCount() > 0 && !chat.Running);
+
+    /// <summary>
+    /// Whether the finished chats are on screen: the person opened their group (kept with the workspace), something is
+    /// typed in the fleet's filter (it looks through every chat), or the fleet has the whole window to itself.
+    /// </summary>
+    private bool FinishedShown =>
+        chatsFinishedOpen || (Face == HexFace.Noon && ((noonFleetFilter?.Text.Trim().Length ?? 0) > 0 || (noonNarrow && noonFleetOpened)));
+
+    /// <summary>The finished group opened or folded, both lists drawn again for it and the choice kept with the workspace.</summary>
+    private void ToggleFinished()
+    {
+        chatsFinishedOpen = !chatsFinishedOpen;
+        agentsListDrawn = NOT_DRAWN;
+        noonFleetDrawn = NOT_DRAWN;
+        noonWait = 0.0f;
+        Engine.WindowManager.RequestFrames();
+    }
+
+    // The chats in order as they were last worked out and what they were worked out from, the ones not folded away, the
+    // band of each and how many are folded (and of those, not read)
+    private List<(HexAgentChat Chat, int Step)> chatsOrdered = [], chatsMain = [];
+    private List<HexChatBand> chatBands = [];
+    private (int Count, int Unread) chatsFinished;
     private long chatsOrderedFor;
+    private readonly List<HexChatFacts> chatFacts = [];
+    private readonly List<HexChatPlace> chatPlaces = [];
+
+    // Whether the person opened the finished group, kept with the workspace's chats
+    private bool chatsFinishedOpen;
+
+    /// <summary>
+    /// The finished group's head: a chevron, how many are in it and how many of those nobody read. The same button in the
+    /// list and the fleet.
+    /// </summary>
+    private Button FinishedHead()
+    {
+        var (count, unread) = chatsFinished;
+        bool open = FinishedShown;
+        string label = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head", ("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}";
+        if (unread > 0)
+            label += $"  ·  $(circle-filled) {Said("agents_panel.finished_unread", ("count", unread.ToString(System.Globalization.CultureInfo.InvariantCulture)))}";
+        return new Button
+        {
+            Style = "button_flat",
+            Align = Origin.Left,
+            Fill = UIFill.Horizontal,
+            Size = new Vector2(0, FINISHED_HEAD),
+            LabelScale = 0.125f,
+            Animated = false,
+            Label = label,
+            Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"),
+            OnPressed = ToggleFinished
+        };
+    }
+
+    // How tall the finished group's head is
+    private const float FINISHED_HEAD = 24.0f;
+
+    /// <summary>
+    /// The cards of a list just made again slid from where they were to where they are now, a new one sliding in, so a
+    /// chat moving up as it starts working or down as it finishes is seen to move rather than jump. Where each card was is
+    /// kept by its chat from one making to the next, measured down from the list's top.
+    /// </summary>
+    private void SlideCards(Dictionary<int, float> was, List<(int Chat, UIComponent Card, float Depth)> now)
+    {
+        float time = AgentsMotion(AGENTS_SLIDE);
+        bool first = was.Count == 0;
+        foreach (var (chat, card, depth) in now)
+        {
+            if (time <= 0.0f || first)
+                continue;
+            if (!was.TryGetValue(chat, out float before))
+                SlideRowIn(card);
+            else if (MathF.Abs(before - depth) > 0.5f)
+            {
+                // Drawn where it was and eased to where it is, up being plus
+                card.VisualOffset = new Vector2(0, depth - before);
+                card.TweenOffset(Vector2.Zero, time).SetEasing(Horizon.Core.Tweening.Easing.OutCubic);
+            }
+        }
+
+        was.Clear();
+        foreach (var (chat, _, depth) in now)
+            was[chat] = depth;
+        now.Clear();
+    }
+
+    // Where each card of the list and the fleet was when they were last made, and the cards being made
+    private readonly Dictionary<int, float> agentsListPlaces = [], noonFleetPlaces = [];
+    private readonly List<(int Chat, UIComponent Card, float Depth)> cardsPlaced = [];
 
     /// <summary>
     /// The list drawn again when what it shows moved, the chats, which is open, how they're doing and the width. Shown
@@ -127,7 +260,10 @@ internal sealed partial class DawnScene
         // put right in place, a card made again every second under a click took the click with it
         float most = MathF.Max(CHAT_ROWS_MOST, MathF.Floor(agentsView.Size.Y * 0.5f / (AGENT_CARD + 1.0f)));
         // Not the systems' height, which eases a step every frame after a fold, the list only placed again for that
-        long said = ((((AgentCardsKey(ChatsInOrder()) * 31 + (wanted ? 1 : 0)) * 31 + (agentsListOpen ? 1 : 0)) * 31 + (long)most) * 31 + working) * 31 + (systems ? 1 : 0);
+        // The order's own key (ChatsInOrder) for the bands and the finished group's choice, the cards' for what's on them
+        ChatsInOrder();
+        long said = ((((AgentCardsKey(ChatsShown()) * 31 + (wanted ? 1 : 0)) * 31 + (agentsListOpen ? 1 : 0)) * 31 + (long)most) * 31 + working) * 31 + (systems ? 1 : 0);
+        said = (said * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0);
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)
@@ -152,20 +288,38 @@ internal sealed partial class DawnScene
             Empty(agentsListRows);
             chatRowFits.Clear();
             chatRowsFitted = -1;
+            // The working and the just finished, then the finished group's head, then the finished while it's open. Each
+            // card slides from where it was, a chat that started working moving up rather than jumping there
+            float depth = 0.0f, tall = 0.0f;
+            bool shown = FinishedShown, headed = false;
             if (agentsListOpen)
             {
-                foreach (var (chat, step) in chats)
+                for (int i = 0; i < chats.Count; i++)
                 {
+                    var (chat, step) = chats[i];
+                    bool finished = BandAt(i) == HexChatBand.Finished;
+                    if (finished && !headed)
+                    {
+                        headed = true;
+                        agentsListRows.Add(FinishedHead());
+                        depth += FINISHED_HEAD + agentsListRows.Spacing;
+                    }
+                    if (finished && !shown)
+                        continue;
                     AgentCard card = AgentCardOf(chat, step, closable: true);
                     agentsListRows.Add(card.Root);
                     chatRowFits.Add(card.Refresh);
+                    cardsPlaced.Add((chat.Id, card.Root, depth));
+                    depth += AGENT_CARD + agentsListRows.Spacing;
                 }
+                // As many cards as the list shows before it scrolls, the finished group's head as tall as it is
+                tall = MathF.Min(depth, most * (AGENT_CARD + 1.0f));
+                SlideCards(agentsListPlaces, cardsPlaced);
             }
 
             foreach (Action<float> refresh in chatRowFits)
                 refresh(width);
-            float rows = agentsListOpen ? MathF.Min(chats.Count, most) : 0.0f;
-            float listed = rows * (AGENT_CARD + 1.0f);
+            float listed = tall;
             agentsListScroll.Size = new Vector2(0, listed);
             agentsListScroll.Visible = agentsListOpen;
             height = CHATS_HEAD + listed + 6.0f;

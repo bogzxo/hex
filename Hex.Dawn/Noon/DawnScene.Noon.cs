@@ -362,13 +362,16 @@ internal sealed partial class DawnScene
         long cheap = 17 + (agentChat?.Id ?? 0) * 7919L + string.GetHashCode(noonFleetFilter.Text, StringComparison.Ordinal);
         for (int i = 0; i < agentChats.Count; i++)
             cheap = cheap * 31 + agentChats[i].Id * 131L + agentChats[i].Version + (agentChats[i].Running ? 1 : 0) + (agentChats[i].Unread ? 2 : 0);
+        // And the order's own key, which moves as a finished chat's few minutes run out with nothing else about it moving
+        ChatsInOrder();
+        cheap = (cheap * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0);
         if (cheap != noonFleetCheap || noonFleetDrawn == NOT_DRAWN)
         {
             string filter = noonFleetFilter.Text.Trim();
             List<(HexAgentChat Chat, int Step)> order = FleetShown();
+            // The order's own key for the bands (a finished chat's few minutes running out) and the finished group's
             long said = AgentCardsKey(order) * 31 + string.GetHashCode(filter, StringComparison.Ordinal);
-            foreach (FleetGroup group in FamilyGroups(order))
-                said = said * 3 + (int)group;
+            said = (said * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0) + chatsFinished.Count * 7L;
             // Not made again under a held button, a card made again between the press and the letting go lost the click, the
             // same as Details and the tabs wait for it
             if (said != noonFleetDrawn && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
@@ -384,7 +387,7 @@ internal sealed partial class DawnScene
                     noonFleetRows.Add(new Button { Label = Said("noon.fleet_empty_new"), Icon = "add", Primary = true, Fill = UIFill.Horizontal, Size = new Vector2(0, 28), LabelScale = 0.13f, Animated = false, OnPressed = NewAgentChat });
                     noonFleetRows.Add(new Button { Label = Said("noon.fleet_empty_systems"), Icon = "extensions", Style = "button_flat", Fill = UIFill.Horizontal, Size = new Vector2(0, 26), LabelScale = 0.13f, Animated = false, OnPressed = BrowseAgentExtensions });
                 }
-                else if (order.Count == 0)
+                else if (order.Count == 0 && filter.Length > 0)
                 {
                     noonFleetRows.Add(new Label { Text = Said("noon.fleet_none_fit"), TextScale = 0.13f, Dim = true, Wrap = true, Fill = UIFill.Horizontal, Align = Origin.Left });
                     // The way back to every chat right there, rather than finding the box and emptying it
@@ -398,29 +401,50 @@ internal sealed partial class DawnScene
                         }
                     });
                 }
-                // A heading over each group once there's more than one, the cards of a family under the group of its most urgent
-                FleetGroup[] groups = FamilyGroups(order);
-                bool headed = groups.Distinct().Count() > 1;
+                // A heading over each band once there's more than one, a family's cards all under its most pressing chat's.
+                // The finished group's head is a button that folds it, with the first finished card while it's open and a
+                // row of its own under the rest while it's folded
+                HexChatBand[] bands = FleetBands(order);
+                bool headed = bands.Distinct().Count() > 1 || (chatsFinished.Count > 0 && filter.Length == 0);
+                float depth = 0.0f;
                 for (int i = 0; i < order.Count; i++)
                 {
                     var (chat, step) = order[i];
                     AgentCard card = AgentCardOf(chat, step, closable: false);
-                    // The heading goes in with the group's first card, one row for each card still, which the keys and the
+                    UIComponent inner = card.Root;
+                    float above = 0.0f;
+                    // The heading goes in with the band's first card, one row for each card still, which the keys and the
                     // clicks find by its place
-                    if (headed && (i == 0 || groups[i] != groups[i - 1]))
+                    if (headed && (i == 0 || bands[i] != bands[i - 1]))
                     {
                         var with = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
-                        with.Add(new Label
+                        if (bands[i] == HexChatBand.Finished)
                         {
-                            Text = Said(groups[i] switch { FleetGroup.NeedsYou => "noon.fleet_needs_you", FleetGroup.Working => "noon.fleet_working", _ => "noon.fleet_rest" }).ToUpperInvariant(),
-                            TextScale = 0.125f, Dim = true, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, i == 0 ? 18 : 26), Padding = new UIEdges(10, 0, 0, 2), Anchor = Origin.BottomLeft, Pivot = Origin.BottomLeft
-                        });
+                            with.Add(FinishedHead());
+                            above = FINISHED_HEAD;
+                        }
+                        else
+                        {
+                            above = i == 0 ? 18 : 26;
+                            with.Add(new Label
+                            {
+                                Text = Said(bands[i] switch { HexChatBand.NeedsYou => "noon.fleet_needs_you", HexChatBand.Working => "noon.fleet_working", _ => "noon.fleet_rest" }).ToUpperInvariant(),
+                                TextScale = 0.125f, Dim = true, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, above), Padding = new UIEdges(10, 0, 0, 2), Anchor = Origin.BottomLeft, Pivot = Origin.BottomLeft
+                            });
+                        }
                         with.Add(card.Root);
                         card = card with { Root = with };
                     }
                     noonFleetRows.Add(card.Root);
                     noonCards.Add(card.Refresh);
+                    cardsPlaced.Add((chat.Id, inner, depth + above));
+                    depth += above + AGENT_CARD + noonFleetRows.Spacing;
                 }
+
+                // The finished folded away, their head under the rest
+                if (!FinishedShown && chatsFinished.Count > 0 && filter.Length == 0)
+                    noonFleetRows.Add(FinishedHead());
+                SlideCards(noonFleetPlaces, cardsPlaced);
             }
 
             // Taken as drawn only once the cards are what it says, a rebuild put off under a held button is tried again
@@ -444,62 +468,30 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// The cards the fleet shows, top to bottom: every chat in the list's order, narrowed by what's typed in the fleet's
-    /// filter. The fleet draws these and its keys go round them, so the next is always the card under this one.
+    /// The cards the fleet shows, top to bottom: the chats on screen in the list's order (ChatsShown, the finished left
+    /// out while their group is folded), narrowed by what's typed in the fleet's filter, which looks through the finished
+    /// too. The fleet draws these and its keys go round them, so the next is always the card under this one.
     /// </summary>
     internal List<(HexAgentChat Chat, int Step)> FleetShown()
     {
-        List<(HexAgentChat Chat, int Step)> order = FleetGrouped();
+        List<(HexAgentChat Chat, int Step)> order = ChatsShown();
         string filter = noonFleetFilter?.Text.Trim() ?? string.Empty;
         return filter.Length == 0 ? order : order.FindAll(each => FleetFits(each.Chat, filter));
     }
 
-    /// <summary>
-    /// The groups of the fleet, those that need the person first, then those working, then the rest. Each family (a chat
-    /// nobody started and the ones under it) stays together, in the group of its most urgent chat, and in the list's own
-    /// order within its group.
-    /// </summary>
-    private enum FleetGroup { NeedsYou, Working, Rest }
-
-    private static FleetGroup GroupOf(HexAgentChat chat) =>
-        chat.HasPending || (chat.Failed && chat.Unread) || (chat.UnreadMailCount() > 0 && !chat.Running) ? FleetGroup.NeedsYou
-        : chat.Running ? FleetGroup.Working
-        : FleetGroup.Rest;
-
-    // The group of each card of a list in the fleet's order, its family's, the family's first card being one nobody started
-    private static FleetGroup[] FamilyGroups(List<(HexAgentChat Chat, int Step)> order)
+    // The band of each card of a list in the fleet's order, its family's, as ChatsInOrder worked it out
+    private HexChatBand[] FleetBands(List<(HexAgentChat Chat, int Step)> order)
     {
-        var groups = new FleetGroup[order.Count];
-        for (int start = 0; start < order.Count;)
+        List<(HexAgentChat Chat, int Step)> all = ChatsInOrder();
+        var bands = new HexChatBand[order.Count];
+        for (int i = 0, at = 0; i < order.Count; i++)
         {
-            int end = start + 1;
-            while (end < order.Count && order[end].Step > 0)
-                end++;
-            FleetGroup group = FleetGroup.Rest;
-            for (int i = start; i < end; i++)
-                group = (FleetGroup)Math.Min((int)group, (int)GroupOf(order[i].Chat));
-            for (int i = start; i < end; i++)
-                groups[i] = group;
-            start = end;
+            while (at < all.Count && all[at].Chat != order[i].Chat)
+                at++;
+            bands[i] = BandAt(at);
         }
 
-        return groups;
-    }
-
-    // The list's order with its families sorted into their groups, stable within each
-    private List<(HexAgentChat Chat, int Step)> FleetGrouped()
-    {
-        List<(HexAgentChat Chat, int Step)> order = ChatsInOrder();
-        var families = new List<(FleetGroup Group, int At, List<(HexAgentChat Chat, int Step)> Chats)>();
-        foreach (var each in order)
-        {
-            if (each.Step == 0 || families.Count == 0)
-                families.Add((FleetGroup.Rest, families.Count, []));
-            families[^1].Chats.Add(each);
-        }
-        for (int i = 0; i < families.Count; i++)
-            families[i] = families[i] with { Group = families[i].Chats.Min(each => GroupOf(each.Chat)) };
-        return [.. families.OrderBy(family => family.Group).ThenBy(family => family.At).SelectMany(family => family.Chats)];
+        return bands;
     }
 
     // Whether a chat's name, agent system, number or model has what's typed in the fleet's filter
