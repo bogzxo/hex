@@ -31,8 +31,26 @@ public static partial class HexIdentity
     /// <summary>The mode the process was started in, Dawn until <see cref="Claim"/> says otherwise.</summary>
     public static HexMode Mode { get; private set; } = HexMode.Dawn;
 
-    /// <summary>The id Windows knows a mode by.</summary>
-    public static string AppIdOf(HexMode mode) => mode == HexMode.Dusk ? "bogzxo.Hex.Dusk" : "bogzxo.Hex.Dawn";
+    // Which build this is to the system, so a Debug Hex's windows (and a nightly's) are a program of their own beside the
+    // installed one: Windows grouped the Hex being worked on with the one it's worked in under one taskbar button, which
+    // of the two came up on a click a toss-up. Nothing for the stable build, whose ids pins and shortcuts already know
+    private static string BuildSuffix { get; } =
+#if DEBUG
+        "Debug";
+#else
+        HexVersion.Dev ? "Dev" : string.Empty;
+#endif
+
+    /// <summary>The id Windows knows a mode by, a Debug or nightly build's its own.</summary>
+    public static string AppIdOf(HexMode mode) =>
+        (mode == HexMode.Dusk ? "bogzxo.Hex.Dusk" : "bogzxo.Hex.Dawn") + (BuildSuffix.Length > 0 ? "." + BuildSuffix : string.Empty);
+
+    /// <summary>
+    /// The id a mode's windows go by on Linux, X11's WM_CLASS and Wayland's app id (hex-dawn, hex-dusk), the desktop
+    /// entry's StartupWMClass. A Debug or nightly build's has its own ending, so it isn't grouped with the installed Hex.
+    /// </summary>
+    public static string WindowIdOf(HexMode mode) =>
+        (mode == HexMode.Dusk ? "hex-dusk" : "hex-dawn") + (BuildSuffix.Length > 0 ? "-" + BuildSuffix.ToLowerInvariant() : string.Empty);
 
     /// <summary>Says which mode this is, to the program and to Windows. Before the window is made.</summary>
     public static void Claim(HexMode mode)

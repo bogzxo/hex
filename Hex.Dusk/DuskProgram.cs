@@ -118,7 +118,7 @@ public static class DuskProgram
                 CustomFrame = true,
                 // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
                 ScaleToDisplay = !selfTest,
-                AppId = "hex-dusk",
+                AppId = HexIdentity.WindowIdOf(HexMode.Dusk),
                 Mode = selfTest && !options.App ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,

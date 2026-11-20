@@ -25,7 +25,7 @@ public static partial class DawnProgram
         WindowConfiguration = host.WindowConfiguration with
         {
             WindowTitle = "Hex",
-            AppId = "hex-dawn",
+            AppId = HexIdentity.WindowIdOf(HexMode.Dawn),
             Mode = RunMode.Application,
             Behaviour = ApplicationBehaviour.All,
             VSync = true,

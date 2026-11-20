@@ -201,7 +201,7 @@ public static partial class DawnProgram
                 CustomFrame = true,
                 // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
                 ScaleToDisplay = !selfTest,
-                AppId = "hex-dawn",
+                AppId = HexIdentity.WindowIdOf(HexMode.Dawn),
 
 
                 Mode = selfTest && !nativeShortcuts ? RunMode.Game : RunMode.Application,
