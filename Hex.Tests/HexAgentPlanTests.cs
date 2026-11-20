@@ -93,6 +93,113 @@ public sealed class HexAgentPlanTests
         Assert.Equal("go ahead", DawnScene.PlanPrompt(chat, "go ahead"));
     }
 
+    private static HexAgentPlan Sample() => new("Task", [
+        new HexPlanItem("One", HexPlanState.Done, "s1"),
+        new HexPlanItem("Two", HexPlanState.Doing, "s2"),
+        new HexPlanItem("Three", HexPlanState.Done, "s3"),
+        new HexPlanItem("Four", HexPlanState.Pending, "s4"),
+        new HexPlanItem("Five", HexPlanState.Dropped, "s5")
+    ]);
+
+    [Fact]
+    public void A_step_newly_done_is_stamped_and_keeps_its_time_until_reopened()
+    {
+        HexAgentPlan first = Sample();
+        Assert.Same(first, HexAgentPlan.Stamped(null, first, 100));
+
+        HexAgentPlan done = HexAgentPlan.Stamped(first, first.WithState("s2", HexPlanState.Done)!, 200);
+        Assert.Equal(200, done.Items[1].DoneAt);
+        // Done before, by ID or (without one) by its words, keeps what it had: nothing for a plan from before times were kept
+        Assert.Equal(0, done.Items[0].DoneAt);
+        Assert.Equal(200, HexAgentPlan.Stamped(done, done.WithText("s4", "Four again")!, 300).Items[1].DoneAt);
+
+        HexAgentPlan reopened = HexAgentPlan.Stamped(done, done.WithState("s2", HexPlanState.Pending)!, 400);
+        Assert.Equal(0, reopened.Items[1].DoneAt);
+    }
+
+    [Fact]
+    public void A_new_task_puts_the_old_ones_done_steps_aside_under_its_title()
+    {
+        HexAgentPlan next = HexAgentPlan.NewTask(Sample(), "Next", [new HexPlanItem("Begin", HexPlanState.Doing, "n1")], 500);
+        Assert.Equal(("Next", 1), (next.Title, next.Items.Count));
+        HexPlanSection aside = Assert.Single(next.Earlier);
+        Assert.Equal(("Task", 500L), (aside.Title, aside.At));
+        Assert.Equal(["One", "Three"], aside.Items.Select(item => item.Text));
+
+        // Only so many earlier tasks are kept, the oldest go
+        HexAgentPlan plan = next;
+        for (int i = 0; i < HexAgentPlan.EARLIER_KEPT + 3; i++)
+            plan = HexAgentPlan.NewTask(plan with { Items = [new HexPlanItem($"T{i}", HexPlanState.Done, "x")] }, $"Task {i}", [], i);
+        Assert.Equal(HexAgentPlan.EARLIER_KEPT, plan.Earlier.Count);
+        Assert.Equal($"Task {HexAgentPlan.EARLIER_KEPT + 1}", plan.Earlier[^1].Title);
+    }
+
+    [Fact]
+    public void Clearing_what_was_done_leaves_the_open_steps_and_puts_the_rest_aside()
+    {
+        HexAgentPlan cleared = Sample().ClearDone(700)!;
+        Assert.Equal(["s2", "s4"], cleared.Items.Select(item => item.Id));
+        Assert.Equal(["s1", "s3", "s5"], Assert.Single(cleared.Earlier).Items.Select(item => item.Id));
+        Assert.Null(cleared.ClearDone(800));
+    }
+
+    [Fact]
+    public void The_person_adds_moves_edits_and_removes_steps()
+    {
+        HexAgentPlan plan = Sample();
+
+        HexAgentPlan added = plan.Added("  New one ", out string? id)!;
+        Assert.Equal(("New one", HexPlanState.Pending, id), (added.Items[4].Text, added.Items[4].State, added.Items[4].Id));
+        Assert.DoesNotContain(plan.Items, item => item.Id == id);
+        Assert.Null(plan.Added("   ", out _));
+
+        // Moving past the done step between to the next open one, none past the last
+        Assert.Equal(["s1", "s4", "s3", "s2", "s5"], plan.Moved("s2", 1)!.Items.Select(item => item.Id));
+        Assert.Equal(["s1", "s4", "s3", "s2", "s5"], plan.Moved("s4", -1)!.Items.Select(item => item.Id));
+        Assert.Null(plan.Moved("s2", -1));
+        Assert.Null(plan.Moved("s4", 1));
+        Assert.Null(plan.Moved("nope", 1));
+
+        Assert.Equal("Second", plan.WithText("s2", " Second ")!.Items[1].Text);
+        Assert.Null(plan.WithText("s2", " "));
+        Assert.Null(plan.WithText("s2", "Two"));
+        Assert.Equal("why", plan.WithNote("s2", " why ")!.Items[1].Note);
+        Assert.Null(plan.WithNote("s2", "")); // no note to clear
+        Assert.Null(plan.WithState("s2", HexPlanState.Doing));
+        Assert.Equal(4, plan.Removed("s3")!.Items.Count);
+        Assert.Null(plan.Removed("nope"));
+    }
+
+    [Fact]
+    public void Earlier_tasks_and_done_times_are_saved_with_the_chat_but_only_counted_for_the_agent()
+    {
+        HexAgentPlan plan = HexAgentPlan.NewTask(Sample(), "Next", [new HexPlanItem("Begin", HexPlanState.Done, "n1") { DoneAt = 42 }], 600);
+        HexAgentPlan restored = HexAgentPlan.FromJson(JsonNode.Parse(plan.ToStored().ToJsonString())!.AsObject());
+        Assert.Equal(42, restored.Items[0].DoneAt);
+        HexPlanSection aside = Assert.Single(restored.Earlier);
+        Assert.Equal(("Task", 600L, 2), (aside.Title, aside.At, aside.Items.Count));
+
+        JsonObject read = plan.ToJson();
+        Assert.Equal(1, read["earlier_tasks"]!.GetValue<int>());
+        Assert.Null(read["earlier"]);
+        Assert.Null(read["items"]![0]!["done_at"]);
+    }
+
+    [Fact]
+    public void A_native_list_naming_none_of_a_finished_plans_rows_is_a_new_task()
+    {
+        HexAgentPlan finished = new("Old", [new HexPlanItem("Read", HexPlanState.Done, "s1"), new HexPlanItem("Fix", HexPlanState.Done, "s2")]);
+        HexAgentPlan next = HexAgentPlan.TakeNative(finished, [Step("Plan menus", "in_progress"), Step("Group items", "pending")], "Menus", 10, "k")!;
+        Assert.Equal(("Menus", 2), (next.Title, next.Items.Count));
+        Assert.Equal(["Read", "Fix"], Assert.Single(next.Earlier).Items.Select(item => item.Text));
+        Assert.Equal((10.0, "k"), (next.NativeAt, next.NativeKey));
+
+        // A list that goes on with a plan still open adds to it, and keeps what was put aside before
+        HexAgentPlan more = HexAgentPlan.TakeNative(next, [Step("Plan menus", "completed"), Step("Ship", "pending")], null, 11, "k2")!;
+        Assert.Equal(3, more.Items.Count);
+        Assert.Single(more.Earlier);
+    }
+
     [Fact]
     public void The_plan_rules_are_said_without_apostrophes_for_codex_toml()
     {
