@@ -18,9 +18,9 @@ internal sealed partial class DawnScene
         HexHost.Report = said => hostSaid.Enqueue(said);
 
         if (HexHost.PickFile is { } file)
-            commands.Add("File/new", Said("documents.open_from_device"), () => file(path => hostPicked.Enqueue((path, false))), icon: "go-to-file");
+            commands.Add("File/open", Said("documents.open_from_device"), () => file(path => hostPicked.Enqueue((path, false))), icon: "go-to-file");
         if (HexHost.PickFolder is { } folder)
-            commands.Add("File/new", Said("documents.open_folder_from_device"), () => folder(path => hostPicked.Enqueue((path, true))), icon: "root-folder");
+            commands.Add("File/open", Said("documents.open_folder_from_device"), () => folder(path => hostPicked.Enqueue((path, true))), icon: "root-folder");
     }
 
     /// <summary>Says what the host said and opens what its pickers picked, a folder as the workspace.</summary>

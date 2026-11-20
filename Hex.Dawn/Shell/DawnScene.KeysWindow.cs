@@ -37,8 +37,8 @@ internal sealed partial class DawnScene
     /// <summary>Keyboard Shortcuts in the File menu, under Settings, VS Code has it there too.</summary>
     private void AddKeysCommands()
     {
-        commands.Add("File/settings/prefs:main", Said("commands.shortcuts"), OpenKeysWindow, "Ctrl+K Ctrl+S", "keyboard", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/settings/prefs:files", Said("commands.shortcuts_file"), OpenKeysFile, icon: "key");
+        commands.Add("File/workspace/prefs:main", Said("commands.shortcuts"), OpenKeysWindow, "Ctrl+K Ctrl+S", "keyboard", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/workspace/prefs:files", Said("commands.shortcuts_file"), OpenKeysFile, icon: "key");
     }
 
     /// <summary>
@@ -361,18 +361,20 @@ internal sealed partial class DawnScene
     {
         string label = LabelOf(item);
         var shown = new Menu("keys");
+        // Changing the key and putting it back, finding and copying it, then taking keys off last
         shown.Add(Said("keys.change"), () => AskForKey(item), "Enter", "edit");
+        if (rebound.Any(pair => pair.Label == label))
+            shown.Add(Said("keys.reset_one"), () => ResetKeyOf(item), "Backspace", "discard");
+        shown.AddSeparator();
+        shown.Add(Said("keys.same_keys"), () => ShowSameKeys(item), icon: "record-keys").IsEnabled = () => item.Shortcut.Length > 0;
+        shown.Add(Said("keys.copy_key"), () => UIClipboard.Copy(item.Shortcut), icon: "copy").IsEnabled = () => item.Shortcut.Length > 0;
+        shown.Add(Said("keys.copy_name"), () => UIClipboard.Copy(label), icon: "copy");
+        shown.AddSeparator();
         shown.Add(Said("keys.remove"), () => RemoveKeyOf(item), "Del", "close").IsEnabled = () => item.Shortcut.Length > 0;
 
         // On a key another command would want at the same time, the key can come off that one instead, one item each
         foreach (MenuItem other in ClashesWith(item))
             shown.Add(Said("keys_table.remove_from", ("other", LabelOf(other))), () => RemoveKeyOf(other), icon: "close");
-
-        if (rebound.Any(pair => pair.Label == label))
-            shown.Add(Said("keys.reset_one"), () => ResetKeyOf(item), "Backspace", "discard");
-        shown.Add(Said("keys.same_keys"), () => ShowSameKeys(item), icon: "record-keys").IsEnabled = () => item.Shortcut.Length > 0;
-        shown.Add(Said("keys.copy_key"), () => UIClipboard.Copy(item.Shortcut), icon: "copy").IsEnabled = () => item.Shortcut.Length > 0;
-        shown.Add(Said("keys.copy_name"), () => UIClipboard.Copy(label), icon: "copy");
         return shown;
     }
 

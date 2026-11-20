@@ -75,9 +75,10 @@ internal sealed partial class HexDebugging
                     if (!ReferenceEquals(debugging, session)) return;
                     var menu = new Menu("data-breakpoint");
                     menu.Add(context.Strings.Said(point.Enabled ? "debugging.disable_breakpoint" : "debugging.enable_breakpoint"),
-                        () => ChangeDataBreakpoints(session, () => session.EnableDataBreakpoint(point.DataId, !point.Enabled)), icon: "circle").IsEnabled = () => ReferenceEquals(debugging, session) && DebugStopped;
+                        () => ChangeDataBreakpoints(session, () => session.EnableDataBreakpoint(point.DataId, !point.Enabled)), icon: point.Enabled ? "circle" : "circle-filled").IsEnabled = () => ReferenceEquals(debugging, session) && DebugStopped;
+                    menu.AddSeparator();
                     menu.Add(context.Strings.Said("debugging.delete_breakpoint"),
-                        () => ChangeDataBreakpoints(session, () => session.RemoveDataBreakpoint(point.DataId)), icon: "trash").IsEnabled = () => ReferenceEquals(debugging, session) && DebugStopped;
+                        () => ChangeDataBreakpoints(session, () => session.RemoveDataBreakpoint(point.DataId)), icon: "trash", destructive: true).IsEnabled = () => ReferenceEquals(debugging, session) && DebugStopped;
                     context.Windows.Menu(menu);
                 })
             });

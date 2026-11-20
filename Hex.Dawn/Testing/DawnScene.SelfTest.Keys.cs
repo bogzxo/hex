@@ -212,8 +212,8 @@ internal sealed partial class DawnScene
             keysTree!.Items is [{ Tag: MenuItem } row] && LabelOf((MenuItem)row.Tag) == "Go to File" && row.Detail == goTo && row.DetailColor == compositor.Skin?.AccentColor
             && row.IconColor == compositor.Skin?.AccentColor && row.Tooltip.Contains(Said("keys.changed_tip", ("key", "Ctrl+P"))));
         test.Check("keys: a row's menu changes, removes, finds the same keys and copies, and resets only a changed key", () =>
-            KeyMenu(command("Go to File")!).Items.Select(item => item.Label)
-                .SequenceEqual([Said("keys.change"), Said("keys.remove"), Said("keys.reset_one"), Said("keys.same_keys"), Said("keys.copy_key"), Said("keys.copy_name")])
+            KeyMenu(command("Go to File")!).Items.Where(item => !item.IsSeparator).Select(item => item.Label)
+                .SequenceEqual([Said("keys.change"), Said("keys.reset_one"), Said("keys.same_keys"), Said("keys.copy_key"), Said("keys.copy_name"), Said("keys.remove")])
             && !KeyMenu(command("Find in Files")!).Items.Any(item => item.Label == Said("keys.reset_one")));
         test.Run(() => Filter("go to"));
         test.Settle(0.2f);

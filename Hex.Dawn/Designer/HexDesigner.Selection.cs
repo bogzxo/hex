@@ -346,7 +346,6 @@ internal sealed partial class HexDesigner
         shown.Add(context.Strings.Said("designer_selection.copy"), CopySelected, "Ctrl+C", "copy").IsEnabled = any;
         shown.Add(context.Strings.Said("designer_selection.paste"), Paste, "Ctrl+V", "clippy").IsEnabled = () => clipboard.Length > 0;
         shown.Add(context.Strings.Said("designer_selection.duplicate"), DuplicateSelected, "Ctrl+D", "clone").IsEnabled = any;
-        shown.Add(context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash").IsEnabled = any;
         shown.AddSeparator();
 
         // What goes inside of the one selected, a menu of the kinds
@@ -378,6 +377,9 @@ internal sealed partial class HexDesigner
         if (document.Selected is TabPanel)
             shown.Add(context.Strings.Said("designer_selection.add_page"), AddPage, icon: "add");
 
+        // Taking them away goes last, on its own and in the error colour
+        shown.AddSeparator();
+        shown.Add(context.Strings.Said("designer_selection.delete"), DeleteAll, "Del", "trash", destructive: true).IsEnabled = any;
         return shown;
     }
 

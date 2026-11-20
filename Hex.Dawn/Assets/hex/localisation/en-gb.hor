@@ -2028,7 +2028,11 @@ let strings = {
         git_stash: "Stash",
         git_history: "History",
         git_tags: "Tags",
-        developer: "Developer"
+        developer: "Developer",
+        new: "New",
+        breakpoints: "Breakpoints",
+        debug_views: "Debug Views",
+        cmake: "CMake"
     },
 
     // The Terminal menu of the bar, the panel's terminals
@@ -3806,6 +3810,7 @@ let strings = {
     agent: {
         explain: "Explain with Agent",
         change: "Change with Agent...",
+        show_agents: "Show Agents",
         explain_prompt: "Explain this code and how it works in context.",
         change_prompt: "Change this code to ",
         too_large: "Select less code before attaching it to an agent draft (maximum 32,000 characters)."
@@ -3817,13 +3822,14 @@ let strings = {
         input: "Write a message…",
         send: "Send",
         stop: "Stop the agent",
-        clear: "Clear this chat",
+        clear: "Clear chat",
         chats_tip: "Recent chats and chat actions",
         none_short: "Choose agent",
-        retry: "Ask the last thing again",
-        copy: "Copy the last answer",
+        retry: "Ask again",
+        copy: "Copy last answer",
         copied: "The agent's last answer is on the clipboard",
-        saved: "What the harness has saved since the count began",
+        saved: "Harness Savings",
+        older_chats: "Older chats",
         new_chat: "New chat",
         chats_head: "Chats ({count})",
         chats_working: "{count} working",

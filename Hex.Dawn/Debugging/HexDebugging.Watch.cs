@@ -20,8 +20,8 @@ internal sealed partial class HexDebugging
         watchWorkspace = context.Workspace.WatchExpressions;
         watches.AddRange(watchWorkspace);
         UICommands commands = context.Commands;
-        commands.Add("Run/debug", context.Strings.Said("debugging.add_watch"), AddWatch, icon: "eye");
-        commands.Add("Run/debug", context.Strings.Said("debugging.evaluate"), EvaluateExpression, "Shift+F9", "debug-console", UIKeyUse.BoundWhileTyping);
+        commands.Add("Run/inspect", context.Strings.Said("debugging.add_watch"), AddWatch, icon: "eye");
+        commands.Add("Run/inspect", context.Strings.Said("debugging.evaluate"), EvaluateExpression, "Shift+F9", "debug-console", UIKeyUse.BoundWhileTyping);
         context.Documents.AddHovers(DataTip, first: true);
     }
 
@@ -53,6 +53,7 @@ internal sealed partial class HexDebugging
         menu.Add(context.Strings.Said("debugging.edit_watch"), () => EditWatch(expression), icon: "edit");
         if (DebugStopped && debugging is { CanSetExpression: true } && value is { ReadOnly: false } editable && current?.Invoke() == true)
             menu.Add(context.Strings.Said("debugging.edit_value"), () => EditWatchValue(expression, editable, current), icon: "edit");
+        menu.AddSeparator();
         menu.Add(context.Strings.Said("debugging.remove_watch"), () => RemoveWatch(expression), icon: "close");
         context.Windows.Menu(menu);
     }

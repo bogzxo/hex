@@ -104,9 +104,10 @@ internal sealed partial class HexDebugging
                     if (debugging != session) return;
                     var menu = new Menu("instruction-breakpoint");
                     menu.Add(context.Strings.Said(point.Enabled ? "debugging.disable_breakpoint" : "debugging.enable_breakpoint"),
-                        () => ChangeInstructionBreakpoints(session, () => session.EnableInstructionBreakpoint(point.Address, !point.Enabled)), icon: "circle").IsEnabled = () => debugging == session && DebugStopped;
+                        () => ChangeInstructionBreakpoints(session, () => session.EnableInstructionBreakpoint(point.Address, !point.Enabled)), icon: point.Enabled ? "circle" : "circle-filled").IsEnabled = () => debugging == session && DebugStopped;
+                    menu.AddSeparator();
                     menu.Add(context.Strings.Said("debugging.delete_breakpoint"),
-                        () => ChangeInstructionBreakpoints(session, () => session.RemoveInstructionBreakpoint(point.Address)), icon: "trash").IsEnabled = () => debugging == session && DebugStopped;
+                        () => ChangeInstructionBreakpoints(session, () => session.RemoveInstructionBreakpoint(point.Address)), icon: "trash", destructive: true).IsEnabled = () => debugging == session && DebugStopped;
                     context.Windows.Menu(menu);
                 })
             });

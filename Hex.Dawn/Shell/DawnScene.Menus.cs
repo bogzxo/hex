@@ -121,14 +121,16 @@ internal sealed partial class DawnScene
     /// </summary>
     private void DeclareMenus()
     {
-        commands.Declare("File", "new", "save", "close", "path", "workspace", "settings", "exit");
+        commands.Declare("File", "new", "open", "save", "close", "path", "workspace", "exit");
         commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
         commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
         commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
         commands.Declare("Go", "places", "open", "symbols", "problems");
-        commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
+        // The debugger's own groups first, the session, stepping through it and what's looked at on the way, then
+        // running without it
+        commands.Declare("Run", "debug", "step", "inspect", "run", "tasks", "check", "apply");
         commands.Declare("Test", "tests");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
@@ -139,9 +141,13 @@ internal sealed partial class DawnScene
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in
+        commands.DeclareSubmenu("File/new", "make", Said("menus.new"), "new-file");
         commands.DeclareSubmenu("File/new", "scratch", Said("menus.scratchpads"), "note");
         commands.DeclareSubmenu("File/workspace", "workspace", Said("menus.workspace"), "folder-library");
-        commands.DeclareSubmenu("File/settings", "prefs", Said("menus.preferences"), "settings-gear", "main", "files");
+        commands.DeclareSubmenu("File/workspace", "prefs", Said("menus.preferences"), "settings-gear", "main", "files");
+        commands.DeclareSubmenu("Run/debug", "cmake", Said("menus.cmake"), "tools");
+        commands.DeclareSubmenu("Run/inspect", "breakpoints", Said("menus.breakpoints"), "debug-breakpoint");
+        commands.DeclareSubmenu("Run/inspect", "views", Said("menus.debug_views"), "debug-console");
         commands.DeclareSubmenu("View/appearance", "look", Said("menus.appearance"), "layout", "screen", "parts", "zoom");
         commands.DeclareSubmenu("Layout/skin", "debugger", Said("menus.layout_debugger"), "debug", "switch", "options");
         commands.DeclareSubmenu("Git/menus", "changes", Said("menus.git_changes"), "diff", "open", "file", "all");
