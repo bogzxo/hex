@@ -38,9 +38,76 @@
   --mono: Hack, ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
   --measure: 80rem;
   --gap: clamp(1rem, 0.5rem + 2vw, 2rem);
+  --icon-target: 2.25rem;
+  --icon-size: 1.125rem;
+  --gallery-stage: #18171f;
+  --gallery-on-stage: #ece9f2;
+  --gallery-backdrop: rgb(12 11 17 / 0.82);
 
   accent-color: var(--accent);
   scrollbar-color: var(--dim) var(--background);
+}
+
+/* Keep the same Solstice colors in browsers that predate light-dark(). */
+@supports not (color: light-dark(white, black)) {
+  :root {
+    --background: #ffffff;
+    --surface: #f4f2f7;
+    --control: #e6e2ec;
+    --text: #1e1b29;
+    --dim: #5f5970;
+    --border: rgb(31 26 41 / 0.14);
+    --dawn: #b85200;
+    --dusk: #5a45d1;
+    --noon: #1c7d82;
+    --on-accent: #ffffff;
+    --keyword: #b4235f;
+    --type: #0b6e99;
+    --call: #5a45d1;
+    --string: #8a5a00;
+    --comment: #8a8499;
+    --shadow: rgb(31 26 41 / 0.18);
+  }
+
+  :root:has(> head > meta[name="color-scheme"][content="dark"]) {
+    --background: #18171f;
+    --surface: #201f2a;
+    --control: #2c2a38;
+    --text: #ece9f2;
+    --dim: #a6a0b5;
+    --border: rgb(255 255 255 / 0.1);
+    --dawn: #da854d;
+    --dusk: #a99bff;
+    --noon: #64c3c8;
+    --on-accent: #18171f;
+    --keyword: #f28fb5;
+    --type: #8ccbea;
+    --call: #c5b8ff;
+    --string: #e9c88f;
+    --comment: #857f97;
+    --shadow: rgb(0 0 0 / 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(:has(> head > meta[name="color-scheme"][content="light"])) {
+      --background: #18171f;
+      --surface: #201f2a;
+      --control: #2c2a38;
+      --text: #ece9f2;
+      --dim: #a6a0b5;
+      --border: rgb(255 255 255 / 0.1);
+      --dawn: #da854d;
+      --dusk: #a99bff;
+      --noon: #64c3c8;
+      --on-accent: #18171f;
+      --keyword: #f28fb5;
+      --type: #8ccbea;
+      --call: #c5b8ff;
+      --string: #e9c88f;
+      --comment: #857f97;
+      --shadow: rgb(0 0 0 / 0.5);
+    }
+  }
 }
 
 *,
@@ -49,72 +116,50 @@
   box-sizing: border-box;
 }
 
-/* What's only in one look, a screenshot of it, the switch's word and picture for going to the other. Day's by default,
-   Night's where the system is dark and Day wasn't pinned, or where Night was. Shown the way each is otherwise shown */
-.night-only,
-.to-day {
+/* Screenshots follow the rendered scheme, including a pin against the system setting. */
+img.night-only {
   display: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not(:has(> head > meta[name="color-scheme"][content="light"])) {
-    & .day-only,
-    & .to-night {
-      display: none;
-    }
-
-    & img.night-only,
-    & svg.to-day {
-      display: block;
-    }
-
-    & span.to-day {
-      display: inline;
-    }
-  }
-}
-
-:root:has(> head > meta[name="color-scheme"][content="dark"]) {
-  & .day-only,
-  & .to-night {
+  :root:not(:has(> head > meta[name="color-scheme"][content="light"])) img.day-only {
     display: none;
   }
 
-  & img.night-only,
-  & svg.to-day {
+  :root:not(:has(> head > meta[name="color-scheme"][content="light"])) img.night-only {
     display: block;
   }
-
-  & span.to-day {
-    display: inline;
-  }
 }
 
-/* Said to a screen reader, not drawn */
-.sr-only {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+:root:has(> head > meta[name="color-scheme"][content="dark"]) img.day-only {
+  display: none;
 }
 
-/* The Day/Night switch in the bar, square, its picture in the middle. Hidden until its script is there to make it work */
-.bar .scheme {
-  position: relative;
-  padding-inline: 0.5rem;
+:root:has(> head > meta[name="color-scheme"][content="dark"]) img.night-only {
+  display: block;
+}
+
+.button.small.icon-button {
   justify-content: center;
+  min-inline-size: var(--icon-target);
+  min-block-size: var(--icon-target);
+  padding-inline: 0.5rem;
+}
 
-  /* A line of text tall, so it stands as high as the buttons with words beside it */
-  & svg {
-    inline-size: 1lh;
-    block-size: 1lh;
-    padding: 0.1lh;
-  }
+.icon-button svg {
+  inline-size: var(--icon-size);
+  block-size: var(--icon-size);
+  flex: none;
+}
 
-  &[hidden] {
-    display: none;
+.scheme[hidden],
+.scheme svg[hidden] {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --icon-target: 2.75rem;
   }
 }
 
@@ -399,7 +444,8 @@ button.button {
 
   & h1 {
     max-inline-size: 14ch;
-    font-size: clamp(2.6rem, 1.2rem + 7vw, 6rem);
+    font-size: min(clamp(2.6rem, 1.2rem + 7vw, 6rem), 12.5vw);
+    overflow-wrap: anywhere;
     font-weight: 800;
     letter-spacing: -0.045em;
     line-height: 0.95;
@@ -725,69 +771,108 @@ h2 + p strong {
   }
 }
 
-/* The picture opened up. A modal dialog, so the page behind is inert and Esc closes it */
+/* The screenshot leads. Controls stay in the dialog chrome, clear of the image. */
+.lightbox:modal {
+  --lightbox-gutter: clamp(0.5rem, 2vw, 1rem);
+  --lightbox-padding: clamp(0.75rem, 2vw, 1rem);
 
-dialog.lightbox {
-  inline-size: min(100vw - 2rem, 110rem);
+  inline-size: min(calc(100% - 2 * var(--lightbox-gutter)), 102rem);
   max-inline-size: none;
-  max-block-size: calc(100dvh - 2rem);
+  max-block-size: calc(100vh - 2 * var(--lightbox-gutter));
+  max-block-size: calc(100dvh - 2 * var(--lightbox-gutter));
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 2rem 6rem var(--shadow);
+  overscroll-behavior: contain;
+}
 
-  &:modal {
-    overscroll-behavior: contain;
-  }
+.lightbox::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: var(--gallery-backdrop);
+  backdrop-filter: blur(6px);
+}
 
-  &::backdrop {
-    overflow: hidden;
-    overscroll-behavior: contain;
-    background: rgb(12 11 17 / 0.82);
-    backdrop-filter: blur(6px);
-  }
+.lightbox header,
+.lightbox footer,
+.lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 
-  & img {
-    inline-size: 100%;
-    max-block-size: calc(100dvh - 7.5rem);
-    object-fit: contain;
-    background: #18171f;
-  }
+.lightbox header,
+.lightbox footer {
+  justify-content: space-between;
+  padding: 0.5rem var(--lightbox-padding);
+}
 
-  & footer {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-block-start: 1px solid var(--border);
-  }
+.lightbox footer {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-block: var(--lightbox-padding);
+}
 
-  & p {
-    flex: 1;
-    color: var(--dim);
-    font-size: 0.95rem;
-  }
+.lightbox-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--gallery-stage);
+}
 
-  & form {
-    display: contents;
-  }
+.lightbox-stage img {
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  max-block-size: max(7rem, calc(100vh - 11rem));
+  max-block-size: max(7rem, calc(100dvh - 11rem));
+  object-fit: contain;
+  color: var(--gallery-on-stage);
+}
 
-  & button {
-    padding: 0.4rem 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--control);
-    color: var(--text);
-    font: inherit;
-    font-size: 0.92rem;
-    cursor: pointer;
+.lightbox-error {
+  position: absolute;
+  max-inline-size: calc(100% - 2 * var(--lightbox-padding));
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
 
-    &:hover {
-      border-color: var(--accent);
-    }
-  }
+.lightbox-error:empty {
+  padding: 0;
+}
+
+.lightbox-position,
+.lightbox-caption {
+  color: var(--dim);
+  font-size: 0.92rem;
+}
+
+.lightbox-position {
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-caption {
+  flex: 1 1 18rem;
+  min-inline-size: 0;
+}
+
+.lightbox-actions {
+  margin-inline-start: auto;
+}
+
+.lightbox .button:active,
+.scheme:active {
+  background: var(--control);
+}
+
+.lightbox .button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  translate: none;
 }
 
 /* The table of what was measured */
@@ -1148,30 +1233,12 @@ pre {
   }
 }
 
-/* A picture grows out of its place in the gallery and goes back into it */
-
-::view-transition-group(shot) {
-  animation-duration: 0.28s;
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
-
-::view-transition-old(shot),
-::view-transition-new(shot) {
-  block-size: 100%;
-  object-fit: cover;
-  object-position: top left;
-}
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
 
   .button,
   .gallery a {

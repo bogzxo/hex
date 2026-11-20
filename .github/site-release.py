@@ -32,10 +32,9 @@ def main(release_path, page_path):
     page = put(page, "title", html.escape(title))
 
     notes = section((release.get("body") or "").replace("\r\n", "\n"), version)
-    if notes:
-        page = put(page, "notes", render(notes, version, codename, release.get("html_url") or ""))
-    else:
-        print(f"::warning::The notes of {title} have nothing for {version}; the page keeps the notes it has.")
+    if not notes:
+        print(f"::warning::The notes of {title} have nothing for {version}; linking to the release.")
+    page = put(page, "notes", render(notes, version, codename, release.get("html_url") or ""))
 
     with open(page_path, "w", encoding="utf-8", newline="") as f:
         f.write(page)
