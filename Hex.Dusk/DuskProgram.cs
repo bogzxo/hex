@@ -105,6 +105,10 @@ public static class DuskProgram
 
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
+        // A self test runs as a game to be paced and a game opens the speakers, a terminal has no sound to test
+        if (selfTest)
+            Environment.SetEnvironmentVariable("HORIZON_AUDIO", "off");
+
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
             // A terminal, nobody plays it with a controller

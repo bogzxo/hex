@@ -188,6 +188,12 @@ public static partial class DawnProgram
         // The editor lays itself out to whatever window it gets, so it takes all there is
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
+        // A self test runs as a game to be paced, and a game opens the speakers: their thread clearing a silent buffer
+        // every couple of milliseconds was a quarter of what agentic-perf measured of an idle editor. An editor has no
+        // sound, so neither has its self test
+        if (selfTest)
+            Environment.SetEnvironmentVariable("HORIZON_AUDIO", "off");
+
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
             // A text editor, nobody plays it with a controller
