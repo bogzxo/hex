@@ -36,8 +36,6 @@ internal sealed partial class HexExtensions
     // How long after a sync the next one is, as Hex starts
     private static readonly TimeSpan CATALOG_CHECK_EVERY = TimeSpan.FromHours(20);
 
-    private const float CATALOG_WIDTH = 640.0f, CATALOG_BUTTON_WIDTH = 96.0f, CATALOG_BUTTON_HEIGHT = 28.0f;
-
     /// <summary>An extension of the catalog, what its extension object says it is and where the synced copy of it is.</summary>
     internal sealed record CatalogEntry(string Id, string Name, string Description, string Version, string Author, string Folder, string Source = "");
 
@@ -49,10 +47,6 @@ internal sealed partial class HexExtensions
 
     // The updates a card was put up for this run, by the extension and the version
     private readonly HashSet<string> catalogOffered = new(StringComparer.OrdinalIgnoreCase);
-
-    // The rows of the catalog while the settings are up, and the line over them
-    private StackPanel? catalogRows;
-    private Label? catalogSaid;
 
     /// <summary>Every extension of the catalog as it was last synced, by name.</summary>
     internal IReadOnlyList<CatalogEntry> Catalog => catalog;
@@ -84,7 +78,6 @@ internal sealed partial class HexExtensions
         context.Work.InBackground(context.Strings.Said("extension_catalog.reading"), () => ReadAll(sources, folder), read =>
         {
             catalog = read;
-            FillCatalogRows();
             CatalogChanged();
             if (look && due)
                 SyncCatalog(asked: false);
@@ -155,7 +148,6 @@ internal sealed partial class HexExtensions
                     context.Notices.Notify(context.Strings.Said("extension_catalog.failed", ("source", source), ("why", catalogProblem)), error: true);
             }
 
-            FillCatalogRows();
             CatalogChanged();
         }, seen: asked);
     }
@@ -268,7 +260,6 @@ internal sealed partial class HexExtensions
             {
                 if (done.State == WorkState.Failed)
                     context.Notices.Notify(context.Strings.Said("extension_catalog.install_failed", ("name", entry.Name), ("why", done.Error ?? "?")), error: true);
-                FillCatalogRows();
                 CatalogChanged();
                 return;
             }
@@ -292,11 +283,9 @@ internal sealed partial class HexExtensions
 
             WatchFolders();
             context.Notices.Say(context.Strings.Said(update ? "extension_catalog.updated" : "extension_catalog.installed", ("name", entry.Name), ("version", entry.Version)));
-            FillCatalogRows();
             CatalogChanged();
         }, cancellable: false);
 
-        FillCatalogRows();
         CatalogChanged();
         return going;
     }
@@ -357,84 +346,6 @@ internal sealed partial class HexExtensions
             if (key == "extension_updates")
                 extensions.SyncCatalog(asked: true);
         }
-    }
-
-    /// <summary>The list under the catalog's settings, made each time the settings open.</summary>
-    private StackPanel MakeCatalogPanel()
-    {
-        var panel = new StackPanel { Spacing = 8.0f, Padding = new UIEdges(14.0f, 6.0f, 10.0f, 14.0f) };
-        catalogSaid = panel.Add(new Label
-        {
-            Markdown = true,
-            Wrap = true,
-            Size = new Vector2(CATALOG_WIDTH, 0.0f),
-            Align = Origin.TopLeft,
-            Anchor = Origin.TopLeft,
-            Pivot = Origin.TopLeft
-        });
-        catalogRows = panel.Add(new StackPanel { Spacing = 10.0f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
-        FillCatalogRows();
-        return panel;
-    }
-
-    // The settings closed, the list let go of
-    private void ForgetCatalogPanel()
-    {
-        catalogRows = null;
-        catalogSaid = null;
-    }
-
-    /// <summary>A row an extension of the catalog, what it is, whether it's here, and Install or Update, written again as that changes.</summary>
-    private void FillCatalogRows()
-    {
-        if (catalogRows is null || catalogSaid is null)
-            return;
-
-        catalogSaid.Text = CatalogLine();
-        foreach (UIComponent row in catalogRows.Children.ToArray())
-            catalogRows.Remove(row);
-
-        foreach (CatalogEntry entry in catalog)
-        {
-            var row = catalogRows.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Anchor = Origin.Left, Pivot = Origin.Left });
-            var (said, button) = StateOf(entry);
-            row.Add(new Label
-            {
-                Text = said,
-                Markdown = true,
-                Wrap = true,
-                Size = new Vector2(CATALOG_WIDTH - CATALOG_BUTTON_WIDTH - 8.0f, 0.0f),
-                Align = Origin.TopLeft
-            });
-
-            if (button is not null)
-            {
-                CatalogEntry of = entry;
-                bool going = Installing(entry) is not null;
-                row.Add(new Button
-                {
-                    Label = going ? context.Strings.Said("extension_catalog.working") : button,
-                    Size = new Vector2(CATALOG_BUTTON_WIDTH, CATALOG_BUTTON_HEIGHT),
-                    Primary = !going,
-                    Enabled = !going,
-                    OnPressed = () => Install(of)
-                });
-            }
-        }
-    }
-
-    // The line over the rows, where the catalog is from and how the last sync went
-    private string CatalogLine()
-    {
-        string source = Kept.ExtensionCatalog;
-        string from = HexExtensionCatalog.PageOf(source) is { } page ? $"[{UIRichText.MarkdownLiteral(source)}]({page})" : UIRichText.MarkdownLiteral(source);
-        if (context.Work.Find(CATALOG_WORK) is not null)
-            return context.Strings.Said("extension_catalog.line_syncing", ("source", from));
-        if (catalogProblem is { } why)
-            return context.Strings.Said("extension_catalog.line_failed", ("source", from), ("why", UIRichText.MarkdownLiteral(why)));
-        if (catalog.Count == 0)
-            return context.Strings.Said("extension_catalog.line_empty", ("source", from));
-        return context.Strings.Said("extension_catalog.line", ("source", from), ("count", catalog.Count.ToString(CultureInfo.InvariantCulture)));
     }
 
     /// <summary>What an extension of the catalog's row has on its button, Install or Update, null for none, for the self test.</summary>

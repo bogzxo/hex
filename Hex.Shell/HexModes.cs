@@ -168,7 +168,7 @@ public static class HexModes
 
         Leaving?.Invoke(Current);
         bool fresh = !made.TryGetValue(to, out Scene? scene);
-        if (fresh)
+        if (scene is null)
             made[to] = scene = make(to, folder);
 
         // Making a mode leaves the garbage of setting it up, taken under the cover as the engine does for any scene. Going
