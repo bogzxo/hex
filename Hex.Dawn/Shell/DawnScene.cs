@@ -540,6 +540,7 @@ internal sealed partial class DawnScene : Scene
     {
         UpdateDialog();
         UpdateClosing();
+        UpdateOpening();
         UpdateHosted();
         UpdateRenderScale();
         Hex.Shell.HexModes.Update(dt);
