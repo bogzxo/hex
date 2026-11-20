@@ -15,6 +15,14 @@ internal sealed partial class DawnScene
         MenuItem? Item(string label) => Commands().FirstOrDefault(pair => LabelOf(pair.Item) == label).Item;
         static string Name(UITreeItem row) => row.Tag is MenuItem item ? LabelOf(item) : row.Text;
 
+        // From Hex's own keys, whatever a suite before left on: the settings suite's look of Visual Studio left its keys
+        // over these, and every check of a key that something else has went by the wrong ones
+        test.Run(() =>
+        {
+            settings.VisualStudioKeys = false;
+            ApplyKeyLayer(force: true);
+        });
+
         test.Check("keys: the menus' keys read and write back as they're written, the odd ones among them", () =>
             new[] { "Ctrl+Shift+F", "Ctrl+\\", "Ctrl+,", "Ctrl+Shift+[", "Del", "Esc", "Shift+F12", "Ctrl+0", "Alt+Up", "Ctrl+=" }
                 .All(written => UIKeys.Tidy(written) == written)
