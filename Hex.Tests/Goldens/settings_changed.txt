@@ -51,6 +51,7 @@ render_scale = "manual"
 render_scale_percent = 37.87
 render_upscaler = "fsr1"
 render_sharpness = 0.37
+text_smoothing = "auto"
 render_composition = "whole_frame"
 effects = "subtle"
 effect_sparks = true

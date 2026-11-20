@@ -104,6 +104,7 @@ internal sealed partial class HexSettings
         Number("render_scale_percent", settings => settings.RenderScalePercent, (settings, value) => settings.RenderScalePercent = value, 25.0f, 100.0f),
         Choice("render_upscaler", settings => settings.RenderUpscaler, (settings, value) => settings.RenderUpscaler = value, "cas", "fsr1", "gsr1", "bilinear", "nearest"),
         Number("render_sharpness", settings => settings.RenderSharpness, (settings, value) => settings.RenderSharpness = value, 0.0f, 1.0f),
+        Choice("text_smoothing", settings => settings.TextSmoothing, (settings, value) => settings.TextSmoothing = value, "auto", "subpixel", "grayscale"),
         Choice("render_composition", settings => settings.RenderComposition, (settings, value) => settings.RenderComposition = value, "native_ui", "whole_frame"),
         Choice("effects", settings => settings.Effects, (settings, value) => settings.Effects = value, "none", "subtle", "all"),
         Flag("effect_sparks", settings => settings.EffectSparks, (settings, value) => settings.EffectSparks = value),

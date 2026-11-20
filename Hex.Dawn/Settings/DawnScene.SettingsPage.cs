@@ -370,6 +370,7 @@ internal sealed partial class DawnScene
             "render_scale_percent" => new NumberValue(hex.settings.RenderScalePercent),
             "render_upscaler" => new StringValue(hex.settings.RenderUpscaler),
             "render_sharpness" => new NumberValue(hex.settings.RenderSharpness),
+            "text_smoothing" => new StringValue(hex.settings.TextSmoothing),
             "render_composition" => new StringValue(hex.settings.RenderComposition),
             "render_scale_now" => new StringValue(hex.DescribeRenderScale()),
             "glass_clarity" => new NumberValue(hex.settings.GlassClarity),
@@ -610,7 +611,11 @@ internal sealed partial class DawnScene
                     settings.RenderScalePercent = Math.Clamp(percent.Value, 25.0f, 100.0f);
                     hex.ApplyRenderScale();
                     break;
-                case ("render_upscaler", StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler):
+                case ("text_smoothing", StringValue { Value: "auto" or "subpixel" or "grayscale" } smoothing):
+                settings.TextSmoothing = smoothing.Value;
+                hex.ApplyRenderScale();
+                break;
+            case ("render_upscaler", StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler):
                     settings.RenderUpscaler = upscaler.Value;
                     hex.ApplyRenderScale();
                     break;

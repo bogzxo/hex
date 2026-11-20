@@ -51,6 +51,7 @@ render_scale = "auto"
 render_scale_percent = 100
 render_upscaler = "cas"
 render_sharpness = 1
+text_smoothing = "auto"
 render_composition = "native_ui"
 effects = "none"
 effect_sparks = false

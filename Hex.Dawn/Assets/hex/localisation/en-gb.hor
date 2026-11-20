@@ -2527,6 +2527,7 @@ let strings = {
         render_scale_percent_help: "With a manual render scale, the share of the window's width and height Hex is drawn at. 100% is every pixel, 50% a quarter of them blown back up.",
         render_composition_title: "What is scaled",
         render_upscaler_title: "Upscaler",
+        text_smoothing_title: "Text smoothing",
         render_sharpness_title: "Sharpness",
         render_sharpness_help: "How hard CAS, FSR 1 or GSR 1 sharpen what they blow up, 0 to 1. 0 is the least ringing round text. Bilinear and nearest don't sharpen.",
         render_scale_now_title: "Render scale now",
@@ -2680,6 +2681,13 @@ let strings = {
     },
 
     settings_choices: {
+        text_smoothing_row: "How the edges of letters are smoothed.",
+        text_smoothing_auto: "Auto",
+        text_smoothing_auto_help: "Subpixel where Windows draws ClearType on a screen under 150%, grey on Mac, Linux, phones and Retina screens.",
+        text_smoothing_subpixel: "Subpixel",
+        text_smoothing_subpixel_help: "Each pixel's red, green and blue stripes smoothed on their own, sharper on an ordinary screen, with colour at the edges up close.",
+        text_smoothing_grayscale: "Grayscale",
+        text_smoothing_grayscale_help: "Grey edges, the same on every screen and in every screenshot.",
         render_scale_row: "How many pixels Hex is drawn with. Fewer is lighter on the GPU, such as an old tablet, but softer.",
         render_scale_auto: "Auto",
         render_scale_auto_help: "What the platform does by itself. A phone or a tablet draws the shorter side at 720 pixels and blows it up, a desktop draws every pixel.",

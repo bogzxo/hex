@@ -113,6 +113,12 @@ internal sealed partial class HexSettings
     /// </summary>
     public string RenderScale = "auto", RenderUpscaler = "cas", RenderComposition = "native_ui";
 
+    /// <summary>
+    /// How the edges of letters are smoothed: auto (ClearType's subpixels where Windows draws them on a screen under
+    /// 150%, grey elsewhere and on Retina), subpixel always, or grayscale always (the same in every screenshot).
+    /// </summary>
+    public string TextSmoothing = "auto";
+
     /// <summary>The share of each side drawn with a manual render scale, 25 to 100, and how hard CAS sharpens, 0 to 1.</summary>
     public float RenderScalePercent = 75.0f, RenderSharpness = 0.0f;
 

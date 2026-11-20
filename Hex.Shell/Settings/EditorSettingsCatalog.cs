@@ -113,6 +113,7 @@ public static class EditorSettingsCatalog
         Choice("render_composition", RENDERING, ["native_ui", "whole_frame"]),
         Choice("render_upscaler", RENDERING, ["cas", "fsr1", "gsr1", "bilinear", "nearest"]),
         new("render_sharpness", HexText.Get("settings_catalog.render_sharpness_title"), UIFormKind.Number, HexText.Get("settings_catalog.render_sharpness_help"), RENDERING, Least: 0.0f, Most: 1.0f, Step: 0.05f, Slider: true),
+        Choice("text_smoothing", RENDERING, ["auto", "subpixel", "grayscale"]),
 
         new("effect_motion", HexText.Get("settings_catalog.effect_motion_title"), UIFormKind.Flag, HexText.Get("settings_catalog.effect_motion_help"), MOTION),
         new("ui_animation", HexText.Get("settings_catalog.ui_animation_title"), UIFormKind.Number, HexText.Get("settings_catalog.ui_animation_help"), MOTION, Least: 0.0f, Most: 3.0f, Step: 0.1f, Slider: true, Unit: "×"),
@@ -248,6 +249,7 @@ public static class EditorSettingsCatalog
         ["render_composition"] = new StringValue("native_ui"),
         ["render_upscaler"] = new StringValue("cas"),
         ["render_sharpness"] = new NumberValue(0.0f),
+        ["text_smoothing"] = new StringValue("auto"),
         ["effects"] = new StringValue("none"),
         ["effect_glass"] = Values.Bool(false),
         ["effect_sparks"] = Values.Bool(false),
