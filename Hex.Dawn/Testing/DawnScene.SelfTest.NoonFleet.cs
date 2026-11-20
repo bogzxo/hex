@@ -185,13 +185,18 @@ internal sealed partial class DawnScene
         test.Wait();
 
         // Everything finished long ago and nothing open: the fleet is its finished head alone, a quiet line over it
+        // (the chats suites before this one left are put aside for it, some of them working or just done)
         HexAgentChat? older = null;
+        List<HexAgentChat> aside = [];
         test.Run(() =>
         {
             StopAgent(working);
             foreach (HexAgentChat chat in (HexAgentChat?[])[just, working])
                 if (chat is not null)
                     CloseAgentChat(chat);
+            aside.AddRange(agentChats.Where(chat => chat != old));
+            foreach (HexAgentChat chat in aside)
+                agentChats.Remove(chat);
             older = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Older finished" };
             older.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "an older thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done")]);
             agentChats.Add(older);
@@ -215,6 +220,8 @@ internal sealed partial class DawnScene
             foreach (HexAgentChat chat in (HexAgentChat?[])[old, older])
                 if (chat is not null)
                     CloseAgentChat(chat);
+            foreach (HexAgentChat chat in aside)
+                agentChats.Add(chat);
             chatsFinishedOpen = wasOpen;
             ShowFace(HexFace.Dawn);
         });
