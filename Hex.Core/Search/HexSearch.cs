@@ -103,9 +103,16 @@ internal static partial class HexSearch
                 foreach (string inside in Directory.GetDirectories(folder))
                 {
                     string under = Inside(Path.GetFileName(inside));
-                    if (Out(under, true) || (File.Exists(Path.Combine(inside, ".git")) && (openNames is null || openNames.Contains(Path.GetFileName(inside)))))
+
+                    // A repository of its own inside the folder (the engine and Hex cloned into the workspace the game's
+                    // repository is) is out of reach of the .gitignores above it, the way git and ripgrep take it: they
+                    // belong to another repository. A workspace whose .gitignore leaves out the repositories cloned into it
+                    // had them walked as if they weren't there, a few files of the top found and nothing of the code
+                    bool repository = Directory.Exists(Path.Combine(inside, ".git"));
+                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true))
+                        || (File.Exists(Path.Combine(inside, ".git")) && (openNames is null || openNames.Contains(Path.GetFileName(inside)))))
                         continue;
-                    pending.Push((inside, under, ignores));
+                    pending.Push((inside, under, repository ? [] : ignores));
                 }
             }
             catch (Exception)
