@@ -290,15 +290,17 @@ internal sealed partial class DawnScene
             typingWantedSince = -1;
         else if (typingWantedSince < 0)
             typingWantedSince = now;
-        bool wanted = quiet && (agentsTyping is not null || now - typingWantedSince >= TYPING_AFTER_MS);
-        if (wanted && agentsTyping is null)
+        bool shown = quiet && now - typingWantedSince >= TYPING_AFTER_MS;
+        // The row keeps its room the whole time the agent runs and only the dots come and go in it: a row put in and
+        // taken out between one tool and the next moved everything above it by its height
+        if (chat.Running && agentsTyping is null)
         {
             agentsTyping = agentsRows.Add(MakeTypingDots());
             BounceDots(agentsTyping);
             if (!still)
                 SlideRowIn(agentsTyping);
         }
-        else if (!wanted && agentsTyping is not null)
+        else if (!chat.Running && agentsTyping is not null)
         {
             agentsRows.Remove(agentsTyping);
             agentsTyping = null;
@@ -307,6 +309,8 @@ internal sealed partial class DawnScene
         {
             agentsRows.MoveChild(agentsTyping, agentsRows.Children.Count);
         }
+        if (agentsTyping is not null)
+            agentsTyping.Children[0].Visible = shown;
     }
 
     // An empty chat, what it's for and a few things to ask to start from, coming in one after another

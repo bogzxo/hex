@@ -365,7 +365,7 @@ internal sealed partial class DawnScene
         DrawHarnessSaved();
 
         // The dots wait out a quiet moment by the clock, not by the chat changing
-        if (agentChat is { Running: true } going && agentsDrawn == (going.Id, going.Version) && agentsTyping is null)
+        if (agentChat is { Running: true } going && agentsDrawn == (going.Id, going.Version) && agentsTyping is not { Children: [{ Visible: true }, ..] })
             ShowTyping(going);
 
         var now = (agentChat?.Id ?? 0, agentChat?.Version ?? -1);
