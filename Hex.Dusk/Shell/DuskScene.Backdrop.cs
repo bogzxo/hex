@@ -91,7 +91,8 @@ internal sealed partial class DuskScene
         HexDialogs.OpenFile("A picture to put behind the terminals", System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyPictures),
             [("Pictures (*.png, *.jpg)", "*.png;*.jpg;*.jpeg")], dialogs).ContinueWith(picked =>
             {
-                if (picked.Result is not { Length: > 0 } path)
+                // A dialog that failed or was closed is no picture, and reading .Result of it would throw in here unseen
+                if (!picked.IsCompletedSuccessfully || picked.Result is not { Length: > 0 } path)
                     return;
 
                 later.Enqueue(() =>
