@@ -19,8 +19,7 @@ internal sealed partial class DawnScene
     // everything, the bars dressed for the skin, the line under the title bar (Hex.Shell's HexFrame)
     private HexFrame frame = null!;
 
-    // The field of light and the module it's in, the frame's
-    private UIModule glowModule => frame.GlowModule;
+    // The field of light, the frame's
     private GlowField glow => frame.Glow;
 
     // How far in from its column a card is drawn (twice that is the gap between two), and how round it is
