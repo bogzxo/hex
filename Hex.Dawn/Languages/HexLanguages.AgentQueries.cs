@@ -22,20 +22,23 @@ internal sealed partial class HexLanguages
 
     private readonly Dictionary<string, AgentFile> agentFiles = new(PlatformPaths.Comparer);
 
-    // What servers last said is wrong with each file, and how many times they've said it, open in a tab or not
-    private readonly Dictionary<string, (int Count, IReadOnlyList<UICodeDiagnostic> Found, string Server)> agentHeard = new(PlatformPaths.Comparer);
+    // What servers last said is wrong with each file, how many times they've said it and when, open in a tab or not
+    private readonly HexHeardLog agentHeard = new();
 
     /// <summary>A server said what's wrong with a file, kept for the agent tools, whoever it's open for.</summary>
     private void AgentHeard(LanguageServer server, string path, IReadOnlyList<UICodeDiagnostic> found, bool linted)
     {
         if (!linted && !(agentFiles.TryGetValue(path, out AgentFile? mine) && ReferenceEquals(mine.Server, server)))
             return;
-        agentHeard[path] = (agentHeard.GetValueOrDefault(path).Count + 1, found, server.Name);
+        agentHeard.Record(path, found, server.Name, System.Environment.TickCount64);
     }
 
     /// <summary>How many times a file's been said of by a server, for waiting on the next time, and the last of it.</summary>
     internal (int Count, IReadOnlyList<UICodeDiagnostic>? Found, string? Server) AgentDiagnostics(string path) =>
-        agentHeard.TryGetValue(Path.GetFullPath(path), out var heard) ? heard : (0, null, null);
+        agentHeard.Of(Path.GetFullPath(path)) is var heard ? (heard.Count, heard.Found, heard.Server) : default;
+
+    /// <summary>Whether a server's said what's wrong with a file at or after a moment (a tick), the moment an edit was sent.</summary>
+    internal bool AgentSaidSince(string path, long since) => agentHeard.SaidSince(Path.GetFullPath(path), since);
 
     /// <summary>
     /// The server for a file an agent asks about, open in a tab or not, the file's latest text sent to it first. With
@@ -52,8 +55,8 @@ internal sealed partial class HexLanguages
                 linting.Change(full, open.Editor.Text);
 
             // What its server said before an agent asked, a tab that's said nothing new since would be waited on for ever
-            if (!agentHeard.ContainsKey(full) && lintFound.TryGetValue(open, out IReadOnlyList<UICodeDiagnostic>? said))
-                agentHeard[full] = (1, said, linting.Name);
+            if (!agentHeard.Has(full) && lintFound.TryGetValue(open, out IReadOnlyList<UICodeDiagnostic>? said))
+                agentHeard.Record(full, said, linting.Name, 0);
             return linting;
         }
 

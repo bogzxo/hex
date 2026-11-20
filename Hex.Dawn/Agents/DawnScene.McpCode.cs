@@ -22,10 +22,10 @@ internal sealed partial class DawnScene
     private const int MCP_CHECK_SETTLE_MS = 600;
 
     // How long after a server's up a file it hasn't said anything of is sent it again, for hex_diagnostics
-    private const int MCP_DIAGNOSTICS_NUDGE_MS = 4_000;
+    private const int MCP_DIAGNOSTICS_LATE_NUDGE_MS = 20_000;
 
     // How long the check after an edit waits for a file's server, the first time for a server longer (it's warming up)
-    private const float MCP_CHECK_SECONDS = 4.0f, MCP_FIRST_CHECK_SECONDS = 12.0f;
+    private const float MCP_CHECK_SECONDS = 10.0f, MCP_FIRST_CHECK_SECONDS = 15.0f;
 
     // The servers a check after an edit has waited on before, the first check of each waits longer
     private readonly HashSet<LanguageServer> mcpChecked = new(ReferenceEqualityComparer.Instance);
@@ -85,8 +85,8 @@ internal sealed partial class DawnScene
                 McpSchema.Object([
                     ("paths", McpSchema.String("The files, a comma between them, at most 10.")),
                     ("errors_only", McpSchema.Flag("Leave the warnings out.")),
-                    ("wait", McpSchema.Integer("Seconds to wait for each file's server to say something of it, 30 by default.")), Max()], "paths"), ReadOnly: true),
-                McpDiagnostics, Timeout: 150.0f),
+                    ("wait", McpSchema.Integer("Seconds to wait for each file's server to say something of it once the server's up, 60 by default (csharp-ls loading a big solution takes most of it, an answer ends the wait). A server still starting is waited on up to 60 s besides.")), Max()], "paths"), ReadOnly: true),
+                McpDiagnostics, Timeout: 190.0f),
 
             new(new McpTool("hex_edit_symbol", "Replace a declaration",
                 "Replace a whole declaration (a method, a class, a function, a property) found by its name with new text, no old_string and no reading it first. Its comments and attributes above stay unless with_comments. Empty new_text deletes it. The errors its server says after come back with it.",
@@ -370,7 +370,8 @@ internal sealed partial class DawnScene
         string title = $"{(incoming ? "Callers of" : "Calls from")} {used[0].Name}{overloads}, {depth} deep, {count} in all.{moved}{also}"
             + (incoming ? " Each caller's line is where it calls." : string.Empty)
             + (constructors > 0 ? $" {constructors} constructor calls left out, skip_constructors false shows them." : string.Empty);
-        string tree = HexHierarchy.Describe(title, roots, relative, budget, "ask again from one of them");
+        HexHierarchy.MarkShared(roots);
+        string tree = HexHierarchy.Describe(title, roots, relative, budget, "ask again from one of them", incoming ? "also called by" : "also calls");
 
         // No callers by the server (csharp-ls has none for an interface's member, the calls go through the interface), the
         // uses by name, which are where it's called from whatever it's called through
@@ -913,8 +914,8 @@ internal sealed partial class DawnScene
 
         bool errorsOnly = args.Flag("errors_only");
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
-        int waitSeconds = Math.Clamp(args.Integer("wait") ?? 30, 0, 120);
-        long giveUp = System.Environment.TickCount64 + waitSeconds * 1000L;
+        int waitSeconds = Math.Clamp(args.Integer("wait") ?? 60, 0, 120);
+        long asked = System.Environment.TickCount64;
 
         var notes = new Dictionary<string, string>(PlatformPaths.Comparer);
         var before = new Dictionary<string, int>(PlatformPaths.Comparer);
@@ -926,11 +927,17 @@ internal sealed partial class DawnScene
         }
 
         // Each file waited on until its server's said something of it, a file it already has said of no longer. A server
-        // that took the file while it was starting and has said nothing a while after it's up is sent it again
+        // still starting is waited on first, up to the time a server's given to start, and wait counts from when it's up:
+        // then a file it took while starting is sent it again at once (one may not look at it until it changes), and any
+        // still unsaid of after a long while once more. Not oftener: each sending is a new version, and what the server
+        // was about to say of the one before is thrown away as stale when it comes (csharp-ls takes longer than a few
+        // seconds loading a solution, sent the file every 4 s it never answered at all)
         bool Waiting(string path) => !notes.ContainsKey(path) && languages.AgentDiagnostics(path).Count == 0;
+        var startedCold = new HashSet<string>(paths.Where(path => !notes.ContainsKey(path) && languages.AgentServer(path, start: false, out _) is { IsReady: false }), PlatformPaths.Comparer);
         var readySince = new Dictionary<string, long>(PlatformPaths.Comparer);
-        var nudged = new HashSet<string>(PlatformPaths.Comparer);
-        while (paths.Any(Waiting) && System.Environment.TickCount64 < giveUp)
+        var nudged = new Dictionary<string, int>(PlatformPaths.Comparer);
+        bool Due(string path, long now) => readySince.TryGetValue(path, out long since) ? now - since < waitSeconds * 1000L : now - asked < MCP_SERVER_START_MS;
+        while (paths.Any(path => Waiting(path) && Due(path, System.Environment.TickCount64)))
         {
             foreach (string path in paths.Where(Waiting))
             {
@@ -939,15 +946,19 @@ internal sealed partial class DawnScene
                 long now = System.Environment.TickCount64;
                 if (!readySince.TryGetValue(path, out long since))
                     readySince[path] = since = now;
-                if (now - since > MCP_DIAGNOSTICS_NUDGE_MS && nudged.Add(path))
+                int times = nudged.GetValueOrDefault(path);
+                if (times == 0 && startedCold.Contains(path) || times <= (startedCold.Contains(path) ? 1 : 0) && now - since > MCP_DIAGNOSTICS_LATE_NUDGE_MS)
+                {
+                    nudged[path] = times + 1;
                     languages.AgentNudge(path);
+                }
             }
             yield return null;
         }
 
         // One said of before is given a moment for what it says of the latest text, a file just written was told again
         long settle = System.Environment.TickCount64 + 1500;
-        while (paths.Any(path => !notes.ContainsKey(path) && languages.AgentDiagnostics(path).Count == before[path] && before[path] > 0) && System.Environment.TickCount64 < Math.Min(settle, giveUp))
+        while (paths.Any(path => !notes.ContainsKey(path) && languages.AgentDiagnostics(path).Count == before[path] && before[path] > 0) && System.Environment.TickCount64 < settle)
             yield return null;
 
         Func<string, string> relative = McpRelative();
@@ -965,7 +976,10 @@ internal sealed partial class DawnScene
             if (count == 0 || found is null)
             {
                 notReady++;
-                lines.Add($"{relative(path)}: not ready, its server said nothing of it in {waitSeconds} s{(languages.AgentServer(path, start: false, out _) is { IsReady: false } ? " (it's still starting)" : string.Empty)}, ask again in a moment or with a bigger wait.");
+                long waited = (System.Environment.TickCount64 - asked) / 1000;
+                lines.Add(readySince.ContainsKey(path) || languages.AgentServer(path, start: false, out _) is { IsReady: true }
+                    ? $"{relative(path)}: not ready, its server is up but said nothing of it in {waitSeconds} s (it may still be loading the project), ask again in a moment or with a bigger wait."
+                    : $"{relative(path)}: not ready, its server is still starting ({waited} s), ask again in a moment.");
                 continue;
             }
 
@@ -1000,7 +1014,7 @@ internal sealed partial class DawnScene
     /// isn't started for this), the errors as lines to add to the answer of the change. Nulls while waiting, the text
     /// last, empty when there's nothing to say.
     /// </summary>
-    private IEnumerable<string?> McpCheckAfter(string path)
+    private IEnumerable<string?> McpCheckAfter(string path, long edited)
     {
         // A server that isn't up yet is started for the next check rather than waited on now, the change has been made
         if (languages.AgentServer(path, start: true, out _) is not { } server || server.Failure is not null)
@@ -1014,17 +1028,16 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        // The first check a server's asked for waits longer, a server just up is still loading the project
+        // The first check a server's asked for waits longer, a server just up is still loading the project. What's waited
+        // for is something it says after the edit was sent, not what it was saying of the text before
         float seconds = mcpChecked.Add(server) ? MCP_FIRST_CHECK_SECONDS : MCP_CHECK_SECONDS;
-        int before = languages.AgentDiagnostics(path).Count;
-
         long giveUp = System.Environment.TickCount64 + (long)(seconds * 1000);
-        while (languages.AgentDiagnostics(path).Count == before && System.Environment.TickCount64 < giveUp)
+        while (!languages.AgentSaidSince(path, edited) && System.Environment.TickCount64 < giveUp)
             yield return null;
 
         // A server often says a file twice, at once as it's opened or changed (pyright with nothing) and again once it's
         // looked at it, the last of what comes in a moment is the one
-        for (int heard = languages.AgentDiagnostics(path).Count; heard != before;)
+        for (int heard = languages.AgentDiagnostics(path).Count; languages.AgentSaidSince(path, edited);)
         {
             long settle = System.Environment.TickCount64 + MCP_CHECK_SETTLE_MS;
             while (languages.AgentDiagnostics(path).Count == heard && System.Environment.TickCount64 < Math.Min(settle, giveUp + MCP_CHECK_SETTLE_MS))
@@ -1034,10 +1047,11 @@ internal sealed partial class DawnScene
             heard = languages.AgentDiagnostics(path).Count;
         }
 
-        var (count, found, _) = languages.AgentDiagnostics(path);
-        if (count == before || found is null)
+        var (_, found, _) = languages.AgentDiagnostics(path);
+        if (!languages.AgentSaidSince(path, edited) || found is null)
         {
-            yield return $"\n{server.Name}: no answer after {seconds:0} s (not the same as no errors, its server may still be loading the project), hex_diagnostics asks again.";
+            int before = found?.Count(each => !each.Warning) ?? -1;
+            yield return $"\n{server.Name}: no answer of the edit after {seconds:0} s (not the same as no errors{(before >= 0 ? $", before it there {(before == 1 ? "was 1 error" : $"were {before} errors")}" : string.Empty)}), hex_diagnostics asks again.";
             yield break;
         }
 
@@ -1045,7 +1059,7 @@ internal sealed partial class DawnScene
         int warnings = found.Count(each => each.Warning && !each.Hint);
         if (errors.Count == 0)
         {
-            yield return $"\n{server.Name}: no errors{(warnings > 0 ? $", {warnings} warnings" : string.Empty)}.";
+            yield return $"\n{server.Name}: clean, no errors after the edit{(warnings > 0 ? $", {warnings} warnings" : string.Empty)}.";
             yield break;
         }
 
@@ -1056,6 +1070,28 @@ internal sealed partial class DawnScene
         if (errors.Count > 10)
             said.Append($"\n... {errors.Count - 10} more, hex_diagnostics lists them.");
         yield return said.ToString();
+    }
+
+    /// <summary>
+    /// Lines first to last taken out of a file, the blank lines either side of them made one run as long as the longer
+    /// of the two was, so the spacing between the neighbours stays as it was (two blank lines between Python's functions,
+    /// not four).
+    /// </summary>
+    internal static string[] WithoutLines(string[] lines, int first, int last)
+    {
+        static bool Blank(string line) => line.Trim().Length == 0;
+        int above = 0, below = 0;
+        while (first - above - 1 >= 0 && Blank(lines[first - above - 1]))
+            above++;
+        while (last + below + 1 < lines.Length && Blank(lines[last + below + 1]))
+            below++;
+
+        // At the end of the file the blank lines before it go too (the file still ends with its line break), at the top
+        // the ones after it
+        if (last + below + 1 >= lines.Length)
+            return [.. lines.Take(first - above), .. lines.Length > 0 && lines[^1].Length == 0 && first - above > 0 ? [string.Empty] : Array.Empty<string>()];
+        int skip = first - above == 0 ? below : Math.Min(above, below);
+        return [.. lines.Take(first), .. lines.Skip(last + 1 + skip)];
     }
 
     private IEnumerable<McpToolResult?> McpEditSymbol(JsonObject args)
@@ -1113,7 +1149,7 @@ internal sealed partial class DawnScene
         }
 
         string[] put = replacement.Length == 0 ? [] : replacement.TrimEnd('\n').Split('\n');
-        string[] changed = [.. lines.Take(first), .. put, .. lines.Skip(last + 1)];
+        string[] changed = put.Length == 0 ? WithoutLines(lines, first, last) : [.. lines.Take(first), .. put, .. lines.Skip(last + 1)];
         string text = string.Join('\n', changed);
         string done = $"{(put.Length == 0 ? "Deleted" : "Replaced")} {here.Symbol.Kind} {here.Symbol.Full}, {found.File.Relative}:{first + 1}-{last + 1} ({last - first + 1} lines, now {put.Length}).{(here.AlsoSaid.Length > 0 ? $" {here.AlsoSaid}" : string.Empty)}";
         if (open is not null)

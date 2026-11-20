@@ -114,8 +114,9 @@ internal sealed partial class DawnScene
     {
         if (!args.Flag("check", true))
             yield break;
+        long edited = System.Environment.TickCount64;
         languages.AgentFileWritten(path);
-        foreach (string? step in McpCheckAfter(path))
+        foreach (string? step in McpCheckAfter(path, edited))
             yield return step;
     }
 
