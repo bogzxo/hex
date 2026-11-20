@@ -14,24 +14,36 @@ internal sealed partial class HexCodeIndex
             return 90;
         if (name.StartsWith(asked, StringComparison.OrdinalIgnoreCase))
             return 70;
-        if (asked.Length > 1 && Capitals(name).StartsWith(asked, StringComparison.OrdinalIgnoreCase))
+        if (asked.Length > 1 && CapitalsStartWith(name, asked))
             return 55;
         if (name.Contains(asked, StringComparison.OrdinalIgnoreCase))
             return 40;
         return 0;
     }
 
-    // The capitals of a name and the letter after each underscore, QueueMcp is QM, run_task is RT
-    private static string Capitals(string name)
+    /// <summary>A query's Container.Name split, the container null when there's no dot inside it.</summary>
+    internal static (string? Container, string Name) SplitContainer(string asked)
     {
-        var capitals = new System.Text.StringBuilder();
-        for (int i = 0; i < name.Length; i++)
+        int dot = asked.LastIndexOf('.');
+        return dot > 0 && dot < asked.Length - 1 ? (asked[..dot], asked[(dot + 1)..]) : (null, asked);
+    }
+
+    // Whether the capitals of a name (and the letter after each underscore, QueueMcp is QM, run_task is RT) start with
+    // what's asked, worked out a letter at a time with nothing made: it ran for nearly every symbol of every search
+    private static bool CapitalsStartWith(string name, string asked)
+    {
+        int matched = 0;
+        for (int i = 0; i < name.Length && matched < asked.Length; i++)
         {
             if (i == 0 || char.IsUpper(name[i]) || (name[i - 1] == '_' && name[i] != '_'))
-                capitals.Append(char.ToUpperInvariant(name[i]));
+            {
+                if (char.ToUpperInvariant(name[i]) != char.ToUpperInvariant(asked[matched]))
+                    return false;
+                matched++;
+            }
         }
 
-        return capitals.ToString();
+        return matched == asked.Length;
     }
 
     private static int KindScore(string kind) => kind switch
@@ -47,28 +59,39 @@ internal sealed partial class HexCodeIndex
     public static List<(HexIndexedFile File, HexSymbol Symbol, int Score)> FindSymbols(HexIndexSnapshot index, string query, string? kind = null, string? under = null)
     {
         string asked = query.Trim();
-        string? container = null;
-        int dot = asked.LastIndexOf('.');
-        if (dot > 0 && dot < asked.Length - 1)
-            (container, asked) = (asked[..dot], asked[(dot + 1)..]);
+        (string? container, asked) = SplitContainer(asked);
 
         var found = new List<(HexIndexedFile, HexSymbol, int)>();
-        IEnumerable<(HexIndexedFile File, HexSymbol Symbol)> candidates = index.ByName.TryGetValue(asked.ToLowerInvariant(), out var exact) && asked.Length > 0
-            ? exact.Concat(index.Files.SelectMany(file => file.Symbols.Where(symbol => !symbol.Name.Equals(asked, StringComparison.OrdinalIgnoreCase)).Select(symbol => (file, symbol))))
-            : index.Files.SelectMany(file => file.Symbols.Select(symbol => (file, symbol)));
-
-        foreach (var (file, symbol) in candidates)
+        void Consider(HexIndexedFile file, HexSymbol symbol)
         {
             if (under is not null && !file.Relative.StartsWith(under, StringComparison.OrdinalIgnoreCase))
-                continue;
+                return;
             if (!KindFits(symbol.Kind, kind))
-                continue;
+                return;
             if (container is not null && !symbol.Container.EndsWith(container, StringComparison.OrdinalIgnoreCase))
-                continue;
+                return;
 
             int score = NameScore(symbol.Name, asked);
             if (score > 0)
                 found.Add((file, symbol, score + KindScore(symbol.Kind)));
+        }
+
+        // The ones of exactly that name straight out of the table, then every other symbol, plain loops over what's there
+        bool byName = false;
+        if (asked.Length > 0 && index.ByName.TryGetValue(asked.ToLowerInvariant(), out var exact))
+        {
+            byName = true;
+            foreach (var (file, symbol) in exact)
+                Consider(file, symbol);
+        }
+        foreach (HexIndexedFile file in index.Files)
+        {
+            foreach (HexSymbol symbol in file.Symbols)
+            {
+                if (byName && symbol.Name.Equals(asked, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                Consider(file, symbol);
+            }
         }
 
         found.Sort((a, b) =>
