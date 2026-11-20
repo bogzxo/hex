@@ -87,6 +87,7 @@ internal sealed partial class HexSettings
         Choice("csharp_colors", settings => settings.CSharpColors, (settings, value) => settings.CSharpColors = value, "resharper", "visual_studio", "skin"),
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
+        Flag("agents_resume_after_limit", settings => settings.AgentsResumeAfterLimit, (settings, value) => settings.AgentsResumeAfterLimit = value),
         Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),

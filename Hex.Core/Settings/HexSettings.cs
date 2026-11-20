@@ -245,6 +245,12 @@ internal sealed partial class HexSettings
     public bool NoAi;
 
     /// <summary>
+    /// Whether a chat a usage or session limit stopped is started again by itself once the limit has reset, told to carry
+    /// on, so agentic work left running goes on without anybody there. On unless turned off.
+    /// </summary>
+    public bool AgentsResumeAfterLimit = true;
+
+    /// <summary>
     /// Whether Don't show again was pressed on the card Agentic puts up while the server is off, saying what switching
     /// it on saves.
     /// </summary>

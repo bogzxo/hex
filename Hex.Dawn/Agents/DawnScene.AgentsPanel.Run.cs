@@ -496,6 +496,7 @@ internal sealed partial class DawnScene
     {
         TickStopping();
         TickCompactAfter();
+        TickResumeAfterLimits();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];

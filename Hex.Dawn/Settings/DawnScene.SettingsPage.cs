@@ -313,6 +313,7 @@ internal sealed partial class DawnScene
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "mcp_server" => Values.Bool(hex.settings.McpServer),
             "no_ai" => Values.Bool(hex.settings.NoAi),
+            "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
             "backdrop_terminal" => Values.Bool(hex.settings.BackdropTerminal),
@@ -482,7 +483,10 @@ internal sealed partial class DawnScene
                     settings.McpServer = agents.Value;
                     hex.ApplyMcp();
                     break;
-                case ("no_ai", BooleanValue noAi):
+                case ("agents_resume_after_limit", BooleanValue resume):
+                settings.AgentsResumeAfterLimit = resume.Value;
+                break;
+            case ("no_ai", BooleanValue noAi):
                     settings.NoAi = noAi.Value;
                     hex.NoAiChanged();
                     break;
