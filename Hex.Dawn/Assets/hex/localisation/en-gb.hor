@@ -286,7 +286,11 @@ let strings = {
         middle_scroll: "Middle-mouse scrolling moves lists, trees and tables smoothly, at a speed you set.",
         go_motion: "Set scroll speed",
         csharp_analyzers: "C# analysers report code-style and naming suggestions where the language server supports them.",
-        go_problems: "Open Problems"
+        go_problems: "Open Problems",
+        persistent_process: "Persistent Process keeps Hex asleep in the background when you close it, a few megabytes and nothing running, so it opens again in a blink.",
+        go_persistent: "Turn it on",
+        launch_faster: "Hex starts faster: fonts, pictures and the loading screen are kept between runs, and what isn't needed for the first frame waits.",
+        go_launch: "See Speed settings"
     },
 
     // The column on the right
