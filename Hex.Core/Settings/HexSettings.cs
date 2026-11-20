@@ -36,6 +36,9 @@ internal sealed partial class HexSettings
     /// <summary>How wide the lists on the left and the properties on the right were dragged, 0 for as their layout has them.</summary>
     public float LeftWidth, RightWidth;
 
+    /// <summary>How wide Agentic's fleet and its Details were dragged, 0 for the widths Agentic has by itself.</summary>
+    public float NoonFleetWidth, NoonContextWidth;
+
     /// <summary>How tall the list of layers and the panel under the editor were dragged, 0 for what the editor works out by itself.</summary>
     public float LayersHeight, PanelHeight;
 

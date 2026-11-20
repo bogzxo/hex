@@ -65,7 +65,9 @@ internal sealed partial class DawnScene
         // later at the most, and not under a held button, made again between the press and the letting go every click was lost
         long now = System.Environment.TickCount64;
         bool moved = shape != noonContextDrawn.Shape
-            || (version != noonContextDrawn.Version && now - noonContextDrawn.At >= CONTEXT_REDRAW_MS && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left));
+            || (version != noonContextDrawn.Version && now - noonContextDrawn.At >= CONTEXT_REDRAW_MS && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
+            // Its column dragged to another width, the bars made again as wide as it once the edge is let go of
+            || (noonContextWide != noonContextDrawnWide && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left));
         if (!moved)
         {
             if (chat is not null && noonClock is not null)
@@ -77,6 +79,7 @@ internal sealed partial class DawnScene
             return;
         }
         noonContextDrawn = (shape, version, now);
+        noonContextDrawnWide = noonContextWide;
 
         ClearRows(noonContextRows);
         if (chat is null)
@@ -127,11 +130,11 @@ internal sealed partial class DawnScene
                 if (chat.ContextLimit > 0 && share >= COMPACT_OFFERED && CanCompact(chat))
                 {
                     var row = noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 24), Color = Vector4.Zero });
-                    Panel bar = row.Add(ContextBar(share, NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8));
+                    Panel bar = row.Add(ContextBar(share, noonContextWide - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8));
                     bar.Fill = UIFill.None;
                     bar.Anchor = Origin.Left;
                     bar.Pivot = Origin.Left;
-                    bar.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8, 6);
+                    bar.Size = new Vector2(noonContextWide - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8, 6);
                     row.Add(new Button
                     {
                         Label = Said("noon.compact_now"), Icon = "fold", Danger = true, Anchor = Origin.Right, Pivot = Origin.Right, Size = new Vector2(COMPACT_BUTTON, 22),
@@ -165,7 +168,7 @@ internal sealed partial class DawnScene
             {
                 ContextLine(LimitIcon(limit), HexAgentLimits.LimitLine(limit, DateTimeOffset.Now));
                 if (limit.Used >= 0)
-                    noonContextRows.Add(LimitBar((float)Math.Clamp(limit.Used, 0.0, 1.0), LimitColour(limit, Skin), NOON_CONTEXT - noonContext.Padding.Total.X - 10));
+                    noonContextRows.Add(LimitBar((float)Math.Clamp(limit.Used, 0.0, 1.0), LimitColour(limit, Skin), noonContextWide - noonContext.Padding.Total.X - 10));
             }
         }
 
@@ -418,7 +421,7 @@ internal sealed partial class DawnScene
     {
         UISkin? skin = Skin;
         Vector4 fill = colour ?? ContextColour(share);
-        float width = across ?? NOON_CONTEXT - noonContext.Padding.Total.X - 10;
+        float width = across ?? noonContextWide - noonContext.Padding.Total.X - 10;
         var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
         track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = fill });
         return track;

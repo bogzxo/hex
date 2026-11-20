@@ -28,6 +28,12 @@ internal sealed class HexSplitter : Panel
     private UIResize edge;
     private bool lit;
 
+    // When it was last pressed, a second press soon after is a double click
+    private long pressed;
+
+    // How soon a second press has to come to be a double click, in milliseconds
+    private const long DOUBLE_CLICK_MS = 400;
+
     public HexSplitter()
     {
         Anchor = Origin.TopLeft;
@@ -54,6 +60,12 @@ internal sealed class HexSplitter : Panel
 
     /// <summary>What it drags, null while there's nothing to.</summary>
     public UIComponent? Target => target;
+
+    /// <summary>
+    /// What a double click on the line does, the panel put back to the width it has by itself. Nothing when left null, the
+    /// second press is then a drag like the first.
+    /// </summary>
+    public Action? OnReset { get; set; }
 
     /// <summary>
     /// Laid over the boundary for a panel's edge, or put away for no panel.
@@ -103,11 +115,26 @@ internal sealed class HexSplitter : Panel
         if (target is not { } panel)
             return;
 
+        // A second press straight after the first puts the panel back, not another drag
+        long now = Environment.TickCount64;
+        if (OnReset is { } reset && pressed > 0 && now - pressed <= DOUBLE_CLICK_MS)
+        {
+            pressed = 0;
+            reset();
+            return;
+        }
+
+        pressed = now;
         held = panel;
         panel.BeginResize(edge, point);
     }
 
-    protected override void OnPointerDrag(Vector2 point) => held?.DragResize(point);
+    // A press that moved the edge was a drag, the next press is a press of its own and not the second of a double click
+    protected override void OnPointerDrag(Vector2 point)
+    {
+        if (held?.DragResize(point) == true)
+            pressed = 0;
+    }
 
     protected override void OnPointerUp(Vector2 point)
     {

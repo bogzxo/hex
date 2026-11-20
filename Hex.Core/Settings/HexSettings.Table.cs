@@ -45,6 +45,8 @@ internal sealed partial class HexSettings
         Free("right_width", settings => settings.RightWidth, (settings, value) => settings.RightWidth = value),
         Free("layers_height", settings => settings.LayersHeight, (settings, value) => settings.LayersHeight = value),
         Free("panel_height", settings => settings.PanelHeight, (settings, value) => settings.PanelHeight = value),
+        Free("noon_fleet_width", settings => settings.NoonFleetWidth, (settings, value) => settings.NoonFleetWidth = value),
+        Free("noon_context_width", settings => settings.NoonContextWidth, (settings, value) => settings.NoonContextWidth = value),
         Flag("side_bar_hidden", settings => settings.SideBarHidden, (settings, value) => settings.SideBarHidden = value),
         Flag("panel_hidden", settings => settings.PanelHidden, (settings, value) => settings.PanelHidden = value),
         Flag("properties_hidden", settings => settings.PropertiesHidden, (settings, value) => settings.PropertiesHidden = value),

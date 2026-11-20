@@ -21,7 +21,8 @@ namespace Hex.Dawn;
 // the agents never stop. docs/agent-workspace-plan.md has where this goes next.
 internal sealed partial class DawnScene
 {
-    // How wide the fleet and the context are, and the width under which the context gives its room to the chat
+    // How wide the fleet and the context are until they're dragged (DawnScene.Noon.Columns), and the width under which the
+    // context gives its room to the chat
     private const float NOON_FLEET = 300.0f, NOON_CONTEXT = 320.0f, NOON_CONTEXT_FROM = 1180.0f;
 
     // How far a chat started by another is stepped in under it in the fleet
@@ -171,6 +172,7 @@ internal sealed partial class DawnScene
         // right on that edge (the running one never turned)
         noonContextScroll = noonContext.Add(new ScrollPanel { Fill = UIFill.Horizontal, Padding = new UIEdges(3, 2, 6, 6) });
         noonContextRows = noonContextScroll.Add(new StackPanel { Fill = UIFill.Horizontal, Spacing = 4 });
+        GripNoon();
 
         DressChrome();
         commands.Add("Agents/open", Said("noon.command"), () => ShowFace(Face == HexFace.Noon ? HexFace.Dawn : HexFace.Noon), "Ctrl+Alt+Shift+N", "robot", UIKeyUse.BoundWhileTyping);
@@ -310,7 +312,9 @@ internal sealed partial class DawnScene
         noonFleet.Visible = fleet;
         noonCenter.Visible = !over;
         noonFleetBack.Visible = !fleet;
-        float fleetWidth = over ? width : NOON_FLEET;
+        var (sideFleet, sideContext) = NoonWidths(width, fleet && !over, context);
+        float fleetWidth = over ? width : sideFleet;
+        noonContextWide = sideContext > 0.0f ? sideContext : noonContextWide;
         noonView.Size = new Vector2(width, height);
 
         noonFleet.Size = new Vector2(fleetWidth, height);
@@ -319,7 +323,7 @@ internal sealed partial class DawnScene
         if (over)
             return;
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
-        float middle = width - (fleet ? fleetWidth : 0.0f) - (context ? NOON_CONTEXT : 0.0f);
+        float middle = width - (fleet ? fleetWidth : 0.0f) - (context ? noonContextWide : 0.0f);
         float column = MathF.Min(middle - 20.0f, NOON_COLUMN);
         float side = MathF.Floor((middle - column) * 0.5f);
         if (MathF.Abs(noonCenter.Padding.Left - side) > 0.5f)
@@ -330,8 +334,8 @@ internal sealed partial class DawnScene
         agentsView.Size = stage;
         noonInbox.Size = noonChanges.Size = noonPlan.Size = stage;
         FitNoonTabs(stage.X - (noonFleetBack.Visible ? noonFleetBack.Size.X + noonTabs.Spacing : 0.0f));
-        noonContext.Size = new Vector2(NOON_CONTEXT, height);
-        noonContextScroll.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X, MathF.Max(40, height - noonContext.Padding.Total.Y - 28));
+        noonContext.Size = new Vector2(noonContextWide, height);
+        noonContextScroll.Size = new Vector2(noonContextWide - noonContext.Padding.Total.X, MathF.Max(40, height - noonContext.Padding.Total.Y - 28));
     }
 
     // Every agent of the project, those started by agents under the one that started them
