@@ -88,7 +88,7 @@ internal sealed partial class DawnScene
             Harnessed(new McpTool("hex_refs", "Where a name is used",
                 "Every use of a name across the workspace, found by its whole word in the index outside comments and strings, no file open and no language server. Declarations marked *, grouped by file. For the exact symbol at a place in the open file, hex_references.",
                 McpSchema.Object([
-                    ("name", McpSchema.String("The name, or Container.Name for its uses in the files that say Container.")),
+                    ("name", McpSchema.String("The name, or Container.Name for its declarations in Container and its uses on a Container (by text, approximate).")),
                     ("glob", McpSchema.String("Only files that fit this glob.")),
                     ("most", McpSchema.Integer("At most this many places, 80 by default.")), Max()], "name"), ReadOnly: true),
                 (index, args, budget) => index.References(args.String("name") ?? string.Empty, args.String("glob"), Math.Clamp(args.Integer("most") ?? 80, 1, 2000), budget)),

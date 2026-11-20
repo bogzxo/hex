@@ -36,8 +36,15 @@ internal sealed partial class HexCodeIndex
 
             Dictionary<string, HexIndexedFile> byPath = files.ToDictionary(file => file.Path, PlatformPaths.Comparer);
             string RelativeOf(string path) => byPath.TryGetValue(path, out HexIndexedFile? file) ? file.Relative : path;
-            List<HexProject> shown = [.. projects.Where(project => under is not { Length: > 0 } || RelativeOf(project.Path).StartsWith(under.Replace('\\', '/').TrimStart('.', '/'), StringComparison.OrdinalIgnoreCase))
+            List<HexProject> inside = [.. projects.Where(project => under is not { Length: > 0 } || RelativeOf(project.Path).StartsWith(under.Replace('\\', '/').TrimStart('.', '/'), StringComparison.OrdinalIgnoreCase))
                 .OrderBy(project => RelativeOf(project.Path), StringComparer.OrdinalIgnoreCase)];
+
+            // A tool's or an editor extension's package.json nothing of the workspace uses is said once at the end, and a
+            // name two projects have is said with its folder
+            List<HexProject> others = [.. inside.Where(project => IsOtherPackage(project, RelativeOf(project.Path), projects))];
+            List<HexProject> shown = [.. inside.Except(others)];
+            Dictionary<string, string> labels = Labels(projects, RelativeOf);
+            string Label(string path) => labels.TryGetValue(path, out string? label) ? label : NameOf(projects, path);
 
             var said = new HexBudget(budget);
             int edges = projects.Sum(project => project.Uses.Count(use => System.IO.Path.IsPathRooted(use)));
@@ -49,16 +56,50 @@ internal sealed partial class HexCodeIndex
                 string targets = project.Targets.Length == 0 ? string.Empty : $" {project.Targets}";
                 said.Line($"{RelativeOf(project.Path)}  {project.Name} ({project.System} {project.Kind}{targets})");
                 if (project.Uses.Count > 0)
-                    said.Line("  -> " + string.Join(", ", project.Uses.Select(use => System.IO.Path.IsPathRooted(use) ? NameOf(projects, use) : use + "?").Distinct(StringComparer.OrdinalIgnoreCase)));
-                List<string> usedBy = [.. projects.Where(other => other.Uses.Contains(project.Path, PlatformPaths.Comparer)).Select(other => other.Name).Distinct(StringComparer.OrdinalIgnoreCase)];
+                    said.Line("  -> " + string.Join(", ", project.Uses.Select(use => System.IO.Path.IsPathRooted(use) ? Label(use) : use + "?").Distinct(StringComparer.OrdinalIgnoreCase)));
+                List<string> usedBy = [.. projects.Where(other => other.Uses.Contains(project.Path, PlatformPaths.Comparer)).Select(other => Label(other.Path)).Distinct(StringComparer.OrdinalIgnoreCase)];
                 if (usedBy.Count > 0)
                     said.Line("  <- " + string.Join(", ", usedBy));
                 if (project.Packages.Count > 0)
                     said.Line(packages ? "  packages: " + string.Join(", ", project.Packages) : $"  {project.Packages.Count} packages (packages true lists them)");
             }
 
+            if (others.Count > 0)
+                said.Line($"other packages ({others.Count}, under editors/ or tools/, nothing of the workspace uses them): "
+                    + string.Join(", ", others.Select(other => $"{other.Name} ({FolderOf(RelativeOf(other.Path))})")));
             return new HexAnswer(said.Finish("narrow with under or a bigger max_chars"), files.Sum(file => file.Length));
         });
+
+    private static string FolderOf(string relative) => System.IO.Path.GetDirectoryName(relative)?.Replace('\\', '/') is { Length: > 0 } folder ? folder : ".";
+
+    /// <summary>
+    /// An npm package under an editors/ or tools/ folder that no project of the workspace uses and that uses none, an
+    /// editor extension's or a script's package.json, said in one line rather than as a project.
+    /// </summary>
+    internal static bool IsOtherPackage(HexProject project, string relative, List<HexProject> projects)
+    {
+        string path = "/" + relative.Replace('\\', '/');
+        return project.System == "npm" && (path.Contains("/editors/", StringComparison.OrdinalIgnoreCase) || path.Contains("/tools/", StringComparison.OrdinalIgnoreCase))
+            && !project.Uses.Exists(System.IO.Path.IsPathRooted)
+            && !projects.Exists(other => other.Uses.Contains(project.Path, PlatformPaths.Comparer));
+    }
+
+    /// <summary>
+    /// What each project is called in the lists, its name, with its folder where another project has the same name
+    /// (Horizon.Testing three times, Horizon.HIDL in hidl/ and horizon/).
+    /// </summary>
+    internal static Dictionary<string, string> Labels(List<HexProject> projects, Func<string, string> relativeOf)
+    {
+        var labels = new Dictionary<string, string>(PlatformPaths.Comparer);
+        foreach (var same in projects.GroupBy(project => project.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            bool collide = same.Count() > 1;
+            foreach (HexProject project in same)
+                labels[project.Path] = collide ? $"{project.Name} ({FolderOf(relativeOf(project.Path))})" : project.Name;
+        }
+
+        return labels;
+    }
 
     /// <summary>
     /// A project file that isn't one of the workspace's own projects: a package's under node_modules, or anything under a

@@ -36,7 +36,7 @@ internal sealed partial class HexCodeIndex
 
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             string bare = regex ? string.Empty : query;
-            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)), (_, line) => FirstMatch(pattern, line, null),
+            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)), (file, at) => FirstMatch(pattern, file.Lines[at], null),
                 bare, query, Math.Clamp(context, 0, 5), most, budget, "hex_search");
         });
 
@@ -61,17 +61,32 @@ internal sealed partial class HexCodeIndex
             var pattern = new Regex($@"\b{Regex.Escape(asked)}\b", RegexOptions.CultureInvariant);
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
 
-            // Container.Name, the files that say the container somewhere (its own, partial ones and all, and the ones that
-            // use a thing of its type), rather than every Name of anything. By text still, a file that only says a variable
-            // of it is left out, hex_calls asks the language server for the exact ones
+            // Container.Name, by the place rather than the file: a declaration of it inside the container, or a use whose
+            // receiver is plausibly one (the container itself, this or nothing in the container's own files, a name
+            // declared as one). By text still and approximate, hex_calls and hex_references ask the language server
             Regex? of = container.Length > 0 && container.All(c => char.IsLetterOrDigit(c) || c == '_')
                 ? new Regex($@"\b{Regex.Escape(container)}\b", RegexOptions.CultureInvariant) : null;
-            bool Says(HexIndexedFile file) => of is null || file.Symbols.Any(symbol => symbol.Name == container) || file.Lines.Any(line => line.Contains(container, StringComparison.Ordinal) && of.IsMatch(line));
+            if (of is null)
+            {
+                return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)),
+                    (file, at) => FirstMatch(pattern, file.Lines[at], file), asked, asked, 0, most, budget, "hex_refs");
+            }
 
-            HexAnswer found = Grouped(index, file => (only.Length == 0 || only.Any(each => each.Matches(file.Relative, false))) && Says(file),
-                (file, line) => FirstMatch(pattern, line, file),
+            var receivers = new HexReceivers(index, container);
+            int leftOut = 0;
+            HexAnswer found = Grouped(index, file => (only.Length == 0 || only.Any(each => each.Matches(file.Relative, false))) && receivers.Mentions(file),
+                (file, at) =>
+                {
+                    int column = receivers.FirstOf(pattern, file, at, asked, out bool dropped);
+                    if (dropped)
+                        leftOut++;
+                    return column;
+                },
                 asked, asked, 0, most, budget, "hex_refs");
-            return of is null ? found : found with { Text = $"Only files that say {container}, {asked} anywhere else left out.\n" + found.Text };
+            return found with
+            {
+                Text = $"{container}.{asked} by text, approximate: declarations inside {container}, and uses on {container} itself, on this or nothing in its own files, or on a name declared as a {container}. {leftOut} other lines with {asked} left out.\n" + found.Text
+            };
         });
 
     // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
@@ -97,7 +112,7 @@ internal sealed partial class HexCodeIndex
     }
 
     // Whether a place is in a comment or a text, by the line alone, the way a language without // still has its own
-    private static bool InCommentOrText(HexIndexedFile file, string line, int column)
+    internal static bool InCommentOrText(HexIndexedFile file, string line, int column)
     {
         string before = line[..column].TrimStart();
         if (before.StartsWith('*') || before.StartsWith("/*", StringComparison.Ordinal))
@@ -113,7 +128,7 @@ internal sealed partial class HexCodeIndex
     /// The places found, ranked and grouped, and what grep would have said for them, which is what was saved. The plain
     /// way's cost counts every place, not just the ones that fit.
     /// </summary>
-    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, string, int> find,
+    private static HexAnswer Grouped(HexIndexSnapshot index, Func<HexIndexedFile, bool> include, Func<HexIndexedFile, int, int> find,
         string name, string query, int context, int most, int budget, string tool)
     {
         var files = new List<(HexIndexedFile File, List<Place> Places, int Score)>();
@@ -129,7 +144,7 @@ internal sealed partial class HexCodeIndex
             HashSet<int>? declared = null;
             for (int i = 0; i < lines.Length; i++)
             {
-                int first = find(file, lines[i]);
+                int first = find(file, i);
                 if (first < 0)
                     continue;
 
