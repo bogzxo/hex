@@ -180,7 +180,10 @@ internal sealed partial class DawnScene
         commands.Add("View/appearance/look:screen", Said("menus.zen_mode"), ToggleQuiet, "Ctrl+K Z", "screen-full", UIKeyUse.BoundWhileTyping).IsChecked = () => Quiet;
         commands.Add("View/appearance/look:parts", Said("menus.side_bar"), ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
         commands.Add("View/appearance/look:parts", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => PanelOpen;
-        commands.Add("View/appearance/look:parts", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
+        // Not in Agentic, which covers the body and has Ctrl+Alt+B for its fleet: the two share the key, each in its face
+        MenuItem properties = commands.Add("View/appearance/look:parts", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping);
+        properties.IsChecked = () => right.Shown;
+        properties.IsEnabled = () => Face != HexFace.Noon;
 
         commands.Add("View/editor", Said("menus.word_wrap"), ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
         commands.Add("View/editor", Said("menus.code_in_hack"), codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;

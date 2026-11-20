@@ -241,8 +241,9 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.2f);
         test.Check("help: the changelog goes down to 0.0.1, and says which Hex this is", () =>
-            help is { Title: "Release Notes" } && Descendants(help).OfType<Label>().Any(label =>
-                label.Text.Contains("## 0.0.1") && label.Text.Contains($"This is Hex {HexAbout.Label}")));
+            // By the strings' own words, the header names the version however the strings put it
+            help is { } notes && notes.Title == Said("changelog.title") && Descendants(notes).OfType<Label>().Any(label =>
+                label.Text.Contains("## 0.0.1") && label.Text.Contains(HexAbout.Label) && !label.Text.Contains("{version}")));
 
         test.Run(() =>
         {
@@ -251,7 +252,7 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.2f);
         test.Check("help: about fills in what Hex knows, the version", () =>
-            help is { Title: "About Hex" } && Descendants(help).OfType<Label>().Any(label => label.Text.StartsWith("Version ") && !label.Text.Contains("{version}")));
+            help is { } about && about.Title == Said("about.title") && Descendants(about).OfType<Label>().Any(label => label.Text.Contains(HexAbout.Label) && !label.Text.Contains("{version}")));
         test.Run(() => Shot("window-about"));
         test.Run(OpenKeysWindow);
         test.Settle(0.3f);

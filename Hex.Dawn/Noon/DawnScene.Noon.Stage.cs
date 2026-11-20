@@ -155,11 +155,21 @@ internal sealed partial class DawnScene
         commands.Add("Agents/chats", Said("noon.command_stage_inbox"), () => ShowStage(NoonStage.Inbox), STAGE_KEYS[1], "inbox", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
         commands.Add("Agents/chats", Said("noon.command_stage_changes"), () => ShowStage(NoonStage.Changes), STAGE_KEYS[2], "diff", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
         commands.Add("Agents/chats", Said("noon.command_stage_plan"), () => ShowStage(NoonStage.Plan), STAGE_KEYS[3], "checklist", UIKeyUse.BoundWhileTyping).IsEnabled = InAgentic;
-        commands.Add("Agents/chats", Said("noon.command_allow"), () => DecideWaiting(true), ALLOW_KEY, "check", UIKeyUse.BoundWhileTyping);
-        commands.Add("Agents/chats", Said("noon.command_deny"), () => DecideWaiting(false), DENY_KEY, "close", UIKeyUse.BoundWhileTyping);
+        // Only while a request waits, the keys are New Scratchpad in Language's the rest of the time (AnyRequestWaiting)
+        commands.Add("Agents/chats", Said("noon.command_allow"), () => DecideWaiting(true), ALLOW_KEY, "check", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
+        commands.Add("Agents/chats", Said("noon.command_deny"), () => DecideWaiting(false), DENY_KEY, "close", UIKeyUse.BoundWhileTyping).IsEnabled = AnyRequestWaiting;
     }
 
     private bool InAgentic() => Face == HexFace.Noon;
+
+    /// <summary>Whether any agent waits on the person, when Ctrl+Alt+Y and Ctrl+Alt+N answer it rather than doing what else they do.</summary>
+    private bool AnyRequestWaiting()
+    {
+        foreach (HexAgentChat chat in agentChats)
+            if (chat.HasPending)
+                return true;
+        return false;
+    }
 
     // A tab's name, its count is a badge after it and its key a label of its own at the tab's right
     private string TabLabel(NoonStage stage, string count)

@@ -636,7 +636,8 @@ internal sealed partial class DawnScene
         // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu. The
         // scratchpads have a menu of their own off File, the File menu is long enough as it is
         commands.Add("File/new/scratch", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "note", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/new/scratch", Said("scratchpads.new_in"), NewScratchpadIn, "Ctrl+Alt+N", "note", UIKeyUse.BoundWhileTyping);
+        // Ctrl+Alt+N is Deny while an agent waits on the person (Agentic's keys), this the rest of the time
+        commands.Add("File/new/scratch", Said("scratchpads.new_in"), NewScratchpadIn, "Ctrl+Alt+N", "note", UIKeyUse.BoundWhileTyping).IsEnabled = () => !AnyRequestWaiting();
         commands.Add("File/new/scratch", Said("scratchpads.open"), OpenScratchpad, icon: "notebook");
         var move = commands.Add("File/new/scratch", Said("scratchpads.move_command"), MoveScratchpadIntoWorkspace, icon: "go-to-file");
         move.IsEnabled = () => IsScratchpad(document);
