@@ -35,6 +35,9 @@ internal sealed class HexNotebook
     /// <summary>Cells run before the kernel was up, sent once it is.</summary>
     public List<NotebookCell> Waiting { get; } = [];
 
+    /// <summary>How many cells the run going on was asked for (a Run All's every code cell), counted from when nothing was running.</summary>
+    public int RunTotal { get; set; }
+
     /// <summary>Which cell is picked, and whether it's being typed into (edit mode) or not (command mode).</summary>
     public int Selected { get; set; }
     public bool Editing { get; set; }

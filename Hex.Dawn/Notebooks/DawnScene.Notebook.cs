@@ -49,7 +49,6 @@ internal sealed partial class DawnScene
         notebookView = layout.Get<Panel>("notebook_view");
         notebookView.Visible = false;
         Engine.WindowManager.Exclusive += outputPicturesMade = _ => MakeOutputPictures();
-        notebookView.Color = compositor.Skin is { } skin ? skin.PanelColor with { W = 1.0f } : new Vector4(0.08f, 0.09f, 0.12f, 1.0f);
 
         // The picture behind the code, behind the cells too, first so everything is drawn over it
         notebookBackdrop = notebookView.Add(new NotebookBackdrop
@@ -67,7 +66,31 @@ internal sealed partial class DawnScene
             Position = new Vector2(8.0f, -4.0f),
             Spacing = 2.0f
         });
+        notebookStatus = notebookView.Add(new StackPanel
+        {
+            Direction = UIDirection.Horizontal,
+            Anchor = Origin.TopRight,
+            Pivot = Origin.TopRight,
+            Position = new Vector2(-12.0f, -4.0f),
+            Spacing = 10.0f
+        });
         BuildNotebookBar();
+
+        // What an empty notebook says under its one cell, how to go on from there
+        notebookHint = new Label
+        {
+            Text = Said("notebook.empty_hint"),
+            Wrap = true,
+            Markdown = true,
+            Align = Origin.TopLeft,
+            Anchor = Origin.TopLeft,
+            Pivot = Origin.TopLeft,
+            TextScale = 0.14f,
+            Visible = false
+        };
+        notebookHintRow = new StackPanel { Direction = UIDirection.Horizontal, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Visible = false };
+        notebookHintRow.Add(new Spacer { Size = new Vector2(CELL_GUTTER + 4.0f + CELL_RAIL + CELL_RAIL_GAP + CELL_FRAME * 2.0f + 6.0f, 1.0f) });
+        notebookHintRow.Add(notebookHint);
 
         notebookScroll = notebookView.Add(new NotebookScrollPanel
         {
@@ -256,6 +279,7 @@ internal sealed partial class DawnScene
         if (shown.Unreadable is { } why)
             notebookProblem.Text = Said("notebook.not_read", ("name", shown.Document.Name), ("why", why));
 
+        ColourNotebook();
         if (shown.Remake)
             MakeCellViews(shown);
 
@@ -279,7 +303,9 @@ internal sealed partial class DawnScene
         foreach (NotebookCellView view in cellViews)
             FitNotebookWrap(view.Editor);
         notebookProblem.Size = notebookProblem.Size with { X = MathF.Max(100.0f, size.X - 32.0f) };
-        FitCellViews(MathF.Max(200.0f, size.X - notebookCells.Padding.Total.X - 14.0f));
+        float cells = MathF.Max(200.0f, size.X - notebookCells.Padding.Total.X - 14.0f);
+        FitCellViews(cells);
+        notebookHint.Size = notebookHint.Size with { X = MathF.Max(100.0f, cells - CELL_GUTTER - 48.0f) };
     }
 
     // Also called after each cell is arranged: scrolling changes the text origin after measurement.

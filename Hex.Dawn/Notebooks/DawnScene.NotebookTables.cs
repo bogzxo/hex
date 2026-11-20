@@ -28,7 +28,23 @@ internal sealed partial class DawnScene
     private const float TABLE_TEXT = 0.13f;
 
     // Helper method for some markdown as labels and tables, into a panel that's emptied first
-    private void WriteMarkdown(StackPanel into, string markdown, string language, List<NotebookPicture>? pictures = null, System.Text.Json.Nodes.JsonObject? attachments = null)
+    private void WriteMarkdown(StackPanel into, string markdown, string language, List<NotebookPicture>? pictures = null, System.Text.Json.Nodes.JsonObject? attachments = null, bool tools = true)
+    {
+        WriteMarkdownPieces(into, markdown, language, pictures, attachments);
+
+        // A table in prose (a markdown cell's) is part of the writing, its CSV strip is for the tables a cell put out, it
+        // stays on the table's right click
+        if (!tools)
+        {
+            foreach (UIComponent piece in into.Children)
+            {
+                if (piece is NotebookTablePanel table)
+                    table.Strip.Visible = false;
+            }
+        }
+    }
+
+    private void WriteMarkdownPieces(StackPanel into, string markdown, string language, List<NotebookPicture>? pictures, System.Text.Json.Nodes.JsonObject? attachments)
     {
         markdown = NotebookMarkdown.Normalize(markdown);
         foreach (UIComponent child in into.Children.ToList())
@@ -90,7 +106,10 @@ internal sealed partial class DawnScene
             string original = string.Concat(paragraph.Select(piece => piece.Math ? "$" + piece.Text + "$" : piece.Text));
             if (paragraph.Any(piece => piece.Math))
             {
-                if (ProseMathPicture(original, pictures) is { } rendered)
+                // A list item with math in it is drawn as a picture of prose, its marker a bullet as the label's are
+                string trimmed = original.TrimStart();
+                string prose = trimmed.Length > 2 && trimmed[0] is '-' or '*' or '+' && trimmed[1] == ' ' ? "• " + trimmed[2..] : original;
+                if (ProseMathPicture(prose, pictures) is { } rendered)
                     into.Add(rendered);
                 else
                     into.Add(MarkdownLabel(original, language));
@@ -112,7 +131,7 @@ internal sealed partial class DawnScene
             }
             else if (!piece.Math)
             {
-                string[] paragraphs = System.Text.RegularExpressions.Regex.Split(piece.Text, @"\n\n|\n(?=[ \t]*(?:[-*+] |\d+\. ))");
+                string[] paragraphs = MarkdownParagraphs().Split(piece.Text);
                 for (int i = 0; i < paragraphs.Length; i++)
                 {
                     if (i > 0) Flush();
@@ -123,6 +142,12 @@ internal sealed partial class DawnScene
         }
         Flush();
     }
+
+    // Where prose with math in it is cut into paragraphs, each written on its own: a blank line, a list item, and a heading,
+    // the line before it and the line after it. A heading with its text on the next line, the usual way, was glued to that
+    // text and written out as "# Heading text"
+    [System.Text.RegularExpressions.GeneratedRegex(@"\n\n|\n(?=[ \t]*(?:[-*+] |\d+\. ))|\n(?=#{1,6} )|(?<=(?:^|\n)#{1,6} [^\n]*)\n")]
+    private static partial System.Text.RegularExpressions.Regex MarkdownParagraphs();
 
     private static Label MarkdownLabel(string markdown, string language) => new()
     {
