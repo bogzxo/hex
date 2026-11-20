@@ -12,6 +12,10 @@ namespace Hex.Core;
 internal sealed class HexReceivers
 {
     private readonly string container;
+
+    // The container with a dot after it, before it and either side, what a symbol's container is matched by, made once
+    // rather than for every symbol of every file it was asked of
+    private readonly string after, before, between;
     private readonly Regex mentions;
     private readonly Regex typed;
     private readonly Dictionary<HexIndexedFile, HashSet<string>> local = new(ReferenceEqualityComparer.Instance);
@@ -23,6 +27,7 @@ internal sealed class HexReceivers
     public HexReceivers(HexIndexSnapshot index, string container)
     {
         this.container = container;
+        (after, before, between) = (container + ".", "." + container, "." + container + ".");
         string type = Regex.Escape(container);
         mentions = new Regex($@"\b{type}\b", RegexOptions.CultureInvariant);
 
@@ -44,15 +49,25 @@ internal sealed class HexReceivers
         }
     }
 
+    // Whether each file asked of says the container, the constructor and the search both ask of every file
+    private readonly Dictionary<HexIndexedFile, bool> mentioned = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>Whether a file says the container anywhere, the ones looked in at all.</summary>
-    public bool Mentions(HexIndexedFile file) =>
-        file.Symbols.Any(symbol => InContainer(symbol.Container) || symbol.Name == container)
-        || file.Lines.Any(line => line.Contains(container, StringComparison.Ordinal) && mentions.IsMatch(line));
+    public bool Mentions(HexIndexedFile file)
+    {
+        if (!mentioned.TryGetValue(file, out bool says))
+        {
+            mentioned[file] = says = file.Symbols.Any(symbol => InContainer(symbol.Container) || symbol.Name == container)
+                || file.Lines.Any(line => line.Contains(container, StringComparison.Ordinal) && mentions.IsMatch(line));
+        }
+
+        return says;
+    }
 
     // A symbol's container is this one, Namespace.UIDrawList or UIDrawList.Inner
     private bool InContainer(string said) =>
-        said == container || said.EndsWith("." + container, StringComparison.Ordinal) || said.StartsWith(container + ".", StringComparison.Ordinal)
-        || said.Contains("." + container + ".", StringComparison.Ordinal);
+        said == container || said.EndsWith(before, StringComparison.Ordinal) || said.StartsWith(after, StringComparison.Ordinal)
+        || said.Contains(between, StringComparison.Ordinal);
 
     // A file the container is declared in (a partial one's every file), where this and nothing are it
     private bool Own(HexIndexedFile file)

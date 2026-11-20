@@ -36,7 +36,7 @@ internal sealed partial class HexCodeIndex
 
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             string bare = regex ? string.Empty : query;
-            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)), (file, at) => FirstMatch(pattern, file.Lines[at], null),
+            return Grouped(index, file => InGlobs(only, file), (file, at) => FirstMatch(pattern, file.Lines[at], null),
                 bare, query, Math.Clamp(context, 0, 5), most, budget, "hex_search");
         });
 
@@ -68,13 +68,13 @@ internal sealed partial class HexCodeIndex
                 ? new Regex($@"\b{Regex.Escape(container)}\b", RegexOptions.CultureInvariant) : null;
             if (of is null)
             {
-                return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)),
+                return Grouped(index, file => InGlobs(only, file),
                     (file, at) => FirstMatch(pattern, file.Lines[at], file), asked, asked, 0, most, budget, "hex_refs");
             }
 
             var receivers = new HexReceivers(index, container);
             int leftOut = 0;
-            HexAnswer found = Grouped(index, file => (only.Length == 0 || only.Any(each => each.Matches(file.Relative, false))) && receivers.Mentions(file),
+            HexAnswer found = Grouped(index, file => InGlobs(only, file) && receivers.Mentions(file),
                 (file, at) =>
                 {
                     int column = receivers.FirstOf(pattern, file, at, asked, out bool dropped);
@@ -88,6 +88,21 @@ internal sealed partial class HexCodeIndex
                 Text = $"{container}.{asked} by text, approximate: declarations inside {container}, and uses on {container} itself, on this or nothing in its own files, or on a name declared as a {container}. {leftOut} other lines with {asked} left out.\n" + found.Text
             };
         });
+
+    // Whether a file is one of those the globs say, any file when there are none. A loop rather than Any, which made a
+    // closure for every file of every search
+    private static bool InGlobs(HexGlob[] only, HexIndexedFile file)
+    {
+        if (only.Length == 0)
+            return true;
+        foreach (HexGlob glob in only)
+        {
+            if (glob.Matches(file.Relative, false))
+                return true;
+        }
+
+        return false;
+    }
 
     // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
     // Walked as spans so a line that has nothing costs no allocation, which nearly all of them are.
