@@ -508,12 +508,10 @@ internal sealed partial class DawnScene
                 label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
-        // A group's time, all of its calls together, going on while one of them runs
+        // A group's time, how long any of its calls was going, going on while one of them runs
         foreach (var (time, calls) in agentsGroupTimes.Values)
         {
-            double seconds = 0.0;
-            foreach (HexAgentEntry call in calls)
-                seconds += call.Seconds;
+            double seconds = GroupSeconds(calls);
             string said = seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
             if (time.Text != said)
                 time.Text = said;

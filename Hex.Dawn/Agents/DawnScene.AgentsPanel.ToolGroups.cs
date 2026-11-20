@@ -162,7 +162,7 @@ internal sealed partial class DawnScene
         int failed = calls.Count(call => call.State == HexAgentToolState.Failed);
         string kinds = string.Join(", ", calls.GroupBy(call => ShortToolName(call)).OrderByDescending(kind => kind.Count())
             .Take(4).Select(kind => kind.Count() > 1 ? $"{kind.Key} ×{kind.Count()}" : kind.Key));
-        double seconds = calls.Sum(call => call.Seconds);
+        double seconds = GroupSeconds(calls);
         // One that failed on the way and was got past (its last call went) is a warning, a group that ended failing an error
         bool endedFailing = calls[^1].State == HexAgentToolState.Failed;
         string icon = running is not null ? (settings.UiAnimation > 0 ? "loading~spin" : "loading") : endedFailing ? "error" : failed > 0 ? "warning" : "tools";
@@ -232,6 +232,28 @@ internal sealed partial class DawnScene
             Lay(true);
 
         return holder;
+    }
+
+    /// <summary>
+    /// How long any of a group's calls was going, calls run side by side counted once: their times added up, several
+    /// running together made the group's clock run as many times faster than the clock on the wall.
+    /// </summary>
+    private static double GroupSeconds(List<HexAgentEntry> calls)
+    {
+        long now = Environment.TickCount64, total = 0, from = 0, to = long.MinValue;
+        foreach (HexAgentEntry call in calls.OrderBy(call => call.Started))
+        {
+            long end = Math.Max(call.Started, call.Ended ?? now);
+            if (call.Started > to)
+            {
+                total += to > from ? to - from : 0;
+                (from, to) = (call.Started, end);
+            }
+            else
+                to = Math.Max(to, end);
+        }
+        total += to > from ? to - from : 0;
+        return total / 1000.0;
     }
 
     // A call's name as a line says it, Hex's without hex_ and in words
