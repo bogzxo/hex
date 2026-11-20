@@ -41,6 +41,15 @@ internal sealed class McpToolResult
 
     public static McpToolResult Error(string text) => new McpToolResult { IsError = true }.AddText(text);
 
+    /// <summary>
+    /// What a tool has done so far, yielded by one that goes on to wait for something (an edit made, then its server's
+    /// errors waited on): the call isn't over, but cut off by its time this is answered rather than only "timed out",
+    /// so an agent knows its edit landed.
+    /// </summary>
+    public bool SoFar { get; init; }
+
+    public static McpToolResult Done(string text) => new McpToolResult { SoFar = true }.AddText(text);
+
     /// <summary>A picture, a PNG, with a line of text about it before it.</summary>
     public static McpToolResult Image(byte[] png, string said) => new McpToolResult().AddText(said).AddImage(png);
 

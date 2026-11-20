@@ -15,6 +15,9 @@ internal sealed record HexTreeNode(string Name, string Detail, string Kind, stri
     public bool Seen { get; set; }
     public bool Cut { get; set; }
 
+    /// <summary>How many other files a partial type is declared in besides this one's (the one with its base list).</summary>
+    public int Partials { get; set; }
+
     /// <summary>The same place, what Seen is told by.</summary>
     public string Key => $"{Path}\n{Line}\n{Name}";
 }
@@ -84,6 +87,39 @@ internal static class HexHierarchy
         string detail = node.Detail.Length == 0 || node.Detail == node.Name || node.Detail.Contains(System.IO.Path.GetFileName(node.Path), StringComparison.OrdinalIgnoreCase) ? string.Empty : $"  {HexBudget.Cut(node.Detail.ReplaceLineEndings(" "), width: 90)}";
         string sites = node.Sites > 1 ? $"  x{node.Sites}" : string.Empty;
         string mark = node.Seen ? "  (above)" : node.Cut ? "  +" : string.Empty;
-        return $"{new string(' ', depth * 2)}{relative(node.Path)}:{node.Line + 1} {node.Kind} {node.Name}{detail}{sites}{mark}";
+        string partials = node.Partials > 0 ? $"  +{node.Partials} partial file{(node.Partials == 1 ? string.Empty : "s")}" : string.Empty;
+        return $"{new string(' ', depth * 2)}{relative(node.Path)}:{node.Line + 1} {node.Kind} {node.Name}{detail}{sites}{partials}{mark}";
+    }
+
+    /// <summary>
+    /// The places of one type said once, a partial class's every file (CodeEditor was listed 25 times) folded to the one
+    /// whose line has its base list (a ':' or extends after the name), else the first, with how many more files it's in.
+    /// Things are the same type by <paramref name="key"/> (its name, kind and container); other things keep their order.
+    /// </summary>
+    public static List<(T Item, int Partials)> FoldPartials<T>(IEnumerable<T> items, Func<T, string> key, Func<T, string> lineOf)
+    {
+        var folded = new List<(T Item, int Partials)>();
+        var at = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (T item in items)
+        {
+            string same = key(item);
+            if (!at.TryGetValue(same, out int index))
+            {
+                at[same] = folded.Count;
+                folded.Add((item, 0));
+                continue;
+            }
+
+            var (kept, partials) = folded[index];
+            folded[index] = (HasBases(lineOf(item)) && !HasBases(lineOf(kept)) ? item : kept, partials + 1);
+        }
+
+        return folded;
+    }
+
+    private static bool HasBases(string line)
+    {
+        string code = line.Split("//")[0];
+        return code.Contains(':') || code.Contains(" extends ", StringComparison.Ordinal) || code.Contains(" implements ", StringComparison.Ordinal);
     }
 }

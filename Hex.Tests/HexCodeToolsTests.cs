@@ -199,6 +199,137 @@ public sealed class HexCodeToolsTests : IDisposable
     }
 
     [Fact]
+    public void Worktrees_and_snapshot_copies_inside_the_workspace_are_left_out_and_submodules_kept()
+    {
+        // hexwt-tools: a git worktree, its .git a file pointing into another clone's worktrees
+        Directory.CreateDirectory(Path.Combine(folder, "hexwt-tools"));
+        File.WriteAllText(Path.Combine(folder, "hexwt-tools", ".git"), "gitdir: C:/repos/hex/.git/worktrees/hexwt-tools\n");
+        File.WriteAllText(Path.Combine(folder, "hexwt-tools", "Queue.cs"), QUEUE);
+        // .hexbase: a snapshot of a clone, a dot folder with a .git of its own
+        Directory.CreateDirectory(Path.Combine(folder, ".hexbase", ".git"));
+        File.WriteAllText(Path.Combine(folder, ".hexbase", "Queue.cs"), QUEUE);
+        // A submodule is the workspace's own
+        Directory.CreateDirectory(Path.Combine(folder, "extensions"));
+        File.WriteAllText(Path.Combine(folder, "extensions", ".git"), "gitdir: ../.git/modules/extensions\n");
+        File.WriteAllText(Path.Combine(folder, "extensions", "Ext.cs"), "namespace Demo;\n\ninternal sealed class Ext\n{\n}\n");
+
+        HexCodeIndex index = Index();
+        HexLocated? found = index.Locate("QueueMcp", null, out _);
+        Assert.NotNull(found);
+        Assert.Empty(found.Others);
+        Assert.Equal("Lib/Queue.cs", found.File.Relative);
+        Assert.NotNull(index.Locate("Ext", null, out _));
+        Assert.DoesNotContain(index.Current().Files, file => file.Relative.Contains("hexwt", StringComparison.Ordinal) || file.Relative.Contains(".hexbase", StringComparison.Ordinal));
+        Assert.True(HexSearch.IsRepositoryCopy(Path.Combine(folder, "hexwt-tools")));
+        Assert.False(HexSearch.IsRepositoryCopy(Path.Combine(folder, "extensions")));
+    }
+
+    [Fact]
+    public void A_declaration_in_a_project_is_tried_before_a_loose_copy_and_every_one_is_a_candidate()
+    {
+        Directory.CreateDirectory(Path.Combine(folder, "Copy"));
+        File.WriteAllText(Path.Combine(folder, "App", "Queue.cs"), QUEUE);
+        File.WriteAllText(Path.Combine(folder, "App", "App.csproj"), """<Project Sdk="Microsoft.NET.Sdk"></Project>""");
+
+        List<HexLocated> all = Index().LocateAll("QueueMcp", null, out string? wrong);
+        Assert.Null(wrong);
+        Assert.Equal(2, all.Count);
+        Assert.Equal("App/Queue.cs", all[0].File.Relative);
+        Assert.Equal("Lib/Queue.cs", all[1].File.Relative);
+        Assert.Contains("App/Queue.cs:6", all[1].Others);
+    }
+
+    [Theory]
+    [InlineData("    public static bool TryGet(char c, out Glyph glyph)", "TryGet")]
+    [InlineData("    public static bool TryGet<T>(T key) where T : notnull", "TryGet")]
+    [InlineData("    internal sealed partial class CodeEditor : UIComponent, IDisposable", "CodeEditor")]
+    [InlineData("    public sealed record struct Place(int Line)", "Place")]
+    [InlineData("    async def run(self, x):", "run")]
+    [InlineData("pub fn parse(text: &str) -> Ast {", "parse")]
+    [InlineData("    public int Count { get; private set; }", "Count")]
+    [InlineData("    private readonly List<string> names = [];", "names")]
+    [InlineData("    public Queue(int size) : base(size)", "Queue")]
+    public void A_declaration_line_is_asked_at_its_name_not_its_modifiers(string line, string name) =>
+        Assert.Equal(System.Text.RegularExpressions.Regex.Match(line, $@"\b{name}\b").Index, HexCodeIndex.DeclarationColumn(line));
+
+    [Fact]
+    public void A_partial_type_is_said_once_with_the_file_holding_its_bases()
+    {
+        (string Name, string Line)[] items =
+        [
+            ("CodeEditor", "internal sealed partial class CodeEditor"),
+            ("CodeEditor", "internal sealed partial class CodeEditor : UIComponent"),
+            ("Other", "internal sealed class Other : CodeEditor"),
+            ("CodeEditor", "partial class CodeEditor // more"),
+        ];
+        var folded = HexHierarchy.FoldPartials(items, item => item.Name, item => item.Line);
+        Assert.Equal(2, folded.Count);
+        Assert.Equal("internal sealed partial class CodeEditor : UIComponent", folded[0].Item.Line);
+        Assert.Equal(2, folded[0].Partials);
+        Assert.Equal(0, folded[1].Partials);
+
+        var node = new HexTreeNode("v CodeEditor", string.Empty, "class", "/w/CodeEditor.cs", 3) { Partials = 2 };
+        Assert.Equal("CodeEditor.cs:4 class v CodeEditor  +2 partial files", HexHierarchy.LineOf(node, 0, path => path.Replace("/w/", string.Empty)));
+    }
+
+    [Theory]
+    [InlineData("class Square(Shape):", "Square", "Shape")]
+    [InlineData("class Square(shapes.Shape, Generic[T], metaclass=ABCMeta):", "Square", "Shape,Generic")]
+    [InlineData("export class Button extends Component<Props> implements Clickable, Focusable {", "Button", "Component,Clickable,Focusable")]
+    [InlineData("internal sealed partial class CodeEditor : UIComponent, IDisposable", "CodeEditor", "UIComponent,IDisposable")]
+    [InlineData("public class Box<T> : List<T> where T : class", "Box", "List")]
+    [InlineData("class Plain:", "Plain", "")]
+    [InlineData("class Thing(object):", "Thing", "")]
+    public void Bases_are_read_off_a_declaration_line(string line, string name, string bases) =>
+        Assert.Equal(bases, string.Join(',', HexCodeIndex.BasesOf(line, name)));
+
+    [Fact]
+    public void A_python_hierarchy_comes_from_the_index_where_the_server_has_none()
+    {
+        Directory.CreateDirectory(Path.Combine(folder, "py"));
+        File.WriteAllText(Path.Combine(folder, "py", "shapes.py"), "from abc import ABC\n\n\nclass Shape(ABC):\n    def area(self):\n        return 0\n\n\nclass Square(Shape):\n    def area(self):\n        return 4\n\n\nclass Tiny(Square):\n    pass\n");
+        File.WriteAllText(Path.Combine(folder, "py", "round.py"), "from shapes import Shape\n\n\nclass Circle(Shape):\n    def area(self):\n        return 3\n");
+        HexCodeIndex index = Index();
+
+        HexLocated shape = index.Locate("Shape", null, out _)!;
+        List<HexTreeNode> tree = index.IndexTypeTree(shape, up: true, down: true, depth: 2);
+        string said = HexHierarchy.Describe("Shape", tree, path => Path.GetRelativePath(folder, path).Replace('\\', '/'), 4000, "more");
+        Assert.Contains("outside the workspace: ABC", said);
+        Assert.Contains("py/shapes.py:9 class v Square", said);
+        Assert.Contains("py/round.py:4 class v Circle", said);
+        Assert.Contains("    py/shapes.py:14 class v Tiny", said);
+
+        List<string> types = [.. index.IndexImplementations(shape).Select(each => each.Symbol.Name)];
+        Assert.Equal(["Circle", "Square", "Tiny"], types.Order(StringComparer.Ordinal));
+
+        HexLocated area = index.Locate("Shape.area", null, out _)!;
+        List<(HexIndexedFile File, HexSymbol Symbol)> overriding = index.IndexImplementations(area);
+        Assert.Equal(2, overriding.Count);
+        Assert.All(overriding, each => Assert.Equal("area", each.Symbol.Name));
+    }
+
+    [Fact]
+    public void Diagnostics_say_the_files_not_looked_at_in_the_count()
+    {
+        Assert.Equal("0 errors and 0 warnings in 3 files, by their language servers.", Hex.Dawn.DawnScene.DiagnosticsTitle(0, 0, 3, 0, 0));
+        Assert.Equal("0 errors and 2 warnings in 3 files (1 file not ready, not counted), by their language servers.", Hex.Dawn.DawnScene.DiagnosticsTitle(0, 2, 3, 1, 0));
+        Assert.Equal("1 errors and 0 warnings in 4 files (2 files not ready, 1 no server reads, not counted), by their language servers.", Hex.Dawn.DawnScene.DiagnosticsTitle(1, 0, 4, 2, 1));
+    }
+
+    [Fact]
+    public void Package_json_that_is_only_data_or_under_docs_is_not_a_project()
+    {
+        Directory.CreateDirectory(Path.Combine(folder, "docs", "benchmarks", "2026-11-04"));
+        File.WriteAllText(Path.Combine(folder, "docs", "benchmarks", "2026-11-04", "package.json"), """{ "name": "bench", "Files": 232 }""");
+        Directory.CreateDirectory(Path.Combine(folder, "data"));
+        File.WriteAllText(Path.Combine(folder, "data", "package.json"), """{ "Files": 232, "ZipBytes": 47144371 }""");
+        File.WriteAllText(Path.Combine(folder, "App", "package.json"), """{ "name": "app", "dependencies": { "react": "^19" } }""");
+        string said = Index().Projects(null, false, 8000).Text;
+        Assert.StartsWith("1 projects", said);
+        Assert.Contains("App/package.json  app", said);
+    }
+
+    [Fact]
     public void A_broken_project_file_is_said_unreadable_rather_than_failing()
     {
         File.WriteAllText(Path.Combine(folder, "App", "package.json"), "{ not json");

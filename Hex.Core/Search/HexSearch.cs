@@ -109,7 +109,7 @@ internal static partial class HexSearch
                     // belong to another repository. A workspace whose .gitignore leaves out the repositories cloned into it
                     // had them walked as if they weren't there, a few files of the top found and nothing of the code
                     bool repository = Directory.Exists(Path.Combine(inside, ".git"));
-                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true))
+                    if ((repository ? leftOut.Skipped(under, true) : Out(under, true)) || IsRepositoryCopy(inside)
                         || (File.Exists(Path.Combine(inside, ".git")) && (openNames is null || openNames.Contains(Path.GetFileName(inside)))))
                         continue;
                     pending.Push((inside, under, repository ? [] : ignores));
@@ -123,6 +123,33 @@ internal static partial class HexSearch
 
         files.Sort(StringComparer.OrdinalIgnoreCase);
         return files;
+    }
+
+    /// <summary>
+    /// Whether a folder inside the workspace is a copy of a repository rather than its own files: a git worktree (its
+    /// .git a file pointing into another clone's .git/worktrees, hexwt-* beside the clones) or a dot folder with a .git
+    /// of its own (.hexbase, a snapshot kept of a clone). Their files are the same names as the real ones, and hex_symbols
+    /// said each declaration three times and hex_rename picked one no server had loaded. A submodule (.git a file pointing
+    /// into .git/modules) is walked as it was. Never asked of a workspace's own folder, which can be a worktree.
+    /// </summary>
+    internal static bool IsRepositoryCopy(string folder)
+    {
+        string git = Path.Combine(folder, ".git");
+        try
+        {
+            if (Path.GetFileName(folder).StartsWith('.') && (Directory.Exists(git) || File.Exists(git)))
+                return true;
+            if (!File.Exists(git))
+                return false;
+            using var reader = new StreamReader(git);
+            string? first = reader.ReadLine();
+            return first is not null && first.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase)
+                && first.Replace('\\', '/').Contains("/worktrees/", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>A path as it is inside of the folders looked through, with the name of its folder in front when there is more than one.</summary>

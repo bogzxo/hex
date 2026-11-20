@@ -91,9 +91,9 @@ internal sealed partial class DawnScene
     /// </summary>
     internal List<HexMcpTool> McpToolList() => HexAi.Off
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
-            Behind(FileTools()), Behind(CodeTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
+            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. Behind(CodeTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
@@ -101,6 +101,12 @@ internal sealed partial class DawnScene
 
     /// <summary>Tools that do their work without the editor on screen, so an agent calling them leaves the person in Dusk.</summary>
     private static IEnumerable<HexMcpTool> Behind(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { NeedsEditor = false });
+
+    /// <summary>
+    /// Tools that change files or ask language servers and touch nothing on screen, stepped alongside whatever call is
+    /// going on rather than queued behind it (HexMcpCall.Alongside).
+    /// </summary>
+    private static IEnumerable<HexMcpTool> Alongside(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { Alongside = true });
 
     /// <summary>A command as a line, its menu, its name and its keys.</summary>
     private static string McpCommandLine(UIChoice choice) =>

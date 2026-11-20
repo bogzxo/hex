@@ -50,6 +50,10 @@ internal sealed partial class HexLanguages
         {
             if (lintIn.Remove(open))
                 linting.Change(full, open.Editor.Text);
+
+            // What its server said before an agent asked, a tab that's said nothing new since would be waited on for ever
+            if (!agentHeard.ContainsKey(full) && lintFound.TryGetValue(open, out IReadOnlyList<UICodeDiagnostic>? said))
+                agentHeard[full] = (1, said, linting.Name);
             return linting;
         }
 
@@ -109,6 +113,17 @@ internal sealed partial class HexLanguages
         agentFiles[full] = new AgentFile(server, info.Length, info.LastWriteTimeUtc.Ticks);
         server.Open(full, ReadText(full));
         return server;
+    }
+
+    /// <summary>
+    /// A file opened for an agent sent to its server again as it is, for one that took the file while it was still
+    /// starting and hasn't said anything of it since (a change makes a server look at it again).
+    /// </summary>
+    internal void AgentNudge(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (agentFiles.TryGetValue(full, out AgentFile? file) && file.Server.Failure is null && file.Server.IsReady)
+            file.Server.Change(full, ReadText(full));
     }
 
     /// <summary>A file an agent changed on the disk told to the server it's open in for an agent, at once rather than at its next question.</summary>
