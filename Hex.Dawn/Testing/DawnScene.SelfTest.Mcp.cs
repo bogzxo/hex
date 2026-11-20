@@ -85,6 +85,15 @@ internal sealed partial class DawnScene
             && Convert.FromBase64String(image["data"]!.GetValue<string>()) is var png && png.Length > 1000 && png[1] == (byte)'P' && png[2] == (byte)'N' && png[3] == (byte)'G'
             && Answered().Contains($"{Engine.WindowManager.ViewportSize.X:0}x{Engine.WindowManager.ViewportSize.Y:0}", StringComparison.Ordinal));
 
+        // With no scale said, a big window comes no bigger than a model looks at, the answer saying by how much
+        Ask("hex_screenshot");
+        test.Check("mcp: a screenshot with no scale said is 1600 pixels at the most on its longer side, and says its scale", () =>
+            answer is { IsCompletedSuccessfully: true } && answer.Result["result"]?["content"] is JsonArray content
+            && content.Any(item => item?["type"]?.GetValue<string>() == "image")
+            && System.Text.RegularExpressions.Regex.Match(Answered(), @"This is the whole window, (\d+)x(\d+)") is { Success: true } shown
+            && Math.Max(int.Parse(shown.Groups[1].Value), int.Parse(shown.Groups[2].Value)) <= 1600
+            && (Math.Max(Engine.WindowManager.ViewportSize.X, Engine.WindowManager.ViewportSize.Y) <= 1600 || Answered().Contains("shown at", StringComparison.Ordinal)));
+
         Ask("hex_ui_tree", new JsonObject { ["interactive"] = true });
         test.Check("mcp: the ui tree lists the menu bar's titles and the status bar's items with ids", () =>
             Answered() is var tree && tree.Contains("MenuTitle \"File\"", StringComparison.Ordinal) && tree.Contains(" StatusItem ", StringComparison.Ordinal)
