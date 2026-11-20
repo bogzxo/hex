@@ -97,19 +97,31 @@ public sealed class HexAgentListOrderTests
         ];
         List<HexChatPlace> order = Order(chats);
 
-        Assert.Equal([1, 3, 2, 4], Ids(chats, order));
-        Assert.Equal([0, 1, 1, 0], order.Select(place => place.Step));
-        Assert.All(order.Take(3), place => Assert.Equal(HexChatBand.Working, place.Band));
+        Assert.Equal([1, 3, 4, 2], Ids(chats, order));
+        Assert.Equal([0, 1, 0, 0], order.Select(place => place.Step));
+        Assert.All(order.Take(2), place => Assert.Equal(HexChatBand.Working, place.Band));
+        Assert.Equal(HexChatBand.Finished, order[3].Band);
     }
 
     [Fact]
-    public void AFinishedSubagentOfAWorkingParentIsNotFolded()
+    public void AFinishedSubagentOfAWorkingParentFoldsIntoTheFinished()
     {
-        HexChatFacts[] chats = [Working(1, NOW - 1_000), Done(2, NOW - 60 * 60_000, parent: 1)];
+        HexChatFacts[] chats = [Working(1, NOW - 1_000), Done(2, NOW - 60 * 60_000, parent: 1), Done(3, NOW - 10_000, parent: 1), Done(4, NOW - 90 * 60_000, parent: 2)];
         List<HexChatPlace> order = Order(chats);
 
-        Assert.Equal([1, 2], Ids(chats, order));
-        Assert.DoesNotContain(order, place => place.Band == HexChatBand.Finished);
+        // The one just done stays under its parent a few minutes, the one done long ago folds with what it started
+        Assert.Equal([1, 3, 2, 4], Ids(chats, order));
+        Assert.Equal([HexChatBand.Working, HexChatBand.Working, HexChatBand.Finished, HexChatBand.Finished], order.Select(place => place.Band));
+        Assert.Equal([0, 1, 0, 1], order.Select(place => place.Step));
+    }
+
+    [Fact]
+    public void AFinishedSubagentOpenStaysUnderItsWorkingParent()
+    {
+        HexChatFacts[] chats = [Working(1, NOW - 1_000), Done(2, NOW - 60 * 60_000, parent: 1)];
+
+        Assert.Equal([1, 2], Ids(chats, Order(chats, open: 2, lift: true)));
+        Assert.DoesNotContain(Order(chats, open: 2, lift: true), place => place.Band == HexChatBand.Finished);
     }
 
     [Fact]

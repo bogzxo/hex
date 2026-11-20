@@ -26,7 +26,7 @@ internal readonly record struct HexChatPlace(int Index, int Step, HexChatBand Ba
 /// then the ones it started under it), each family in the band of its most pressing chat: those waiting on the person
 /// first, then those working, then those finished a moment ago, then the finished, most recently active first in each.
 /// A finished chat stays with the working ones for a few minutes after it ended (longer while nobody read it) so the
-/// person sees it end, then folds into the finished group.
+/// person sees it end, then folds into the finished group, a subagent too, let go of its family still going.
 /// </summary>
 internal static class HexAgentListOrder
 {
@@ -110,14 +110,22 @@ internal static class HexAgentListOrder
             }
         }
 
-        // The family of the chat open lifted out of the finished band while that's folded
+        // The chat open and those over it lifted out of the finished band while that's folded
         if (liftOpen && index.TryGetValue(open, out int opened))
         {
-            int root = opened;
-            for (int guard = 0; parentOf[root] >= 0 && guard < count; guard++)
-                root = parentOf[root];
-            if (band[root] == HexChatBand.Finished)
-                band[root] = HexChatBand.Recent;
+            for (int at = opened, guard = 0; at >= 0 && guard < count; at = parentOf[at], guard++)
+            {
+                if (band[at] == HexChatBand.Finished)
+                    band[at] = HexChatBand.Recent;
+            }
+        }
+
+        // A finished subagent (and what it started, all finished too) under a family still going is let go of it, folded
+        // into the finished group on its own rather than kept on screen for as long as the one that started it works
+        for (int i = 0; i < count; i++)
+        {
+            if (parentOf[i] >= 0 && band[i] == HexChatBand.Finished && band[parentOf[i]] != HexChatBand.Finished)
+                parentOf[i] = -1;
         }
 
         int Compare(int a, int b)
@@ -140,7 +148,10 @@ internal static class HexAgentListOrder
             into.Add(new HexChatPlace(i, step, family));
             int from = siblings.Count;
             for (int child = first[i]; child >= 0; child = next[child])
-                siblings.Add(child);
+            {
+                if (parentOf[child] == i)
+                    siblings.Add(child);
+            }
             int many = siblings.Count - from;
             siblings.Sort(from, many, Comparer<int>.Create(Compare));
             int[] children = [.. siblings.GetRange(from, many)];
