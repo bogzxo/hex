@@ -154,21 +154,20 @@ internal sealed class HexDebugVariables(Func<string, string> text, Func<Exceptio
     // Watch rows share the same lazy children and lifetime as the variables of this frame.
     internal Func<DebugVariable, UITreeItem> Items(object session, Func<int, Task<IReadOnlyList<DebugVariable>>> variables)
     {
+        // Item says what the value is and that it's of this view already
         long asked = generation;
-        return variable =>
-        {
-            UITreeItem item = Item(session, asked, variable, variables);
-            item.Tag = (item.Tag as SideTag ?? new SideTag()) with { DebugValue = variable, DebugCurrent = () => Current(session, asked) };
-            return item;
-        };
+        return variable => Item(session, asked, variable, variables);
     }
 
+    // A variable's row. Its tag is made once with all it carries, and the one test of whether the row is still of the view
+    // on screen is shared by its menu and its tag, a frame of thousands of variables made each of them three times
     private UITreeItem Item(object session, long asked, DebugVariable variable, Func<int, Task<IReadOnlyList<DebugVariable>>> variables, int parent = 0, Action<int, DebugVariable>? edit = null, bool hexadecimal = false)
     {
-        var item = new UITreeItem($"{variable.Name} = {variable.Value}", "symbol-variable")
+        string said = $"{variable.Name} = {variable.Value}";
+        var item = new UITreeItem(said, "symbol-variable")
         {
-            Detail = variable.ReadOnly ? string.Join(" ? ", new[] { variable.Type, text("debugging.read_only") }.Where(value => !string.IsNullOrEmpty(value))) : variable.Type ?? string.Empty,
-            Tooltip = $"{variable.Name} = {variable.Value}",
+            Detail = variable.ReadOnly ? ReadOnlyDetail(variable.Type, text("debugging.read_only")) : variable.Type ?? string.Empty,
+            Tooltip = said,
             Expandable = variable.Reference > 0
         };
         if (variable.Reference > 0)
@@ -177,16 +176,24 @@ internal sealed class HexDebugVariables(Func<string, string> text, Func<Exceptio
                 Paging(item, adapter, asked, variable, variables, edit, hexadecimal);
             else Expanding(item, session, asked, variable.Reference, variables, edit, hexadecimal);
         }
+
+        Func<bool> current = () => Current(session, asked);
+        SideTag tag = item.Tag as SideTag ?? new SideTag();
         if (edit is not null && parent > 0 && !variable.ReadOnly)
+            tag = tag with { Menu = _ => { if (current()) edit(parent, variable); } };
+        item.Tag = tag with
         {
-            Action<System.Numerics.Vector2> menu = _ => { if (Current(session, asked)) edit(parent, variable); };
-            item.Tag = item.Tag is SideTag tag ? tag with { Menu = menu } : new SideTag(Menu: menu);
-        }
-        if (!string.IsNullOrWhiteSpace(variable.EvaluateName))
-            item.Tag = (item.Tag as SideTag ?? new SideTag()) with { DebugExpression = variable.EvaluateName, DebugCurrent = () => Current(session, asked) };
-        item.Tag = (item.Tag as SideTag ?? new SideTag()) with { DebugValue = variable, DebugContainer = parent, DebugCurrent = () => Current(session, asked) };
+            DebugExpression = string.IsNullOrWhiteSpace(variable.EvaluateName) ? tag.DebugExpression : variable.EvaluateName,
+            DebugValue = variable,
+            DebugContainer = parent,
+            DebugCurrent = current
+        };
         return item;
     }
+
+    // The type and that it's read only, the two of them that say anything
+    private static string ReadOnlyDetail(string? type, string readOnly) =>
+        string.IsNullOrEmpty(type) ? readOnly ?? string.Empty : string.IsNullOrEmpty(readOnly) ? type : $"{type} ? {readOnly}";
 
     private void Paging(UITreeItem item, DebugSession session, long asked, DebugVariable variable,
         Func<int, Task<IReadOnlyList<DebugVariable>>> variables, Action<int, DebugVariable>? edit, bool hexadecimal)
