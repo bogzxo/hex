@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // How many agents up an agent can be from the one somebody started, and how many started by agents run at once
-    private const int AGENTS_DEEPEST = 2, AGENTS_AT_ONCE = 6;
+    private const int AGENTS_DEEPEST = 2, AGENTS_AT_ONCE = 12;
 
     // How long hex_agent_wait waits when it isn't told, the most it waits, and how much of each reply it hands back
     private const int AGENTS_WAIT = 300, AGENTS_WAIT_MOST = 600, AGENTS_REPLY = 6000;
