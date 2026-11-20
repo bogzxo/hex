@@ -2513,6 +2513,7 @@ let strings = {
         help: "Mark misspellings in prose, comments, agent prompts and commit messages. Uses the installed Windows dictionaries.",
         language: "Spelling language",
         language_help: "Use a language tag such as en-GB or en-US. Leave blank to use the Windows language.",
+        language_placeholder: "Empty for the system's, or en-GB",
         checking: "Checking spelling",
         unavailable: "No Windows spelling dictionary is available for the selected language.",
         menu: "Spelling",

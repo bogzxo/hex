@@ -357,8 +357,10 @@ internal sealed partial class DawnScene
             ForgetSemantics();
         if (now.CSharpColors != was.CSharpColors)
             languages.ApplyCSharpColors();
+        // Read from the files, not chosen in the window: a reload marked the keys chosen and wrote that into the user's
+        // file, a workspace setting changed was the user's file written as well
         if (now.VisualStudioKeys != was.VisualStudioKeys)
-            ApplyKeyLayer();
+            ApplyKeyLayer(force: true);
         if (now.McpServer != was.McpServer)
             ApplyMcp();
         if (now.NoAi != was.NoAi)

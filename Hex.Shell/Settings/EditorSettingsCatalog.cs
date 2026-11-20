@@ -142,7 +142,7 @@ public static class EditorSettingsCatalog
         new("wrap_code", HexText.Get("settings_catalog.wrap_code_title"), UIFormKind.Flag, HexText.Get("settings_catalog.wrap_code_help"), CODE),
         new("minimap", HexText.Get("settings_catalog.minimap_title"), UIFormKind.Flag, HexText.Get("settings_catalog.minimap_help"), CODE),
         new("spell_check", HexText.Get("spelling.title"), UIFormKind.Flag, HexText.Get("spelling.help"), CODE),
-        new("spell_check_language", HexText.Get("spelling.language"), UIFormKind.Text, HexText.Get("spelling.language_help"), CODE),
+        new("spell_check_language", HexText.Get("spelling.language"), UIFormKind.Text, HexText.Get("spelling.language_help"), CODE, Placeholder: HexText.Get("spelling.language_placeholder")),
         new("inlay_hints", HexText.Get("settings_catalog.inlay_hints_title"), UIFormKind.Flag, HexText.Get("settings_catalog.inlay_hints_help"), CODE),
         new("code_lens_references", HexText.Get("settings_catalog.code_lens_references_title"), UIFormKind.Flag, HexText.Get("settings_catalog.code_lens_references_help"), CODE),
         new("semantic_highlighting", HexText.Get("settings_catalog.semantic_highlighting_title"), UIFormKind.Flag, HexText.Get("settings_catalog.semantic_highlighting_help"), CODE),
