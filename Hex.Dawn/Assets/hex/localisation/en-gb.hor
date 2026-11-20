@@ -3816,6 +3816,48 @@ let strings = {
         too_large: "Select less code before attaching it to an agent draft (maximum 32,000 characters)."
     },
 
+    // The agents' data on the disk, the chats, pasted pictures, temporary files and caches in the data folder next to
+    // Hex.exe: the Agents menu's Agent Data and the line at the foot of Agentic's fleet
+    agent_data: {
+        title: "Agent Data",
+        open: "Open Data Folder",
+        open_sized: "Open Data Folder ({size})",
+        chats: "Chats: {size}",
+        images: "Pasted Pictures: {size}",
+        temp: "Temporary Files: {size}",
+        cache: "Cache: {size}",
+        counting: "counting...",
+        noon: "Agent data: {size}",
+        noon_tip: "{chats} chats and {images} pasted pictures in {folder}. Click to open the folders or clean up.",
+        fallback: "Hex's own folder can't be written to, so agent data is kept in your local app data instead.",
+        open_failed: "Couldn't open the folder: {why}",
+        delete_chats: "Delete Old Chats...",
+        delete_images: "Delete Unused Pictures...",
+        clear_temp: "Clear Temporary Files...",
+        cancel: "Cancel",
+        chats_title: "Delete old chats?",
+        chats_text: "Deleted chats and their older messages can't be brought back. The open chat, running chats and the chats that started them are kept.",
+        old_line: "Not used in {days} days: {count} chats, {size}",
+        old_line_one: "Not used in {days} days: 1 chat, {size}",
+        delete_older: "Delete Chats Over {days} Days Old",
+        no_old_chats: "No chats are older than {days} days.",
+        deleted_chats: "Deleted {count} old chats.",
+        deleted_chats_one: "Deleted 1 old chat.",
+        images_title: "Delete {count} unused pictures?",
+        images_title_one: "Delete 1 unused picture?",
+        images_text: "{size} of pasted pictures that no kept chat mentions. Deleted pictures can't be brought back.",
+        images_go: "Delete Pictures",
+        no_unused_images: "Every pasted picture is still used by a chat.",
+        deleted_images: "Deleted {count} unused pictures.",
+        deleted_images_one: "Deleted 1 unused picture.",
+        temp_title: "Clear temporary files?",
+        temp_text: "{count} files, {size}. Agents make these again when they start. Files written in the last 10 minutes are kept.",
+        temp_go: "Clear Files",
+        no_temp: "No temporary files to clear.",
+        cleared_temp: "Cleared {count} temporary files.",
+        cleared_temp_one: "Cleared 1 temporary file."
+    },
+
     agents_panel: {
         remove_context: "Remove captured code",
         command: "Agents",

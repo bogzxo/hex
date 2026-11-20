@@ -652,7 +652,7 @@ internal sealed partial class DawnScene : Scene
             .Add("spelling", UpdateSpelling)
             .Add("mcp", UpdateMcp);
         if (!HexAi.Off)
-            panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept);
+            panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks
             .Add("dev_restart", UpdateDevRestart)
             .Add("dev_continue", UpdateDevContinue)

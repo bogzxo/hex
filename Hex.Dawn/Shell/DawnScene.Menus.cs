@@ -135,9 +135,9 @@ internal sealed partial class DawnScene
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
         // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness
-        // saved. Not there at all with No AI on, nothing goes in it
+        // saved, and their data on the disk. Not there at all with No AI on, nothing goes in it
         if (!HexAi.Off)
-            commands.Declare("Agents", "open", "chats", "harness");
+            commands.Declare("Agents", "open", "chats", "harness", "data");
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in
@@ -157,6 +157,8 @@ internal sealed partial class DawnScene
         commands.DeclareSubmenu("Git/menus", "stash", Said("menus.git_stash"), "git-stash", "stash", "pick");
         commands.DeclareSubmenu("Git/menus", "history", Said("menus.git_history"), "history");
         commands.DeclareSubmenu("Git/menus", "tags", Said("menus.git_tags"), "tag");
+        if (!HexAi.Off)
+            commands.DeclareSubmenu("Agents/data", "agent_data", Said("agent_data.title"), "database", "folder", "usage", "clean");
         commands.DeclareSubmenu("Help/developer", "developer", Said("menus.developer"), "tools");
     }
 
