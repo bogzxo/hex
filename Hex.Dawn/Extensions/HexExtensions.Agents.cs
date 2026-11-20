@@ -76,6 +76,12 @@ internal sealed partial class HexExtensions
             ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder }),
                 .. args.Has(0) && args[0] is ObjectValue chat && chat.Properties.TryGetValue("id", out IRuntimeValue? id) && id is StringValue { Value.Length: > 0 } named
                     ? new[] { "--agent-chat", named.Value } : []]))))),
+        // A heavy stdio MCP server shared by every agent in the chat's worktree, the { command, args } that starts the
+        // proxy to it (Hex --mcp-proxy, McpSharedServers), null when the command isn't on the PATH. See HexExtensions.Shared
+        ("shared_server", Natives.Function("shared_server", args => SharedServer(args))),
+        // Whether a Claude Code plugin is switched on in the user's settings, by its name before the @ (dotnet-claude-kit)
+        ("claude_plugin", Natives.Function("claude_plugin", args => ClaudePlugin(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), args.Text(0)) ? Values.True : Values.False)),
         ("agents", Natives.Function("agents", _ => new ListValue([.. HexAgentProfiles.All.Select(profile => (IRuntimeValue)new StringValue(profile.Name))]))),
         ("workspace", Natives.Function("workspace", _ => new ListValue([.. context.Workspace.Folders.Select(folder => (IRuntimeValue)new StringValue(folder))]))),
         ("executable", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
