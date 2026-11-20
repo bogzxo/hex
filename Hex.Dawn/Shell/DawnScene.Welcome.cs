@@ -385,10 +385,12 @@ internal sealed partial class DawnScene
             list.Add(row);
         }
 
-        // A setting that's on or off as a switch, changed the way the settings change it
+        // A setting that's on or off as a switch, changed the way the settings change it. The editor's settings are read
+        // through the one source made for the whole of Getting started
+        var editor = new EditorSource(this);
         UIComponent Switch(string key)
         {
-            bool on = SettingFlag(key);
+            bool on = SettingFlag(key, editor);
             var toggle = new ToggleButton(on ? Said("extensions_window.on") : Said("extensions_window.off"), on) { Size = new Vector2(84, 30), Style = "switch", Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
             toggle.OnPressed = () =>
             {
@@ -452,16 +454,39 @@ internal sealed partial class DawnScene
                 FillGettingStarted(sizing.Getting, sizing.GettingWidth);
     }
 
-    // The settings' source a key is one of, the one the settings window would change it through
-    private ISettingsSource? SettingSourceOf(string key)
+    // The settings' source a key is one of, the one the settings window would change it through. The editor's own are looked
+    // in first and the parts' sources made only for a key that isn't one of those. Every source was made for every key, the
+    // editor's with all its rows, seven times over each time Getting started was filled
+    private ISettingsSource? SettingSourceOf(string key, ISettingsSource? editor = null)
     {
-        var sources = new List<ISettingsSource> { new EditorSource(this) };
-        sources.AddRange(settingSources.Select(added => added.Source()));
-        return sources.FirstOrDefault(source => source.Settings.Any(setting => setting.Key == key));
+        editor ??= new EditorSource(this);
+        if (Has(editor))
+            return editor;
+
+        foreach (var added in settingSources)
+        {
+            ISettingsSource source = added.Source();
+            if (Has(source))
+                return source;
+        }
+
+        return null;
+
+        bool Has(ISettingsSource source)
+        {
+            foreach (UISetting setting in source.Settings)
+            {
+                if (setting.Key == key)
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     // Whether a setting that's on or off is on, as the settings window reads it
-    private bool SettingFlag(string key) => SettingSourceOf(key)?.Get(key) is Horizon.HIDL.Runtime.BooleanValue { Value: true };
+    private bool SettingFlag(string key, ISettingsSource? editor = null) =>
+        SettingSourceOf(key, editor)?.Get(key) is Horizon.HIDL.Runtime.BooleanValue { Value: true };
 
     // A setting that's on or off changed through its source, applied and saved the way the settings window does it
     private void SetSettingFlag(string key, bool on)
