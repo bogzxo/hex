@@ -18,6 +18,10 @@ internal sealed partial class DawnScene
     // How strongly the calls that went are drawn, the reply round them standing out of them
     private const float TOOL_QUIET = 0.72f;
 
+    // How much of the skin's raised shade a call's or a group's bubble is. Half of it was all but lost on the glass
+    // panels' darker ground, the calls a column of loose text
+    private const float TOOL_SHADE = 0.9f;
+
     // The groups opened, by the first call of each, the rest are folded
     private readonly HashSet<HexAgentEntry> toolGroupsOpen = [];
 
@@ -148,7 +152,7 @@ internal sealed partial class DawnScene
 
         List<HexAgentEntry> calls = start < 0 ? [first] : ToolGroupAt(chat, start);
         if (calls.Count == 1)
-            return ToolLine(chat, first, skin);
+            return ToolLine(chat, first, skin, alone: true);
 
         Vector4 raised = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         bool open = toolGroupsOpen.Contains(first);
@@ -168,7 +172,7 @@ internal sealed partial class DawnScene
 
         var bar = holder.Add(new Panel
         {
-            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f },
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * TOOL_SHADE },
             Opacity = running is null && failed == 0 ? TOOL_QUIET : 1.0f
         });
         // How it's going the way a tool's own row says it, an outline while one of its calls runs or once it ended failing,
@@ -244,14 +248,17 @@ internal sealed partial class DawnScene
     /// One call as a slim line, its icon, its name and what it was given dimmed after it, its time at the right, a thin mark
     /// of how it went at its left. A press opens what it was given and said back under it.
     /// </summary>
-    private UIComponent ToolLine(HexAgentChat chat, HexAgentEntry call, UISkin? skin)
+    /// <param name="alone">A call on its own rather than one of an opened group's, a bubble of its own with its state's outline the way a group's bar is. Bare on the chat it was a line of text with nothing to say it was a call, or how it went.</param>
+    private UIComponent ToolLine(HexAgentChat chat, HexAgentEntry call, UISkin? skin, bool alone = false)
     {
         var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
         // A call that went is quieter than the words round it, the agent's reply is what the chat is read for. One running
         // or failed stays as it is, it's what wants seeing
+        Vector4 raised = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         var line = holder.Add(new Panel
         {
-            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero,
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = alone ? raised with { W = raised.W * TOOL_SHADE } : Vector4.Zero,
+            Radius = alone ? 6 : 0, Outline = alone ? ToolOutline(call.State, skin) : Vector4.Zero,
             Opacity = call.State == HexAgentToolState.Done ? TOOL_QUIET : 1.0f
         });
         // How it went by its icon alone, a spinner while it runs and the error's mark in red once it failed, the group's

@@ -136,12 +136,15 @@ internal sealed partial class DawnScene
         return holder;
     }
 
-    /// <summary>The outline of a tool's row or group, the running blue while it runs, the error's red once it failed, none once it went.</summary>
+    /// <summary>
+    /// The outline of a tool's row or group, the running blue while it runs, the error's red once it failed, a faint green
+    /// once it went, so every call says how it went at a glance and one that went stays quieter than the others.
+    /// </summary>
     internal static Vector4 ToolOutline(HexAgentToolState state, Horizon.UI.Skinning.UISkin? skin) => state switch
     {
         HexAgentToolState.Running => RunningBlue(skin) with { W = 0.55f },
         HexAgentToolState.Failed => (skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)) with { W = 0.55f },
-        _ => Vector4.Zero
+        _ => (skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f)) with { W = 0.28f }
     };
 
     // The rows' helpers live in HexAgentRows, shared by the side panel and Noon, said here by their short names
