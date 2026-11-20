@@ -266,7 +266,8 @@ internal sealed partial class DawnScene
                     {
                         if (document.View == HexView.Table) SwitchView(HexView.Code);
                         running.GoToCode(at, 0);
-                    }) with { TextDigits = digits });
+                    }) with
+                    { TextDigits = digits });
                 }
                 return lines;
 
@@ -274,9 +275,6 @@ internal sealed partial class DawnScene
                 return null;
         }
     }
-
-    /// <summary>Every place in every file of the workspace something is, as a word of its own if it says so.</summary>
-    private List<HexResult> FindEverywhere(string query, bool wholeWord) => HexSearch.FindIn(WorkspaceRoots(), query, new UIFindOptions(WholeWord: wholeWord));
 
     /// <summary>
     /// Ctrl+F8, every .hor of the workspace parsed, what doesn't parse listed on the left, and what names a text the game
