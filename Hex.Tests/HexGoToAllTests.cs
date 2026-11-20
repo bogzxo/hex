@@ -116,12 +116,18 @@ public sealed class HexGoToAllTests : IDisposable
         HexIndexSnapshot index = Index();
         HexCodeIndex.GoToAll(index, "warm", 200);
 
-        var clock = Stopwatch.StartNew();
-        foreach (string query in new[] { "d", "dsn", "DoSomethingNumber12", "thing99", "dsnw", "Thing5.Do" })
-            HexCodeIndex.GoToAll(index, query, 200);
-        clock.Stop();
+        // The best of three goes, the whole suite runs its tests side by side and one go could land on a machine busy
+        // with the rest of them. A search that got slower is slower every go
+        long best = long.MaxValue;
+        for (int go = 0; go < 3; go++)
+        {
+            var clock = Stopwatch.StartNew();
+            foreach (string query in new[] { "d", "dsn", "DoSomethingNumber12", "thing99", "dsnw", "Thing5.Do" })
+                HexCodeIndex.GoToAll(index, query, 200);
+            best = Math.Min(best, clock.ElapsedMilliseconds);
+        }
 
-        Assert.True(clock.ElapsedMilliseconds < 1500, $"six searches took {clock.ElapsedMilliseconds} ms");
+        Assert.True(best < 1500, $"six searches took {best} ms at best");
         Assert.Equal("Thing99", HexCodeIndex.GoToAll(index, "thing99", 200)[0].Symbol.Name);
     }
 }
