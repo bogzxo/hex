@@ -106,17 +106,19 @@ internal sealed partial class DuskScene
 
     private void ShowTabMenu(TerminalTab tab, Vector2 point)
     {
+        // Naming and moving it first, closing last in the error colour, a terminal closed ends its shell and what runs in it
         var shown = new Menu("tab");
-        shown.Add(HexText.Get("tabs.close"), () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close");
+        shown.Add(HexText.Get("code_hints.rename"), () => host.AskRename(tab), icon: "edit");
+        shown.AddSeparator();
+        shown.Add(HexText.Get("dusk_chrome.move_left"), () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left").IsEnabled = () => panel.IndexOf(tab) > 0;
+        shown.Add(HexText.Get("dusk_chrome.move_right"), () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right").IsEnabled = () => panel.IndexOf(tab) < panel.Tabs.Count - 1;
+        shown.AddSeparator();
+        shown.Add(HexText.Get("tabs.close"), () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close", destructive: true);
         shown.Add(HexText.Get("tabs.close_others"), () =>
         {
             foreach (TerminalTab other in panel.Tabs.ToArray())
                 if (other != tab) panel.CloseTab(other);
-        }, icon: "close-all");
-        shown.Add(HexText.Get("code_hints.rename"), () => host.AskRename(tab), icon: "edit");
-        shown.AddSeparator();
-        shown.Add(HexText.Get("dusk_chrome.move_left"), () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left");
-        shown.Add(HexText.Get("dusk_chrome.move_right"), () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right");
+        }, icon: "close-all", destructive: true).IsEnabled = () => panel.Tabs.Count > 1;
         ContextMenu.Show(chrome, point, shown);
     }
 

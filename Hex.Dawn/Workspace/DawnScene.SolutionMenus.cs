@@ -51,7 +51,7 @@ internal sealed partial class DawnScene
         var menu = new Menu("reference");
         menu.Add(Said("solution.open_project"), () => Open(reference), icon: "go-to-file");
         menu.AddSeparator();
-        menu.Add(Said("solution.remove"), () => RemoveReference(project, reference), "Del", "trash");
+        menu.Add(Said("solution.remove"), () => RemoveReference(project, reference), "Del", "trash", destructive: true);
         Context.Windows.Menu(menu);
     }
 
@@ -62,7 +62,7 @@ internal sealed partial class DawnScene
         menu.Add(Said("nuget.versions_menu"), () => LookUpPackage(project, package.Name), icon: "versions");
         menu.Add(Said("nuget.manage"), () => ManageNuget(project), icon: "package");
         menu.AddSeparator();
-        menu.Add(Said("solution.remove"), () => RemovePackage(project, package), "Del", "trash");
+        menu.Add(Said("solution.remove"), () => RemovePackage(project, package), "Del", "trash", destructive: true);
         Context.Windows.Menu(menu);
     }
 

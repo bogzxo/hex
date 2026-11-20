@@ -20,7 +20,8 @@ internal sealed partial class DawnScene
     {
         menu.Add(Said("agent.explain"), () => RequestAgent("explain"), icon: "robot").IsEnabled = CanAskAgent;
         menu.Add(Said("agent.change"), () => RequestAgent("change"), icon: "edit").IsEnabled = CanAskAgent;
-        menu.Add(Said("agents_panel.command"), ShowAgentsPanel, icon: "comment-discussion");
+        // "Agents" alone read as a menu of them in the middle of the code's, it says what it does
+        menu.Add(Said("agent.show_agents"), ShowAgentsPanel, icon: "comment-discussion");
         menu.AddSeparator();
     }
 

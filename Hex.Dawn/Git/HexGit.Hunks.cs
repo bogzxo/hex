@@ -24,7 +24,8 @@ internal sealed partial class HexGit
         var menu = new Menu("git_change");
         menu.Add(context.Strings.Said("git.show_change"), () => ShowChangeAt?.Invoke(repository.Git, path, pressed.Line), icon: "diff");
         menu.Add(context.Strings.Said("git.stage_change"), () => StageChange(document, repository, pressed.Line), icon: "add");
-        menu.Add(context.Strings.Said("git.revert_change"), () => RevertChange(document, pressed.Line), icon: "discard");
+        menu.AddSeparator();
+        menu.Add(context.Strings.Said("git.revert_change"), () => RevertChange(document, pressed.Line), icon: "discard", destructive: true);
         context.Windows.Menu(menu);
     }
 

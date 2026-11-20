@@ -133,7 +133,7 @@ internal sealed partial class HexDebugging
         {
             immediate.Clear();
             context.Panels.RefreshSide(HexSide.Debug);
-        }, icon: "clear-all");
+        }, icon: "clear-all", destructive: true);
         context.Windows.Menu(menu);
     }
 
