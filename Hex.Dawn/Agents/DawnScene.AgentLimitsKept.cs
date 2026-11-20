@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace Hex.Dawn;
 
-// Each agent system's limits as last told, kept in a file beside Hex's settings, so its block shows where it stands
+// Each agent system's limits as last told, kept in a file in Hex's data folder, so its block shows where it stands
 // against its plan from the start, before any chat of this run has said, and after its chats are closed. A line a limit,
 // the system, the kind, how much is used, when it resets and its state, between tabs.
 internal sealed partial class DawnScene
@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
     private Dictionary<string, Dictionary<string, HexAgentLimit>>? limitsKept;
     private string limitsKeptSaid = string.Empty;
 
-    private string LimitsFile => Path.Combine(TerminalFiles.UserFolder, "agent_limits.tsv");
+    private string LimitsFile => Hex.Core.HexData.AgentLimits;
 
     /// <summary>
     /// A system's limits, what its chats say now over what was kept, session first then the week. What's new is kept in
@@ -75,6 +75,7 @@ internal sealed partial class DawnScene
         limitsKeptSaid = said;
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(LimitsFile)!);
             File.WriteAllText(LimitsFile, said);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

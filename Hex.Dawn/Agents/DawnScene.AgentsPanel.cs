@@ -106,10 +106,10 @@ internal sealed partial class DawnScene
         agentsCompose.MoveChild(agentsInput, 0);
         BuildAgentImages();
 
-        // The rows a chat no longer keeps in memory, in Hex's folder, a self test's in a folder of its own it leaves behind
+        // The rows a chat no longer keeps in memory, in Hex's data folder, a self test's in a folder of its own it leaves behind
         hub.History = new HexAgentHistory(options.SelfTest
             ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
-            : Path.Combine(TerminalFiles.UserFolder, "agent_history"));
+            : Hex.Core.HexData.AgentHistory);
         hub.History.Tidy(TimeSpan.FromDays(2));
         // What an agent another started asks leave to do goes to that one too (DawnScene.McpAgentApprovals)
         hub.ApprovalAsked = RouteApproval;

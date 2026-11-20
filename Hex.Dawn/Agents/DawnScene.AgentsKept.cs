@@ -13,8 +13,8 @@ internal sealed partial class DawnScene
     private HexAgentChatsKept? chatsKept;
     private float chatsKeptIn = CHATS_KEPT_EVERY;
 
-    // Where every workspace's chats are
-    private static string ChatsKeptRoot => Path.Combine(TerminalFiles.UserFolder, "agent_chats");
+    // Where every workspace's chats are, in the data folder (HexData)
+    private static string ChatsKeptRoot => Hex.Core.HexData.AgentChats;
 
     // The folder for the workspace open now
     private string ChatsKeptFolder => HexAgentChatsKept.FolderFor(ChatsKeptRoot, explorer.workspace.Folders.FirstOrDefault());

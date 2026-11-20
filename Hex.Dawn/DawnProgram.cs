@@ -138,6 +138,11 @@ public static partial class DawnProgram
 
         Directory.CreateDirectory(workspace);
 
+        // The agents' chats, pictures and caches that were in the settings folder moved into the data folder, once, before
+        // anything reads them. Only this Hex, the one that's staying, a Hex that handed over above never got here
+        if (!selfTest && check.Length == 0)
+            Hex.Core.HexData.MoveOld();
+
         // What the editor's first moments wait on, started on the pool while the engine, the device and the window are made:
         // WSL's distributions for the terminal's shells, and the editor's own layouts read (and the reader's code compiled)
         // before the editor loads them on the thread that's holding the window back

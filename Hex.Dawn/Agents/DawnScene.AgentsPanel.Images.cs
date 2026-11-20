@@ -6,7 +6,7 @@ using Horizon.Rendering;
 namespace Hex.Dawn;
 
 // Pictures pasted into the agents' box. Control with V over a clipboard that holds a picture and no text keeps it as a
-// PNG in Hex's folder and puts a chip of it over the pickers, a cross on the chip taking it off again. Sent, the
+// PNG in Hex's data folder (HexData.AgentImages) and puts a chip of it over the pickers, a cross on the chip taking it off again. Sent, the
 // pictures go with the message, handed to the agent system's extension (chat.images) to give the agent in its own way,
 // their paths said at the end of the message too so an agent whose system can't take them still finds the files.
 internal sealed partial class DawnScene
@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
         if (ClipboardPicture.Png() is not { Length: > 0 } png)
             return false;
 
-        string folder = Path.Combine(TerminalFiles.UserFolder, "agent_images");
+        string folder = Hex.Core.HexData.AgentImages;
         try
         {
             Directory.CreateDirectory(folder);
