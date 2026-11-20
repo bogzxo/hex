@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -25,17 +27,17 @@ internal sealed class McpBridgeSession
     /// </summary>
     public void FromClient(string line, bool connected)
     {
-        JsonObject? message = Parse(line);
+        Head head = HeadOf(line);
         lock (gate)
         {
-            string? method = message?["method"]?.GetValue<string>();
+            string? method = head.Method;
             if (method == "initialize")
                 initialize = line;
             else if (method == "notifications/initialized")
                 initialized = line;
 
-            if (message?["id"] is { } id && method is not null)
-                waiting[IdOf(id)] = method;
+            if (head.Id is { } id && method is not null)
+                waiting[id] = method;
 
             if (!connected)
                 held.Enqueue(line);
@@ -48,12 +50,11 @@ internal sealed class McpBridgeSession
     /// </summary>
     public string? FromHex(string line)
     {
-        JsonObject? message = Parse(line);
-        if (message?["id"] is not { } id || message["method"] is not null)
+        Head head = HeadOf(line);
+        if (head.Id is not { } key || head.HasMethod)
             return line;
 
-        string key = IdOf(id);
-        if (id is JsonValue value && value.TryGetValue(out string? text) && text == REPLAY_ID)
+        if (head.Replay)
             return null;
         lock (gate)
             waiting.Remove(key);
@@ -72,7 +73,7 @@ internal sealed class McpBridgeSession
             foreach (var (id, method) in waiting)
             {
                 // The handshake said again is the bridge's, and a request held for the next Hex is still to be sent
-                if (id == REPLAY_ID || held.Any(line => Parse(line)?["id"] is { } heldId && IdOf(heldId) == id))
+                if (id == REPLAY_ID || held.Any(line => HeadOf(line).Id == id))
                     continue;
                 var error = new JsonObject
                 {
@@ -135,8 +136,72 @@ internal sealed class McpBridgeSession
     /// <summary>What the client is told once the line's back, that the tools may be other ones in the new build.</summary>
     public static string ToolsChanged() => """{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}""";
 
-    // An id said the same way whether it came as a number or a text, its JSON
-    private static string IdOf(JsonNode id) => id.ToJsonString();
+    /// <summary>
+    /// What the top of a line says: its id as JSON (null when it has none, or a null one), its method when that's a
+    /// text, whether it has a method of any sort that isn't null, and whether the id is the handshake said again.
+    /// Nothing for a line that isn't a JSON object.
+    /// </summary>
+    private readonly record struct Head(string? Id, string? Method, bool HasMethod, bool Replay);
+
+    /// <summary>
+    /// The top of a line read without making the message: the id and the method are found among the properties of the
+    /// object and everything else is stepped over. A tool's answer can be a picture of a few megabytes, and every line
+    /// both ways was made into a whole tree of nodes for these two. Still read to the end, a line that isn't JSON has
+    /// neither, as it had when it was parsed whole.
+    /// </summary>
+    private static Head HeadOf(string line)
+    {
+        byte[] bytes = ArrayPool<byte>.Shared.Rent(Encoding.UTF8.GetByteCount(line));
+        try
+        {
+            var reader = new Utf8JsonReader(bytes.AsSpan(0, Encoding.UTF8.GetBytes(line, bytes)));
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return default;
+
+            string? id = null, method = null;
+            bool replay = false, hasMethod = false;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                bool isId = reader.ValueTextEquals("id"u8), isMethod = reader.ValueTextEquals("method"u8);
+                reader.Read();
+                if (isId)
+                {
+                    replay = reader.TokenType == JsonTokenType.String && reader.ValueTextEquals(REPLAY_ID);
+                    id = reader.TokenType == JsonTokenType.Null ? null : IdOf(ref reader);
+                }
+                else if (isMethod)
+                {
+                    hasMethod = reader.TokenType != JsonTokenType.Null;
+                    method = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+                    reader.Skip();
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            }
+
+            // Nothing after the object, the way a parse of the whole line has it
+            return reader.Read() ? default : new Head(id, method, hasMethod, replay);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bytes);
+        }
+    }
+
+    // An id said the same way whether it came as a number or a text, its JSON written again the way a node writes it
+    private static string IdOf(ref Utf8JsonReader reader)
+    {
+        var written = new ArrayBufferWriter<byte>(32);
+        using (var writer = new Utf8JsonWriter(written))
+            JsonElement.ParseValue(ref reader).WriteTo(writer);
+        return Encoding.UTF8.GetString(written.WrittenSpan);
+    }
 
     private static JsonObject? Parse(string line)
     {
