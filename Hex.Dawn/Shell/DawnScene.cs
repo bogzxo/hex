@@ -666,14 +666,15 @@ internal sealed partial class DawnScene : Scene
             .Add("tree_title", FitTreeTitle);
     }
 
-    // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
+    // Something changed in a folder of the workspace, where the languages are is looked for again, and the explorer reads
+    // that folder again when it had read it, the only folders whose changes it can show
     private void TakeFolderChanges()
     {
-        if (folders.TakeChanges())
-        {
+        var (any, read) = folders.TakeChanges();
+        if (any)
             languagesNear.Clear();
+        if (read)
             treeDirty |= Side == HexSide.Explorer;
-        }
     }
 
     /// <summary>
