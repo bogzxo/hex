@@ -13,6 +13,9 @@ namespace Hex.Dawn;
 /// </summary>
 internal static class HexAgentRows
 {
+    // The arguments a tool's input is read by, the first that's there said in its place
+    private static readonly string[] PreviewKeys = ["command", "cmd", "query", "pattern", "file_path", "path", "filename", "url", "description", "prompt"];
+
     /// <summary>Prefer the useful argument over JSON scaffolding; plain or partial tool input remains readable.</summary>
     public static string ToolPreview(string? input)
     {
@@ -24,7 +27,7 @@ internal static class HexAgentRows
             if (root.ValueKind == JsonValueKind.String) return root.GetString() ?? string.Empty;
             if (root.ValueKind == JsonValueKind.Object)
             {
-                foreach (string key in new[] { "command", "cmd", "query", "pattern", "file_path", "path", "filename", "url", "description", "prompt" })
+                foreach (string key in PreviewKeys)
                     if (root.TryGetProperty(key, out JsonElement value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
                         return value.GetString()!;
                 return string.Join(" · ", root.EnumerateObject().Take(3).Select(property =>
@@ -103,7 +106,7 @@ internal static class HexAgentRows
     {
         if (entry.Steps > 0)
             return true;
-        string tool = ToolTitle(entry.ToolName ?? string.Empty);
+        ReadOnlySpan<char> tool = ToolTitleSpan(entry.ToolName ?? string.Empty);
         return tool.Equals("task", StringComparison.OrdinalIgnoreCase) || tool.Equals("agent", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -126,10 +129,13 @@ internal static class HexAgentRows
     }
 
     /// <summary>A tool's name as a row says it, Hex's without the mcp__hex__ a host puts in front.</summary>
-    public static string ToolTitle(string name)
+    public static string ToolTitle(string name) => ToolTitleSpan(name) is var title && title.Length == name.Length ? name : title.ToString();
+
+    // The same as a span of the name, for asking about a tool's name without making a string of it
+    private static ReadOnlySpan<char> ToolTitleSpan(string name)
     {
         int at = name.LastIndexOf("__", StringComparison.Ordinal);
-        return name.StartsWith("mcp__", StringComparison.Ordinal) && at > 4 ? name[(at + 2)..] : name;
+        return name.StartsWith("mcp__", StringComparison.Ordinal) && at > 4 ? name.AsSpan(at + 2) : name;
     }
 
     /// <summary>The icon of a tool by what kind of tool it is, a command, a file changed or read, a search, Hex's own.</summary>
