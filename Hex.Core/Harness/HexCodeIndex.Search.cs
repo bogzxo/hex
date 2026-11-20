@@ -48,16 +48,30 @@ internal sealed partial class HexCodeIndex
         Ask("hex_refs", $"{name}\n{glob}\n{most}\n{budget}", index =>
         {
             string asked = name.Trim();
+            string container = string.Empty;
             if (asked.Contains('.'))
+            {
+                container = asked[..asked.LastIndexOf('.')];
+                container = container[(container.LastIndexOf('.') + 1)..];
                 asked = asked[(asked.LastIndexOf('.') + 1)..];
+            }
             if (asked.Length == 0 || !asked.All(c => char.IsLetterOrDigit(c) || c == '_'))
                 return HexAnswer.Wrong("hex_refs takes a name, letters, digits and underscores. hex_search finds anything else.");
 
             var pattern = new Regex($@"\b{Regex.Escape(asked)}\b", RegexOptions.CultureInvariant);
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
-            return Grouped(index, file => only.Length == 0 || only.Any(each => each.Matches(file.Relative, false)),
+
+            // Container.Name, the files that say the container somewhere (its own, partial ones and all, and the ones that
+            // use a thing of its type), rather than every Name of anything. By text still, a file that only says a variable
+            // of it is left out, hex_calls asks the language server for the exact ones
+            Regex? of = container.Length > 0 && container.All(c => char.IsLetterOrDigit(c) || c == '_')
+                ? new Regex($@"\b{Regex.Escape(container)}\b", RegexOptions.CultureInvariant) : null;
+            bool Says(HexIndexedFile file) => of is null || file.Symbols.Any(symbol => symbol.Name == container) || file.Lines.Any(line => line.Contains(container, StringComparison.Ordinal) && of.IsMatch(line));
+
+            HexAnswer found = Grouped(index, file => (only.Length == 0 || only.Any(each => each.Matches(file.Relative, false))) && Says(file),
                 (file, line) => FirstMatch(pattern, line, file),
                 asked, asked, 0, most, budget, "hex_refs");
+            return of is null ? found : found with { Text = $"Only files that say {container}, {asked} anywhere else left out.\n" + found.Text };
         });
 
     // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
@@ -152,30 +166,34 @@ internal sealed partial class HexCodeIndex
 
             said.Line($"{file.Relative} ({places.Count})");
             string[] lines = file.Lines;
-            int lastShown = -1;
+            // The lines written so far, a place already written as a line around another isn't again. Counted as a set:
+            // the declarations go first, so a use further up the file than one came after it and was taken for written
+            var written = new HashSet<int>();
             foreach (Place place in places.OrderByDescending(place => place.Declares).ThenBy(place => place.Line))
             {
                 if (shown++ >= most)
                     break;
 
-                // Already written as a line around the one before
-                if (place.Line <= lastShown)
+                if (written.Contains(place.Line))
                     continue;
 
                 if (context > 0)
                 {
-                    for (int around = Math.Max(Math.Max(0, place.Line - context), lastShown + 1); around < place.Line; around++)
-                        said.Line($"  {around + 1}- {HexBudget.Cut(lines[around], 0, LINE_WIDTH)}");
+                    for (int around = Math.Max(0, place.Line - context); around < place.Line; around++)
+                    {
+                        if (written.Add(around))
+                            said.Line($"  {around + 1}- {HexBudget.Cut(lines[around], 0, LINE_WIDTH)}");
+                    }
                 }
 
                 said.Line($"  {place.Line + 1}{(place.Declares ? "*" : string.Empty)}: {HexBudget.Cut(lines[place.Line], place.Column, LINE_WIDTH)}");
-                lastShown = place.Line;
+                written.Add(place.Line);
                 if (context > 0)
                 {
                     for (int around = place.Line + 1; around <= Math.Min(lines.Length - 1, place.Line + context); around++)
                     {
-                        said.Line($"  {around + 1}- {HexBudget.Cut(lines[around], 0, LINE_WIDTH)}");
-                        lastShown = around;
+                        if (written.Add(around))
+                            said.Line($"  {around + 1}- {HexBudget.Cut(lines[around], 0, LINE_WIDTH)}");
                     }
                 }
             }
