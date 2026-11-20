@@ -85,9 +85,12 @@ internal sealed partial class DawnScene
         }
     }
 
-    /// <summary>Whether a document has anything in it that isn't in its file.</summary>
+    /// <summary>
+    /// Whether a document has anything in it that isn't in its file. Its text is compared line by line where it is, the
+    /// backups asked it of every changed file every few seconds and joined the whole of each to ask.
+    /// </summary>
     internal static bool HasChanges(HexDocument open) => open.IsText
-        ? open.Editor.Text != open.SavedCode || open.CrLf != open.SavedCrLf
+        ? !open.Editor.Document.TextEquals(open.SavedCode) || open.CrLf != open.SavedCrLf
         : open.Modified || open.CodeEdited || open.GenerateCode() != open.SavedCode;
 
     /// <summary>A document made what its file says on the disk, as a step of its undo, the caret kept where it can be.</summary>

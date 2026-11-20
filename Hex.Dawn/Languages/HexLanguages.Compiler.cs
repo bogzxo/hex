@@ -35,7 +35,13 @@ internal sealed partial class HexLanguages
     private static partial Regex ModuleDeclaration { get; }
 
     /// <summary>Whether a file is one the compiler looks over.</summary>
-    private static bool Checked(HexDocument of) => of.Path is { } path && Path.GetExtension(path).ToLowerInvariant() is ".d" or ".di";
+    /// <remarks>
+    /// Asked on every key of every open file, so the extension is looked at where it is. It was lowered into a string of
+    /// its own each time.
+    /// </remarks>
+    private static bool Checked(HexDocument of) =>
+        of.Path is { } path && Path.GetExtension(path.AsSpan()) is var extension
+        && (extension.Equals(".d", StringComparison.OrdinalIgnoreCase) || extension.Equals(".di", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>A file is checked so long from now, opened, typed into or saved.</summary>
     private void CheckSoon(HexDocument of, float delay = CHECK_DELAY)

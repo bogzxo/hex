@@ -162,7 +162,7 @@ internal sealed partial class DawnScene
             {
                 if (span.Kind != SyntaxKind.Comment || span.Start < 0 || span.Length <= 0 || span.Start > text.Length - span.Length)
                     continue;
-                prose ??= new string(' ', text.Length).ToCharArray();
+                prose ??= Blank(text.Length);
                 text.AsSpan(span.Start, span.Length).CopyTo(prose.AsSpan(span.Start));
             }
             if (prose is not null)
@@ -187,7 +187,7 @@ internal sealed partial class DawnScene
         {
             string text = target.Editor.Document.LineAt(line);
             bool wanted = line >= target.First && text.Length is > 0 and <= HexSpelling.MaxLineLength;
-            char[]? prose = wanted ? new string(' ', text.Length).ToCharArray() : null;
+            char[]? prose = wanted ? Blank(text.Length) : null;
             bool any = false;
 
             // A style's or a script's comments, from the colours, while the rest of it is skipped below
@@ -205,7 +205,8 @@ internal sealed partial class DawnScene
                 if (raw is not null)
                 {
                     // Code until the tag that ends it
-                    if (c == '<' && text.AsSpan(i).StartsWith("</" + raw, StringComparison.OrdinalIgnoreCase))
+                    // Without making "</" + its name to look for at every < in it
+                    if (c == '<' && i + 1 < text.Length && text[i + 1] == '/' && text.AsSpan(i + 2).StartsWith(raw, StringComparison.OrdinalIgnoreCase))
                     {
                         i += 1 + raw.Length;
                         raw = null;
@@ -284,6 +285,15 @@ internal sealed partial class DawnScene
         }
 
         return [.. lines];
+    }
+
+    // A line's worth of spaces to copy the prose of a line into, made as the one array it is. A string of spaces was made
+    // first and copied into it, for every line on screen every time it was checked
+    private static char[] Blank(int length)
+    {
+        var blank = new char[length];
+        blank.AsSpan().Fill(' ');
+        return blank;
     }
 
     private static string SpellingDictionaryPath => HexFiles.Kept("spelling-words.tsv");
