@@ -16,11 +16,10 @@ internal sealed partial class DawnScene
     // Bigger than this either way and a picture is drawn smoothed, it's going to be shrunk to fit and nearest would shimmer
     private const int SMOOTH_FROM = 512;
 
-    // The most a small picture is made bigger
-    private const int MOST_ZOOM = 16;
-
     private Panel imageView = null!;
-    private Image imagePicture = null!;
+    // The picture itself, the same viewer the agents' pictures are seen full screen in: the wheel zooms round the pointer,
+    // a drag looks round, + - 0 and 1 and the arrows do the same from the keyboard (HexPictureView)
+    private HexPictureView imagePicture = null!;
     private Label imageInfo = null!;
 
     /// <summary>Whether a file is one of the pictures that's shown rather than opened as text.</summary>
@@ -37,8 +36,12 @@ internal sealed partial class DawnScene
     private void BuildImageView()
     {
         imageView = layout.Get<Panel>("image_view");
-        imagePicture = layout.Get<Image>("image_picture");
         imageInfo = layout.Get<Label>("image_info");
+
+        // Under the line that says how big it is, which is taken out and put back over it
+        imagePicture = imageView.Add(new HexPictureView { Fill = UIFill.Both, Padding = new UIEdges(24.0f) });
+        imageView.Remove(imageInfo);
+        imageView.Add(imageInfo);
         documentClosed += FreePicture;
         Engine.WindowManager.Exclusive += picturesFreed = _ => FreeClosedPictures();
     }
@@ -52,8 +55,8 @@ internal sealed partial class DawnScene
         if (closed.Picture is not { } picture || documents.Any(open => ReferenceEquals(open.Picture, picture)))
             return;
 
-        if (ReferenceEquals(imagePicture.Texture, picture))
-            imagePicture.Texture = null;
+        if (ReferenceEquals(imagePicture.Picture, picture))
+            imagePicture.Picture = null;
         closed.Picture = null;
         lock (picturesToFree)
             picturesToFree.Add((picture, FREE_AFTER_FRAMES));
@@ -147,23 +150,14 @@ internal sealed partial class DawnScene
         if (document.Picture is not { } picture || !imageView.Visible)
             return;
 
-        if (!ReferenceEquals(imagePicture.Texture, picture))
-            imagePicture.Texture = picture;
+        // Another picture starts fitted, a tab gone back to keeps nothing of how the last one was looked at
+        if (!ReferenceEquals(imagePicture.Picture, picture))
+        {
+            imagePicture.Picture = picture;
+            imagePicture.Fit();
+        }
 
-        UIRect room = imageView.Bounds.Shrink(new UIEdges(24.0f));
-        if (room.IsEmpty)
-            return;
-
-        float width = picture.Width, height = picture.Height;
-        float fit = MathF.Min(room.Width / width, room.Height / height);
-
-        // Smaller than the room, it's made bigger by a whole number of times so every pixel is a square of the same size
-        float zoom = fit >= 1.0f ? MathF.Min(MOST_ZOOM, MathF.Floor(fit)) : fit;
-        var size = new Vector2(MathF.Round(width * zoom), MathF.Round(height * zoom));
-        if (imagePicture.Size != size)
-            imagePicture.Size = size;
-
-        string info = Said("images.info", ("width", picture.Width.ToString()), ("height", picture.Height.ToString()), ("zoom", (zoom * 100.0f).ToString("0")));
+        string info = Said("images.info", ("width", picture.Width.ToString()), ("height", picture.Height.ToString()), ("zoom", (imagePicture.Shown * 100.0f).ToString("0")));
         if (imageInfo.Text != info)
             imageInfo.Text = info;
     }
