@@ -54,12 +54,7 @@ internal sealed partial class DawnScene
 
             Context.Documents.Rewrite(open, changed);
             string edited = $"Edited {path}:{line} in the editor ({Places(count)}), it has changes nobody saved yet, so it isn't on the disk until it's saved.";
-            foreach (string? step in McpCheckIfAsked(args, path))
-            {
-                if (step is null) yield return null;
-                else edited += step;
-            }
-            yield return McpToolResult.Text(edited);
+            foreach (McpToolResult? step in McpThenCheck(args, path, edited)) yield return step;
             yield break;
         }
 
@@ -93,24 +88,34 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        foreach (McpToolResult? step in McpThenCheck(args, path, said)) yield return step;
+    }
+
+    /// <summary>
+    /// A change made answered with: what was done yielded at once as what's done so far (cut off by the call's time,
+    /// that's the answer, so an agent never hears "timed out" of an edit that landed), then the check, then the whole.
+    /// </summary>
+    private IEnumerable<McpToolResult?> McpThenCheck(JsonObject args, string path, string done)
+    {
+        yield return McpToolResult.Done(done);
         foreach (string? step in McpCheckIfAsked(args, path))
         {
             if (step is null) yield return null;
-            else said += step;
+            else done += step;
         }
-        yield return McpToolResult.Text(said);
+        yield return McpToolResult.Text(done);
     }
 
     /// <summary>
     /// After a change, what the file's language server says is wrong with it, waited on a moment, unless check is false.
-    /// A server that isn't running for the file isn't started for it. Nulls while waiting, then what to add to the answer.
+    /// A server that isn't up for the file yet is started for the next check, not waited on. Nulls while waiting, then what to add to the answer.
     /// </summary>
     private IEnumerable<string?> McpCheckIfAsked(JsonObject args, string path)
     {
         if (!args.Flag("check", true))
             yield break;
         languages.AgentFileWritten(path);
-        foreach (string? step in McpCheckAfter(path, 4.0f))
+        foreach (string? step in McpCheckAfter(path))
             yield return step;
     }
 
@@ -122,12 +127,7 @@ internal sealed partial class DawnScene
         {
             Context.Documents.Rewrite(open, content.Replace("\r\n", "\n"));
             string wrote = $"Wrote {path} in the editor, it had changes nobody saved yet, so it isn't on the disk until it's saved.";
-            foreach (string? step in McpCheckIfAsked(args, path))
-            {
-                if (step is null) yield return null;
-                else wrote += step;
-            }
-            yield return McpToolResult.Text(wrote);
+            foreach (McpToolResult? step in McpThenCheck(args, path, wrote)) yield return step;
             yield break;
         }
 
@@ -158,12 +158,7 @@ internal sealed partial class DawnScene
             yield break;
         }
 
-        foreach (string? step in McpCheckIfAsked(args, path))
-        {
-            if (step is null) yield return null;
-            else said += step;
-        }
-        yield return McpToolResult.Text(said);
+        foreach (McpToolResult? step in McpThenCheck(args, path, said)) yield return step;
     }
 
     private static string Places(int count) => count == 1 ? "one place" : $"{count} places";

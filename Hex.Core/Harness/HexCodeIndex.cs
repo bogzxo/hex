@@ -20,6 +20,26 @@ internal sealed class HexIndexSnapshot(long generation, string[] roots, HexIndex
     /// <summary>Every declaration by its name in lower case, made the first time it's asked for.</summary>
     public Dictionary<string, List<(HexIndexedFile File, HexSymbol Symbol)>> ByName => byName ??= MakeByName();
 
+    /// <summary>
+    /// Whether a file is in a project's folder (a .csproj, package.json, Cargo.toml, ... of the index in its folder or one
+    /// above it), what a declaration a language server has loaded is told from one in a loose copy by.
+    /// </summary>
+    public bool InProject(HexIndexedFile file)
+    {
+        projectFolders ??= new HashSet<string>(Files.Where(each => HexCodeIndex.IsProjectFile(each.Relative)).Select(each => Path.GetDirectoryName(each.Path) ?? string.Empty), StringComparer.OrdinalIgnoreCase);
+        for (string? folder = Path.GetDirectoryName(file.Path); folder is { Length: > 0 }; folder = Path.GetDirectoryName(folder))
+        {
+            if (projectFolders.Contains(folder))
+                return true;
+            if (Roots.Any(root => root.Equals(folder, StringComparison.OrdinalIgnoreCase)))
+                break;
+        }
+
+        return false;
+    }
+
+    private HashSet<string>? projectFolders;
+
     /// <summary>A file by its whole path, case ignored the way Windows has it.</summary>
     public HexIndexedFile? File(string path)
     {

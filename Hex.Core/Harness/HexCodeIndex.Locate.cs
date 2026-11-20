@@ -21,7 +21,18 @@ internal sealed partial class HexCodeIndex
     /// The best declaration of a name (Name or Container.Name), in one file when a path's said. Null with why not in
     /// <paramref name="wrong"/>.
     /// </summary>
-    public HexLocated? Locate(string symbol, string? path, out string? wrong)
+    public HexLocated? Locate(string symbol, string? path, out string? wrong) => LocateAll(symbol, path, out wrong) is [var best, ..] ? best : null;
+
+    /// <summary>The most declarations of a name a tool tries one after the other when a server has nothing at the first.</summary>
+    public const int MOST_CANDIDATES = 6;
+
+    /// <summary>
+    /// Every declaration of a name that fits it exactly, the best first (in a project's folder before one that isn't,
+    /// then by how well the name fits), at most <see cref="MOST_CANDIDATES"/>, each with the others said. A tool asks a
+    /// server about the first and goes on to the next when it has nothing there, an overload or a copy outside a project.
+    /// Empty with why not in <paramref name="wrong"/>.
+    /// </summary>
+    public List<HexLocated> LocateAll(string symbol, string? path, out string? wrong)
     {
         HexIndexSnapshot index = Current();
         wrong = null;
@@ -29,23 +40,22 @@ internal sealed partial class HexCodeIndex
         if (path is { Length: > 0 } && file is null)
         {
             wrong = NoFile(index, path);
-            return null;
+            return [];
         }
 
         List<(HexIndexedFile File, HexSymbol Symbol, int Score)> fits = [.. FindSymbols(index, symbol)
-            .Where(each => each.Score >= 90 && (file is null || ReferenceEquals(each.File, file)))];
+            .Where(each => each.Score >= 90 && (file is null || ReferenceEquals(each.File, file)))
+            .OrderByDescending(each => each.Score >= 100).ThenByDescending(each => index.InProject(each.File))];
         if (fits.Count == 0 && InContainer(index, symbol, file) is { } member)
-            return member;
+            return [member];
         if (fits.Count == 0)
         {
             wrong = $"Nothing called {symbol} is declared{(file is null ? string.Empty : $" in {file.Relative}")}. hex_symbols finds names by part of them.";
-            return null;
+            return [];
         }
 
-        // The best of the same kind and name before any other, the rest said as others
-        var (found, best, _) = fits[0];
-        string[] others = [.. fits.Skip(1).Select(each => $"{each.File.Relative}:{each.Symbol.Line + 1}")];
-        return LocateIn(Fresh(found), best, others);
+        string[] places = [.. fits.Select(each => $"{each.File.Relative}:{each.Symbol.Line + 1}")];
+        return [.. fits.Take(MOST_CANDIDATES).Select((each, i) => LocateIn(Fresh(each.File), each.Symbol, [.. places.Where((_, j) => j != i)]))];
     }
 
     /// <summary>
@@ -137,4 +147,91 @@ internal sealed partial class HexCodeIndex
     }
 
     private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    // The words a declaration's name comes after, in any of the languages the tools ask servers about
+    private static readonly HashSet<string> DECLARING = new(StringComparer.Ordinal)
+    {
+        "class", "struct", "interface", "record", "enum", "trait", "impl", "union", "namespace", "module",
+        "def", "fn", "func", "function"
+    };
+
+    /// <summary>
+    /// The column of the name a line declares, when a tool's given a path and line with no name: past the modifiers and
+    /// the return type ("public static bool TryGet&lt;T&gt;(" is TryGet, "class Foo : Bar" is Foo, "def run(self)" is run,
+    /// "int Count { get; }" is Count). A server asked at "public" said there was no call hierarchy there. The first
+    /// letter that isn't a space when nothing on it looks declared.
+    /// </summary>
+    internal static int DeclarationColumn(string line)
+    {
+        string text = line;
+        int comment = text.IndexOf("//", StringComparison.Ordinal);
+        if (comment >= 0)
+            text = text[..comment];
+
+        // Each word with where it starts
+        var words = new List<(string Word, int At)>();
+        for (int i = 0; i < text.Length;)
+        {
+            if (IsWordChar(text[i]) && !char.IsDigit(text[i]))
+            {
+                int start = i;
+                while (i < text.Length && IsWordChar(text[i]))
+                    i++;
+                words.Add((text[start..i], start));
+            }
+            else
+                i++;
+        }
+
+        // A keyword that declares, the first word after it that isn't another (record struct Foo, async def run)
+        for (int w = 0; w < words.Count; w++)
+        {
+            if (!DECLARING.Contains(words[w].Word))
+                continue;
+            for (int next = w + 1; next < words.Count; next++)
+            {
+                if (!DECLARING.Contains(words[next].Word) && words[next].Word is not ("class" or "struct" or "static" or "async" or "mut"))
+                    return words[next].At;
+            }
+        }
+
+        // A method or a function, the word before its first ( past any <type parameters>
+        int open = text.IndexOf('(');
+        if (open > 0)
+        {
+            int at = open - 1;
+            while (at >= 0 && char.IsWhiteSpace(text[at]))
+                at--;
+            if (at >= 0 && text[at] == '>')
+            {
+                for (int depth = 0; at >= 0; at--)
+                {
+                    if (text[at] == '>') depth++;
+                    else if (text[at] == '<' && --depth == 0) { at--; break; }
+                }
+                while (at >= 0 && char.IsWhiteSpace(text[at]))
+                    at--;
+            }
+
+            int end = at + 1;
+            while (at >= 0 && IsWordChar(text[at]))
+                at--;
+            if (end > at + 1)
+                return at + 1;
+        }
+
+        // A property, field or variable, the last word before = { ; or =>
+        int stop = text.IndexOfAny(['=', '{', ';']);
+        (string Word, int At) last = default;
+        foreach (var word in words)
+        {
+            if (stop >= 0 && word.At >= stop)
+                break;
+            last = word;
+        }
+        if (last.Word is { Length: > 0 } && words.Count > 1)
+            return last.At;
+
+        return NameColumn(line, string.Empty);
+    }
 }

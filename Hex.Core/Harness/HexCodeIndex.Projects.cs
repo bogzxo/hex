@@ -30,8 +30,7 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Projects(string? under, bool packages, int budget) =>
         Ask("hex_projects", $"{under}\n{packages}\n{budget}", index =>
         {
-            List<HexIndexedFile> files = [.. index.Files.Where(file => IsProjectFile(file.Relative)
-                && !file.Relative.Contains("node_modules/", StringComparison.OrdinalIgnoreCase))];
+            List<HexIndexedFile> files = [.. index.Files.Where(file => IsProjectFile(file.Relative) && !IsProjectNoise(file.Relative))];
             List<HexProject> projects = [.. files.Select(file => ProjectOf(file.Path, File.Exists(file.Path) ? HexSearch.ReadLines(file.Path) : [])).OfType<HexProject>()];
             Resolve(projects);
 
@@ -50,8 +49,8 @@ internal sealed partial class HexCodeIndex
                 string targets = project.Targets.Length == 0 ? string.Empty : $" {project.Targets}";
                 said.Line($"{RelativeOf(project.Path)}  {project.Name} ({project.System} {project.Kind}{targets})");
                 if (project.Uses.Count > 0)
-                    said.Line("  -> " + string.Join(", ", project.Uses.Select(use => System.IO.Path.IsPathRooted(use) ? NameOf(projects, use) : use + "?")));
-                List<string> usedBy = [.. projects.Where(other => other.Uses.Contains(project.Path, PlatformPaths.Comparer)).Select(other => other.Name)];
+                    said.Line("  -> " + string.Join(", ", project.Uses.Select(use => System.IO.Path.IsPathRooted(use) ? NameOf(projects, use) : use + "?").Distinct(StringComparer.OrdinalIgnoreCase)));
+                List<string> usedBy = [.. projects.Where(other => other.Uses.Contains(project.Path, PlatformPaths.Comparer)).Select(other => other.Name).Distinct(StringComparer.OrdinalIgnoreCase)];
                 if (usedBy.Count > 0)
                     said.Line("  <- " + string.Join(", ", usedBy));
                 if (project.Packages.Count > 0)
@@ -60,6 +59,17 @@ internal sealed partial class HexCodeIndex
 
             return new HexAnswer(said.Finish("narrow with under or a bigger max_chars"), files.Sum(file => file.Length));
         });
+
+    /// <summary>
+    /// A project file that isn't one of the workspace's own projects: a package's under node_modules, or anything under a
+    /// docs, benchmarks or samples folder (hex's docs/benchmarks keep a package.json that's only numbers).
+    /// </summary>
+    internal static bool IsProjectNoise(string relative)
+    {
+        string path = "/" + relative.Replace('\\', '/');
+        return path.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) || path.Contains("/docs/", StringComparison.OrdinalIgnoreCase)
+            || path.Contains("/benchmarks/", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string NameOf(List<HexProject> projects, string path) =>
         projects.Find(project => PlatformPaths.Same(project.Path, path))?.Name ?? System.IO.Path.GetFileNameWithoutExtension(path);
@@ -152,10 +162,15 @@ internal sealed partial class HexCodeIndex
         return new HexProject(path, name, "MSBuild", kind, targets, uses, packages);
     }
 
-    private static HexProject NpmProject(string path, string folder, string text)
+    // What a package.json of npm's has at least one of, a JSON file of that name with none of them is only data
+    private static readonly string[] NPM_KEYS = ["name", "version", "dependencies", "devDependencies", "peerDependencies", "workspaces", "scripts", "main", "module", "exports", "bin", "private"];
+
+    private static HexProject? NpmProject(string path, string folder, string text)
     {
         using var json = System.Text.Json.JsonDocument.Parse(text, new System.Text.Json.JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = System.Text.Json.JsonCommentHandling.Skip });
         System.Text.Json.JsonElement root = json.RootElement;
+        if (root.ValueKind != System.Text.Json.JsonValueKind.Object || !NPM_KEYS.Any(key => root.TryGetProperty(key, out _)))
+            return null;
         string? Text(string key) => root.TryGetProperty(key, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString() : null;
 
         string name = Text("name") ?? System.IO.Path.GetFileName(folder);

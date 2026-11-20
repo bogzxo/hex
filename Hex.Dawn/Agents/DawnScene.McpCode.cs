@@ -21,6 +21,15 @@ internal sealed partial class DawnScene
     // How long after a server's said what's wrong with a file it's given to say it again, the second being about the change
     private const int MCP_CHECK_SETTLE_MS = 600;
 
+    // How long after a server's up a file it hasn't said anything of is sent it again, for hex_diagnostics
+    private const int MCP_DIAGNOSTICS_NUDGE_MS = 4_000;
+
+    // How long the check after an edit waits for a file's server, the first time for a server longer (it's warming up)
+    private const float MCP_CHECK_SECONDS = 4.0f, MCP_FIRST_CHECK_SECONDS = 12.0f;
+
+    // The servers a check after an edit has waited on before, the first check of each waits longer
+    private readonly HashSet<LanguageServer> mcpChecked = new(ReferenceEqualityComparer.Instance);
+
     // The most a call tree has, past it a node isn't asked about
     private const int MOST_TREE_NODES = 160;
     private const int MOST_CHILDREN = 25;
@@ -39,16 +48,17 @@ internal sealed partial class DawnScene
                 "What calls a function or method (direction in, the default) or what it calls (out), as a tree a few levels deep in one answer, path:line of each call. Asked of the file's language server (any language with call hierarchy), no file need be open. Callers three deep here is a dozen hex_refs.",
                 McpSchema.Object([Symbol(), PathOf(), Line(), Column(),
                     ("direction", McpSchema.OneOf("in for callers, out for what it calls.", "in", "out")),
-                    ("depth", McpSchema.Integer("How many levels, 1 to 5, 2 by default.")), Max()]), ReadOnly: true),
+                    ("depth", McpSchema.Integer("How many levels, 1 to 5, 2 by default.")),
+                    ("skip_constructors", McpSchema.Flag("Leave out the constructors it calls, true by default going out.")), Max()]), ReadOnly: true),
                 McpCalls, Timeout: 120.0f),
 
             new(new McpTool("hex_implementations", "Implementations",
-                "What implements an interface or abstract member, or overrides a virtual one, or derives from a class, path:line each. Asked of the file's language server (textDocument/implementation, then the type hierarchy), no file need be open.",
+                "What implements an interface or abstract member, or overrides a virtual one, or derives from a class, path:line each. Asked of the file's language server (textDocument/implementation, then the type hierarchy, then the base lists the index read for a server with neither), no file need be open.",
                 McpSchema.Object([Symbol(), PathOf(), Line(), Column(), Max()]), ReadOnly: true),
                 McpImplementations, Timeout: 90.0f),
 
             new(new McpTool("hex_types", "Type hierarchy",
-                "A type's bases and interfaces (up), what derives from it (down) or both, as a tree a few levels deep, path:line each, by its language server's type hierarchy.",
+                "A type's bases and interfaces (up), what derives from it (down) or both, as a tree a few levels deep, path:line each, by its language server's type hierarchy (by the base lists the index read where the server has none, Python's pyright).",
                 McpSchema.Object([Symbol(), PathOf(), Line(), Column(),
                     ("direction", McpSchema.OneOf("up for bases, down for derived, both by default.", "up", "down", "both")),
                     ("depth", McpSchema.Integer("How many levels, 1 to 5, 2 by default.")), Max()]), ReadOnly: true),
@@ -75,7 +85,7 @@ internal sealed partial class DawnScene
                 McpSchema.Object([
                     ("paths", McpSchema.String("The files, a comma between them, at most 10.")),
                     ("errors_only", McpSchema.Flag("Leave the warnings out.")),
-                    ("wait", McpSchema.Integer("Seconds to wait for a server that's starting, 20 by default.")), Max()], "paths"), ReadOnly: true),
+                    ("wait", McpSchema.Integer("Seconds to wait for each file's server to say something of it, 30 by default.")), Max()], "paths"), ReadOnly: true),
                 McpDiagnostics, Timeout: 150.0f),
 
             new(new McpTool("hex_edit_symbol", "Replace a declaration",
@@ -95,12 +105,23 @@ internal sealed partial class DawnScene
         ];
     }
 
-    /// <summary>A place to ask a server about, found by name or given, the name that's there and the others declaring it.</summary>
-    private sealed record McpCodeAt(string Path, int Line, int Column, string Name, string Also);
+    /// <summary>
+    /// A place to ask a server about, found by name or given, the name that's there, the others declaring it, and the
+    /// index's declaration when it has one (what a fallback by the index starts from, and what overloads are told by).
+    /// </summary>
+    private sealed record McpCodeAt(string Path, int Line, int Column, string Name, string Also, HexLocated? Located = null)
+    {
+        public string Place(Func<string, string> relative) => $"{relative(Path)}:{Line + 1}";
+
+        /// <summary>The same name in the same container of the same file, an overload of this, asked together with it.</summary>
+        public bool Overloads(McpCodeAt other) => PlatformPaths.Same(Path, other.Path) && Name == other.Name
+            && (Located?.Symbol.Container ?? string.Empty) == (other.Located?.Symbol.Container ?? string.Empty);
+    }
 
     /// <summary>
     /// Where the arguments point, by path and line or by a name the index finds, worked out off the editor's thread. The
-    /// last thing yielded is the place, or an error.
+    /// last thing yielded is the places to try, best first (the declarations of a name, in a project's folder first), or
+    /// an error.
     /// </summary>
     private IEnumerable<object?> McpLocate(JsonObject args)
     {
@@ -115,12 +136,21 @@ internal sealed partial class DawnScene
                 yield break;
             }
 
+            // Asked on the name, not the line's start: on a declaration line that's past its modifiers and return type,
+            // where the index says the name is when it declares something there
             string text = lines[line - 1].TrimEnd('\r');
-            int column = args.Integer("column") is { } said ? Math.Max(0, said - 1) : HexCodeIndex.NameColumn(text, symbol ?? string.Empty);
+            HexIndexedFile? indexed = Harness.Latest.File(full);
+            HexSymbol? declared = indexed?.Symbols.FirstOrDefault(each => each.Line == line - 1 && (symbol is not { Length: > 0 } || each.Name == symbol));
+            int column = args.Integer("column") is { } said ? Math.Max(0, said - 1)
+                : symbol is { Length: > 0 } ? HexCodeIndex.NameColumn(text, symbol)
+                : declared is not null ? HexCodeIndex.NameColumn(text, declared.Name, declared.Column)
+                : HexCodeIndex.DeclarationColumn(text);
+            column = Math.Min(column, text.Length);
             int end = column;
             while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_'))
                 end++;
-            yield return new McpCodeAt(full, line - 1, column, symbol ?? text[column..end], string.Empty);
+            HexLocated? located = declared is not null && indexed is not null ? HexCodeIndex.LocateIn(HexCodeIndex.Fresh(indexed), declared, []) : null;
+            yield return new List<McpCodeAt> { new(full, line - 1, column, symbol is { Length: > 0 } ? symbol : text[column..end], string.Empty, located) };
             yield break;
         }
 
@@ -132,23 +162,50 @@ internal sealed partial class DawnScene
 
         HexCodeIndex index = Harness;
         string? wrong = null;
-        Task<HexLocated?> finding = Task.Run(() => index.Locate(symbol, path, out wrong));
+        Task<List<HexLocated>> finding = Task.Run(() => index.LocateAll(symbol, path, out wrong));
         while (!finding.IsCompleted)
             yield return null;
-        if (finding.IsFaulted || finding.Result is not { } found)
+        if (finding.IsFaulted || finding.Result.Count == 0)
         {
             yield return McpToolResult.Error(wrong ?? $"{symbol} couldn't be found, {finding.Exception?.InnerException?.Message}");
             yield break;
         }
 
-        yield return new McpCodeAt(found.File.Path, found.Line, found.Column, found.Symbol.Name, found.AlsoSaid);
+        yield return finding.Result.Select(found => new McpCodeAt(found.File.Path, found.Line, found.Column, found.Symbol.Name, found.AlsoSaid, found)).ToList();
+    }
+
+    /// <summary>
+    /// The places to ask in turn: each with its overloads (the same name in the same container and file) as one group,
+    /// the groups in the order they were found.
+    /// </summary>
+    private static List<List<McpCodeAt>> McpGroups(List<McpCodeAt> all)
+    {
+        var groups = new List<List<McpCodeAt>>();
+        foreach (McpCodeAt at in all)
+        {
+            if (groups.Find(group => group[0].Overloads(at)) is { } same)
+                same.Add(at);
+            else
+                groups.Add([at]);
+        }
+
+        return groups;
+    }
+
+    /// <summary>What a tool says when none of the places it tried had anything, each of them and how to pick one.</summary>
+    private string McpTriedAll(string what, string name, List<McpCodeAt> tried)
+    {
+        Func<string, string> relative = McpRelative();
+        return tried.Count <= 1
+            ? $"{what} at {name} ({tried[0].Place(relative)})."
+            : $"{what} at any of the {tried.Count} declarations of {name}: {string.Join(", ", tried.Select(each => each.Place(relative)))}. Say path (and line) to pick one.";
     }
 
     /// <summary>
     /// The server for a file, waited on until it's up and does what's wanted. The last thing yielded is the server, or an
     /// error saying why there's none.
     /// </summary>
-    private IEnumerable<object?> McpServerFor(string path, string provider, string what)
+    private IEnumerable<object?> McpServerFor(string path, string? provider, string what)
     {
         if (languages.AgentServer(path, start: true, out string? why) is not { } server)
         {
@@ -169,7 +226,7 @@ internal sealed partial class DawnScene
             yield return McpToolResult.Error($"{server.Name}'s server didn't start in {MCP_SERVER_START_MS / 1000} s, ask again in a moment.");
             yield break;
         }
-        if (!server.Offers(provider))
+        if (provider is not null && !server.Offers(provider))
         {
             yield return McpToolResult.Error($"{server.Name}'s server can't say {what} ({provider}).");
             yield break;
@@ -241,47 +298,98 @@ internal sealed partial class DawnScene
         var box = new McpStepBox();
         foreach (var step in McpSteps(McpLocate(args), box)) yield return step;
         if (box.Value is McpToolResult located) { yield return located; yield break; }
-        var at = (McpCodeAt)box.Value!;
+        var all = (List<McpCodeAt>)box.Value!;
+        McpCodeAt first = all[0];
         bool incoming = args.String("direction") != "out";
+        bool skipConstructors = args.Flag("skip_constructors", !incoming);
         int depth = Math.Clamp(args.Integer("depth") ?? 2, 1, 5);
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
 
         // A server with no call hierarchy has its callers said by the index's references instead
-        if (languages.AgentServer(at.Path, start: true, out _) is { } early && early.IsReady && !early.Offers("callHierarchyProvider") && incoming)
+        if (languages.AgentServer(first.Path, start: true, out _) is { } early && early.IsReady && !early.Offers("callHierarchyProvider") && incoming)
         {
-            yield return McpToolResult.Text($"{early.Name}'s server has no call hierarchy, the uses of {at.Name} by name instead.\n" + Harness.References(at.Name, null, 80, budget).Text);
+            yield return McpToolResult.Text($"{early.Name}'s server has no call hierarchy, the uses of {first.Name} by name instead.\n" + Harness.References(first.Name, null, 80, budget).Text);
             yield break;
         }
 
-        foreach (var step in McpSteps(McpServerFor(at.Path, "callHierarchyProvider", "a call hierarchy"), box)) yield return step;
-        if (box.Value is McpToolResult noServer) { yield return noServer; yield break; }
-        var server = (LanguageServer)box.Value!;
+        // Each declaration in turn (a copy outside the projects the server loaded has nothing), its overloads together
+        LanguageServer? server = null;
+        McpToolResult? failure = null;
+        var roots = new List<HexTreeNode>();
+        List<McpCodeAt> used = [], tried = [];
+        int constructors = 0;
+        foreach (List<McpCodeAt> group in McpGroups(all))
+        {
+            foreach (var step in McpSteps(McpServerFor(group[0].Path, "callHierarchyProvider", "a call hierarchy"), box)) yield return step;
+            if (box.Value is McpToolResult noServer)
+            {
+                failure ??= noServer;
+                tried.AddRange(group);
+                continue;
+            }
+            server = (LanguageServer)box.Value!;
 
-        foreach (var step in McpSteps(McpAwait(CallTree(server, at, incoming, depth, McpInside()), "the calls"), box)) yield return step;
-        if (box.Value is McpToolResult failed) { yield return failed; yield break; }
-        var roots = (List<HexTreeNode>)box.Value!;
+            foreach (McpCodeAt at in group)
+            {
+                tried.Add(at);
+                foreach (var step in McpSteps(McpAwait(CallTree(server, at, incoming, depth, McpInside(), skipConstructors), "the calls"), box)) yield return step;
+                if (box.Value is McpToolResult failed)
+                {
+                    failure ??= failed;
+                    continue;
+                }
+
+                var (found, skipped) = ((List<HexTreeNode>, int))box.Value!;
+                foreach (HexTreeNode root in found.Where(root => !roots.Exists(other => other.Key == root.Key)))
+                    roots.Add(root);
+                if (found.Count > 0)
+                    used.Add(at);
+                constructors += skipped;
+            }
+
+            if (roots.Count > 0)
+                break;
+        }
+
         if (roots.Count == 0)
         {
-            yield return McpToolResult.Error($"{server.Name}'s server has no call hierarchy at {at.Name} ({McpRelative()(at.Path)}:{at.Line + 1}). It's not a function, or the server is still loading the project.");
+            yield return server is null && failure is not null ? failure
+                : McpToolResult.Error(McpTriedAll($"{server?.Name ?? "The"}'s server has no call hierarchy", first.Name, tried) + " It's not a function, or the server is still loading the project.");
             yield break;
         }
 
+        Func<string, string> relative = McpRelative();
         int count = CountNodes(roots) - roots.Count;
-        string title = $"{(incoming ? "Callers of" : "Calls from")} {at.Name}, {depth} deep, {count} in all{(at.Also.Length > 0 ? $". {at.Also}" : ".")}"
-            + (incoming ? " Each caller's line is where it calls." : string.Empty);
-        string tree = HexHierarchy.Describe(title, roots, McpRelative(), budget, "ask again from one of them");
+        string overloads = used.Count > 1 ? $" ({used.Count} overloads together)" : string.Empty;
+        string moved = used[0] != first ? $" {first.Place(relative)} had nothing, {used[0].Place(relative)} was asked instead." : string.Empty;
+        // The other declarations said are the ones not asked together with it
+        string[] asked = [.. used.Select(each => each.Place(relative))];
+        string[] rest = [.. used[0].Located?.Others.Where(other => !asked.Contains(other, StringComparer.OrdinalIgnoreCase)) ?? []];
+        string also = used.Count == 1 ? (used[0].Also.Length > 0 ? $" {used[0].Also}" : string.Empty)
+            : rest.Length == 0 ? string.Empty : $" {rest.Length} more declare {used[0].Name}, {string.Join(", ", rest.Take(5))}{(rest.Length > 5 ? " ..." : string.Empty)}, say path to pick one.";
+        string title = $"{(incoming ? "Callers of" : "Calls from")} {used[0].Name}{overloads}, {depth} deep, {count} in all.{moved}{also}"
+            + (incoming ? " Each caller's line is where it calls." : string.Empty)
+            + (constructors > 0 ? $" {constructors} constructor calls left out, skip_constructors false shows them." : string.Empty);
+        string tree = HexHierarchy.Describe(title, roots, relative, budget, "ask again from one of them");
 
         // No callers by the server (csharp-ls has none for an interface's member, the calls go through the interface), the
         // uses by name, which are where it's called from whatever it's called through
         if (incoming && count == 0)
-            tree += $"{server.Name}'s server knows no callers, the uses of {at.Name} by name:\n" + Harness.References(at.Name, null, 30, Math.Max(1000, budget - tree.Length)).Text;
+            tree += $"{server!.Name}'s server knows no callers, the uses of {used[0].Name} by name:\n" + Harness.References(used[0].Name, null, 30, Math.Max(1000, budget - tree.Length)).Text;
         yield return McpToolResult.Text(tree);
     }
 
     private static int CountNodes(IEnumerable<HexTreeNode> nodes) => nodes.Sum(node => 1 + CountNodes(node.Children));
 
-    /// <summary>The call tree of a place, breadth first to a depth, each node asked about once (a recursion's said as above).</summary>
-    private static async Task<List<HexTreeNode>> CallTree(LanguageServer server, McpCodeAt at, bool incoming, int depth, Func<string, bool> inside)
+    // A call of a constructor, which hex_calls out leaves out unless asked (a method that makes a few lists says nothing by them)
+    private static bool IsConstructorCall(LanguageServerCall call) =>
+        call.Other.Kind == 9 || call.Other.Name is ".ctor" or "constructor" or "__init__" || call.Other.Name.EndsWith(".ctor", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The call tree of a place, breadth first to a depth, each node asked about once (a recursion's said as above), and
+    /// how many constructor calls were left out.
+    /// </summary>
+    private static async Task<(List<HexTreeNode> Roots, int Skipped)> CallTree(LanguageServer server, McpCodeAt at, bool incoming, int depth, Func<string, bool> inside, bool skipConstructors)
     {
         IReadOnlyList<LanguageServerCallItem> items = await server.CallItems(at.Path, at.Line, at.Column).ConfigureAwait(false);
         var roots = new List<HexTreeNode>();
@@ -295,7 +403,7 @@ internal sealed partial class DawnScene
             level.Add((node, item));
         }
 
-        int made = roots.Count;
+        int made = roots.Count, skipped = 0;
         for (int down = 0; down < depth && level.Count > 0; down++)
         {
             var next = new List<(HexTreeNode, LanguageServerCallItem)>();
@@ -308,6 +416,11 @@ internal sealed partial class DawnScene
                 }
 
                 IReadOnlyList<LanguageServerCall> asked = incoming ? await server.IncomingCalls(item).ConfigureAwait(false) : await server.OutgoingCalls(item).ConfigureAwait(false);
+                if (skipConstructors && !incoming)
+                {
+                    skipped += asked.Count(IsConstructorCall);
+                    asked = [.. asked.Where(call => !IsConstructorCall(call))];
+                }
 
                 // What's called outside the workspace (the standard library, a package) is only named, once for its overloads
                 List<LanguageServerCall> calls = [.. asked.Where(call => inside(call.Other.Declared.Path))];
@@ -336,7 +449,7 @@ internal sealed partial class DawnScene
 
         // A leaf at the bottom with nothing under it isn't cut, only one that was never asked. Asking every leaf whether it
         // has more would double the questions, so + is only said of the ones the depth stopped at
-        return roots;
+        return (roots, skipped);
     }
 
     private IEnumerable<McpToolResult?> McpImplementations(JsonObject args)
@@ -344,34 +457,97 @@ internal sealed partial class DawnScene
         var box = new McpStepBox();
         foreach (var step in McpSteps(McpLocate(args), box)) yield return step;
         if (box.Value is McpToolResult located) { yield return located; yield break; }
-        var at = (McpCodeAt)box.Value!;
+        var all = (List<McpCodeAt>)box.Value!;
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
 
-        foreach (var step in McpSteps(McpServerFor(at.Path, "implementationProvider", "implementations"), box)) yield return step;
-        if (box.Value is McpToolResult noServer) { yield return noServer; yield break; }
-        var server = (LanguageServer)box.Value!;
-
-        foreach (var step in McpSteps(McpAwait(server.Implementation(at.Path, at.Line, at.Column), "the implementations"), box)) yield return step;
-        if (box.Value is McpToolResult failed) { yield return failed; yield break; }
-        List<LanguageServerPlace> places = [.. ((IReadOnlyList<LanguageServerPlace>)box.Value!).Where(place => !(PlatformPaths.Same(place.Path, at.Path) && place.Line == at.Line))];
-
-        // Nothing but itself, a class's derived types by the type hierarchy instead
-        if (places.Count == 0 && server.Offers("typeHierarchyProvider"))
+        // Each declaration in turn until one has something: the server's implementations, its type hierarchy's derived
+        // types, and for a server with neither (pyright) or one that knows nothing, the index's base lists
+        LanguageServer? server = null;
+        McpToolResult? failure = null;
+        List<LanguageServerPlace> places = [];
+        List<McpCodeAt> tried = [];
+        McpCodeAt? used = null;
+        string how = string.Empty;
+        foreach (McpCodeAt at in all)
         {
-            Task<List<HexTreeNode>> derived = TypeTree(server, at, up: false, down: true, depth: 1);
-            foreach (var step in McpSteps(McpAwait(derived, "the derived types"), box)) yield return step;
-            if (box.Value is List<HexTreeNode> tree)
-                places = [.. tree.SelectMany(root => root.Children).Select(node => new LanguageServerPlace(node.Path, node.Line, 0, node.Line, 0))];
+            foreach (var step in McpSteps(McpServerFor(at.Path, null, "implementations"), box)) yield return step;
+            if (box.Value is McpToolResult noServer)
+            {
+                failure ??= noServer;
+                continue;
+            }
+            server = (LanguageServer)box.Value!;
+            tried.Add(at);
+
+            if (server.Offers("implementationProvider"))
+            {
+                foreach (var step in McpSteps(McpAwait(server.Implementation(at.Path, at.Line, at.Column), "the implementations"), box)) yield return step;
+                if (box.Value is IReadOnlyList<LanguageServerPlace> found)
+                    places = [.. found.Where(place => !(PlatformPaths.Same(place.Path, at.Path) && place.Line == at.Line))];
+                else
+                    failure ??= box.Value as McpToolResult;
+            }
+
+            // Nothing but itself, a class's derived types by the type hierarchy instead
+            if (places.Count == 0 && server.Offers("typeHierarchyProvider"))
+            {
+                Task<List<HexTreeNode>> derived = TypeTree(server, at, up: false, down: true, depth: 1);
+                foreach (var step in McpSteps(McpAwait(derived, "the derived types"), box)) yield return step;
+                if (box.Value is List<HexTreeNode> tree)
+                    places = [.. tree.SelectMany(root => root.Children).Select(node => new LanguageServerPlace(node.Path, node.Line, 0, node.Line, 0))];
+            }
+
+            if (places.Count == 0 && at.Located is { } declared)
+            {
+                HexCodeIndex index = Harness;
+                foreach (var step in McpSteps(McpAwait(Task.Run(() => index.IndexImplementations(declared)), "the implementations by the index"), box)) yield return step;
+                if (box.Value is List<(HexIndexedFile File, HexSymbol Symbol)> { Count: > 0 } byIndex)
+                {
+                    places = [.. byIndex.Select(each => new LanguageServerPlace(each.File.Path, each.Symbol.Line, 0, each.Symbol.Line, 0))];
+                    how = $" {server.Name}'s server {(server.Offers("implementationProvider") ? "knew none" : "can't say implementations")}, these are by the base lists the index read, by name.";
+                }
+            }
+
+            if (places.Count > 0)
+            {
+                used = at;
+                break;
+            }
+        }
+
+        if (server is null)
+        {
+            yield return failure ?? McpToolResult.Error($"No language server reads {all[0].Path}.");
+            yield break;
         }
 
         Func<string, string> relative = McpRelative();
+        McpCodeAt shown = used ?? all[0];
+        string moved = used is not null && used != all[0] ? $" {all[0].Place(relative)} had nothing, {used.Place(relative)} was asked instead." : string.Empty;
+
+        // A partial class's every file said once, the one with its base list, with how many more there are
+        var lines = new Dictionary<(string, int), string>();
+        string Text((string Path, int Line) place) => lines.TryGetValue(place, out string? known) ? known : lines[place] = LineAt(place.Path, place.Line);
+        List<(LanguageServerPlace Item, int Partials)> folded = HexHierarchy.FoldPartials(places.DistinctBy(place => (place.Path, place.Line)),
+            place => Text((place.Path, place.Line)) is var line && line.Contains("partial ", StringComparison.Ordinal) ? "partial\n" + DeclaredOn(line) : $"{place.Path}\n{place.Line}",
+            place => Text((place.Path, place.Line)));
+
         var said = new HexBudget(budget);
-        said.Line(places.Count == 0
-            ? $"Nothing implements or overrides {at.Name} that {server.Name}'s server knows of ({relative(at.Path)}:{at.Line + 1}).{(at.Also.Length > 0 ? $" {at.Also}" : string.Empty)}"
-            : $"{places.Count} implementations of {at.Name}.{(at.Also.Length > 0 ? $" {at.Also}" : string.Empty)}");
-        foreach (LanguageServerPlace place in places.DistinctBy(place => (place.Path, place.Line)))
-            said.Line($"{relative(place.Path)}:{place.Line + 1}  {HexBudget.Cut(LineAt(place.Path, place.Line).Trim(), width: 110)}");
+        said.Line(folded.Count == 0
+            ? McpTriedAll($"Nothing implements or overrides it that {server.Name}'s server knows of", shown.Name, tried.Count > 0 ? tried : [shown]) + (shown.Also.Length > 0 && tried.Count <= 1 ? $" {shown.Also}" : string.Empty)
+            : $"{folded.Count} implementations of {shown.Name}.{moved}{how}{(shown.Also.Length > 0 ? $" {shown.Also}" : string.Empty)}");
+        foreach (var (place, partials) in folded)
+            said.Line($"{relative(place.Path)}:{place.Line + 1}  {HexBudget.Cut(Text((place.Path, place.Line)).Trim(), width: 110)}{(partials > 0 ? $"  +{partials} partial file{(partials == 1 ? string.Empty : "s")}" : string.Empty)}");
         yield return McpToolResult.Text(said.Finish("ask with a bigger max_chars"));
+    }
+
+    // The name a line declares, what a partial type's files are told the same by
+    private static string DeclaredOn(string line)
+    {
+        int at = HexCodeIndex.DeclarationColumn(line), end = at;
+        while (end < line.Length && (char.IsLetterOrDigit(line[end]) || line[end] == '_'))
+            end++;
+        return line[at..end];
     }
 
     // A line of a file as it is in the editor or on the disk, empty when there's none
@@ -381,6 +557,19 @@ internal sealed partial class DawnScene
         {
             if (Context.Documents.Find(path) is { } open)
                 return line < open.Editor.Document.LineCount ? open.Editor.Document.LineAt(line) : string.Empty;
+            return DiskLineAt(path, line);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return string.Empty;
+        }
+    }
+
+    // A line of a file on the disk, off the editor's thread, empty when there's none
+    private static string DiskLineAt(string path, int line)
+    {
+        try
+        {
             return File.Exists(path) ? File.ReadLines(path).Skip(line).FirstOrDefault() ?? string.Empty : string.Empty;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -394,31 +583,83 @@ internal sealed partial class DawnScene
         var box = new McpStepBox();
         foreach (var step in McpSteps(McpLocate(args), box)) yield return step;
         if (box.Value is McpToolResult located) { yield return located; yield break; }
-        var at = (McpCodeAt)box.Value!;
+        var all = (List<McpCodeAt>)box.Value!;
         string direction = args.String("direction") ?? "both";
         int depth = Math.Clamp(args.Integer("depth") ?? 2, 1, 5);
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
+        bool up = direction != "down", down = direction != "up";
 
-        foreach (var step in McpSteps(McpServerFor(at.Path, "typeHierarchyProvider", "a type hierarchy"), box)) yield return step;
-        if (box.Value is McpToolResult noServer) { yield return noServer; yield break; }
-        var server = (LanguageServer)box.Value!;
-
-        foreach (var step in McpSteps(McpAwait(TypeTree(server, at, direction != "down", direction != "up", depth), "the type hierarchy"), box)) yield return step;
-        if (box.Value is McpToolResult failed) { yield return failed; yield break; }
-        var roots = (List<HexTreeNode>)box.Value!;
-        if (roots.Count == 0)
+        // Each declaration in turn until one's a type the server knows, the index's base lists for a server with no type
+        // hierarchy (pyright) or one that knows nothing of it
+        LanguageServer? server = null;
+        McpToolResult? failure = null;
+        List<HexTreeNode> roots = [];
+        List<McpCodeAt> tried = [];
+        McpCodeAt? used = null;
+        string how = string.Empty;
+        foreach (McpCodeAt at in all)
         {
-            yield return McpToolResult.Error($"{server.Name}'s server has no type at {at.Name} ({McpRelative()(at.Path)}:{at.Line + 1}).");
+            foreach (var step in McpSteps(McpServerFor(at.Path, null, "a type hierarchy"), box)) yield return step;
+            if (box.Value is McpToolResult noServer)
+            {
+                failure ??= noServer;
+                continue;
+            }
+            server = (LanguageServer)box.Value!;
+            tried.Add(at);
+
+            if (server.Offers("typeHierarchyProvider"))
+            {
+                foreach (var step in McpSteps(McpAwait(TypeTree(server, at, up, down, depth), "the type hierarchy"), box)) yield return step;
+                if (box.Value is List<HexTreeNode> tree)
+                    roots = tree;
+                else
+                    failure ??= box.Value as McpToolResult;
+            }
+
+            if (roots.Count == 0 && at.Located is { Symbol.IsType: true } declared)
+            {
+                HexCodeIndex index = Harness;
+                foreach (var step in McpSteps(McpAwait(Task.Run(() => index.IndexTypeTree(declared, up, down, depth)), "the types by the index"), box)) yield return step;
+                if (box.Value is List<HexTreeNode> byIndex && byIndex.Exists(root => root.Children.Count > 0 || root.Outside.Count > 0))
+                {
+                    roots = byIndex;
+                    how = $" {server.Name}'s server {(server.Offers("typeHierarchyProvider") ? "knew nothing of it" : "has no type hierarchy")}, this is by the base lists the index read, by name.";
+                }
+            }
+
+            if (roots.Count > 0)
+            {
+                used = at;
+                break;
+            }
+        }
+
+        if (server is null || used is null)
+        {
+            yield return server is null && failure is not null ? failure
+                : McpToolResult.Error(McpTriedAll($"{server?.Name ?? "The"}'s server has no type", all[0].Name, tried.Count > 0 ? tried : [all[0]]));
             yield break;
         }
 
-        string title = $"The types of {at.Name}, {depth} deep, under it ^ are its bases and v what derives from it.{(at.Also.Length > 0 ? $" {at.Also}" : string.Empty)}";
-        yield return McpToolResult.Text(HexHierarchy.Describe(title, roots, McpRelative(), budget, "ask again from one of them"));
+        Func<string, string> relative = McpRelative();
+        string moved = used != all[0] ? $" {all[0].Place(relative)} had nothing, {used.Place(relative)} was asked instead." : string.Empty;
+        string title = $"The types of {used.Name}, {depth} deep, under it ^ are its bases and v what derives from it.{moved}{how}{(used.Also.Length > 0 ? $" {used.Also}" : string.Empty)}";
+        yield return McpToolResult.Text(HexHierarchy.Describe(title, roots, relative, budget, "ask again from one of them"));
     }
 
-    /// <summary>A type's bases (named ^) and what derives from it (named v) under it, to a depth.</summary>
+    /// <summary>
+    /// A type's bases (named ^) and what derives from it (named v) under it, to a depth. A partial type the server says
+    /// once a file is said once, the file with its base list, with how many more.
+    /// </summary>
     private static async Task<List<HexTreeNode>> TypeTree(LanguageServer server, McpCodeAt at, bool up, bool down, int depth)
     {
+        var lines = new Dictionary<(string, int), string>();
+        string LineOf(LanguageServerTypeItem item) => lines.TryGetValue((item.Declared.Path, item.Declared.Line), out string? known) ? known
+            : lines[(item.Declared.Path, item.Declared.Line)] = DiskLineAt(item.Declared.Path, item.Declared.Line);
+        List<(LanguageServerTypeItem Item, int Partials)> Fold(IEnumerable<LanguageServerTypeItem> items) =>
+            HexHierarchy.FoldPartials(items, item => $"{item.Name}\n{item.Kind}\n{item.Detail}", LineOf);
+
         IReadOnlyList<LanguageServerTypeItem> items = await server.TypeItems(at.Path, at.Line, at.Column).ConfigureAwait(false);
         var roots = new List<HexTreeNode>();
         int made = 0;
@@ -431,9 +672,9 @@ internal sealed partial class DawnScene
             }
 
             IReadOnlyList<LanguageServerTypeItem> related = await server.RelatedTypes(item, bases).ConfigureAwait(false);
-            foreach (LanguageServerTypeItem other in related.Take(MOST_CHILDREN * 2))
+            foreach (var (other, partials) in Fold(related).Take(MOST_CHILDREN * 2))
             {
-                var child = new HexTreeNode((bases ? "^ " : "v ") + other.Name, other.Detail, HexHierarchy.KindName(other.Kind), other.Declared.Path, other.Declared.Line);
+                var child = new HexTreeNode((bases ? "^ " : "v ") + other.Name, other.Detail, HexHierarchy.KindName(other.Kind), other.Declared.Path, other.Declared.Line) { Partials = partials };
                 node.Children.Add(child);
                 made++;
                 if (!seen.Add(child.Key))
@@ -443,9 +684,9 @@ internal sealed partial class DawnScene
             }
         }
 
-        foreach (LanguageServerTypeItem item in items)
+        foreach (var (item, partials) in Fold(items))
         {
-            var root = new HexTreeNode(item.Name, item.Detail, HexHierarchy.KindName(item.Kind), item.Declared.Path, item.Declared.Line);
+            var root = new HexTreeNode(item.Name, item.Detail, HexHierarchy.KindName(item.Kind), item.Declared.Path, item.Declared.Line) { Partials = partials };
             roots.Add(root);
             if (up)
                 await Grow(root, item, bases: true, depth, new HashSet<string>(StringComparer.Ordinal) { root.Key }).ConfigureAwait(false);
@@ -468,23 +709,42 @@ internal sealed partial class DawnScene
         var box = new McpStepBox();
         foreach (var step in McpSteps(McpLocate(args), box)) yield return step;
         if (box.Value is McpToolResult located) { yield return located; yield break; }
-        var at = (McpCodeAt)box.Value!;
+        var all = (List<McpCodeAt>)box.Value!;
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
 
-        foreach (var step in McpSteps(McpServerFor(at.Path, "renameProvider", "a rename"), box)) yield return step;
-        if (box.Value is McpToolResult noServer) { yield return noServer; yield break; }
-        var server = (LanguageServer)box.Value!;
-
-        foreach (var step in McpSteps(McpAwait(server.Rename(at.Path, at.Line, at.Column, renamed), "the rename"), box)) yield return step;
-        if (box.Value is McpToolResult failed) { yield return failed; yield break; }
-        if (box.Value is not IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> { Count: > 0 } edits || edits.Values.All(list => list.Count == 0))
+        // The first declaration the server will rename, one in a copy it hasn't loaded gives no edits
+        LanguageServer? server = null;
+        McpToolResult? failure = null;
+        List<McpCodeAt> tried = [];
+        foreach (McpCodeAt at in all)
         {
-            yield return McpToolResult.Error($"{server.Name}'s server wouldn't rename {at.Name} at {McpRelative()(at.Path)}:{at.Line + 1}, it's not something it can rename or the project isn't loaded yet.");
+            foreach (var step in McpSteps(McpServerFor(at.Path, "renameProvider", "a rename"), box)) yield return step;
+            if (box.Value is McpToolResult noServer)
+            {
+                failure ??= noServer;
+                continue;
+            }
+            server = (LanguageServer)box.Value!;
+            tried.Add(at);
+
+            foreach (var step in McpSteps(McpAwait(server.Rename(at.Path, at.Line, at.Column, renamed), "the rename"), box)) yield return step;
+            if (box.Value is McpToolResult failed)
+            {
+                failure ??= failed;
+                continue;
+            }
+            if (box.Value is not IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> { Count: > 0 } edits || edits.Values.All(list => list.Count == 0))
+                continue;
+
+            Func<string, string> relative = McpRelative();
+            string moved = at != all[0] ? $" ({all[0].Place(relative)} gave nothing to rename, {at.Place(relative)} did)" : string.Empty;
+            string said = McpApplyEdits(edits, args.Flag("dry_run"), $"{(args.Flag("dry_run") ? "Would rename" : "Renamed")} {at.Name} to {renamed}{moved}", budget);
+            yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
             yield break;
         }
 
-        string said = McpApplyEdits(edits, args.Flag("dry_run"), $"{(args.Flag("dry_run") ? "Would rename" : "Renamed")} {at.Name} to {renamed}", budget);
-        yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
+        yield return server is null && failure is not null ? failure
+            : McpToolResult.Error(McpTriedAll($"{server?.Name ?? "The"}'s server wouldn't rename it", all[0].Name, tried.Count > 0 ? tried : [all[0]]) + " It's not something it can rename, or the project isn't loaded yet.");
     }
 
     /// <summary>
@@ -653,7 +913,8 @@ internal sealed partial class DawnScene
 
         bool errorsOnly = args.Flag("errors_only");
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
-        long giveUp = System.Environment.TickCount64 + Math.Clamp(args.Integer("wait") ?? 20, 0, 120) * 1000L;
+        int waitSeconds = Math.Clamp(args.Integer("wait") ?? 30, 0, 120);
+        long giveUp = System.Environment.TickCount64 + waitSeconds * 1000L;
 
         var notes = new Dictionary<string, string>(PlatformPaths.Comparer);
         var before = new Dictionary<string, int>(PlatformPaths.Comparer);
@@ -664,10 +925,25 @@ internal sealed partial class DawnScene
                 notes[path] = why ?? "no language server reads it";
         }
 
-        // Each file waited on until its server's said something of it, a file it already has said of no longer
+        // Each file waited on until its server's said something of it, a file it already has said of no longer. A server
+        // that took the file while it was starting and has said nothing a while after it's up is sent it again
         bool Waiting(string path) => !notes.ContainsKey(path) && languages.AgentDiagnostics(path).Count == 0;
+        var readySince = new Dictionary<string, long>(PlatformPaths.Comparer);
+        var nudged = new HashSet<string>(PlatformPaths.Comparer);
         while (paths.Any(Waiting) && System.Environment.TickCount64 < giveUp)
+        {
+            foreach (string path in paths.Where(Waiting))
+            {
+                if (languages.AgentServer(path, start: false, out _) is not { IsReady: true })
+                    continue;
+                long now = System.Environment.TickCount64;
+                if (!readySince.TryGetValue(path, out long since))
+                    readySince[path] = since = now;
+                if (now - since > MCP_DIAGNOSTICS_NUDGE_MS && nudged.Add(path))
+                    languages.AgentNudge(path);
+            }
             yield return null;
+        }
 
         // One said of before is given a moment for what it says of the latest text, a file just written was told again
         long settle = System.Environment.TickCount64 + 1500;
@@ -676,7 +952,7 @@ internal sealed partial class DawnScene
 
         Func<string, string> relative = McpRelative();
         var said = new HexBudget(budget);
-        int errors = 0, warnings = 0;
+        int errors = 0, warnings = 0, notReady = 0;
         var lines = new List<string>();
         foreach (string path in paths)
         {
@@ -688,7 +964,8 @@ internal sealed partial class DawnScene
             }
             if (count == 0 || found is null)
             {
-                lines.Add($"{relative(path)}: its server hasn't said anything yet, ask again in a moment.");
+                notReady++;
+                lines.Add($"{relative(path)}: not ready, its server said nothing of it in {waitSeconds} s{(languages.AgentServer(path, start: false, out _) is { IsReady: false } ? " (it's still starting)" : string.Empty)}, ask again in a moment or with a bigger wait.");
                 continue;
             }
 
@@ -701,10 +978,21 @@ internal sealed partial class DawnScene
                 lines.Add($"{relative(path)}:{each.Line + 1}:{each.Column + 1} {(each.Warning ? "warning" : "error")} {each.Message}");
         }
 
-        said.Line($"{errors} errors and {warnings} warnings in {paths.Count} files, by their language servers.");
+        said.Line(DiagnosticsTitle(errors, warnings, paths.Count, notReady, notes.Count));
         foreach (string line in lines)
             said.Line(line);
         yield return McpToolResult.Text(said.Finish("errors_only, or a bigger max_chars"));
+    }
+
+    /// <summary>
+    /// hex_diagnostics's first line, the files whose server said nothing in time and those no server reads counted, so
+    /// "0 errors" isn't read as all clear when one of them wasn't looked at.
+    /// </summary>
+    internal static string DiagnosticsTitle(int errors, int warnings, int files, int notReady, int unread)
+    {
+        string looked = notReady + unread == 0 ? string.Empty
+            : $" ({string.Join(", ", new[] { notReady > 0 ? $"{notReady} {(notReady == 1 ? "file" : "files")} not ready" : null, unread > 0 ? $"{unread} no server reads" : null }.OfType<string>())}, not counted)";
+        return $"{errors} errors and {warnings} warnings in {files} files{looked}, by their language servers.";
     }
 
     /// <summary>
@@ -712,14 +1000,23 @@ internal sealed partial class DawnScene
     /// isn't started for this), the errors as lines to add to the answer of the change. Nulls while waiting, the text
     /// last, empty when there's nothing to say.
     /// </summary>
-    private IEnumerable<string?> McpCheckAfter(string path, float seconds)
+    private IEnumerable<string?> McpCheckAfter(string path)
     {
-        int before = languages.AgentDiagnostics(path).Count;
-        if (languages.AgentServer(path, start: false, out _) is not { IsReady: true } server || server.Failure is not null)
+        // A server that isn't up yet is started for the next check rather than waited on now, the change has been made
+        if (languages.AgentServer(path, start: true, out _) is not { } server || server.Failure is not null)
         {
             yield return string.Empty;
             yield break;
         }
+        if (!server.IsReady)
+        {
+            yield return $"\nNo check yet, {server.Name}'s server is still starting (hex_diagnostics waits for it).";
+            yield break;
+        }
+
+        // The first check a server's asked for waits longer, a server just up is still loading the project
+        float seconds = mcpChecked.Add(server) ? MCP_FIRST_CHECK_SECONDS : MCP_CHECK_SECONDS;
+        int before = languages.AgentDiagnostics(path).Count;
 
         long giveUp = System.Environment.TickCount64 + (long)(seconds * 1000);
         while (languages.AgentDiagnostics(path).Count == before && System.Environment.TickCount64 < giveUp)
@@ -740,7 +1037,7 @@ internal sealed partial class DawnScene
         var (count, found, _) = languages.AgentDiagnostics(path);
         if (count == before || found is null)
         {
-            yield return $"\n{server.Name} said nothing of it in {seconds:0} s, hex_diagnostics asks again.";
+            yield return $"\n{server.Name}: no answer after {seconds:0} s (not the same as no errors, its server may still be loading the project), hex_diagnostics asks again.";
             yield break;
         }
 
@@ -842,17 +1139,7 @@ internal sealed partial class DawnScene
             languages.AgentFileWritten(path);
         }
 
-        if (args.Flag("check", true))
-        {
-            foreach (string? step in McpCheckAfter(path, 4.0f))
-            {
-                if (step is null)
-                    yield return null;
-                else
-                    done += step;
-            }
-        }
-
-        yield return McpToolResult.Text(done);
+        foreach (McpToolResult? step in McpThenCheck(args, path, done))
+            yield return step;
     }
 }
