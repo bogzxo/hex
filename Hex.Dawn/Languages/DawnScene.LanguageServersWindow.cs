@@ -516,6 +516,8 @@ internal sealed partial class DawnScene
             page.Add(Words(Said("server_settings.told_none"), width, SERVERS_BODY, dim: true));
         foreach (var (key, value) in told)
             page.Add(ServerSettingLine(entry, key, value, width));
+        if (told.Any(setting => setting.Path == HexLanguages.CSHARP_ANALYZERS))
+            page.Add(Words(Said("server_settings.csharp_analyzers"), width, SERVERS_BODY, dim: true));
 
         // The language's own
         if (entry.Name.Equals("python", StringComparison.OrdinalIgnoreCase) && languages.SetupFolder is { } folder)

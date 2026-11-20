@@ -1210,6 +1210,7 @@ let strings = {
         releases: "What Changed",
         told: "Server settings",
         told_none: "This server takes no settings from Hex.",
+        csharp_analyzers: "analyzersEnabled runs the project's analyzers and the SDK's code-style rules as well as the compiler. It's off unless switched on: csharp-ls re-checks the whole project of every open file on every change and can keep several cores busy. On a 35-project solution a file's first diagnostics took 8 to 43 s with it on against 0.3 to 1 s off, 4 to 16 s with the analyzers but not the code-style rules, and 2 to 4 cores stayed busy with nothing being asked.",
         reset: "Reset",
         python: "Python",
         interpreter: "Interpreter",

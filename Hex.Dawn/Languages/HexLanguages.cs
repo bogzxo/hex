@@ -1,4 +1,6 @@
-﻿using Horizon.UI.Components;
+﻿using System.Text.Json.Nodes;
+
+using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 using Horizon.UI.Skinning;
 
@@ -51,6 +53,8 @@ internal sealed partial class HexLanguages
     public HexLanguages(DawnContext with)
     {
         context = with;
+        if (MoveOldAnalyzersDefault(settings))
+            with.Settings.Save();
 
         // C# in ReSharper's colours whatever the skin (or Visual Studio's, or the skin's, as the settings say), the way it
         // looks where most of it is written
@@ -82,6 +86,32 @@ internal sealed partial class HexLanguages
         // What was found of the servers looked for again as the settings open, in case something was installed since
         // One row, the Language Servers window opened from it; what was here (a row a server, the form that adds one) is there
         with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION);
+    }
+
+    /// <summary>C#'s analyzers switch by its dotted path in csharp-ls's settings.</summary>
+    internal const string CSHARP_ANALYZERS = "csharp.analyzersEnabled";
+
+    /// <summary>
+    /// Once, C#'s analyzersEnabled kept as true put back to the catalog's, which is off now: true was the catalog's own
+    /// until then, kept only by switching it off and on again. A false the user chose stays, and so does a true chosen
+    /// after this. True when the settings changed and want saving.
+    /// </summary>
+    internal static bool MoveOldAnalyzersDefault(HexSettings settings)
+    {
+        if (settings.CSharpAnalyzersMoved)
+            return false;
+
+        settings.CSharpAnalyzersMoved = true;
+        if (settings.ServerSettings.GetValueOrDefault("csharp") is { } told && told["csharp"] is JsonObject section
+            && section["analyzersEnabled"] is JsonValue kept && kept.TryGetValue(out bool on) && on)
+        {
+            section.Remove("analyzersEnabled");
+            if (section.Count == 0)
+                told.Remove("csharp");
+            if (told.Count == 0)
+                settings.ServerSettings.Remove("csharp");
+        }
+        return true;
     }
 
     /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
@@ -540,8 +570,8 @@ internal sealed partial class HexLanguages
         IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
         foreach (LanguageServer server in servers)
         {
-            if (server.Failure is null)
-                server.FilesChanged(changes);
+            if (server.Failure is null && ServerFiles(server, changes) is { Count: > 0 } its)
+                server.FilesChanged(its);
         }
 
         // A project of a server's that reads them only as it starts, the server started again a moment after. And one that
@@ -554,6 +584,39 @@ internal sealed partial class HexLanguages
                     && servers.Any(server => server.Name == entry.Name && server.Failure is not null && ReloadsServer(server, change.Path))))
                 reloadIn[entry] = RELOAD_DELAY;
         }
+    }
+
+    /// <summary>
+    /// The changes a server is told of, none in a hidden folder (.git, .hexbase's copies of the repositories) nor for C#
+    /// in a build's output, and of the rest those it asked to watch (LanguageServer.Watches). Outside its folder too, a
+    /// solution of Hex's has the engine's projects beside it. csharp-ls adds a .cs made anywhere under a project's folder
+    /// to that project, so the agents' scratch files in Hex's data folder (hex/Hex/bin/...) became part of Hex.csproj.
+    /// </summary>
+    internal static List<(string Path, LanguageServerFileChange Change)> ServerFiles(LanguageServer server, IReadOnlyList<(string Path, LanguageServerFileChange Change)> changes)
+    {
+        string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        bool dotnet = server.LanguageId == "csharp";
+        var its = new List<(string Path, LanguageServerFileChange Change)>();
+        foreach (var change in changes)
+        {
+            string full = Path.GetFullPath(change.Path);
+            if (!InSkippedFolder(Path.GetRelativePath(root, full), dotnet) && server.Watches(full, change.Change))
+                its.Add(change);
+        }
+        return its;
+    }
+
+    // Helper method to say whether a path from a server's folder goes through a hidden folder, or bin or obj for .NET
+    private static bool InSkippedFolder(string relative, bool buildOutput)
+    {
+        string[] parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (string part in parts.AsSpan(0, parts.Length - 1))
+        {
+            if ((part.Length > 1 && part[0] == '.' && part != "..")
+                || (buildOutput && (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase))))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -571,14 +634,6 @@ internal sealed partial class HexLanguages
         // The folders it's in, the file's own name (.editorconfig) left out. A build's or a restore's own folders aren't a
         // project changing: csharp-ls 0.29 restores a project itself as it loads it, the restore wrote obj's assets and
         // props, Hex started it again for them a moment later, and the completion it was working on never came back
-        string[] parts = Path.GetRelativePath(root, full).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (string part in parts.AsSpan(0, parts.Length - 1))
-        {
-            if (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase)
-                || (part.Length > 1 && part[0] == '.' && part != ".."))
-                return false;
-        }
-
-        return true;
+        return !InSkippedFolder(Path.GetRelativePath(root, full), buildOutput: true);
     }
 }

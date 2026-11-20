@@ -139,8 +139,11 @@ let servers = {
         about: "C#, on Roslyn. Needs a .NET SDK of the same major version as the runtime it runs on.",
         install: "dotnet tool install -g csharp-ls", update: "dotnet tool update -g csharp-ls",
         repo: "razzmatazz/csharp-language-server", version: ["--version"],
-        // Analyzer rules come from the project's .editorconfig and analyzer packages.
-        settings: { csharp: { analyzersEnabled: true } },
+        // The compiler's errors and warnings alone, the analyzers (the project's packages, .editorconfig's rules, the
+        // trimming ones of IsAotCompatible) switched on in the Language Servers window. With them csharp-ls runs every
+        // analyzer over the whole project of each open file after every change: on the workspace's solution a file's
+        // first diagnostics took 8-43 s against 0.3-1, an edit's 43 s against 0.4, and it used 3-4 cores while idle.
+        settings: { csharp: { analyzersEnabled: false } },
         // Not project.assets.json: csharp-ls (0.29 on) restores a project itself as it loads it and watches what it
         // needs, so a restore's output starting it again only threw away what it was loading and the completion asked
         // meanwhile. Hex's own restore of a folder never restored (HexLanguages.Restore) goes with it, csharp-ls does it

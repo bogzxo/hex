@@ -508,7 +508,11 @@ internal sealed partial class DawnScene
                 if (box.Value is List<(HexIndexedFile File, HexSymbol Symbol)> { Count: > 0 } byIndex)
                 {
                     places = [.. byIndex.Select(each => new LanguageServerPlace(each.File.Path, each.Symbol.Line, 0, each.Symbol.Line, 0))];
-                    how = $" {server.Name}'s server {(server.Offers("implementationProvider") ? "knew none" : "can't say implementations")}, these are by the base lists the index read, by name.";
+                    // csharp-ls answers with the declaration itself for a class's virtual member, Roslyn's
+                    // FindImplementationsAsync it goes by gives an interface's implementations and no overrides
+                    how = server.LanguageId == "csharp" && server.Offers("implementationProvider")
+                        ? " csharp-ls gives interface implementations only; overrides by the index."
+                        : $" {server.Name}'s server {(server.Offers("implementationProvider") ? "knew none" : "can't say implementations")}, these are by the base lists the index read, by name.";
                 }
             }
 

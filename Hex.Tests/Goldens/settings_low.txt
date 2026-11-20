@@ -97,6 +97,7 @@ debug_just_my_code = true
 exception_breakpoints = {}
 language_server_paths = {}
 language_server_settings = {}
+csharp_analyzers_moved = false
 files_associations = {}
 files_exclude = [     "**/.git",     "**/.svn",     "**/.hg",     "**/CVS",     "**/.DS_Store",     "**/Thumbs.db",     "**/.vs" ]
 search_exclude = [     "**/node_modules",     "**/bin",     "**/obj",     "**/venv",     "**/.venv",     "**/__pycache__",     "**/target",     "**/dist",     "**/.terraform",     "**/.gradle",     "**/.tox",     "**/.pytest_cache",     "**/Build History" ]

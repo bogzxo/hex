@@ -304,6 +304,12 @@ internal sealed partial class HexSettings
     /// </summary>
     public readonly Dictionary<string, System.Text.Json.Nodes.JsonObject> ServerSettings = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether C#'s analyzersEnabled kept as true, what it was before Hex left it off, was moved to the new default once
+    /// (HexLanguages.MoveOldAnalyzersDefault). Switched on after that, it stays on.
+    /// </summary>
+    public bool CSharpAnalyzersMoved;
+
     // The servers' own settings written the way the settings file has them, each server's an object of its sections
     internal HIDLObject ServerSettingsObject()
     {
