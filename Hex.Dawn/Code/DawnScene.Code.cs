@@ -59,6 +59,7 @@ internal sealed partial class DawnScene
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         editor.OverloadCounter = Said("code.overload_counter", ("index", "{0}"), ("count", "{1}"));
+        editor.DiagnosticWords = (Said("code.diagnostic_error"), Said("code.diagnostic_warning"), Said("code.diagnostic_hint"));
         ShowBackdrop(editor);
         // The code on the middle card's own colour, one surface with the tabs over it and the terminal under it. It was a
         // charcoal of its own written in here, a third colour in the one card

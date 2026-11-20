@@ -665,8 +665,9 @@ internal sealed partial class DawnScene
         revert.IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 
         commands.Add("File/close", Said("documents.close"), Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "clear-all").IsEnabled = () => documents.Count > 1;
-        commands.Add("File/close", Said("documents.close_all"), () => CloseAll(), icon: "close-all");
+        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document, keepPinned: true), icon: "clear-all").IsEnabled = () => documents.Count > 1;
+        commands.Add("File/close", Said("documents.close_all"), () => CloseAll(keepPinned: true), icon: "close-all");
+        commands.Add("File/close", Said("documents.pin"), () => PinTab(document, !document.Pinned), "Ctrl+K Shift+Enter", "pin").IsEnabled = () => !plainShown;
 
         // VS Code's, the file closed last back and the path of the one on screen copied
         commands.Add("File/close", Said("documents.reopen_closed"), ReopenClosed, "Ctrl+Shift+T", "history", UIKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;
