@@ -111,9 +111,9 @@ internal sealed partial class DawnScene
     /// A message given to a chat's agent, at once when it's working and can be told more, otherwise kept for it to read,
     /// an instruction starting it again when it's finished. Both chats get a short note of it. Says what became of it.
     /// </summary>
-    private string Deliver(HexAgentChat to, HexAgentChat? from, string kind, string text, bool directive)
+    private string Deliver(HexAgentChat to, HexAgentChat? from, string kind, string text, bool directive, string? fromName = null)
     {
-        var message = new HexAgentMail(hub.NextMailSeq(), from?.Id, from is null ? "an agent outside Hex's panel" : MailName(from), kind, text, directive) { To = to.Id };
+        var message = new HexAgentMail(hub.NextMailSeq(), from?.Id, fromName ?? (from is null ? "an agent outside Hex's panel" : MailName(from)), kind, text, directive) { To = to.Id };
         to.Post(message);
         HexMailLog log = hub.MailOf(to);
         string line = OneLine(text, 160);

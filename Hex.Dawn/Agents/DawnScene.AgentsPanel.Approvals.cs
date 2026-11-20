@@ -28,15 +28,19 @@ internal sealed partial class DawnScene
 
         if (waiting)
         {
-            var buttons = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 26) });
+            var buttons = stack.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 26), Anchor = Origin.Left, Pivot = Origin.Left });
             // Their keys said on them when they're the request the keys answer from anywhere in Hex (DecideWaiting)
             var (allow, deny) = DecideLabels(entry);
-            buttons.Add(new Button { Label = allow, Icon = "check", Primary = true, Size = new Vector2(150, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, true) });
-            buttons.Add(new Button { Label = deny, Icon = "close", Danger = true, Size = new Vector2(140, 24), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, false) });
+            buttons.Add(new Button { Label = allow, Icon = "check", Primary = true, Size = new Vector2(DecideWidth(allow, skin), 26), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, true) });
+            buttons.Add(new Button { Label = deny, Icon = "close", Size = new Vector2(DecideWidth(deny, skin), 26), LabelScale = 0.125f, Animated = false, OnPressed = () => chat.Decide(entry, false) });
         }
         else
             stack.Add(Text(entry.State == HexAgentToolState.Done ? $"$(check) {Said("agents_panel.allowed")}" : $"$(close) {Said("agents_panel.denied")}", 0.125f, dim: true));
 
         return card;
     }
+
+    // An Allow or Deny as wide as its words and their key, with room for its icon, never cut short
+    private static float DecideWidth(string label, UISkin? skin) =>
+        skin is null ? 150.0f : MathF.Ceiling(skin.Font.MeasureLine(label, 0.125f, UITextStyle.None, default) + skin.ButtonPadding.Total.X + 30.0f);
 }

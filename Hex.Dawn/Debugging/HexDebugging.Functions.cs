@@ -56,12 +56,13 @@ internal sealed partial class HexDebugging
         var menu = new Menu("function-breakpoint");
         menu.Add(context.Strings.Said(enabled ? "debugging.disable_breakpoint" : "debugging.enable_breakpoint"), () => SetFunctionBreakpoint(name, !enabled),
             icon: enabled ? "circle" : "circle-filled").IsEnabled = () => !building;
+        menu.AddSeparator();
         menu.Add(context.Strings.Said("debugging.delete_breakpoint"), () =>
         {
             if (building) return;
             functionBreakpoints.Remove(name);
             FunctionBreakpointsChanged();
-        }, icon: "trash").IsEnabled = () => !building;
+        }, icon: "trash", destructive: true).IsEnabled = () => !building;
         context.Windows.Menu(menu);
     }
 

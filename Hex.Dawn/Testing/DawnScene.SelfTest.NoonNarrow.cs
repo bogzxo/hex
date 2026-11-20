@@ -14,7 +14,7 @@ internal sealed partial class DawnScene
         {
             float pixels = chrome.Root.Bounds.Width * compositor.Scale;
             float scale = HexFrame.Scales.FirstOrDefault(value => pixels / value < NOON_FLEET_FROM - 20);
-            SetScale(scale > 0 ? scale : HexFrame.Scales[^1], remember: false);
+            SetInterfaceSize(scale > 0 ? scale : HexFrame.Scales[^1], remember: false);
             // Even 200% can leave a large display in the wide layout.
             if (scale == 0)
                 compositor.Scale = stage.Scale = pixels / 800.0f;
@@ -23,7 +23,7 @@ internal sealed partial class DawnScene
 
         void Wide()
         {
-            SetScale(scaleBefore, remember: false);
+            SetInterfaceSize(scaleBefore, remember: false);
             noonWait = 0;
         }
 
@@ -63,6 +63,9 @@ internal sealed partial class DawnScene
         // Another chat picked
         test.Click(() => chrome.ToWorld(noonFleetBack.Bounds.Center));
         test.Settle(0.5f);
+        // Under a group's heading at 200% it can be past the fleet's foot, where a person scrolls to it
+        test.Run(() => noonFleetScroll.ScrollIntoView(noonFleetRows.Children[FleetShown().FindIndex(each => each.Chat == picked)]));
+        test.Settle(0.4f);
         test.Click(() => CardAt(picked!));
         test.Settle(0.4f);
         test.Check("noon narrow: picking another chat gives the chat back, that one in it with the box's keyboard", () =>

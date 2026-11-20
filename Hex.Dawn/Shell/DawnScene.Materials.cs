@@ -19,8 +19,7 @@ internal sealed partial class DawnScene
     // everything, the bars dressed for the skin, the line under the title bar (Hex.Shell's HexFrame)
     private HexFrame frame = null!;
 
-    // The field of light and the module it's in, the frame's
-    private UIModule glowModule => frame.GlowModule;
+    // The field of light, the frame's
     private GlowField glow => frame.Glow;
 
     // How far in from its column a card is drawn (twice that is the gap between two), and how round it is
@@ -104,6 +103,22 @@ internal sealed partial class DawnScene
             open.Editor.Color = codeScroll.Color;
         if (welcome is not null)
             welcome.Color = card;
+
+        // A picture's view the code's ground, its size in the quiet text, and the bars floating over the code (find, the
+        // debugger's) the look's raised panel with its edge. They were a fixed blue-grey, out of every look but the
+        // first one Hex had
+        if (imageView is not null)
+        {
+            imageView.Color = codeScroll.Color;
+            imageInfo.Color = skin.Palette.DimText;
+        }
+        foreach (Panel floating in (ReadOnlySpan<Panel?>)[codeEditing?.findBar, debugBar])
+        {
+            if (floating is null)
+                continue;
+            floating.Color = skin.Palette.Control with { W = 1.0f };
+            floating.Outline = skin.BorderColor;
+        }
 
         // The terminals of the panel under the editor round cornered like Dusk's, inside the card
         if (terminalPanel is not null)

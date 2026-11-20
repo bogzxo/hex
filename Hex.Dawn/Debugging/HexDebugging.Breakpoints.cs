@@ -157,9 +157,11 @@ internal sealed partial class HexDebugging
         menu.AddSeparator();
         menu.Add(context.Strings.Said(settings.Enabled ? "debugging.disable_breakpoint" : "debugging.enable_breakpoint"),
             () => Settle(full, line, SettingsOf(full, line) with { Enabled = !SettingsOf(full, line).Enabled }), "Ctrl+F9", settings.Enabled ? "circle" : "circle-filled");
-        menu.Add(context.Strings.Said("debugging.delete_breakpoint"), () => ToggleBreakpoint(full, line), icon: "trash");
-        menu.AddSeparator();
         menu.Add(context.Strings.Said("debugging.go_to_breakpoint"), () => context.Documents.OpenAt(full, line, 0), icon: "go-to-file");
+
+        // Taking it away last, on its own, in the error colour
+        menu.AddSeparator();
+        menu.Add(context.Strings.Said("debugging.delete_breakpoint"), () => ToggleBreakpoint(full, line), icon: "trash", destructive: true);
         context.Windows.Menu(menu);
     }
 
@@ -169,7 +171,8 @@ internal sealed partial class HexDebugging
         var menu = new Menu("breakpoints");
         menu.Add(context.Strings.Said("debugging.enable_all"), () => EnableAll(true), icon: "circle-filled").IsEnabled = CanChangeAllBreakpoints;
         menu.Add(context.Strings.Said("debugging.disable_all"), () => EnableAll(false), icon: "circle").IsEnabled = CanChangeAllBreakpoints;
-        menu.Add(context.Strings.Said("debugging.delete_all"), DeleteAllBreakpoints, icon: "trash").IsEnabled = CanChangeAllBreakpoints;
+        menu.AddSeparator();
+        menu.Add(context.Strings.Said("debugging.delete_all"), DeleteAllBreakpoints, icon: "trash", destructive: true).IsEnabled = CanChangeAllBreakpoints;
         context.Windows.Menu(menu);
     }
 

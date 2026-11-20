@@ -38,17 +38,13 @@ internal sealed partial class DawnScene
     /// </summary>
     private UIChoiceSearch SymbolSearch(bool withTexts)
     {
-        harnessRoots = [.. WorkspaceRoots()];
-        HexCodeIndex index = Harness;
-        Task.Run(() => index.Look());
+        HexCodeIndex index = WakeIndex();
 
         // The line under a declaration with its parts as {0} and so on, the words of it taken here
         string inside = Said("go_to_all.detail", ("kind", "{0}"), ("container", "{1}"), ("file", "{2}"), ("line", "{3}"));
         string top = Said("go_to_all.detail_top", ("kind", "{0}"), ("file", "{2}"), ("line", "{3}"));
         Dictionary<string, string> kinds = KindsSaid.ToDictionary(kind => kind, kind => Said("go_to_all.kind_" + kind));
-        List<(string Key, string Says)> texts = withTexts
-            ? [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => (key, HexEvaluation.Shorten(Localisation.Get(key), 60)))]
-            : [];
+        IReadOnlyList<(string Key, string Says)> texts = withTexts ? GameTexts.All : [];
 
         return (typed, cancel) =>
         {
@@ -69,14 +65,35 @@ internal sealed partial class DawnScene
                 });
             }
 
-            foreach (var (key, says) in texts.Where(text => typed.Trim().Length > 0 && UIChooser.Matches(text.Key, typed)).Take(TEXTS_MOST))
+            int found = 0;
+            if (typed.AsSpan().Trim().Length > 0)
             {
-                if (cancel.IsCancellationRequested)
-                    break;
-                rows.Add(new UIChoice(key, () => codeEditing.GoToKey(key)) { Detail = says, Icon = "symbol-string", Id = $"{key}   {says}" });
+                foreach (var (key, says) in texts)
+                {
+                    if (found >= TEXTS_MOST || cancel.IsCancellationRequested)
+                        break;
+                    if (!UIChooser.Matches(key, typed))
+                        continue;
+                    found++;
+                    rows.Add(new UIChoice(key, () => codeEditing.GoToKey(key)) { Detail = says, Icon = "symbol-string", Id = $"{key}   {says}" });
+                }
             }
 
             return rows;
         };
+    }
+
+    /// <summary>
+    /// The game's texts in order with what each says, cut short, for quick open's #. Thousands of them, sorted and cut
+    /// once a language rather than every time the search opened, and made again when another is loaded.
+    /// </summary>
+    private static class GameTexts
+    {
+        private static List<(string Key, string Says)>? kept;
+
+        static GameTexts() => Localisation.Changed += static () => kept = null;
+
+        public static IReadOnlyList<(string Key, string Says)> All =>
+            kept ??= [.. Localisation.Keys.Order(StringComparer.Ordinal).Select(key => (key, HexEvaluation.Shorten(Localisation.Get(key), 60)))];
     }
 }

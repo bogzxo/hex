@@ -78,6 +78,10 @@ internal sealed partial class DuskScene : Scene
 
         root = layout.Get<StackPanel>("root");
         top = layout.Get<TitleBar>("top");
+#if DEBUG
+        // A Debug build's mark is the grey Hex as it is, not tinted the look's accent, as Dawn's is
+        top.IconColor = System.Numerics.Vector4.One;
+#endif
         menu = layout.Get<MenuBar>("menu");
         panel = layout.Get<TerminalPanel>("terminal");
         statusBar = layout.Get<StatusBar>("status");
@@ -111,7 +115,7 @@ internal sealed partial class DuskScene : Scene
             SettingsChanged = SettingsChanged
         });
 
-        SetScale(options.Scale ?? HexModes.Scale ?? settings.Scale);
+        SetInterfaceSize(options.Scale ?? HexModes.InterfaceSize ?? settings.Scale);
         BuildPanel();
         host.Commands.OnChanged = RefreshMenuKeys;
         host.Blocked = () => chrome.Dialog is not null;
@@ -195,7 +199,7 @@ internal sealed partial class DuskScene : Scene
     private void SettingsChanged()
     {
         if (settings.Scale != compositor.Scale)
-            SetScale(settings.Scale);
+            SetInterfaceSize(settings.Scale);
         if (ThemeOrUsual(settings.Theme) != compositor.Skin?.Theme)
             compositor.SetSkin(SKIN_DIRECTORY, SKIN_FILE, ThemeOrUsual(settings.Theme));
         UpdateQuakeKey();

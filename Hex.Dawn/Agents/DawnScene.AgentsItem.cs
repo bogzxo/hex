@@ -28,13 +28,13 @@ internal sealed partial class DawnScene
     }
 
     // How many chats want looking at
-    private int AgentsWanting() => agentChats.Count(chat => chat.Pending.Any() || chat.Unread || (!chat.Running && chat.UnreadMail().Length > 0));
+    private int AgentsWanting() => agentChats.Count(chat => chat.HasPending || chat.Unread || (!chat.Running && chat.UnreadMailCount() > 0));
 
     /// <summary>The item's words as the chats are now.</summary>
     private void DrawAgentsItem()
     {
         int working = agentChats.Count(chat => chat.Running), wanting = AgentsWanting();
-        string said = (working > 0 ? $"$(loading~spin) {Said("agents_item.working", ("count", working.ToString(System.Globalization.CultureInfo.InvariantCulture)))}" : $"$(robot) {Said("agents_item.agents", ("count", agentChats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}")
+        string said = (working > 0 ? $"$(loading~spin) {Said("agents_item.working", ("count", working.ToString(System.Globalization.CultureInfo.InvariantCulture)))}" : $"$(robot) {Said(agentChats.Count == 1 ? "agents_item.agents_one" : "agents_item.agents", ("count", agentChats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)))}")
             + (wanting > 0 ? $"  $(bell-dot) {wanting}" : string.Empty);
         if (said == agentsItemSaid)
             return;

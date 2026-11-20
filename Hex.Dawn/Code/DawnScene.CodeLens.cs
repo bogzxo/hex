@@ -50,8 +50,7 @@ internal sealed partial class DawnScene
     }
 
     private readonly Dictionary<HexDocument, LensFile> lensFiles = [];
-    private (HexDocument? Of, int Version) lensSeen = (null, -1);
-    private long lensChangedAt;
+    private HexSettle<(HexDocument, int)> lensSettle = new(LENSES_SETTLE_MS);
 
     /// <summary>
     /// Every tick, the counts of the file on screen. Asked again once the typing stops (or the server says its project
@@ -79,14 +78,7 @@ internal sealed partial class DawnScene
             // Something was counted before, so it waits for the typing to stop, a file just shown is counted at once
             if (file.Version >= 0 && !refreshed)
             {
-                if (lensSeen != (document, version))
-                {
-                    lensSeen = (document, version);
-                    lensChangedAt = now;
-                    return;
-                }
-
-                if (now - lensChangedAt < LENSES_SETTLE_MS)
+                if (!lensSettle.Settled((document, version), now))
                     return;
             }
 
@@ -397,6 +389,6 @@ internal sealed partial class DawnScene
         foreach (HexDocument open in documents)
             open.Editor.LensesAbove = [];
         lensFiles.Clear();
-        lensSeen = (null, -1);
+        lensSettle.Reset();
     }
 }

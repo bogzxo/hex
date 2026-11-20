@@ -29,7 +29,7 @@ internal sealed partial class HexRunning
             return;
 
         // Written in another file, or worked out, it is the code that says what it is
-        bool here = at.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(open), PlatformPaths.Comparison));
+        bool here = at.File is null || (document.Path is { } open && PlatformPaths.Same(at.File, open));
         if (!here || !at.Literal)
         {
             GoToValue(tag.Path, at);

@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
 
     private void AddNotebookCommands()
     {
-        commands.Add("File/new", Said("notebook.new"), NewNotebook, icon: "notebook");
+        commands.Add("File/new/make", Said("notebook.new"), NewNotebook, icon: "notebook");
         commands.ShowMenuWhen("Notebook", () => NotebookShown);
         commands.DeclareSubmenu("Notebook/kernel", "kernel", Said("notebook.pick_kernel_title"), "server-process", "run", "pick");
 

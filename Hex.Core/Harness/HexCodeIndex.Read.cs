@@ -32,6 +32,17 @@ internal sealed partial class HexCodeIndex
                     return HexAnswer.Wrong($"Nothing called {symbol} is declared{(file is null ? string.Empty : $" in {file.Relative}")}. hex_symbols finds names by part of them.");
 
                 (file, found) = (fits[0].File, fits[0].Symbol);
+
+                // Its text read only now, after it changed since it was indexed: the declarations are found again in what
+                // was read, or the lines handed back were the old line numbers' of the new text
+                if (file.Lines.Length != file.LineCount)
+                {
+                    var fresh = new HexIndexedFile(file.Path, file.Relative, file.Length, file.Written, file.Lines);
+                    HexSymbol was = found;
+                    if (fresh.Symbols.Where(each => each.Name == was.Name && each.Kind == was.Kind).MinBy(each => Math.Abs(each.Line - was.Line)) is { } moved)
+                        (file, found) = (fresh, moved);
+                }
+
                 if (fits.Count > 1)
                     also = $"{fits.Count - 1} more declare {symbol}, {string.Join(", ", fits.Skip(1).Take(5).Select(each => $"{each.File.Relative}:{each.Symbol.Line + 1}"))}{(fits.Count > 6 ? " ..." : string.Empty)}, say path to pick one.";
                 (first, last) = Extent(file, found);

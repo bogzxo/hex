@@ -7,14 +7,8 @@ namespace Hex.Shell;
 /// <summary>The same mode selector in both windows. Only the destination creates or switches a scene.</summary>
 internal static class HexModeSwitch
 {
-    public static void SetScale(Button? destination, float scale)
-    {
-        if (destination?.Parent is not StackPanel row || scale <= 0)
-            return;
-        row.Spacing = 2.0f / scale;
-        foreach (Button button in row.Children.OfType<Button>())
-            button.LabelScale = 0.14f / scale;
-    }
+    // How big the faces' names are written, the title bar's menus' size. They grow with the interface size like every word
+    private const float LABEL_TEXT = 0.14f;
 
     /// <summary>
     /// The selector dressed for a skin. In a flush look (Solstice) the mode that's on is filled with the accent, which is
@@ -26,7 +20,14 @@ internal static class HexModeSwitch
             return;
         bool accent = skin.CornerRadius > 0.0f && HexLooks.Flush(skin);
         foreach (Button button in row.Children.OfType<Button>())
+        {
             button.Primary = accent && button.Selected;
+            // On a dark look the words on the accent are the ground's colour, white on Solstice's orange was 3.6:1 and
+            // the dark ground on it 4.9:1. A light look's white on its deeper accent reads already
+            System.Numerics.Vector4? ink = button.Primary && !skin.Palette.LightField ? skin.Palette.Field with { W = 1.0f } : null;
+            button.LabelColor = ink;
+            button.IconColor = ink;
+        }
     }
 
     public static bool RestoreFocus(UICompositor compositor, UIComponent? previous)
@@ -49,11 +50,10 @@ internal static class HexModeSwitch
             // No Agentic with No AI on, the row is the editor and the terminal
             if (face == HexFace.Noon && Hex.Core.HexAi.Off)
                 continue;
-            row.Add(new Button(face.Name()) { Icon = face.Icon(), Style = "button_flat", Animated = false });
+            row.Add(new Button(face.Name()) { Icon = face.Icon(), Style = "button_flat", Animated = false, LabelScale = LABEL_TEXT });
         }
         Button first = (Button)row.Children[0];
         Select(first, current, pick);
-        SetScale(first, bar.Module?.Compositor.Scale ?? 1.0f);
         return first;
     }
 

@@ -22,6 +22,7 @@ internal sealed partial class DawnScene
         OnCode(test, dataFile);
         CheckMenuSizes(test, "code");
         OpenEveryMenu(test, "code");
+        TestContextMenus(test);
 
         TestMenuThroughPointer(test);
         TestTallMenu(test);
@@ -134,6 +135,43 @@ internal sealed partial class DawnScene
             Engine.WindowManager.Wake();
         });
         test.Settle(0.2f);
+    }
+
+    // The menus a right click opens most, the code's, a file's in the explorer, a tab's and a breakpoint's (which has an
+    // item that throws something away), each opened by the middle of the window, inside it and no wider than a list is
+    // read across, a picture of each when pictures are asked for
+    private void TestContextMenus(HexPointerScript test)
+    {
+        string full = Path.GetFullPath(dataFile);
+        (string Name, Func<Menu?> Open, Action? Done)[] menus =
+        [
+            ("code", () => { codeEditing.ShowCodeMenu(document, Vector2.Zero); return Showing(); }, null),
+            ("file", () => Shown(explorer.ExplorerMenu(new ExplorerEntry(dataFile, false, 1, false))), null),
+            ("tab", () => { ShowTabMenu(document); return Showing(); }, null),
+            ("breakpoint", () => { debugger.ToggleBreakpoint(full, 1); debugger.BreakpointMenu(full, 1); return Showing(); }, () => debugger.ToggleBreakpoint(full, 1))
+        ];
+
+        foreach (var (name, open, done) in menus)
+        {
+            Menu? opened = null;
+            test.Hover(() => chrome.ToWorld(chrome.Frame.Center));
+            test.Run(() => opened = open());
+            test.Wait();
+            test.Check($"menus: the {name} context menu opens inside the window, no wider than a list is read across", () =>
+                chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault() is { Showing: not null } shown && opened is not null
+                && shown.OpenListBounds.All(list => Inside(list, chrome.Frame) && list.Width <= chrome.Frame.Width * 0.5f));
+            MenuShot(test, $"context_{name}");
+            test.Run(() => { chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Close(); done?.Invoke(); });
+            test.Wait();
+        }
+
+        Menu? Showing() => chrome.Root.Children.OfType<ContextMenu>().FirstOrDefault()?.Showing;
+
+        Menu Shown(Menu menu)
+        {
+            contextMenu = ContextMenu.ShowAt(chrome, compositor.Pointer.Position, menu);
+            return menu;
+        }
     }
 
     // The Git menu by the pointer, its word clicked and Branches rested on, and an item of Branches clicked

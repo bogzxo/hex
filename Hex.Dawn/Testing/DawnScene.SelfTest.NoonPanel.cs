@@ -47,7 +47,7 @@ internal sealed partial class DawnScene
         // Picked in the fleet, by its card's press
         test.Run(() =>
         {
-            int at = ChatsInOrder().FindIndex(each => each.Chat == other);
+            int at = FleetShown().FindIndex(each => each.Chat == other);
             Descendants(noonFleetRows.Children[at]).OfType<Button>().First().OnPressed!();
         });
         test.Settle(0.3f);

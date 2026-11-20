@@ -383,7 +383,10 @@ internal sealed partial class DawnScene
         commands.Add("Selection/carets", Said("code.add_cursors_line_ends"), () => code.Document.CaretsAtLineEnds(), "Shift+Alt+I", "newline");
         // Ctrl+Shift+Space the editor's own key, the box over a call back after Escape took it away. Going to the other
         // bracket is VS Code's Ctrl+Shift+\ and Visual Studio's Ctrl+]
-        commands.Add("Run/check", Said("code.parameter_info"), () => { code.Focus(); code.ShowSignature(); }, "Ctrl+Shift+Space", "symbol-parameter").IsVisible = inCode;
+        // The editor's own keys, in the palette and not the Run menu, nobody goes to a menu to bring up the box over a call
+        MenuItem parameters = commands.Add("Run/check", Said("code.parameter_info"), () => { code.Focus(); code.ShowSignature(); }, "Ctrl+Shift+Space", "symbol-parameter");
+        parameters.IsVisible = inCode;
+        parameters.PaletteOnly = true;
         commands.Add("Go/symbols", Said("code.go_to_bracket"), () => code.GoToMatchingBracket(), "Ctrl+Shift+\\", "bracket", UIKeyUse.BoundWhileTyping).IsVisible = inCode;
         commands.Add("Selection/carets", Said("code.single_cursor"), () => code.Document.CollapseCarets(), "Esc", "circle-small-filled").IsEnabled = () => code.Document.HasExtraCarets;
         Menu folding = commands.AddMenu("View/editor", Said("code.folding"), "fold");
@@ -420,6 +423,8 @@ internal sealed partial class DawnScene
                 codeEditing.RenameSymbol();
             else if (compositor.Focus == sideTree && Side == HexSide.Explorer)
                 RenameInExplorer();
+            else if (RenameAgentCardByKey())
+                return;
             else if (LayoutTools)
                 RenameSelected();
         }, whileTyping: true);
@@ -431,12 +436,16 @@ internal sealed partial class DawnScene
         commands.Bind(Key.F5, RunWithoutDebugging, control: true, whileTyping: true);
 
         commands.Add("Run/check", Said("code.check_all_files"), CheckAllFiles, "Ctrl+F8", "check-all", UIKeyUse.BoundWhileTyping);
-        commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space", "symbol-keyword").IsVisible = inCode;
+        MenuItem completion = commands.Add("Run/check", Said("code.trigger_completion"), () => { code.Focus(); code.Complete(); }, "Ctrl+Space", "symbol-keyword");
+        completion.IsVisible = inCode;
+        completion.PaletteOnly = true;
 
         // Not while the commit box has the keys, Ctrl+Enter there commits
         commands.Add("Run/apply", Said("code.apply_to_layout"), ApplyCode, "Ctrl+Enter", "export", UIKeyUse.BoundWhileTyping).IsEnabled = () => document.CodeEdited && !CommitBoxTyping;
-        commands.Add("Run/apply", Said("code.discard_changes"), RevertCode, icon: "discard").IsEnabled = () => document.CodeEdited;
         commands.Add("Run/apply", Said("code.convert_to_layout"), MakeLayout, icon: "layout").IsEnabled = () => document.IsText && IsLayoutCode(code.Text);
+
+        // Throws the edits away, so last and in the error colour
+        commands.Add("Run/apply", Said("code.discard_changes"), RevertCode, icon: "discard", destructive: true).IsEnabled = () => document.CodeEdited;
     }
 
     /// <summary>The outline of what is in the code editor, by the language of its file.</summary>

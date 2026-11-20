@@ -64,8 +64,8 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
 
-        test.Check("settings file: Panels has no dot when nobody picked a size", () =>
-            SettingsPage is { } page && !page.IsModified!("size") && !page.SectionsChanged.Contains(PANELS));
+        test.Check("settings file: Panels has no dot and the interface size none at 100%", () =>
+            SettingsPage is { } page && !page.IsModified!(INTERFACE_SIZE) && !page.SectionsChanged.Contains(PANELS));
 
         test.Run(() => SettingsPage!.Find("keybinding"));
         test.Wait();

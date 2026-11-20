@@ -15,15 +15,26 @@ internal sealed partial class DawnScene
     private string? renderFallbackSaid;
 
     /// <summary>Puts the settings' render scale in force and has the Render scale now row kept up with what it comes to.</summary>
+    // Heard from the window's scaler, which outlives an editor put away (DawnScene.Resident)
+    private Action<Horizon.Rendering.Scaling.RenderScalePlan>? renderPlanHeard;
+
     private void BuildRenderScale()
     {
-        Engine.WindowManager.Scaling.PlanChanged += _ => renderPlanChanged = true;
+        Engine.WindowManager.Scaling.PlanChanged += renderPlanHeard = _ => renderPlanChanged = true;
         ApplyRenderScale();
     }
 
-    /// <summary>The render scale as the settings have it now, from the next frame on.</summary>
+    /// <summary>The render scale and how text is smoothed as the settings have them now, from the next frame on.</summary>
     internal void ApplyRenderScale()
     {
+        // ClearType's way, grey or as the system and the screen say (see GlyphSmoothing), the next paint on
+        Horizon.Rendering.Text.GlyphSmoothing.Mode = settings.TextSmoothing switch
+        {
+            "subpixel" => Horizon.Rendering.Text.TextSmoothing.Subpixel,
+            "grayscale" => Horizon.Rendering.Text.TextSmoothing.Grayscale,
+            _ => Horizon.Rendering.Text.TextSmoothing.Auto
+        };
+
         RenderScaleSettings wanted = RenderScaleOf(settings, Engine.WindowManager.Features);
 
         var problems = new List<string>();

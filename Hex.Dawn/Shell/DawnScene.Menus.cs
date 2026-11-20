@@ -121,27 +121,33 @@ internal sealed partial class DawnScene
     /// </summary>
     private void DeclareMenus()
     {
-        commands.Declare("File", "new", "save", "close", "path", "workspace", "settings", "exit");
+        commands.Declare("File", "new", "open", "save", "close", "path", "workspace", "exit");
         commands.Declare("Edit", "history", "clipboard", "selection", "find", "files", "comment");
         commands.Declare("Selection", "select", "lines", "carets");
         commands.Declare("Layout", "add", "group", "move", "select", "screen", "skin");
         commands.Declare("Notebook", "run", "cells", "clear", "export", "kernel");
         commands.Declare("View", "palette", "sides", "panels", "appearance", "editor");
         commands.Declare("Go", "places", "open", "symbols", "problems");
-        commands.Declare("Run", "debug", "run", "tasks", "check", "apply");
+        // The debugger's own groups first, the session, stepping through it and what's looked at on the way, then
+        // running without it
+        commands.Declare("Run", "debug", "step", "inspect", "run", "tasks", "check", "apply");
         commands.Declare("Test", "tests");
         commands.Declare("Terminal", "terminals", "tasks", "pane", "options");
         commands.Declare("Git", "commit", "conflicts", "operation", "menus", "settings");
         // The agents' own menu, bringing them up or asking one about the code, going between their chats, what the harness
-        // saved. Not there at all with No AI on, nothing goes in it
+        // saved, and their data on the disk. Not there at all with No AI on, nothing goes in it
         if (!HexAi.Off)
-            commands.Declare("Agents", "open", "chats", "harness");
+            commands.Declare("Agents", "open", "chats", "harness", "data");
         commands.Declare("Help", "help", "developer", "about");
 
         // The menus inside the bar's, each after what is added to the group it's in
+        commands.DeclareSubmenu("File/new", "make", Said("menus.new"), "new-file");
         commands.DeclareSubmenu("File/new", "scratch", Said("menus.scratchpads"), "note");
         commands.DeclareSubmenu("File/workspace", "workspace", Said("menus.workspace"), "folder-library");
-        commands.DeclareSubmenu("File/settings", "prefs", Said("menus.preferences"), "settings-gear", "main", "files");
+        commands.DeclareSubmenu("File/workspace", "prefs", Said("menus.preferences"), "settings-gear", "main", "files");
+        commands.DeclareSubmenu("Run/debug", "cmake", Said("menus.cmake"), "tools");
+        commands.DeclareSubmenu("Run/inspect", "breakpoints", Said("menus.breakpoints"), "debug-breakpoint");
+        commands.DeclareSubmenu("Run/inspect", "views", Said("menus.debug_views"), "debug-console");
         commands.DeclareSubmenu("View/appearance", "look", Said("menus.appearance"), "layout", "screen", "parts", "zoom");
         commands.DeclareSubmenu("Layout/skin", "debugger", Said("menus.layout_debugger"), "debug", "switch", "options");
         commands.DeclareSubmenu("Git/menus", "changes", Said("menus.git_changes"), "diff", "open", "file", "all");
@@ -151,6 +157,8 @@ internal sealed partial class DawnScene
         commands.DeclareSubmenu("Git/menus", "stash", Said("menus.git_stash"), "git-stash", "stash", "pick");
         commands.DeclareSubmenu("Git/menus", "history", Said("menus.git_history"), "history");
         commands.DeclareSubmenu("Git/menus", "tags", Said("menus.git_tags"), "tag");
+        if (!HexAi.Off)
+            commands.DeclareSubmenu("Agents/data", "agent_data", Said("agent_data.title"), "database", "folder", "usage", "clean");
         commands.DeclareSubmenu("Help/developer", "developer", Said("menus.developer"), "tools");
     }
 
@@ -180,7 +188,10 @@ internal sealed partial class DawnScene
         commands.Add("View/appearance/look:screen", Said("menus.zen_mode"), ToggleQuiet, "Ctrl+K Z", "screen-full", UIKeyUse.BoundWhileTyping).IsChecked = () => Quiet;
         commands.Add("View/appearance/look:parts", Said("menus.side_bar"), ToggleSideBar, "Ctrl+B", "layout-sidebar-left", UIKeyUse.BoundWhileTyping).IsChecked = () => left.Shown;
         commands.Add("View/appearance/look:parts", Said("menus.panel"), TogglePanel, "Ctrl+J", "layout-panel", UIKeyUse.BoundWhileTyping).IsChecked = () => PanelOpen;
-        commands.Add("View/appearance/look:parts", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping).IsChecked = () => right.Shown;
+        // Not in Agentic, which covers the body and has Ctrl+Alt+B for its fleet: the two share the key, each in its face
+        MenuItem properties = commands.Add("View/appearance/look:parts", Said("menus.properties"), ToggleProperties, "Ctrl+Alt+B", "layout-sidebar-right", UIKeyUse.BoundWhileTyping);
+        properties.IsChecked = () => right.Shown;
+        properties.IsEnabled = () => Face != HexFace.Noon;
 
         commands.Add("View/editor", Said("menus.word_wrap"), ToggleWrap, "Alt+Z", "word-wrap", UIKeyUse.BoundWhileTyping).IsChecked = () => settings.WrapCode;
         commands.Add("View/editor", Said("menus.code_in_hack"), codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
@@ -191,9 +202,9 @@ internal sealed partial class DawnScene
             () => !document.IsText || IsNotebook(document) || IsMarkdown(document) || running.HasTable || ViewsFor(document).Any();
 
         // The size of everything, beside Appearance rather than inside it, a menu in a menu in a menu is a long way down
-        Menu size = commands.AddMenu("View/appearance", Said("menus.editor_scale"), "zoom-in");
+        Menu size = commands.AddMenu("View/appearance", Said("menus.interface_size"), "zoom-in");
         foreach (float scale in Scales)
-            size.Add(DescribeScale(scale), () => SetScale(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
+            size.Add(DescribeSize(scale), () => SetInterfaceSize(scale, remember: true)).IsChecked = () => compositor.Scale == scale;
 
         // The layout debugger is the designer's, in the Layout menu with what it draws under it
         layoutDebugger.AddTo(commands, "Layout/skin/debugger:switch", "Layout/skin/debugger:options",
@@ -214,8 +225,8 @@ internal sealed partial class DawnScene
 
         AddTerminalCommands();
 
-        // Through the window manager, on the window's thread, asking first like its x does
-        commands.Add("File/exit", Said("menus.exit"), () => Engine.WindowManager.Close(), "Alt+F4", "close");
+        // Closed for real, asking first about anything unsaved, where the window's x only hides a Hex that stays running
+        commands.Add("File/exit", Said("menus.exit"), Quit, "Alt+F4", "close");
     }
 
     /// <summary>

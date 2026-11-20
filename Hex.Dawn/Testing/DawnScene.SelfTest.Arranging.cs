@@ -233,7 +233,7 @@ internal sealed partial class DawnScene
 
         int open = 0;
         test.Run(() => open = documents.Count);
-        Pick("File", () => "Close");
+        Pick("File", () => Said("documents.close"));
         test.Wait();
         test.Check("close: a layout with changes asks first", () => chrome.Dialog is { IsOpen: true } && documents.Count == open);
 

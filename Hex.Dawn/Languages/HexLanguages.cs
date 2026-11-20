@@ -262,7 +262,7 @@ internal sealed partial class HexLanguages
         knownAt[of] = of.Path;
 
         // Cached library and debugger views are read-only, outside the workspace's language-server documents.
-        if (of.Path is {} cached && (PlatformPaths.IsUnder(cached, DecompiledFolder) || HexDebugging.IsDisassemblyPath(cached) || HexDebugging.IsMemoryPath(cached) || HexDebugging.IsDebuggerSourcePath(cached)))
+        if (of.Path is { } cached && (PlatformPaths.IsUnder(cached, DecompiledFolder) || HexDebugging.IsDisassemblyPath(cached) || HexDebugging.IsMemoryPath(cached) || HexDebugging.IsDebuggerSourcePath(cached)))
         {
             of.Editor.ReadOnly = true;
             return;
@@ -506,7 +506,9 @@ internal sealed partial class HexLanguages
                 if (notebookShadows.Count > 0 && NotebookFound(server, full, found))
                     continue;
                 HexDocument? of = context.Documents.Find(full);
-                if (of is null || !linters.TryGetValue(of, out LanguageServer? current) || !ReferenceEquals(current, server))
+                bool linted = of is not null && linters.TryGetValue(of, out LanguageServer? current) && ReferenceEquals(current, server);
+                AgentHeard(server, full, found, linted);
+                if (!linted || of is null)
                     continue;
 
                 lintFound[of] = found;
@@ -524,6 +526,8 @@ internal sealed partial class HexLanguages
         UpdateServerCompletions();
         if (notebookShadows.Count > 0)
             UpdateNotebooks(dt);
+        if (agentFiles.Count > 0)
+            UpdateAgentFiles(dt);
         UpdateInstallStatus();
     }
 

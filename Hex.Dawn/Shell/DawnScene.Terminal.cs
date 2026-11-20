@@ -67,9 +67,12 @@ internal sealed partial class DawnScene : ITerminalHostUi
         terminalPanel.OnTabMenu = (tab, point) =>
         {
             var shown = new Menu("terminal tab");
-            shown.Add(Said("terminal_menu.kill"), () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "trash");
             shown.Add(Said("terminal_menu.rename"), () => terminals.AskRename(tab), icon: "edit");
             shown.Add(Said("terminal_page.split_right"), () => terminals.Run("split_right"), terminals.Commands.KeyOf("split_right"), icon: "split-horizontal");
+
+            // Ending the shell and whatever runs in it goes last, on its own and in the error colour
+            shown.AddSeparator();
+            shown.Add(Said("terminal_menu.kill"), () => terminalPanel.CloseTab(tab), terminals.Commands.KeyOf("close_tab"), icon: "trash", destructive: true);
             ContextMenu.Show(chrome, point, shown);
         };
 
@@ -182,7 +185,11 @@ internal sealed partial class DawnScene : ITerminalHostUi
     {
         terminals.Update(dt);
 
-        if (!terminalFontSet && Horizon.Graphics.GraphicsDevice.IsAvailable)
+        // Only once a terminal is wanted, its page up or a tab made (a task, an agent's), not as Hex starts. Built at the
+        // first tick it was half a second of a first launch for a terminal nobody had opened, the code font's box drawing,
+        // blocks and braille made into its field
+        bool wanted = terminalPanel.Tabs.Count > 0 || (PanelOpen && bottom.Selected == CONSOLE_PAGE);
+        if (!terminalFontSet && wanted && Horizon.Graphics.GraphicsDevice.IsAvailable)
         {
             terminalFontSet = true;
             terminalPanel.Font = UIFont.Shared(Path.Combine(Hex.Core.HexHost.ProgramFolder, "Assets", "fonts", HexCodeEditing.HACK), HexCodeEditing.HACK + ".ttf", HexCodeEditing.CODE_FONT_EM, terminal: true);

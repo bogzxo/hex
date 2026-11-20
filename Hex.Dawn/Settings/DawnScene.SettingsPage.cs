@@ -22,8 +22,11 @@ internal sealed partial class DawnScene
     // How wide the words of a section that's a panel run (the keyboard's, an extension's about), at the page's zoom
     private const float PANEL_PROSE = 640.0f;
 
-    // What the editor's panels and Dawn's size are in
+    // What the editor's panels and its interface size are in
     private const string PANELS = "Editor · Panels";
+
+    // The row of the interface size, the key it's kept under in the settings file too
+    private const string INTERFACE_SIZE = "interface_size";
 
     private SettingsWindow? settingsView;
 
@@ -35,9 +38,6 @@ internal sealed partial class DawnScene
 
     // What the keyboard's section is called, a panel that sends you to the window of the keys
     private const string KEYS_SECTION = "Editor · Keyboard shortcuts";
-
-    // Whether Dawn's size was picked on its row this run, the self test keeps no file of it to go by
-    private bool scalePicked;
 
     /// <summary>
     /// The settings, brought to the front when they're up. Ctrl+, in the settings file goes to the setting on the caret's
@@ -75,9 +75,8 @@ internal sealed partial class DawnScene
         settingsView.Page.HomePart = EDITOR_PART;
         settingsView.Page.Common = CommonSettings;
 
-        // Drawn smaller than the screen would have it (a size picked small on a big screen, the self test at 1 on 4K), the
-        // page zooms its text and its controls up to what the screen's usual size would draw them at
-        settingsView.Page.Zoom = SettingsZoom;
+        // The page is drawn at the interface size like everything else. It zoomed itself back up when a size under the one
+        // the window's height suggested was picked, so the setting that made every word smaller made these bigger
         settingsView.Page.OnResetAllAsked = AskResetAllSettings;
         settingsView.Window.Color = compositor.Skin?.Palette.Raised;
         settingsView.Window.Glass = Glassy ? HexGlass.Window(PopupGlass) : null;
@@ -231,30 +230,6 @@ internal sealed partial class DawnScene
         return body;
     }
 
-    /// <summary>The size Dawn is drawn at when nobody picked one, what the window's height says.</summary>
-    private float UsualScale => ScaleFor(Engine.WindowManager.ViewportSize);
-
-    /// <summary>How much the settings page zooms, what the usual size would draw Dawn at over what it's drawn at, never smaller.</summary>
-    private float SettingsZoom => MathF.Max(1.0f, UsualScale / MathF.Max(0.25f, compositor.Scale));
-
-    /// <summary>Dawn back at the size the window says, the one that was picked forgotten so the next run goes by the window too.</summary>
-    private void UseUsualScale()
-    {
-        SetScale(UsualScale, remember: false);
-        scalePicked = false;
-        if (options.SelfTest)
-            return;
-
-        try
-        {
-            File.Delete(ScalePath);
-        }
-        catch (Exception e)
-        {
-            Say(Said("chrome.scale_not_kept", ("reason", e.Message)), error: true);
-        }
-    }
-
     /// <summary>The skins and themes the designer can show a layout in, as the window lists them.</summary>
     private static List<(UISkinChoice Skin, string? Theme, string Text)> LayoutSkins()
     {
@@ -295,7 +270,7 @@ internal sealed partial class DawnScene
                 [.. EditorSkins().Select(choice => choice.Text)], Buttons: [Said("settings_window.preview_themes")]),
             .. EditorSettingsCatalog.Settings,
             EditorSettingsCatalog.RenderNow,
-            new("size", Said("settings_page.size"), UIFormKind.Choice, Said("settings_page.size_help"), PANELS, [.. Scales.Select(DescribeScale)]),
+            new(INTERFACE_SIZE, Said("settings_page.interface_size"), UIFormKind.Choice, Said("settings_page.interface_size_help"), PANELS, [.. Scales.Select(DescribeSize)]),
             new("panels", Said("settings.editor.panels"), UIFormKind.Text, Said("settings_page.panels_help"), PANELS, Buttons: [Said("settings_page.put_back")], ButtonsOnly: true),
             new("layout_skin", Said("settings_page.layout_skin"), UIFormKind.Choice, Said("settings_page.layout_skin_help"), EditorSettingsCatalog.DESIGNER,
                 [.. LayoutSkins().Select(choice => choice.Text)], ChoiceLabels: [.. LayoutSkins().Select(LayoutSkinLabel)]),
@@ -313,7 +288,7 @@ internal sealed partial class DawnScene
         private IRuntimeValue? InForce(string key) => key switch
         {
             "editor_skin" => new StringValue(EditorSkins().Find(choice => choice.Skin.Name == hex.settings.EditorSkin && (choice.Theme ?? string.Empty) == hex.settings.EditorTheme).Text ?? string.Empty),
-            "size" => new StringValue(DescribeScale(hex.compositor.Scale)),
+            INTERFACE_SIZE => new StringValue(DescribeSize(hex.compositor.Scale)),
             "layout_skin" => new StringValue(LayoutSkins().Find(choice => choice.Skin.Name == UISkins.Current.Name && choice.Theme == (UISkins.Theme ?? UISkins.Current.UsualTheme)).Text ?? UISkins.Current.Title),
             "code_zoom" => new NumberValue(hex.settings.CodeZoom),
             "code_font" => new StringValue(hex.settings.CodeFont),
@@ -355,6 +330,8 @@ internal sealed partial class DawnScene
             "backdrop_wrap_margin" => new NumberValue(hex.settings.BackdropWrapMargin),
             "wrap_flow" => new NumberValue(hex.settings.WrapFlow),
             "reopen_last" => Values.Bool(hex.settings.ReopenLast),
+            "persistent_process" => Values.Bool(hex.settings.PersistentProcess),
+            "persistent_at_login" => Values.Bool(hex.settings.PersistentAtLogin),
             "effects" => new StringValue(hex.settings.Effects),
             "effect_sparks" => Values.Bool(hex.settings.EffectSparks),
             "effect_motion" => Values.Bool(hex.settings.EffectMotion),
@@ -368,6 +345,7 @@ internal sealed partial class DawnScene
             "render_scale_percent" => new NumberValue(hex.settings.RenderScalePercent),
             "render_upscaler" => new StringValue(hex.settings.RenderUpscaler),
             "render_sharpness" => new NumberValue(hex.settings.RenderSharpness),
+            "text_smoothing" => new StringValue(hex.settings.TextSmoothing),
             "render_composition" => new StringValue(hex.settings.RenderComposition),
             "render_scale_now" => new StringValue(hex.DescribeRenderScale()),
             "glass_clarity" => new NumberValue(hex.settings.GlassClarity),
@@ -391,9 +369,7 @@ internal sealed partial class DawnScene
         public bool IsModified(string key) => hex.ScopedModified(key) ?? key switch
         {
             "editor_skin" => hex.settings.EditorSkin != HexSettings.USUAL_SKIN || hex.settings.EditorTheme != HexSettings.USUAL_THEME,
-            // Only a size somebody picked and that's kept for next time, a window that's another size than the last run's
-            // isn't a change of anybody's
-            "size" => hex.scalePicked || (!hex.options.SelfTest && File.Exists(ScalePath)),
+            INTERFACE_SIZE => hex.compositor.Scale != 1.0f,
             "panels" or "layout_skin" or EditorSettingsCatalog.ARRANGE_BACKDROP or "render_scale_now" => false,
             "disabled_extensions" => hex.extensions.All.Any(extension => !extension.Enabled),
             _ => !SettingValues.Same(Get(key), EditorSettingsCatalog.Usual.GetValueOrDefault(key))
@@ -417,13 +393,10 @@ internal sealed partial class DawnScene
                     if (index >= 0)
                         hex.UseEditorSkin(skins[index].Skin.Name, skins[index].Theme, save: true);
                     return;
-                case ("size", StringValue sized):
-                    int at = Array.FindIndex(Scales, scale => DescribeScale(scale) == sized.Value);
+                case (INTERFACE_SIZE, StringValue sized):
+                    int at = Array.FindIndex(Scales, size => DescribeSize(size) == sized.Value);
                     if (at >= 0)
-                    {
-                        hex.SetScale(Scales[at], remember: true);
-                        hex.scalePicked = true;
-                    }
+                        hex.SetInterfaceSize(Scales[at], remember: true);
                     return;
                 case ("layout_skin", StringValue shownIn):
                     var layoutSkins = LayoutSkins();
@@ -608,7 +581,11 @@ internal sealed partial class DawnScene
                     settings.RenderScalePercent = Math.Clamp(percent.Value, 25.0f, 100.0f);
                     hex.ApplyRenderScale();
                     break;
-                case ("render_upscaler", StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler):
+                case ("text_smoothing", StringValue { Value: "auto" or "subpixel" or "grayscale" } smoothing):
+                settings.TextSmoothing = smoothing.Value;
+                hex.ApplyRenderScale();
+                break;
+            case ("render_upscaler", StringValue { Value: "cas" or "fsr1" or "gsr1" or "bilinear" or "nearest" } upscaler):
                     settings.RenderUpscaler = upscaler.Value;
                     hex.ApplyRenderScale();
                     break;
@@ -670,6 +647,19 @@ internal sealed partial class DawnScene
                 case ("reopen_last", BooleanValue reopen):
                     settings.ReopenLast = reopen.Value;
                     break;
+                case ("persistent_process", BooleanValue persistent):
+                    settings.PersistentProcess = persistent.Value;
+                    // Starting with the system is the persistent process's, it goes when that does
+                    if (!persistent.Value && settings.PersistentAtLogin)
+                        settings.PersistentAtLogin = false;
+                    HexStartup.Apply(settings.PersistentProcess && settings.PersistentAtLogin);
+                    break;
+                case ("persistent_at_login", BooleanValue atLogin):
+                    settings.PersistentAtLogin = atLogin.Value;
+                    if (atLogin.Value)
+                        settings.PersistentProcess = true;
+                    HexStartup.Apply(settings.PersistentProcess && settings.PersistentAtLogin);
+                    break;
                 case ("canvas_handles", BooleanValue handles):
                     settings.CanvasHandles = handles.Value;
                     break;
@@ -714,8 +704,8 @@ internal sealed partial class DawnScene
                 case "disabled_extensions":
                     Set(key, new ListValue([]));
                     return;
-                case "size":
-                    hex.UseUsualScale();
+                case INTERFACE_SIZE:
+                    hex.SetInterfaceSize(1.0f, remember: true);
                     return;
             }
 

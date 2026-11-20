@@ -67,6 +67,19 @@ internal sealed class HexAgentRowList
         return at < 0 ? rows.Count : at;
     }
 
+    /// <summary>Where the row showing a thing (a chat's entry) is, -1 when none does.</summary>
+    public int IndexOfThing(object of)
+    {
+        long key = (1L << 40) + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(of);
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (keys[rows[i]] == key)
+                return i;
+        }
+
+        return -1;
+    }
+
     public T Add<T>(T row) where T : UIComponent => Insert(rows.Count, row);
 
     /// <summary>

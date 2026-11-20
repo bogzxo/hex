@@ -48,36 +48,38 @@ internal sealed partial class HexDebugging
         commands.Add("Run/debug", context.Strings.Said("debugging.continue"), DebugOrContinue, "F5", "debug-continue").IsVisible = () => DebugStopped;
         commands.Add("Run/debug", context.Strings.Said("debug_bar.pause"), ContinueOrPause, icon: "debug-pause")
             .IsVisible = () => debugging is { State: DebugState.Running };
-        var hexLocals = commands.Add("Run/debug", context.Strings.Said("debugging.hexadecimal_locals"), ToggleHexadecimalLocals, icon: "symbol-numeric");
+        var hexLocals = commands.Add("Run/inspect/views", context.Strings.Said("debugging.hexadecimal_locals"), ToggleHexadecimalLocals, icon: "symbol-numeric");
         hexLocals.IsVisible = () => DebugStopped && debugging?.Can("supportsValueFormattingOptions") == true;
         hexLocals.IsChecked = () => hexadecimalLocals;
-        commands.Add("Run/debug", context.Strings.Said("debugging.show_current_frame"), ShowCurrentFrame, icon: "debug-stackframe-focused")
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.show_current_frame"), ShowCurrentFrame, icon: "debug-stackframe-focused")
             .IsVisible = CanShowCurrentFrame;
-        commands.Add("Run/debug", context.Strings.Said("debugging.disassembly"), ShowDisassembly, icon: "code")
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.disassembly"), ShowDisassembly, icon: "code")
             .IsVisible = CanShowDisassembly;
-        commands.Add("Run/debug", context.Strings.Said("debugging.memory"), ShowMemory, icon: "file-binary").IsVisible = CanShowMemory;
-        commands.Add("Run/debug", context.Strings.Said("debugging.modules"), ShowModules, icon: "library").IsVisible = CanShowModules;
-        commands.Add("Run/debug", context.Strings.Said("debugging.modules_refresh"), RefreshModules, icon: "refresh").IsVisible = () => modulesShown && CanShowModules() && debugging?.CanRequestModules == true;
-        commands.Add("Run/debug", context.Strings.Said("debugging.modules_filter"), FilterModules, icon: "filter").IsVisible = () => modulesShown && CanShowModules();
-        commands.Add("Run/debug", context.Strings.Said("debugging.memory_refresh"), RefreshMemory, icon: "refresh").IsVisible = CanPageMemory;
-        commands.Add("Run/debug", context.Strings.Said("debugging.memory_previous"), () => PageMemory(-1), icon: "arrow-left").IsVisible = CanPageMemory;
-        commands.Add("Run/debug", context.Strings.Said("debugging.memory_next"), () => PageMemory(1), icon: "arrow-right").IsVisible = CanPageMemory;
-        commands.Add("Run/debug", context.Strings.Said("debugging.copy_call_stack"), CopyCallStack, icon: "copy")
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.memory"), ShowMemory, icon: "file-binary").IsVisible = CanShowMemory;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.modules"), ShowModules, icon: "library").IsVisible = CanShowModules;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.modules_refresh"), RefreshModules, icon: "refresh").IsVisible = () => modulesShown && CanShowModules() && debugging?.CanRequestModules == true;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.modules_filter"), FilterModules, icon: "filter").IsVisible = () => modulesShown && CanShowModules();
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.memory_refresh"), RefreshMemory, icon: "refresh").IsVisible = CanPageMemory;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.memory_previous"), () => PageMemory(-1), icon: "arrow-left").IsVisible = CanPageMemory;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.memory_next"), () => PageMemory(1), icon: "arrow-right").IsVisible = CanPageMemory;
+        commands.Add("Run/inspect/views", context.Strings.Said("debugging.copy_call_stack"), CopyCallStack, icon: "copy")
             .IsVisible = () => DebugStopped && stoppedFrames.Count > 0;
-        commands.Add("Run/debug", context.Strings.Said("debugging.run_to_cursor"), RunToCursor, "Ctrl+F10", "debug-continue", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped && !IsDebuggerSourcePath(context.Documents.Current.Path);
-        var setNext = commands.Add("Run/debug", context.Strings.Said("debugging.set_next_statement"), SetNextStatement, "Ctrl+Shift+F10", "debug-stackframe-focused", UIKeyUse.BoundWhileTyping);
+        Stepping(commands.Add("Run/step", context.Strings.Said("debugging.run_to_cursor"), RunToCursor, "Ctrl+F10", "debug-continue", UIKeyUse.BoundWhileTyping), () => !IsDebuggerSourcePath(context.Documents.Current.Path));
+        var setNext = commands.Add("Run/step", context.Strings.Said("debugging.set_next_statement"), SetNextStatement, "Ctrl+Shift+F10", "debug-stackframe-focused", UIKeyUse.BoundWhileTyping);
         setNext.IsVisible = () => debugging?.CanGoto == true;
         setNext.IsEnabled = CanSetNextStatement;
-        commands.Add("Run/debug", context.Strings.Said("debugging.step_over"), StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", context.Strings.Said("debugging.step_into"), StepIn, "F11", "debug-step-into").IsEnabled = () => DebugStopped;
-        commands.Add("Run/debug", context.Strings.Said("debugging.step_out"), StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping).IsEnabled = () => DebugStopped;
+        Stepping(commands.Add("Run/step", context.Strings.Said("debugging.step_over"), StepOver, "F10", "debug-step-over", UIKeyUse.BoundWhileTyping));
+        Stepping(commands.Add("Run/step", context.Strings.Said("debugging.step_into"), StepIn, "F11", "debug-step-into"));
+        Stepping(commands.Add("Run/step", context.Strings.Said("debugging.step_out"), StepOut, "Shift+F11", "debug-step-out", UIKeyUse.BoundWhileTyping));
         var stopDebugging = commands.Add("Run/debug", context.Strings.Said("debugging.stop_debugging"), StopDebugging, "Shift+F5", "debug-stop", UIKeyUse.BoundWhileTyping);
         stopDebugging.IsEnabled = () => Debugging || Tasks?.RunGoing == true;
         stopDebugging.IsVisible = () => debugging?.TerminatesDebuggeeOnStop != false;
         commands.Add("Run/debug", context.Strings.Said("debugging.detach"), StopDebugging, "Shift+F5", "debug-disconnect", UIKeyUse.BoundWhileTyping)
             .IsVisible = () => debugging?.TerminatesDebuggeeOnStop == false;
-        commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping).IsEnabled = () => Debugging && restart is not null;
-        commands.Add("Run/debug", context.Strings.Said("debugging.attach"), AttachToProcess, icon: "plug").IsEnabled = () => !Debugging;
+        var restartDebugging = commands.Add("Run/debug", context.Strings.Said("debugging.restart_debugging"), RestartDebugging, "Ctrl+Shift+F5", "debug-restart", UIKeyUse.BoundWhileTyping);
+        restartDebugging.IsVisible = () => Debugging;
+        restartDebugging.IsEnabled = () => restart is not null;
+        commands.Add("Run/debug", context.Strings.Said("debugging.attach"), AttachToProcess, icon: "plug").IsVisible = () => !Debugging;
         var justMyCode = commands.Add("Run/debug", context.Strings.Said("debugging.just_my_code"), () =>
         {
             if (Debugging) return;
@@ -85,23 +87,23 @@ internal sealed partial class HexDebugging
             context.Settings.Save();
         }, icon: "code");
         justMyCode.IsChecked = () => context.Settings.Values.DebugJustMyCode;
-        justMyCode.IsEnabled = () => !Debugging;
+        justMyCode.IsVisible = () => !Debugging;
         commands.Add("Run/debug", context.Strings.Said("debugging.select_framework"), SelectDebugFramework, icon: "debug-alt")
             .IsVisible = () => !Debugging && Tasks?.ChosenRun()?.Task is null && (IsCSharp(context.Documents.Current.Path)
                 || Tasks?.ChosenRun()?.Project?.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) == true);
-        commands.Add("Run/debug", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
-        commands.Add("Run/debug", context.Strings.Said("debugging.add_function_breakpoint"), AddFunctionBreakpoint, icon: "debug-breakpoint-function")
+        commands.Add("Run/inspect", context.Strings.Said("debugging.toggle_breakpoint"), ToggleBreakpointHere, "F9", "debug-breakpoint", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
+        commands.Add("Run/inspect/breakpoints", context.Strings.Said("debugging.add_function_breakpoint"), AddFunctionBreakpoint, icon: "debug-breakpoint-function")
             .IsEnabled = () => !building;
-        commands.Add("Run/debug", context.Strings.Said("debugging.enable_disable_breakpoint"), ToggleBreakpointEnabledHere, "Ctrl+F9", "circle", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
-        commands.Add("Run/debug", context.Strings.Said("debugging.breakpoint_settings"), BreakpointSettingsHere, icon: "debug-breakpoint-conditional").IsVisible = () => CanUseBreakpointCommands() && !IsDisassemblyPath(context.Documents.Current.Path) && !IsDebuggerSourcePath(context.Documents.Current.Path);
+        commands.Add("Run/inspect/breakpoints", context.Strings.Said("debugging.enable_disable_breakpoint"), ToggleBreakpointEnabledHere, "Ctrl+F9", "circle", UIKeyUse.BoundWhileTyping).IsVisible = () => CanUseBreakpointCommands() && (!IsDisassemblyPath(context.Documents.Current.Path) || CanToggleInstructionHere());
+        commands.Add("Run/inspect/breakpoints", context.Strings.Said("debugging.breakpoint_settings"), BreakpointSettingsHere, icon: "debug-breakpoint-conditional").IsVisible = () => CanUseBreakpointCommands() && !IsDisassemblyPath(context.Documents.Current.Path) && !IsDebuggerSourcePath(context.Documents.Current.Path);
         commands.Add("Run/debug", context.Strings.Said("debugging.install_netcoredbg"), InstallNetcoredbg, icon: "cloud-download").IsVisible = () => NetcoredbgAsset() is not null && Netcoredbg() is null;
         AddWatchCommands();
-        commands.Add("Run/debug", context.Strings.Said("debugging.exception_settings"), ExceptionSettings, icon: "debug-breakpoint")
+        commands.Add("Run/inspect/breakpoints", context.Strings.Said("debugging.exception_settings"), ExceptionSettings, icon: "debug-breakpoint")
             .IsVisible = () => debugging?.ExceptionFilters.Count > 0;
-        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_configure"), ConfigureCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
-        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_build"), BuildCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
-        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_select_preset"), SelectCMakePreset, icon: "tools").IsVisible = () => CanConfigureCMake;
-        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_choose_preset"), () =>
+        commands.Add("Run/debug/cmake", context.Strings.Said("debugging.cmake_configure"), ConfigureCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug/cmake", context.Strings.Said("debugging.cmake_build"), BuildCMake, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug/cmake", context.Strings.Said("debugging.cmake_select_preset"), SelectCMakePreset, icon: "tools").IsVisible = () => CanConfigureCMake;
+        commands.Add("Run/debug/cmake", context.Strings.Said("debugging.cmake_choose_preset"), () =>
         {
             if (context.Documents.Current.Path is { } file && CMakeProject.RootOf(file, context.Workspace.Roots) is { } root)
             {
@@ -109,7 +111,7 @@ internal sealed partial class HexDebugging
                 StartDebuggingCMake(file, root, preset: string.Empty);
             }
         }, icon: "debug-alt").IsVisible = () => !Debugging && IsNativeSource(context.Documents.Current.Path);
-        commands.Add("Run/debug", context.Strings.Said("debugging.cmake_choose_target"), () =>
+        commands.Add("Run/debug/cmake", context.Strings.Said("debugging.cmake_choose_target"), () =>
         {
             if (context.Documents.Current.Path is { } file && CMakeProject.RootOf(file, context.Workspace.Roots) is { } root)
             {
@@ -117,6 +119,15 @@ internal sealed partial class HexDebugging
                 StartDebuggingCMake(file, root);
             }
         }, icon: "debug-alt").IsVisible = () => !Debugging && IsNativeSource(context.Documents.Current.Path);
+    }
+
+    // A command that steps through the program, in the Run menu only while something is being debugged (it would only
+    // ever be greyed out the rest of the time) and picked only while it's stopped
+    private MenuItem Stepping(MenuItem item, Func<bool>? also = null)
+    {
+        item.IsVisible = () => Debugging;
+        item.IsEnabled = () => DebugStopped && (also?.Invoke() ?? true);
+        return item;
     }
 
     /// <summary>The workspace's tasks, whose run tasks Shift+F5 stops when nothing is being debugged.</summary>
@@ -1011,7 +1022,7 @@ internal sealed partial class HexDebugging
         {
             showingDisassembly = false;
             context.Documents.OpenAt(file, frame.Line, frame.Column);
-            if (context.Documents.Current is { Path: { } open } shown && string.Equals(Path.GetFullPath(open), Path.GetFullPath(file), PlatformPaths.Comparison))
+            if (context.Documents.Current is { Path: { } open } shown && PlatformPaths.Same(open, file))
                 shown.Editor.ExecutionLine = frame.Line;
         }
         RefreshPinnedTip();
@@ -1178,19 +1189,12 @@ internal sealed partial class HexDebugging
         if (frameNames.TryGetValue(frame.Id, out string? named))
             return named;
 
-        string text;
-        try
-        {
-            text = context.Documents.All.FirstOrDefault(open => open.Path is { } path && PlatformPaths.Same(path, frame.File!))?.Editor.Text ?? File.ReadAllText(frame.File!);
-        }
-        catch (IOException)
-        {
+        if (OutlineOfFrameFile(frame.File!) is not { } outline)
             return frame.Name;
-        }
 
         // The last function that starts at or above its line, the one the line is in
         string? function = null;
-        foreach (OutlineEntry entry in HexOutline.Outline(text, frame.File))
+        foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > frame.Line)
                 break;
@@ -1200,6 +1204,46 @@ internal sealed partial class HexDebugging
 
         return frameNames[frame.Id] = function ?? frame.Name;
     }
+
+    // The outlines of the files frames were named out of, by the file, as of when it was written or the open copy's
+    // version: every stop read and outlined each file again for every frame of a deep stack
+    private readonly Dictionary<string, (long Stamp, List<OutlineEntry> Outline)> frameOutlines = new(PlatformPaths.Comparer);
+
+    private List<OutlineEntry>? OutlineOfFrameFile(string file)
+    {
+        HexDocument? open = context.Documents.All.FirstOrDefault(each => each.Path is { } path && PlatformPaths.Same(path, file));
+        long stamp;
+        try
+        {
+            // An open file goes by its text's version (negated, never a write time), one on the disk by its write time
+            stamp = open is not null ? -1 - open.Editor.Document.Version : File.GetLastWriteTimeUtc(file).Ticks;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (frameOutlines.TryGetValue(file, out var kept) && kept.Stamp == stamp)
+            return kept.Outline;
+
+        string text;
+        try
+        {
+            text = open?.Editor.Text ?? File.ReadAllText(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (frameOutlines.Count >= FRAME_OUTLINES_KEPT)
+            frameOutlines.Clear();
+        List<OutlineEntry> outline = [.. HexOutline.Outline(text, file)];
+        frameOutlines[file] = (stamp, outline);
+        return outline;
+    }
+
+    private const int FRAME_OUTLINES_KEPT = 64;
 
     // Which debugger the session is under, DebugSession's kind of it
     private string debuggingKind = DebugSession.CORECLR;

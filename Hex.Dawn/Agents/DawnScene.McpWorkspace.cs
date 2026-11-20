@@ -40,7 +40,7 @@ internal sealed partial class DawnScene
         // A project or solution file stands for the folder it's in
         if (File.Exists(path))
             path = Path.GetDirectoryName(path)!;
-        string? inWorkspace = folders.FirstOrDefault(folder => string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), path.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+        string? inWorkspace = folders.FirstOrDefault(folder => PlatformPaths.Same(folder, path));
 
         if (action == "add")
         {

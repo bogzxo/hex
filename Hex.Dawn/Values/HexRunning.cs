@@ -79,7 +79,7 @@ internal sealed partial class HexRunning
         }
 
         if (values is { Error: { } error, ErrorAt.Span.IsKnown: true } ran
-            && (ran.ErrorAt.File is null || (of.Path is { } path && string.Equals(Path.GetFullPath(ran.ErrorAt.File), Path.GetFullPath(path), PlatformPaths.Comparison))))
+            && (ran.ErrorAt.File is null || (of.Path is { } path && PlatformPaths.Same(ran.ErrorAt.File, path))))
         {
             found.Add(new UICodeDiagnostic(ran.ErrorAt.Span.Line - 1, ran.ErrorAt.Span.Column - 1, Math.Max(0, ran.ErrorAt.Span.Length), error));
         }
@@ -440,7 +440,7 @@ internal sealed partial class HexRunning
     {
         if (at is { Span.IsKnown: true } known)
         {
-            if (known.File is { } file && (document.Path is null || !string.Equals(Path.GetFullPath(file), Path.GetFullPath(document.Path), PlatformPaths.Comparison)))
+            if (known.File is { } file && (document.Path is null || !PlatformPaths.Same(file, document.Path)))
                 context.Documents.OpenAt(file, known.Span.Line - 1, known.Span.Column - 1);
             else
                 code.GoTo(known.Span.Line - 1, known.Span.Column - 1);
@@ -461,7 +461,7 @@ internal sealed partial class HexRunning
         if (at is not { Span.IsKnown: true } known)
             return said;
 
-        bool here = known.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(known.File), Path.GetFullPath(open), PlatformPaths.Comparison));
+        bool here = known.File is null || (document.Path is { } open && PlatformPaths.Same(known.File, open));
         if (!here)
             return $"{said}, from {Path.GetFileName(known.File)} line {known.Span.Line}{(known.Doc is { } elsewhere ? $"\n{elsewhere}" : string.Empty)}";
 

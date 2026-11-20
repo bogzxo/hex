@@ -10,11 +10,66 @@ namespace Hex.Dawn;
 // to on its own command line and leaves the pipe to the first.
 internal sealed partial class DawnScene
 {
-    public static string RemotePipe => "horizon-hex-" + System.Environment.UserName.ToLowerInvariant();
+    // HEX_REMOTE_PIPE names another, for trying a Hex that sleeps between uses beside the one that's open
+    public static string RemotePipe => System.Environment.GetEnvironmentVariable("HEX_REMOTE_PIPE") is { Length: > 0 } named ? named : "horizon-hex-" + System.Environment.UserName.ToLowerInvariant();
 
     private readonly ConcurrentQueue<(string Path, int Line, int Column)> remoteOpens = new();
     private readonly ConcurrentQueue<string> remoteFolders = new();
-    private CancellationTokenSource? remoteStop;
+
+    /// <summary>
+    /// The pipe, the process's rather than an editor's, so a Hex asleep between uses (DawnResident) hears the next start
+    /// on it with no editor made. One thread listens for the whole run, and hands each line to whoever hears it now.
+    /// </summary>
+    internal static class Remote
+    {
+        private static Action<string>? heard;
+        private static int started;
+
+        /// <summary>Whether this Hex has the pipe, so another start finds it, which sleeping between uses needs.</summary>
+        public static bool Owned { get; private set; }
+
+        /// <summary>Has the lines go to <paramref name="hearer"/> from now on, listening first if nobody was.</summary>
+        public static void Hear(Action<string> hearer)
+        {
+            heard = hearer;
+            if (Interlocked.Exchange(ref started, 1) == 0)
+                new Thread(Listen) { IsBackground = true, Name = "Hex remote" }.Start();
+        }
+
+        /// <summary>Nobody hears the lines, unless somebody else took them over already.</summary>
+        public static void Leave(Action<string> hearer)
+        {
+            if (Equals(heard, hearer))
+                heard = null;
+        }
+
+        private static void Listen()
+        {
+            HexInstance.ClearStale(RemotePipe);
+            while (true)
+            {
+                try
+                {
+                    using var pipe = new NamedPipeServerStream(RemotePipe, PipeDirection.In, 1, PipeTransmissionMode.Byte);
+                    Owned = true;
+                    pipe.WaitForConnection();
+                    using var reader = new StreamReader(pipe, Encoding.UTF8);
+                    while (reader.ReadLine() is { } line)
+                        heard?.Invoke(line);
+                }
+                catch (IOException)
+                {
+                    // Another Hex has the pipe, this one opens what it is told on its own command line and nothing else
+                    return;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"[Hex] the pipe for other programs stopped, {e.Message}");
+                    return;
+                }
+            }
+        }
+    }
 
     private void StartRemote()
     {
@@ -23,40 +78,7 @@ internal sealed partial class DawnScene
         if (options.SelfTest || !HexHost.Pipes)
             return;
 
-        remoteStop = new CancellationTokenSource();
-        CancellationToken stop = remoteStop.Token;
-        var thread = new Thread(() => Listen(stop)) { IsBackground = true, Name = "Hex remote" };
-        thread.Start();
-    }
-
-    private void Listen(CancellationToken stop)
-    {
-        HexInstance.ClearStale(RemotePipe);
-        while (!stop.IsCancellationRequested)
-        {
-            try
-            {
-                using var pipe = new NamedPipeServerStream(RemotePipe, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                pipe.WaitForConnectionAsync(stop).GetAwaiter().GetResult();
-                using var reader = new StreamReader(pipe, Encoding.UTF8);
-                while (reader.ReadLine() is { } line)
-                    Take(line);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (IOException)
-            {
-                // Another Hex has the pipe, this one opens what it is told on its own command line and nothing else
-                return;
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[Hex] the pipe for other programs stopped, {e.Message}");
-                return;
-            }
-        }
+        Remote.Hear(Take);
     }
 
     /// <summary>A line another program said, queued for the editor's thread.</summary>
@@ -68,11 +90,22 @@ internal sealed partial class DawnScene
             int at = parts.Length > 2 && int.TryParse(parts[2], out int number) ? number : 0;
             int column = parts.Length > 3 && int.TryParse(parts[3], out int across) ? across : 0;
             remoteOpens.Enqueue((path, at, column));
-            Engine.WindowManager.Wake();
+            Show();
         }
         else if (parts is ["folder", var folder, ..] && folder.Length > 0)
         {
             remoteFolders.Enqueue(folder);
+            Show();
+        }
+        else if (parts is ["show", ..])
+        {
+            Show();
+        }
+
+        // Asked for by another start of Hex, its window in front
+        void Show()
+        {
+            Engine.WindowManager.BringToFront();
             Engine.WindowManager.Wake();
         }
     }
@@ -99,6 +132,6 @@ internal sealed partial class DawnScene
 
     private void StopRemote()
     {
-        remoteStop?.Cancel();
+        Remote.Leave(Take);
     }
 }

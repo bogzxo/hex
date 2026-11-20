@@ -14,6 +14,11 @@ namespace Hex.Dawn;
 // pictures of it.
 internal sealed partial class DawnScene
 {
+    // A tab says its name, and its count on the badge after it, none for an empty count
+    private bool TabShows(NoonStage stage, string count) =>
+        noonTabButtons[(int)stage].Label == TabLabel(stage)
+        && (count.Length == 0 ? !noonTabCounts[(int)stage].Visible : noonTabCounts[(int)stage] is { Visible: true } badge && badge.Text == count);
+
     private void TestNoon(HexPointerScript test)
     {
         string themeBefore = settings.EditorTheme, skinBefore = settings.EditorSkin;
@@ -147,7 +152,7 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.4f);
         test.Check("noon: the Inbox tab counts what waits and the Plan tab how far the agent's list got", () =>
-            noonTabButtons[(int)NoonStage.Inbox].Label == TabLabel(NoonStage.Inbox, "1") && noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, "1/3"));
+            TabShows(NoonStage.Inbox, "1") && TabShows(NoonStage.Plan, "1/3"));
         test.Check("noon: a count widens its tab to fit it and the tabs still fit the strip", () =>
             noonTabPanels[(int)NoonStage.Plan].Size.X > planWidthBefore
             && noonTabPanels.Sum(tab => tab.Size.X) + noonTabs.Spacing * 3 <= noonTabsFitted.Room);
@@ -160,7 +165,7 @@ internal sealed partial class DawnScene
         PressKeys(test, "Ctrl+Alt+Y");
         test.Settle(0.4f);
         test.Check("noon: Ctrl+Alt+Y allows the request waiting and the Inbox empties", () =>
-            allowed == true && !chat!.Pending.Any() && noonTabButtons[(int)NoonStage.Inbox].Label == TabLabel(NoonStage.Inbox, string.Empty));
+            allowed == true && !chat!.Pending.Any() && TabShows(NoonStage.Inbox, string.Empty));
         PressKeys(test, "Alt+4");
         test.Settle(0.4f);
         test.Check("noon: Alt+4 shows the plan, a line an item", () =>
@@ -191,7 +196,7 @@ internal sealed partial class DawnScene
         test.Settle(0.5f);
         test.Check("noon: a tagged MCP plan replaces the legacy checklist and redraws the open tab", () =>
             PlanReply().StartsWith("Plan: 0 of 2 done.", StringComparison.Ordinal)
-            && noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, "0/2")
+            && TabShows(NoonStage.Plan, "0/2")
             && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text.Contains("Fix links", StringComparison.Ordinal))
             && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text.Contains("From chat", StringComparison.Ordinal)));
 
@@ -229,7 +234,7 @@ internal sealed partial class DawnScene
         PlanCall("hex_plan_update", """{"merge":false,"items":[]}""");
         test.Settle(0.5f);
         test.Check("noon: an explicit empty plan clears the tab without restoring the old checklist", () =>
-            noonTabButtons[(int)NoonStage.Plan].Label == TabLabel(NoonStage.Plan, string.Empty)
+            TabShows(NoonStage.Plan, string.Empty)
             && Descendants(noonPlanRows).OfType<Label>().Any(label => label.Text == Said("noon.plan_empty")));
 
         PressKeys(test, "Alt+3");

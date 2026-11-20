@@ -106,10 +106,10 @@ internal sealed partial class DawnScene
         agentsCompose.MoveChild(agentsInput, 0);
         BuildAgentImages();
 
-        // The rows a chat no longer keeps in memory, in Hex's folder, a self test's in a folder of its own it leaves behind
+        // The rows a chat no longer keeps in memory, in Hex's data folder, a self test's in a folder of its own it leaves behind
         hub.History = new HexAgentHistory(options.SelfTest
             ? Path.Combine(Path.GetTempPath(), "hex-selftest-history-" + System.Environment.ProcessId)
-            : Path.Combine(TerminalFiles.UserFolder, "agent_history"));
+            : Hex.Core.HexData.AgentHistory);
         hub.History.Tidy(TimeSpan.FromDays(2));
         // What an agent another started asks leave to do goes to that one too (DawnScene.McpAgentApprovals)
         hub.ApprovalAsked = RouteApproval;
@@ -189,14 +189,23 @@ internal sealed partial class DawnScene
         }
     }
 
+    // How many of the newest chats the chats menu lists itself, the older ones are in a menu off it
+    private const int RECENT_CHATS_SHOWN = 10;
+
     /// <summary>Recent chats and commands for the selected conversation.</summary>
     private Menu ChatsMenu()
     {
         var menu = new Menu("agents chats");
-        for (int i = agentChats.Count - 1; i >= 0; i--)
+
+        // The newest chats, the rest in a menu of their own off the last, a list of every chat ran off the window
+        Menu older = menu;
+        for (int i = agentChats.Count - 1, shown = 0; i >= 0; i--, shown++)
         {
+            if (shown == RECENT_CHATS_SHOWN)
+                older = menu.AddMenu(Said("agents_panel.older_chats"), "history");
+
             HexAgentChat chat = agentChats[i];
-            menu.Add(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), () => OpenAgentChat(chat),
+            older.Add(chat.Shown.Length > 0 ? chat.Shown : Said("agents_panel.new_chat"), () => OpenAgentChat(chat),
                 icon: chat.Running ? "loading~spin" : "comment").IsChecked = () => chat == agentChat;
         }
 
@@ -205,12 +214,19 @@ internal sealed partial class DawnScene
             menu.AddSeparator();
             menu.Add(Said("agents_panel.retry"), RetryAgent, icon: "refresh").IsEnabled = () => agentChat?.Running == false;
             menu.Add(Said("agents_panel.copy"), CopyAgentReply, icon: "copy");
-            menu.Add(Said("agents_panel.clear"), ClearAgentChat, icon: "clear-all");
         }
 
+        menu.AddSeparator();
         if (Face != HexFace.Noon)
             menu.Add(Said("agents_panel.chat_open_noon"), () => ShowFace(HexFace.Noon), icon: "robot");
         menu.Add(Said("agents_panel.saved"), ShowHarnessSaved, icon: "graph");
+
+        // Emptying the chat goes last, in the error colour, it can't be had back
+        if (agentChat is not null)
+        {
+            menu.AddSeparator();
+            menu.Add(Said("agents_panel.clear"), ClearAgentChat, icon: "clear-all", destructive: true);
+        }
 
         return menu;
     }
@@ -236,7 +252,7 @@ internal sealed partial class DawnScene
     private void ClearAgentChat()
     {
         if (agentChat is { } chat)
-            CloseAgentChat(chat);
+            AskCloseAgentChat(chat);
     }
 
     /// <summary>
@@ -315,6 +331,7 @@ internal sealed partial class DawnScene
         }
         DrawAgentImages();
         FitAgentsCompose();
+        DrawAgentsLatest();
         DrawAgentSlash();
         DrawAgentMention();
 
@@ -360,10 +377,11 @@ internal sealed partial class DawnScene
         DrawAgentOptions();
         TickRunningTimes();
         DrawAgentsHead();
+        DrawAgentsWaiting();
         DrawHarnessSaved();
 
         // The dots wait out a quiet moment by the clock, not by the chat changing
-        if (agentChat is { Running: true } going && agentsDrawn == (going.Id, going.Version) && agentsTyping is null)
+        if (agentChat is { Running: true } going && agentsDrawn == (going.Id, going.Version) && agentsTyping is not { Children: [{ Visible: true }, ..] })
             ShowTyping(going);
 
         var now = (agentChat?.Id ?? 0, agentChat?.Version ?? -1);

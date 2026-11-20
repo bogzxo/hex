@@ -78,7 +78,4 @@ internal sealed partial class HexDesigner
 
     // How many components the layout on screen has, for the status bar
     internal int componentCount;
-
-    /// <summary>Whether the layout has a change that isn't a step to come back to yet.</summary>
-    internal bool RecordPending => recordPending;
 }

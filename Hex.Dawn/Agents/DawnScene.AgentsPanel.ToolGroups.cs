@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // How tall a call's line is in an opened group, and the group's head
-    private const float TOOL_LINE = 22.0f, TOOL_GROUP_HEAD = 26.0f;
+    private const float TOOL_LINE = 24.0f, TOOL_GROUP_HEAD = 26.0f;
 
     // How strongly the calls that went are drawn, the reply round them standing out of them
     private const float TOOL_QUIET = 0.72f;
@@ -101,7 +101,7 @@ internal sealed partial class DawnScene
     private static Panel GroupedPlace() => new() { Visible = false, Size = Vector2.Zero };
 
     /// <summary>Whether an entry goes in a group of calls, a tool call that isn't a subagent.</summary>
-    private static bool Groupable(HexAgentEntry entry) => entry.Kind == HexAgentEntryKind.Tool && SubagentOf(entry) is null;
+    private static bool Groupable(HexAgentEntry entry) => entry.Kind == HexAgentEntryKind.Tool && !HexAgentRows.IsSubagent(entry) && !ShowsPictures(entry);
 
     /// <summary>The calls of the group that starts at an entry, it and the groupable ones straight after it.</summary>
     private static List<HexAgentEntry> ToolGroupAt(HexAgentChat chat, int start)
@@ -171,13 +171,9 @@ internal sealed partial class DawnScene
             Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f },
             Opacity = running is null && failed == 0 ? TOOL_QUIET : 1.0f
         });
-        // A gutter down its left by how it went, blue while one of its calls is running, so what's going on now stands out
-        // of what's done, then green, yellow when one failed on the way but the last went, red when it ended failing
-        Vector4 gutter = running is not null ? RUNNING_BLUE
-            : endedFailing ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
-            : failed > 0 ? skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)
-            : skin?.Palette.Success ?? new Vector4(0.35f, 0.8f, 0.45f, 1.0f);
-        bar.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, TOOL_GROUP_HEAD - 6), Position = new Vector2(1, 0), Radius = 1.5f, Color = gutter });
+        // How it's going the way a tool's own row says it, an outline while one of its calls runs or once it ended failing,
+        // none once it went. How many failed on the way is said in words at its right
+        bar.Outline = ToolOutline(running is not null ? HexAgentToolState.Running : endedFailing ? HexAgentToolState.Failed : HexAgentToolState.Done, skin);
         var button = bar.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.13f, Icon = icon,
@@ -221,7 +217,7 @@ internal sealed partial class DawnScene
                 button.Label = fitted;
         });
         var right = bar.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 5, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0) });
-        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s", TextScale = 0.115f, Dim = failed == 0 });
+        Label time = right.Add(new Label { Text = failed > 0 ? Said("agents_panel.tools_failed", ("count", failed.ToString(System.Globalization.CultureInfo.InvariantCulture))) : seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s", TextScale = 0.125f, Dim = failed == 0 });
         // Its time goes on with the call running in it, a few times a second (TickRunningTimes)
         if (running is not null && failed == 0)
             agentsGroupTimes[first] = (time, calls);
@@ -258,9 +254,8 @@ internal sealed partial class DawnScene
             Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero,
             Opacity = call.State == HexAgentToolState.Done ? TOOL_QUIET : 1.0f
         });
-        // How it went, a thin mark at its left, a wider blue gutter while it's running
-        bool going = call.State == HexAgentToolState.Running;
-        line.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(going ? 3 : 2, TOOL_LINE - 6), Radius = 1, Color = going ? RUNNING_BLUE : ToolStateColour(call.State, skin) });
+        // How it went by its icon alone, a spinner while it runs and the error's mark in red once it failed, the group's
+        // outline round them saying the rest
         string icon = call.State switch
         {
             HexAgentToolState.Running => settings.UiAnimation > 0 ? "loading~spin" : "loading",
@@ -272,7 +267,7 @@ internal sealed partial class DawnScene
         var button = line.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Animated = false, Align = Origin.Left, LabelScale = 0.125f, Icon = icon,
-            IconColor = call.State == HexAgentToolState.Done ? toolColour : skin?.ControlTextColor,
+            IconColor = call.State switch { HexAgentToolState.Done => toolColour, HexAgentToolState.Failed => skin?.Palette.Error, _ => skin?.ControlTextColor },
             LabelColor = toolColour,
             Padding = new UIEdges(8, 0, 56, 0), Tooltip = $"{call.ToolName}\n{preview}"
         });
@@ -304,7 +299,7 @@ internal sealed partial class DawnScene
         Label time = line.Add(new Label
         {
             Text = call.State == HexAgentToolState.Running ? Said("agents_panel.tool_running", ("seconds", seconds)) : $"{seconds}s",
-            TextScale = 0.11f, Dim = call.State != HexAgentToolState.Failed, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
+            TextScale = 0.125f, Dim = call.State != HexAgentToolState.Failed, Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-8, 0)
         });
         if (call.State == HexAgentToolState.Running)
             agentsRunningTimes[call] = time;

@@ -91,16 +91,22 @@ internal sealed partial class DawnScene
     /// </summary>
     internal List<HexMcpTool> McpToolList() => HexAi.Off
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
-            Behind(FileTools()), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
+            Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Behind(FileTools()), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
-        tool.StartsWith("hex_agent_", StringComparison.Ordinal) || tool is "hex_ask" or "hex_harness_stats" || tool.StartsWith("hex_plan_", StringComparison.Ordinal);
+        tool.StartsWith("hex_agent_", StringComparison.Ordinal) || tool is "hex_ask" or "hex_harness_stats" or "hex_show_image" || tool.StartsWith("hex_plan_", StringComparison.Ordinal);
 
     /// <summary>Tools that do their work without the editor on screen, so an agent calling them leaves the person in Dusk.</summary>
     private static IEnumerable<HexMcpTool> Behind(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { NeedsEditor = false });
+
+    /// <summary>
+    /// Tools that change files or ask language servers and touch nothing on screen, stepped alongside whatever call is
+    /// going on rather than queued behind it (HexMcpCall.Alongside).
+    /// </summary>
+    private static IEnumerable<HexMcpTool> Alongside(IEnumerable<HexMcpTool> tools) => tools.Select(tool => tool with { Alongside = true });
 
     /// <summary>A command as a line, its menu, its name and its keys.</summary>
     private static string McpCommandLine(UIChoice choice) =>
@@ -412,6 +418,10 @@ internal sealed partial class DawnScene
         foreach (string suite in list ? ["nothing-of-that-name"] : suites)
             start.ArgumentList.Add(suite);
         start.ArgumentList.Add("--exit");
+        // The size the suites are written for. Without it the window took the screen's, and the checks of what fits a
+        // narrow or crowded editor failed for an agent where they passed for anybody running them by hand
+        start.ArgumentList.Add("--size");
+        start.ArgumentList.Add("1600x900");
         start.Environment["HORIZON_AUDIO"] = "off";
 
         var lines = new List<string>();

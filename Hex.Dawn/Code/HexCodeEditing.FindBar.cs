@@ -292,8 +292,9 @@ internal sealed partial class HexCodeEditing
         if (compact)
             available = MathF.Max(28, right - code.Bounds.Min.X - FIND_BAR_GAP - 12);
         findLine.AvailableWidth = replaceLine.AvailableWidth = available;
-        findBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 52)) : 220, 26);
-        replaceBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 84)) : 220, 26);
+        // The room the chevron (26) and the close (26) and their gaps take beside the box, and the replace row's gap and two buttons
+        findBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 56)) : 220, 26);
+        replaceBox.Size = new Vector2(compact ? MathF.Min(220, MathF.Max(28, available - 88)) : 220, 26);
         // Leave the two arrows together on the options line when the number fits beside them.
         float optionButtons = findCase.Size.X + findWord.Size.X + findRegex.Size.X + findPrevious.Size.X + findNext.Size.X + 10;
         findCount.Size = new Vector2(MathF.Min(available, Math.Clamp(available - optionButtons, 64, 84)), 26);
@@ -328,7 +329,8 @@ internal sealed partial class HexCodeEditing
     private sealed class FindBarLine : StackPanel
     {
         internal float AvailableWidth = 620;
-        internal const float WideWidth = 604;
+        // Every part on one line, the chevron 26 wide for a target of 24 and more
+    internal const float WideWidth = 608;
         internal UIComponent[][] CompactGroups = [];
         internal bool BreakAfterFirstGroup;
 

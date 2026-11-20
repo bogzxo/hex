@@ -45,7 +45,8 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
         test.Check("solstice: the welcome page has what's new on it", () =>
             (welcome is { Visible: true } ? welcome : plainPage) is { Visible: true } page
-            && Descendants(page).OfType<StackPanel>().Any(stack => stack.Children.OfType<Button>().Any(button => button.Label == Said("whats_new.go_agents"))));
+            && HexWhatsNew.For(Hex.Shell.HexVersion.Number) is { Count: > 0 } items
+            && Descendants(page).OfType<StackPanel>().Any(stack => stack.Children.OfType<Button>().Any(button => items.Any(item => button.Label == Said("whats_new." + item.Go)))));
         test.Run(() => Shot("solstice-welcome"));
         test.Settle(0.8f);
         test.Run(() => welcomeWanted = false);

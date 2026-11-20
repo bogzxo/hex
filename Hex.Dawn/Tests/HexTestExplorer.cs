@@ -380,15 +380,14 @@ internal sealed partial class HexTestExplorer
         string? nativeRoot = ctestProjects.GetValueOrDefault(project)?.Root;
         var scope = new RunScope(project, [], [], workspaceGeneration, context.Workspace.Configuration,
             nativeRoot, nativeRoot is null ? 0 : nativeVersions.GetValueOrDefault(nativeRoot), pythonVersions.GetValueOrDefault(project), framework, frameworkNames);
-        foreach (DotnetTest test in TestsOf(project, names))
+        // The names sorted once, a run of the failed among a thousand tests went through every name for every test
+        NamesOfRun? named = names is null ? null : new NamesOfRun(names);
+        foreach (DotnetTest test in TestsOf(project, named))
         {
-            if (names is not null && !names.Any(name => Whole(test, name)))
+            if (named is not null && !named.TakesWhole(test))
             {
-                foreach (string name in names)
-                {
-                    if (DotnetTests.WithoutArguments(name) == test.FullName)
-                        scope.Cases.Add(name);
-                }
+                if (named.Cases.TryGetValue(test.FullName, out List<string>? cases))
+                    scope.Cases.AddRange(cases);
             }
             else
                 scope.Whole.Add(test.FullName);
@@ -402,15 +401,52 @@ internal sealed partial class HexTestExplorer
         return scope;
     }
 
-    // Whether a name a run goes by takes a test in whole, its own name, its class's, or a namespace or class ending in a dot
-    private static bool Whole(DotnetTest test, string name) =>
-        name == test.FullName || name == test.FullClass || name == test.FullClass + "." || (name.EndsWith('.') && test.FullName.StartsWith(name, StringComparison.Ordinal));
-
     // The tests a run of a project names, all of them for none
-    private IEnumerable<DotnetTest> TestsOf(string project, IReadOnlyList<string>? names) =>
+    private IEnumerable<DotnetTest> TestsOf(string project, IReadOnlyList<string>? names) => TestsOf(project, names is null ? null : new NamesOfRun(names));
+
+    private IEnumerable<DotnetTest> TestsOf(string project, NamesOfRun? names) =>
         tests.TryGetValue(project, out List<DotnetTest>? its)
-            ? its.Where(test => names is null || names.Any(name => Whole(test, name) || DotnetTests.WithoutArguments(name) == test.FullName))
+            ? its.Where(test => names is null || names.TakesWhole(test) || names.Cases.ContainsKey(test.FullName))
             : [];
+
+    /// <summary>
+    /// The names a run goes by, looked up rather than gone through: whole names and classes, namespaces or classes ending
+    /// in a dot, and the cases of a theory by the test they're of. A name takes a test whole when it's the test's own,
+    /// its class's, or a namespace or class ending in a dot that the test's name starts with.
+    /// </summary>
+    private sealed class NamesOfRun
+    {
+        private readonly HashSet<string> exact = new(StringComparer.Ordinal);
+        private readonly List<string> prefixes = [];
+
+        /// <summary>The names of a theory's cases by the test they're cases of.</summary>
+        public Dictionary<string, List<string>> Cases { get; } = new(StringComparer.Ordinal);
+
+        public NamesOfRun(IReadOnlyList<string> names)
+        {
+            foreach (string name in names)
+            {
+                exact.Add(name);
+                if (name.EndsWith('.'))
+                    prefixes.Add(name);
+                string of = DotnetTests.WithoutArguments(name);
+                if (!Cases.TryGetValue(of, out List<string>? cases))
+                    Cases[of] = cases = [];
+                cases.Add(name);
+            }
+        }
+
+        // A class ending in a dot is a prefix of the test's whole name, which the prefixes take
+        public bool TakesWhole(DotnetTest test)
+        {
+            if (exact.Contains(test.FullName) || exact.Contains(test.FullClass))
+                return true;
+            foreach (string prefix in prefixes)
+                if (test.FullName.StartsWith(prefix, StringComparison.Ordinal))
+                    return true;
+            return false;
+        }
+    }
 
     // What a run was waiting on not waited on any more
     private void Waited(RunScope scope)

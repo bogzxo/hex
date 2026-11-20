@@ -436,7 +436,9 @@ internal sealed partial class DawnScene
         }
         catch (UnauthorizedAccessException)
         {
-            return false;
+            // An image another process has mapped, an agent's MCP bridge started from this folder, says access denied
+            // rather than in use. It can't be written over either, so it's moved aside the same way
+            return true;
         }
     }
 

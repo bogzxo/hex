@@ -246,7 +246,4 @@ internal sealed partial class HexLanguages
 
     /// <summary>The keyboard in the form's server box, which has the settings scroll down to it.</summary>
     internal void FocusServerForm() => addCommand?.Focus();
-
-    /// <summary>What the form last said under Add, empty for nothing.</summary>
-    internal string ServerFormSaid => addSaid?.Text ?? string.Empty;
 }

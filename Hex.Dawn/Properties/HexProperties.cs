@@ -138,7 +138,18 @@ internal sealed partial class HexProperties
             rowsStale = true;
         };
 
-        Dotnet.Changed += project => projectsChanged = true;
+        Dotnet.Changed += projectHeard = _ => projectsChanged = true;
+    }
+
+    // Heard from the projects, which are the process's and outlive an editor put away (DawnScene.Resident)
+    private Action<string>? projectHeard;
+
+    /// <summary>Stops hearing from what outlives the editor, as it's put away.</summary>
+    internal void Forget()
+    {
+        if (projectHeard is not null)
+            Dotnet.Changed -= projectHeard;
+        projectHeard = null;
     }
 
     /// <summary>The designer's rows narrowed down to the ones whose names have what's typed in the filter in them.</summary>
@@ -185,7 +196,8 @@ internal sealed partial class HexProperties
     {
         Shows = shows;
         page.Visible = shows == HexPropertiesShows.Files;
-        filter.Visible = shows == HexPropertiesShows.Component;
+        // A box to narrow rows down only while there are rows, nothing selected it filtered the hint to select something
+        filter.Visible = shows == HexPropertiesShows.Component && document.Selected is not null;
         swap.Visible = canSwap;
         swap.Icon = propertiesOverValues ? "list-tree" : "symbol-property";
         swap.Tooltip = Said(propertiesOverValues ? "show_values" : "show_properties");

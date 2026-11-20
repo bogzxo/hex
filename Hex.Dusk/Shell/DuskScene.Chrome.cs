@@ -13,20 +13,24 @@ namespace Hex.Dusk;
 // and the title.
 internal sealed partial class DuskScene
 {
-    // How big the menus in the title bar are written, at a scale of one
+    // How big the menus in the title bar are written
     private const float MENU_TEXT = 0.14f;
 
-    private void SetScale(float scale)
+    /// <summary>
+    /// Sets how big the whole window is drawn, its title bar and its menus as much as the terminals' bars, on top of the
+    /// screen's own scale. Dawn's interface size, the same factor and the same steps (the terminal's font is its own).
+    /// </summary>
+    private void SetInterfaceSize(float size)
     {
-        scale = Hex.Shell.HexFrame.NearestScale(scale);
-        compositor.Scale = scale;
+        size = Hex.Shell.HexFrame.NearestScale(size);
+        compositor.Scale = size;
         if (HexModes.Together)
-            HexModes.Scale = scale;
+            HexModes.InterfaceSize = size;
 
-        // The title bar is the window's and the size of the system's whatever the rest is drawn at
-        menu.TextScale = MENU_TEXT / scale;
-        HexModeSwitch.SetScale(modeToggle, scale);
-        settings.Scale = scale;
+        // The title bar grows with the rest, it was kept at the system's size and its words were the only ones that didn't
+        top.PixelSized = false;
+        menu.TextScale = MENU_TEXT;
+        settings.Scale = size;
     }
 
     /// <summary>The panel gets whatever the window has between the title bar and the status bar.</summary>
@@ -106,17 +110,19 @@ internal sealed partial class DuskScene
 
     private void ShowTabMenu(TerminalTab tab, Vector2 point)
     {
+        // Naming and moving it first, closing last in the error colour, a terminal closed ends its shell and what runs in it
         var shown = new Menu("tab");
-        shown.Add(HexText.Get("tabs.close"), () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close");
+        shown.Add(HexText.Get("code_hints.rename"), () => host.AskRename(tab), icon: "edit");
+        shown.AddSeparator();
+        shown.Add(HexText.Get("dusk_chrome.move_left"), () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left").IsEnabled = () => panel.IndexOf(tab) > 0;
+        shown.Add(HexText.Get("dusk_chrome.move_right"), () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right").IsEnabled = () => panel.IndexOf(tab) < panel.Tabs.Count - 1;
+        shown.AddSeparator();
+        shown.Add(HexText.Get("tabs.close"), () => panel.CloseTab(tab), KeyOf("close_tab"), icon: "close", destructive: true);
         shown.Add(HexText.Get("tabs.close_others"), () =>
         {
             foreach (TerminalTab other in panel.Tabs.ToArray())
                 if (other != tab) panel.CloseTab(other);
-        }, icon: "close-all");
-        shown.Add(HexText.Get("code_hints.rename"), () => host.AskRename(tab), icon: "edit");
-        shown.AddSeparator();
-        shown.Add(HexText.Get("dusk_chrome.move_left"), () => panel.MoveTab(tab, panel.IndexOf(tab) - 1), icon: "arrow-left");
-        shown.Add(HexText.Get("dusk_chrome.move_right"), () => panel.MoveTab(tab, panel.IndexOf(tab) + 1), icon: "arrow-right");
+        }, icon: "close-all", destructive: true).IsEnabled = () => panel.Tabs.Count > 1;
         ContextMenu.Show(chrome, point, shown);
     }
 

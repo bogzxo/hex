@@ -8,7 +8,7 @@ namespace Hex.Core;
 // shaders, Python, JavaScript and TypeScript, Markdown's headings, the keys of JSON and YAML.
 internal static partial class HexOutline
 {
-    private static readonly Regex CsType = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record|interface|enum)\s+(\w+)", RegexOptions.Compiled);
+    private static readonly Regex CsType = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record(?:\s+(?:struct|class))?|interface|enum)\s+(\w+)", RegexOptions.Compiled);
     private static readonly Regex CsMember = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|override|virtual|async|readonly|unsafe|extern|new|required|partial)\s+)+[\w<>\[\],.?() ]+?\s+(\w+)\s*(\(|\{|=>|=|;)", RegexOptions.Compiled);
     private static readonly Regex ShaderFunction = new(@"^(\s*)(?:\[[^\]]*\]\s*)*(?:static\s+|inline\s+)?(struct)\s+(\w+)|^(\s*)(?:\[[^\]]*\]\s*)*[\w<>]+\s+(\w+)\s*\([^;]*$", RegexOptions.Compiled);
     private static readonly Regex DType = new(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|shared|immutable|const|synchronized|extern\([^)]*\)|align\([^)]*\)|@\w+)\s+)*(class|struct|union|interface|enum|template|mixin\s+template)\s+(\w+)", RegexOptions.Compiled);
@@ -39,7 +39,7 @@ internal static partial class HexOutline
             {
                 case ".cs":
                     if (CsType.Match(row) is { Success: true } type)
-                        entries.Add(new OutlineEntry(type.Groups[3].Value, line, type.Groups[3].Index, Depth(type.Groups[1].Value, 4), type.Groups[2].Value switch
+                        entries.Add(new OutlineEntry(type.Groups[3].Value, line, type.Groups[3].Index, Depth(type.Groups[1].Value, 4), type.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1] switch
                         {
                             "interface" => "symbol-interface",
                             "enum" => "symbol-enum",

@@ -36,11 +36,7 @@ internal sealed partial class HexCodeIndex
     /// </summary>
     public static List<(HexIndexedFile File, HexSymbol Symbol, int Score)> GoToAll(HexIndexSnapshot index, string query, int most, CancellationToken cancel = default)
     {
-        string asked = query.Trim();
-        string? container = null;
-        int dot = asked.LastIndexOf('.');
-        if (dot > 0 && dot < asked.Length - 1)
-            (container, asked) = (asked[..dot], asked[(dot + 1)..]);
+        (string? container, string asked) = SplitContainer(query.Trim());
 
         var found = new List<(HexIndexedFile File, HexSymbol Symbol, int Score)>();
         if (asked.Length == 0)

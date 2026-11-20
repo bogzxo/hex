@@ -18,13 +18,15 @@ internal sealed partial class DawnScene
                 ("path", McpSchema.String("The file, inside the workspace or whole.")),
                 ("old_string", McpSchema.String("The exact text to replace, enough of it to be found once.")),
                 ("new_string", McpSchema.String("What goes in its place.")),
-                ("replace_all", McpSchema.Flag("Every place it's found rather than the one."))], "path", "old_string", "new_string")),
+                ("replace_all", McpSchema.Flag("Every place it's found rather than the one.")),
+                ("check", McpSchema.Flag("Wait a moment for the errors its language server says after, when one's running for it, true by default."))], "path", "old_string", "new_string")),
             McpEditFile),
         new(new McpTool("hex_write", "Write a file",
             "Write a whole file, made with its folders when it isn't there. For a new file or one changed throughout, hex_edit for a change to part of one. Use it in place of your own Write.",
             McpSchema.Object([
                 ("path", McpSchema.String("The file, inside the workspace or whole.")),
-                ("content", McpSchema.String("All of what it's to say."))], "path", "content")),
+                ("content", McpSchema.String("All of what it's to say.")),
+                ("check", McpSchema.Flag("Wait a moment for the errors its language server says after, when one's running for it, true by default."))], "path", "content")),
             McpWriteFile)
     ];
 
@@ -51,7 +53,8 @@ internal sealed partial class DawnScene
             }
 
             Context.Documents.Rewrite(open, changed);
-            yield return McpToolResult.Text($"Edited {path}:{line} in the editor ({Places(count)}), it has changes nobody saved yet, so it isn't on the disk until it's saved.");
+            string edited = $"Edited {path}:{line} in the editor ({Places(count)}), it has changes nobody saved yet, so it isn't on the disk until it's saved.";
+            foreach (McpToolResult? step in McpThenCheck(args, path, edited)) yield return step;
             yield break;
         }
 
@@ -79,7 +82,41 @@ internal sealed partial class DawnScene
             said = $"!{path} couldn't be changed, {e.Message}";
         }
 
-        yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
+        if (said.StartsWith('!'))
+        {
+            yield return McpToolResult.Error(said[1..]);
+            yield break;
+        }
+
+        foreach (McpToolResult? step in McpThenCheck(args, path, said)) yield return step;
+    }
+
+    /// <summary>
+    /// A change made answered with: what was done yielded at once as what's done so far (cut off by the call's time,
+    /// that's the answer, so an agent never hears "timed out" of an edit that landed), then the check, then the whole.
+    /// </summary>
+    private IEnumerable<McpToolResult?> McpThenCheck(JsonObject args, string path, string done)
+    {
+        yield return McpToolResult.Done(done);
+        foreach (string? step in McpCheckIfAsked(args, path))
+        {
+            if (step is null) yield return null;
+            else done += step;
+        }
+        yield return McpToolResult.Text(done);
+    }
+
+    /// <summary>
+    /// After a change, what the file's language server says is wrong with it, waited on a moment, unless check is false.
+    /// A server that isn't up for the file yet is started for the next check, not waited on. Nulls while waiting, then what to add to the answer.
+    /// </summary>
+    private IEnumerable<string?> McpCheckIfAsked(JsonObject args, string path)
+    {
+        if (!args.Flag("check", true))
+            yield break;
+        languages.AgentFileWritten(path);
+        foreach (string? step in McpCheckAfter(path))
+            yield return step;
     }
 
     private IEnumerable<McpToolResult?> McpWriteFile(JsonObject args)
@@ -89,7 +126,8 @@ internal sealed partial class DawnScene
         if (Context.Documents.Find(path) is { Modified: true } open)
         {
             Context.Documents.Rewrite(open, content.Replace("\r\n", "\n"));
-            yield return McpToolResult.Text($"Wrote {path} in the editor, it had changes nobody saved yet, so it isn't on the disk until it's saved.");
+            string wrote = $"Wrote {path} in the editor, it had changes nobody saved yet, so it isn't on the disk until it's saved.";
+            foreach (McpToolResult? step in McpThenCheck(args, path, wrote)) yield return step;
             yield break;
         }
 
@@ -114,7 +152,13 @@ internal sealed partial class DawnScene
             said = $"!{path} couldn't be written, {e.Message}";
         }
 
-        yield return said.StartsWith('!') ? McpToolResult.Error(said[1..]) : McpToolResult.Text(said);
+        if (said.StartsWith('!'))
+        {
+            yield return McpToolResult.Error(said[1..]);
+            yield break;
+        }
+
+        foreach (McpToolResult? step in McpThenCheck(args, path, said)) yield return step;
     }
 
     private static string Places(int count) => count == 1 ? "one place" : $"{count} places";

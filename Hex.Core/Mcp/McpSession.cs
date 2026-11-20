@@ -17,8 +17,13 @@ internal sealed class McpSession : IDisposable
     private readonly Stream output;
     private readonly Lock writing = new();
     private readonly ManualResetEventSlim done = new();
-    private int pending;
+    // The requests being answered and the reading itself, the session ending once all of them are done
+    private readonly CountdownEvent answering = new(1);
     private volatile bool closed;
+
+    // What a message is written into, the session's for its life and only used under writing
+    private readonly ArrayBufferWriter<byte> sendBuffer = new();
+    private readonly Utf8JsonWriter sendWriter = new(Stream.Null, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 
     public McpServer Server { get; }
 
@@ -55,10 +60,10 @@ internal sealed class McpSession : IDisposable
         {
             while (!closed && input.ReadLine() is { } line)
             {
-                if (line.Length == 0 || line.All(char.IsWhiteSpace))
+                if (string.IsNullOrWhiteSpace(line))
                     continue;
 
-                Interlocked.Increment(ref pending);
+                answering.AddCount();
                 _ = Answer(line);
             }
         }
@@ -71,7 +76,8 @@ internal sealed class McpSession : IDisposable
 
         // What's being answered still goes out before the end, a client that wrote its last request and closed its side
         // waits for the answer on the other
-        SpinWait.SpinUntil(() => Volatile.Read(ref pending) == 0, 30_000);
+        answering.Signal();
+        answering.Wait(30_000);
         Close();
     }
 
@@ -88,7 +94,7 @@ internal sealed class McpSession : IDisposable
         }
         finally
         {
-            Interlocked.Decrement(ref pending);
+            answering.Signal();
         }
     }
 
@@ -100,15 +106,16 @@ internal sealed class McpSession : IDisposable
 
         // Node by node, the serializer proper wants reflection, which a native Hex hasn't got. Not indented, so there's
         // never a new line inside a message, a new line in a string is written as \n
-        var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-            message.WriteTo(writer);
-
         lock (writing)
         {
             try
             {
-                output.Write(buffer.WrittenSpan);
+                // One buffer and writer the session's life, made again for every message they were the most of a call's garbage
+                sendBuffer.ResetWrittenCount();
+                sendWriter.Reset(sendBuffer);
+                message.WriteTo(sendWriter);
+                sendWriter.Flush();
+                output.Write(sendBuffer.WrittenSpan);
                 output.WriteByte((byte)'\n');
                 output.Flush();
             }

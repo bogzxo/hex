@@ -106,6 +106,11 @@ internal sealed partial class HexExtensions
     /// </summary>
     internal void StopWatching()
     {
+        // And what they asked to have done later, the timer that wakes the editor for it with them
+        timers.Clear();
+        waker?.Dispose();
+        waker = null;
+
         foreach (var (watcher, _) in watched.Values)
             watcher.Dispose();
         watched.Clear();

@@ -13,8 +13,9 @@ internal readonly record struct HexProblem(string Path, int Line, int Column, st
     internal string Shade => Hint ? "accent" : Warning ? "warning" : "error";
     internal string Icon => Hint ? "info" : Warning ? "warning" : "error";
 
-    internal bool Matches(string query) => Text.Contains(query, StringComparison.OrdinalIgnoreCase)
-        || Path.Replace('\\', '/').Contains(query.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether the text has the query in it, or the path has it with both slashed forward (the query trimmed and slashed once, see FilterProblems).</summary>
+    internal bool Matches(string query, string slashed) => Text.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || (Path.Contains('\\') ? Path.Replace('\\', '/') : Path).Contains(slashed, StringComparison.OrdinalIgnoreCase);
 }
 
 // The panel under the editor, put away and brought back with Ctrl+J. Problems is everything wrong with the file that is
@@ -29,6 +30,9 @@ internal sealed partial class DawnScene
     private const int PROBLEMS_PAGE = 0, OUTPUT_PAGE = 1;
     private const int MAX_OUTPUT = 400;
     private const float MIN_PANEL = 80.0f, MAX_PANEL = 600.0f, MIN_KEPT_PANEL = 140.0f;
+
+    // The least the panel is given when the window is too short for its usual least, about its titles
+    private const float PANEL_TITLES_LEAST = 40.0f;
 
     private TabPanel bottom = null!;
     private StackPanel problems = null!, output = null!;
@@ -164,6 +168,9 @@ internal sealed partial class DawnScene
     /// another tab opens it. It was the height set to the tabs' and back in one go, a snap, and the editor over it a tick
     /// behind, which flashed a gap or the two over each other.
     /// </summary>
+    // The filter's clear button, found once
+    private Button? problemsClear;
+
     private void FoldPanel(bool fold)
     {
         panelFolded = fold;
@@ -253,6 +260,12 @@ internal sealed partial class DawnScene
         bool fold = settings.PanelCollapsed;
         if (fold != panelFolded || !panelFoldSettled)
             FoldPanel(fold);
+
+        // The cross that empties the filter only while there's something in it to empty
+        problemsClear ??= layout.Get<Button>("problems_clear");
+        bool filtered = problemsFilter.Text.Length > 0;
+        if (problemsClear.Visible != filtered)
+            problemsClear.Visible = filtered;
 
         panelRowsWait -= dt;
         if (!bottom.Visible || panelRowsWait > 0.0f)
@@ -355,12 +368,21 @@ internal sealed partial class DawnScene
     private void RebuildProblems()
     {
         var severities = FilterProblems(problemList, problemsFilter.Text);
-        int rowCount = severities.Sum(group => 1 + group.Count()
-            + group.Select(problem => Path.GetFullPath(problem.Path)).Distinct(PlatformPaths.Comparer).Count());
+
+        // The files of each severity grouped once, for the count of rows and for the rows
+        var files = new List<IGrouping<string, HexProblem>>[severities.Count];
+        int rowCount = 0;
+        for (int each = 0; each < severities.Count; each++)
+        {
+            files[each] = [.. severities[each].GroupBy(problem => Path.GetFullPath(problem.Path), PlatformPaths.Comparer)];
+            rowCount += 1 + severities[each].Count() + files[each].Count;
+        }
+
         var items = layout.Populate(problems, rowCount);
         int at = 0;
-        foreach (var severity in severities)
+        for (int each = 0; each < severities.Count; each++)
         {
+            var severity = severities[each];
             HexProblem kind = severity.First();
             var header = items[at++];
             string title = Said(kind.Severity switch { 0 => "panel_tabs.errors", 1 => "panel_tabs.warnings", _ => "panel_tabs.hints" });
@@ -371,7 +393,7 @@ internal sealed partial class DawnScene
             headerRow.OnPressed = null;
             headerRow.OnContextMenu = null;
 
-            foreach (var group in severity.GroupBy(problem => Path.GetFullPath(problem.Path), PlatformPaths.Comparer))
+            foreach (var group in files[each])
             {
                 HexProblem first = group.First();
                 var fileHeader = items[at++];
@@ -402,8 +424,14 @@ internal sealed partial class DawnScene
         FitRowsTo(problems, problemsScroll);
     }
 
-    internal static List<IGrouping<int, HexProblem>> FilterProblems(IEnumerable<HexProblem> source, string query) =>
-        source.Where(problem => problem.Matches(query.Trim())).GroupBy(problem => problem.Severity).OrderBy(group => group.Key).ToList();
+    internal static List<IGrouping<int, HexProblem>> FilterProblems(IEnumerable<HexProblem> source, string query)
+    {
+        // Trimmed and slashed once, not for every problem, and no filtering at all for an empty box
+        query = query.Trim();
+        string slashed = query.Replace('\\', '/');
+        IEnumerable<HexProblem> matching = query.Length == 0 ? source : source.Where(problem => problem.Matches(query, slashed));
+        return matching.GroupBy(problem => problem.Severity).OrderBy(group => group.Key).ToList();
+    }
 
     // What a server says a problem is called, in brackets after what it says about it ("(dscanner.suspicious.unused_variable)")
     private static readonly System.Text.RegularExpressions.Regex ProblemCode = new(@"^(?<said>.*?)\s*\((?<code>[^()\s]+)\)\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);

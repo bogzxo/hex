@@ -338,16 +338,23 @@ internal sealed partial class HexGit
 
     private void FileMenu(Repository repository, string path, GitFileState state, bool stagedSide)
     {
+        // Opening it first, then staging, and throwing its changes away last on its own in the error colour
         var menu = new Menu("git_file");
+        if (File.Exists(path))
+        {
+            menu.Add(context.Strings.Said("git.open_file"), () => context.Documents.Open(path), icon: "go-to-file");
+            menu.AddSeparator();
+        }
+
         if (stagedSide)
             menu.Add(context.Strings.Said("git.unstage"), () => StageFiles(repository, [path], false), icon: "remove");
         else
             menu.Add(context.Strings.Said("git.stage"), () => StageFiles(repository, [path], true), icon: "add");
         if (!stagedSide && state.Change != GitChange.Conflicted)
-            menu.Add(context.Strings.Said("git.discard"), () => DiscardFile(repository, path, state), icon: "discard");
-        menu.AddSeparator();
-        if (File.Exists(path))
-            menu.Add(context.Strings.Said("git.open_file"), () => context.Documents.Open(path), icon: "go-to-file");
+        {
+            menu.AddSeparator();
+            menu.Add(context.Strings.Said("git.discard"), () => DiscardFile(repository, path, state), icon: "discard", destructive: true);
+        }
         context.Windows.Menu(menu);
     }
 
@@ -359,7 +366,8 @@ internal sealed partial class HexGit
         else
         {
             menu.Add(context.Strings.Said("git.stage_all"), () => StageFiles(repository, paths, true), icon: "add");
-            menu.Add(context.Strings.Said("git.discard_all"), () => DiscardAll(repository, paths), icon: "discard");
+            menu.AddSeparator();
+            menu.Add(context.Strings.Said("git.discard_all"), () => DiscardAll(repository, paths), icon: "discard", destructive: true);
         }
         context.Windows.Menu(menu);
     }

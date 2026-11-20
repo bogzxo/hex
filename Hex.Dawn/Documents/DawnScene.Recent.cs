@@ -100,6 +100,6 @@ internal sealed partial class DawnScene
         }
 
         recentMenu.AddSeparator();
-        recentMenu.Add(Said("recent.clear"), ForgetRecent, icon: "clear-all").IsEnabled = () => recent.Count > 0;
+        recentMenu.Add(Said("recent.clear"), ForgetRecent, icon: "clear-all", destructive: true).IsEnabled = () => recent.Count > 0;
     }
 }

@@ -118,7 +118,7 @@ internal sealed partial class HexLanguages
             Settings =
             [
                 new(WINDOW_ROW, HexText.Get("server_window.settings_row"), UIFormKind.Flag, HexText.Get("server_window.settings_row_help"), SERVER_SECTION,
-                    Buttons: [HexText.Get("server_window.open")], ButtonsOnly: true, Keywords: "language server servers lsp install " + words)
+                    Buttons: [HexText.Get("server_window.open")], ButtonsOnly: true, Keywords: "language server servers lsp install add a new language set up " + words)
             ];
         }
 

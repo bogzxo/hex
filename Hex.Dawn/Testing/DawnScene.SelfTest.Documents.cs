@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("tabs: clicking a tab shows its layout", () => document == documents[0] && nameBox.Text == "selftest_menu" && designer.treeRows.Count == 3);
 
-        Pick("File", () => "Close");
+        Pick("File", () => Said("documents.close"));
         test.Wait();
         test.Check("close: the layout is gone and the other one is shown", () => documents.Count == 1 && document.Path is null && docTabs.Tabs.Count == 1);
 
@@ -198,7 +198,7 @@ internal sealed partial class DawnScene
             scaleBefore = compositor.Scale;
             scaleAfter = Scales[(Array.IndexOf(Scales, scaleBefore) + 1) % Scales.Length];
         });
-        Pick("View", () => DescribeScale(scaleAfter));
+        Pick("View", () => DescribeSize(scaleAfter));
         test.Settle(0.4f);
         test.Check("scale: the menu draws the editor and the layouts at the next size", () =>
             compositor.Scale == scaleAfter && compositor.UIScale == scaleAfter && stage.UIScale == scaleAfter);
@@ -207,7 +207,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("scale: buttons are still where they are drawn", () => layoutDebugger.IsOn);
         Pick("Layout", () => "Layout Debugger");
-        Pick("View", () => DescribeScale(scaleBefore));
+        Pick("View", () => DescribeSize(scaleBefore));
         test.Settle(0.4f);
         test.Check("scale: and back", () => compositor.UIScale == scaleBefore && Fits());
     }

@@ -119,15 +119,22 @@ internal sealed partial class DawnScene
         // What other agents told it while it wasn't working goes in front of what it's asked, so nothing sent is lost
         // Provider commands must remain at the start; unread mail waits for the next ordinary prompt.
         if (!IsAgentSlash(prompt))
+        {
             prompt = PlanPrompt(chat, UnreadPrompt(chat, prompt));
+            // What the person changed of its plan in the Plan tab goes in front too, so the agent keeps their changes
+            if (TakePlanTold(chat) is { } told)
+                prompt = $"{told}\n\n{prompt}";
+        }
         // The working copy as it was before the turn, for its changes to be seen and put back (Agentic's Changes). The
         // agent starts once it's taken, started alongside it its first writes could be in what was taken as before
         HexAgentEntry turn = chat.Ask(prompt, asked, contextLocation is null ? null : asked, contextLocation);
         agentsStarting.Add(chat);
         TakeCheckpoint(turn, () =>
         {
-            // Stopped while the checkpoint was taken, it isn't started at all
-            if (agentsStarting.Remove(chat))
+            // Stopped while the checkpoint was taken, it isn't started at all. Left in agentsStarting through the launch,
+            // which is off the editor's thread in two steps (the program looked for, the program started), so the chat is
+            // busy to the end and a stop in between is seen at either
+            if (agentsStarting.Contains(chat))
                 LaunchAgent(chat, extension, run, prompt);
         });
     }
@@ -161,15 +168,31 @@ internal sealed partial class DawnScene
     /// <summary>A chat's agent started on what it was asked, the row of it already in the chat.</summary>
     private void LaunchAgent(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt)
     {
+        // Looking for the program is a walk of every folder on PATH (and the system's, when it isn't on Hex's), a disk or a
+        // network share that answers slowly held the editor still through it
         string program = HexExtensions.Text(run, "program") ?? string.Empty;
-        string? found = HexAgentProcess.Find(program);
-        if (found is null)
+        InBackground<string?>("find agent", () => HexAgentProcess.Find(program), found =>
         {
-            chat.Error(Said("agents_panel.not_found", ("program", program), ("install", HexExtensions.Text(run, "install") ?? string.Empty)));
-            chat.Done();
-            return;
-        }
+            // Stopped while it was looked for, StopAgent has ended the turn
+            if (!agentsStarting.Contains(chat))
+                return;
 
+            if (found is null)
+            {
+                agentsStarting.Remove(chat);
+                chat.Error(Said("agents_panel.not_found", ("program", program), ("install", HexExtensions.Text(run, "install") ?? string.Empty)));
+                chat.Done();
+                return;
+            }
+
+            ContinueLaunch(chat, extension, run, prompt, program, found);
+        }, quiet: true);
+    }
+
+    // The launch from the program found, the extension's words for it made on the editor's thread (a script isn't run
+    // anywhere else) and the program started off it
+    private void ContinueLaunch(HexAgentChat chat, HexExtension extension, ObjectValue run, string prompt, string program, string found)
+    {
         // The agent reaches Hex's tools through the server, which is up from now on in this run
         if (mcpHost is null && StartMcp())
             chat.Note(Said("agents_panel.mcp_started"));
@@ -180,6 +203,7 @@ internal sealed partial class DawnScene
         {
             if (!extension.Invoke(making, [new StringValue(prompt), chatObject], out IRuntimeValue made))
             {
+                agentsStarting.Remove(chat);
                 chat.Error($"{extension.Name}, {extension.Failed}");
                 chat.Done();
                 return;
@@ -198,6 +222,7 @@ internal sealed partial class DawnScene
         {
             if (MessageLine(extension, run, prompt, chatObject) is not { } first)
             {
+                agentsStarting.Remove(chat);
                 chat.Error($"{extension.Name}, {extension.Failed}");
                 chat.Done();
                 return;
@@ -207,16 +232,38 @@ internal sealed partial class DawnScene
         }
 
         string folder = explorer.workspace.Folders.FirstOrDefault() ?? Directory.GetCurrentDirectory();
-        try
+
+        // Starting it makes a process and writes the prompt down its stdin, which waits when the program is slow to take it
+        // (a scanner looking it over first, a prompt bigger than the pipe), so it's off the editor's thread. What went wrong
+        // comes back as the exception, nothing thrown on the pool
+        InBackground<(HexAgentProcess? Process, Exception? Failed)>("start agent", () =>
         {
-            HexAgentProcess process = HexAgentProcess.Start(found, arguments, folder, input, keepInput: steers);
-            agentRuns.Add(new AgentRun(chat, process, extension, run, chatObject, program, steers));
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+            try
+            {
+                return (Process: HexAgentProcess.Start(found, arguments, folder, input, keepInput: steers), Failed: (Exception?)null);
+            }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+            {
+                return (Process: null, Failed: e);
+            }
+        }, started =>
         {
-            chat.Error(Said("agents_panel.failed_start", ("program", program), ("why", e.Message)));
-            chat.Done();
-        }
+            // Stopped while it was being started, what was started goes with it
+            if (!agentsStarting.Remove(chat))
+            {
+                started.Process?.Dispose();
+                return;
+            }
+
+            if (started.Process is null)
+            {
+                chat.Error(Said("agents_panel.failed_start", ("program", program), ("why", started.Failed!.Message)));
+                chat.Done();
+                return;
+            }
+
+            agentRuns.Add(new AgentRun(chat, started.Process, extension, run, chatObject, program, steers));
+        }, quiet: true);
     }
 
     /// <summary>A message as its run's message writes it for the agent's stdin, one line, null when the extension failed.</summary>

@@ -140,10 +140,6 @@ internal sealed partial class HexRunning
         repl.Write(coloured + "\n");
     }
 
-    private void FitConsole()
-    {
-    }
-
     // The lines --console asked for, run one at a time once the values of the file are in
     private Queue<string>? consoleAskedFor;
 
@@ -171,8 +167,20 @@ internal sealed partial class HexRunning
             if (row == screen.Scrollback.Count + screen.CursorY)
                 continue;
             string line = screen.RowAt(row).Text().Trim();
-            if (line.Length > 0)
+            if (line.Length == 0)
+                continue;
+
+            // The whole line, the rows it was wrapped onto in a narrow console put back together: a long message's last
+            // row was only its tail ("ine 1)")
+            int first = row;
+            while (first > 0 && screen.RowAt(first - 1).Wrapped)
+                first--;
+            if (first == row)
                 return line;
+            var whole = new System.Text.StringBuilder();
+            for (int at = first; at <= row; at++)
+                whole.Append(screen.RowAt(at).Text().TrimEnd());
+            return whole.ToString().Trim();
         }
 
         return string.Empty;

@@ -88,7 +88,6 @@ internal sealed partial class HexExtensions
         }, read =>
         {
             catalog = read;
-            FillCatalogRows();
             CatalogChanged();
         }, quiet: true);
 
@@ -147,7 +146,6 @@ internal sealed partial class HexExtensions
         else
             context.Notices.Notify(context.Strings.Said("extensions_window.uninstall_left", ("name", extension.Name), ("why", why)), error: true);
 
-        FillCatalogRows();
         CatalogChanged();
         return why.Length == 0;
     }

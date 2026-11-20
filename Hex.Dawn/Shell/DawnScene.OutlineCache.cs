@@ -11,8 +11,7 @@ internal sealed partial class DawnScene
 
     private List<OutlineEntry> outlineKept = [];
     private (HexDocument? Of, int Version) outlineKeptFor = (null, -1);
-    private int outlineVersionSeen = -1;
-    private long outlineChangedAt;
+    private HexSettle<int> outlineSettle = new(OUTLINE_SETTLE_MS);
     private bool outlineWorking;
 
     /// <summary>
@@ -32,20 +31,29 @@ internal sealed partial class DawnScene
         if (outlineKeptFor.Version == version || outlineWorking)
             return outlineKept;
 
-        long now = System.Environment.TickCount64;
-        if (outlineVersionSeen != version)
-        {
-            outlineVersionSeen = version;
-            outlineChangedAt = now;
-            return outlineKept;
-        }
-
-        if (now - outlineChangedAt < OUTLINE_SETTLE_MS)
+        if (!outlineSettle.Settled(version, System.Environment.TickCount64))
             return outlineKept;
 
         WorkOutOutline(version);
         return outlineKept;
     }
+
+    // The text of the code as of a version, put together once for whatever works it out in the background (the outline,
+    // the hints, the semantic colours), which all asked within a moment of the typing stopping, a copy of a big file each
+    private (Horizon.UI.Components.UITextDocument? Of, int Version, string? Text) codeTextKept;
+
+    private string CodeText(Horizon.UI.Components.CodeEditor editor)
+    {
+        var of = editor.Document;
+        if (ReferenceEquals(codeTextKept.Of, of) && codeTextKept.Version == of.Version && codeTextKept.Text is { } kept)
+            return kept;
+        string text = editor.Text;
+        codeTextKept = (of, of.Version, text);
+        return text;
+    }
+
+    /// <summary>The text let go of, a closed file's isn't kept.</summary>
+    private void ForgetCodeText() => codeTextKept = default;
 
     // Helper method to work the outline out again in the background, out of KeptOutline so the closure it needs is made
     // only then and not on every tick that asks for the outline
@@ -54,7 +62,7 @@ internal sealed partial class DawnScene
         // The text is put together once, here, and the going through it is done in the background
         outlineWorking = true;
         HexDocument of = document;
-        string text = code.Text;
+        string text = CodeText(code);
         string? path = document.Path;
         InBackground("outline", () => HexOutline.Outline(text, path), outline =>
         {

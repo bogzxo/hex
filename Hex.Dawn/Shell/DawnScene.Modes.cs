@@ -17,6 +17,9 @@ internal sealed partial class DawnScene
     public override bool Persistent => HexModes.Together;
 
     private Button modeToggle = null!;
+
+    // What this editor does as the window swaps away from it, taken off again as it's put away (see Unload)
+    private Action<HexMode>? leavingMode;
     private UIComponent? focusBeforeMode, stageFocusBeforeMode;
 
     private void BuildModes()
@@ -27,7 +30,7 @@ internal sealed partial class DawnScene
         HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
         if (!HexAi.Off)
             HexAgentProcess.Woken = Engine.WindowManager.Wake;
-        HexModes.Leaving += mode =>
+        HexModes.Leaving += leavingMode = mode =>
         {
             if (mode == HexMode.Dawn)
             {
@@ -111,8 +114,8 @@ internal sealed partial class DawnScene
         HexModeSwitch.RestoreFocus(stage, stageFocusBeforeMode);
 
         // Dusk was made bigger or smaller meanwhile, the editor follows so the swap doesn't jump
-        if (HexModes.Scale is { } shared && shared != compositor.Scale)
-            SetScale(shared, remember: true);
+        if (HexModes.InterfaceSize is { } shared && shared != compositor.Scale)
+            SetInterfaceSize(shared, remember: true);
         Engine.WindowManager.RequestFrames();
     }
 }

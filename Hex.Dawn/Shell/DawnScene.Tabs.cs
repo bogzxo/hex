@@ -17,7 +17,11 @@ internal sealed partial class DawnScene
     // The breadcrumbs' pieces and what a click on each does
     private readonly List<string> crumbParts = [];
     private readonly List<Action> crumbActions = [];
-    private (HexDocument? Document, int Version, int Line, UIComponent? Selected, HexView View) crumbsFor;
+    private (HexDocument? Document, int Version, int Line, UIComponent? Selected, HexView View, string? Path) crumbsFor;
+
+    // The folder crumbs of the file on screen, which only its path changes, kept rather than worked out at each move
+    private (HexDocument? Of, string? Path) crumbFoldersFor;
+    private readonly List<string> crumbFolders = [];
     private bool crumbsPlain;
 
     private void BuildTabs()
@@ -173,9 +177,13 @@ internal sealed partial class DawnScene
     /// <summary>Shows a file in the explorer, its folders opened up to it.</summary>
     private void RevealInExplorer(HexDocument tab)
     {
-        if (tab.Path is not { } path)
-            return;
+        if (tab.Path is { } path)
+            RevealInExplorer(path);
+    }
 
+    /// <summary>Shows a file in the explorer, its folders opened up to it.</summary>
+    private void RevealInExplorer(string path)
+    {
         if (explorer.workspace.IsEmpty)
             browseDirectory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? browseDirectory;
         else
@@ -192,7 +200,9 @@ internal sealed partial class DawnScene
         if (!LayoutTools)
             KeptOutline();
 
-        var now = (document, code.Document.Version, code.Document.Caret.Line, LayoutTools ? document.Selected : null, document.View);
+        // Code's crumbs change with the caret's line and the outline, which says so itself when it's worked out again
+        // (OutlineCache), so a key typed on the same line makes nothing. A layout's go by its text, the names in it
+        var now = (document, LayoutTools ? code.Document.Version : 0, code.Document.Caret.Line, LayoutTools ? document.Selected : null, document.View, document.Path);
         if (crumbsFor == now && crumbsPlain == plainShown)
             return;
 
@@ -211,16 +221,24 @@ internal sealed partial class DawnScene
         // The folders, from the workspace's (or the repository's) down, the file with its icon
         if (document.Path is { } path)
         {
-            string full = Path.GetFullPath(path);
-            string root = WorkspaceRoots().FirstOrDefault(folder => full.StartsWith(Path.GetFullPath(folder), PlatformPaths.Comparison)) ?? Path.GetDirectoryName(full)!;
-            string relative = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(root)) ?? root, Path.GetDirectoryName(full)!);
+            if (crumbFoldersFor != (document, path))
+            {
+                crumbFoldersFor = (document, path);
+                crumbFolders.Clear();
+                string full = Path.GetFullPath(path);
+                string root = WorkspaceRoots().FirstOrDefault(folder => full.StartsWith(Path.GetFullPath(folder), PlatformPaths.Comparison)) ?? Path.GetDirectoryName(full)!;
+                string relative = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(root)) ?? root, Path.GetDirectoryName(full)!);
+                foreach (string folder in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+                    if (folder != ".")
+                        crumbFolders.Add(folder);
+            }
 
             HexDocument here = document;
-            foreach (string folder in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+            Action reveal = () => RevealInExplorer(here);
+            foreach (string folder in crumbFolders)
             {
-                if (folder == ".") continue;
                 crumbParts.Add(folder);
-                crumbActions.Add(() => RevealInExplorer(here));
+                crumbActions.Add(reveal);
             }
         }
 

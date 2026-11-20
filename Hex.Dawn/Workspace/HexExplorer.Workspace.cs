@@ -102,23 +102,123 @@ internal sealed partial class HexExplorer
         if (document?.Path is { } shown)
             workspace.OpenFiles.Add(Path.GetFullPath(shown));
 
-        try
+        // What it says is put together here, where the workspace is the editor's, and written on the pool: a tab opened,
+        // closed or moved, a folder folded, each wrote the file on the editor's thread, from twenty-six places
+        if (keepFailed is { } failed)
         {
-            if (workspace.FilePath is { } file)
-                workspace.Save(file);
-            else if (UntitledWorkspacePath is { } untitled)
-                File.WriteAllText(untitled, workspace.Write(null));
+            keepFailed = null;
+            context.Notices.Say(context.Strings.Said("explorer_workspace.keep_failed", ("message", failed)), error: true);
         }
-        catch (Exception e)
+
+        if (workspace.FilePath is { } file)
         {
-            context.Notices.Say(context.Strings.Said("explorer_workspace.keep_failed", ("message", e.Message)), error: true);
+            string full = Path.GetFullPath(file);
+            Keep(full, workspace.Write(Path.GetDirectoryName(full)!));
+            workspace.FilePath = full;
         }
+        else if (UntitledWorkspacePath is { } untitled)
+            Keep(untitled, workspace.Write(null));
 
         string last = workspace.FilePath ?? string.Empty;
         if (settings.LastWorkspace != last)
         {
             settings.LastWorkspace = last;
             settings.Save();
+        }
+    }
+
+    // The workspace's file as it's to be written, the latest only, and whether the pool is writing it
+    private readonly Lock keeping = new();
+    private (string Path, string Text)? keepNext;
+    private bool keepWriting;
+    private volatile string? keepFailed;
+
+    // Hands what the file is to say to the pool's one writer, a newer one taking the place of one not written yet
+    private void Keep(string path, string text)
+    {
+        // A self test reads the file straight after, so it's written at once there
+        if (options.SelfTest)
+        {
+            try
+            {
+                File.WriteAllText(path, text);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                context.Notices.Say(context.Strings.Said("explorer_workspace.keep_failed", ("message", e.Message)), error: true);
+            }
+            return;
+        }
+
+        lock (keeping)
+        {
+            keepNext = (path, text);
+            if (keepWriting)
+                return;
+            keepWriting = true;
+        }
+
+        DawnScene.OffThread("keeping the workspace", WriteKept);
+    }
+
+    private void WriteKept()
+    {
+        while (true)
+        {
+            (string Path, string Text) next;
+            lock (keeping)
+            {
+                if (keepNext is not { } wanted)
+                {
+                    keepWriting = false;
+                    return;
+                }
+                next = wanted;
+                keepNext = null;
+            }
+
+            try
+            {
+                File.WriteAllText(next.Path, next.Text);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                keepFailed = e.Message;
+            }
+        }
+    }
+
+    /// <summary>What's waiting to be written of the workspace written now, before Hex goes or the editor is put away.</summary>
+    internal void FlushKept()
+    {
+        // The newest taken, the writer let finish what it has (older), then the newest written over it
+        (string Path, string Text)? newest;
+        lock (keeping)
+        {
+            newest = keepNext;
+            keepNext = null;
+        }
+
+        var wait = System.Diagnostics.Stopwatch.StartNew();
+        while (wait.ElapsedMilliseconds < 2000)
+        {
+            lock (keeping)
+            {
+                if (!keepWriting)
+                    break;
+            }
+            Thread.Sleep(2);
+        }
+
+        if (newest is not { } last)
+            return;
+        try
+        {
+            File.WriteAllText(last.Path, last.Text);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine($"[Hex] the workspace couldn't be kept, {e.Message}");
         }
     }
 

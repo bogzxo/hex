@@ -59,7 +59,8 @@ internal sealed partial class HexExtensions
             context.Work.InBackground($"{extension.Name}: {program}", () => ProgramOutput(program, arguments, folder, input),
                 said => Answered(extension, then, said is null ? Values.Null : new StringValue(said)), quiet: true);
         })),
-        ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
+        // Each chat's files for its agent system, in Hex's data folder where Agent Data measures and tidies them
+        ("temp", new StringValue(Hex.Core.HexData.AgentTemp)),
         // What an agent is told in its system prompt about the harness, the same for every agent system
         ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
         // What the agent of a chat is told about its Plan tab and the agents beside it, for its own system prompt and
@@ -76,6 +77,12 @@ internal sealed partial class HexExtensions
             ("args", Natives.List(["--mcp-connect", .. context.Workspace.Folders.Take(1).SelectMany(folder => new[] { "--folder", folder }),
                 .. args.Has(0) && args[0] is ObjectValue chat && chat.Properties.TryGetValue("id", out IRuntimeValue? id) && id is StringValue { Value.Length: > 0 } named
                     ? new[] { "--agent-chat", named.Value } : []]))))),
+        // A heavy stdio MCP server shared by every agent in the chat's worktree, the { command, args } that starts the
+        // proxy to it (Hex --mcp-proxy, McpSharedServers), null when the command isn't on the PATH. See HexExtensions.Shared
+        ("shared_server", Natives.Function("shared_server", args => SharedServer(args))),
+        // Whether a Claude Code plugin is switched on in the user's settings, by its name before the @ (dotnet-claude-kit)
+        ("claude_plugin", Natives.Function("claude_plugin", args => ClaudePlugin(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), args.Text(0)) ? Values.True : Values.False)),
         ("agents", Natives.Function("agents", _ => new ListValue([.. HexAgentProfiles.All.Select(profile => (IRuntimeValue)new StringValue(profile.Name))]))),
         ("workspace", Natives.Function("workspace", _ => new ListValue([.. context.Workspace.Folders.Select(folder => (IRuntimeValue)new StringValue(folder))]))),
         ("executable", new StringValue(System.Environment.ProcessPath ?? Path.Combine(Hex.Core.HexHost.ProgramFolder, "Hex.exe"))),
@@ -95,8 +102,64 @@ internal sealed partial class HexExtensions
             return Natives.Object(("lines", new ListValue([.. lines.Select(line => (IRuntimeValue)new StringValue(line))])), ("end", new NumberValue(end)));
         })),
         // A file under a folder by how its name ends, the newest when there are several, null when there's none
-        ("find_file", Natives.Function("find_file", args => FindFile(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null))
+        ("find_file", Natives.Function("find_file", args => FindFile(PathFor(extension, args.Text(0)), args.Text(1)) is { } found ? new StringValue(found) : Values.Null)),
+        // The MCP servers Claude Code would start for a folder by itself, the user's own (~/.claude.json, its own and the
+        // folder's project's) and the folder's .mcp.json, by name, for a config that says them all and nothing else
+        // (--strict-mcp-config), so plugins' servers aren't started once for every agent
+        ("claude_servers", Natives.Function("claude_servers", args => Hex.Core.HexJson.ToHidl(ClaudeServers(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), args.Text(0, context.Workspace.Folders.FirstOrDefault() ?? string.Empty)))))
     ];
+
+    /// <summary>
+    /// The MCP servers Claude Code starts for a folder out of the user's own configuration: ~/.claude.json's mcpServers,
+    /// the same under its projects entry for the folder, then the folder's .mcp.json, later ones over earlier ones by name.
+    /// Hex's own server is left out, it's written in by the extension for the chat. Whatever won't read is skipped.
+    /// </summary>
+    internal static System.Text.Json.Nodes.JsonObject ClaudeServers(string home, string folder)
+    {
+        var servers = new System.Text.Json.Nodes.JsonObject();
+        if (Read(Path.Combine(home, ".claude.json")) is System.Text.Json.Nodes.JsonObject user)
+        {
+            Take(user["mcpServers"]);
+            // Its projects are keyed by the folder written with forward slashes, a drive letter in either case
+            if (folder.Length > 0 && user["projects"] is System.Text.Json.Nodes.JsonObject projects)
+            {
+                string wanted = Path.GetFullPath(folder).Replace('\\', '/').TrimEnd('/');
+                foreach (var (key, project) in projects)
+                {
+                    if (string.Equals(key.Replace('\\', '/').TrimEnd('/'), wanted, StringComparison.OrdinalIgnoreCase))
+                        Take(project?["mcpServers"]);
+                }
+            }
+        }
+        if (folder.Length > 0 && Read(Path.Combine(folder, ".mcp.json")) is System.Text.Json.Nodes.JsonObject local)
+            Take(local["mcpServers"]);
+        servers.Remove("hex");
+        return servers;
+
+        void Take(System.Text.Json.Nodes.JsonNode? from)
+        {
+            if (from is not System.Text.Json.Nodes.JsonObject named)
+                return;
+            foreach (var (name, server) in named)
+            {
+                if (server is not null)
+                    servers[name] = server.DeepClone();
+            }
+        }
+
+        static System.Text.Json.Nodes.JsonNode? Read(string path)
+        {
+            try
+            {
+                return File.Exists(path) ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path)) : null;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                return null;
+            }
+        }
+    }
 
     // How long program_output waits for a program to end, and the most of what it prints it keeps
     private const int PROGRAM_OUTPUT_MS = 20_000, PROGRAM_OUTPUT_MOST = 1 << 20;

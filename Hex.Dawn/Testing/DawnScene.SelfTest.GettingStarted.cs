@@ -17,8 +17,15 @@ internal sealed partial class DawnScene
         ToggleButton? SwitchOf(string name) => Title(name)?.Parent?.Parent is StackPanel row ? row.Children.OfType<ToggleButton>().FirstOrDefault() : null;
         bool spelling = false;
 
-        test.Run(() => welcomeWanted = true);
-        test.Settle(0.4f);
+        // In Dawn whatever ran before left it in, the welcome is Dawn's
+        test.Run(() =>
+        {
+            ShowFace(Hex.Shell.HexFace.Dawn);
+            welcomeWanted = true;
+            // What a part before left open closed, the welcome is over the layout Hex started with alone
+            CloseAll();
+        });
+        test.Settle(0.6f);
         test.Check("getting started: the welcome has it, in its groups, a row for each setting", () =>
             welcome is { Visible: true } && groups.All(group => All().OfType<Label>().Any(label => label.Text == Said("welcome.getting_" + group)))
             && rows.All(name => Title(name) is not null));

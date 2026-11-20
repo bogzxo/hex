@@ -5,8 +5,9 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     private (HexDocument? Of, int Version, LanguageServer? Source, string? Path) foldingFor;
-    private (HexDocument? Of, int Version) foldingSeen;
-    private long foldingChangedAt, foldingAskedAt, foldingRetryAt;
+    private HexSettle<(HexDocument, int)> foldingSettle = new(FOLDING_SETTLE_MS);
+    private const long FOLDING_SETTLE_MS = 300;
+    private long foldingAskedAt, foldingRetryAt;
     private bool foldingPending;
     private int foldingRequest, foldingTries;
 
@@ -27,7 +28,7 @@ internal sealed partial class DawnScene
         }
         else
         {
-            if (foldingFor.Of != document || foldingFor.Source != source || foldingFor.Path != document.Path) foldingSeen = default;
+            if (foldingFor.Of != document || foldingFor.Source != source || foldingFor.Path != document.Path) foldingSettle.Reset();
             if (source is null)
             {
                 foldingFor = key;
@@ -39,8 +40,7 @@ internal sealed partial class DawnScene
             }
             if (foldingFor.Of == document && foldingFor.Source == source && foldingFor.Path == document.Path && foldingFor.Version != version)
             {
-                if (foldingSeen != (document, version)) { foldingSeen = (document, version); foldingChangedAt = now; return; }
-                if (now - foldingChangedAt < 300) return;
+                if (!foldingSettle.Settled((document, version), now)) return;
             }
             foldingTries = 0;
         }
@@ -68,9 +68,9 @@ internal sealed partial class DawnScene
 
     private void ForgetNativeFolding()
     {
-        if (foldingFor.Of is null && foldingSeen.Of is null) return;
+        foldingSettle.Reset();
+        if (foldingFor.Of is null) return;
         foldingFor = default;
-        foldingSeen = default;
         foldingRequest++;
         foldingPending = false;
         foldingRetryAt = 0;

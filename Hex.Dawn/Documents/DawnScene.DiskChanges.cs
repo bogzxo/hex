@@ -160,7 +160,7 @@ internal sealed partial class DawnScene
         File.WriteAllText(copy, text);
 
         // A copy opened before is read again rather than opened twice, and goes next to the file, mine on the left
-        HexDocument? copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), PlatformPaths.Comparison));
+        HexDocument? copied = documents.Find(other => other.Path is not null && PlatformPaths.Same(other.Path, copy));
         if (copied is not null)
         {
             if (!TakeFromDisk(copied, text))
@@ -169,7 +169,7 @@ internal sealed partial class DawnScene
         else
         {
             OpenText(copy, text, show: false);
-            copied = documents.Find(other => other.Path is not null && Path.GetFullPath(other.Path).Equals(Path.GetFullPath(copy), PlatformPaths.Comparison));
+            copied = documents.Find(other => other.Path is not null && PlatformPaths.Same(other.Path, copy));
         }
 
         if (documents.Contains(open))
@@ -186,7 +186,7 @@ internal sealed partial class DawnScene
     private bool SafeToSave(string path)
     {
         if (document.DiskText is not { } known || document.Path is not { } own
-            || !Path.GetFullPath(own).Equals(Path.GetFullPath(path), PlatformPaths.Comparison)
+            || !PlatformPaths.Same(own, path)
             || !File.Exists(path) || ReadNow(path) is not { } now || now == known)
             return true;
 

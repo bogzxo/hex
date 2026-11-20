@@ -20,7 +20,25 @@ internal sealed partial class HexLanguages
         {
             if (asked.IsCompletedSuccessfully)
                 then(asked.Result);
-        }));
+        }
+        ));
+    }
+
+    /// <summary>
+    /// Something to do with a server's answer once it's in, on the editor's thread, with <paramref name="fallback"/> for
+    /// one that failed or was cancelled. What fourteen asks wrote as a ContinueWith of their own, a task more each.
+    /// </summary>
+    private void When<T>(Task<T> asked, T fallback, Action<T> then)
+    {
+        asked.ContinueWith(_ => context.Wake(), TaskScheduler.Default);
+        answers.Add((asked, () => then(asked.IsCompletedSuccessfully ? asked.Result : fallback)));
+    }
+
+    /// <summary>A list from a server, empty when the server failed or said nothing, so whoever waits on it is never left waiting.</summary>
+    private void WhenList<T>(Task<IReadOnlyList<T>?> asked, Action<IReadOnlyList<T>> then)
+    {
+        asked.ContinueWith(_ => context.Wake(), TaskScheduler.Default);
+        answers.Add((asked, () => then(asked.IsCompletedSuccessfully ? asked.Result ?? [] : [])));
     }
 
     /// <summary>Every tick, the answers that are in done, and the edits a server asked for made.</summary>
@@ -99,8 +117,7 @@ internal sealed partial class HexLanguages
         {
             hovering = request;
             long number = ++hoverRequestNumber;
-            Task<string?> answer = ask().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
-            When(answer, said =>
+            When(ask(), null, said =>
             {
                 if (number != hoverRequestNumber) return;
                 hovering = null;
@@ -155,7 +172,7 @@ internal sealed partial class HexLanguages
     /// </summary>
     internal static string Printable(string markdown)
     {
-        if (!markdown.Any(c => c > '~'))
+        if (!markdown.AsSpan().ContainsAnyExceptInRange('\0', '~'))
             return markdown;
 
         var printable = new System.Text.StringBuilder(markdown.Length);
@@ -208,9 +225,7 @@ internal sealed partial class HexLanguages
         {
             signing = request;
             long number = ++signatureRequestNumber;
-            Task<UISignature?> asked = ask()
-                .ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
-            When(asked, said =>
+            When(ask(), null, said =>
             {
                 if (number != signatureRequestNumber) return;
                 signing = null;
@@ -284,7 +299,7 @@ internal sealed partial class HexLanguages
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, source);
-                if (context.Documents.Find(file) is {} existing)
+                if (context.Documents.Find(file) is { } existing)
                 {
                     existing.Editor.Text = source;
                     existing.SavedCode = existing.Editor.Text;
@@ -617,7 +632,7 @@ internal sealed partial class HexLanguages
         if (!EditsCurrent(snapshot, action.Edits.Keys.Append(origin))) return;
         if (action.Resolve is { } resolve)
         {
-            When(resolve().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default), resolved =>
+            When(resolve(), null, resolved =>
             {
                 if (resolved is null) context.Notices.Say(context.Strings.Said("code_server.resolve_failed"), error: true);
                 else TakeAction(server, resolved, snapshot, origin);

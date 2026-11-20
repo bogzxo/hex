@@ -11,18 +11,17 @@ namespace Hex.Dawn;
 // How big the editor draws itself and how it shares the window out between its parts.
 internal sealed partial class DawnScene
 {
-    // Where the editor keeps how big it was last asked to draw itself, next to its executable. On top of the scale of the
-    // screen it's on now, hex_ui_scale.txt was the whole of it from before Hex knew about that and would come out too big.
-    private const string SCALE_FILE = "hex_ui_scale_on_screen.txt";
+    // Where the editor kept its interface size before it was a setting, next to its executable, see TakeOldInterfaceSize
+    private const string OLD_SIZE_FILE = "hex_ui_scale_on_screen.txt";
 
-    /* How big the editor draws itself */
+    /* How big the editor draws itself, its interface size */
 
-    private static string DescribeScale(float scale) => $"{scale * 100:0}%";
+    private static string DescribeSize(float size) => $"{size * 100:0}%";
 
-    // How big the menus in the title bar are written, at a scale of one
+    // How big the menus in the title bar are written
     private const float MENU_TEXT = 0.14f;
 
-    /* The code's zoom, apart from the editor's scale */
+    /* The code's zoom, on top of the interface size */
 
     private const float CODE_ZOOM_STEP = 1.1f;
     private const float MIN_CODE_ZOOM = 0.5f, MAX_CODE_ZOOM = 3.0f;
@@ -50,60 +49,72 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// The size a window is best read at when nobody has said. Bigger on a bigger screen, counted in the system's units
-    /// so a 4K screen at 150% is the size it looks and not the pixels it has, the scale of the screen comes on top.
+    /// The interface size kept next to the executable by Hex before it was a setting, taken into the settings once and
+    /// the file deleted, null when there's none. It was the same thing, a factor on top of the screen's own scale.
     /// </summary>
-    private float ScaleFor(Vector2 window) => (window / (Engine.WindowManager.ScalesToDisplay ? Engine.WindowManager.DisplayScale : 1.0f)).Y switch
-    {
-        >= 2000 => 2.0f,
-        >= 1400 => 1.5f,
-        >= 1000 => 1.25f,
-        _ => 1.0f
-    };
-
-    private static string ScalePath => HexFiles.Kept(SCALE_FILE);
-
-    private float? ReadScale()
+    private float? TakeOldInterfaceSize()
     {
         // The editor testing itself starts out the same every time
-        if (options.SelfTest || !File.Exists(ScalePath))
+        string path = HexFiles.Kept(OLD_SIZE_FILE);
+        if (options.SelfTest || !File.Exists(path))
             return null;
-
-        return float.TryParse(File.ReadAllText(ScalePath), System.Globalization.CultureInfo.InvariantCulture, out float saved) ? saved : null;
-    }
-
-    /// <summary>
-    /// Sets how big the editor and the layouts in it are drawn. The editor makes room by itself. The lists,
-    /// the canvas and the code get whatever the window has left at that size, see <see cref="FitChrome"/>.
-    /// </summary>
-    /// <param name="remember">Whether this is what the editor starts with from now on.</param>
-    private void SetScale(float scale, bool remember)
-    {
-        scale = HexFrame.NearestScale(scale);
-
-        // The two are one screen as far as anybody looking at it is concerned
-        compositor.Scale = stage.Scale = scale;
-        if (HexModes.Together)
-            HexModes.Scale = scale;
-
-        // Desktop chrome follows the native window. On a phone or tablet the bar belongs to the app and follows its zoom.
-        bool nativeChrome = (Engine.WindowManager.Features & Horizon.Platform.PlatformFeatures.Window) != 0;
-        ((TitleBar)top).PixelSized = nativeChrome;
-        float chromeScale = nativeChrome ? scale : 1.0f;
-        menu.TextScale = MENU_TEXT / chromeScale;
-        Hex.Shell.HexModeSwitch.SetScale(modeToggle, chromeScale);
-
-        if (!remember || options.SelfTest)
-            return;
 
         try
         {
-            File.WriteAllText(ScalePath, scale.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            bool read = float.TryParse(File.ReadAllText(path), System.Globalization.CultureInfo.InvariantCulture, out float saved);
+            File.Delete(path);
+            return read ? Math.Clamp(saved, HexSettings.LEAST_INTERFACE_SIZE, HexSettings.MOST_INTERFACE_SIZE) : null;
         }
-        catch (Exception e)
+        catch (IOException)
         {
-            Say(Said("chrome.scale_not_kept", ("reason", e.Message)), error: true);
+            return null;
         }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The interface size the editor starts at: what <c>--scale</c> says for this run, else what the other mode has while
+    /// they share the window, else the setting (taken over from the file it was kept in before, the first time).
+    /// </summary>
+    private float StartingInterfaceSize()
+    {
+        if (TakeOldInterfaceSize() is { } old)
+        {
+            settings.InterfaceSize = old;
+            SaveSettings();
+        }
+
+        return options.Scale ?? HexModes.InterfaceSize ?? settings.InterfaceSize;
+    }
+
+    /// <summary>
+    /// Sets how big the whole editor is drawn, its title bar, its menus and every word as much as the panels, on top of the
+    /// screen's own scale (see <see cref="HexSettings.InterfaceSize"/>). The editor makes room by itself. The lists, the
+    /// canvas and the code get whatever the window has left at that size, see <see cref="FitChrome"/>.
+    /// </summary>
+    /// <param name="remember">Whether this is what the editor starts with from now on, the setting changed and saved.</param>
+    private void SetInterfaceSize(float size, bool remember)
+    {
+        size = HexFrame.NearestScale(size);
+
+        // The two are one screen as far as anybody looking at it is concerned
+        compositor.Scale = stage.Scale = size;
+        if (HexModes.Together)
+            HexModes.InterfaceSize = size;
+
+        // The title bar is the editor's and grows with the rest. It was kept at the system's size, so a bigger interface
+        // had every word bigger but the menus' and the title's
+        ((TitleBar)top).PixelSized = false;
+        menu.TextScale = MENU_TEXT;
+
+        if (!remember || settings.InterfaceSize == size)
+            return;
+
+        settings.InterfaceSize = size;
+        SaveSettings();
     }
 
     /// <summary>
@@ -296,9 +307,14 @@ internal sealed partial class DawnScene
             float editorMinimum = shown == codeScroll
                 ? code.Padding.Total.Y + MathF.Max(MIN_FLEXIBLE, 7 * MathF.Max(16, code.CaretLineHeight))
                 : MIN_FLEXIBLE;
-            float most = Math.Clamp(height - others - gap - editorMinimum, MIN_PANEL, MAX_PANEL);
+            // A window too short for both (a small one at 200%) gives the panel less than its usual least, down to its
+            // titles, rather than the code less than its few lines under the find bar
+            float room = height - others - gap - editorMinimum;
+            float least = Math.Clamp(room, PANEL_TITLES_LEAST, MIN_PANEL);
+            float most = Math.Clamp(room, least, MAX_PANEL);
+            bottom.MinSize = new Vector2(0.0f, least);
             bottom.MaxSize = new Vector2(0.0f, most);
-            float open = Math.Min(Math.Max(panelWanted, MIN_PANEL), most);
+            float open = Math.Min(Math.Max(panelWanted, least), most);
             if (MathF.Abs(bottom.Size.Y - open) > 0.5f)
                 bottom.Size = bottom.Size with { Y = open };
         }

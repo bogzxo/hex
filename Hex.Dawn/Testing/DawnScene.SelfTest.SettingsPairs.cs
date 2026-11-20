@@ -223,16 +223,17 @@ internal sealed partial class DawnScene
             settings.SearchExclude.SequenceEqual(HexSettings.UsualSearchExclude) && Shown().SequenceEqual(HexSettings.UsualSearchExclude) && !page.IsModified!(SEARCH_EXCLUDE));
     }
 
-    // The page on a big screen, the window most of it, the rows past their old 1120 and the text zoomed to suit
+    // The page on a big screen, the window most of it and the rows past their old 1120. Its text is the interface size
+    // like every other word, the page no longer zooms itself to make up for a size picked small
     private void TestSettingsBigDisplay(HexPointerScript test)
     {
         test.Check("settings big display: at 1600 by 900 the window opens the size it always did", () =>
-            SettingsWindow is { } window && Horizon.UI.Components.SettingsWindow.SizeFor(new Vector2(1600.0f, 900.0f), window.MinSize) == new Vector2(1152.0f, 702.0f)
-            && ScaleFor(new Vector2(1600.0f, 900.0f)) == 1.0f);
-        test.Check("settings big display: on a big screen the window is about 80% of it, the rows wider than 1120, the text zoomed", () =>
+            SettingsWindow is { } window && Horizon.UI.Components.SettingsWindow.SizeFor(new Vector2(1600.0f, 900.0f), window.MinSize) == new Vector2(1152.0f, 702.0f));
+        test.Check("settings big display: on a big screen the window is about 80% of it, the rows wider than 1120, the text at the interface size", () =>
             SettingsWindow is { } window && SettingsPage is { } page && chrome.Root.Bounds.Size is var room
+            && page.Zoom == 1.0f
             && (room.X < 3000.0f || (Near(window.Size.X, room.X * 0.8f, room.X * 0.03f) && Near(window.Size.Y, room.Y * 0.8f, room.Y * 0.03f)
-                && page.RowWidthNow > 1120.0f && page.Zoom == SettingsZoom && page.ZoomNow > 1.0f)));
+                && page.RowWidthNow > 1120.0f)));
     }
 
     // While a search is typed the sections down the left are the ones it found something in, the best first and with

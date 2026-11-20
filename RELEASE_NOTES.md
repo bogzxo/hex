@@ -1,3 +1,40 @@
+# Hex 3.2.0 Amphetamine
+
+Sharper text, a Hex that stays ready in the background, and agents that share their servers, keep their data in one place and get eight new tools.
+
+## text
+
+- letters are made at the size they're drawn instead of out of a distance field, their x height and baseline on whole pixels, so text at 100% and 125% is crisp where it was soft
+- subpixel smoothing the way Windows' ClearType draws it, on a screen under 150% when Windows has ClearType on, grey on Mac, Linux, phones and Retina screens; Text smoothing in Settings picks auto, subpixel or grayscale
+- text no longer steps at its edges while a window slides or fades in
+- one interface size for the whole of Hex, the title bar and its menus included, on top of the screen's own scale; View, Interface Size and Settings pick it, and the code's zoom and the terminal's font go on top of it
+
+## the editor
+
+- Persistent Process in Settings (and Speed on the welcome page): closing the window puts Hex to sleep instead of quitting, a few MB of memory and no CPU, and opening Hex again shows a window in well under a second; File, Exit still quits
+- Start with Windows starts Hex asleep when you sign in, so the first window is as quick as the rest
+- Hex starts quicker, the first frame sooner and the work that can wait done a moment after
+- a file with a line a fifth of a megabyte long (an agent's chat saved as JSON) opens and scrolls at once, coloured all along
+- every right-click menu is grouped and short enough to read, what throws something away last and in the error colour, the Run menu split into the session, stepping and what's looked at
+- a workspace whose .gitignore leaves out the repositories cloned into it has their code indexed again
+- the About box shows Hex's icon again
+- closing the window while it was idle no longer skips asking about unsaved changes
+- the usage limits shown for Claude are the latest it said, and a limit that's been reached shows 100%
+- keys that clashed (Properties and Agentic's fleet, Allow and Deny) only answer where they mean something
+- many places do less work each frame, and work that blocked the window happens beside it
+
+## Agentic
+
+- the Plan tab is a plan to work from: what's being done now, what needs you, what's next, the steps done folded away, filters, a step's note, files and owner a click away, and steps you add, edit, reorder or drop reach the agent
+- a chat's title is renamed in place on its card, from its menu, F2 or a double click
+- Agent Data in the Agents menu and at the foot of Agentic says how much the chats, pictures and the agents' files take, and clears old chats, pictures nothing mentions and temporary files; it all lives in a data folder next to Hex
+- Claude Code agents share Hex's servers instead of each starting its own: one Roslyn navigator for a workspace, no language servers of their own, a gigabyte less for every agent running
+- new tools for agents, in any language with a language server: callers and callees a few levels deep, implementations, type hierarchies, a rename across every file at once, a line's fixes, a file's errors, a declaration replaced by name and the projects and what uses what; hex_edit and hex_write answer with the file's errors after
+- an agent can show you pictures in the chat, and a tool's row opens or reveals the files it was given from its menu
+- the thinking dots no longer make the chat jump
+- Claude Code's chat carries on after a /compact instead of failing
+- the setting that keeps Claude Code on Hex's tools says plainly what each choice does
+
 # Hex 3.1.2 Amphetamine
 
 Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.

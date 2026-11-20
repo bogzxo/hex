@@ -9,8 +9,9 @@ namespace Hex.Core;
 // the cache had never had it. Written when the index changed, no more than every few seconds, and when Hex closes.
 internal sealed partial class HexCodeIndex
 {
-    // What the file starts with, a cache of another format thrown away rather than misread
-    private const string CACHE_MAGIC = "HEXIDX3";
+    // What the file starts with, a cache of another format thrown away rather than misread. 4, a record struct's symbol
+    // was struct rather than its name, so the outlines kept before are read again
+    private const string CACHE_MAGIC = "HEXIDX4";
 
     // The least time between two writes of the cache, in milliseconds
     private const int CACHE_EVERY = 5000;

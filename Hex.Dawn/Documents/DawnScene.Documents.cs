@@ -554,9 +554,10 @@ internal sealed partial class DawnScene
     /// </summary>
     private void ForgetClosed(HexDocument gone)
     {
-        if (lensSeen.Of == gone) lensSeen = (null, -1);
+        lensSettle.Reset();
         if (inlaysFor.Of == gone) inlaysFor = (null, -1);
-        if (foldingFor.Of == gone || foldingSeen.Of == gone) ForgetNativeFolding();
+        if (foldingFor.Of == gone) ForgetNativeFolding();
+        foldingSettle.Reset();
         if (semanticsFor.Of == gone) semanticsFor = (null, -1, 0);
         if (ownSemanticsFor.Of == gone) ownSemanticsFor = (null, -1);
         if (conflictsFor.Of == gone) conflictsFor = (null, -1);
@@ -568,6 +569,8 @@ internal sealed partial class DawnScene
             outlineKept = [];
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
+        if (crumbFoldersFor.Of == gone) crumbFoldersFor = default;
+        if (ReferenceEquals(codeTextKept.Of, gone.Editor?.Document)) ForgetCodeText();
         if (peeking?.From == gone) peeking = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
@@ -633,26 +636,31 @@ internal sealed partial class DawnScene
         // Ctrl+N is a scratchpad, a file of text to put something down in, a new layout is on the File menu. The
         // scratchpads have a menu of their own off File, the File menu is long enough as it is
         commands.Add("File/new/scratch", Said("documents.new_scratchpad"), NewScratchpad, "Ctrl+N", "note", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/new/scratch", Said("scratchpads.new_in"), NewScratchpadIn, "Ctrl+Alt+N", "note", UIKeyUse.BoundWhileTyping);
+        // Ctrl+Alt+N is Deny while an agent waits on the person (Agentic's keys), this the rest of the time
+        commands.Add("File/new/scratch", Said("scratchpads.new_in"), NewScratchpadIn, "Ctrl+Alt+N", "note", UIKeyUse.BoundWhileTyping).IsEnabled = () => !AnyRequestWaiting();
         commands.Add("File/new/scratch", Said("scratchpads.open"), OpenScratchpad, icon: "notebook");
         var move = commands.Add("File/new/scratch", Said("scratchpads.move_command"), MoveScratchpadIntoWorkspace, icon: "go-to-file");
         move.IsEnabled = () => IsScratchpad(document);
         move.PaletteOnly = true;
-        commands.Add("File/new", Said("new_project.command"), ShowNewProject, "Ctrl+Shift+N", "new-folder", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/new", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
+        // A file first, the thing made most, the rarer things made (a project, a layout, a notebook) in New off it
         commands.Add("File/new", Said("documents.new_file"), () => explorer.NewFileIn(explorer.workspace.IsEmpty ? browseDirectory : explorer.workspace.Folders[0]), icon: "file-add");
-        commands.Add("File/new", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new/make", Said("new_project.command"), ShowNewProject, "Ctrl+Shift+N", "new-folder", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/new/make", Said("welcome.new_layout"), () => Show(NewDocument()), icon: "layout");
+        commands.Add("File/open", Said("documents.open"), OpenPressed, "Ctrl+O", "folder-opened", UIKeyUse.BoundWhileTyping);
 
         // A folder right under a file, the way they're opened one after the other, not down with the workspaces
-        commands.Add("File/new", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "root-folder-opened", UIKeyUse.BoundWhileTyping);
+        commands.Add("File/open", Said("welcome.open_folder"), () => explorer.AskFolder(explorer.OpenFolder), "Ctrl+Alt+O", "root-folder-opened", UIKeyUse.BoundWhileTyping);
         AddHostedCommands();
-        recentMenu = commands.AddMenu("File/new", Said("documents.open_recent"), "history");
+        recentMenu = commands.AddMenu("File/open", Said("documents.open_recent"), "history");
         FillRecentMenu();
 
         commands.Add("File/save", Said("documents.save"), SaveFormatted, "Ctrl+S", "save", UIKeyUse.BoundWhileTyping).IsEnabled = () => !document.Editor.ReadOnly;
         commands.Add("File/save", Said("documents.save_as"), SaveAs, icon: "save-as").IsEnabled = () => !document.Editor.ReadOnly;
         commands.Add("File/save", Said("documents.save_all"), SaveAll, "Ctrl+Shift+S", "save-all", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard").IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
+        // It throws the changes away, last in its group and said in the error colour
+        MenuItem revert = commands.Add("File/save", Said("documents.revert_file"), RevertFile, icon: "discard");
+        revert.IsDestructive = true;
+        revert.IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 
         commands.Add("File/close", Said("documents.close"), Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
         commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "clear-all").IsEnabled = () => documents.Count > 1;

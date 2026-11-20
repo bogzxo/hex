@@ -45,6 +45,11 @@ internal static class HexWhatsNew
 
     private static readonly Dictionary<string, HexNewsItem[]> releases = new(StringComparer.Ordinal)
     {
+        ["3.2.0"] =
+        [
+            new("persistent_process", "go_persistent", "zap", HexNewsPlace.Setting, "persistent_process"),
+            new("launch_faster", "go_launch", "dashboard", HexNewsPlace.Setting, "persistent_at_login")
+        ],
         ["3.1.0"] =
         [
             new("agentic", "go_agents", "robot", HexNewsPlace.Side, Side: HexSide.Agents),

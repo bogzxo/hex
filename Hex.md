@@ -13,6 +13,11 @@ their section. Plans in depth are in docs/agent-workspace-plan.md, this is what'
 - Work handed to an agent stays in the face you're in.
 - Agents in this workspace use Hex's tools (hex_read, hex_edit, hex_write, hex_search, hex_terminal_run), never their own
   Read, Edit, Write, grep or cat. Claude Code's guard enforces it (strict).
+- The code is a modern, performant C# project that stays maintainable: each type one job, modules that own their
+  lifetimes (what starts something stops it), no duplicated helpers, no allocations or LINQ on hot paths, no work on
+  the UI thread that can be off it, nothing kept that can be read back, and the language's current features (records,
+  pattern matching, spans, collection expressions, source-generated interop) where they make the code clearer or faster.
+  Work that crowds a file or takes a shortcut against this is fixed, not added to.
 
 ## Agents panel and Agentic
 

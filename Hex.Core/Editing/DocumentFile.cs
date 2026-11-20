@@ -45,8 +45,8 @@ internal static class DocumentFile
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         Span<byte> start = stackalloc byte[4];
         int count = file.ReadAtLeast(start, 4, throwOnEndOfStream: false);
-        if (count >= 4 && start.SequenceEqual(new byte[] { 0, 0, 0xFE, 0xFF })) return new UTF32Encoding(true, true, true);
-        if (count >= 4 && start.SequenceEqual(new byte[] { 0xFF, 0xFE, 0, 0 })) return new UTF32Encoding(false, true, true);
+        if (count >= 4 && start.SequenceEqual((ReadOnlySpan<byte>)[0, 0, 0xFE, 0xFF])) return new UTF32Encoding(true, true, true);
+        if (count >= 4 && start.SequenceEqual((ReadOnlySpan<byte>)[0xFF, 0xFE, 0, 0])) return new UTF32Encoding(false, true, true);
         if (count >= 2 && start[0] == 0xFF && start[1] == 0xFE) return new UnicodeEncoding(false, true, true);
         if (count >= 2 && start[0] == 0xFE && start[1] == 0xFF) return new UnicodeEncoding(true, true, true);
         return new UTF8Encoding(count >= 3 && start[0] == 0xEF && start[1] == 0xBB && start[2] == 0xBF, true);

@@ -16,7 +16,7 @@ internal sealed partial class HexLanguages
         long number = ++typeFormattingRequest;
         var weak = new WeakReference<HexDocument>(of);
         var asked = server.FormatOnType(path, caret.Line, caret.Column, typed, of.Editor.TabSize, !text.Indent.StartsWith('\t'));
-        When(asked.WaitAsync(TimeSpan.FromMilliseconds(750)).ContinueWith(result => result.IsCompletedSuccessfully ? result.Result : null, TaskScheduler.Default), edits =>
+        When(asked.WaitAsync(TimeSpan.FromMilliseconds(750)), null, edits =>
         {
             if (edits is not { Count: > 0 } || number != typeFormattingRequest || !settings.FormatOnType || workspace != editWorkspaceGeneration
                 || !weak.TryGetTarget(out var open) || context.Documents.Current != open || open.Path != path

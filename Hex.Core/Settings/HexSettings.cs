@@ -48,6 +48,16 @@ internal sealed partial class HexSettings
     /// <summary>What positions and sizes land on a multiple of when something is dragged in the canvas, 0 for anywhere.</summary>
     public float Snap;
 
+    /// <summary>
+    /// How big the whole of the editor is drawn, its bars, menus, panels and every word in them, 1 for 100%. On top of the
+    /// scale the system has for the screen (150% on a laptop Windows scales by that), so 100% is the size every other
+    /// program on that screen is. The code's zoom and the terminal's font come on top of this again.
+    /// </summary>
+    public float InterfaceSize = 1.0f;
+
+    /// <summary>The least and the most <see cref="InterfaceSize"/> goes to.</summary>
+    public const float LEAST_INTERFACE_SIZE = 0.75f, MOST_INTERFACE_SIZE = 2.0f;
+
     /// <summary>How big the code is drawn against the rest of the editor, 1 for the size it comes at.</summary>
     public float CodeZoom = 1.0f;
 
@@ -62,6 +72,15 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether the editor starts with the layout that was worked on last.</summary>
     public bool ReopenLast;
+
+    /// <summary>
+    /// Persistent Process: closing the window puts the editor away and leaves Hex asleep with its graphics device and its
+    /// window hidden, so starting it again makes the editor in a moment. File, Exit quits for real.
+    /// </summary>
+    public bool PersistentProcess;
+
+    /// <summary>Whether the persistent process starts asleep with the system, so Hex is ready from the first start.</summary>
+    public bool PersistentAtLogin;
 
     /// <summary>
     /// The picture behind the code (see DawnScene.Backdrop), whether it's there, which (empty for the girl that comes with
@@ -103,6 +122,12 @@ internal sealed partial class HexSettings
     /// is nearly all UI that's the one that saves the GPU anything, at the price of softer text.
     /// </summary>
     public string RenderScale = "auto", RenderUpscaler = "cas", RenderComposition = "native_ui";
+
+    /// <summary>
+    /// How the edges of letters are smoothed: auto (ClearType's subpixels where Windows draws them on a screen under
+    /// 150%, grey elsewhere and on Retina), subpixel always, or grayscale always (the same in every screenshot).
+    /// </summary>
+    public string TextSmoothing = "auto";
 
     /// <summary>The share of each side drawn with a manual render scale, 25 to 100, and how hard CAS sharpens, 0 to 1.</summary>
     public float RenderScalePercent = 75.0f, RenderSharpness = 0.0f;

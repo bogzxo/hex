@@ -85,7 +85,8 @@ internal sealed partial class HexDesigner
         module.Scale = new Vector2(scale);
         module.Position = area.Center + canvasPan;
         module.Clip = new UIRect((area.Min - module.Position) / scale, (area.Max - module.Position) / scale);
-        module.FrameColor = FrameColor;
+        // The look's accent, the one colour that says where you are, not a blue of the designer's own beside it
+        module.FrameColor = compositor.Skin?.Palette.Accent is { } accent ? accent with { W = 0.9f } : FrameColor;
         module.FrameBackground = compositor.Skin?.Palette.Raised;
     }
 
@@ -235,6 +236,10 @@ internal sealed partial class HexDesigner
     /// </summary>
     private void HoldHover(UIComponent? under)
     {
+        // The same thing under a pointer that stood still, every tick, nothing to let go of and take again
+        if (under is null ? heldHovers.Count == 0 : heldHovers.Count > 0 && heldHovers[0] == under && heldHovers[^1].Parent is null)
+            return;
+
         foreach (var held in heldHovers)
             held.HoverHeld = false;
         heldHovers.Clear();

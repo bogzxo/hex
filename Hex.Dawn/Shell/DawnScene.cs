@@ -38,6 +38,14 @@ internal sealed partial class DawnScene : Scene
     private const float SETTLE_SECONDS = 3.0f;
     private float settleIn = SETTLE_SECONDS;
 
+    // What the start leaves until the editor has been up a moment, nothing the first frames need (see AfterStart)
+    private const float AFTER_START_SECONDS = 1.0f;
+    private readonly List<Action> afterStart = [];
+    private float afterStartIn = AFTER_START_SECONDS;
+
+    /// <summary>Has something of the start done once the editor has been on screen a moment, off the first frames' path.</summary>
+    private void AfterStart(Action run) => afterStart.Add(run);
+
     // The least the parts of the editor that take whatever room is left are given, and how much of the height
     // the canvas gets at most.
     private const float MIN_FLEXIBLE = 80;
@@ -117,16 +125,21 @@ internal sealed partial class DawnScene : Scene
         // The layouts first and the editor over them. The canvas is a hole in the editor they are seen through, so the
         // menus, lists and dialogs of the editor come out on top of them rather than under. What is dark behind the
         // layouts is a module of the stage itself, the first one, see PlaceCanvas
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: camera");
         stage = AddComponent(new UICompositor(camera));
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: stage compositor");
         compositor = AddComponent(new UICompositor(camera, TOOL_SKIN_DIRECTORY, TOOL_SKIN));
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: editor compositor");
         backdrop = stage.CreateModule();
         backdrop.ShowInLayoutDebugger = false;
         backdrop.Interactive = false;
         backdrop.LoadLayout("Assets/hex/backdrop.hor");
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: compositors and backdrop");
         // What the editor says, before anything of it is shown, its layouts name the texts by key
         ReadStrings();
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: strings");
         // The field of light the frame's glass sits over, under everything of the editor's, see DawnScene.Materials
         BuildGlow();
 
@@ -135,6 +148,7 @@ internal sealed partial class DawnScene : Scene
         chrome.ShowInLayoutDebugger = false;
         layout = chrome.LoadLayout(EDITOR_LAYOUT);
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: editor layout loaded");
         // The editor's views take turns on layers of their own, hidden in the file so they can be shown one at a time in the
         // designer and worked on. Running, which of them is up is the code's to say with Visible, so what the file starts
         // hidden starts out of sight that way and every layer is shown
@@ -143,6 +157,12 @@ internal sealed partial class DawnScene : Scene
 
         root = layout.Get<StackPanel>("root");
         top = layout.Get<StackPanel>("top");
+#if DEBUG
+        // A Debug build's mark is the grey Hex as it is, the window's and the taskbar's, not tinted the look's accent
+        // the way an installed Hex's is, so the one built from the source is never taken for it
+        if (top is TitleBar bar)
+            bar.IconColor = System.Numerics.Vector4.One;
+#endif
         toolbar = layout.Get<StackPanel>("toolbar");
         body = layout.Get<StackPanel>("body");
         activity = layout.Get<StackPanel>("activity");
@@ -168,6 +188,7 @@ internal sealed partial class DawnScene : Scene
         layoutDebugger = new HexLayoutDebugger(stage);
         LoadSettings();
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: settings");
         // Whether this run has agents at all, said before anything of theirs would be made (HexAi). The command line has
         // the last word, the settings say it otherwise, and it's kept for the run
         if (options.NoAi)
@@ -202,10 +223,12 @@ internal sealed partial class DawnScene : Scene
 
         // A folder with a solution offers Visual Studio's keys, once (DawnScene.Keys.VisualStudioOffer)
         explorer.FoldersChanged += OfferVisualStudioKeys;
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: parts up to the status bar");
         BuildStatusBar();
         BuildPanel();
         codeEditing.BuildFindBar();
         BuildQuiet();
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: status bar, panel, find bar");
         BuildTerminal();
         // The agents' panel and Agentic, never made with No AI on, nothing of them is there to tick or to lay out
         if (!HexAi.Off)
@@ -213,12 +236,14 @@ internal sealed partial class DawnScene : Scene
             BuildAgentsPanel();
             BuildNoon();
         }
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: terminal and agents");
         StartRemote();
         BuildSideTree();
         BuildExtensionViews();
         toasts = layout.Get<Notifications>("toasts");
         BuildTabs();
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: side tree, tabs");
         recent.AddRange(ReadRecent());
         AddWindowCommands();
         AddDocumentCommands();
@@ -241,7 +266,13 @@ internal sealed partial class DawnScene : Scene
         debugger.Tasks = tasks;
         debugger.InstallsItself = !options.SelfTest;
         BuildProperties();
-        languages.StartChecks();
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: commands, debugger, tests, properties");
+        // The servers' look round the machine spawns shells, which raced the first frame for the processor, so it waits
+        // until the editor is up. A self test has them at once, its checks look
+        if (options.SelfTest)
+            languages.StartChecks();
+        else
+            AfterStart(languages.StartChecks);
         languages.RestoreWhereNeeded();
         BuildEffects();
         BuildModes();
@@ -269,7 +300,7 @@ internal sealed partial class DawnScene : Scene
         // The window has no frame of the system's, the title bar is the editor's and so are the edges
         compositor.ResizesWindow = true;
 
-        SetScale(options.Scale ?? HexModes.Scale ?? ReadScale() ?? ScaleFor(Engine.WindowManager.ViewportSize), remember: false);
+        SetInterfaceSize(StartingInterfaceSize(), remember: false);
 
         nameBox.OnChanged = text =>
         {
@@ -277,18 +308,19 @@ internal sealed partial class DawnScene : Scene
             tabsDirty = codeDirty = true;
         };
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: views, keys, scale");
         designer.BuildPalette();
         extensions.Find();
         Show(NewDocument());
         startedWith = document;
 
         // The folders of last time and the files that were open in them, unless the editor was told what to open
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: palette, extensions found, first document");
         explorer.RestoreWorkspace();
 
         // A folder it was started on (dawn -window folder in a terminal) is the workspace instead, unless it's a folder of
         // the workspace of last time, which is kept whole (a restart on its first folder lost the others)
-        if (options.Folder is not null && !explorer.workspace.Folders.Any(folder =>
-                string.Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), Path.GetFullPath(options.Folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)))
+        if (options.Folder is { } startedOn && !explorer.workspace.Folders.Any(folder => PlatformPaths.Same(folder, startedOn)))
             explorer.OpenFolder(options.Folder);
 
         // The agents' chats of this workspace as they were when Hex last had it open, none read with No AI on
@@ -304,6 +336,7 @@ internal sealed partial class DawnScene : Scene
         }
 
         // A start on code rather than on layouts has the welcome without the designer round it, see DawnScene.Welcome
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: workspace and chats");
         plainWelcome = WantsPlainWelcome();
 
         if (options.Files is { Length: > 0 } named)
@@ -325,11 +358,21 @@ internal sealed partial class DawnScene : Scene
         else if (!options.Fresh)
             RestoreBackups();
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: files and backups");
         // Last, an extension's on_start finds the editor up and a file open
         extensions.StartAll();
         explorer.FoldersChanged += () => extensions.Raise("on_workspace_changed");
-        extensions.WatchFolders();
-        extensions.StartCatalog();
+        // Watching the extensions' folders and reading the catalog are nothing the first frame needs
+        if (options.SelfTest)
+        {
+            extensions.WatchFolders();
+            extensions.StartCatalog();
+        }
+        else
+        {
+            AfterStart(extensions.WatchFolders);
+            AfterStart(extensions.StartCatalog);
+        }
 
         // The file open by now was opened before any extension said what views it has, so it's asked again
         if (document.IsText)
@@ -338,6 +381,7 @@ internal sealed partial class DawnScene : Scene
         // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
         BuildMcp();
 
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor: extensions started, MCP");
         // Every part is made by now, what each tick does is put in order
         DeclareTicks();
 
@@ -389,6 +433,9 @@ internal sealed partial class DawnScene : Scene
     private long saidAt;
     private const long SAID_FOR = 10_000;
 
+    // Whether what the status bar says is an error, which stays there until it's pressed or replaced
+    private bool saidError;
+
     // The cards in the corner, for what the status bar can't hold
     private Notifications toasts = null!;
 
@@ -406,6 +453,7 @@ internal sealed partial class DawnScene : Scene
     private void Say(string message, bool error = false)
     {
         saidAt = System.Environment.TickCount64;
+        saidError = error;
         messageItem.Text = (error ? "$(error) " : string.Empty) + UIRichText.Plain(message);
         messageItem.Color = error ? ErrorColor : null;
         Note(message, error);
@@ -436,6 +484,13 @@ internal sealed partial class DawnScene : Scene
 
         if (settleIn > 0.0f && (settleIn -= dt) <= 0.0f)
             GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
+
+        if (afterStart.Count > 0 && (afterStartIn -= dt) <= 0.0f)
+        {
+            foreach (Action run in afterStart)
+                run();
+            afterStart.Clear();
+        }
         Profile.Mark("collection");
 
         UpdateZoomSettings(dt);
@@ -597,7 +652,7 @@ internal sealed partial class DawnScene : Scene
             .Add("spelling", UpdateSpelling)
             .Add("mcp", UpdateMcp);
         if (!HexAi.Off)
-            panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept);
+            panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks
             .Add("dev_restart", UpdateDevRestart)
             .Add("dev_continue", UpdateDevContinue)

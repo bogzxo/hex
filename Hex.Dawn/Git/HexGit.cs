@@ -173,6 +173,8 @@ internal sealed partial class HexGit
         wouldBe[folder] = [.. places];
     }
 
+    private const int PATHS_KEPT = 4096;
+
     // The repository of a path, looked for once per folder
     private Repository? RepositoryOf(string path)
     {
@@ -182,6 +184,11 @@ internal sealed partial class HexGit
         // Asked every tick for the file on screen, so a path asked before is answered without touching the disk
         if (foundForPath.TryGetValue(path, out Repository? asked))
             return asked;
+
+        // Every path ever asked about was kept for the whole run, the explorer asks of every row it shows. The folders'
+        // answers stay, so what's let go of is found again without touching the disk
+        if (foundForPath.Count >= PATHS_KEPT)
+            foundForPath.Clear();
 
         string folder = Directory.Exists(path) ? Path.GetFullPath(path) : Path.GetDirectoryName(Path.GetFullPath(path)) ?? path;
         if (foundFor.TryGetValue(folder, out Repository? known))

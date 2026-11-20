@@ -35,12 +35,12 @@ internal sealed partial class DawnScene
         test.Run(() => ZoomCode(0.6f));
         test.Settle(0.4f);
         test.Check("notebook zoom: zoom-out keeps the same centre content point", Centred);
-        test.Run(() => SetScale(originalScale == 2 ? 1 : 2, remember: false));
+        test.Run(() => SetInterfaceSize(originalScale == 2 ? 1 : 2, remember: false));
         test.Settle(0.5f);
         test.Check("notebook zoom: viewport resize retains the centre content point", Centred);
         test.Run(() =>
         {
-            SetScale(originalScale, remember: false);
+            SetInterfaceSize(originalScale, remember: false);
             ZoomCode(originalZoom / settings.CodeZoom);
         });
         test.Settle(0.3f);

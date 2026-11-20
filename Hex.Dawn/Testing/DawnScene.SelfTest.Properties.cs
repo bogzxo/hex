@@ -172,10 +172,10 @@ internal sealed partial class DawnScene
             picked is not null && properties.Shows == HexPropertiesShows.Component && inspectorScroll.Visible && !properties.Page.Visible
             && properties.Filter.Visible && designer.editors.ContainsKey("size"));
         float originalScale = compositor.Scale;
-        test.Run(() => SetScale(1.25f, remember: false));
+        test.Run(() => SetInterfaceSize(1.25f, remember: false));
         test.Settle(0.3f);
         test.Check("properties: the designer toolbar and both sides fit at 125%", () => Fits() && toolbar.Bounds.Max.X <= center.Bounds.Max.X + 1);
-        test.Run(() => SetScale(originalScale, remember: false));
+        test.Run(() => SetInterfaceSize(originalScale, remember: false));
         test.Wait();
         test.Run(() => properties.Filter.Text = "size");
         test.Run(() => designer.FilterRows(properties.Filter.Text));

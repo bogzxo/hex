@@ -178,7 +178,7 @@ internal sealed partial class HexRunning
         {
             foreach (string other in Directory.GetFiles(folder, "*.hor").Order(StringComparer.OrdinalIgnoreCase))
             {
-                if (string.Equals(Path.GetFullPath(other), Path.GetFullPath(path), PlatformPaths.Comparison))
+                if (PlatformPaths.Same(other, path))
                     continue;
 
                 try
@@ -273,7 +273,7 @@ internal sealed partial class HexRunning
         if (!tableCells.TryGetValue((row, column), out SourceLocation at))
             return;
 
-        bool here = at.File is null || (document.Path is { } open && string.Equals(Path.GetFullPath(at.File), Path.GetFullPath(open), PlatformPaths.Comparison));
+        bool here = at.File is null || (document.Path is { } open && PlatformPaths.Same(at.File, open));
         if (column == 0 || !here || !at.Literal || !at.Value.IsKnown)
         {
             window.SwitchView(HexView.Code);

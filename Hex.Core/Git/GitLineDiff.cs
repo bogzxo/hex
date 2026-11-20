@@ -81,9 +81,10 @@ internal static class GitLineDiff
         // The same at either end first, a gap between fixed points is often that
         while (aFrom < aTo && bFrom < bTo && a[aFrom] == b[bFrom])
             same.Add((aFrom++, bFrom++));
-        var tail = new List<(int, int)>();
+        // Most keystrokes leave no shared tail, so the list is only made when there is one
+        List<(int, int)>? tail = null;
         while (aTo > aFrom && bTo > bFrom && a[aTo - 1] == b[bTo - 1])
-            tail.Add((--aTo, --bTo));
+            (tail ??= []).Add((--aTo, --bTo));
 
         if (aFrom < aTo && bFrom < bTo)
         {
@@ -104,8 +105,11 @@ internal static class GitLineDiff
             }
         }
 
-        tail.Reverse();
-        same.AddRange(tail);
+        if (tail is not null)
+        {
+            tail.Reverse();
+            same.AddRange(tail);
+        }
     }
 
     /// <summary>

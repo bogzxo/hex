@@ -153,7 +153,7 @@ internal sealed partial class DawnScene
 
     // The open document of a file, null when it isn't open
     private HexDocument? OpenScratchpadAt(string path) =>
-        documents.FirstOrDefault(open => open.Path is { } at && string.Equals(Path.GetFullPath(at), Path.GetFullPath(path), PlatformPaths.Comparison));
+        documents.FirstOrDefault(open => open.Path is { } at && PlatformPaths.Same(at, path));
 
     /// <summary>The scratchpads with nothing in them that aren't open deleted, nobody wants a dozen empty files to pick from.</summary>
     private void SweepScratchpads()

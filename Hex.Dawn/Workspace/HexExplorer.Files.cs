@@ -111,6 +111,9 @@ internal sealed partial class HexExplorer
     private static bool IsPlainName(string name) =>
         name.Length > 0 && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && name != "." && name != "..";
 
+    /// <summary>A file or a folder shown in the machine's own file explorer, picked there, for whatever else shows files.</summary>
+    internal void RevealInSystem(string path) => RevealInExplorer(path);
+
     /// <summary>A file or a folder shown in the machine's own file explorer, picked there.</summary>
     private void RevealInExplorer(string path)
     {

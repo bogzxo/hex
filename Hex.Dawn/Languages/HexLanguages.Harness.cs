@@ -10,7 +10,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "documentSymbolProvider", out LanguageServer server, out string path))
             return false;
 
-        When(server.Symbols(path).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result ?? [] : (IReadOnlyList<LanguageServerSymbol>)[], TaskScheduler.Default), then);
+        WhenList(server.Symbols(path), then);
         return true;
     }
 }

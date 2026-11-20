@@ -91,9 +91,10 @@ internal sealed partial class HexDebugging
         else
         {
             menu.Add(context.Strings.Said(point.Enabled ? "debugging.disable_breakpoint" : "debugging.enable_breakpoint"), () =>
-            { if (Current()) ChangeSourceBreakpoints(view.Session, () => view.Session.EnableSourceBreakpoint(view.Set, point.RequestedLine, !point.Enabled)); }, icon: "circle");
+            { if (Current()) ChangeSourceBreakpoints(view.Session, () => view.Session.EnableSourceBreakpoint(view.Set, point.RequestedLine, !point.Enabled)); }, icon: point.Enabled ? "circle" : "circle-filled");
+            menu.AddSeparator();
             menu.Add(context.Strings.Said("debugging.delete_breakpoint"), () =>
-            { if (Current()) ChangeSourceBreakpoints(view.Session, () => view.Session.RemoveSourceBreakpoint(view.Set, point.RequestedLine)); }, icon: "trash");
+            { if (Current()) ChangeSourceBreakpoints(view.Session, () => view.Session.RemoveSourceBreakpoint(view.Set, point.RequestedLine)); }, icon: "trash", destructive: true);
         }
         context.Windows.Menu(menu);
     }

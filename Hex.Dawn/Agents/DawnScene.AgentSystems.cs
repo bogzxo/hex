@@ -37,6 +37,9 @@ internal sealed partial class DawnScene
         public long Made { get; set; } = NOT_DRAWN;
         public bool Open { get; set; } = true;
 
+        /// <summary>Whether its systems have been folded as it was first made, so a fold opened stays open after.</summary>
+        public bool FoldedOnce { get; set; }
+
         /// <summary>The systems folded to their head, by id, the rest showing their lines.</summary>
         public HashSet<string> Folded { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -153,6 +156,15 @@ internal sealed partial class DawnScene
         if (made != panel.Made)
         {
             HexAgentProfile[] systems = AgentSystems();
+            // Each system its head alone until it's opened, the first time the panel's made. Open, a block of a few lines a
+            // system took a third of the fleet's height, and what it says is wanted now and then; the panel's own line says
+            // when a limit is near
+            if (panel.Made == NOT_DRAWN && !panel.FoldedOnce)
+            {
+                panel.FoldedOnce = true;
+                foreach (HexAgentProfile system in systems)
+                    panel.Folded.Add(system.Id);
+            }
             panel.Made = made;
             Empty(panel.Root);
             panel.Refresh.Clear();
@@ -176,7 +188,7 @@ internal sealed partial class DawnScene
                 Text = $"$({(panel.Open ? (panel.BottomUp ? "chevron-up" : "chevron-down") : "chevron-right")}) {Said("noon.systems")}", TextScale = 0.125f, Bold = true, Dim = true,
                 Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0), Align = Origin.Left
             });
-            var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.12f, Dim = true, Align = Origin.Right });
+            var summary = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.125f, Dim = true, Align = Origin.Right });
             int summaryWorking = -1;
             panel.Refresh.Add(_ =>
             {
@@ -195,12 +207,26 @@ internal sealed partial class DawnScene
                         }
                     }
                 }
-                if (working == summaryWorking)
+                // The limit nearest its end of any chat's, said on the panel's line once it's four fifths gone, in the
+                // warning's colour, so it's seen with every system folded
+                HexAgentLimit? nearest = null;
+                for (int i = 0; i < agentChats.Count; i++)
+                {
+                    if (agentChats[i].Limit is { } limit && (limit.Used >= 0.8 || limit.State == HexAgentLimitState.Hit) && (nearest is null || limit.Used > nearest.Used))
+                        nearest = limit;
+                }
+                int near = nearest is null ? -1 : (int)Math.Round(Math.Max(0, nearest.Used) * 100);
+                if (working * 1000 + near == summaryWorking)
                     return;
-                summaryWorking = working;
+                summaryWorking = working * 1000 + near;
                 string said = working > 0
                     ? Said("noon.systems_summary_working", ("count", systems.Length.ToString(CultureInfo.InvariantCulture)), ("working", working.ToString(CultureInfo.InvariantCulture)))
                     : systems.Length.ToString(CultureInfo.InvariantCulture);
+                if (nearest is not null)
+                {
+                    Vector4 warn = nearest.State == HexAgentLimitState.Hit ? Skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f) : Skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
+                    said = $"[color:{HexColour(warn)}]$(warning) {UIRichText.Literal(HexAgentLimits.KindName(nearest.Kind))} {near}%[/color] · {said}";
+                }
                 if (summary.Text != said)
                     summary.Text = said;
             });
@@ -264,9 +290,9 @@ internal sealed partial class DawnScene
         });
         head.Add(new Label { Text = $"$({(open ? "chevron-down" : "chevron-right")})", TextScale = 0.1f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(4, 0) });
         var badge = head.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(18, 0), Size = new Vector2(22, 14), Radius = 3, Color = tint with { W = 0.22f } });
-        badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system.Name)}[/color]", TextScale = 0.085f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
+        badge.Add(new Label { Text = $"[color:{HexColour(tint)}]{Initials(system.Name)}[/color]", TextScale = 0.1f, Bold = true, Anchor = Origin.Center, Pivot = Origin.Center });
         var name = head.Add(new Label { Anchor = Origin.Left, Pivot = Origin.Left, Position = new Vector2(SYSTEM_INDENT, 0), TextScale = 0.13f, Bold = true, Align = Origin.Left });
-        var state = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.12f, Align = Origin.Right });
+        var state = head.Add(new Label { Anchor = Origin.Right, Pivot = Origin.Right, Position = new Vector2(-6, 0), TextScale = 0.125f, Align = Origin.Right });
 
         // Its lines, an icon each as the Details column has them, each hidden while it has nothing to say, so a system not
         // used yet is its head alone
@@ -337,10 +363,6 @@ internal sealed partial class DawnScene
             HexAgentChat[] chats = [.. agentChats.Where(chat => chat.Agent == system.Id)];
             int working = chats.Count(chat => chat.Running);
             string version = systemVersions.GetValueOrDefault(program) ?? string.Empty;
-            string said = UIRichText.Literal(system.Name) + (version.Length > 0 ? $" [color:{HexColour(dim)}]{UIRichText.Literal(version)}[/color]" : string.Empty);
-            if (name.Text != said)
-                name.Text = said;
-
             // The limit it's nearest, the latest any of its chats was told, since a plan's limit is the account's
             HexAgentLimit? nearest = chats.Select(chat => chat.Limit).Where(each => each is not null)
                 .OrderByDescending(each => each!.State).ThenByDescending(each => each!.Used).FirstOrDefault();
@@ -350,6 +372,24 @@ internal sealed partial class DawnScene
                 : $"[color:{HexColour(dim)}]$(pass) {Said("noon.system_ready")}[/color]";
             if (state.Text != status)
                 state.Text = status;
+
+            // Its name as much of it as fits before how it is, the version going first. In a narrow side bar the two ran
+            // into each other
+            string shown = system.Name;
+            string Named(string what, bool withVersion) => UIRichText.Literal(what) + (withVersion && version.Length > 0 ? $" [color:{HexColour(dim)}]{UIRichText.Literal(version)}[/color]" : string.Empty);
+            string said = Named(shown, true);
+            if (skin is not null)
+            {
+                // Measured without its colour's markup, which isn't drawn
+                string unmarked = System.Text.RegularExpressions.Regex.Replace(status, @"\[/?color[^\]]*\]", string.Empty);
+                float room = width - SYSTEM_INDENT - skin.Font.Measure(unmarked, 0.125f).X - 18;
+                bool withVersion = skin.Font.Measure(System.Text.RegularExpressions.Regex.Replace(said, @"\[/?color[^\]]*\]", string.Empty), 0.13f).X <= room;
+                while (!withVersion && shown.Length > 2 && skin.Font.Measure(Named(shown, false), 0.13f).X > room)
+                    shown = system.Name[..(shown.EndsWith('…') ? shown.Length - 2 : shown.Length - 1)] + "…";
+                said = Named(shown, withVersion);
+            }
+            if (name.Text != said)
+                name.Text = said;
 
             if (used is null)
                 return;
@@ -412,7 +452,7 @@ internal sealed partial class DawnScene
         limit.State == HexAgentLimitState.Hit ? skin?.Palette.Error ?? new Vector4(1.0f, 0.42f, 0.38f, 1.0f)
         : limit.Kind switch
         {
-            "five_hour" => RUNNING_BLUE,
+            "five_hour" => RunningBlue(skin),
             "seven_day" => new Vector4(0.66f, 0.52f, 0.98f, 1.0f),
             "seven_day_opus" or "seven_day_sonnet" => new Vector4(0.36f, 0.78f, 0.74f, 1.0f),
             _ => skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f)

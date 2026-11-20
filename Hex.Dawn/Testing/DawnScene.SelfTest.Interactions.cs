@@ -128,12 +128,14 @@ internal sealed partial class DawnScene
         test.Check("interaction: Peek cancels on an outside press and restores code focus", () => !shown.IsOpen && compositor.Focus == code && behindClicks == 1);
 
         float scale = 1;
-        test.Run(() => { scale = compositor.Scale; SetScale(2, remember: false); CommandPalette(); Remember(); });
+        Vector2 behindSize = default;
+        // The button behind in the corner, at 200% of a 1600 by 900 window the palette is wide enough to cover where it was
+        test.Run(() => { scale = compositor.Scale; behindSize = behind.Size; behind.Size = new Vector2(30, 24); behind.Position = new Vector2(2, 50); SetInterfaceSize(2, remember: false); CommandPalette(); Remember(); });
         test.Settle(0.3f);
         test.Run(() => Shot("interaction-command-palette-200"));
         test.Click(Outside);
         test.Check("interaction: outside dismissal works at 200% without click-through", () => !shown.IsOpen && behindClicks == 1 && compositor.Focus == code);
-        test.Run(() => SetScale(scale, remember: false));
+        test.Run(() => { SetInterfaceSize(scale, remember: false); behind.Size = behindSize; });
         test.Settle(0.2f);
 
         test.Run(() =>

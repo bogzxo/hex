@@ -77,11 +77,4 @@ internal sealed partial class HexDebugging
     /// <summary>Every breakpoint there is, its file, its line from 0 and what it has to it.</summary>
     internal IEnumerable<(string File, int Line, HexBreakpoint Settings)> AllBreakpoints() =>
         breakpoints.SelectMany(file => file.Value.Select(line => (file.Key, line, SettingsOf(file.Key, line))));
-
-    /// <summary>A frame of where it's stopped looked at, its file open at its line, the way clicking it in the stack does.</summary>
-    internal void LookAtFrame(int index)
-    {
-        if (DebugStopped && index >= 0 && index < stoppedFrames.Count)
-            ShowFrame(index);
-    }
 }

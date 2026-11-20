@@ -162,7 +162,7 @@ internal sealed partial class DawnScene
 
     /// <summary>Whether the welcome is what is on screen, nothing of anybody's open and the layout Hex started with untouched.</summary>
     private bool Welcoming => (welcomeWanted || !options.SelfTest) && documents.Count == 1 && document == startedWith
-        && document is { Path: null, IsText: false, Modified: false } && !document.Module.Root.Children.Any();
+        && document is { Path: null, IsText: false, Modified: false } && document.Module.Root.Children.Count == 0;
 
     /// <summary>Every tick, the welcome put up or taken down for what is open.</summary>
     private void UpdateWelcome()
@@ -253,6 +253,8 @@ internal sealed partial class DawnScene
         made.Get<Label>("release_name").Text = Hex.Shell.HexVersion.Name;
         made.Get<Label>("release_name").Visible = Hex.Shell.HexVersion.Name.Length > 0;
         made.Get<Label>("release_number").Text = Hex.Shell.HexVersion.Number;
+        // The build's own mark, the grey one in a Debug build and the nightly's in a nightly, as the window's is
+        made.Get<Image>("icon").File = Hex.Shell.HexIdentity.ICON;
 
         FillWelcomeNews(made);
         var sizing = new WelcomeSizing(page, made) { FillGetting = FillGettingStarted };
@@ -430,6 +432,11 @@ internal sealed partial class DawnScene
         Row("paintcan", "look", Said("welcome.getting_look_about", ("look", look)), "look", Action("change", () => OpenSettingAt("look")));
         Row("keyboard", "vs_keys", Said("welcome.getting_vs_keys_about"), "visual_studio_keys", Switch("visual_studio_keys"));
         Row("arrow-swap", "import", Said("welcome.getting_import_about"), null, Action("import_now", ImportVsCodeSettings));
+
+        Group("speed");
+        Row("zap", "persistent", Said("welcome.getting_persistent_about"), "persistent_process", Switch("persistent_process"));
+        if (OperatingSystem.IsWindows())
+            Row("debug-start", "at_login", Said("welcome.getting_at_login_about"), "persistent_at_login", Switch("persistent_at_login"));
 
         Group("ai");
         Row("circle-slash", "no_ai", Said("welcome.getting_no_ai_about"), "no_ai", Switch("no_ai"));

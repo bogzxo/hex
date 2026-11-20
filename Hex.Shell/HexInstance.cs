@@ -26,6 +26,11 @@ public sealed partial class HexInstance : IDisposable
     /// <summary>Says a line down a pipe by its name, for a test that mustn't reach the Dusk somebody has open.</summary>
     public static bool Tell(string pipeName, string line)
     {
+        // No pipe of the name at all, nobody's running. Connect waits its whole time out for a pipe that isn't there,
+        // which every start with nothing running paid before it could make its window
+        if (OperatingSystem.IsWindows() && !WaitNamedPipeW(@"\\.\pipe\" + pipeName, 1) && Marshal.GetLastPInvokeError() == ERROR_FILE_NOT_FOUND)
+            return false;
+
         try
         {
             using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
@@ -132,4 +137,10 @@ public sealed partial class HexInstance : IDisposable
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool AllowSetForegroundWindow(int process);
+
+    private const int ERROR_FILE_NOT_FOUND = 2;
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WaitNamedPipeW(string name, uint milliseconds);
 }

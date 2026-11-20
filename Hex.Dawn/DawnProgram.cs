@@ -126,7 +126,40 @@ public static partial class DawnProgram
         if (!selfTest && !window && HandOver(folder, files))
             return;
 
+        // Started with nothing to open and a Hex running already, the one asleep between uses (DawnResident) or one with its
+        // window up: that one makes its editor or comes to the front, in a moment, and this one goes
+        if (args.Length == 0 && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, "show"))
+            return;
+
+        // Started with the system to sleep until it's wanted (HexStartup), not when a Hex is running already
+        bool background = !selfTest && args.Contains(HexStartup.ARGUMENT);
+        if (background && Hex.Shell.HexInstance.Tell(DawnScene.RemotePipe, DawnResident.PING))
+            return;
+
         Directory.CreateDirectory(workspace);
+
+        // The agents' chats, pictures and caches that were in the settings folder moved into the data folder, once, before
+        // anything reads them. Only this Hex, the one that's staying, a Hex that handed over above never got here
+        if (!selfTest && check.Length == 0)
+            Hex.Core.HexData.MoveOld();
+
+        // What the editor's first moments wait on, started on the pool while the engine, the device and the window are made:
+        // WSL's distributions for the terminal's shells, and the editor's own layouts read (and the reader's code compiled)
+        // before the editor loads them on the thread that's holding the window back
+        Horizon.UI.Components.TerminalProfiles.Prefetch();
+        // The editor's statics (its strings read, the settings' catalog made), a tenth of a second the editor's making
+        // started with, run on the pool while the engine is made. The editor waits for them only if they aren't done
+        _ = Task.Run(() => System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(DawnScene).TypeHandle));
+        Horizon.UI.UILayout.Prewarm(EditorLayouts());
+        // And the grammars: the first is the TextMate registry made as well, a fifth of a second the editor's making
+        // waited on for the agents' box (Markdown) and again for the first file of code
+        _ = Task.Run(() =>
+        {
+            // Each read once as well, a grammar gets going (its rules, the languages it holds) the first time it reads, which
+            // the agents' first message and the first file of code waited on otherwise. The editor reads on the pool too
+            foreach (string kind in (string[])["message.md", "file.cs"])
+                Horizon.UI.Scripting.CodeLanguages.ForFile(kind)?.Read("x\n", 1);
+        });
 
         var options = new HexOptions(
             Open: files.Count > 0 ? files[^1].Path : null,
@@ -175,6 +208,7 @@ public static partial class DawnProgram
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
                 Maximized = size is null,
+                StartHidden = background,
                 VSync = true,
                 FramesPerSecond = selfTest && !options.Watch ? 240.0 : 120.0,
                 UpdatesPerSecond = selfTest && !options.Watch && !nativeShortcuts ? 240.0 : 120.0
@@ -185,14 +219,21 @@ public static partial class DawnProgram
         engine.ScreenshotKey = null;
 
         Horizon.Core.Diagnostics.StartupTrace.Mark("engine made");
-        var scene = new DawnScene(options);
-        Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
 
         // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Not in a self test, which
         // is the one mode and nothing else, unless it asks for the suite that goes between the two
         bool bothTested = selfTest && options.Suites?.Contains("dusk-noon", StringComparer.Ordinal) == true;
-        if ((!selfTest || bothTested) && Other is { } other)
-            Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dawn, scene, (mode, folder) => mode == Hex.Shell.HexMode.Dawn ? scene : other(folder));
+        DawnScene MakeEditor(HexOptions with)
+        {
+            var editor = new DawnScene(with);
+            if ((!selfTest || bothTested) && Other is { } other)
+                Hex.Shell.HexModes.Host(Hex.Shell.HexMode.Dawn, editor, (mode, folder) => mode == Hex.Shell.HexMode.Dawn ? editor : other(folder));
+            return editor;
+        }
+
+        // Every editor after the first made the same way, in this process, when it sleeps between uses
+        if (!selfTest)
+            DawnResident.Prepare(MakeEditor, options);
 
 #if DEBUG
         // The engine's own debugger is on F8, F9 and F10 in a Debug build, which are the C# debugger's here, so it's on
@@ -205,7 +246,9 @@ public static partial class DawnProgram
         }
 #endif
 
-        engine.SetScene(scene);
+        // Started with the system there's no editor yet, only the device and the hidden window. Made in a call of its own
+        // so nothing here holds on to it: an editor put away (DawnResident) was kept alive by this frame for the whole run
+        Begin(engine, () => background ? DawnResident.StartAsleep() : MakeEditor(options));
         engine.Run();
         Hex.Shell.HexModes.Shutdown();
 
@@ -214,6 +257,25 @@ public static partial class DawnProgram
 
         // Where the time went, with HEX_PROFILE set
         DawnScene.Profile.Report();
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void Begin(GameEngine engine, Func<Scene> first)
+    {
+        engine.SetScene(first());
+        Horizon.Core.Diagnostics.StartupTrace.Mark("editor made");
+    }
+
+    // The layouts the editor loads as it starts, its own and the shell's parts it includes, the welcome page's among them
+    private static IEnumerable<string> EditorLayouts()
+    {
+        foreach (string folder in (string[])["Assets/hex", "Assets/hex/shell"])
+        {
+            if (!Directory.Exists(folder))
+                continue;
+            foreach (string file in Directory.EnumerateFiles(folder, "*.hor"))
+                yield return file.Replace('\\', '/');
+        }
     }
 
     /// <summary>How Hex.exe makes the terminal for the same window, in a folder, see Hex.Shell.HexModes.</summary>

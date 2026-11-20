@@ -20,7 +20,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "codeLensProvider", out LanguageServer server, out string path))
             return false;
 
-        When(server.CodeLenses(path).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result ?? [] : (IReadOnlyList<LanguageServerLens>)[], TaskScheduler.Default), then);
+        WhenList(server.CodeLenses(path), then);
         return true;
     }
 
@@ -35,7 +35,7 @@ internal sealed partial class HexLanguages
         if (server.LanguageIdOf(path) is "html" or "css" or "scss" or "less" or "json" or "jsonc" or "yaml" or "markdown" or "toml" or "xml")
             return false;
 
-        When(server.Symbols(path).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result ?? [] : (IReadOnlyList<LanguageServerSymbol>)[], TaskScheduler.Default), then);
+        WhenList(server.Symbols(path), then);
         return true;
     }
 
@@ -45,7 +45,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "codeLensProvider", out LanguageServer server, out _))
             return false;
 
-        When(server.ResolveLens(lens).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : null, TaskScheduler.Default), then);
+        When(server.ResolveLens(lens), null, then);
         return true;
     }
 
@@ -55,7 +55,7 @@ internal sealed partial class HexLanguages
         if (!Serves(of, "referencesProvider", out LanguageServer server, out string path))
             return false;
 
-        When(server.References(path, line, character).ContinueWith(asked => asked.IsCompletedSuccessfully ? asked.Result : [], TaskScheduler.Default), then);
+        When(server.References(path, line, character), [], then);
         return true;
     }
 }

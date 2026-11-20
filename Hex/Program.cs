@@ -34,6 +34,11 @@ internal static partial class Program
         if (args.Contains("--harness-hook"))
             return Hex.Core.HexHarnessGuard.Run(args);
 
+        // A heavy stdio server shared through the Hex an agent runs in (McpProxy), before --help or the bridge, which the
+        // server's own command line after -- may look like
+        if (Hex.Core.McpProxy.IsProxyMode(args))
+            return Hex.Core.McpProxy.Run(args);
+
         // A terminal nobody picked a theme for is Solstice's own of Dusk, before any settings are read
         Horizon.UI.Components.TerminalSettings.UsualTheme = Hex.Core.HexSettings.USUAL_TERMINAL_THEME;
 
@@ -87,7 +92,7 @@ internal static partial class Program
         HexIdentity.Claim(mode);
 
         string[] rest = [.. args.Where(arg => !arg.Equals("--dusk", StringComparison.OrdinalIgnoreCase))];
-        rest = Dropped(rest, mode, out List<string> more);
+        rest = Dropped(rest, mode);
 
         // Either mode can swap to the other in its own window (Ctrl+Alt+Shift+D), each made the first time it's wanted
         DawnProgram.Other = DuskProgram.Scene;
@@ -102,9 +107,6 @@ internal static partial class Program
         }
         else
         {
-            // more than one file dropped, the rest go to the Dawn that opens the first once it's listening
-            if (more.Count > 0)
-                _ = Task.Run(() => HandOver(more));
             DawnProgram.Run(rest);
         }
 
@@ -112,24 +114,20 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// The paths on their own made into what the modes take, the first file <c>--open</c> and a folder <c>--folder</c> for
-    /// Dawn, a folder <c>--cwd</c> for Dusk. A path is what comes before the first option, so never an option's value
-    /// (<c>--size 1600x900</c>). Made whole here, both modes go and work in the exe's own folder.
+    /// The paths on their own made into what Dusk takes, a folder <c>--cwd</c>. A path is what comes before the first
+    /// option, so never an option's value (<c>--size 1600x900</c>). Dawn reads its own paths, anywhere in the line and
+    /// with a line and column after them (see HexLaunch), so for it the arguments are left as they are.
     /// </summary>
-    private static string[] Dropped(string[] args, HexMode mode, out List<string> more)
+    private static string[] Dropped(string[] args, HexMode mode)
     {
-        more = [];
-
-        // Dawn reads its own paths, anywhere in the line and with a line and column after them, see HexLaunch
         if (mode == HexMode.Dawn)
             return args;
 
         int first = Array.FindIndex(args, arg => arg.StartsWith('-'));
         if (first < 0)
             first = args.Length;
-        var kept = new List<string>(args[first..]);
 
-        string? file = null, folder = null;
+        string? folder = null;
         foreach (string path in args[..first])
         {
             string full;
@@ -144,42 +142,10 @@ internal static partial class Program
 
             if (Directory.Exists(full))
                 folder ??= full;
-            else if (File.Exists(full) && mode == HexMode.Dawn)
-            {
-                if (file is null)
-                    file = full;
-                else
-                    more.Add(full);
-            }
         }
 
-        if (mode == HexMode.Dusk)
-        {
-            if (folder is not null && !kept.Contains("--cwd"))
-                kept.AddRange(["--cwd", folder]);
-            return [.. kept];
-        }
-
-        if (file is not null && !kept.Contains("--open"))
-            kept.AddRange(["--open", file]);
-        if (folder is not null && !kept.Contains("--folder"))
-            kept.AddRange(["--folder", folder]);
-        return [.. kept];
-    }
-
-    // The files after the first one dropped, told to Dawn as soon as it's listening, which takes a moment as it starts
-    private static void HandOver(List<string> files)
-    {
-        DateTime giveUp = DateTime.UtcNow.AddSeconds(20);
-        foreach (string file in files)
-        {
-            while (!HexInstance.Tell(DawnScene.RemotePipe, $"open|{file}|0"))
-            {
-                if (DateTime.UtcNow > giveUp)
-                    return;
-                Thread.Sleep(250);
-            }
-        }
+        string[] kept = args[first..];
+        return folder is not null && !kept.Contains("--cwd") ? [.. kept, "--cwd", folder] : kept;
     }
 
     /// <summary>
