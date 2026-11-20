@@ -218,6 +218,9 @@ public static partial class DawnProgram
         // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
 
+        // The frame or two before the editor draws is the ground of Hex's own dark look, not the engine's night blue
+        engine.LoadingScreen.Color = HexIdentity.LOADING_COLOR;
+
         Horizon.Core.Diagnostics.StartupTrace.Mark("engine made");
 
         // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Not in a self test, which

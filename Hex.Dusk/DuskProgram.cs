@@ -132,6 +132,9 @@ public static class DuskProgram
         // F12 is the terminal's, the engine took a screenshot with it and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
 
+        // The frame or two before the terminal draws is Hex's dark ground, not the engine's night blue
+        engine.LoadingScreen.Color = HexIdentity.LOADING_COLOR;
+
         var scene = new DuskScene(options);
 
         // The editor in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it, never in a self test

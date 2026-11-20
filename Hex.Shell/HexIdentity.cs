@@ -28,6 +28,12 @@ public static partial class HexIdentity
         HexVersion.Dev ? "Assets/hex_icon_dev.png" : "Assets/hex_icon.png";
 #endif
 
+    /// <summary>
+    /// What the window shows before Hex draws its first frame, the ground of its dark look, so a start or a wake goes from
+    /// this straight to Hex rather than through the engine's picture.
+    /// </summary>
+    public static readonly System.Numerics.Vector3 LOADING_COLOR = new(0.094f, 0.090f, 0.122f);
+
     /// <summary>The mode the process was started in, Dawn until <see cref="Claim"/> says otherwise.</summary>
     public static HexMode Mode { get; private set; } = HexMode.Dawn;
 
