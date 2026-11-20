@@ -99,6 +99,18 @@ internal sealed partial class DawnScene
         test.Check("mcp-check: afterwards the server's text is the disk's, nothing wrong with any of them", () =>
             asked is { IsCompletedSuccessfully: true } && asked.Result.AllText().Contains("0 errors", StringComparison.Ordinal));
 
+        // Asked again with nothing changed, it's answered from what the server last said, not waited on
+        test.Run(() =>
+        {
+            clock.Restart();
+            asked = McpTools.Call("hex_diagnostics", new JsonObject { ["paths"] = files[1] }, CancellationToken.None);
+        });
+        test.WaitFor(() => asked?.IsCompleted == true, 10.0f);
+        double again = 0.0;
+        test.Run(() => Console.WriteLine($"[Hex self-test] mcp-check: diagnostics of an unchanged file took {again = clock.Elapsed.TotalSeconds:0.00} s"));
+        test.Check("mcp-check: what's wrong with a file that hasn't changed is said at once", () =>
+            asked is { IsCompletedSuccessfully: true } && asked.Result.AllText().Contains("0 errors", StringComparison.Ordinal) && again < 0.5);
+
         test.Run(LanguageServers.StopAll);
     }
 }

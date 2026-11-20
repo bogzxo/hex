@@ -469,7 +469,10 @@ internal sealed partial class HexLanguages
 
                 lintIn.Remove(due);
                 if (linters.TryGetValue(due, out LanguageServer? server) && due.Path is { } path)
+                {
                     server.Change(path, due.Editor.Text);
+                    agentSent[Path.GetFullPath(path)] = System.Environment.TickCount64;
+                }
             }
 
             dueNow.Clear();

@@ -925,8 +925,11 @@ internal sealed partial class DawnScene
         foreach (string path in paths)
         {
             before[path] = languages.AgentDiagnostics(path).Count;
-            if (languages.AgentServer(path, start: true, out string? why) is null)
+            if (languages.AgentServer(path, start: true, out string? why) is not { } server)
                 notes[path] = why ?? "no language server reads it";
+            // A file whose text was just sent is asked about at once, where its server can be asked
+            else if (server.IsReady && languages.AgentSentSince(path, asked))
+                languages.AgentAskDiagnostics(path, server);
         }
 
         // Each file waited on until its server's said something of it, a file it already has said of no longer. A server
@@ -959,9 +962,12 @@ internal sealed partial class DawnScene
             yield return null;
         }
 
-        // One said of before is given a moment for what it says of the latest text, a file just written was told again
+        // One said of before whose text was sent again just now (it changed on the disk) is given a moment for what's said
+        // of the latest text. One that hasn't changed isn't waited on: every call sat out the whole 1.5 s for a word that
+        // was never coming, the file not having been sent
         long settle = System.Environment.TickCount64 + 1500;
-        while (paths.Any(path => !notes.ContainsKey(path) && languages.AgentDiagnostics(path).Count == before[path] && before[path] > 0) && System.Environment.TickCount64 < settle)
+        while (paths.Any(path => !notes.ContainsKey(path) && before[path] > 0 && languages.AgentSentSince(path, asked) && !languages.AgentSaidSince(path, asked))
+            && System.Environment.TickCount64 < settle)
             yield return null;
 
         Func<string, string> relative = McpRelative();
