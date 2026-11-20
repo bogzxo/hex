@@ -22,6 +22,10 @@ internal sealed partial class DawnScene
     private StatusItem mcpItem = null!;
     private readonly ConcurrentQueue<HexMcpCall> mcpCalls = new();
     private HexMcpCall? mcpCurrent;
+
+    // The calls stepped alongside the one going on (HexMcpCall.Alongside), as they come and as they're going
+    private readonly ConcurrentQueue<HexMcpCall> mcpAlongsideIn = new();
+    private readonly List<HexMcpCall> mcpAlongside = [];
     private volatile bool mcpChanged;
     private float mcpFoldersWait;
     private int mcpClientsShown;
@@ -130,6 +134,11 @@ internal sealed partial class DawnScene
             waiting.Finish(McpToolResult.Error("Hex's MCP server was switched off."));
         mcpCurrent?.Finish(McpToolResult.Error("Hex's MCP server was switched off."));
         mcpCurrent = null;
+        while (mcpAlongsideIn.TryDequeue(out HexMcpCall? coming))
+            coming.Finish(McpToolResult.Error("Hex's MCP server was switched off."));
+        foreach (HexMcpCall going in mcpAlongside)
+            going.Finish(McpToolResult.Error("Hex's MCP server was switched off."));
+        mcpAlongside.Clear();
         agentPointer.Release();
         mcpChanged = true;
     }
@@ -161,7 +170,7 @@ internal sealed partial class DawnScene
     /// <summary>A call from a client, queued for the next tick, the editor woken for it. From the pipe's threads.</summary>
     internal void QueueMcp(HexMcpCall call)
     {
-        mcpCalls.Enqueue(call);
+        (call.Alongside ? mcpAlongsideIn : mcpCalls).Enqueue(call);
         Engine.WindowManager.Wake();
 
         // The editor isn't drawn while Dusk is on screen. A call that drives the editor brings it back, one about agents or
@@ -176,14 +185,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateMcp(float dt)
     {
-        if (mcpHost is null && mcpCurrent is null && mcpCalls.IsEmpty && !agentPointer.Taken)
+        if (mcpHost is null && mcpCurrent is null && mcpCalls.IsEmpty && mcpAlongside.Count == 0 && mcpAlongsideIn.IsEmpty && !agentPointer.Taken)
             return;
 
         agentPointer.Update(Engine.Input.Mouse.Position);
         RunMcpCalls();
 
         // The robot breathes while an agent's call is going, so it's plain it's doing something to Hex right now
-        bool calling = mcpCurrent is not null || !mcpCalls.IsEmpty;
+        bool calling = mcpCurrent is not null || !mcpCalls.IsEmpty || mcpAlongside.Count > 0 || !mcpAlongsideIn.IsEmpty;
         if (calling != mcpCalling)
         {
             mcpCalling = calling;
@@ -228,6 +237,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private void RunMcpCalls(bool behind = false)
     {
+        RunMcpAlongside(behind);
         for (int started = 0; started < 8; started++)
         {
             if (mcpCurrent is null)
@@ -257,6 +267,30 @@ internal sealed partial class DawnScene
         }
     }
 
+    /// <summary>
+    /// The calls that don't wait their turn a step each, an edit or a language server's answer going on while a call
+    /// that drives the editor (or waits on a server) is, so an edit is made the tick after it comes whatever's ahead of it.
+    /// </summary>
+    private void RunMcpAlongside(bool behind)
+    {
+        while (mcpAlongsideIn.TryDequeue(out HexMcpCall? coming))
+            mcpAlongside.Add(coming);
+        if (mcpAlongside.Count == 0)
+            return;
+
+        for (int i = mcpAlongside.Count - 1; i >= 0; i--)
+        {
+            HexMcpCall call = mcpAlongside[i];
+            if (behind && call.NeedsEditor)
+                continue;
+            if (call.Step())
+                mcpAlongside.RemoveAt(i);
+        }
+
+        if (mcpAlongside.Count > 0)
+            Engine.WindowManager.NoteChange();
+    }
+
     /// <summary>Whether an agent is connected right now, for the self test.</summary>
     internal int McpClients => mcpHost?.Clients.Count ?? 0;
 
@@ -269,15 +303,23 @@ internal sealed partial class DawnScene
 /// on its own tick, null for "not yet" and a result for done. It's given up on past its deadline or when cancelled.
 /// </summary>
 internal sealed class HexMcpCall(string name, IEnumerator<McpToolResult?> run, float timeout, CancellationToken cancel,
-    int? chat = null, bool needsEditor = true)
+    int? chat = null, bool needsEditor = true, bool alongside = false)
 {
     private readonly TaskCompletionSource<McpToolResult> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly long deadline = System.Environment.TickCount64 + (long)(timeout * 1000.0f);
+    private bool started;
+    private McpToolResult? soFar;
 
     public Task<McpToolResult> Done => done.Task;
 
     /// <summary>Whether it has to have the editor on screen, false for one that runs as well while Dusk is up.</summary>
     public bool NeedsEditor => needsEditor;
+
+    /// <summary>
+    /// Whether it's stepped alongside the call going on rather than after it, for a tool that doesn't drive the editor
+    /// (an edit, a language server's answer): hex_edit queued behind a hex_calls waiting on csharp-ls timed out unstarted.
+    /// </summary>
+    public bool Alongside => alongside;
 
     /// <summary>The next step, true once the call is over (done, failed, timed out or cancelled).</summary>
     public bool Step()
@@ -289,14 +331,27 @@ internal sealed class HexMcpCall(string name, IEnumerator<McpToolResult?> run, f
             return Finish(McpToolResult.Error($"{name} was cancelled."));
 
         if (System.Environment.TickCount64 > deadline)
-            return Finish(McpToolResult.Error($"{name} timed out after {timeout:0.#} seconds."));
+        {
+            // What it had done is the answer when it had done something, its edit landed and only the waiting after was cut
+            if (soFar is not null)
+                return Finish(McpToolResult.Text($"{soFar.AllText()}\n(What came after wasn't waited for, {name} ran out of its {timeout:0.#} s. The change above was made.)"));
+            return Finish(McpToolResult.Error(started
+                ? $"{name} timed out after {timeout:0.#} seconds."
+                : $"{name} timed out after {timeout:0.#} seconds waiting for the editor to take it, it never started and nothing was done."));
+        }
 
         // The editor's thread runs every client's calls, so who's calling is said for this step and taken back after it
         McpServer.CallingChat.Value = chat;
+        started = true;
         try
         {
             if (!run.MoveNext())
-                return Finish(McpToolResult.Error($"{name} said nothing."));
+                return Finish(soFar is not null ? McpToolResult.Text(soFar.AllText()) : McpToolResult.Error($"{name} said nothing."));
+            if (run.Current is { SoFar: true } partial)
+            {
+                soFar = partial;
+                return false;
+            }
             if (run.Current is { } result)
                 return Finish(result);
             return false;
@@ -327,7 +382,7 @@ internal sealed class HexMcpCall(string name, IEnumerator<McpToolResult?> run, f
 /// doesn't pull the editor forward. TakesCaller has the calling chat put in its arguments as the agents' tools have it.
 /// </summary>
 internal sealed record HexMcpTool(McpTool Meta, Func<JsonObject, IEnumerable<McpToolResult?>>? Run, float Timeout = 30.0f,
-    Func<JsonObject, CancellationToken, Task<McpToolResult>>? RunAway = null, bool NeedsEditor = true, bool TakesCaller = false);
+    Func<JsonObject, CancellationToken, Task<McpToolResult>>? RunAway = null, bool NeedsEditor = true, bool TakesCaller = false, bool Alongside = false);
 
 /// <summary>
 /// The tools as the agent of a chat of the Agents panel sees them, the tools about agents told which chat is calling
@@ -387,7 +442,7 @@ internal sealed class HexMcpTools : IMcpTools
 
         // A call that says how long it may wait (wait_for's timeout) gets that and a little more
         float timeout = arguments.Number("timeout") is { } asked ? (float)Math.Clamp(asked, 0.1, 600.0) + 5.0f : tool.Timeout;
-        var call = new HexMcpCall(name, tool.Run!(arguments).GetEnumerator(), timeout, cancel, caller, tool.NeedsEditor);
+        var call = new HexMcpCall(name, tool.Run!(arguments).GetEnumerator(), timeout, cancel, caller, tool.NeedsEditor, tool.Alongside);
         hex.QueueMcp(call);
         return call.Done;
     }
