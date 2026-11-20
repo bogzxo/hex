@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
             if (harness is { } made)
                 return made;
 
-            harness = new HexCodeIndex(() => harnessRoots, options.SelfTest ? null : Path.Combine(TerminalFiles.UserFolder, "harness"));
+            harness = new HexCodeIndex(() => harnessRoots, options.SelfTest ? null : Hex.Core.HexData.HarnessCache);
             AppDomain.CurrentDomain.ProcessExit += harnessExit = (_, _) => harness?.SaveCache();
             return harness;
         }

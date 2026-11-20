@@ -154,6 +154,8 @@ internal sealed partial class DawnScene
             Tooltip = Said("agents_panel.harness_tip"), OnPressed = ShowHarnessSaved
         });
         agentsHarnessShown = (-1, -1);
+        // And under that, how much the agents' data takes on the disk, opening its folders and tidying it (DawnScene.AgentData)
+        BuildAgentData();
 
         // The chat in the middle, the Agents view is put in it as Noon comes up
         // The wheel turned over the margins round the chat's column scrolls the chat, as it would over the column itself
@@ -313,7 +315,7 @@ internal sealed partial class DawnScene
 
         noonFleet.Size = new Vector2(fleetWidth, height);
         float systems = noonSystems is not null && SystemsTall(noonSystems) is > 0 and var tall ? tall + noonFleet.Spacing : 0.0f;
-        noonFleetScroll.Size = new Vector2(fleetWidth - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - NOON_FILTER - noonFleet.Spacing - systems - NOON_HARNESS - noonFleet.Spacing));
+        noonFleetScroll.Size = new Vector2(fleetWidth - noonFleet.Padding.Total.X, MathF.Max(40, height - noonFleet.Padding.Total.Y - 52 - NOON_FILTER - noonFleet.Spacing - systems - 2 * (NOON_HARNESS + noonFleet.Spacing)));
         if (over)
             return;
         // The chat a column of a reading width down the middle of its card, the way a long line is hard to follow
