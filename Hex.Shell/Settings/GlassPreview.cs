@@ -63,10 +63,13 @@ public sealed class GlassPreview : UIComponent
         // A side panel down the left on the sides' glass, a popup in the middle on the popups'
         var sideRect = new UIRect(area.Min + new Vector2(16.0f, 16.0f), new Vector2(area.Min.X + area.Width * 0.24f, area.Max.Y - 16.0f));
         if (on)
-            list.Glass(sideRect, 0.0f, side.Blur, 0.0f);
+            list.Glass(sideRect, 0.0f, side.Blur, side.Bend);
         list.Rect(sideRect, on ? side.Over(skin.PanelColor with { W = 1.0f }) : skin.PanelColor with { W = 1.0f });
         if (on && side.Rim > 0.0f)
+        {
+            list.Sheen(sideRect, 0.0f, side.Rim);
             list.SilverLining(sideRect, 0.0f, side.Rim);
+        }
         list.Text(HexText.Get("glass_preview.side"), sideRect.Shrink(new UIEdges(10.0f)), Origin.TopLeft, skin.TextScale * CARD_TEXT, skin.TextColor, markup: false);
 
         var popupRect = new UIRect(new Vector2(area.Min.X + area.Width * 0.36f, area.Min.Y + 26.0f), new Vector2(area.Max.X - area.Width * 0.08f, area.Max.Y - 26.0f));

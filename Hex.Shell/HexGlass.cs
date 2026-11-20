@@ -5,46 +5,49 @@ namespace Hex.Shell;
 
 /// <summary>
 /// How thick the glass is, out of the four sliders of the effects (glass_blur, glass_clarity, glass_rim and glass_bend in
-/// the editor's section, one setting for both modes). The popups get them as they are, the side panels a quieter glass
-/// worked out of the same, a little more blur and a lot less rim and no bend, there's nothing on most of a side but a
-/// tree and a lens on that much glass looks like the window's melting.
+/// the editor's section, one setting for both modes). Every surface is the one glass: the popups, the side panels and the
+/// windows all smear as far (the blur slider, to the pixel) and have the same rim. The windows and the sides are the
+/// broad surfaces, a pane that big keeps no more of a lens than <see cref="BROAD_BEND"/> (a lens that deep on a whole side
+/// looks like the window's melting), and a window, a page of sentences, is the one that is also a little less clear. That
+/// is all the difference there is between them, and it is made here and nowhere else.
+/// <para>
+/// The blur used to be worked out per kind of surface, a window twice the popups' and at least 20, a side a fifth more,
+/// so the settings, the menus and the side bars were never the same frost however the slider was set.
+/// </para>
 /// </summary>
 public static class HexGlass
 {
     /// <summary>What the sliders come as, clear glass with a bright rim and a strong lens.</summary>
     public static readonly float BLUR = UIGlass.Clear.Blur, CLARITY = UIGlass.Clear.Clarity, RIM = UIGlass.Clear.Rim, BEND = UIGlass.Clear.Bend;
 
-    /// <summary>The glass of the dialogs, menus and the palette.</summary>
+    /// <summary>The glass of the dialogs, menus, dropdowns, tooltips and the palette, the sliders as they are.</summary>
     public static UIGlass Popup(float blur, float clarity, float rim, float bend) => UIGlass.Lens(blur, clarity, rim, bend);
 
-    /// <summary>
-    /// The glass of a window that stays up over everything (the settings), the popups' less clear and with less of
-    /// a lens. A page of sentences over clear glass is a page nobody can read, and a lens on that much edge looks like a
-    /// fishbowl. It was held to one clarity for every look, and Fluid's windows came out the same solid navy as Frosted's.
-    /// <para>
-    /// Blurred twice as far as a popup and never less than WINDOW_BLUR, and under half as clear. A window stays up over the
-    /// designer's canvas, and at the popups' blur and three quarters of their clarity a panel of the layout under it came
-    /// through as a ghost of a box behind the profiles' cards and the theme rows.
-    /// </para>
-    /// </summary>
-    public static UIGlass Window(UIGlass popup) => popup with
-    {
-        Blur = MathF.Min(MathF.Max(popup.Blur * 2.0f, WINDOW_BLUR), 64.0f),
-        Clarity = WindowClarity(popup.Clarity),
-        Bend = MathF.Min(popup.Bend, 6.0f)
-    };
+    // The deepest lens a broad surface (a side, a window) gets, in the UI's pixels
+    private const float BROAD_BEND = 6.0f;
 
-    // How much of the popups' clarity a window keeps, and the least it's blurred
-    private const float WINDOW_CLARITY = 0.45f, WINDOW_BLUR = 20.0f;
-
-    // The clarity the sliders come as, and the most a window gets with the slider all the way up
-    private const float CLEAREST_WINDOW = 0.95f;
+    // How much of the popups' clarity a window keeps up to the slider's usual, and the most clarity a window gets with
+    // the slider all the way up
+    private const float WINDOW_CLARITY = 0.6f, CLEAREST_WINDOW = 1.0f;
     private static readonly float USUAL_CLARITY = UIGlass.Clear.Clarity;
 
     /// <summary>
-    /// A window's clarity out of the slider's. Up to the usual it's under half the popups', the way the looks were made,
-    /// and past that it goes on up to nearly clear glass with the slider. It was held to a quarter whatever the slider
-    /// said, and glass turned right up still had a solid window over it.
+    /// The glass of a broad surface out of the popups': the same blur, rim and clarity, only the lens held to what a surface
+    /// that big can take.
+    /// </summary>
+    private static UIGlass Broad(UIGlass popup) => popup with { Bend = MathF.Min(popup.Bend, BROAD_BEND) };
+
+    /// <summary>
+    /// The glass of a window that stays up over everything (the settings, the keys, a page of help). The popups' blur, rim
+    /// and lens (held to <see cref="BROAD_BEND"/>), less clear: a page of sentences over clear glass is a page nobody can
+    /// read, and a panel of the layout under it came through as a ghost of a box behind the profiles' cards and the theme rows.
+    /// </summary>
+    public static UIGlass Window(UIGlass popup) => Broad(popup) with { Clarity = WindowClarity(popup.Clarity) };
+
+    /// <summary>
+    /// A window's clarity out of the slider's. Up to the usual it's a share of the popups', the way the looks were made,
+    /// and past that it goes on up with the slider to as clear as the slider says. It was held to a quarter whatever the
+    /// slider said, and glass turned right up still had a solid window over it.
     /// </summary>
     public static float WindowClarity(float clarity)
     {
@@ -57,17 +60,10 @@ public static class HexGlass
     }
 
     /// <summary>
-    /// The glass of the side panels, out of the same sliders. Liquid glass (a bend) keeps more of its rim there, a light
-    /// along the edge of the side as there is along a popup's, so the side reads as the same stuff as what pops up over it.
+    /// The glass of the side panels, out of the same sliders: the popups' blur, clarity and rim, the lens held to
+    /// <see cref="BROAD_BEND"/> so the side reads as the same stuff as what pops up over it.
     /// </summary>
-    public static UIGlass Side(float blur, float clarity, float rim, float bend = 0.0f)
-    {
-        UIGlass pane = UIGlass.Pane(blur, clarity, rim);
-        return bend > 0.0f ? pane with { Rim = Math.Clamp(rim * LIQUID_SIDE_RIM, 0.0f, 1.0f) } : pane;
-    }
-
-    // How much of the rim the side of liquid glass keeps
-    private const float LIQUID_SIDE_RIM = 0.6f;
+    public static UIGlass Side(float blur, float clarity, float rim, float bend = 0.0f) => Broad(Popup(blur, clarity, rim, bend));
 
     /// <summary>
     /// How much of the window's tone is laid over its field of light, by how clear the look's glass is. Clear glass lets
