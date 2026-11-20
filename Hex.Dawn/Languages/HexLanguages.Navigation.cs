@@ -592,7 +592,7 @@ internal sealed partial class HexLanguages
 
         if (!Serves(of, "codeActionProvider", out LanguageServer server, out string path))
         {
-            OfferFixes(of, own, null, snapshot);
+            OfferFixes(of, own, null, snapshot, from, to);
             return;
         }
 
@@ -601,29 +601,72 @@ internal sealed partial class HexLanguages
         FlushEditsToServer(server);
         Task<IReadOnlyList<LanguageServerAction>> asked = server.Actions(path, from.Line, from.Column, to.Line, to.Column)
             .ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : (IReadOnlyList<LanguageServerAction>)[], TaskScheduler.Default);
-        When(asked, actions => OfferFixes(of, [.. own, .. actions], server, snapshot));
+        When(asked, actions => OfferFixes(of, [.. own, .. actions], server, snapshot, from, to));
     }
 
-    // The fixes there are, picked from a list, or said there are none
-    private void OfferFixes(HexDocument of, IReadOnlyList<LanguageServerAction> actions, LanguageServer? server, EditSnapshot snapshot)
+    /// <summary>
+    /// The rows Ctrl+.'s menu has besides the server's and the editor's, for the caret's lines or what's selected (the
+    /// agents', set by the scene), after them. Null or empty for none.
+    /// </summary>
+    internal Func<HexDocument, UITextPosition, UITextPosition, IReadOnlyList<UIChoice>>? MoreActions { get; set; }
+
+    // Where a server's action goes in the menu: what fixes something first, then refactorings, then what tidies the file
+    private static int ActionGroup(LanguageServerAction action) =>
+        action.Fixes ? 0 : action.Kind.StartsWith("refactor", StringComparison.Ordinal) ? 1 : action.Kind.StartsWith("source", StringComparison.Ordinal) ? 2 : 1;
+
+    // The actions there are, picked from a menu by the caret, or said there are none
+    private void OfferFixes(HexDocument of, IReadOnlyList<LanguageServerAction> actions, LanguageServer? server, EditSnapshot snapshot, UITextPosition from, UITextPosition to)
     {
         if (of.Path is not { } path || !EditsCurrent(snapshot, [path]))
             return;
-        if (actions.Count == 0)
+
+        // What fixes the line first, the one the server would pick at the very top so Enter takes it, then the
+        // refactorings, then what tidies the file. csharp-ls put Extract local function over the fix for a misspelt name,
+        // and Enter took it. Each says its group in front and shows what it would change under the list while it's the
+        // one highlighted, Visual Studio's lightbulb by the caret rather than up at the top of the window
+        string text = of.Editor.Text;
+        string[] groups = [context.Strings.Said("code_server.actions_fix"), context.Strings.Said("code_server.actions_refactor"), context.Strings.Said("code_server.actions_source")];
+        string[] icons = ["lightbulb", "wrench", "tools"];
+        var choices = new List<UIChoice>();
+        foreach (LanguageServerAction action in actions.OrderBy(ActionGroup).ThenBy(action => action.Preferred ? 0 : 1))
+        {
+            int group = ActionGroup(action);
+            choices.Add(new UIChoice(action.Title, () => TakeAction(server, action, snapshot, path))
+            {
+                Quiet = groups[group], Icon = action.Preferred ? "sparkle" : icons[group], Preview = FixPreview(of.Path, text, action)
+            });
+        }
+        choices.AddRange(EditorActions(of));
+        if (MoreActions?.Invoke(of, from, to) is { Count: > 0 } more)
+            choices.AddRange(more);
+
+        if (choices.Count == 0)
         {
             context.Notices.Say(context.Strings.Said("code_server.no_fixes_here"));
             return;
         }
 
-        // What fixes the line first, the refactors after. csharp-ls put Extract local function over the fix for a
-        // misspelt name, and Enter took it. By the caret with what each would change under the list, Visual Studio's
-        // lightbulb, rather than up at the top of the window
         of.Editor.HideSignature();
-        string text = of.Editor.Text;
-        List<UIChoice> choices = [.. actions.OrderBy(action => action.Fixes ? 0 : 1).Select(action =>
-            new UIChoice(action.Title, () => TakeAction(server, action, snapshot, path)) { Preview = FixPreview(of.Path, text, action) })];
-        context.Windows.ChooseAtCaret(context.Strings.Said("code_server.fixes_title"),
-            context.Strings.Said("code_server.fixes_prompt", ("server", server is null ? "the compiler" : ShownName(server))), choices, of.Editor);
+        string by = server is null ? context.Strings.Said("code_server.actions_by_compiler") : ShownName(server);
+        context.Windows.ChooseAtCaret(context.Strings.Said("code_server.actions_title"),
+            context.Strings.Said("code_server.actions_prompt", ("server", by)), choices, of.Editor);
+    }
+
+    // What the editor itself can do to the caret's name or what's selected through the file's server, under the fixes
+    private List<UIChoice> EditorActions(HexDocument of)
+    {
+        var rows = new List<UIChoice>();
+        if (of.Editor.ReadOnly)
+            return rows;
+
+        string group = context.Strings.Said("code_server.actions_editor");
+        if (CanServe(of, "renameProvider") && !of.Editor.Document.HasSelection)
+            rows.Add(new UIChoice(context.Strings.Said("code_hints.rename"), () => Rename(of)) { Quiet = group, Icon = "edit", Keys = "F2" });
+        if (of.Editor.Document.HasSelection && CanServe(of, "documentRangeFormattingProvider"))
+            rows.Add(new UIChoice(context.Strings.Said("code_server.format_selection"), FormatSelection) { Quiet = group, Icon = "list-flat", Keys = "Ctrl+K Ctrl+F" });
+        if (CanOrganizeImports())
+            rows.Add(new UIChoice(context.Strings.Said("code_server.organize_imports"), OrganizeImports) { Quiet = group, Icon = "list-flat" });
+        return rows;
     }
 
     // A fix picked, its edits made and its command run (which may ask for more edits, taken as they come)
@@ -736,7 +779,8 @@ internal sealed partial class HexLanguages
         formatSelection.IsVisible = () => CanServe(context.Documents.Current, "documentRangeFormattingProvider");
         formatSelection.IsEnabled = () => context.Documents.Current.Editor.Document.HasSelection;
         commands.Add("Edit/comment", context.Strings.Said("code_server.quick_fix"), QuickFix, "Ctrl+.", "lightbulb", UIKeyUse.BoundWhileTyping)
-            .IsVisible = () => context.Documents.Current is { IsText: true, Path: not null } current && (CanServe(current, "codeActionProvider") || Checked(current));
+            .IsVisible = () => context.Documents.Current is { IsText: true, Path: not null } current
+                && (CanServe(current, "codeActionProvider") || Checked(current) || MoreActions is not null);
         commands.Add("Go/symbols", context.Strings.Said("code_server.show_hover"), ShowHover, "Ctrl+Shift+I", "info", UIKeyUse.BoundWhileTyping)
             .IsVisible = () => CanServe(context.Documents.Current, "hoverProvider");
         commands.Add("Run/check", context.Strings.Said("languages.restart_server"), RestartCurrentServer, icon: "refresh")
