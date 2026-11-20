@@ -37,9 +37,6 @@ internal sealed partial class HexDebugging
 
     private bool CanDebugNow(string? path) => !IsDebuggerSourcePath(path) && ((IsCSharp(path) && Netcoredbg() is not null) || ((IsD(path) || IsNativeSource(path)) && LldbDap() is not null) || (IsPython(path) && PythonAdapter() is not null));
 
-    /// <summary>Whether any D file has a breakpoint, what has F5 debug a D file rather than run it.</summary>
-    internal bool DBreakpoints() => breakpoints.Any(pair => IsD(pair.Key) && DebugBreakpointsOf(pair.Key).Count > 0);
-
     /// <summary>Where lldb-dap is, the PATH first then where LLVM puts itself, null when it's nowhere.</summary>
     internal static string? LldbDap()
     {
