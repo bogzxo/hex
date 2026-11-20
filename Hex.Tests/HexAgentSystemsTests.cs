@@ -351,6 +351,18 @@ public sealed class HexAgentSystemsTests : IDisposable
     }
 
     [Fact]
+    public void Claude_codes_summary_after_a_compaction_is_no_error()
+    {
+        // The summary a compact starts the new context with comes as a user message whose content is text, not parts
+        HexAgentChat chat = Play("claude_code",
+            """{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":815000,"post_tokens":25000}}""",
+            """{"type":"user","message":{"role":"user","content":"This session is being continued from a previous conversation."}}""");
+
+        Assert.False(chat.Failed);
+        Assert.DoesNotContain(chat.Entries, entry => entry.Text.Contains("couldn't read", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Claude_codes_compactions_limits_and_retries_reach_the_chat()
     {
         HexAgentChat chat = Play("claude_code",
