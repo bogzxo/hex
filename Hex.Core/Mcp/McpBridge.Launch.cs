@@ -26,7 +26,7 @@ internal static partial class McpBridge
     }
 
     /// <summary>Lets go of a console nobody else is on, the one Windows made for a Debug Hex started by a program without one.</summary>
-    private static void DropOwnConsole()
+    internal static void DropOwnConsole()
     {
         if (!OperatingSystem.IsWindows())
             return;
