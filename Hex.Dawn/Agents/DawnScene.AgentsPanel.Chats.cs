@@ -246,9 +246,7 @@ internal sealed partial class DawnScene
     /// <summary>A chat called something of somebody's own, what it was asked coming back when the name is left empty.</summary>
     private void RenameAgentChat(HexAgentChat chat)
     {
-        string now = chat.Shown;
-        AskText(Said("agents_panel.rename_title"), Said("agents_panel.rename_message"), now, Said("agents_panel.rename_go"),
-            named => chat.Rename(named), selected: (0, now.Length));
+        BeginChatRename(chat);
     }
 
     /// <summary>A chat put on screen, what was being written for the one before left behind.</summary>

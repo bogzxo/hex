@@ -165,6 +165,7 @@ internal sealed partial class DawnScene
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agent-commands", "Slash command scrolling, descriptions, keyboard navigation and local dispatch", TestAgentCommands),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
+        ("agents-rename", "An agent's card renamed in place, from its menu, F2 and a double click on its name, Enter, Escape and a click away, in the Agents view and Agentic's fleet", TestAgentsRename),
         ("agentic-perf", "Agentic with a dozen long chats, its frames, allocations and CPU standing still, switching, scrolling, streaming and opening groups", TestAgenticPerf),
         ("agents-markdown", "Agent replies render Markdown, tables, links and streaming updates at different widths", TestAgentMarkdown),
         ("noon", "Agentic from the title bar and its key, its own theme in the Solstice looks, the side bar as it was, the welcome page's Agents row", TestNoon),

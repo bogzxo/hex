@@ -423,6 +423,8 @@ internal sealed partial class DawnScene
                 codeEditing.RenameSymbol();
             else if (compositor.Focus == sideTree && Side == HexSide.Explorer)
                 RenameInExplorer();
+            else if (RenameAgentCardByKey())
+                return;
             else if (LayoutTools)
                 RenameSelected();
         }, whileTyping: true);
