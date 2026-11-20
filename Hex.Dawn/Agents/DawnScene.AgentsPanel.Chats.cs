@@ -441,9 +441,39 @@ internal sealed partial class DawnScene
         if (agentChat == chat)
             return;
 
+        ShowDraftOf(chat);
+    }
+
+    // What the person was writing in each chat and not sent yet, the code it was about with it, put back when the chat is
+    private readonly Dictionary<HexAgentChat, (string Text, AgentDraftContext? Context)> agentDrafts = [];
+
+    /// <summary>
+    /// A chat on screen in place of the one before, what was being written for that one kept with it and what was being
+    /// written for this one put back in the box, the caret at its end.
+    /// </summary>
+    private void ShowDraftOf(HexAgentChat? chat)
+    {
+        if (agentChat is not null && agentChats.Contains(agentChat))
+        {
+            if (agentsInput.Text.Length > 0 || agentDraftContext is not null)
+                agentDrafts[agentChat] = (agentsInput.Text, agentDraftContext);
+            else
+                agentDrafts.Remove(agentChat);
+        }
+
         agentChat = chat;
-        agentDraftContext = null;
-        agentsInput.Text = string.Empty;
+        if (chat is not null && agentDrafts.Remove(chat, out var draft))
+        {
+            agentDraftContext = draft.Context;
+            agentsInput.Text = draft.Text;
+            string[] lines = draft.Text.Split('\n');
+            agentsInput.GoTo(lines.Length - 1, lines[^1].Length);
+        }
+        else
+        {
+            agentDraftContext = null;
+            agentsInput.Text = string.Empty;
+        }
     }
 
     /// <summary>
@@ -477,12 +507,9 @@ internal sealed partial class DawnScene
 
         StopAgent(chat, withStarted: true);
         agentChats.Remove(chat);
+        agentDrafts.Remove(chat);
         if (agentChat == chat)
-        {
-            agentChat = chat.Parent is { } parent && ChatById(parent) is { } starter ? starter : agentChats.LastOrDefault();
-            agentDraftContext = null;
-            agentsInput.Text = string.Empty;
-        }
+            ShowDraftOf(chat.Parent is { } parent && ChatById(parent) is { } starter ? starter : agentChats.LastOrDefault());
     }
 
     /// <summary>The robot of the activity bar breathing while agents work, saying how many, so it shows with the view away.</summary>

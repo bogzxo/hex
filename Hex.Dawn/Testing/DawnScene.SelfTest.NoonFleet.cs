@@ -133,6 +133,27 @@ internal sealed partial class DawnScene
         });
         test.Wait();
 
+        // What's written and not sent stays with its chat, another chat's box its own
+        string seenJust = "?", seenBack = "?";
+        test.Run(() =>
+        {
+            agentsInput.Text = "half a thought\nfor the working one";
+            OpenAgentChat(just!);
+            seenJust = agentsInput.Text;
+            agentsInput.Text = "for the one just done";
+            OpenAgentChat(working!);
+            seenBack = agentsInput.Text;
+            OpenAgentChat(just!);
+        });
+        test.Check("noon fleet drafts: what was written for a chat comes back with it, another chat's box its own", () =>
+            seenJust.Length == 0 && seenBack == "half a thought\nfor the working one" && agentsInput.Text == "for the one just done");
+        test.Run(() =>
+        {
+            agentsInput.Text = string.Empty;
+            OpenAgentChat(working!);
+            agentsInput.Text = string.Empty;
+        });
+
         test.Run(() =>
         {
             OpenAgentChat(working!);
