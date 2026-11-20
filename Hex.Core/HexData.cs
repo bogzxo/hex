@@ -37,6 +37,12 @@ public static class HexData
     public static string AgentHistory => Path.Combine(Agents, "history");
     public static string AgentImages => Path.Combine(Agents, "images");
     public static string AgentTemp => Path.Combine(Agents, "temp");
+
+    /// <summary>
+    /// Where agents are told to put what they make for themselves (notes, probes, test scripts), inside the temporary files
+    /// so Agent Data counts and clears it with them. They put it in the person's home folder before.
+    /// </summary>
+    public static string AgentScratch => Path.Combine(AgentTemp, "scratch");
     public static string AgentLimits => Path.Combine(Agents, "limits.tsv");
     public static string Cache => Path.Combine(Root, "cache");
     public static string HarnessCache => Path.Combine(Cache, "harness");
