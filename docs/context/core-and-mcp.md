@@ -152,7 +152,7 @@ Builders return `JsonObject` nodes: `String(desc)` :13, `Number` :15, `Integer` 
 - `HexMcpTools` (:319) indexes `McpToolList()` by name (:329). `HexMcpCaller` (:309, `CALLER = "_hex_caller"` :311): for tools whose name starts `hex_agent` called from a chat bridge, `CallAs` removes any client-supplied `_hex_caller` and injects the real chat id after schema validation (so `additionalProperties:false` does not reject it, and a client cannot forge it).
 - `McpClients` (:~247), `McpTools` (:248) expose the server to the self test.
 
-### 5.4 Tool catalogue (60 tools; registry `DawnScene.McpWorkbench.cs:87` `McpToolList()`, order Screen, Editor, Workbench, Notebook, Agent, Agents, Harness, Terminal, Debug). Files are `Hex.Dawn/Agents/DawnScene.Mcp<Name>.cs`; line = the `new McpTool("hex_...")` declaration.
+### 5.4 Tool catalogue (60 tools when written, more since; registry `DawnScene.McpWorkbench.cs:87` `McpToolList()`, order Screen, Editor, Workbench, Notebook, Agent, Agents, Harness, Terminal, Debug). Files are `Hex.Dawn/Agents/DawnScene.Mcp<Name>.cs`; line = the `new McpTool("hex_...")` declaration.
 | Tool | Purpose | File:line |
 | --- | --- | --- |
 | `hex_screenshot` | PNG of the window or a region, optionally scaled | McpScreen.cs:29 |
@@ -200,6 +200,16 @@ Builders return `JsonObject` nodes: `String(desc)` :13, `Number` :15, `Integer` 
 | `hex_skim` | Files' size, language, summary, outline | McpHarness.cs:102 |
 | `hex_changes` | Files changed since an index generation | McpHarness.cs:109 |
 | `hex_harness_stats` | Calls and chars vs the plain way | McpHarness.cs:114 |
+| `hex_calls` | Callers (in) or callees (out) of a name as a tree to a depth, library callees folded; LSP callHierarchy, falls back to `hex_refs` | McpCode.cs (CodeTools) |
+| `hex_implementations` | Implementations/overrides/derived types; LSP implementation, then typeHierarchy subtypes | McpCode.cs |
+| `hex_types` | Bases (up) and derived (down) as a tree; LSP typeHierarchy | McpCode.cs |
+| `hex_rename` | Rename by name across files, all or nothing, `dry_run`; LSP rename, written to disk (or editor for unsaved tabs) | McpCode.cs |
+| `hex_fix` | Diagnostics + code actions for a line, `apply` by number/title; LSP codeAction (+resolve, commands) | McpCode.cs |
+| `hex_diagnostics` | What servers say is wrong with files now, no build, opening them if needed | McpCode.cs |
+| `hex_edit_symbol` | Replace or delete a whole declaration found by name (index `Extent`), errors after | McpCode.cs |
+| `hex_projects` | Projects and uses/used-by from .csproj, package.json, Cargo.toml, go.mod, pyproject.toml, CMakeLists.txt | McpCode.cs, `HexCodeIndex.Projects.cs` |
+
+The language-server tools take `symbol` (Name or Container.Name, found by `HexCodeIndex.Locate`, interface members without bodies too) or `path`+`line`. A file needn't be open: `HexLanguages.AgentQueries.cs` (`AgentServer`) opens it in its server with no tab, re-sends it when the disk changes, lets go after 180 s idle, and counts each publishDiagnostics per path (`AgentDiagnostics`) so `hex_edit`, `hex_write` and `hex_edit_symbol` (`check`, true by default) end with the errors the running server says after the change (a server not yet running is not started for that).
 | `hex_terminal` | list / new / select / rename / close / interrupt terminal tabs | McpTerminal.cs:18 |
 | `hex_terminal_run` | Run a command in a tab, wait, return output + exit code | McpTerminal.cs:28 |
 | `hex_debug_breakpoint` / `_breakpoints` | Set/clear/list breakpoints (file need not be open) | McpDebug.cs:21 / :30 |
