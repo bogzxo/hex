@@ -104,12 +104,22 @@ internal sealed partial class DawnScene
         {
             if (chat.FirstPending(HexAgentEntryKind.Question) is null)
                 continue;
-            foreach (HexAgentEntry question in chat.Pending.Where(entry => entry.Kind == HexAgentEntryKind.Question).ToArray())
+            // Answered after the walk, a reply takes the question out of the list being walked
+            List<HexAgentEntry>? expired = null;
+            foreach (HexAgentEntry question in chat.Pending)
             {
+                if (question.Kind != HexAgentEntryKind.Question)
+                    continue;
                 if (question.Deadline is { } deadline && now >= deadline)
-                    chat.Reply(question, null);
+                    (expired ??= []).Add(question);
                 else
                     open++;
+            }
+
+            if (expired is not null)
+            {
+                foreach (HexAgentEntry question in expired)
+                    chat.Reply(question, null);
             }
         }
 
