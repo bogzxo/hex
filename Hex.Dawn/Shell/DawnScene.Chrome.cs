@@ -296,9 +296,14 @@ internal sealed partial class DawnScene
             float editorMinimum = shown == codeScroll
                 ? code.Padding.Total.Y + MathF.Max(MIN_FLEXIBLE, 7 * MathF.Max(16, code.CaretLineHeight))
                 : MIN_FLEXIBLE;
-            float most = Math.Clamp(height - others - gap - editorMinimum, MIN_PANEL, MAX_PANEL);
+            // A window too short for both (a small one at 200%) gives the panel less than its usual least, down to its
+            // titles, rather than the code less than its few lines under the find bar
+            float room = height - others - gap - editorMinimum;
+            float least = Math.Clamp(room, PANEL_TITLES_LEAST, MIN_PANEL);
+            float most = Math.Clamp(room, least, MAX_PANEL);
+            bottom.MinSize = new Vector2(0.0f, least);
             bottom.MaxSize = new Vector2(0.0f, most);
-            float open = Math.Min(Math.Max(panelWanted, MIN_PANEL), most);
+            float open = Math.Min(Math.Max(panelWanted, least), most);
             if (MathF.Abs(bottom.Size.Y - open) > 0.5f)
                 bottom.Size = bottom.Size with { Y = open };
         }

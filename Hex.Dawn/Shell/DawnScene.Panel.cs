@@ -30,6 +30,9 @@ internal sealed partial class DawnScene
     private const int MAX_OUTPUT = 400;
     private const float MIN_PANEL = 80.0f, MAX_PANEL = 600.0f, MIN_KEPT_PANEL = 140.0f;
 
+    // The least the panel is given when the window is too short for its usual least, about its titles
+    private const float PANEL_TITLES_LEAST = 40.0f;
+
     private TabPanel bottom = null!;
     private StackPanel problems = null!, output = null!;
     private ScrollPanel problemsScroll = null!, outputScroll = null!;
