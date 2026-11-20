@@ -497,14 +497,18 @@ internal sealed partial class HexExplorer
     {
         // A backup has the icon of what it was a copy of, Foo.cs.orig a C# file's
         path = CodeLanguages.WithoutBackupSuffix(path);
-        string name = Path.GetFileName(path);
-        string extension = Path.GetExtension(path).ToLowerInvariant();
 
-        if (extension == HexWorkspace.EXTENSION)
+        // Looked at in place, asked for every row of the explorer and every tab, its name, its extension and that again in
+        // lower case were three strings a row each time the explorer was put together
+        ReadOnlySpan<char> name = Path.GetFileName(path.AsSpan());
+        ReadOnlySpan<char> extension = Path.GetExtension(path.AsSpan());
+
+        if (extension.Equals(HexWorkspace.EXTENSION, StringComparison.OrdinalIgnoreCase))
             return "folder-library";
         if (name.Equals("skin.hor", StringComparison.OrdinalIgnoreCase))
             return "paintcan";
-        if (extension == ".hor" && Path.GetFileName(Path.GetDirectoryName(path))?.Equals("localisation", StringComparison.OrdinalIgnoreCase) == true)
+        if (extension.Equals(".hor", StringComparison.OrdinalIgnoreCase)
+            && Path.GetFileName(Path.GetDirectoryName(path.AsSpan())).Equals("localisation", StringComparison.OrdinalIgnoreCase))
             return "globe";
 
         return UIFileKinds.IconOf(path);
