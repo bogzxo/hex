@@ -71,8 +71,9 @@ internal sealed partial class HexDebugging
     {
         var session = debugging!;
         var modules = session.LoadedModules;
-        bool Matches(DebugModule module) => moduleFilter.Length == 0 || new[] { module.Name, module.Path, module.SymbolStatus, module.SymbolFilePath, module.Version }
-            .Any(value => value.Contains(moduleFilter, StringComparison.OrdinalIgnoreCase));
+        bool Matches(DebugModule module) => moduleFilter.Length == 0 || Has(module.Name) || Has(module.Path) || Has(module.SymbolStatus)
+            || Has(module.SymbolFilePath) || Has(module.Version);
+        bool Has(string value) => value.Contains(moduleFilter, StringComparison.OrdinalIgnoreCase);
         var shown = modules.Where(Matches).ToArray();
         var section = new UITreeItem(context.Strings.Said("debugging.modules_count", ("shown", shown.Length.ToString()), ("total", modules.Count.ToString())), "library")
         {
