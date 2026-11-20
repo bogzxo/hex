@@ -158,17 +158,32 @@ internal sealed partial class HexDesigner
         sections[title] = section;
 
         // Before the first one made already that comes after it, and after what is said over all of them
-        int index = inspector.Children.TakeWhile(child => child is not Collapsible).Count();
+        IReadOnlyList<UIComponent> children = inspector.Children;
+        int index = 0;
+        while (index < children.Count && children[index] is not Collapsible)
+            index++;
         foreach (var (other, made) in sections)
         {
             if (other == title)
                 break;
             if (made is not null && made != section && made.Parent == inspector)
-                index = inspector.Children.ToList().IndexOf(made) + 1;
+                index = IndexOf(children, made) + 1;
         }
 
         inspector.MoveChild(section, index);
         return section;
+    }
+
+    // Where a child is among the inspector's, -1 for not there, without a copy of them all for each look
+    private static int IndexOf(IReadOnlyList<UIComponent> children, UIComponent child)
+    {
+        for (int i = 0; i < children.Count; i++)
+        {
+            if (children[i] == child)
+                return i;
+        }
+
+        return -1;
     }
 
     /// <summary>
