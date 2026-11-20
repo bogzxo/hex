@@ -20,7 +20,8 @@ internal sealed partial class HexLanguages
         {
             if (asked.IsCompletedSuccessfully)
                 then(asked.Result);
-        }));
+        }
+        ));
     }
 
     /// <summary>
@@ -31,6 +32,13 @@ internal sealed partial class HexLanguages
     {
         asked.ContinueWith(_ => context.Wake(), TaskScheduler.Default);
         answers.Add((asked, () => then(asked.IsCompletedSuccessfully ? asked.Result : fallback)));
+    }
+
+    /// <summary>A list from a server, empty when the server failed or said nothing, so whoever waits on it is never left waiting.</summary>
+    private void WhenList<T>(Task<IReadOnlyList<T>?> asked, Action<IReadOnlyList<T>> then)
+    {
+        asked.ContinueWith(_ => context.Wake(), TaskScheduler.Default);
+        answers.Add((asked, () => then(asked.IsCompletedSuccessfully ? asked.Result ?? [] : [])));
     }
 
     /// <summary>Every tick, the answers that are in done, and the edits a server asked for made.</summary>
@@ -109,8 +117,7 @@ internal sealed partial class HexLanguages
         {
             hovering = request;
             long number = ++hoverRequestNumber;
-            Task<string?> answer = ask().ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
-            When(answer, said =>
+            When(ask(), null, said =>
             {
                 if (number != hoverRequestNumber) return;
                 hovering = null;
@@ -165,7 +172,7 @@ internal sealed partial class HexLanguages
     /// </summary>
     internal static string Printable(string markdown)
     {
-        if (!markdown.Any(c => c > '~'))
+        if (!markdown.AsSpan().ContainsAnyExceptInRange('\0', '~'))
             return markdown;
 
         var printable = new System.Text.StringBuilder(markdown.Length);
@@ -218,9 +225,7 @@ internal sealed partial class HexLanguages
         {
             signing = request;
             long number = ++signatureRequestNumber;
-            Task<UISignature?> asked = ask()
-                .ContinueWith(task => task.IsCompletedSuccessfully ? task.Result : null, TaskScheduler.Default);
-            When(asked, said =>
+            When(ask(), null, said =>
             {
                 if (number != signatureRequestNumber) return;
                 signing = null;
@@ -294,7 +299,7 @@ internal sealed partial class HexLanguages
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, source);
-                if (context.Documents.Find(file) is {} existing)
+                if (context.Documents.Find(file) is { } existing)
                 {
                     existing.Editor.Text = source;
                     existing.SavedCode = existing.Editor.Text;
