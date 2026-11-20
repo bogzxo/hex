@@ -1178,19 +1178,12 @@ internal sealed partial class HexDebugging
         if (frameNames.TryGetValue(frame.Id, out string? named))
             return named;
 
-        string text;
-        try
-        {
-            text = context.Documents.All.FirstOrDefault(open => open.Path is { } path && PlatformPaths.Same(path, frame.File!))?.Editor.Text ?? File.ReadAllText(frame.File!);
-        }
-        catch (IOException)
-        {
+        if (OutlineOfFrameFile(frame.File!) is not { } outline)
             return frame.Name;
-        }
 
         // The last function that starts at or above its line, the one the line is in
         string? function = null;
-        foreach (OutlineEntry entry in HexOutline.Outline(text, frame.File))
+        foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > frame.Line)
                 break;
@@ -1200,6 +1193,46 @@ internal sealed partial class HexDebugging
 
         return frameNames[frame.Id] = function ?? frame.Name;
     }
+
+    // The outlines of the files frames were named out of, by the file, as of when it was written or the open copy's
+    // version: every stop read and outlined each file again for every frame of a deep stack
+    private readonly Dictionary<string, (long Stamp, List<OutlineEntry> Outline)> frameOutlines = new(PlatformPaths.Comparer);
+
+    private List<OutlineEntry>? OutlineOfFrameFile(string file)
+    {
+        HexDocument? open = context.Documents.All.FirstOrDefault(each => each.Path is { } path && PlatformPaths.Same(path, file));
+        long stamp;
+        try
+        {
+            // An open file goes by its text's version (negated, never a write time), one on the disk by its write time
+            stamp = open is not null ? -1 - open.Editor.Document.Version : File.GetLastWriteTimeUtc(file).Ticks;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (frameOutlines.TryGetValue(file, out var kept) && kept.Stamp == stamp)
+            return kept.Outline;
+
+        string text;
+        try
+        {
+            text = open?.Editor.Text ?? File.ReadAllText(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (frameOutlines.Count >= FRAME_OUTLINES_KEPT)
+            frameOutlines.Clear();
+        List<OutlineEntry> outline = [.. HexOutline.Outline(text, file)];
+        frameOutlines[file] = (stamp, outline);
+        return outline;
+    }
+
+    private const int FRAME_OUTLINES_KEPT = 64;
 
     // Which debugger the session is under, DebugSession's kind of it
     private string debuggingKind = DebugSession.CORECLR;
