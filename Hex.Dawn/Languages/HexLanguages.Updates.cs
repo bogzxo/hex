@@ -22,7 +22,8 @@ internal sealed partial class HexLanguages
     internal const string INSTALL_WORK = "servers:install:";
 
     // A percentage a command prints as it goes (npm's, dotnet's, winget's), which the bar is set to
-    private static readonly Regex Percent = new(@"(\d{1,3}(?:\.\d+)?)\s?%", RegexOptions.Compiled);
+    [GeneratedRegex(@"(\d{1,3}(?:\.\d+)?)\s?%")]
+    private static partial Regex Percent { get; }
 
     // How long after a look at GitHub the next one is, as Hex starts
     private static readonly TimeSpan SERVER_CHECK_EVERY = TimeSpan.FromHours(20);

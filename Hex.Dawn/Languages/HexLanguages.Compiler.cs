@@ -31,7 +31,8 @@ internal sealed partial class HexLanguages
     // A dub project's import folders by its folder, with when its dub.json or dub.sdl was written
     private static readonly ConcurrentDictionary<string, (DateTime Written, string[] Imports)> dubImports = new(PlatformPaths.Comparer);
 
-    private static readonly Regex ModuleDeclaration = new(@"^\s*module\s+([\w.]+)\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*module\s+([\w.]+)\s*;", RegexOptions.Multiline)]
+    private static partial Regex ModuleDeclaration { get; }
 
     /// <summary>Whether a file is one the compiler looks over.</summary>
     private static bool Checked(HexDocument of) => of.Path is { } path && Path.GetExtension(path).ToLowerInvariant() is ".d" or ".di";

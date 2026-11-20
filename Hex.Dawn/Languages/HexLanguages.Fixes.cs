@@ -10,10 +10,14 @@ namespace Hex.Dawn;
 // whose compiler says it that way.
 internal sealed partial class HexLanguages
 {
-    private static readonly Regex NeedsImport = new(@"perhaps `(?<import>import [\w.]+;)` is needed", RegexOptions.Compiled);
-    private static readonly Regex MeantName = new(@"did you mean (?:\w+ )?`(?<name>[\w.]+)`", RegexOptions.Compiled);
-    private static readonly Regex ImportLine = new(@"^\s*(?:public\s+|static\s+)*import\s", RegexOptions.Compiled);
-    private static readonly Regex ModuleLine = new(@"^\s*module\s", RegexOptions.Compiled);
+    [GeneratedRegex(@"perhaps `(?<import>import [\w.]+;)` is needed")]
+    private static partial Regex NeedsImport { get; }
+    [GeneratedRegex(@"did you mean (?:\w+ )?`(?<name>[\w.]+)`")]
+    private static partial Regex MeantName { get; }
+    [GeneratedRegex(@"^\s*(?:public\s+|static\s+)*import\s")]
+    private static partial Regex ImportLine { get; }
+    [GeneratedRegex(@"^\s*module\s")]
+    private static partial Regex ModuleLine { get; }
 
     /// <summary>The fixes what's wrong on some lines of a document says itself, the ones it would pick first.</summary>
     private List<LanguageServerAction> CompilerFixes(HexDocument of, int fromLine, int toLine)
