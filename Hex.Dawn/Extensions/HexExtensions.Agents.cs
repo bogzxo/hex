@@ -59,7 +59,8 @@ internal sealed partial class HexExtensions
             context.Work.InBackground($"{extension.Name}: {program}", () => ProgramOutput(program, arguments, folder, input),
                 said => Answered(extension, then, said is null ? Values.Null : new StringValue(said)), quiet: true);
         })),
-        ("temp", new StringValue(Path.Combine(Path.GetTempPath(), "hex-agents"))),
+        // Each chat's files for its agent system, in Hex's data folder where Agent Data measures and tidies them
+        ("temp", new StringValue(Hex.Core.HexData.AgentTemp)),
         // What an agent is told in its system prompt about the harness, the same for every agent system
         ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
         // What the agent of a chat is told about its Plan tab and the agents beside it, for its own system prompt and
