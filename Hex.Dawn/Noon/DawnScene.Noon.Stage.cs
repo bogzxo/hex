@@ -133,7 +133,7 @@ internal sealed partial class DawnScene
             noonTabPanels[(int)stage] = tab;
             noonTabButtons[(int)stage] = tab.Add(new Button
             {
-                Icon = StageIcon(stage), Label = TabLabel(stage, string.Empty), Style = "button_flat", Fill = UIFill.Both, Align = Origin.Left,
+                Icon = StageIcon(stage), Label = TabLabel(stage), Style = "button_flat", Fill = UIFill.Both, Align = Origin.Left,
                 LabelScale = 0.13f, Animated = false, Padding = new UIEdges(8, 0, 8, 0),
                 Tooltip = Said("noon.stage_tip", ("name", Said($"noon.stage_{stage.ToString().ToLowerInvariant()}")), ("key", STAGE_KEYS[(int)stage])),
                 OnPressed = () => ShowStage(shown)
@@ -172,11 +172,7 @@ internal sealed partial class DawnScene
     }
 
     // A tab's name, its count is a badge after it and its key a label of its own at the tab's right
-    private string TabLabel(NoonStage stage, string count)
-    {
-        string name = Said($"noon.stage_{stage.ToString().ToLowerInvariant()}");
-        return count.Length > 0 ? $"{name}  {count}" : name;
-    }
+    private static string TabLabel(NoonStage stage) => Said($"noon.stage_{stage.ToString().ToLowerInvariant()}");
 
     // A tab's count on its badge, hidden for none
     private void TabCount(NoonStage stage, string count, UIBadgeTone tone)
