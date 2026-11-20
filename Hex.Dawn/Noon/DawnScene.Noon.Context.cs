@@ -57,7 +57,7 @@ internal sealed partial class DawnScene
                 hash.Add(each.Running);
             }
 
-            shape = hash.ToHashCode() | 1L << 40;
+            shape = (uint)hash.ToHashCode() | 1L << 40;
             version = chat.Version;
         }
 
