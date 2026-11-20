@@ -138,7 +138,9 @@ internal sealed partial class DawnScene
         DecorateRows();
         if (pendingExplorerSelection is { } pasted)
         {
-            var rows = explorer.explorerRows.Where(row => pasted.Contains(row.Path, PlatformPaths.Comparer)).Select(row => row.Row).ToList();
+            // Looked up in a set, a paste or a selection of the whole folder is thousands of paths against thousands of rows
+            var pastedSet = new HashSet<string>(pasted, PlatformPaths.Comparer);
+            var rows = explorer.explorerRows.Where(row => pastedSet.Contains(row.Path)).Select(row => row.Row).ToList();
             sideTree.SelectMany(rows);
             if (rows.Count > 0) sideTree.Reveal(rows[0]);
             pendingExplorerSelection = null;
@@ -146,7 +148,8 @@ internal sealed partial class DawnScene
         else if (follow) ShowOpenInExplorer();
         else
         {
-            sideTree.SelectMany([.. explorer.explorerRows.Where(row => selected.Contains(row.Path, PlatformPaths.Comparer)).Select(row => row.Row)]);
+            var selectedSet = new HashSet<string>(selected, PlatformPaths.Comparer);
+            sideTree.SelectMany([.. explorer.explorerRows.Where(row => selectedSet.Contains(row.Path)).Select(row => row.Row)]);
             sideTree.ScrollOffset = offset;
         }
     }
