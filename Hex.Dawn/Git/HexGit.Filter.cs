@@ -8,9 +8,6 @@ internal sealed partial class HexGit
     // What the files are narrowed to, nothing for all of them
     private string changesFilter = string.Empty;
 
-    /// <summary>What the changes are narrowed to, by the box over the side.</summary>
-    internal string ChangesFilter => changesFilter;
-
     /// <summary>The changes narrowed to the files with some text in their path, the side made again once and only if it's another text.</summary>
     internal void FilterChanges(string text)
     {
