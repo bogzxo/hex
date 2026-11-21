@@ -63,6 +63,14 @@ internal sealed record HexLinkSyncSkipped(string Path, string Why);
 /// sent comes back from the other side's watcher with the hash it already agreed: neither echoes.
 /// </para>
 /// <para>
+/// A Windows checkout with core.autocrlf has CRLF where a Mac's of the same commit has LF, so the base is kept as each
+/// side has it (<see cref="HexLinkSyncAgreed"/>): text that only differs in its line ends is agreed with nothing sent
+/// (<see cref="EolOnly"/>), each side is compared with its own hash, what's sent is written in the receiver's line ends
+/// (those of the file it replaces, or what most files there have for a new one), and a change of only line ends stays
+/// on the side it was made. Binary files, and text with more than one kind of line end, go exactly as they are.
+/// .gitattributes isn't read.
+/// </para>
+/// <para>
 /// Everything the other side says is data. Its paths go through the same jail its own requests do
 /// (<see cref="HexLinkFiles.Resolve"/>), plus what this side ignores, the conflict copies and the state file, so a
 /// peer can never make this side write outside the folder, into .git, over something git ignores here or over the
