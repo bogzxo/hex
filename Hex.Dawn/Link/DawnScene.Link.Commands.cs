@@ -29,6 +29,7 @@ internal sealed partial class DawnScene
             commands.Add((Said("link.command_forget"), LinkForgetCommand));
         // Sharing the code with the devices linked now: sync, remote files, presence, git (DawnScene.LinkSync.Share)
         commands.AddRange(LinkSharePaletteCommands());
+        commands.AddRange(LinkProvisionPaletteCommands());
         LinkDocumentCommands(commands);
         return commands;
     }

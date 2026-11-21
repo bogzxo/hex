@@ -418,7 +418,7 @@ internal sealed partial class DawnScene
     /// B started: this Hex again with a home, a pipe and a key of its own, told to dial and pair with A, what it prints
     /// kept for the checks and said after "B|". Killed in the tidy after the part (and as this process exits) whatever happened.
     /// </summary>
-    private void LinkStartPeer(string peerHome, string dial, IReadOnlyDictionary<string, string>? also = null)
+    private void LinkStartPeer(string peerHome, string dial, IReadOnlyDictionary<string, string>? also = null, string suite = "link-peer")
     {
         var start = new ProcessStartInfo(System.Environment.ProcessPath!)
         {
@@ -430,7 +430,7 @@ internal sealed partial class DawnScene
         // Run as "dotnet Hex.dll" the process is dotnet, which is told the program to run before its arguments
         if (LinkTestRunByHost() is { } program)
             start.ArgumentList.Add(program);
-        foreach (string argument in (string[])["--selftest", "link-peer", "--exit", "--size", "1200x800"])
+        foreach (string argument in (string[])["--selftest", suite, "--exit", "--size", "1200x800"])
             start.ArgumentList.Add(argument);
         start.Environment["HEX_HOME"] = peerHome;
         start.Environment["HEX_REMOTE_PIPE"] = "hex-link-peer-" + Guid.NewGuid().ToString("N")[..12];

@@ -195,6 +195,8 @@ internal sealed partial class HexLinkHost : IDisposable
             ["granted"] = HexLinkData.Words(rights),
             ["redial"] = redial,
             ["serves"] = Serves(),
+            ["syncChosen"] = new JsonArray([.. (HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.ChosenSyncFolders(Device.Id) : [])
+                .Take(MOST_TREES).Select(folder => (JsonNode)folder)]),
             ["workspace"] = new JsonObject
             {
                 ["name"] = workspace.Name,

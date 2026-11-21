@@ -114,13 +114,13 @@ internal static class HexLinkGit
     /// Whether a bundle that came over is whole and fits, null when it does, why when it doesn't. In a repository it's
     /// verified against it (what it needs is there); without one its heads have to be readable.
     /// </summary>
-    public static string? Verify(string bundle, string? repo)
+    public static string? Verify(string bundle, string? repo, CancellationToken cancel = default)
     {
         if (Why() is { } why)
             return why;
         if (repo is null)
-            return GitProcess.Run(Path.GetDirectoryName(bundle) ?? ".", ["bundle", "list-heads", bundle]) is { Ok: false } bad ? $"It isn't a bundle git can read, {bad.Why}" : null;
-        GitResult verified = GitProcess.Run(repo, ["bundle", "verify", "-q", bundle], patience: PATIENCE);
+            return GitProcess.Run(Path.GetDirectoryName(bundle) ?? ".", ["bundle", "list-heads", bundle], cancel: cancel) is { Ok: false } bad ? $"It isn't a bundle git can read, {bad.Why}" : null;
+        GitResult verified = GitProcess.Run(repo, ["bundle", "verify", "-q", bundle], patience: PATIENCE, cancel: cancel);
         return verified.Ok ? null : $"It doesn't fit the repository, {verified.Why}";
     }
 

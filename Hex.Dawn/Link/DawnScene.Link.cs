@@ -734,18 +734,18 @@ internal sealed partial class DawnScene
 
         // The folders at once, so a hello said before git has answered says them; their repositories when it has
         if (!folders.SequenceEqual(services.Workspace.Folders.Select(folder => folder.Path), PlatformPaths.Comparer))
-            services.Workspace = HexLinkWorkspaces.Describe(name, folders, _ => null) with { Repositories = services.Workspace.Repositories };
+            services.Workspace = LinkDescribeWorkspace(name, folders, _ => null) with { Repositories = services.Workspace.Repositories };
         _ = Task.Run(() =>
         {
             HexLinkWorkspace described;
             try
             {
-                described = HexLinkWorkspaces.Describe(name, folders, HexLinkWorkspaces.RepositoryOf);
+                described = LinkDescribeWorkspace(name, folders, HexLinkWorkspaces.RepositoryOf);
             }
             catch (Exception e)
             {
                 Console.WriteLine($"[Hex] Link couldn't describe the workspace, {e.Message}");
-                described = HexLinkWorkspaces.Describe(name, folders, _ => null);
+                described = LinkDescribeWorkspace(name, folders, _ => null);
             }
 
             services.Workspace = described;

@@ -12,7 +12,7 @@ internal sealed partial class DawnScene
     /// and what has to touch the editor (a chat read, a question answered, a file written into an open tab) is posted to
     /// the editor's thread and handed back when it's run.
     /// </summary>
-    private sealed class LinkServices(DawnScene hex) : IHexLinkServices
+    private sealed class LinkServices(DawnScene hex) : IHexLinkServices, IHexLinkProvisionOffers
     {
         private volatile HexLinkWorkspace workspace = HexLinkWorkspace.Empty;
         private volatile IReadOnlyDictionary<int, HexLinkChatExtra> extras = new Dictionary<int, HexLinkChatExtra>();
@@ -24,6 +24,8 @@ internal sealed partial class DawnScene
             get => workspace;
             set => workspace = value;
         }
+
+        public IReadOnlyList<string> ChosenSyncFolders(string deviceId) => hex.LinkSyncChosen(deviceId);
 
         public HexLinkDocuments Documents { get; } = new();
 
@@ -70,6 +72,8 @@ internal sealed partial class DawnScene
 
         // A card for the person, Apply, Keep as File or Discard, their answer going back (DawnScene.LinkGit)
         public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => hex.LinkPatchOffered(device, title, diff);
+
+        public void WorkspaceOffered(HexLinkDevice device, string workspace) => hex.LinkWorkspaceOffered(device, workspace);
 
         public void Audit(string what, HexLinkDevice who, string detail)
         {

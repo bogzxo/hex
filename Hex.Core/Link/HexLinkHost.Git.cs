@@ -5,6 +5,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkHost
 {
     private volatile HexLinkHostedProvision? hostedProvision;
+    private long lastProvisionOffer;
     private readonly Lock bundleGate = new();
     private readonly Dictionary<string, CancellationTokenSource> outgoingBundles = new(StringComparer.Ordinal);
     private readonly Queue<string> earlyBundleCancellations = new();
@@ -15,6 +16,10 @@ internal sealed partial class HexLinkHost
     /// </summary>
     private async Task<JsonNode?> GitBundle(JsonObject parameters, CancellationToken cancel)
     {
+        string? operation = HexLinkData.String(parameters, "operation", 20);
+        if (operation == "offer")
+            return OfferProvision(parameters);
+
         Need(HexLinkRights.View, "git/bundle");
         string id = HexLinkData.Need(parameters, "id", 64);
         if (id.Length == 0 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
@@ -23,7 +28,7 @@ internal sealed partial class HexLinkHost
         bool sending = false;
         try
         {
-            if (HexLinkData.String(parameters, "operation", 20) == "plan")
+            if (operation == "plan")
             {
                 string? folder = HexLinkData.String(parameters, "folder", 200);
                 HexLinkWorkspace workspace = services.Workspace;
@@ -35,7 +40,7 @@ internal sealed partial class HexLinkHost
             string name = HexLinkData.Need(parameters, "repository", 200);
             string repository;
             HexLinkProvisionRepository? planned = null;
-            if (name.StartsWith(HexLinkProvisionPlan.BUNDLE_PREFIX, StringComparison.Ordinal))
+            if (HexLinkProvisionPlan.IsBundleId(name))
             {
                 HexLinkHostedProvision hosted = hostedProvision ?? throw HexLinkException.NotFound("Ask for a workspace plan before its bundles.");
                 if (!hosted.WirePaths.TryGetValue(name, out string? wire))
@@ -79,6 +84,18 @@ internal sealed partial class HexLinkHost
             if (!sending)
                 EndBundle(id, transfer);
         }
+    }
+
+    private JsonObject OfferProvision(JsonObject parameters)
+    {
+        if (services is not IHexLinkProvisionOffers offers)
+            throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, "This Hex cannot receive workspace offers.");
+        long now = Environment.TickCount64, last = Volatile.Read(ref lastProvisionOffer);
+        if ((last != 0 && now - last < 5_000) || Interlocked.CompareExchange(ref lastProvisionOffer, now, last) != last)
+            throw new HexLinkException(HexLinkErrors.BUSY, "A workspace was just offered to this device.");
+        string workspace = HexLinkData.Need(parameters, "workspace", 200);
+        offers.WorkspaceOffered(Device, workspace);
+        return new JsonObject { ["ok"] = true };
     }
 
     private CancellationTokenSource BeginBundle(string id, CancellationToken cancel)

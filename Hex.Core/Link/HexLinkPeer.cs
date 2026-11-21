@@ -51,6 +51,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     /// <summary>The other machine's workspace, its folders and repositories by name (their paths are empty, they're not this machine's).</summary>
     public HexLinkWorkspace Workspace { get; private set; } = HexLinkWorkspace.Empty;
 
+    internal IReadOnlyList<string> ChosenSyncFolders { get; private set; } = [];
+
     /// <summary>The protocol the other end speaks.</summary>
     public int Protocol { get; private set; }
 
@@ -103,6 +105,7 @@ internal sealed partial class HexLinkPeer : IDisposable
         granted = HexLinkData.RightsOf(said, "granted");
         Workspace = WorkspaceOf(HexLinkData.Object(said, "workspace"));
         TakeAddresses(HexLinkData.Object(said, "redial"));
+        ChosenSyncFolders = HexLinkData.Strings(said, "syncChosen", HexLinkHost.MOST_TREES, 200);
         TakeServes(said);
         Changed?.Invoke();
     }

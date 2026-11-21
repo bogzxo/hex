@@ -123,7 +123,7 @@ internal sealed partial class DawnScene
             return Said("link.off");
         if (links.PeerOf(deviceId) is not { } peer || peer.IsClosed)
             return Said("link.sync_not_linked", ("device", LinkKnown.FirstOrDefault(known => known.Device.Id == deviceId)?.Device.Name ?? deviceId));
-        if (services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is not { } local)
+        if ((LinkProvisionedLocal(deviceId, folder) ?? services.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder))) is not { } local)
             return Said("link.sync_no_folder_here", ("folder", folder));
 
         Task starting;

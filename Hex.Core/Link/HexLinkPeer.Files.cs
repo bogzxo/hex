@@ -214,7 +214,7 @@ internal sealed partial class HexLinkPeer
             if (size == 0)
                 return null;
 
-            if (await Task.Run(() => HexLinkGit.Verify(file, repo), stop.Token) is { } bad)
+            if (await Task.Run(() => HexLinkGit.Verify(file, repo, stop.Token), stop.Token) is { } bad)
                 throw new HexLinkException(HexLinkErrors.INTERNAL_ERROR, $"The bundle didn't verify, {bad}");
             keep = true;
             return file;

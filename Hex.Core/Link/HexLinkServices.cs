@@ -54,6 +54,9 @@ internal interface IHexLinkServices
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);
 
+    /// <summary>Folders this device is already responsible for syncing with this peer.</summary>
+    IReadOnlyList<string> ChosenSyncFolders(string deviceId) => [];
+
     /// <summary>Buffers explicitly shared by the host editor, across all its connections.</summary>
     HexLinkDocuments? Documents => null;
 

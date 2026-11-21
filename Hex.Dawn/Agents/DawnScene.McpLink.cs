@@ -47,8 +47,31 @@ internal sealed partial class DawnScene
                 ("path", McpSchema.String("For resolve, the file in conflict as status names it (folder/relative/path).")),
                 ("keep", McpSchema.OneOf("For resolve, whose version stays.", "mine", "theirs")),
                 ("force", McpSchema.Flag("For start, go on when the two have different commits checked out."))], "device")),
-            null, RunAway: LinkSyncTool, NeedsEditor: false)
+            null, RunAway: LinkSyncTool, NeedsEditor: false),
+        new(new McpTool("hex_link_provision", "Get or share a linked workspace",
+            "Get a linked device's workspace from its Git objects and working files, then keep it synced here. The host must grant View. Share offers this workspace to a linked device you already grant View to.",
+            McpSchema.Object([
+                ("device", McpSchema.String("The device, its name or the start of its id.")),
+                ("action", McpSchema.OneOf("Get takes a copy here. Share sends an offer.", "get", "share")),
+                ("destination", McpSchema.String("Local destination for get. Defaults to the workspace name under ~/source/repos."))], "device", "action")),
+            null, RunAway: LinkProvisionTool, NeedsEditor: false)
     ];
+
+    private async Task<McpToolResult> LinkProvisionTool(JsonObject args, CancellationToken cancel)
+    {
+        if (!LinkOnForTools(out HexLink? links, out _))
+            return McpToolResult.Text(LINK_OFF_TOOL);
+        if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
+            return McpToolResult.Error(wrong!);
+
+        if (args.String("action") == "share")
+            return await LinkShareWorkspace(peer.Device.Id, cancel) is { } shareError
+                ? McpToolResult.Error(shareError) : McpToolResult.Text($"Workspace offered to {peer.Device.Name}.");
+
+        string destination = args.String("destination") is { Length: > 0 } selected ? selected : LinkDefaultProvisionDestination(peer);
+        return await LinkGetWorkspace(peer.Device.Id, destination, cancel: cancel) is { } error
+            ? McpToolResult.Error(error) : McpToolResult.Text($"Workspace from {peer.Device.Name} downloaded to {destination} and sync started.");
+    }
 
     // What a tool says while Link is off
     private const string LINK_OFF_TOOL = "Link is off, no other machine is linked to this Hex. The person turns it on (Link: Turn On).";

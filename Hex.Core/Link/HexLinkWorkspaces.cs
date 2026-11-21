@@ -68,6 +68,8 @@ internal static class HexLinkWorkspaces
         var wirePaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var gitlinks = new Dictionary<string, (string Parent, string Head)>(StringComparer.Ordinal);
         var physical = new HashSet<string>(PlatformPaths.Comparer);
+        var deleted = new List<string>();
+        var largeChanges = new List<string>();
         string lease = Guid.NewGuid().ToString("N");
         foreach (HexLinkFolder root in roots)
         {
@@ -107,6 +109,8 @@ internal static class HexLinkWorkspaces
                 repos.Add(new HexLinkProvisionRepository(id, path, head, parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null,
                     origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
                 wirePaths.Add(id, wire);
+                if (only is null)
+                    ProvisionChanges(directory, path, deleted, largeChanges, cancel);
                 foreach (var (module, commit) in Submodules(directory, cancel))
                 {
                     string modulePath = path.Length > 0 ? path + "/" + module : module;
@@ -121,7 +125,20 @@ internal static class HexLinkWorkspaces
             if (!repoPaths.Contains(path))
                 throw new InvalidOperationException($"Submodule {path} is uninitialized on the host. Initialize it there before sharing this workspace.");
         }
-        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos), wirePaths);
+        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos, deleted, largeChanges), wirePaths);
+    }
+
+    private static void ProvisionChanges(string directory, string repositoryPath, List<string> deleted, List<string> largeChanges, CancellationToken cancel)
+    {
+        foreach (string status in HexLinkProvision.Status(directory, cancel))
+        {
+            string file = status[3..];
+            string path = repositoryPath.Length > 0 ? repositoryPath + "/" + file : file;
+            if ((status[0] == 'D' || status[1] == 'D') && !File.Exists(Path.Combine(directory, file)))
+                deleted.Add(path);
+            else if (new FileInfo(Path.Combine(directory, file)) is { Exists: true, Length: > HexLinkFiles.MOST_READ })
+                largeChanges.Add(path);
+        }
     }
 
     private static string Under(string prefix, string root, string path)
