@@ -148,8 +148,8 @@ internal sealed partial class DawnScene
         test.Run(() => page.Find("font"));
         test.Settle(0.2f);
         test.Run(() => Shot("settings-search-pill"));
-        test.Check("search: pill after the key, code_zoom's font pill starts past the end of its key", () =>
-            page.KeyParts("code_zoom") is { } parts && !parts.FoundBy.IsEmpty && !parts.Key.IsEmpty && parts.FoundBy.Min.X >= parts.Key.Max.X && !parts.KeyCut
+        test.Check("search: pill after the name and before the key, code_zoom's key starts past the end of its font pill", () =>
+            page.KeyParts("code_zoom") is { } parts && !parts.FoundBy.IsEmpty && !parts.Key.IsEmpty && parts.Key.Min.X >= parts.FoundBy.Max.X && !parts.KeyCut
             && page.FoundByShown("code_zoom") is { } by && by.Contains("font", StringComparison.OrdinalIgnoreCase));
         test.Check("search: pill after the key, no key's words are painted past its own edge", () =>
             page.KeysShown.Count > 0 && page.KeysShown.All(key => page.KeyParts(key) is { } parts && parts.KeyPainted.Max.X <= parts.Key.Max.X + 0.5f));

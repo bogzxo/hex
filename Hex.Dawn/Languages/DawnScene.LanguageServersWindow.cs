@@ -54,6 +54,12 @@ internal sealed partial class DawnScene
         UILayout made = layout.Instantiate("language_servers_window.hor", chrome.Root);
         var window = made.Get<WindowPanel>("window");
         DressWindow(window);
+
+        // No bigger than the settings window would open on this screen. At 200% on a small one the layout's size ran off
+        // the edge, and the switches down the right of its rows with it
+        Vector2 fits = Horizon.UI.Components.SettingsWindow.SizeFor(chrome.Root.Bounds.Size, Vector2.Zero, Horizon.UI.Components.SettingsWindow.ScaleIn(chrome));
+        window.MinSize = Vector2.Min(window.MinSize, fits);
+        window.Size = Vector2.Min(window.Size, fits);
         serversWindow = window;
         serversNav = made.Get<StackPanel>("servers_nav");
         serversPage = made.Get<StackPanel>("servers_page");
@@ -496,17 +502,17 @@ internal sealed partial class DawnScene
             if (typed.Trim().Trim('"') != languages.ServerPathOf(entry))
                 languages.SetServerPath(entry, typed.Trim().Trim('"'));
         });
-        page.Add(SettingLine(Said("server_settings.where"), width,
+        page.Add(SettingRow(Said("server_settings.where"), null, Said("server_settings.where_help", ("command", entry.Command)), width,
         [
             pathBox,
             ServersButton(Said("server_settings.choose"), "folder-opened", () => { languages.ChooseServerFile(entry); serversDirty = true; }, width: 96),
             ServersButton(Said("server_settings.use_path"), "discard", () => { languages.SetServerPath(entry, string.Empty); FillLanguageServers(); }, width: 120, enabled: path.Length > 0)
-        ]));
+        ], below: true));
 
         var serverActions = new List<UIComponent> { ServersButton(Said("server_window.restart"), "debug-restart", () => languages.RestartLanguage(entry)) };
         if (entry.ReleasesPage.Length > 0)
             serverActions.Add(ServersButton(Said("server_settings.releases"), "link-external", () => OpenInBrowser(entry.ReleasesPage)));
-        page.Add(SettingLine(string.Empty, width, serverActions));
+        page.Add(SettingRow(string.Empty, null, null, width, serverActions, below: true));
 
         // What it's told, the catalog's settings with the user's own over them, a field each of its kind
         page.Add(SettingsHeading(Said("server_settings.told"), width));
@@ -516,17 +522,14 @@ internal sealed partial class DawnScene
             page.Add(Words(Said("server_settings.told_none"), width, SERVERS_BODY, dim: true));
         foreach (var (key, value) in told)
             page.Add(ServerSettingLine(entry, key, value, width));
-        if (told.Any(setting => setting.Path == HexLanguages.CSHARP_ANALYZERS))
-            page.Add(Words(Said("server_settings.csharp_analyzers"), width, SERVERS_BODY, dim: true));
 
         // The language's own
         if (entry.Name.Equals("python", StringComparison.OrdinalIgnoreCase) && languages.SetupFolder is { } folder)
         {
             page.Add(SettingsHeading(Said("server_settings.python"), width));
             string picked = HexLanguages.PythonPickedFor(folder) ?? Said("server_settings.python_found");
-            page.Add(SettingLine(Said("server_settings.interpreter"), width,
+            page.Add(SettingRow(Said("server_settings.interpreter"), null, UIRichText.MarkdownLiteral(picked), width,
             [
-                Words(UIRichText.MarkdownLiteral(picked), MathF.Min(360, width - 330), 0.13f),
                 ServersButton(Said("server_settings.choose_interpreter"), "list-selection", () => languages.PickPythonInterpreter(folder), width: 170)
             ]));
         }
@@ -535,12 +538,12 @@ internal sealed partial class DawnScene
         {
             page.Add(SettingsHeading(Said("server_settings.colours"), width));
             string now = languages.CodeColors;
-            page.Add(SettingLine(Said("server_settings.colours_of"), width,
+            page.Add(SettingRow(Said("server_settings.colours_of"), null, Said("server_settings.colours_help"), width,
             [
                 ChoiceButton(Said("server_settings.colours_resharper"), now == "resharper", () => { languages.CodeColors = "resharper"; FillLanguageServers(); }),
                 ChoiceButton(Said("server_settings.colours_vs"), now == "visual_studio", () => { languages.CodeColors = "visual_studio"; FillLanguageServers(); }),
                 ChoiceButton(Said("server_settings.colours_skin"), now == "skin", () => { languages.CodeColors = "skin"; FillLanguageServers(); })
-            ]));
+            ], below: true));
         }
 
         // The files it opens
@@ -600,10 +603,38 @@ internal sealed partial class DawnScene
             controls.Add(box);
         }
 
-        if (languages.ServerSettingChanged(entry, path))
-            controls.Add(ServersButton(Said("server_settings.reset"), "discard", () => { languages.SetServerSetting(entry, path, null); FillLanguageServers(); }, width: 88, flat: true));
+        // Named the way the settings window names its rows, by the last word of its key, with the key small after it.
+        // A setting that costs something says so under what it does
+        bool changed = languages.ServerSettingChanged(entry, path);
+        var (help, cost) = ServerSettingAbout(path);
+        return SettingRow(ServerSettingTitle(path), path, help, width, controls, cost: cost,
+            reset: changed ? () => { languages.SetServerSetting(entry, path, null); FillLanguageServers(); } : null);
+    }
 
-        return SettingLine(path, width, controls, code: true);
+    // What a server's setting does and what it costs, for the ones Hex knows of, nulls for the rest
+    private (string? Help, string? Cost) ServerSettingAbout(string path) => path switch
+    {
+        HexLanguages.CSHARP_ANALYZERS => (Said("server_settings.csharp_analyzers"), Said("server_settings.csharp_analyzers_cost")),
+        _ => (null, null)
+    };
+
+    // A server's key as a name, its last word split where its capitals are: wrapLineLength is Wrap line length
+    internal static string ServerSettingTitle(string path)
+    {
+        string last = path[(path.LastIndexOf('.') + 1)..];
+        var said = new System.Text.StringBuilder(last.Length + 4);
+        for (int i = 0; i < last.Length; i++)
+        {
+            char c = last[i];
+            if (i == 0)
+                said.Append(char.ToUpperInvariant(c));
+            else if (char.IsUpper(c) && !char.IsUpper(last[i - 1]))
+                said.Append(' ').Append(char.ToLowerInvariant(c));
+            else
+                said.Append(c);
+        }
+
+        return said.ToString();
     }
 
     private Label SettingsHeading(string text, float width) => new()
@@ -617,25 +648,54 @@ internal sealed partial class DawnScene
         Pivot = Origin.TopLeft
     };
 
-    // A line of a settings section, what it is on the left (in the code font for a server's own key) and its controls
-    private StackPanel SettingLine(string caption, float width, IEnumerable<UIComponent> controls, bool code = false)
+    // How wide the column down the right is that a row's switch or box sits in, the gap before it, and the most a
+    // row's sentence runs to, the settings window's own
+    private const float SERVERS_CONTROL_COLUMN = 300.0f, SERVERS_COLUMN_GAP = 24.0f, SERVERS_HELP_MOST = 640.0f;
+
+    // A setting the way the settings window has its rows: its name in bold with a reset while it's changed and its key
+    // small and dim after them, the sentence of what it does under them, what it costs under that when it costs
+    // something, and what sets it in a column down the right. Buttons and anything wide go on a line under the sentence
+    private StackPanel SettingRow(string title, string? key, string? help, float width, IEnumerable<UIComponent> controls, bool below = false, string? cost = null, Action? reset = null)
     {
-        var line = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
-        var label = new Label
+        var row = new StackPanel { Spacing = 4, Padding = new UIEdges(0, 6, 0, 6), Size = new Vector2(width, 0), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
+        bool side = !below && width - SERVERS_CONTROL_COLUMN - SERVERS_COLUMN_GAP >= 280.0f;
+        StackPanel text = row, line;
+        float textWidth = width;
+        if (side)
         {
-            Text = code ? $"`{caption}`" : UIRichText.MarkdownLiteral(caption),
-            Markdown = true,
-            TextScale = 0.13f,
-            Wrap = true,
-            Size = new Vector2(220, SERVERS_BUTTON_HEIGHT),
-            Align = Origin.Left
-        };
-        if (code)
-            label.CodeFont = this.code.Font;
-        line.Add(label);
+            textWidth = width - SERVERS_CONTROL_COLUMN - SERVERS_COLUMN_GAP;
+            var body = row.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = SERVERS_COLUMN_GAP, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft });
+            text = body.Add(new StackPanel { Spacing = 4, Size = new Vector2(textWidth, 0), Anchor = Origin.Top, Pivot = Origin.Top });
+            var column = body.Add(new StackPanel { Size = new Vector2(SERVERS_CONTROL_COLUMN, 0), Anchor = Origin.Top, Pivot = Origin.Top });
+            line = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Anchor = Origin.Right, Pivot = Origin.Right });
+        }
+        else
+            line = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft };
+
+        if (title.Length > 0)
+        {
+            var top = text.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8, Anchor = Origin.Left, Pivot = Origin.Left });
+            top.Add(new Label { Text = $"**{UIRichText.MarkdownLiteral(title)}**", Markdown = true, TextScale = SERVERS_BODY, Size = new Vector2(0, 26), Align = Origin.Left });
+            if (reset is not null)
+                top.Add(new Button { Icon = "discard", Style = "button_flat", Animated = false, Size = new Vector2(26, 26), Tooltip = Said("server_settings.reset"), OnPressed = reset });
+            if (key is not null)
+            {
+                var keyLabel = top.Add(new Label { Text = $"`{key}`", Markdown = true, Dim = true, TextScale = SERVERS_SMALL, Size = new Vector2(0, 26), Align = Origin.Left });
+                keyLabel.CodeFont = code.Font;
+            }
+        }
+
+        float helpWidth = MathF.Min(SERVERS_HELP_MOST, textWidth);
+        if (help is { Length: > 0 })
+            text.Add(Words(help, helpWidth, SERVERS_BODY * 0.95f, dim: true));
+        if (cost is { Length: > 0 })
+            text.Add(Words($"**{UIRichText.MarkdownLiteral(Said("server_settings.cost"))}** {cost}", helpWidth, SERVERS_BODY * 0.95f, dim: true));
+
         foreach (UIComponent control in controls)
             line.Add(control);
-        return line;
+        if (!side && line.Children.Count > 0)
+            row.Add(line);
+        return row;
     }
 
     private static Button ChoiceButton(string label, bool chosen, Action pressed) => new()
@@ -714,13 +774,11 @@ internal sealed partial class DawnScene
 
         var updates = new ToggleButton(languages.ServerUpdates ? Said("extensions_window.on") : Said("extensions_window.off"), languages.ServerUpdates) { Size = new Vector2(84, SERVERS_BUTTON_HEIGHT), Style = "switch" };
         updates.OnPressed = () => { languages.ServerUpdates = updates.State; FillLanguageServers(); };
-        page.Add(SettingLine(Said("language_settings.updates"), width, [updates, ServersButton(Said("language_settings.check_now"), "refresh", languages.CheckForServerUpdates, width: 120)]));
-        page.Add(Words(Said("language_settings.updates_help"), width, SERVERS_SMALL, dim: true));
+        page.Add(SettingRow(Said("language_settings.updates"), null, Said("language_settings.updates_help"), width, [ServersButton(Said("language_settings.check_now"), "refresh", languages.CheckForServerUpdates, width: 120), updates]));
 
         var cards = new ToggleButton(languages.MissingCards ? Said("extensions_window.on") : Said("extensions_window.off"), languages.MissingCards) { Size = new Vector2(84, SERVERS_BUTTON_HEIGHT), Style = "switch" };
         cards.OnPressed = () => { languages.MissingCards = cards.State; Context.Settings.Save(); FillLanguageServers(); };
-        page.Add(SettingLine(Said("code_server.missing_cards"), width, [cards]));
-        page.Add(Words(Said("code_server.missing_cards_help"), width, SERVERS_SMALL, dim: true));
+        page.Add(SettingRow(Said("code_server.missing_cards"), null, Said("code_server.missing_cards_help"), width, [cards]));
 
         page.Add(new Spacer { Size = new Vector2(width, 8.0f) });
         page.Add(languages.AddServerForm());

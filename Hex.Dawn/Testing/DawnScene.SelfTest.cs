@@ -290,6 +290,7 @@ internal sealed partial class DawnScene
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
         ("editor-look", "the editor in every look at 100, 150 and 200%, its tabs, gutter, hover, completions, the box over a call, find, the empty editor, a diff and side by side", TestEditorLook),
         ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
+        ("settings-look", "the settings in every look at 100, 150 and 200%: the window, a search, a changed setting, the looks, the keyboard shortcuts and a language server's settings", TestSettingsLook),
         (DawnProgram.NO_AI_SUITE, "No AI, a run without the agents: no Agentic, Agents view, menu, commands, agent systems, agents' ticks or MCP tools about agents. Only when named, the run is without them", TestNoAi),
         ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
         ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
