@@ -50,7 +50,7 @@ internal sealed partial class DawnScene
         UITreeItem? Heading(string name) => sideRows(sideTree.Items).FirstOrDefault(row => row.Text == name && row.Icon == "repo" && row.HasChildren);
         UITreeItem? Under(string heading, string name) => sideRows(Heading(heading)?.Children ?? []).FirstOrDefault(row => row.Text == name && row.Icon != "repo");
 
-        test.WaitFor(() => new[] { "first", "second", "clone", "mod", "inner" }.All(name => Heading(name) is not null) && Heading("first")?.Detail.StartsWith("main", StringComparison.Ordinal) == true, 10.0f);
+        test.WaitFor(() => new[] { "first", "second", "clone", "mod", "inner" }.All(name => Heading(name) is not null) && Heading("first")?.Detail.StartsWith("main", StringComparison.Ordinal) == true, 10.0f * GIT_PATIENCE);
         test.Check("repositories: a folder of repositories has every one of them, a submodule and one nobody added too, each under its name", () =>
             new[] { "first", "second", "clone", "mod", "inner" }.All(name => Heading(name) is not null));
         test.Check("repositories: a heading says its branch after its name and how many changes at its end", () =>
@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
             !sideTree.Items.Any(row => row.Text is "mod" or "inner") && Heading("first")?.Children is { } inFirst
             && inFirst.Any(row => row is { Text: "mod", Icon: "repo" }) && inFirst.Any(row => row is { Text: "inner", Icon: "repo" }));
 
-        test.WaitFor(() => Under("first", "mod") is not null, 5.0f);
+        test.WaitFor(() => Under("first", "mod") is not null, 5.0f * GIT_PATIENCE);
         test.Check("submodules: a submodule is a row of its own kind, saying it has new commits", () =>
             Under("first", "mod") is { Icon: "file-submodule" } row && row.Detail.Contains("new commits", StringComparison.Ordinal));
         test.Check("submodules: a repository nobody added that has a heading isn't a row too, and no row is without a name", () =>
@@ -67,7 +67,7 @@ internal sealed partial class DawnScene
 
         // A click on a heading makes it the active one, the status bar says it by name and the Git menu works in it
         test.Click(TreeRow(() => Heading("second")));
-        test.WaitFor(() => branchItem.Text.Contains("$(repo) second", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => branchItem.Text.Contains("$(repo) second", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("active repository: a click on a heading makes it active, the status bar names it with its branch", () =>
             branchItem.Text.Contains("$(repo) second", StringComparison.Ordinal) && branchItem.Text.Contains("$(git-branch) main", StringComparison.Ordinal)
             && Heading("second")?.Edge is not null && Heading("first")?.Edge is null);
@@ -79,16 +79,16 @@ internal sealed partial class DawnScene
             git.Refresh(second);
             git.Refresh(clone);
         });
-        test.WaitFor(() => Heading("second")?.Badge == "1" && Heading("clone")?.Badge == "1", 5.0f);
+        test.WaitFor(() => Heading("second")?.Badge == "1" && Heading("clone")?.Badge == "1", 5.0f * GIT_PATIENCE);
         test.Run(() => GitCommand(Said("git.stage_all"))?.OnPicked?.Invoke());
-        test.WaitFor(() => GitProcess.Run(second, ["diff", "--cached", "--name-only"]).Output.Trim() == "readme.md", 5.0f);
+        test.WaitFor(() => GitProcess.Run(second, ["diff", "--cached", "--name-only"]).Output.Trim() == "readme.md", 5.0f * GIT_PATIENCE);
         test.Check("active repository: Stage All from the Git menu stages in the active one and nowhere else", () =>
             GitProcess.Run(second, ["diff", "--cached", "--name-only"]).Output.Trim() == "readme.md"
             && GitProcess.Run(clone, ["diff", "--cached", "--name-only"]).Output.Trim().Length == 0);
 
         // The status bar's branch picks the repository first, then the branch
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(branchItem).Center));
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Check("active repository: a click on the status bar's branch lists the repositories first", () =>
             textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items is var items
             && items.Any(item => item.StartsWith("first: main", StringComparison.Ordinal)) && items.Any(item => item.StartsWith("clone: main", StringComparison.Ordinal)));
@@ -99,14 +99,14 @@ internal sealed partial class DawnScene
             list.Choose(at);
             list.OnActivated!(list.Items[at]);
         });
-        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains(Said("git.new_branch"), StringComparison.Ordinal)), 4.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && Descendants(textDialog!.Body).OfType<ListBox>().First().Items.Any(item => item.Contains(Said("git.new_branch"), StringComparison.Ordinal)), 4.0f * GIT_PATIENCE);
         test.Check("active repository: and picking one makes it active and lists its branches", () =>
             branchItem.Text.Contains("$(repo) clone", StringComparison.Ordinal) && textDialog is { IsOpen: true });
         test.Run(() => chrome.Dialog?.Close());
 
         // A click on the submodule's row goes to its own heading, the active one now
         test.Click(TreeRow(() => Under("first", "mod")));
-        test.WaitFor(() => branchItem.Text.Contains("$(repo) mod", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => branchItem.Text.Contains("$(repo) mod", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("submodules: a click on a submodule's row makes its own repository the active one", () =>
             branchItem.Text.Contains("$(repo) mod", StringComparison.Ordinal) && Heading("mod") is { Expanded: true, Edge: not null });
 
@@ -116,7 +116,7 @@ internal sealed partial class DawnScene
             Git(second, "commit", "-q", "-m", "Changed in second");
             Git(clone, "fetch", "-q");
         });
-        test.WaitFor(() => Heading("clone")?.Detail.Contains("1$(arrow-down)", StringComparison.Ordinal) == true, 5.0f);
+        test.WaitFor(() => Heading("clone")?.Detail.Contains("1$(arrow-down)", StringComparison.Ordinal) == true, 5.0f * GIT_PATIENCE);
         test.Check("repositories: a fetch in the terminal is seen, the clone's heading says it's one behind", () =>
             Heading("clone")?.Detail.Contains("1$(arrow-down) 0$(arrow-up)", StringComparison.Ordinal) == true);
 
@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
             Directory.CreateDirectory(third);
             Git(third, "init", "-q", "-b", "main");
         });
-        test.WaitFor(() => Heading("third") is not null, 12.0f);
+        test.WaitFor(() => Heading("third") is not null, 12.0f * GIT_PATIENCE);
         test.Check("repositories: a git init in the workspace turns up on the side without a refresh", () => Heading("third") is not null);
 
         test.Run(() =>
