@@ -4127,6 +4127,8 @@ let strings = {
         unheard: "not taken in, the turn ended first",
         tool_running: "running {seconds}s",
         card_working: "Working {time}",
+        card_waiting: "Waiting on a task",
+        woken: "Its last turn had ended with a task of its own still going (a build, a wait). That was stopped so it takes what you said now.",
         card_failed: "Failed",
         card_stopped: "Stopped",
         card_done: "Done {time}",

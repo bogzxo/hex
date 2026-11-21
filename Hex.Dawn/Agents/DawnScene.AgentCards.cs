@@ -210,6 +210,8 @@ internal sealed partial class DawnScene
     {
         string time = Took(chat.TurnSeconds);
         (string text, UIBadgeTone tone, string icon, bool dot) = chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
+            // Its turn over but its program still going, on a build or a wait of its own: not done, and said so
+            : chat.RunGoing ? (Said("agents_panel.card_waiting"), UIBadgeTone.Warning, "watch", false)
             : chat.Failed ? (Said("agents_panel.card_failed"), UIBadgeTone.Danger, "error", false)
             : chat.Stopped ? (Said("agents_panel.card_stopped"), UIBadgeTone.Neutral, "debug-stop", false)
             : chat.Unread ? (Said("agents_panel.card_done", ("time", time)), UIBadgeTone.Accent, "", true)

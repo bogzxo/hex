@@ -15,7 +15,7 @@ internal readonly record struct HexChatFacts(int Id, int? Parent, bool Running, 
 {
     /// <summary>The facts of a chat as it is now, what waits on the person being said by the caller (it reads the chat's mail and rows).</summary>
     public static HexChatFacts Of(HexAgentChat chat, bool needsYou) =>
-        new(chat.Id, chat.Parent, chat.Running, needsYou, chat.Entries.Count > 0, chat.Unread, chat.TurnStarted, chat.Ended);
+        new(chat.Id, chat.Parent, chat.Running || chat.RunGoing, needsYou, chat.Entries.Count > 0, chat.Unread, chat.TurnStarted, chat.Ended);
 }
 
 /// <summary>A chat's place in the lists, its index in the chats it was worked out from, how far it's stepped in under the one that started it and its family's band.</summary>

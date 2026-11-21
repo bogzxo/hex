@@ -58,6 +58,20 @@ internal sealed partial class DawnScene
             agentChats.Add(agentChat);
         }
 
+        // Its turn over but its program still going on a task of its own, what's typed would wait in its mail for that to
+        // end, with no way to see it or get through. The person is answered at once: the leftover is stopped and this
+        // turn starts in its session, which the agent can see was cut short
+        if (agentChat.RunGoing || (!agentChat.Running && AgentRunBusy(agentChat)))
+        {
+            agentsStarting.Remove(agentChat);
+            agentsStopping.Remove(agentChat);
+            foreach (AgentRun leftover in agentRuns.Where(each => each.Chat == agentChat).ToList())
+                KillAgentRun(leftover);
+            agentChat.RunGoing = false;
+            agentChat.Stopped = false;
+            agentChat.Note(Said("agents_panel.woken"));
+        }
+
         bool slash = IsAgentSlash(asked);
         string prompt = slash ? asked : AgentDraftPrompt(asked);
         string? location = !slash && agentDraftContext is { } context
