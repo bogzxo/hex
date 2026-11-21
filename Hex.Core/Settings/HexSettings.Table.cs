@@ -92,6 +92,7 @@ internal sealed partial class HexSettings
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
         Flag("agents_resume_after_limit", settings => settings.AgentsResumeAfterLimit, (settings, value) => settings.AgentsResumeAfterLimit = value),
+        Whole("agents_auto_settle_seconds", settings => settings.AgentsAutoSettleSeconds, (settings, value) => settings.AgentsAutoSettleSeconds = value, 0.0f, 3600.0f),
         Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),

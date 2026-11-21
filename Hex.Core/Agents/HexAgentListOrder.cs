@@ -1,21 +1,21 @@
 namespace Hex.Core;
 
 /// <summary>
-/// Where a chat stands in the lists of chats, top to bottom: waiting on the person, working, finished a moment ago (or
-/// new and not asked anything yet), and finished, which folds away under a group of its own.
+/// Where a chat stands in the lists of chats, top to bottom: waiting on the person, working, finished and not settled yet
+/// (or new and not asked anything yet), and settled, the Finished group, which folds away.
 /// </summary>
 internal enum HexChatBand { NeedsYou, Working, Recent, Finished }
 
 /// <summary>
 /// What the order of a chat goes by, taken off it once so the order is worked out with times the caller says (tests and
-/// the lists alike). <paramref name="TurnStarted"/> and <paramref name="Ended"/> are Environment.TickCount64's
-/// milliseconds, 0 for none.
+/// the lists alike). <paramref name="TurnStarted"/>, <paramref name="Ended"/> and <paramref name="UnsettledAt"/> are
+/// Environment.TickCount64's milliseconds, 0 for none.
 /// </summary>
-internal readonly record struct HexChatFacts(int Id, int? Parent, bool Running, bool NeedsYou, bool Asked, bool Unread, long TurnStarted, long Ended)
+internal readonly record struct HexChatFacts(int Id, int? Parent, bool Running, bool NeedsYou, bool Asked, bool Unread, long TurnStarted, long Ended, bool Settled = false, long UnsettledAt = 0)
 {
     /// <summary>The facts of a chat as it is now, what waits on the person being said by the caller (it reads the chat's mail and rows).</summary>
     public static HexChatFacts Of(HexAgentChat chat, bool needsYou) =>
-        new(chat.Id, chat.Parent, chat.Running || chat.RunGoing, needsYou, chat.Entries.Count > 0, chat.Unread, chat.TurnStarted, chat.Ended);
+        new(chat.Id, chat.Parent, chat.Running || chat.RunGoing, needsYou, chat.Entries.Count > 0, chat.Unread, chat.TurnStarted, chat.Ended, chat.Settled, chat.UnsettledAt);
 }
 
 /// <summary>A chat's place in the lists, its index in the chats it was worked out from, how far it's stepped in under the one that started it and its family's band.</summary>
@@ -24,22 +24,33 @@ internal readonly record struct HexChatPlace(int Index, int Step, HexChatBand Ba
 /// <summary>
 /// The order the Agents view's list and Agentic's fleet show the chats in. Families stay together (a chat nobody started,
 /// then the ones it started under it), each family in the band of its most pressing chat: those waiting on the person
-/// first, then those working, then those finished a moment ago, then the finished, most recently active first in each.
-/// A finished chat stays with the working ones for a few minutes after it ended (longer while nobody read it) so the
-/// person sees it end, then folds into the finished group, a subagent too, let go of its family still going.
+/// first, then those working, then those finished and not settled, then the settled (the Finished group), most recently
+/// active first in each. One rule says what's in the Finished group: a chat is there while it's settled, and only then.
+/// The person settles one from its menu; a finished one settles by itself once it's been done a while with nothing unread
+/// or waiting on the person (SettlesNow); working again or waiting on the person unsettles it (Unsettles). A settled
+/// subagent of a family still going is let go of it into the group on its own.
 /// </summary>
 internal static class HexAgentListOrder
 {
-    /// <summary>How long a finished chat stays in the main list after it ended, and how long while nobody has read it.</summary>
-    public const long RECENT_MS = 3 * 60_000, UNREAD_RECENT_MS = 15 * 60_000;
-
-    /// <summary>A chat's own band at <paramref name="now"/>, its family's being the most pressing of its members'.</summary>
-    public static HexChatBand BandOf(in HexChatFacts chat, long now) =>
+    /// <summary>A chat's own band, its family's being the most pressing of its members'.</summary>
+    public static HexChatBand BandOf(in HexChatFacts chat) =>
         chat.NeedsYou ? HexChatBand.NeedsYou
         : chat.Running ? HexChatBand.Working
         : !chat.Asked ? HexChatBand.Recent
-        : chat.Ended > 0 && now - chat.Ended < (chat.Unread ? UNREAD_RECENT_MS : RECENT_MS) ? HexChatBand.Recent
-        : HexChatBand.Finished;
+        : chat.Settled ? HexChatBand.Finished
+        : HexChatBand.Recent;
+
+    /// <summary>
+    /// Whether a finished chat settles by itself at <paramref name="now"/>: asked something, done, nothing unread or
+    /// waiting on the person, and <paramref name="afterMs"/> gone by since it ended (or since the person last unsettled
+    /// it). Never with <paramref name="afterMs"/> 0.
+    /// </summary>
+    public static bool SettlesNow(in HexChatFacts chat, long now, long afterMs) =>
+        afterMs > 0 && !chat.Settled && chat.Asked && !chat.Running && !chat.NeedsYou && !chat.Unread
+        && now - Math.Max(chat.Ended, chat.UnsettledAt) >= afterMs;
+
+    /// <summary>Whether a settled chat comes out of the Finished group: it's working again or something waits on the person.</summary>
+    public static bool Unsettles(in HexChatFacts chat) => chat.Settled && (chat.Running || chat.NeedsYou);
 
     /// <summary>
     /// When a chat was last active for its order within its band: its turn's start while it works, when it ended once it
@@ -53,7 +64,7 @@ internal static class HexAgentListOrder
     /// the family of the chat open (<paramref name="open"/>, its id) is never in the finished band, the finished group
     /// being folded and the chat on screen never hidden.
     /// </summary>
-    public static void Order(IReadOnlyList<HexChatFacts> chats, long now, int open, bool liftOpen, List<HexChatPlace> into)
+    public static void Order(IReadOnlyList<HexChatFacts> chats, int open, bool liftOpen, List<HexChatPlace> into)
     {
         into.Clear();
         int count = chats.Count;
@@ -98,7 +109,7 @@ internal static class HexAgentListOrder
             if (done[i])
                 return;
             done[i] = true;
-            band[i] = BandOf(chats[i], now);
+            band[i] = BandOf(chats[i]);
             active[i] = ActiveAt(chats[i]);
             for (int child = first[i]; child >= 0; child = next[child])
             {

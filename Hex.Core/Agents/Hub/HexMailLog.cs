@@ -29,29 +29,42 @@ internal sealed class HexMailLog
     /// <summary>Endpoints that aren't chats, the person watching and Hex itself.</summary>
     public const int USER = 0, HEX = -2;
 
-    // The most messages kept, the least wanted going first when there are more
-    private const int MOST = 2000;
+    /// <summary>The most messages kept, the oldest read ones going first when there are more.</summary>
+    public const int MOST = 50;
 
     private readonly List<HexMailEntry> entries = [];
+    private readonly Func<HexAgentMail, bool>? unread;
+
+    /// <summary>A log, <paramref name="unread"/> saying whether the one a message is for hasn't read it yet (none, all read).</summary>
+    public HexMailLog(Func<HexAgentMail, bool>? unread = null) => this.unread = unread;
 
     /// <summary>Every message, oldest first.</summary>
     public IReadOnlyList<HexMailEntry> All => entries;
 
     /// <summary>
-    /// A message put in the log. Past the most it keeps, the oldest progress note goes first, then the oldest of
-    /// anything but an instruction or an answer, so a chatty worker never buries what somebody was told to do.
+    /// A message put in the log. Past the most it keeps, the oldest one its receiver has read goes first, then the oldest
+    /// unread one that isn't an instruction. An instruction an agent still has to read and act on is never let go of, the
+    /// log growing past its most for as long as nothing else can go.
     /// </summary>
     public void Add(HexAgentMail mail, HexMailRoute route)
     {
         entries.Add(new HexMailEntry(mail, route));
-        if (entries.Count <= MOST)
-            return;
-
-        int drop = entries.FindIndex(entry => entry.Mail.Kind == "progress");
-        if (drop < 0)
-            drop = entries.FindIndex(entry => entry.Mail.Kind is not ("instruction" or "answer"));
-        entries.RemoveAt(drop < 0 ? 0 : drop);
+        while (entries.Count > MOST)
+        {
+            int drop = entries.FindIndex(entry => !Unread(entry.Mail));
+            if (drop < 0)
+                drop = entries.FindIndex(entry => !IsInstruction(entry.Mail));
+            if (drop < 0)
+                return;
+            entries.RemoveAt(drop);
+        }
     }
+
+    // Whether the one it's for hasn't read it, or, for a message to an endpoint that isn't a chat, whether it asks the person something
+    private bool Unread(HexAgentMail mail) => unread?.Invoke(mail) ?? false;
+
+    /// <summary>Whether a message is an instruction, which an agent has to act on.</summary>
+    public static bool IsInstruction(HexAgentMail mail) => mail.Directive || mail.Kind == "instruction";
 
     /// <summary>Where a message came from as an endpoint, the person for one with no chat.</summary>
     public static int FromOf(HexAgentMail mail) => mail.From ?? USER;

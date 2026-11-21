@@ -59,7 +59,7 @@ internal sealed partial class DawnScene
 
         test.Check("noon keys: the fleet draws the newest first, a started chat under its starter", () =>
             FleetShown().Select(each => each.Chat).Where(chat => chat == first || chat == child || chat == middle || chat == last)
-                .SequenceEqual([last!, middle!, first!, child!]) && noonFleetRows.Children.Count == FleetShown().Count);
+                .SequenceEqual([last!, middle!, first!, child!]) && noonFleetRows.Children.Count == FleetRowsWanted());
 
         // Picked with the pointer, the middle chat's card clicked
         test.Click(() => chrome.ToWorld(noonFleetRows.Children[FleetShown().FindIndex(each => each.Chat == middle)].Bounds.Center));

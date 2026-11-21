@@ -90,24 +90,105 @@ internal sealed partial class DawnScene
             TestNoonFleetSpawned(test);
     }
 
+    // How many rows the fleet has for its cards: one each, and the Finished group's head under them while it's folded
+    // with chats in it (those suites before left settle by themselves as they go)
+    private int FleetRowsWanted() =>
+        FleetShown().Count + (!FinishedShown && chatsFinished.Count > 0 && noonFleetFilter.Text.Trim().Length == 0 ? 1 : 0);
+
+    // Settling: Settle on a card's menu puts a finished chat in the Finished group at once and Unsettle takes it out, it
+    // settles by itself the while agents_auto_settle_seconds says after it finished (never with 0), working again takes
+    // it out unsettled, and Settle all finished settles every finished chat
+    private void TestNoonFleetSettle(HexPointerScript test)
+    {
+        HexAgentChat? done = null;
+        int autoWas = settings.AgentsAutoSettleSeconds;
+        bool Up() => FleetShown().Any(each => each.Chat == done);
+        void Pick(string key) => ChatMenu(done!).Items.First(item => item.Label == Said(key)).OnPicked!();
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 0;
+            done = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Done and read" };
+            done.Ask("a small thing");
+            done.Done();
+            done.Seen = done.Version;
+            agentChats.Add(done);
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(1.2f);
+        test.Check("settle: with auto-settle off a finished chat stays up until it's settled", () => !done!.Settled && Up());
+        test.Check("settle: its menu says Settle, not Unsettle", () =>
+            ChatMenu(done!).Items.Any(item => item.Label == Said("agents_panel.chat_settle") && (item.IsEnabled?.Invoke() ?? true))
+            && ChatMenu(done!).Items.All(item => item.Label != Said("agents_panel.chat_unsettle")));
+        test.Run(() =>
+        {
+            Pick("agents_panel.chat_settle");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Settle from its menu moves it into the Finished group at once, kept unread or not", () =>
+            done!.Settled && !Up() && !done.Unread && ChatsInOrder().Select(each => each.Chat).Contains(done));
+        test.Run(() =>
+        {
+            Pick("agents_panel.chat_unsettle");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Unsettle takes it out again", () => !done!.Settled && Up());
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 1;
+            noonWait = 0;
+        });
+        test.Settle(1.6f);
+        test.Check("auto-settle: a finished chat with nothing unread settles by itself the while set after", () => done!.Settled && !Up());
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 0;
+            done!.Ask("once more");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: working again takes it out of the Finished group, unsettled", () => !done!.Settled && Up());
+
+        test.Run(() =>
+        {
+            done!.Done();
+            done.Seen = done.Version;
+            SettleAllFinished();
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Settle all finished settles every finished chat", () => done!.Settled && !Up() && !agentChats.Any(CanSettle));
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = autoWas;
+            CloseAgentChat(done!);
+        });
+    }
+
     // The finished folded away under a group of their own below the working, in the fleet and the side bar's list alike:
-    // a chat read back from an earlier run is finished at once, one that just ended stays up with the working a while,
-    // the group opens and folds and is remembered, the chat open is never hidden and the keys go round what's on screen
+    // a settled chat is in it, one that just ended stays up with the working until it settles, the group opens and folds
+    // and is remembered, the chat open is never hidden and the keys go round what's on screen. Then settling itself
     private void TestNoonFleetFinished(HexPointerScript test)
     {
         HexAgentChat? old = null, just = null, working = null;
         bool wasOpen = chatsFinishedOpen;
-        // The head by its name and its count's pill
+        // The head by its name and its count's pill (the chats suites before this one left settle by themselves as they go)
         bool HasHead(UIComponent rows) => Descendants(rows).OfType<Label>().Any(label => label.Text.EndsWith(Said("agents_panel.finished_head"), StringComparison.Ordinal))
-            && Descendants(rows).OfType<Badge>().Any(badge => badge.Text == "1");
+            && Descendants(rows).OfType<Badge>().Any(badge => badge.Text == chatsFinished.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         test.Run(() =>
         {
             chatsFinishedOpen = false;
             old = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Old finished" };
             old.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "look at the old thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done long ago")]);
-            // Finished before it was read, the group's head counts it
+            // Finished before it was read and settled, the group's head counts it
             old.Seen = old.Version - 1;
+            old.Settle(true);
             just = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Just finished" };
             just.Ask("a quick one");
             just.Done();
@@ -123,7 +204,7 @@ internal sealed partial class DawnScene
         test.Settle(0.5f);
         test.Check("noon fleet finished: working first, the one that just ended under it, the old one folded away", () =>
             FleetShown().Select(each => each.Chat).Where(chat => chat == old || chat == just || chat == working).SequenceEqual([working!, just!])
-            && ChatsInOrder().Select(each => each.Chat).Last() == old && chatsFinished.Count == 1);
+            && ChatsInOrder().Select(each => each.Chat).Contains(old!) && BandAt(ChatsInOrder().FindIndex(each => each.Chat == old)) == HexChatBand.Finished);
         test.Check("noon fleet finished: the folded group's head is under the cards, one row for each card besides", () =>
             HasHead(noonFleetRows) && noonFleetRows.Children.Count == FleetShown().Count + 1);
         test.Run(() =>
@@ -205,6 +286,8 @@ internal sealed partial class DawnScene
         });
         test.Wait();
 
+        TestNoonFleetSettle(test);
+
         // Everything finished long ago and nothing open: the fleet is its finished head alone, a quiet line over it
         // (the chats suites before this one left are put aside for it, some of them working or just done)
         HexAgentChat? older = null;
@@ -220,6 +303,7 @@ internal sealed partial class DawnScene
                 agentChats.Remove(chat);
             older = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Older finished" };
             older.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "an older thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done")]);
+            older.Settle(true);
             agentChats.Add(older);
             agentChat = null;
             ShowFace(HexFace.Noon);

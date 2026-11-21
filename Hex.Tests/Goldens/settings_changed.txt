@@ -44,6 +44,7 @@ csharp_colors = "visual_studio"
 mcp_server = false
 no_ai = true
 agents_resume_after_limit = false
+agents_auto_settle_seconds = 15
 mcp_hint_quiet = true
 git_autofetch = false
 git_autofetch_interval = 1.87

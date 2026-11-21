@@ -149,8 +149,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// </summary>
     public string? Name { get; set; }
 
-    // The most messages a chat keeps, the oldest go after that
-    private const int MOST_MAIL = 100;
+    /// <summary>The most messages a chat keeps, the oldest it has read going first after that.</summary>
+    public const int MOST_MAIL = 50;
 
     private readonly List<HexAgentMail> mail = [];
     private long mailSeen;
@@ -184,8 +184,18 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public void Post(HexAgentMail message)
     {
         mail.Add(message);
-        if (mail.Count > MOST_MAIL)
-            mail.RemoveAt(0);
+        // Past the most, the oldest read goes, then the oldest unread that isn't an instruction. An instruction the agent
+        // hasn't read yet is never let go of, it still has to act on it
+        long seen = MailSeen;
+        while (mail.Count > MOST_MAIL)
+        {
+            int drop = mail.FindIndex(each => each.Seq <= seen);
+            if (drop < 0)
+                drop = mail.FindIndex(each => !HexMailLog.IsInstruction(each));
+            if (drop < 0)
+                break;
+            mail.RemoveAt(drop);
+        }
         Version++;
     }
 
@@ -311,6 +321,45 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>Goes up with every change, the panel redraws when it's moved.</summary>
     public int Version { get; private set; }
 
+    /// <summary>
+    /// Whether it's settled into the lists' Finished group, by the person or by itself a while after it finished
+    /// (HexAgentListOrder.SettlesNow). Kept with the chat. Another turn, or something waiting on the person, unsettles it.
+    /// </summary>
+    public bool Settled { get; private set; }
+
+    /// <summary>
+    /// When the person last unsettled it, in Environment.TickCount64's milliseconds, 0 for never: it settles by itself
+    /// again only that long after, as after it ended.
+    /// </summary>
+    public long UnsettledAt { get; private set; }
+
+    /// <summary>
+    /// Settled into the Finished group, or out of it again. Not a change of what it says, so it isn't made unread by it,
+    /// what writes it down goes by <see cref="SettleVersion"/>.
+    /// </summary>
+    public void Settle(bool settled)
+    {
+        if (Settled == settled)
+            return;
+        Settled = settled;
+        if (!settled)
+            UnsettledAt = Environment.TickCount64;
+        SettleVersion++;
+    }
+
+    /// <summary>Goes up when it settles or unsettles, for what keeps it written down.</summary>
+    public int SettleVersion { get; private set; }
+
+    /// <summary>
+    /// Settled as read back from where it was kept, nothing moving for it. One that wasn't settles by itself only the
+    /// usual while after now, its turn having ended in a Hex before this one.
+    /// </summary>
+    public void RestoreSettled(bool settled)
+    {
+        Settled = settled;
+        UnsettledAt = settled ? 0 : Environment.TickCount64;
+    }
+
     /// <summary>Called something else from its card, nothing going back to what it was asked. Kept with the chat.</summary>
     public void Rename(string? name)
     {
@@ -416,6 +465,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
         Running = true;
         Stopped = false;
+        Settled = false;
         turnStarted = Environment.TickCount64;
         TurnSeconds = 0;
         return Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation });

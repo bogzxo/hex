@@ -40,7 +40,7 @@ internal sealed class HexAgentHub
     {
         int root = RootOf(chat).Id;
         if (!mail.TryGetValue(root, out HexMailLog? log))
-            mail[root] = log = new HexMailLog();
+            mail[root] = log = new HexMailLog(each => ChatById(each.To) is { } to ? each.Seq > to.MailSeen : each.Kind == "question");
         return log;
     }
 

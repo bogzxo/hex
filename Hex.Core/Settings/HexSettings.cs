@@ -260,6 +260,12 @@ internal sealed partial class HexSettings
     public bool AgentsResumeAfterLimit = true;
 
     /// <summary>
+    /// How many seconds after a chat finished (done, nothing unread, nothing waiting on the person) it settles by itself
+    /// into the lists' Finished group, 0 for never (only when the person settles it).
+    /// </summary>
+    public int AgentsAutoSettleSeconds = 30;
+
+    /// <summary>
     /// Whether Don't show again was pressed on the card Agentic puts up while the server is off, saying what switching
     /// it on saves.
     /// </summary>

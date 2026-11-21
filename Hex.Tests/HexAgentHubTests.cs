@@ -83,21 +83,46 @@ public sealed class HexAgentHubTests
     }
 
     [Fact]
-    public void AFullLogLetsProgressGoBeforeInstructions()
+    public void AFullLogLetsTheOldestReadGoAndKeepsUnreadInstructions()
     {
-        var log = new HexMailLog();
-        log.Add(new HexAgentMail(1, 2, "#2", "instruction", "keep me", true) { To = 1 }, HexMailRoute.Inbox);
-        for (int i = 2; i <= 2001; i++)
-            log.Add(new HexAgentMail(i, 2, "#2", i == 2 ? "progress" : "finding", "step", false) { To = 1 }, HexMailRoute.Inbox);
+        // Read up to 10 by the chat they're for, the instruction at 1 read and the one at 20 not
+        long seen = 10;
+        var log = new HexMailLog(mail => mail.Seq > seen);
+        log.Add(new HexAgentMail(1, 2, "#2", "instruction", "done with", true) { To = 1 }, HexMailRoute.Inbox);
+        for (int i = 2; i <= HexMailLog.MOST; i++)
+            log.Add(new HexAgentMail(i, 2, "#2", i == 20 ? "instruction" : "finding", "step", i == 20) { To = 1 }, HexMailRoute.Inbox);
+        Assert.Equal(HexMailLog.MOST, log.All.Count);
 
-        Assert.Equal(2000, log.All.Count);
-        Assert.Equal(1, log.All[0].Mail.Seq);
-        Assert.DoesNotContain(log.All, entry => entry.Mail.Kind == "progress");
+        // Past the most, the read ones go first, the read instruction with them
+        for (int i = 1; i <= 10; i++)
+            log.Add(new HexAgentMail(HexMailLog.MOST + i, 2, "#2", "finding", "more", false) { To = 1 }, HexMailRoute.Inbox);
+        Assert.Equal(HexMailLog.MOST, log.All.Count);
+        Assert.Equal(11, log.All[0].Mail.Seq);
 
-        // No progress left, the oldest finding goes and the instruction stays
-        log.Add(new HexAgentMail(2002, 2, "#2", "finding", "more", false) { To = 1 }, HexMailRoute.Inbox);
-        Assert.Equal(1, log.All[0].Mail.Seq);
-        Assert.Equal(4, log.All[1].Mail.Seq);
+        // None read left, the oldest unread finding goes and the unread instruction stays
+        for (int i = 11; i <= 20; i++)
+            log.Add(new HexAgentMail(HexMailLog.MOST + i, 2, "#2", "finding", "more", false) { To = 1 }, HexMailRoute.Inbox);
+        Assert.Equal(HexMailLog.MOST, log.All.Count);
+        Assert.Contains(log.All, entry => entry.Mail.Seq == 20);
+        Assert.Equal(20, log.All[0].Mail.Seq);
+    }
+
+    [Fact]
+    public void AChatKeepsItsLastMailAndNeverAnInstructionItHasntRead()
+    {
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Post(new HexAgentMail(1, 2, "#2", "instruction", "act on me", true) { To = 1 });
+        for (int i = 2; i <= HexAgentChat.MOST_MAIL + 30; i++)
+            chat.Post(new HexAgentMail(i, 2, "#2", "finding", "step", false) { To = 1 });
+        Assert.Equal(HexAgentChat.MOST_MAIL, chat.Mail.Count);
+        Assert.Equal(1, chat.Mail[0].Seq);
+        Assert.Equal(HexAgentChat.MOST_MAIL + 30, chat.Mail[^1].Seq);
+
+        // Once it's read, the instruction is the oldest read and goes first
+        chat.MailRead(5);
+        chat.Post(new HexAgentMail(100, 2, "#2", "finding", "more", false) { To = 1 });
+        Assert.DoesNotContain(chat.Mail, mail => mail.Seq == 1);
+        Assert.Equal(HexAgentChat.MOST_MAIL, chat.Mail.Count);
     }
 
     [Fact]

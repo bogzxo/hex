@@ -44,6 +44,7 @@ csharp_colors = "resharper"
 mcp_server = true
 no_ai = false
 agents_resume_after_limit = true
+agents_auto_settle_seconds = 0
 mcp_hint_quiet = false
 git_autofetch = true
 git_autofetch_interval = 1

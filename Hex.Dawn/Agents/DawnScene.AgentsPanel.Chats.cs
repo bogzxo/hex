@@ -61,24 +61,33 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// Every chat in the order the list and the fleet show them (HexAgentListOrder): families together, those waiting on
-    /// the person first, then those working, then those that finished a moment ago, then the finished, the most recently
-    /// active first in each. The finished come last whether they're folded away or not, ChatsShown leaves them out.
+    /// the person first, then those working, then those finished and not settled, then the settled (the Finished group),
+    /// the most recently active first in each. The settled come last whether they're folded away or not, ChatsShown
+    /// leaves them out.
     /// </summary>
     /// <remarks>
-    /// Made again only when what the order goes by moved (the chats, who started whom, how each is doing, a finished one's
-    /// few minutes running out), the same list handed back otherwise, so it's read and never changed by whoever asks.
+    /// Each chat settled or unsettled first as the one rule says (a finished one settles by itself the while
+    /// agents_auto_settle_seconds says after it finished, working again or waiting on the person unsettles it). Made again
+    /// only when what the order goes by moved (the chats, who started whom, how each is doing, settling), the same list
+    /// handed back otherwise, so it's read and never changed by whoever asks.
     /// </remarks>
     private List<(HexAgentChat Chat, int Step)> ChatsInOrder()
     {
         long now = Environment.TickCount64;
+        long settleAfter = Math.Max(0, settings.AgentsAutoSettleSeconds) * 1000L;
         bool lift = !FinishedShown;
         long key = 17 + (lift ? (agentChat?.Id ?? 0) * 7919L + 1 : 0);
         for (int i = 0; i < agentChats.Count; i++)
         {
             HexAgentChat chat = agentChats[i];
             var facts = HexChatFacts.Of(chat, NeedsYou(chat));
+            if (HexAgentListOrder.Unsettles(facts) || HexAgentListOrder.SettlesNow(facts, now, settleAfter))
+            {
+                chat.Settle(!facts.Settled);
+                facts = facts with { Settled = chat.Settled };
+            }
             key = (key * 31 + chat.Id) * 31 + (chat.Parent ?? -1);
-            key = key * 31 + (int)HexAgentListOrder.BandOf(facts, now);
+            key = key * 31 + (int)HexAgentListOrder.BandOf(facts);
             key = key * 31 + HexAgentListOrder.ActiveAt(facts);
             key = key * 31 + (facts.Unread ? 1 : 0);
         }
@@ -89,7 +98,7 @@ internal sealed partial class DawnScene
         chatFacts.Clear();
         foreach (HexAgentChat chat in agentChats)
             chatFacts.Add(HexChatFacts.Of(chat, NeedsYou(chat)));
-        HexAgentListOrder.Order(chatFacts, now, agentChat?.Id ?? -1, lift, chatPlaces);
+        HexAgentListOrder.Order(chatFacts, agentChat?.Id ?? -1, lift, chatPlaces);
 
         // New lists rather than the old ones filled again, whoever holds the last one is reading it
         var ordered = new List<(HexAgentChat, int)>(chatPlaces.Count);
@@ -181,11 +190,18 @@ internal sealed partial class DawnScene
             holder.Add(new Label { Text = Said("agents_panel.finished_none_working"), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_ALONE), Position = new Vector2(inset, 0) });
 
         var row = holder.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, FINISHED_HEAD), Color = Vector4.Zero });
-        row.Add(new Button
+        var head = row.Add(new Button
         {
             Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false,
             Tooltip = Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), OnPressed = ToggleFinished
         });
+        head.OnContextMenu = at =>
+        {
+            var menu = new Menu("finished chats");
+            menu.Add(Said(open ? "agents_panel.finished_fold" : "agents_panel.finished_open"), ToggleFinished, icon: open ? "chevron-down" : "chevron-right");
+            menu.Add(Said("agents_panel.finished_settle_all"), SettleAllFinished, icon: "check-all").IsEnabled = () => agentChats.Any(CanSettle);
+            ContextMenu.Show(chrome, at, menu);
+        };
         row.Add(new Label
         {
             Text = $"$({(open ? "chevron-down" : "chevron-right")}) {Said("agents_panel.finished_head")}", TextScale = 0.125f, Dim = true, Bold = true,
@@ -421,10 +437,60 @@ internal sealed partial class DawnScene
         if (HasRunningStarted(chat))
             menu.Add(Said("agents_panel.chat_stop_all"), () => StopAgent(chat, withStarted: true), icon: "debug-stop");
         menu.AddSeparator();
+        // Into the Finished group at once, or out of it again; and every finished chat not settled yet
+        if (chat.Settled)
+            menu.Add(Said("agents_panel.chat_unsettle"), () => SettleChat(chat, false), icon: "pinned");
+        else
+            menu.Add(Said("agents_panel.chat_settle"), () => SettleChat(chat, true), icon: "check-all").IsEnabled = () => CanSettle(chat);
+        if (agentChats.Any(CanSettle))
+            menu.Add(Said("agents_panel.finished_settle_all"), SettleAllFinished, icon: "check-all");
+        menu.AddSeparator();
         // Said with its subagents only when it has some, they go with it
         bool started = agentChats.Any(each => each.Parent == chat.Id);
         menu.Add(Said(started ? "agents_panel.chat_close_all" : "agents_panel.chat_close"), () => AskCloseAgentChat(chat), icon: "close");
         return menu;
+    }
+
+    /// <summary>Whether a chat can be settled now: asked something, not settled, done and nothing waiting on the person.</summary>
+    private bool CanSettle(HexAgentChat chat) => !chat.Settled && chat.Entries.Count > 0 && !chat.Running && !chat.RunGoing && !NeedsYou(chat);
+
+    /// <summary>
+    /// A chat settled into the Finished group at once, the finished chats it started with it so its family goes in whole,
+    /// or unsettled out of it, then settling by itself again only the usual while after. Both lists drawn again now.
+    /// </summary>
+    private void SettleChat(HexAgentChat chat, bool settled)
+    {
+        if (settled)
+        {
+            foreach (HexAgentChat each in agentChats)
+            {
+                if ((each == chat || IsUnder(each, chat)) && CanSettle(each))
+                    each.Settle(true);
+            }
+        }
+        else
+            chat.Settle(false);
+        ChatsSettled();
+    }
+
+    /// <summary>Every finished chat not settled yet settled at once, from the Finished group's head or a chat's menu.</summary>
+    private void SettleAllFinished()
+    {
+        foreach (HexAgentChat chat in agentChats)
+        {
+            if (CanSettle(chat))
+                chat.Settle(true);
+        }
+        ChatsSettled();
+    }
+
+    // The order worked out again and both lists drawn again for a chat settling, rather than at their next look
+    private void ChatsSettled()
+    {
+        chatsOrderedFor = 0;
+        agentsListDrawn = NOT_DRAWN;
+        noonFleetDrawn = NOT_DRAWN;
+        Engine.WindowManager.RequestFrames();
     }
 
     /// <summary>A chat called something of somebody's own, what it was asked coming back when the name is left empty.</summary>
