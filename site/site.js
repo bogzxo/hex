@@ -12,6 +12,10 @@ if (menu && typeof menu.hidePopover === 'function') {
   const close = () => { if (menu.matches(':popover-open')) menu.hidePopover(); };
   menu.addEventListener('click', event => { if (event.target.closest('a')) close(); });
   wide.addEventListener('change', close);
+  // Open or closed, said on the button as well as by the popover's own wiring
+  const opener = document.querySelector('[popovertarget="site-menu"]');
+  opener?.setAttribute('aria-expanded', 'false');
+  menu.addEventListener('toggle', event => opener?.setAttribute('aria-expanded', String(event.newState === 'open')));
 }
 
 /* Where you are. The part of the page on screen is marked in the bar's list, by the line at a third of the way down */
@@ -69,6 +73,30 @@ if (yours) {
     note.replaceChildren(`Setup, ${main.textContent}. Or the `, Object.assign(document.createElement('a'), { href: zip.href, textContent: 'portable ZIP' }), ', or another system below.');
     yours.hidden = false;
   };
+
+  // A phone or a tablet can't run Hex. It gets a way to send the page to a computer instead: the share sheet where
+  // there is one, the link copied where there isn't
+  const handheld = /Android|iPhone|iPad|Mobile/i.test(ua) || navigator.userAgentData?.mobile;
+  if (!os && handheld && (navigator.share || navigator.clipboard)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button big';
+    button.textContent = navigator.share ? 'Send the link to your computer' : 'Copy the download link';
+    const note = yours.querySelector('.note');
+    note.textContent = 'Hex runs on Windows, macOS and Linux.';
+    note.setAttribute('role', 'status');
+    const url = new URL('#get-it', location.href).href;
+    button.addEventListener('click', async () => {
+      try {
+        if (navigator.share) await navigator.share({ title: 'Hex', url });
+        else { await navigator.clipboard.writeText(url); note.textContent = 'Copied. Open it on your computer.'; }
+      } catch {
+        // Dismissed, nothing to say
+      }
+    });
+    yours.querySelector('a.button').replaceWith(button);
+    yours.hidden = false;
+  }
 
   if (os) {
     const guess = os === 'mac' ? 'arm64' : /arm|aarch64/i.test(ua) ? 'arm64' : 'x64';
@@ -140,7 +168,7 @@ for (const track of document.querySelectorAll('.swipe')) {
   const next = button(1, `Next, ${label}`, 'm9 18 6-6-6-6');
 
   // Dots for a few, a count for many, which wouldn't fit a phone as dots a finger can hit
-  const dots = slides.length <= 7 ? slides.map((_, index) => {
+  const dots = slides.length <= 5 ? slides.map((_, index) => {
     const dot = document.createElement('button');
     dot.type = 'button';
     dot.className = 'dot';
