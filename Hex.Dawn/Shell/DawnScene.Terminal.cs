@@ -268,7 +268,7 @@ internal sealed partial class DawnScene : ITerminalHostUi
 
     void ITerminalHostUi.Choose(string title, string message, IReadOnlyList<string> items, Action<int> picked)
     {
-        var choices = new List<(string Text, Action Picked)>();
+        List<(string Text, Action Picked)> choices = [];
         for (int i = 0; i < items.Count; i++)
         {
             int index = i;

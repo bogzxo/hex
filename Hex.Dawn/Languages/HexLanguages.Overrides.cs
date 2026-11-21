@@ -25,7 +25,16 @@ internal sealed partial class HexLanguages
     }
 
     // A type's declaration on a line, with the kind of type it is
-    private static readonly Regex TypeDeclared = new(@"\b(interface|class|struct|record)\s+[A-Za-z_]", RegexOptions.Compiled);
+    [GeneratedRegex(@"\b(interface|class|struct|record)\s+[A-Za-z_]")]
+    private static partial Regex TypeDeclared { get; }
+
+    // The modifiers in front of a member that say what it is to the types it's in, each a word of its own
+    [GeneratedRegex(@"\boverride\b")]
+    private static partial Regex OverrideWord { get; }
+    [GeneratedRegex(@"\babstract\b")]
+    private static partial Regex AbstractWord { get; }
+    [GeneratedRegex(@"\bvirtual\b")]
+    private static partial Regex VirtualWord { get; }
 
     // Words that put a name being called rather than declared after them
     private static readonly HashSet<string> NotTypes = ["return", "new", "await", "throw", "yield", "else", "case", "goto", "in", "is", "as", "out", "ref", "nameof", "typeof", "using", "var", "not", "and", "or", "when"];
@@ -93,12 +102,14 @@ internal sealed partial class HexLanguages
     {
         for (int at = Math.Min(line, lines.Count - 1); at >= 0; at--)
         {
-            string text = lines[at].TrimStart();
+            // Looked at where it is, every line up to the type's declaration was copied to ask
+            ReadOnlySpan<char> text = lines[at].AsSpan().TrimStart();
             if (text.StartsWith("//", StringComparison.Ordinal) || text.StartsWith('*') || text.StartsWith("/*", StringComparison.Ordinal))
                 continue;
 
-            if (TypeDeclared.Match(text) is { Success: true } type)
-                return type.Groups[1].Value == "interface";
+            // The first declaration on the line starts with the kind of type it is
+            foreach (ValueMatch type in TypeDeclared.EnumerateMatches(text))
+                return text[type.Index..].StartsWith("interface", StringComparison.Ordinal);
         }
 
         return false;
@@ -110,12 +121,12 @@ internal sealed partial class HexLanguages
         if (line < 0 || line >= lines.Count || !DeclaresMember(lines[line].TrimEnd('\r'), column, word))
             return MemberKind.Used;
 
-        string before = lines[line][..column];
-        if (Regex.IsMatch(before, @"\boverride\b"))
+        ReadOnlySpan<char> before = lines[line].AsSpan(0, column);
+        if (OverrideWord.IsMatch(before))
             return MemberKind.Implements;
-        if (Regex.IsMatch(before, @"\babstract\b"))
+        if (AbstractWord.IsMatch(before))
             return MemberKind.Abstract;
-        if (Regex.IsMatch(before, @"\bvirtual\b"))
+        if (VirtualWord.IsMatch(before))
             return MemberKind.Virtual;
 
         // One of an interface with a body of its own (a default) still runs, the rest are the interface's word for it

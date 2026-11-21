@@ -66,7 +66,7 @@ internal sealed partial class HexRunning
         if (values is null || valuesOf != of)
             return null;
 
-        var found = new List<UICodeDiagnostic>();
+        List<UICodeDiagnostic> found = [];
         if (values is { Error: null } clean)
         {
             if (!ReferenceEquals(linted, clean))
@@ -202,7 +202,7 @@ internal sealed partial class HexRunning
     private void ShowInlineValues(HexDocument ran, HexValues done)
     {
         string? own = ran.Path is { } path ? Path.GetFullPath(path) : null;
-        var hints = new List<UICodeHint>();
+        List<UICodeHint> hints = [];
         foreach (var (name, value) in done.Declared)
         {
             if (!done.Sources.TryGetDeclaration(name, out var at) || at.Literal || !at.Span.IsKnown)
@@ -264,7 +264,7 @@ internal sealed partial class HexRunning
         }
 
         HexValues shown = values!;
-        var items = new List<UITreeItem>();
+        List<UITreeItem> items = [];
 
         foreach (UICodeDiagnostic error in code.SyntaxErrors)
             items.Add(ProblemItem($"line {error.Line + 1}: {error.Message}", "error", context.Panels.Error, () => GoToCode(error.Line, error.Column)));
@@ -476,7 +476,7 @@ internal sealed partial class HexRunning
     /// <summary>The lines of // comment right over a line of the code on screen, joined, nothing if there are none.</summary>
     private string CommentAbove(int line)
     {
-        var lines = new List<string>();
+        List<string> lines = [];
         for (int at = line - 1; at >= 0 && lines.Count < 8; at--)
         {
             string text = code.Document.LineAt(at).Trim();

@@ -159,6 +159,7 @@ internal sealed partial class DawnScene
             agentsQuestionTimes.Clear();
             agentRowFits.Clear();
             agentsRows.Clear(keep: typing);
+            agentsWaitingRow = null;
 
             agentsTyping = typing;
             if (chat is not { Entries.Count: > 0 })
@@ -311,6 +312,75 @@ internal sealed partial class DawnScene
         }
         if (agentsTyping is not null)
             agentsTyping.Children[0].Visible = shown;
+
+        // Its turn over but a task of its own still going (a build, a wait in the background): said at the end of the
+        // chat with a way through, where the chat read as done and what was typed to it waited unseen
+        if (chat.RunGoing && agentsWaitingRow is null)
+        {
+            agentsWaitingRow = agentsRows.Add(MakeWaitingRow(chat));
+            if (!still)
+                SlideRowIn(agentsWaitingRow);
+        }
+        else if (!chat.RunGoing && agentsWaitingRow is not null)
+        {
+            agentsRows.Remove(agentsWaitingRow);
+            agentsWaitingRow = null;
+        }
+        else if (agentsWaitingRow is not null && agentsRows.Children[^1] != agentsWaitingRow)
+        {
+            agentsRows.MoveChild(agentsWaitingRow, agentsRows.Children.Count);
+        }
+    }
+
+    // The row at the end of a chat waiting on a task of its own, see ShowTyping
+    private UIComponent? agentsWaitingRow;
+
+    // A spinner and what it's waiting on, with Wake now and Stop
+    private UIComponent MakeWaitingRow(HexAgentChat chat)
+    {
+        Vector4 raised = Skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
+        var card = new Panel
+        {
+            Fill = UIFill.Horizontal, Size = new Vector2(0, 34), Radius = 6, Color = raised,
+            Outline = ToolOutline(HexAgentToolState.Running, Skin), Padding = new UIEdges(10, 0, 8, 0)
+        };
+        string spin = settings.UiAnimation > 0 ? "loading~spin" : "watch";
+        card.Add(new Label
+        {
+            Text = $"$({spin}) {UIRichText.Literal(Said("agents_panel.waiting_row"))}", TextScale = 0.13f,
+            Anchor = Origin.Left, Pivot = Origin.Left
+        });
+        var actions = card.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 4, Anchor = Origin.Right, Pivot = Origin.Right, Size = new Vector2(0, 26) });
+        actions.Add(new Button
+        {
+            Label = Said("agents_panel.waiting_wake"), Icon = "debug-continue", Style = "button_flat", Size = new Vector2(112, 26),
+            LabelScale = 0.125f, Animated = false, Tooltip = Said("agents_panel.waiting_wake_tip"), OnPressed = () => WakeWaitingAgent(chat)
+        });
+        actions.Add(new Button
+        {
+            Label = Said("agents_panel.waiting_stop"), Icon = "debug-stop", Style = "button_flat", Size = new Vector2(80, 26),
+            LabelScale = 0.125f, Animated = false, OnPressed = () => StopAgent(chat)
+        });
+        return card;
+    }
+
+    /// <summary>
+    /// A chat waiting on a task of its own woken now: the task and its process stopped and the agent started again in
+    /// its session, told it was woken, what was sent to it meanwhile in front.
+    /// </summary>
+    private void WakeWaitingAgent(HexAgentChat chat)
+    {
+        if (!extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
+            return;
+
+        agentsStarting.Remove(chat);
+        agentsStopping.Remove(chat);
+        foreach (AgentRun leftover in agentRuns.Where(each => each.Chat == chat).ToList())
+            KillAgentRun(leftover);
+        chat.RunGoing = false;
+        chat.Stopped = false;
+        string told = "You were woken by the person while you waited on a task of your own (a build, a wait in the background), which was stopped. Check what it left and carry on.";
+        StartAgent(chat, run.Extension, run.Run, told, Said("agents_panel.waiting_woken"));
     }
 
     // An empty chat, what it's for and a few things to ask to start from, coming in one after another
@@ -508,12 +578,10 @@ internal sealed partial class DawnScene
                 label.Text = Said("agents_panel.tool_running", ("seconds", entry.Seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
-        // A group's time, all of its calls together, going on while one of them runs
+        // A group's time, how long any of its calls was going, going on while one of them runs
         foreach (var (time, calls) in agentsGroupTimes.Values)
         {
-            double seconds = 0.0;
-            foreach (HexAgentEntry call in calls)
-                seconds += call.Seconds;
+            double seconds = GroupSeconds(calls);
             string said = seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s";
             if (time.Text != said)
                 time.Text = said;

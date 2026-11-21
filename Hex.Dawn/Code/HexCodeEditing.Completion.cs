@@ -282,7 +282,8 @@ internal sealed partial class HexCodeEditing
     // Whether a file is HIDL, which finds its declarations its own way
     private static bool IsHidlFile(string path) => Path.GetExtension(path).ToLowerInvariant() is ".hor" or ".jab" or ".hex-workspace";
 
-    private static readonly System.Text.RegularExpressions.Regex IncludeLine = new(@"^\s*#\s*include\s*[<""]([^>""]+)[>""]", System.Text.RegularExpressions.RegexOptions.Compiled);
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*#\s*include\s*[<""]([^>""]+)[>""]")]
+    private static partial System.Text.RegularExpressions.Regex IncludeLine { get; }
 
     /// <summary>
     /// Where a name is declared in some code, by its tokens, null for nowhere. Given where it's used, the parameter or

@@ -37,6 +37,7 @@ internal static class HexAgentChatStore
             ["context_limit"] = chat.ContextLimit,
             ["cache_read"] = chat.CacheRead,
             ["stopped"] = chat.Stopped,
+            ["settled"] = chat.Settled,
             ["key"] = chat.Key,
             ["dropped"] = chat.Dropped,
             ["plan"] = chat.Plan?.ToStored(),
@@ -114,6 +115,8 @@ internal static class HexAgentChatStore
             CacheRead = said["cache_read"]?.GetValue<long>() ?? 0,
             Stopped = said["stopped"]?.GetValue<bool>() ?? false
         };
+        // Chats kept before there was settling were in the Finished group once read back, as they still are
+        chat.RestoreSettled(said["settled"]?.GetValue<bool>() ?? true);
 
         if (said["options"] is JsonObject options)
         {

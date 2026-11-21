@@ -427,7 +427,8 @@ internal sealed partial class DawnScene
 
         if (answered.IsFaulted)
             Say(Said("documents.dialog_failed", ("message", answered.Exception?.InnerException?.Message ?? "")), error: true);
-        else if (answered.Result is { } path)
+        // A dialog that was cancelled picked nothing, its Result would throw
+        else if (answered.IsCompletedSuccessfully && answered.Result is { } path)
             picked?.Invoke(path);
     }
 
@@ -570,11 +571,12 @@ internal sealed partial class DawnScene
         }
         if (crumbsFor.Document == gone) crumbsFor = default;
         if (crumbFoldersFor.Of == gone) crumbFoldersFor = default;
-        if (ReferenceEquals(codeTextKept.Of, gone.Editor?.Document)) ForgetCodeText();
+        if (ReferenceEquals(codeTextKept.Of, gone.Editor.Document)) ForgetCodeText();
         if (peeking?.From == gone) peeking = null;
         if (plainFor == gone) plainFor = null;
         if (languageFor == gone) languageFor = null;
-        if (ReferenceEquals(definesOf.Text, gone.Editor.Text))
+        // Only when something's kept, asking for the text of a big file that was never joined joined it as it closed
+        if (definesOf.Text is { } defined && ReferenceEquals(defined, gone.Editor.Text))
             definesOf = (null, new Dictionary<string, string>());
         lensFiles.Remove(gone);
         localisationFound.Remove(gone);
@@ -663,8 +665,9 @@ internal sealed partial class DawnScene
         revert.IsEnabled = () => document.Path is not null && (document.Modified || document.CodeEdited);
 
         commands.Add("File/close", Said("documents.close"), Close, "Ctrl+W", "close", UIKeyUse.BoundWhileTyping);
-        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document), icon: "clear-all").IsEnabled = () => documents.Count > 1;
-        commands.Add("File/close", Said("documents.close_all"), () => CloseAll(), icon: "close-all");
+        commands.Add("File/close", Said("documents.close_others"), () => CloseAll(except: document, keepPinned: true), icon: "clear-all").IsEnabled = () => documents.Count > 1;
+        commands.Add("File/close", Said("documents.close_all"), () => CloseAll(keepPinned: true), icon: "close-all");
+        commands.Add("File/close", Said("documents.pin"), () => PinTab(document, !document.Pinned), "Ctrl+K Shift+Enter", "pin").IsEnabled = () => !plainShown;
 
         // VS Code's, the file closed last back and the path of the one on screen copied
         commands.Add("File/close", Said("documents.reopen_closed"), ReopenClosed, "Ctrl+Shift+T", "history", UIKeyUse.BoundWhileTyping).IsEnabled = () => closed.Count > 0;

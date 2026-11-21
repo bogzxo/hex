@@ -165,6 +165,7 @@ internal sealed partial class DawnScene
             "files_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.FilesExclude),
             "search_exclude" => Horizon.HIDL.Library.Natives.List(hex.settings.SearchExclude),
             "search_use_ignore_files" => Values.Bool(hex.settings.SearchUseIgnoreFiles),
+            "explorer_auto_reveal" => Values.Bool(hex.settings.ExplorerAutoReveal),
             _ => null
         };
 
@@ -240,6 +241,10 @@ internal sealed partial class DawnScene
                 case ("search_use_ignore_files", BooleanValue ignore):
                     settings.SearchUseIgnoreFiles = ignore.Value;
                     hex.ExcludesChanged();
+                    hex.SaveSettings();
+                    return;
+                case ("explorer_auto_reveal", BooleanValue reveal):
+                    settings.ExplorerAutoReveal = reveal.Value;
                     hex.SaveSettings();
                     return;
                 default:

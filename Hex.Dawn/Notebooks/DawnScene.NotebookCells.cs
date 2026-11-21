@@ -21,6 +21,25 @@ internal sealed class NotebookCellView
     public required NotebookCellEditor Editor { get; init; }
     public StackPanel? Written { get; set; }
 
+    /// <summary>How long its last run took, or has been running, under the count.</summary>
+    public required Label Took { get; init; }
+
+    /// <summary>The row of the outputs with the rail beside them, and the line said in their place while they're hidden.</summary>
+    public required StackPanel OutputRow { get; init; }
+    public required NotebookRail OutputRail { get; init; }
+    public required Button OutputHidden { get; init; }
+
+    /// <summary>The rail beside a code cell's code and the line said in its place while it's hidden, null for markdown.</summary>
+    public NotebookRail? InputRail { get; init; }
+    public Button? InputHidden { get; init; }
+
+    /// <summary>What the gutter last said, a state (CellState) and the seconds or milliseconds it showed, -1 for none.</summary>
+    public int StateShown { get; set; } = -1;
+    public long TimeShown { get; set; } = -1;
+
+    /// <summary>Whether a running cell's button showed stop, pointed at, rather than its spinner.</summary>
+    public bool StopShown { get; set; }
+
     /// <summary>A code cell's outlined frame round its editor, null for a markdown cell, whose editor goes without.</summary>
     public StackPanel? Frame { get; set; }
 
@@ -48,6 +67,20 @@ internal sealed class NotebookCellCard : Panel
         Pressed?.Invoke(now - pressedAt < 400);
         pressedAt = now;
     }
+}
+
+/// <summary>
+/// The thin bar down the left of a cell's code or its outputs, JupyterLab's collapser. It's drawn in the accent on the cell
+/// picked (solid while it's typed into), in the theme's error colour beside the outputs of a run that failed, and pressed it
+/// hides or shows what it's beside.
+/// </summary>
+internal sealed class NotebookRail : Panel
+{
+    public Action? Pressed { get; set; }
+
+    protected override bool HitTestVisible => true;
+
+    protected override void OnPointerDown(Vector2 point) => Pressed?.Invoke();
 }
 
 /// <summary>A cell's editor, Escape out of it going back to picking cells (Jupyter's command mode) once it has nothing of its own to close.</summary>
@@ -82,8 +115,10 @@ internal sealed class NotebookCellEditor : CodeEditor
 // under that. One cell is picked at a time, typed into or not, the way Jupyter has edit and command modes
 internal sealed partial class DawnScene
 {
-    // How wide the column of counts down the left of the cells is
+    // How wide the column of counts down the left of the cells is, and the rail beside a cell's code and outputs with the
+    // gap after it
     private const float CELL_GUTTER = 58.0f;
+    private const float CELL_RAIL = 3.0f, CELL_RAIL_GAP = 5.0f;
 
     private readonly List<NotebookCellView> cellViews = [];
 
@@ -119,6 +154,8 @@ internal sealed partial class DawnScene
         foreach (NotebookCellView view in cellViews)
             ForgetOutputs(view);
         cellViews.Clear();
+        cellTools.Parent?.Remove(cellTools);
+        toolsOn = null;
         foreach (UIComponent child in notebookCells.Children.ToList())
             notebookCells.Remove(child);
     }
@@ -131,6 +168,7 @@ internal sealed partial class DawnScene
         ClearCellViews();
         for (int i = 0; i < notebook.Model.Cells.Count; i++)
             cellViews.Add(MakeCellView(notebook, notebook.Model.Cells[i]));
+        notebookCells.Add(notebookHintRow);
 
         if (typing && notebook.Selected < cellViews.Count)
             EditCell(notebook, notebook.Selected);
@@ -143,32 +181,59 @@ internal sealed partial class DawnScene
         var row = card.Add(new StackPanel { Direction = UIDirection.Horizontal, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f });
 
         var gutter = row.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(CELL_GUTTER, 0.0f), Spacing = 2.0f });
-        var run = gutter.Add(new Button { Icon = "play", Size = new Vector2(26.0f, 24.0f), Anchor = Origin.TopRight, Tooltip = Said("notebook.run_cell") });
+        var run = gutter.Add(new Button { Icon = "play", Size = new Vector2(26.0f, 24.0f), Anchor = Origin.TopRight, Tooltip = Said("notebook.run_cell_tip") });
         var count = gutter.Add(new Label { Anchor = Origin.TopRight, Align = Origin.TopRight, TextScale = 0.125f, Dim = true });
+        var took = gutter.Add(new Label { Anchor = Origin.TopRight, Align = Origin.TopRight, TextScale = 0.12f, Dim = true });
 
         var body = row.Add(new StackPanel { Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f });
-        // The code in a thin outline of the theme's border colour, and what it put out in one of its own in the accent's,
-        // so where the code ends and its output starts is plain at a glance. A markdown cell's text goes without
-        var (codeLine, outputLine) = NotebookOutlines();
-        StackPanel? frame = cell.Kind == CellKind.Markdown ? null : body.Add(new StackPanel
+        // The code in a thin outline of the theme's border colour with the rail beside it, its outputs under it with a rail
+        // of their own, so where the code ends and what it put out starts is plain at a glance. A markdown cell's text goes
+        // without either
+        bool framed = cell.Kind != CellKind.Markdown;
+        StackPanel? inputRow = framed ? body.Add(new StackPanel { Direction = UIDirection.Horizontal, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = CELL_RAIL_GAP }) : null;
+        NotebookRail? inputRail = inputRow?.Add(new NotebookRail { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(CELL_RAIL, 0.0f), Radius = CELL_RAIL * 0.5f, Tooltip = Said("notebook.hide_code") });
+        StackPanel? frame = inputRow?.Add(new StackPanel
         {
-            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Padding = new UIEdges(CELL_FRAME), Radius = 5.0f, Outline = codeLine
+            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Padding = new UIEdges(CELL_FRAME), Radius = 5.0f, Outline = NotebookOutline()
         });
         var editor = (frame ?? body).Add(new NotebookCellEditor(cell.Source) { Arranged = FitNotebookWrap });
         PrepareCellEditor(notebook, editor, cell);
-        var outputs = body.Add(new StackPanel
-        {
-            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 2.0f,
-            Padding = new UIEdges(CELL_OUTPUT_INSET), Radius = 5.0f, Outline = outputLine
-        });
+        Button? inputHidden = framed ? body.Add(HiddenLine(Said("notebook.code_hidden"))) : null;
 
-        var view = new NotebookCellView { Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor, Frame = frame };
+        var outputRow = body.Add(new StackPanel { Direction = UIDirection.Horizontal, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = CELL_RAIL_GAP, Visible = false });
+        var outputRail = outputRow.Add(new NotebookRail { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Size = new Vector2(CELL_RAIL, 0.0f), Radius = CELL_RAIL * 0.5f, Tooltip = Said("notebook.hide_output") });
+        var outputs = outputRow.Add(new StackPanel
+        {
+            Direction = UIDirection.Vertical, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Spacing = 4.0f,
+            Padding = new UIEdges(CELL_OUTPUT_INSET, 2.0f, CELL_OUTPUT_INSET, 2.0f)
+        });
+        Button outputHidden = body.Add(HiddenLine(Said("notebook.output_hidden")));
+
+        var view = new NotebookCellView
+        {
+            Cell = cell, Card = card, Body = body, Outputs = outputs, Count = count, RunButton = run, Editor = editor, Frame = frame, Took = took,
+            OutputRow = outputRow, OutputRail = outputRail, OutputHidden = outputHidden, InputRail = inputRail, InputHidden = inputHidden
+        };
         card.Pressed = twice => PressCell(notebook, view, twice);
         run.OnPressed = () =>
         {
+            // A cell that's running is stopped by the same button, the kernel's interrupt
+            if (notebook.Run.RunningSince(cell) is not null)
+            {
+                InterruptKernel(notebook);
+                return;
+            }
+
             PickCell(notebook, notebook.Model.Cells.IndexOf(cell), edit: false);
             RunCells(notebook, [cell]);
         };
+        if (inputRail is not null && inputHidden is not null)
+        {
+            inputRail.Pressed = () => HideSource(notebook, cell, hide: true);
+            inputHidden.OnPressed = () => HideSource(notebook, cell, hide: false);
+        }
+        outputRail.Pressed = () => HideOutputs(notebook, cell, hide: true);
+        outputHidden.OnPressed = () => HideOutputs(notebook, cell, hide: false);
 
         if (cell.Kind == CellKind.Markdown)
         {
@@ -297,16 +362,14 @@ internal sealed partial class DawnScene
         if (notebook.Editing && (notebook.Selected >= cellViews.Count || !cellViews[notebook.Selected].Editor.IsFocused) && compositor.Focus is not null)
             notebook.Editing = false;
 
-        Vector4 plain = compositor.Skin is { } skin ? skin.PanelColor with { W = 0.0f } : Vector4.Zero;
-        Vector4 picked = compositor.Skin is { } lit ? lit.HoverColor with { W = MathF.Max(lit.HoverColor.W, 0.18f) } : new Vector4(1.0f, 1.0f, 1.0f, 0.06f);
-        Vector4 typing = compositor.Skin is { } accent ? accent.HighlightColor with { W = 0.12f } : new Vector4(0.3f, 0.5f, 1.0f, 0.12f);
-
+        NotebookLook look = NotebookLookNow();
+        long now = System.Environment.TickCount64;
         for (int i = 0; i < cellViews.Count; i++)
         {
             NotebookCellView view = cellViews[i];
             NotebookCell cell = view.Cell;
             bool selected = i == notebook.Selected;
-            view.Card.Color = !selected ? plain : notebook.Editing ? typing : picked;
+            bool editing = selected && notebook.Editing;
 
             // The word under the caret lit down a cell only while it's typed into, every cell's caret sits at its start
             view.Editor.LightOccurrences = view.Editor.IsFocused;
@@ -314,18 +377,10 @@ internal sealed partial class DawnScene
             bool code = cell.Kind == CellKind.Code;
             view.RunButton.Visible = code;
             view.Count.Visible = code;
+            view.Took.Visible = code;
+            CellState state = code ? StateOf(notebook, cell) : CellState.None;
             if (code)
-            {
-                // Written only when it's another, a count made into text every tick for every cell was garbage for nothing
-                bool queued = notebook.Run.IsQueued(cell) || notebook.Waiting.Contains(cell);
-                int counted = queued ? -2 : cell.ExecutionCount ?? -1;
-                if (view.CountShown != counted)
-                {
-                    view.CountShown = counted;
-                    view.Count.Text = queued ? "[*]" : counted >= 0 ? $"[{counted}]" : "[ ]";
-                    view.RunButton.Icon = queued ? "loading" : "play";
-                }
-            }
+                ShowCellState(notebook, view, state, now, look);
 
             // The source as it is now, from its editor as it's typed or from outside it (moved, made again from the JSON),
             // looked at only when it's another string, its text made every tick was every cell's whole source
@@ -339,7 +394,7 @@ internal sealed partial class DawnScene
                     List<NotebookPicture> previous = markdownPictures.TryGetValue(view, out var old) ? old : [];
                     var pictures = new List<NotebookPicture>();
                     markdownPictures[view] = pictures;
-                    WriteMarkdown(markdown, cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown"), notebook.Model.Language, pictures, cell.Rest["attachments"] as System.Text.Json.Nodes.JsonObject);
+                    WriteMarkdown(markdown, cell.Source.Length > 0 ? cell.Source : Said("notebook.empty_markdown"), notebook.Model.Language, pictures, cell.Rest["attachments"] as System.Text.Json.Nodes.JsonObject, tools: false);
                     ReleaseNotebookPictures(previous);
                 }
             }
@@ -347,46 +402,86 @@ internal sealed partial class DawnScene
             // A markdown cell is written out unless it's being typed into, or empty
             if (view.Written is { } written)
             {
-                bool editing = selected && notebook.Editing;
                 view.Editor.Visible = editing || cell.Source.Length == 0 && selected;
                 written.Visible = !view.Editor.Visible;
             }
 
             if (view.OutputsDrawn != OutputsSignature(cell, notebook.Run.Input))
                 DrawOutputs(notebook, view);
+
+            // Code and outputs hidden or shown as the cell's metadata says (Jupyter's source_hidden and outputs_hidden). A
+            // cell typed into always shows its code
+            bool sourceHidden = view.InputHidden is not null && !editing && SourceHidden(cell);
+            bool outputsHidden = OutputsHidden(cell);
+            bool hasOutputs = view.Outputs.Children.Count > 0;
+            if (view.Frame is { } frame)
+            {
+                frame.Visible = !sourceHidden;
+                view.InputRail!.Visible = !sourceHidden;
+                view.InputHidden!.Visible = sourceHidden;
+            }
+            view.OutputRow.Visible = hasOutputs && !outputsHidden;
+            view.OutputHidden.Visible = hasOutputs && outputsHidden;
+
+            // The picked cell lifted a little off the page and its rails in the accent, solid while it's typed into. The
+            // outputs of a run that failed keep the error colour's rail whether it's picked or not, so it's found scrolling
+            view.Card.Color = !selected ? Vector4.Zero : editing ? look.Typing : look.Picked;
+            Vector4 rail = editing ? look.Accent : selected ? look.AccentSoft : Vector4.Zero;
+            if (view.InputRail is { } input)
+                input.Color = rail;
+            view.OutputRail.Color = state == CellState.Failed ? look.Error : rail;
         }
+
+        UpdateCellTools(notebook);
+        UpdateNotebookHint(notebook);
     }
 
-    // How far in from its outline a code cell's editor sits, and a cell's outputs from theirs
+    // How far in from its outline a code cell's editor sits, and a cell's outputs from their rail
     private const float CELL_FRAME = 2.0f, CELL_OUTPUT_INSET = 6.0f;
 
-    /// <summary>
-    /// The outline round a cell's code, the theme's border a touch stronger so it shows on the card, and the one round its
-    /// output, the accent faded, told apart from the code's by its tint.
-    /// </summary>
-    private (Vector4 Code, Vector4 Output) NotebookOutlines()
+    /// <summary>The outline round a cell's code, the theme's border a touch stronger so it shows on the page.</summary>
+    private Vector4 NotebookOutline()
     {
-        Horizon.UI.Skinning.UISkin? skin = compositor.Skin;
-        Vector4 border = skin?.BorderColor ?? new Vector4(1, 1, 1, 0.14f);
-        Vector4 accent = skin?.Palette.Accent ?? new Vector4(0.35f, 0.6f, 1.0f, 1.0f);
-        return (border with { W = MathF.Min(1.0f, border.W * 1.6f + 0.08f) }, accent with { W = 0.38f });
+        Vector4 border = compositor.Skin?.BorderColor ?? Vector4.Zero;
+        return border with { W = MathF.Min(1.0f, border.W * 1.6f + 0.08f) };
     }
+
+    // Helper method for the line said in place of a cell's hidden code or outputs, pressed it shows them again
+    private Button HiddenLine(string said) => new()
+    {
+        Icon = "unfold",
+        Label = said,
+        Tooltip = said,
+        Align = Origin.Left,
+        LabelScale = 0.125f,
+        Anchor = Origin.TopLeft,
+        Pivot = Origin.TopLeft,
+        Size = new Vector2(0.0f, 24.0f),
+        Visible = false
+    };
 
     // Helper method for every cell as wide as the notebook, less its column of counts
     private void FitCellViews(float width)
     {
         float body = MathF.Max(120.0f, width - CELL_GUTTER - 12.0f);
+        float inner = body - CELL_RAIL - CELL_RAIL_GAP;
         foreach (NotebookCellView view in cellViews)
         {
             view.Card.Size = view.Card.Size with { X = width };
             view.Body.Size = view.Body.Size with { X = body };
             if (view.Frame is { } frame)
-                frame.Size = frame.Size with { X = body };
-            view.Editor.Size = view.Editor.Size with { X = view.Frame is null ? body : body - CELL_FRAME * 2.0f };
+            {
+                frame.Size = frame.Size with { X = inner };
+                view.InputRail!.Size = new Vector2(CELL_RAIL, frame.Size.Y);
+            }
+            view.Editor.Size = view.Editor.Size with { X = view.Frame is null ? body : inner - CELL_FRAME * 2.0f };
             if (view.Written is { } written)
                 FitWritten(written, body, settings.CodeZoom);
-            view.Outputs.Size = view.Outputs.Size with { X = body };
-            FitOutputs(view, body - CELL_OUTPUT_INSET * 2.0f, settings.CodeZoom);
+            view.Outputs.Size = view.Outputs.Size with { X = inner };
+            view.OutputRail.Size = new Vector2(CELL_RAIL, view.Outputs.Size.Y);
+            FitOutputs(view, inner - CELL_OUTPUT_INSET * 2.0f, settings.CodeZoom);
         }
+
+        FitCellTools(body);
     }
 }

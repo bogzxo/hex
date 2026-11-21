@@ -38,8 +38,9 @@ internal sealed partial class DawnScene
             return at >= 0 && at < noonFleetRows.Children.Count ? noonFleetRows.Children[at] : null;
         }
 
+        // The latest of them to finish first, as every band is the most recently active first
         test.Check("noon fleet: the two a chat started come right after it in the fleet", () =>
-            ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Take(3).SequenceEqual([lead!, scout!, builder!]));
+            ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Take(3).SequenceEqual([lead!, builder!, scout!]));
         test.Check("noon fleet: the ones it started are a step in under it", () =>
             CardOf(lead!) is { } top && CardOf(scout!) is { } first && CardOf(builder!) is { } second
             && first.Padding.Left > top.Padding.Left + 4 && MathF.Abs(second.Padding.Left - first.Padding.Left) < 1);
@@ -84,8 +85,252 @@ internal sealed partial class DawnScene
         test.Run(() => ShowFace(HexFace.Dawn));
         test.Settle(0.2f);
 
+        TestNoonFleetFinished(test);
         if (OperatingSystem.IsWindows())
             TestNoonFleetSpawned(test);
+    }
+
+    // How many rows the fleet has for its cards: one each, and the Finished group's head under them while it's folded
+    // with chats in it (those suites before left settle by themselves as they go)
+    private int FleetRowsWanted() =>
+        FleetShown().Count + (!FinishedShown && chatsFinished.Count > 0 && noonFleetFilter.Text.Trim().Length == 0 ? 1 : 0);
+
+    // Settling: Settle on a card's menu puts a finished chat in the Finished group at once and Unsettle takes it out, it
+    // settles by itself the while agents_auto_settle_seconds says after it finished (never with 0), working again takes
+    // it out unsettled, and Settle all finished settles every finished chat
+    private void TestNoonFleetSettle(HexPointerScript test)
+    {
+        HexAgentChat? done = null;
+        int autoWas = settings.AgentsAutoSettleSeconds;
+        bool Up() => FleetShown().Any(each => each.Chat == done);
+        void Pick(string key) => ChatMenu(done!).Items.First(item => item.Label == Said(key)).OnPicked!();
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 0;
+            done = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Done and read" };
+            done.Ask("a small thing");
+            done.Done();
+            done.Seen = done.Version;
+            agentChats.Add(done);
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(1.2f);
+        test.Check("settle: with auto-settle off a finished chat stays up until it's settled", () => !done!.Settled && Up());
+        test.Check("settle: its menu says Settle, not Unsettle", () =>
+            ChatMenu(done!).Items.Any(item => item.Label == Said("agents_panel.chat_settle") && (item.IsEnabled?.Invoke() ?? true))
+            && ChatMenu(done!).Items.All(item => item.Label != Said("agents_panel.chat_unsettle")));
+        test.Run(() =>
+        {
+            Pick("agents_panel.chat_settle");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Settle from its menu moves it into the Finished group at once, kept unread or not", () =>
+            done!.Settled && !Up() && !done.Unread && ChatsInOrder().Select(each => each.Chat).Contains(done));
+        test.Run(() =>
+        {
+            Pick("agents_panel.chat_unsettle");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Unsettle takes it out again", () => !done!.Settled && Up());
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 1;
+            noonWait = 0;
+        });
+        test.Settle(1.6f);
+        test.Check("auto-settle: a finished chat with nothing unread settles by itself the while set after", () => done!.Settled && !Up());
+
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = 0;
+            done!.Ask("once more");
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: working again takes it out of the Finished group, unsettled", () => !done!.Settled && Up());
+
+        test.Run(() =>
+        {
+            done!.Done();
+            done.Seen = done.Version;
+            SettleAllFinished();
+            noonWait = 0;
+        });
+        test.Settle(0.3f);
+        test.Check("settle: Settle all finished settles every finished chat", () => done!.Settled && !Up() && !agentChats.Any(CanSettle));
+        test.Run(() =>
+        {
+            settings.AgentsAutoSettleSeconds = autoWas;
+            CloseAgentChat(done!);
+        });
+    }
+
+    // The finished folded away under a group of their own below the working, in the fleet and the side bar's list alike:
+    // a settled chat is in it, one that just ended stays up with the working until it settles, the group opens and folds
+    // and is remembered, the chat open is never hidden and the keys go round what's on screen. Then settling itself
+    private void TestNoonFleetFinished(HexPointerScript test)
+    {
+        HexAgentChat? old = null, just = null, working = null;
+        bool wasOpen = chatsFinishedOpen;
+        // The head by its name and its count's pill (the chats suites before this one left settle by themselves as they go)
+        bool HasHead(UIComponent rows) => Descendants(rows).OfType<Label>().Any(label => label.Text.EndsWith(Said("agents_panel.finished_head"), StringComparison.Ordinal))
+            && Descendants(rows).OfType<Badge>().Any(badge => badge.Text == chatsFinished.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        test.Run(() =>
+        {
+            chatsFinishedOpen = false;
+            old = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Old finished" };
+            old.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "look at the old thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done long ago")]);
+            // Finished before it was read and settled, the group's head counts it
+            old.Seen = old.Version - 1;
+            old.Settle(true);
+            just = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Just finished" };
+            just.Ask("a quick one");
+            just.Done();
+            working = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Still working" };
+            working.Ask("keep going");
+            agentChats.Add(old);
+            agentChats.Add(just);
+            agentChats.Add(working);
+            OpenAgentChat(working);
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: working first, the one that just ended under it, the old one folded away", () =>
+            FleetShown().Select(each => each.Chat).Where(chat => chat == old || chat == just || chat == working).SequenceEqual([working!, just!])
+            && ChatsInOrder().Select(each => each.Chat).Contains(old!) && BandAt(ChatsInOrder().FindIndex(each => each.Chat == old)) == HexChatBand.Finished);
+        test.Check("noon fleet finished: the folded group's head is under the cards, one row for each card besides", () =>
+            HasHead(noonFleetRows) && noonFleetRows.Children.Count == FleetShown().Count + 1);
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_folded.png"));
+        });
+        test.Wait();
+
+        // What's written and not sent stays with its chat, another chat's box its own
+        string seenJust = "?", seenBack = "?";
+        test.Run(() =>
+        {
+            agentsInput.Text = "half a thought\nfor the working one";
+            OpenAgentChat(just!);
+            seenJust = agentsInput.Text;
+            agentsInput.Text = "for the one just done";
+            OpenAgentChat(working!);
+            seenBack = agentsInput.Text;
+            OpenAgentChat(just!);
+        });
+        test.Check("noon fleet drafts: what was written for a chat comes back with it, another chat's box its own", () =>
+            seenJust.Length == 0 && seenBack == "half a thought\nfor the working one" && agentsInput.Text == "for the one just done");
+        test.Run(() =>
+        {
+            agentsInput.Text = string.Empty;
+            OpenAgentChat(working!);
+            agentsInput.Text = string.Empty;
+        });
+
+        test.Run(() =>
+        {
+            OpenAgentChat(working!);
+            StepAgent(1);
+        });
+        test.Check("noon fleet finished: the next agent key skips what's folded", () => agentChat != old);
+
+        test.Run(() =>
+        {
+            ToggleFinished();
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: opened, the group shows its chats under its head", () =>
+            chatsFinishedOpen && FleetShown().Any(each => each.Chat == old) && noonFleetRows.Children.Count == FleetShown().Count && HasHead(noonFleetRows));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_open.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            ToggleFinished();
+            OpenAgentChat(old!);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: the chat open is never folded away", () =>
+            !chatsFinishedOpen && FleetShown().Any(each => each.Chat == old));
+
+        test.Run(() =>
+        {
+            OpenAgentChat(working!);
+            ShowFace(HexFace.Dawn);
+            ShowAgentsPanel();
+            agentsListOpen = true;
+            agentsListDrawn = NOT_DRAWN;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: the side bar's list folds them the same", () =>
+            HasHead(agentsListRows) && !Descendants(agentsListRows).OfType<AgentCardButton>().Any(pick => pick.Chat == old)
+            && Descendants(agentsListRows).OfType<AgentCardButton>().Any(pick => pick.Chat == just));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "list_finished_folded.png"));
+        });
+        test.Wait();
+
+        TestNoonFleetSettle(test);
+
+        // Everything finished long ago and nothing open: the fleet is its finished head alone, a quiet line over it
+        // (the chats suites before this one left are put aside for it, some of them working or just done)
+        HexAgentChat? older = null;
+        List<HexAgentChat> aside = [];
+        test.Run(() =>
+        {
+            StopAgent(working);
+            foreach (HexAgentChat? chat in (HexAgentChat?[])[just, working])
+                if (chat is not null)
+                    CloseAgentChat(chat);
+            aside.AddRange(agentChats.Where(chat => chat != old));
+            foreach (HexAgentChat chat in aside)
+                agentChats.Remove(chat);
+            older = new HexAgentChat(++agentChatsMade, "noon_agent") { Name = "Older finished" };
+            older.Restore("from before", [new HexAgentEntry(HexAgentEntryKind.User, "an older thing"), new HexAgentEntry(HexAgentEntryKind.Text, "done")]);
+            older.Settle(true);
+            agentChats.Add(older);
+            agentChat = null;
+            ShowFace(HexFace.Noon);
+            noonWait = 0;
+        });
+        test.Settle(0.5f);
+        test.Check("noon fleet finished: with nothing working the fleet says so over the folded head", () =>
+            FleetShown().All(each => each.Chat != old && each.Chat != older)
+            && Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said("agents_panel.finished_none_working")));
+        test.Run(() =>
+        {
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_SHOTS") is { Length: > 0 } shots)
+                Engine.CaptureScreenshot(Path.Combine(shots, "fleet_finished_alone.png"));
+        });
+        test.Wait();
+
+        test.Run(() =>
+        {
+            foreach (HexAgentChat? chat in (HexAgentChat?[])[old, older])
+                if (chat is not null)
+                    CloseAgentChat(chat);
+            foreach (HexAgentChat chat in aside)
+                agentChats.Add(chat);
+            chatsFinishedOpen = wasOpen;
+            ShowFace(HexFace.Dawn);
+        });
+        test.Settle(0.2f);
     }
 
     // A stand-in agent system whose agent is ping, a few seconds of lines and gone (cmd waited for good on the --version
@@ -132,9 +377,14 @@ internal sealed partial class DawnScene
             && Started() is { Length: 2 } started && started.All(chat => chat.Running)
             && ChatsInOrder().Select(each => each.Chat).SkipWhile(chat => chat != lead).Skip(1).Take(2).All(chat => chat.Parent == lead!.Id));
 
+        // Stopping its turn leaves them working, the person stopping it to say something is still waiting for them
         test.Run(() => StopAgent(lead));
+        test.Settle(0.5f);
+        test.Check("noon fleet: stopping the one that started them stops its turn and leaves them running", () => Started() is { Length: 2 } started && started.All(chat => chat.Running));
+
+        test.Run(() => StopAgent(lead, withStarted: true));
         test.WaitFor(() => Started().All(chat => !chat.Running), 10.0f);
-        test.Check("noon fleet: stopping the one that started them stops them", () => Started() is { Length: 2 } started && started.All(chat => !chat.Running));
+        test.Check("noon fleet: stopping it with its agents stops them", () => Started() is { Length: 2 } started && started.All(chat => !chat.Running));
 
         test.Run(() =>
         {

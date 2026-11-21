@@ -12,7 +12,13 @@ namespace Hex.Core;
 /// </summary>
 internal sealed class HexAgentProcess : IDisposable
 {
-    private readonly Process process;
+    // The program as .NET started it, on Windows (held in a job there) or where it couldn't be started in a group
+    private readonly Process? process;
+
+    // The program started in a session and group of its own, on Linux and macOS
+    private readonly HexAgentGroup? group;
+
+    private readonly StreamWriter input;
 
     /// <summary>What it printed, a line at a time, whether it was on stderr with each.</summary>
     public ConcurrentQueue<(string Line, bool Error)> Lines { get; } = new();
@@ -30,7 +36,17 @@ internal sealed class HexAgentProcess : IDisposable
     /// </summary>
     public static Action? Woken { get; set; }
 
-    private HexAgentProcess(Process process) => this.process = process;
+    private HexAgentProcess(Process process)
+    {
+        this.process = process;
+        input = process.StandardInput;
+    }
+
+    private HexAgentProcess(HexAgentGroup group)
+    {
+        this.group = group;
+        input = new StreamWriter(group.Input!, new UTF8Encoding(false));
+    }
 
     /// <summary>
     /// Where a program is, a whole path as it is, a name looked for on PATH with each of PATHEXT's endings (.exe, .cmd,
@@ -148,24 +164,39 @@ internal sealed class HexAgentProcess : IDisposable
                 info.Environment[name] = value;
         }
 
-        var process = new Process { StartInfo = info, EnableRaisingEvents = true };
-        var running = new HexAgentProcess(process);
-        process.Start();
+        HexAgentProcess running;
+        StreamReader output, error;
+        if (!OperatingSystem.IsWindows() && StartInGroup(info) is { } group)
+        {
+            running = new HexAgentProcess(group);
+            output = new StreamReader(group.Output!, new UTF8Encoding(false));
+            error = new StreamReader(group.Error!, new UTF8Encoding(false));
+        }
+        else
+        {
+            var process = new Process { StartInfo = info, EnableRaisingEvents = true };
+            process.Start();
+            running = new HexAgentProcess(process);
+            // Held in a job of its own at once, before it's had the time to start anything, so whatever it starts is held too
+            running.job = HexAgentJob.Hold(process);
+            output = process.StandardOutput;
+            error = process.StandardError;
+        }
 
         // Said before the readers start, which close it as the program goes: set after them, a program that went at once
         // was left taking input
         running.inputOpen = keepInput;
-        new Thread(() => running.Read(process.StandardOutput, false)) { IsBackground = true, Name = "agent stdout" }.Start();
-        new Thread(() => running.Read(process.StandardError, true)) { IsBackground = true, Name = "agent stderr" }.Start();
+        new Thread(() => running.Read(output, false)) { IsBackground = true, Name = "agent stdout" }.Start();
+        new Thread(() => running.Read(error, true)) { IsBackground = true, Name = "agent stderr" }.Start();
 
         try
         {
             if (stdin is not null)
-                process.StandardInput.Write(stdin);
+                running.input.Write(stdin);
             if (keepInput)
-                process.StandardInput.Flush();
+                running.input.Flush();
             else
-                process.StandardInput.Close();
+                running.input.Close();
         }
         catch (IOException)
         {
@@ -175,6 +206,20 @@ internal sealed class HexAgentProcess : IDisposable
         }
 
         return running;
+    }
+
+    // Started in a session and group of its own (HexAgentGroup), null where the C library hasn't what that takes and
+    // .NET starts it instead
+    private static HexAgentGroup? StartInGroup(ProcessStartInfo info)
+    {
+        try
+        {
+            return HexAgentGroup.Start(info.FileName, [.. info.ArgumentList], info.WorkingDirectory, info.Environment);
+        }
+        catch (Exception e) when (e is EntryPointNotFoundException or DllNotFoundException)
+        {
+            return null;
+        }
     }
 
     // Whether its stdin is still open for more to be said to it
@@ -201,8 +246,8 @@ internal sealed class HexAgentProcess : IDisposable
 
             try
             {
-                process.StandardInput.Write(line.TrimEnd('\r', '\n') + "\n");
-                process.StandardInput.Flush();
+                input.Write(line.TrimEnd('\r', '\n') + "\n");
+                input.Flush();
                 return true;
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
@@ -224,7 +269,7 @@ internal sealed class HexAgentProcess : IDisposable
             inputOpen = false;
             try
             {
-                process.StandardInput.Close();
+                input.Close();
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
             {
@@ -251,8 +296,15 @@ internal sealed class HexAgentProcess : IDisposable
         {
             try
             {
-                process.WaitForExit();
-                ExitCode = process.ExitCode;
+                if (group is not null)
+                {
+                    ExitCode = group.WaitForExit();
+                }
+                else
+                {
+                    process!.WaitForExit();
+                    ExitCode = process.ExitCode;
+                }
             }
             catch (Exception)
             {
@@ -263,22 +315,53 @@ internal sealed class HexAgentProcess : IDisposable
         }
     }
 
-    /// <summary>Kills it and every process it started.</summary>
+    // The job its processes are held in, Windows only (HexAgentJob)
+    private HexAgentJob? job;
+
+    /// <summary>
+    /// Kills it and every process it started: its group on Linux and macOS, its job on Windows, either of which has them
+    /// all whatever ended in between, and its tree as well where it has no job, for what the job didn't take (a process
+    /// started before it was held, or no jobs at all).
+    /// </summary>
     public void Stop()
     {
+        if (group is not null)
+        {
+            group.Kill();
+            return;
+        }
+
         try
         {
-            if (!process.HasExited)
+            if (!process!.HasExited)
                 process.Kill(entireProcessTree: true);
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
         }
+
+        job?.Dispose();
+        job = null;
     }
 
     public void Dispose()
     {
         Stop();
-        process.Dispose();
+        process?.Dispose();
+        if (group is not null)
+        {
+            // Hex's end of its stdin let go of, the ends of what it prints by the readers when they've read them through
+            lock (inputGate)
+            {
+                inputOpen = false;
+                try
+                {
+                    input.Dispose();
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
     }
 }

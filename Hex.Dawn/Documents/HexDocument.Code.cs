@@ -325,7 +325,8 @@ internal sealed partial class HexDocument
     private List<string> headerNotes = [];
     private const string NOTE_DESIGN = "design", NOTE_HIDDEN = "hidden_layers";
 
-    private static readonly Regex Declaration = new(@"^let\s+([A-Za-z_]\w*)\s*=", RegexOptions.Compiled);
+    [GeneratedRegex(@"^let\s+([A-Za-z_]\w*)\s*=")]
+    private static partial Regex Declaration { get; }
 
     /// <summary>The comments written over a declaration of the layout, by the name it is declared under, for whoever writes code of their own out of it.</summary>
     public IReadOnlyList<string> NotesOver(string name) => notes.GetValueOrDefault(name, []);

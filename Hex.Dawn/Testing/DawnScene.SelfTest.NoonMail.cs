@@ -101,17 +101,67 @@ internal sealed partial class DawnScene
         test.Check("noon mail: an agent's number on a message opens its chat", () => agentChat == scout && noonStage == NoonStage.Chat);
         test.Run(() => OpenAgentChat(lead!));
 
-        // Hundreds of messages, a few rows made, the newest in sight
+        // Hundreds of messages, the family keeping its last 50, the instruction its agent hasn't read among them however
+        // old, a few rows made and the newest in sight
         test.Run(() =>
         {
             PressChip(true, Said("noon.family_everyone"));
             for (int i = 1; i <= 500; i++)
-                hub.MailOf(lead!).Add(new HexAgentMail(hub.NextMailSeq(), scout!.Id, "Scout", "progress", $"step {i} of the long job", false) { To = lead!.Id }, HexMailRoute.Inbox);
+            {
+                var step = new HexAgentMail(hub.NextMailSeq(), scout!.Id, "Scout", "progress", $"step {i} of the long job", false) { To = lead!.Id };
+                lead.Post(step);
+                hub.MailOf(lead).Add(step, HexMailRoute.Inbox);
+            }
         });
         test.Settle(0.5f);
-        test.Check("noon mail: of hundreds of messages only those near what's in sight have rows, the newest among them", () =>
-            familyList is { ItemCount: 503 } list && list.Children.Count is > 0 and < 80
+        test.Check("noon mail: of hundreds of messages the family keeps its last 50, the unread instruction kept", () =>
+            hub.MailOf(lead!).All.Count == HexMailLog.MOST && lead!.Mail.Count == HexAgentChat.MOST_MAIL
+            && hub.MailOf(lead).All.Any(entry => entry.Mail.Text == "look at the tests first")
+            && hub.MailOf(lead).All[^1].Mail.Text == "step 500 of the long job"
+            && !hub.MailOf(lead).All.Any(entry => entry.Mail.Text == "step 1 of the long job"));
+        test.Check("noon mail: only those near what's in sight have rows, the newest among them", () =>
+            familyList is { ItemCount: HexMailLog.MOST } list && list.Children.Count is > 0 and < HexMailLog.MOST
             && Shown().Any(said => said.Contains("step 500 of the long job", StringComparison.Ordinal)));
+
+        // Details shows the newest few, the older folded into a row that opens them in place and folds them again,
+        // open or folded kept for each chat
+        int Steps() => Descendants(noonContextRows).OfType<Label>().Count(label => label.Text.Contains("of the long job", StringComparison.Ordinal));
+        Button? Fold() => Descendants(noonContextRows).OfType<Button>().FirstOrDefault(button =>
+            button.Label.StartsWith(Said("noon.family_more", ("count", string.Empty))[..4], StringComparison.Ordinal) || button.Label == Said("noon.family_fewer"));
+        test.Run(() =>
+        {
+            noonContextDrawn = CONTEXT_NOT_DRAWN;
+            noonWait = 0;
+        });
+        test.Settle(0.4f);
+        test.Check("noon mail: Details shows the newest five, the rest folded into More", () =>
+            Steps() == 5 && Fold() is { } more && more.Label == Said("noon.family_more", ("count", (HexMailLog.MOST - 5).ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            && Descendants(noonContextRows).OfType<Label>().Any(label => label.Text.Contains("step 500 of the long job", StringComparison.Ordinal)));
+        test.Run(() => Fold()!.OnPressed!());
+        test.Settle(0.4f);
+        test.Check("noon mail: More opens the older in place, with a way to fold them", () =>
+            Steps() > 5 && Fold() is { } fewer && fewer.Label == Said("noon.family_fewer"));
+        test.Check("noon mail: the filters and the way to the whole conversation are still there", () =>
+            Descendants(noonContextRows).OfType<Button>().Any(button => button.Label.Contains(Said("noon.family_every", ("count", HexMailLog.MOST.ToString(System.Globalization.CultureInfo.InvariantCulture))), StringComparison.Ordinal)));
+        test.Run(() =>
+        {
+            OpenAgentChat(scout!);
+            noonContextDrawn = CONTEXT_NOT_DRAWN;
+            noonWait = 0;
+        });
+        test.Settle(0.4f);
+        test.Check("noon mail: another chat of the family has its own fold, folded", () => Steps() == 5);
+        test.Run(() =>
+        {
+            OpenAgentChat(lead!);
+            noonContextDrawn = CONTEXT_NOT_DRAWN;
+            noonWait = 0;
+        });
+        test.Settle(0.4f);
+        test.Check("noon mail: and coming back the chat's own is still open", () => Steps() > 5);
+        test.Run(() => Fold()!.OnPressed!());
+        test.Settle(0.4f);
+        test.Check("noon mail: Fewer folds them again", () => Steps() == 5);
 
         // What the scout asks leave to do goes to the one that started it, which decides it with hex_agent_approve
         bool? decided = null;

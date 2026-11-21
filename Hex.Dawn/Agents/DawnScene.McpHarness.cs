@@ -42,6 +42,27 @@ internal sealed partial class DawnScene
         }
     }
 
+    /// <summary>
+    /// The C# interfaces the index knows, those in the folders nearest a file first, for warming a server's derived types
+    /// (HexLanguages.Warm). The index looked at first, off the editor's thread: an agent's first question walks it anyway.
+    /// </summary>
+    private static IEnumerable<(string Path, int Line, int Column)> InterfacesNear(HexCodeIndex harness, string file)
+    {
+        HexIndexSnapshot index = harness.Current();
+
+        static int Shared(string a, string b)
+        {
+            int at = 0;
+            while (at < a.Length && at < b.Length && char.ToUpperInvariant(a[at]) == char.ToUpperInvariant(b[at]))
+                at++;
+            return at;
+        }
+
+        return index.Files.Where(each => each.Extension == ".cs" && index.InProject(each))
+            .SelectMany(each => each.Symbols.Where(symbol => symbol.Kind == "interface").Select(symbol => (each.Path, symbol.Line, symbol.Column)))
+            .OrderByDescending(found => Shared(found.Path, file)).ToList();
+    }
+
     private IEnumerable<HexMcpTool> HarnessTools()
     {
         // A schema's node can only be in one schema, so each tool gets its own
@@ -88,7 +109,7 @@ internal sealed partial class DawnScene
             Harnessed(new McpTool("hex_refs", "Where a name is used",
                 "Every use of a name across the workspace, found by its whole word in the index outside comments and strings, no file open and no language server. Declarations marked *, grouped by file. For the exact symbol at a place in the open file, hex_references.",
                 McpSchema.Object([
-                    ("name", McpSchema.String("The name, or Container.Name for its uses in the files that say Container.")),
+                    ("name", McpSchema.String("The name, or Container.Name for its declarations in Container and its uses on a Container (by text, approximate).")),
                     ("glob", McpSchema.String("Only files that fit this glob.")),
                     ("most", McpSchema.Integer("At most this many places, 80 by default.")), Max()], "name"), ReadOnly: true),
                 (index, args, budget) => index.References(args.String("name") ?? string.Empty, args.String("glob"), Math.Clamp(args.Integer("most") ?? 80, 1, 2000), budget)),

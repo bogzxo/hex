@@ -43,7 +43,7 @@ internal sealed partial class DawnScene
             git.Refresh(repo);
             ShowSide(HexSide.SourceControl);
         });
-        test.WaitFor(() => commitBox is { Visible: true } && commitBoxFor is { } root && PlatformPaths.Same(root, repo) && commitButton.Primary, 6.0f);
+        test.WaitFor(() => commitBox is { Visible: true } && commitBoxFor is { } root && PlatformPaths.Same(root, repo) && commitButton.Primary, 6.0f * GIT_PATIENCE);
         test.Check("commit box: Source Control has a box for the message over the changes, the active repository's, its Commit a button that's lit", () =>
             commitBox is { Visible: true } && commitBoxFor is { } root && PlatformPaths.Same(root, repo) && commitButton.Primary
             && commitButton.Label.StartsWith("Commit", StringComparison.Ordinal) && commitPlaceholder.Visible);
@@ -63,7 +63,7 @@ internal sealed partial class DawnScene
             commitMessage.Text = "Typed in the box";
             commitMessage.OnControlEnter!();
         });
-        test.WaitFor(() => LastSubject(repo) == "Typed in the box" && commitMessage.Text.Length == 0, 6.0f);
+        test.WaitFor(() => LastSubject(repo) == "Typed in the box" && commitMessage.Text.Length == 0, 6.0f * GIT_PATIENCE);
         test.Run(() => wasEmpty = commitMessage.Text.Length == 0);
         test.Check("commit box: Ctrl+Enter in the box commits what's typed with no dialog, every change staged first, and empties the box", () =>
             LastSubject(repo) == "Typed in the box" && wasEmpty && textDialog is not { IsOpen: true }
@@ -75,17 +75,18 @@ internal sealed partial class DawnScene
             File.WriteAllText(file, "again\n");
             git.Refresh(repo);
         });
-        test.WaitFor(() => commitButton.Primary, 5.0f);
+        test.WaitFor(() => commitButton.Primary, 5.0f * GIT_PATIENCE);
         test.Run(() => commitButton.OnPressed?.Invoke());
-        test.WaitFor(() => textDialog is { IsOpen: true } && CommitBox() is not null, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && CommitBox() is not null, 3.0f * GIT_PATIENCE);
         test.Check("commit box: Commit with the box empty asks for the message in the commit window", () =>
             textDialog is { IsOpen: true } && CommitBox() is not null);
         test.Run(() =>
         {
             chrome.Dialog?.Close();
             settings.GitSmartCommit = smart;
-            Git(repo, "checkout", "--", "a.txt");
-            git.Refresh(repo);
+            CloseDocumentsUnder(repo);
         });
+        test.Wait();
+        test.Run(() => DeleteGitFolder(repo));
     }
 }

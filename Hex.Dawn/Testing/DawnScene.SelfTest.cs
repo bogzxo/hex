@@ -104,6 +104,7 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
 
         suitesAsked = asked;
+        test.Run(KeepStartLayout);
 
         // HEX_SELFTEST_REPEAT runs the parts asked for that many times over in the one process, and weighs what's left
         // after each round, so something a part keeps that it shouldn't shows as a number climbing round by round
@@ -117,9 +118,19 @@ internal sealed partial class DawnScene
 
                 // How long each part takes is said after it, the slow ones are the ones to look at
                 var took = new System.Diagnostics.Stopwatch();
+                // A part that debugs C# on a machine without netcoredbg is skipped and said so, it can only fail there,
+                // and F5 without a debugger asks how to run the file, a question nobody answers
+                if (NEEDS_CSHARP_DEBUGGER.Contains(name) && !debugger.CanDebug(Path.Combine(testFolder, "Program.cs")))
+                {
+                    test.Run(() => Console.WriteLine($"[Hex self-test] {name} skipped: no C# debugger (netcoredbg) on this machine"));
+                    continue;
+                }
+
                 test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
+                test.BeginPart(name, PartLimit);
                 MakeTestFiles();
                 run(test);
+                test.EndPart();
                 test.Run(TidyAfterSuite);
                 test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
             }
@@ -134,6 +145,21 @@ internal sealed partial class DawnScene
     }
 
     private const string REPEAT_VARIABLE = "HEX_SELFTEST_REPEAT";
+
+    // The parts that debug C# under netcoredbg, skipped where there is none
+    private static readonly HashSet<string> NEEDS_CSHARP_DEBUGGER =
+    [
+        "frame-values", "csharp-data-tips", "csharp-exceptions", "csharp-run-to", "csharp-edit-variable", "debug-threads",
+        "set-next-statement", "debug-completion", "data-breakpoints", "debug-workspace-switch", "variable-pages",
+        "watch-object", "watch-value", "debug-modules", "disassembly", "debug-memory", "launch-profile-environment",
+        "dotnet-task-environment", "dotnet-target-frameworks", "dotnet-runtime-options"
+    ];
+
+    // How long a part may take by the clock before the rest of it is skipped and the run goes on, ten minutes unless
+    // HEX_SELFTEST_PART_MINUTES says otherwise. The slowest take a few minutes on a busy machine; one waiting on a
+    // question nobody answers sat there for good, its window left open
+    private static float PartLimit =>
+        60.0f * (float.TryParse(System.Environment.GetEnvironmentVariable("HEX_SELFTEST_PART_MINUTES"), System.Globalization.CultureInfo.InvariantCulture, out float minutes) && minutes > 0.0f ? minutes : 10.0f);
 
     // Rounds are minutes each for some parts, fifty is a long evening already
     private const int MOST_ROUNDS = 50;
@@ -162,6 +188,7 @@ internal sealed partial class DawnScene
     [
         ("native-shortcuts", "Windows key messages through the native keyboard and application shortcut dispatcher", TestNativeShortcuts),
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
+        ("accessibility", "every look's colours measured against their grounds, Tab round the main window with every stop ringed, named and big enough, Ctrl+M out of the code, and nothing moving with the motion at 0", TestAccessibility),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agent-commands", "Slash command scrolling, descriptions, keyboard navigation and local dispatch", TestAgentCommands),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),
@@ -177,10 +204,13 @@ internal sealed partial class DawnScene
         ("noon-mail-steer", "A message steered into a working agent takes the unread ones before it with it, is read only once written, and stays unread in its inbox when the write fails", TestNoonMailSteer),
         ("noon-panel", "The side bar's Agents view and Agentic showing the one chat, picked in either, a question answered in Agentic answered in the side bar", TestNoonPanel),
         ("dusk-noon", "Agentic and Dusk in the one window, the agents going on behind Dusk and Dusk's Noon button bringing Agentic back", TestDuskNoon),
+        ("face-switch", "Every way between Dawn, Agentic and Dusk timed in every look at 100, 150 and 200%, to its first frame and to standing still, no frame empty or in the other face's theme", TestFaceSwitch),
         ("noon-keys", "Agentic's keys round the fleet, up to the starter, to the next that wants looking at, back to Dawn, and none of them in Dawn", TestNoonKeys),
+        ("noon-columns", "Agentic's fleet and Details dragged by their lines, held between their least and most, kept, put back by a double click, the fleet put away past its least", TestNoonColumns),
         ("noon-looks", "Agentic in every look Hex comes with at 100, 150 and 200%, its Noon theme on where the look has one and gone after", TestNoonLooks),
         ("scrollbars", "default scrollbar track clicks and thumb dragging without activating rows", TestScrollbars),
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
+        ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),
@@ -286,7 +316,9 @@ internal sealed partial class DawnScene
         ("minimap", "the minimap on its own, clicked and dragged, on whole pixels at 100% and 111% as it scrolls, no slider on a short file", TestMinimap),
         ("middle-scroll", "middle-click autoscroll and hold-to-scroll without moving the caret", TestMiddleScroll),
         ("surface", "how the code is drawn, the sticky lines of Allman C#, a squiggle under all of what it's on, the bar's thumb, the find bar clear of the minimap, a diff's two columns of numbers", TestSurface),
+        ("editor-look", "the editor in every look at 100, 150 and 200%, its tabs, gutter, hover, completions, the box over a call, find, the empty editor, a diff and side by side", TestEditorLook),
         ("solstice", "the Solstice looks, flush panes on the window's tone, Dawn's orange accent, and the welcome page with what's new", TestSolstice),
+        ("settings-look", "the settings in every look at 100, 150 and 200%: the window, a search, a changed setting, the looks, the keyboard shortcuts and a language server's settings", TestSettingsLook),
         (DawnProgram.NO_AI_SUITE, "No AI, a run without the agents: no Agentic, Agents view, menu, commands, agent systems, agents' ticks or MCP tools about agents. Only when named, the run is without them", TestNoAi),
         ("ticks", "what the editor does every tick as a list of named steps, the parts among them, in the order that matters", TestTicks),
         ("triple-click", "two presses on a word in the code pick the word and a third picks its line", TestTripleClick),
@@ -390,7 +422,9 @@ internal sealed partial class DawnScene
         ("shell", "the shell round the editor, the side bar one width whatever is in it, empty notes, the title over the welcome, long tabs, Extensions lit, the explorer's buttons", TestShellLayout),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
+        ("welcome-looks", "the welcome page in every look at 100, 150 and 200%, the first time and with history, everything inside it, pictures with HEX_SELFTEST_SHOTS", TestWelcomeLooks),
         ("getting-started", "the welcome page's Getting started, a link each to the settings nobody finds by looking, as wide as Start's, each opening its setting", TestGettingStarted),
+        ("servers-clicks", "the Language Servers window takes each click on its list and its tabs the first time, the keyboard elsewhere before and what it shows changing under the press", TestServersClicks),
         ("servers-window", "the Language Servers window: Overview finds the workspace's languages, a step's command shown and run (and one queued behind it), a failure with its log, a server's own settings changed and reset, every page", TestServersWindow),
         ("spelling", "spelling through Windows' spell checker, a comment in code but no names or strings, an HTML page's words and comments and its style's and script's comments but no tags or code, .txt and Markdown", TestSpelling),
         ("webshots", "the page's pictures of the web, a page, its sheet and TypeScript through their servers, written to HEX_SELFTEST_SHOTS", TestWebShots),
@@ -470,7 +504,8 @@ internal sealed partial class DawnScene
         ("notebook", "a Jupyter notebook as its cells, run in a real kernel when there's one, outputs, input(), interrupting and restarting, saved", TestNotebook),
         ("notebookserver", "a notebook's code read by pyright, what's wrong under the cell it's in, Jupyter's own lines left alone and completion with no kernel, when pyright is on this machine", TestNotebookServer),
         ("notebookengineering", "engineering reference calculations, inline math, SVG plots, rich output textures and save", TestNotebookEngineering),
-        ("notebookfile", "an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
+        ("notebooklooks", "a notebook of real outputs, a table, a plot, a long stream and a traceback, in every look at 100, 150 and 200%, pictures with HEX_SELFTEST_SHOTS", TestNotebookLooks),
+        ("notebookfile","an isolated copy of HEX_NOTEBOOK_TEST_FILE, optionally executed", TestNotebookFile),
         ("code-surface", "code rendering, compact find and pinned-scope visibility", TestSurface),
         ("zoom-persistence", "debounced zoom settings and lifecycle flush", TestZoomPersistence),
         ("document-retention", "twenty document open/close retention cycles", TestDocumentRetention),
@@ -480,10 +515,15 @@ internal sealed partial class DawnScene
         ("notebook-zoom", "centred notebook zoom and viewport resize", TestNotebookZoom),
         ("notebookhtml", "a notebook exported as HTML from the palette through the save dialog, unsaved edits in it, the notebook left unsaved, SVG kept vector", TestNotebookHtml),
         ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
+        ("explorer-new", "a new file or folder named on its row from the explorer's head, a folder's menu and the palette: Escape and a click away untouched make nothing, a click away with a name makes it", TestExplorerNew),
+        ("explorer-inplace", "the explorer worked in place: open files marked, the shown file revealed, type to find, rename and new file or folder on their rows, drag and drop with its cues, menus folded at 200% and Properties' read-only values as text", TestExplorerInPlace),
+        ("file-drop", "files and folders dragged onto the window from outside, faked through the engine's event: what letting go would do said while held, a folder made or added to the workspace, files each in a tab (a picture as the picture, a notebook as the notebook), one held over an explorer folder copied into it", TestFileDrop),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
+        ("markdown-terminal", "a Markdown preview with code and math shown, then the terminal, its text still in its monospaced font with every column a cell wide", TestMarkdownTerminalFont),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
+        ("mcp-check", "the check after hex_edit through csharp-ls, timed, one after another and three at once, when csharp-ls is on this machine", TestMcpCheck),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first
@@ -515,7 +555,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

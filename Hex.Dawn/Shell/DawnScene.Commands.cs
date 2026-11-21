@@ -70,7 +70,7 @@ internal sealed partial class DawnScene
     /// <summary>Something the file declares, or a key of it, picked out of its outline by a few letters.</summary>
     private void GoToSymbol()
     {
-        var choices = new List<UIChoice>();
+        List<UIChoice> choices = [];
         foreach (OutlineEntry entry in OutlineHere())
         {
             string text = new string(' ', entry.Depth * 4) + Said("commands.symbol_entry", ("name", entry.Name), ("line", (entry.Line + 1).ToString()));

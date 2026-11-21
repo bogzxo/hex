@@ -22,20 +22,30 @@ internal sealed partial class HexLanguages
 
     private readonly Dictionary<string, AgentFile> agentFiles = new(PlatformPaths.Comparer);
 
-    // What servers last said is wrong with each file, and how many times they've said it, open in a tab or not
-    private readonly Dictionary<string, (int Count, IReadOnlyList<UICodeDiagnostic> Found, string Server)> agentHeard = new(PlatformPaths.Comparer);
+    // When each file's text was last sent to a server for an agent (opened, or changed on the disk or in its tab), for a
+    // tool to wait on what's said of a change only when there was one
+    private readonly Dictionary<string, long> agentSent = new(PlatformPaths.Comparer);
+
+    /// <summary>Whether a file's text went to its server at or after a moment, so what it said before may be out of date.</summary>
+    internal bool AgentSentSince(string path, long since) => agentSent.TryGetValue(Path.GetFullPath(path), out long sent) && sent >= since;
+
+    // What servers last said is wrong with each file, how many times they've said it and when, open in a tab or not
+    private readonly HexHeardLog agentHeard = new();
 
     /// <summary>A server said what's wrong with a file, kept for the agent tools, whoever it's open for.</summary>
     private void AgentHeard(LanguageServer server, string path, IReadOnlyList<UICodeDiagnostic> found, bool linted)
     {
         if (!linted && !(agentFiles.TryGetValue(path, out AgentFile? mine) && ReferenceEquals(mine.Server, server)))
             return;
-        agentHeard[path] = (agentHeard.GetValueOrDefault(path).Count + 1, found, server.Name);
+        agentHeard.Record(path, found, server.Name, System.Environment.TickCount64);
     }
 
     /// <summary>How many times a file's been said of by a server, for waiting on the next time, and the last of it.</summary>
     internal (int Count, IReadOnlyList<UICodeDiagnostic>? Found, string? Server) AgentDiagnostics(string path) =>
-        agentHeard.TryGetValue(Path.GetFullPath(path), out var heard) ? heard : (0, null, null);
+        agentHeard.Of(Path.GetFullPath(path)) is var heard ? (heard.Count, heard.Found, heard.Server) : default;
+
+    /// <summary>Whether a server's said what's wrong with a file at or after a moment (a tick), the moment an edit was sent.</summary>
+    internal bool AgentSaidSince(string path, long since) => agentHeard.SaidSince(Path.GetFullPath(path), since);
 
     /// <summary>
     /// The server for a file an agent asks about, open in a tab or not, the file's latest text sent to it first. With
@@ -49,11 +59,14 @@ internal sealed partial class HexLanguages
         if (context.Documents.Find(full) is { } open && linters.TryGetValue(open, out LanguageServer? linting) && linting.Failure is null)
         {
             if (lintIn.Remove(open))
+            {
                 linting.Change(full, open.Editor.Text);
+                agentSent[full] = System.Environment.TickCount64;
+            }
 
             // What its server said before an agent asked, a tab that's said nothing new since would be waited on for ever
-            if (!agentHeard.ContainsKey(full) && lintFound.TryGetValue(open, out IReadOnlyList<UICodeDiagnostic>? said))
-                agentHeard[full] = (1, said, linting.Name);
+            if (!agentHeard.Has(full) && lintFound.TryGetValue(open, out IReadOnlyList<UICodeDiagnostic>? said))
+                agentHeard.Record(full, said, linting.Name, 0);
             return linting;
         }
 
@@ -73,6 +86,7 @@ internal sealed partial class HexLanguages
                 {
                     (known.Length, known.Written) = (info.Length, info.LastWriteTimeUtc.Ticks);
                     known.Server.Change(full, ReadText(full));
+                    agentSent[full] = System.Environment.TickCount64;
                 }
                 return known.Server;
             }
@@ -112,6 +126,7 @@ internal sealed partial class HexLanguages
             LetGo(oldest);
         agentFiles[full] = new AgentFile(server, info.Length, info.LastWriteTimeUtc.Ticks);
         server.Open(full, ReadText(full));
+        agentSent[full] = System.Environment.TickCount64;
         return server;
     }
 
@@ -123,8 +138,17 @@ internal sealed partial class HexLanguages
     {
         string full = Path.GetFullPath(path);
         if (agentFiles.TryGetValue(full, out AgentFile? file) && file.Server.Failure is null && file.Server.IsReady)
+        {
             file.Server.Change(full, ReadText(full));
+            agentSent[full] = System.Environment.TickCount64;
+        }
     }
+
+    /// <summary>
+    /// What's wrong with a file asked of its server now (pull diagnostics), for one that offers it, rather than waited on
+    /// until it publishes by itself. What it says comes in the way the rest does (AgentHeard). False when it can't be asked.
+    /// </summary>
+    internal bool AgentAskDiagnostics(string path, LanguageServer server) => server.AskDiagnosticsNow(Path.GetFullPath(path));
 
     /// <summary>A file an agent changed on the disk told to the server it's open in for an agent, at once rather than at its next question.</summary>
     internal void AgentFileWritten(string path)
@@ -153,6 +177,7 @@ internal sealed partial class HexLanguages
     // A file opened for agents closed in its server, unless a tab has it open there now (its own didOpen took it over)
     private void LetGo(string path)
     {
+        agentSent.Remove(path);
         if (!agentFiles.Remove(path, out AgentFile? file))
             return;
         bool tabbed = context.Documents.Find(path) is { } open && linters.TryGetValue(open, out LanguageServer? server) && ReferenceEquals(server, file.Server);

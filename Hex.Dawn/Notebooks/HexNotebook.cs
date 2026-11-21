@@ -35,6 +35,9 @@ internal sealed class HexNotebook
     /// <summary>Cells run before the kernel was up, sent once it is.</summary>
     public List<NotebookCell> Waiting { get; } = [];
 
+    /// <summary>How many cells the run going on was asked for (a Run All's every code cell), counted from when nothing was running.</summary>
+    public int RunTotal { get; set; }
+
     /// <summary>Which cell is picked, and whether it's being typed into (edit mode) or not (command mode).</summary>
     public int Selected { get; set; }
     public bool Editing { get; set; }
@@ -45,6 +48,9 @@ internal sealed class HexNotebook
 
     /// <summary>Whether the cells on screen have to be made again (another notebook shown, cells added or taken out).</summary>
     public bool Remake { get; set; } = true;
+
+    /// <summary>The cells' text and kinds as last sent to the language's server, sent again as they are while no cell's code changed.</summary>
+    public (string Source, bool Code)[]? SentCells { get; set; }
 
     /// <summary>The cell picked, null in a notebook with none.</summary>
     public NotebookCell? Cell => Selected >= 0 && Selected < Model.Cells.Count ? Model.Cells[Selected] : null;

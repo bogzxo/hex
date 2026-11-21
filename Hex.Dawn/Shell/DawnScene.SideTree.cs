@@ -90,6 +90,7 @@ internal sealed partial class DawnScene
 
         // As wide as the components' list whichever of the two is showing, dragged by its edge the same way
         SideGrip(sideTree, UIResize.Right, left: true);
+        WireExplorerInPlace();
     }
 
     /// <summary>Whether the side bar shows the tree, or the rows of the designer.</summary>
@@ -117,9 +118,15 @@ internal sealed partial class DawnScene
         explorerMade = 0;
         UseSideTree(true);
         WatchFolders();
+        WireExplorerDrops();
+        GatherOpenInTabs();
+
+        // The folders of a file shown opened first, so its row is there to pick (explorer_auto_reveal)
+        if (follow && settings.ExplorerAutoReveal)
+            OpenFoldersOfShown();
 
         // The Solution view, the solution's projects instead of the folders (DawnScene.Solution)
-        var items = new List<UITreeItem>();
+        List<UITreeItem> items = [];
         if (ShownSolution() is { } solutionFile)
         {
             treeTitle.Text = Said("solution.title");
@@ -134,8 +141,9 @@ internal sealed partial class DawnScene
         if (items.Count == 0)
             items.Add(NoteItem(Said("side_tree.no_folders"), DimColor));
 
+        // Every row was coloured for git and its problems as it was made (FolderItem, FileRow), coloured all over again
+        // here it was the same work twice for every row of the explorer
         sideTree.Items = items;
-        DecorateRows();
         if (pendingExplorerSelection is { } pasted)
         {
             // Looked up in a set, a paste or a selection of the whole folder is thousands of paths against thousands of rows
@@ -145,7 +153,7 @@ internal sealed partial class DawnScene
             if (rows.Count > 0) sideTree.Reveal(rows[0]);
             pendingExplorerSelection = null;
         }
-        else if (follow) ShowOpenInExplorer();
+        else if (follow && settings.ExplorerAutoReveal) ShowOpenInExplorer();
         else
         {
             var selectedSet = new HashSet<string>(selected, PlatformPaths.Comparer);
@@ -160,13 +168,14 @@ internal sealed partial class DawnScene
     // How many rows of the explorer were made, there is a most
     private int explorerMade;
 
-    private UITreeItem FolderItem(ExplorerEntry entry)
+    private UITreeItem FolderItem(ExplorerEntry entry, string? label = null)
     {
         bool open = explorer.workspace.Expanded.Contains(entry.Path);
-        var item = new UITreeItem(Path.GetFileName(entry.Path.TrimEnd('\\', '/')), open ? "folder-opened" : "folder")
+        var item = new UITreeItem(label ?? Path.GetFileName(entry.Path.TrimEnd('\\', '/')), open ? "folder-opened" : "folder")
         {
             IconColor = FolderColor,
-            Color = entry.IsRoot ? null : FolderColor,
+            // A folder of the workspace leads its rows, the others are in the text's own colour
+            Bold = entry.IsRoot,
             Tooltip = entry.Path,
             Expandable = true,
             Expanded = open
@@ -185,7 +194,7 @@ internal sealed partial class DawnScene
 
         explorer.explorerRows.Add((entry.Path, true, item));
         explorerMade++;
-        DecorateRow(item, entry.Path, true, entry.IsRoot ? null : FolderColor);
+        DecorateRow(item, entry.Path, true, null);
         if (explorer.IsCutPath(entry.Path)) item.Color = item.IconColor = DimColor;
 
         if (open)
@@ -238,7 +247,10 @@ internal sealed partial class DawnScene
             if (project is not null && name is "bin" or "obj")
                 continue;
 
-            item.Add(FolderItem(new ExplorerEntry(directory, true, depth, false)));
+            // A folder with only a folder in it is one row with the other, assets/ui/flat, VS Code's compact folders
+            string? label = null;
+            string shown = project is null ? Compacted(directory, Hidden, out label) : directory;
+            item.Add(FolderItem(new ExplorerEntry(shown, true, depth, false), label));
         }
 
         foreach (string file in files)
@@ -253,6 +265,50 @@ internal sealed partial class DawnScene
         }
     }
 
+    // How many folders deep one row goes at most, a chain of hundreds is a row nobody can read
+    private const int COMPACT_MOST = 8;
+
+    /// <summary>
+    /// The deepest folder of a chain that has only a folder in each, from a folder down, and the row's text for all of
+    /// them, "assets/ui/flat". The folder itself and its name when it has files in it or more than one folder.
+    /// </summary>
+    private string Compacted(string directory, Func<string, bool, bool> hidden, out string label)
+    {
+        label = Path.GetFileName(directory);
+        string at = directory;
+        for (int step = 0; step < COMPACT_MOST; step++)
+        {
+            var (inside, files) = folders.In(at);
+            string? only = null;
+            bool more = false;
+            foreach (string file in files)
+            {
+                if (!Path.GetFileName(file).StartsWith("~syncthing~") && !hidden(file, false))
+                {
+                    more = true;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < inside.Length && !more; i++)
+            {
+                if (Path.GetFileName(inside[i]).StartsWith("~syncthing~") || hidden(inside[i], true))
+                    continue;
+                if (only is not null)
+                    more = true;
+                only = inside[i];
+            }
+
+            if (more || only is null)
+                break;
+
+            at = only;
+            label += "/" + Path.GetFileName(only);
+        }
+
+        return at;
+    }
+
     /// <summary>A file's row of the explorer, opened when it's pressed, with the explorer's menu.</summary>
     private UITreeItem FileRow(string file, int depth)
     {
@@ -264,6 +320,7 @@ internal sealed partial class DawnScene
             Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
         };
 
+        row.Pip = openInTabs.Contains(file) ? openInTabMark : null;
         explorer.explorerRows.Add((file, false, row));
         explorerMade++;
         DecorateRow(row, file, false, null);
@@ -305,13 +362,22 @@ internal sealed partial class DawnScene
 
         // A folder to open first, a row that does it the way VS Code's button does, then the folder files are opened from.
         // It was a quiet note saying which menu to go to, over a blue "../"
+        // What the explorer is for said once, then the two ways in as buttons, the folder files are opened from under them
+        Vector4? accent = compositor.Skin?.Palette.Accent;
         var items = new List<UITreeItem>
         {
+            NoteItem(Said("side_tree.no_workspace"), DimColor),
             new(Said("side_tree.open_folder"), "folder-opened")
             {
-                Color = compositor.Skin?.Palette.Highlight,
-                IconColor = compositor.Skin?.Palette.Highlight,
+                Button = true,
+                IconColor = accent,
                 Tag = new SideTag(Pressed: () => explorer.AskFolder(explorer.OpenFolder))
+            },
+            new(Said("side_tree.open_workspace"), "folder-library")
+            {
+                Button = true,
+                IconColor = accent,
+                Tag = new SideTag(Pressed: explorer.OpenWorkspacePressed)
             }
         };
         if (Directory.GetParent(browseDirectory) is { } parent)
@@ -360,8 +426,8 @@ internal sealed partial class DawnScene
         treeTitle.Text = Said("side.outline_of", ("file", document.Name));
 
         List<OutlineEntry> entries = KeptOutline();
-        var items = new List<UITreeItem>();
-        var open = new List<(int Depth, UITreeItem Item, string Key)>();
+        List<UITreeItem> items = [];
+        List<(int Depth, UITreeItem Item, string Key)> open = [];
 
         foreach (OutlineEntry entry in entries)
         {
@@ -427,6 +493,8 @@ internal sealed partial class DawnScene
     {
         designer.treeRows.Clear();
         fileRows.Clear();
+        sideTree.DropAt = null;
+        sideTree.OnDrop = null;
         KeepSidePlace();
         ApplySide();
         ShowExplorerHead(Side);

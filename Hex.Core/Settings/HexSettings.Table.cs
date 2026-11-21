@@ -45,6 +45,8 @@ internal sealed partial class HexSettings
         Free("right_width", settings => settings.RightWidth, (settings, value) => settings.RightWidth = value),
         Free("layers_height", settings => settings.LayersHeight, (settings, value) => settings.LayersHeight = value),
         Free("panel_height", settings => settings.PanelHeight, (settings, value) => settings.PanelHeight = value),
+        Free("noon_fleet_width", settings => settings.NoonFleetWidth, (settings, value) => settings.NoonFleetWidth = value),
+        Free("noon_context_width", settings => settings.NoonContextWidth, (settings, value) => settings.NoonContextWidth = value),
         Flag("side_bar_hidden", settings => settings.SideBarHidden, (settings, value) => settings.SideBarHidden = value),
         Flag("panel_hidden", settings => settings.PanelHidden, (settings, value) => settings.PanelHidden = value),
         Flag("properties_hidden", settings => settings.PropertiesHidden, (settings, value) => settings.PropertiesHidden = value),
@@ -84,9 +86,13 @@ internal sealed partial class HexSettings
             },
             (settings, written) => written.Add("visual_studio_keys", settings.VisualStudioKeys)),
         Flag("visual_studio_keys_chosen", settings => settings.VisualStudioKeysChosen, (settings, value) => settings.VisualStudioKeysChosen = value),
+        Text("welcome_done", settings => settings.WelcomeDone, (settings, value) => settings.WelcomeDone = value),
+        Flag("welcome_checklist_hidden", settings => settings.WelcomeChecklistHidden, (settings, value) => settings.WelcomeChecklistHidden = value),
         Choice("csharp_colors", settings => settings.CSharpColors, (settings, value) => settings.CSharpColors = value, "resharper", "visual_studio", "skin"),
         Flag("mcp_server", settings => settings.McpServer, (settings, value) => settings.McpServer = value),
         Flag("no_ai", settings => settings.NoAi, (settings, value) => settings.NoAi = value),
+        Flag("agents_resume_after_limit", settings => settings.AgentsResumeAfterLimit, (settings, value) => settings.AgentsResumeAfterLimit = value),
+        Whole("agents_auto_settle_seconds", settings => settings.AgentsAutoSettleSeconds, (settings, value) => settings.AgentsAutoSettleSeconds = value, 0.0f, 3600.0f),
         Flag("mcp_hint_quiet", settings => settings.McpHintQuiet, (settings, value) => settings.McpHintQuiet = value),
         Flag("git_autofetch", settings => settings.GitAutoFetch, (settings, value) => settings.GitAutoFetch = value),
         Number("git_autofetch_interval", settings => settings.GitAutoFetchInterval, (settings, value) => settings.GitAutoFetchInterval = value, 1.0f, 60.0f),
@@ -199,6 +205,7 @@ internal sealed partial class HexSettings
                         settings.ServerSettings[name] = json;
             },
             (settings, written) => written.Add("language_server_settings", settings.ServerSettingsObject())),
+        Flag("csharp_analyzers_moved", settings => settings.CSharpAnalyzersMoved, (settings, value) => settings.CSharpAnalyzersMoved = value),
         Special("files_associations",
             (settings, values) =>
             {
@@ -222,6 +229,7 @@ internal sealed partial class HexSettings
             },
             (settings, written) => written.Add("search_exclude", Horizon.HIDL.Library.Natives.List(settings.SearchExclude))),
         Flag("search_use_ignore_files", settings => settings.SearchUseIgnoreFiles, (settings, value) => settings.SearchUseIgnoreFiles = value),
+        Flag("explorer_auto_reveal", settings => settings.ExplorerAutoReveal, (settings, value) => settings.ExplorerAutoReveal = value),
         Special(LANGUAGE_OVERRIDES,
             (settings, values) => settings.ReadLanguageOverrides(values),
             (settings, written) => written.Add(LANGUAGE_OVERRIDES, settings.LanguageOverridesObject())),

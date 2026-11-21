@@ -34,6 +34,34 @@ public static class HexModes
     /// </summary>
     public static HexFace? FaceWanted { get; set; }
 
+    /// <summary>
+    /// How a swap goes, the old mode's last frame laid over the new one and faded out (see Horizon's CrossfadeTransition),
+    /// null for a cut. Asked at every swap, so it follows the interface animation setting as it changes. Set by the editor.
+    /// </summary>
+    public static Func<SceneTransition?>? Transition { get; set; }
+
+    /// <summary>
+    /// How long the part of a mode that changes takes to slide its last few pixels in as it comes back on screen, as the
+    /// last transition handed out had it, 0 for not moving.
+    /// </summary>
+    public static float ArriveTime { get; set; }
+
+    /// <summary>
+    /// The other mode made and set up ahead of being asked for, at the next frame, for a pointer over its button or the
+    /// keys of the swap held down. Nothing once it's made, or when the modes aren't in the one window.
+    /// </summary>
+    public static void Warm(HexMode mode, string? folder = null)
+    {
+        if (make is null || made.ContainsKey(mode) || GameEngine.Instance?.SceneManager is not { } scenes)
+            return;
+
+        Scene scene = made[mode] = make(mode, folder);
+        scenes.Preload(scene);
+    }
+
+    /// <summary>Whether a mode's scene has been made, on screen, kept or set up ahead (see <see cref="Warm"/>).</summary>
+    public static bool Made(HexMode mode) => made.ContainsKey(mode);
+
     /// <summary>Called on the scene that is about to be left for the other mode, to let go of the keyboard and the pointer.</summary>
     public static event Action<HexMode>? Leaving;
 
@@ -176,7 +204,7 @@ public static class HexModes
         // pause for nothing each time Ctrl+Alt+Shift+D was pressed
         scenes.CollectAfterChange = fresh;
         Current = to;
-        scenes.SetScene(scene, null);
+        scenes.SetScene(scene, Transition?.Invoke());
         return true;
     }
 

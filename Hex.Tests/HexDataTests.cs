@@ -5,6 +5,7 @@ using Hex.Core;
 namespace Hex.Tests;
 
 /// <summary>The data folder: where it is, the old files moved into it, and what tidying it takes away and keeps.</summary>
+[Collection(HexHome.NAME)]
 public sealed class HexDataTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "hex-data-" + Guid.NewGuid().ToString("N")[..8]);

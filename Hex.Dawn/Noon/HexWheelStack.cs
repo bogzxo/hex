@@ -12,5 +12,9 @@ internal sealed class HexWheelStack : StackPanel
 
     protected override bool OnScroll(float delta) => Wheeled?.Invoke() is { Visible: true } scroll && scroll.Wheel(delta);
 
+    // A drag or the middle button's autoscroll over the margins moves the column with it to the fraction of a pixel, as
+    // over the column. Left to the stack's own, it went by whole notches of the wheel and jumped at slow speeds
+    protected override bool OnPan(System.Numerics.Vector2 delta) => Wheeled?.Invoke() is { Visible: true } scroll && scroll.Pan(delta);
+
     protected override bool UsesScrollSpeed => true;
 }

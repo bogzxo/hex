@@ -20,6 +20,24 @@ internal sealed class NotebookRun
     private sealed record ExecutionOutcome(string Status);
 
     public bool Succeeded(NotebookCell cell) => !IsQueued(cell) && outcomes.TryGetValue(cell, out var outcome) && outcome.Status == "ok";
+
+    /// <summary>Whether the cell's last run ended in an error (an exception, an interrupt), false while it runs or never ran.</summary>
+    public bool Failed(NotebookCell cell) => !IsQueued(cell) && outcomes.TryGetValue(cell, out var outcome) && outcome.Status is "error" or "aborted";
+
+    // When the kernel started on a cell (its execute_input) and how long the run took once it finished, in milliseconds of
+    // Environment.TickCount64, for the time under each cell's count. Kept with the cell, not written into the file
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<NotebookCell, Timing> timings = new();
+    private sealed class Timing
+    {
+        public long Started;
+        public long Took = -1;
+    }
+
+    /// <summary>When the kernel started running the cell, null while it waits its turn, has finished or never ran.</summary>
+    public long? RunningSince(NotebookCell cell) => timings.TryGetValue(cell, out Timing? timing) && timing.Took < 0 && IsQueued(cell) ? timing.Started : null;
+
+    /// <summary>How long the cell's last run took in milliseconds, null while it runs or when it hasn't run since it was opened.</summary>
+    public long? Took(NotebookCell cell) => timings.TryGetValue(cell, out Timing? timing) && timing.Took >= 0 ? timing.Took : null;
     private readonly Dictionary<string, List<JsonObject>> displays = [];
     private readonly HashSet<NotebookCell> clearing = [];
     private readonly HashSet<string> replied = [], idle = [];
@@ -42,6 +60,7 @@ internal sealed class NotebookRun
             idle.Remove(old);
         }
         outcomes.Remove(cell);
+        timings.Remove(cell);
         sent[requestId] = cell;
         Queued.Remove(cell);
         Queued.Add(cell);
@@ -83,6 +102,7 @@ internal sealed class NotebookRun
         {
             case "execute_input":
                 cell.ExecutionCount = Count(content);
+                timings.AddOrUpdate(cell, new Timing { Started = Environment.TickCount64 });
                 return cell;
 
             case "stream":
@@ -202,6 +222,8 @@ internal sealed class NotebookRun
     private void Finish(string id, NotebookCell cell)
     {
         if (!replied.Contains(id) || !idle.Contains(id)) return;
+        if (timings.TryGetValue(cell, out Timing? timing) && timing.Took < 0)
+            timing.Took = Math.Max(0, Environment.TickCount64 - timing.Started);
         Queued.Remove(cell);
         replied.Remove(id);
         idle.Remove(id);

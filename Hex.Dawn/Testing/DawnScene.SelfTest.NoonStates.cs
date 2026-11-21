@@ -54,8 +54,8 @@ internal sealed partial class DawnScene
             return shown.IndexOf(asking!) < shown.IndexOf(working!) && shown.IndexOf(failed!) < shown.IndexOf(working!) && shown.IndexOf(working!) < shown.IndexOf(idle!);
         });
         test.Check("noon states: each group has its heading, and still one row for each card", () =>
-            noonFleetRows.Children.Count == FleetShown().Count
-            && new[] { "noon.fleet_needs_you", "noon.fleet_working", "noon.fleet_rest" }.All(key => Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said(key).ToUpperInvariant())));
+            noonFleetRows.Children.Count == FleetRowsWanted()
+            && new[] { "noon.fleet_needs_you", "noon.fleet_working", "noon.fleet_rest" }.All(key => Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text == Said(key))));
         test.Run(() => Shot("noon-states-fleet"));
 
         // Waiting on the person in another chat, the strip says how many and goes there
@@ -166,7 +166,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            foreach (HexAgentChat chat in new[] { working, asking, failed, other })
+            foreach (HexAgentChat? chat in new[] { working, asking, failed, other })
             {
                 if (chat is not null && ChatById(chat.Id) is not null)
                 {

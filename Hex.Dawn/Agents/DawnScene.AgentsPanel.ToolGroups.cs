@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 
 using Horizon.Rendering;
 using Horizon.UI.Drawing;
@@ -17,6 +18,10 @@ internal sealed partial class DawnScene
 
     // How strongly the calls that went are drawn, the reply round them standing out of them
     private const float TOOL_QUIET = 0.72f;
+
+    // How much of the skin's raised shade a call's or a group's bubble is. Half of it was all but lost on the glass
+    // panels' darker ground, the calls a column of loose text
+    private const float TOOL_SHADE = 0.9f;
 
     // The groups opened, by the first call of each, the rest are folded
     private readonly HashSet<HexAgentEntry> toolGroupsOpen = [];
@@ -119,11 +124,14 @@ internal sealed partial class DawnScene
     /// <summary>What a group is drawn from, its calls and how each is, and whether it's open, so it's made again when that moves.</summary>
     private int ToolGroupKey(HexAgentChat chat, int start)
     {
+        // Its calls gone through in place, a list of them was made for every group each time the rows were looked over,
+        // with every line an agent streams
         var hash = new HashCode();
-        foreach (HexAgentEntry call in ToolGroupAt(chat, start))
+        IReadOnlyList<HexAgentEntry> entries = chat.Entries;
+        for (int i = start; i < entries.Count && Groupable(entries[i]); i++)
         {
-            hash.Add(call);
-            hash.Add(call.Version);
+            hash.Add(entries[i]);
+            hash.Add(entries[i].Version);
         }
 
         // Not whether it's open, a press opens it in place without the row being made again
@@ -148,7 +156,7 @@ internal sealed partial class DawnScene
 
         List<HexAgentEntry> calls = start < 0 ? [first] : ToolGroupAt(chat, start);
         if (calls.Count == 1)
-            return ToolLine(chat, first, skin);
+            return ToolLine(chat, first, skin, alone: true);
 
         Vector4 raised = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         bool open = toolGroupsOpen.Contains(first);
@@ -156,9 +164,8 @@ internal sealed partial class DawnScene
 
         HexAgentEntry? running = calls.LastOrDefault(call => call.State == HexAgentToolState.Running);
         int failed = calls.Count(call => call.State == HexAgentToolState.Failed);
-        string kinds = string.Join(", ", calls.GroupBy(call => ShortToolName(call)).OrderByDescending(kind => kind.Count())
-            .Take(4).Select(kind => kind.Count() > 1 ? $"{kind.Key} ×{kind.Count()}" : kind.Key));
-        double seconds = calls.Sum(call => call.Seconds);
+        string kinds = ToolKinds(calls);
+        double seconds = GroupSeconds(calls);
         // One that failed on the way and was got past (its last call went) is a warning, a group that ended failing an error
         bool endedFailing = calls[^1].State == HexAgentToolState.Failed;
         string icon = running is not null ? (settings.UiAnimation > 0 ? "loading~spin" : "loading") : endedFailing ? "error" : failed > 0 ? "warning" : "tools";
@@ -168,7 +175,7 @@ internal sealed partial class DawnScene
 
         var bar = holder.Add(new Panel
         {
-            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * 0.45f },
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_GROUP_HEAD), Radius = 6, Color = raised with { W = raised.W * TOOL_SHADE },
             Opacity = running is null && failed == 0 ? TOOL_QUIET : 1.0f
         });
         // How it's going the way a tool's own row says it, an outline while one of its calls runs or once it ended failing,
@@ -230,6 +237,65 @@ internal sealed partial class DawnScene
         return holder;
     }
 
+    /// <summary>
+    /// How long any of a group's calls was going, calls run side by side counted once: their times added up, several
+    /// running together made the group's clock run as many times faster than the clock on the wall.
+    /// </summary>
+    private static double GroupSeconds(List<HexAgentEntry> calls)
+    {
+        long now = Environment.TickCount64, total = 0, from = 0, to = long.MinValue;
+        foreach (HexAgentEntry call in calls.OrderBy(call => call.Started))
+        {
+            long end = Math.Max(call.Started, call.Ended ?? now);
+            if (call.Started > to)
+            {
+                total += to > from ? to - from : 0;
+                (from, to) = (call.Started, end);
+            }
+            else
+                to = Math.Max(to, end);
+        }
+        total += to > from ? to - from : 0;
+        return total / 1000.0;
+    }
+
+    // A call's name as a line says it, Hex's without hex_ and in words
+    // The four kinds of call a group has most of, the most first and those as many in the order they came, each with how
+    // many when there's more than one
+    private static string ToolKinds(List<HexAgentEntry> calls)
+    {
+        List<(string Kind, int Count)> counted = [];
+        foreach (HexAgentEntry call in calls)
+        {
+            string kind = ShortToolName(call);
+            int at = counted.FindIndex(each => each.Kind == kind);
+            if (at < 0)
+                counted.Add((kind, 1));
+            else
+                counted[at] = (kind, counted[at].Count + 1);
+        }
+
+        var said = new StringBuilder();
+        for (int taken = 0; taken < 4 && counted.Count > 0; taken++)
+        {
+            int most = 0;
+            for (int i = 1; i < counted.Count; i++)
+            {
+                if (counted[i].Count > counted[most].Count)
+                    most = i;
+            }
+            var (name, count) = counted[most];
+            counted.RemoveAt(most);
+            if (said.Length > 0)
+                said.Append(", ");
+            said.Append(name);
+            if (count > 1)
+                said.Append(" ×").Append(count);
+        }
+
+        return said.ToString();
+    }
+
     // A call's name as a line says it, Hex's without hex_ and in words
     private static string ShortToolName(HexAgentEntry call)
     {
@@ -244,14 +310,17 @@ internal sealed partial class DawnScene
     /// One call as a slim line, its icon, its name and what it was given dimmed after it, its time at the right, a thin mark
     /// of how it went at its left. A press opens what it was given and said back under it.
     /// </summary>
-    private UIComponent ToolLine(HexAgentChat chat, HexAgentEntry call, UISkin? skin)
+    /// <param name="alone">A call on its own rather than one of an opened group's, a bubble of its own with its state's outline the way a group's bar is. Bare on the chat it was a line of text with nothing to say it was a call, or how it went.</param>
+    private UIComponent ToolLine(HexAgentChat chat, HexAgentEntry call, UISkin? skin, bool alone = false)
     {
         var holder = new StackPanel { Fill = UIFill.Horizontal, Spacing = 0 };
         // A call that went is quieter than the words round it, the agent's reply is what the chat is read for. One running
         // or failed stays as it is, it's what wants seeing
+        Vector4 raised = skin?.Palette.Raised ?? new Vector4(1, 1, 1, 0.05f);
         var line = holder.Add(new Panel
         {
-            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = Vector4.Zero,
+            Fill = UIFill.Horizontal, Size = new Vector2(0, TOOL_LINE), Color = alone ? raised with { W = raised.W * TOOL_SHADE } : Vector4.Zero,
+            Radius = alone ? 6 : 0, Outline = alone ? ToolOutline(call.State, skin) : Vector4.Zero,
             Opacity = call.State == HexAgentToolState.Done ? TOOL_QUIET : 1.0f
         });
         // How it went by its icon alone, a spinner while it runs and the error's mark in red once it failed, the group's

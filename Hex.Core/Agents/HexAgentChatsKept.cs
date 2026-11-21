@@ -224,7 +224,7 @@ internal sealed class HexAgentChatsKept
     }
 
     // What a chat is at, moved whenever anything of it that's written does
-    private static long Stamp(HexAgentChat chat) => chat.Version * 4L + (chat.Running ? 1 : 0) + (chat.Stopped ? 2 : 0);
+    private static long Stamp(HexAgentChat chat) => (chat.Version * 4L + (chat.Running ? 1 : 0) + (chat.Stopped ? 2 : 0)) * 1_000_003L + chat.SettleVersion;
 
     // Written beside and moved over, so a file is either what it was or what it's to be
     private static void WriteOver(string file, string text)

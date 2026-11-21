@@ -17,7 +17,11 @@ internal sealed partial class DawnScene
             PickLanguage = PickLanguage,
             ChangeLanguageMode = ChangeLanguageMode,
             Rename = explorer.RenameTo,
-            FilterRows = designer.FilterRows
+            FilterRows = designer.FilterRows,
+            IconOf = path => (HexExplorer.FileIcon(path), explorer.FileIconColor(path)),
+            RelativeOf = explorer.RelativeOf,
+            Reveal = explorer.RevealInExplorer,
+            OpenWithSystem = explorer.OpenWithSystem
         };
         explorer.PropertiesOf = path => ShowPropertiesOf(SelectedWith(path));
 

@@ -157,7 +157,7 @@ internal sealed partial class HexCodeIndex
 
     /// <summary>
     /// The column of the name a line declares, when a tool's given a path and line with no name: past the modifiers and
-    /// the return type ("public static bool TryGet&lt;T&gt;(" is TryGet, "class Foo : Bar" is Foo, "def run(self)" is run,
+    /// the return type ("public static bool TryGet&lt;T>(" is TryGet, "class Foo : Bar" is Foo, "def run(self)" is run,
     /// "int Count { get; }" is Count). A server asked at "public" said there was no call hierarchy there. The first
     /// letter that isn't a space when nothing on it looks declared.
     /// </summary>

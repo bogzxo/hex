@@ -21,6 +21,10 @@ internal sealed partial class DawnScene
     /// <summary>Runs cells, in order, once the kernel's up. Markdown and raw cells are only written out.</summary>
     private void RunCells(HexNotebook notebook, IEnumerable<NotebookCell> cells)
     {
+        // A run's cells counted from when nothing was running, for how far it's got on the bar
+        if (notebook.Run.Queued.Count == 0 && notebook.Waiting.Count == 0)
+            notebook.RunTotal = 0;
+
         foreach (NotebookCell cell in cells)
         {
             if (cell.Kind != CellKind.Code)
@@ -28,11 +32,14 @@ internal sealed partial class DawnScene
 
             if (notebook.Kernel is { State: not KernelState.Dead } kernel && !notebook.Starting)
             {
+                if (!notebook.Run.IsQueued(cell))
+                    notebook.RunTotal++;
                 notebook.Run.Sent(cell, kernel.Execute(cell.Source));
                 NotebookChanged(notebook);
             }
             else if (!notebook.Waiting.Contains(cell))
             {
+                notebook.RunTotal++;
                 notebook.Waiting.Add(cell);
             }
         }

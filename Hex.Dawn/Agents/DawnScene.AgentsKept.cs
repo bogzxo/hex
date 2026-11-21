@@ -51,6 +51,9 @@ internal sealed partial class DawnScene
             agentChat = opened;
         // The face the workspace was left in, unless the command line said one
         faceAtStart ??= FaceNamed(state?["face"]?.GetValue<string>());
+        // Whether the finished chats' group was left open, this workspace's own choice
+        chatsFinishedOpen = state?["finished_open"]?.GetValue<bool>() ?? false;
+        noonFleetDrawn = NOT_DRAWN;
         agentsListDrawn = NOT_DRAWN;
         agentsDrawn = (-1, -1);
     }
@@ -93,7 +96,8 @@ internal sealed partial class DawnScene
         {
             ["open"] = agentChat?.Id,
             ["made"] = agentChatsMade,
-            ["face"] = Face.ToString()
+            ["face"] = Face.ToString(),
+            ["finished_open"] = chatsFinishedOpen
         });
     }
 

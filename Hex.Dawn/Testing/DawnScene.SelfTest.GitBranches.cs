@@ -67,17 +67,17 @@ internal sealed partial class DawnScene
         });
 
         // A clean repository's Commit row is a dim Commit, no 0 in it, and the note under it short with the rest on the pointer
-        test.WaitFor(() => CommitSaid(Rows()) is not null && git.StatusFor(file)?.Branch == "main", 5.0f);
+        test.WaitFor(() => CommitSaid(Rows()) is not null && git.StatusFor(file)?.Branch == "main", 5.0f * GIT_PATIENCE);
         test.Check("branch ops: with nothing changed the Commit row is a dim Commit with no count, the note short and the whole of it its tooltip", () =>
             CommitSaid(Rows()) is { } said && said.Text == Said("git.commit_plain") && said.Dim && !said.Text.Contains('0')
             && Rows().Any(note => note.Text == Said("git.no_changes") && note.Tooltip == Said("git_branch.nothing_to_commit")));
 
         // Merge Branch... lists b with the branch rows' look, and merging it is a fast forward, HEAD moved to b's commit
         test.Run(() => Command("git_branch.merge_command"));
-        test.WaitFor(() => Lists(": b   "), 3.0f);
+        test.WaitFor(() => Lists(": b   "), 3.0f * GIT_PATIENCE);
         test.Check("branch ops: Merge Branch lists the other branches, not the one checked out", () => Lists(": b   ") && !Lists(": main   "));
         test.Run(() => Pick(": b   "));
-        test.WaitFor(() => Head() == Head("b"), 5.0f);
+        test.WaitFor(() => Head() == Head("b"), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: merging b fast forwards, HEAD on b's commit and no merge commit", () =>
             Head() == Head("b") && GitProcess.Run(repo, ["rev-list", "--parents", "-n", "1", "HEAD"]).Output.Trim().Split(' ').Length == 2);
 
@@ -87,48 +87,48 @@ internal sealed partial class DawnScene
             Git(repo, "switch", "-q", "b");
             git.Refresh(repo);
         });
-        test.WaitFor(() => git.StatusFor(file)?.Branch == "b", 4.0f);
+        test.WaitFor(() => git.StatusFor(file)?.Branch == "b", 4.0f * GIT_PATIENCE);
         test.Run(() => Command("git_branch.rename_command"));
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Check("branch ops: Rename Branch starts with the name of the branch checked out", () =>
             textDialog is { IsOpen: true } open && Descendants(open.Body).OfType<TextBox>().FirstOrDefault()?.Text == "b");
         test.Run(() => Submit("c"));
-        test.WaitFor(() => Local().Contains("c"), 5.0f);
+        test.WaitFor(() => Local().Contains("c"), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: renaming b to c lists c and not b", () => Local().Contains("c") && !Local().Contains("b"));
         test.Run(() =>
         {
             Git(repo, "switch", "-q", "main");
             git.Refresh(repo);
         });
-        test.WaitFor(() => git.StatusFor(file)?.Branch == "main", 4.0f);
+        test.WaitFor(() => git.StatusFor(file)?.Branch == "main", 4.0f * GIT_PATIENCE);
 
         // Create Tag... asks a name then a message, none for a lightweight tag, and Delete Tag... lists it to delete
         test.Run(() => Command("git_branch.tag_command"));
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Run(() => Submit("v1"));
-        test.WaitFor(() => textDialog is { IsOpen: true } open && open.Buttons.Any(button => button.Label == Said("git_branch.tag_button")), 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } open && open.Buttons.Any(button => button.Label == Said("git_branch.tag_button")), 3.0f * GIT_PATIENCE);
         test.Run(() => Submit(string.Empty));
-        test.WaitFor(() => Tags().Any(tag => tag.Name == "v1"), 5.0f);
+        test.WaitFor(() => Tags().Any(tag => tag.Name == "v1"), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: Create Tag v1 makes a tag Tags() has", () => Tags().Any(tag => tag.Name == "v1"));
         test.Run(() => Command("git_branch.delete_tag_command"));
-        test.WaitFor(() => Lists(": v1   "), 3.0f);
+        test.WaitFor(() => Lists(": v1   "), 3.0f * GIT_PATIENCE);
         test.Run(() => Pick(": v1   "));
-        test.WaitFor(() => Tags().Count == 0, 5.0f);
+        test.WaitFor(() => Tags().Count == 0, 5.0f * GIT_PATIENCE);
         test.Check("branch ops: Delete Tag takes it away again", () => Tags().Count == 0);
 
         // Revert Commit... lists HEAD's commits, and the one picked is taken back by a commit of its own
         test.Run(() => Command("git_branch.revert_command"));
-        test.WaitFor(() => Lists(": On b"), 3.0f);
+        test.WaitFor(() => Lists(": On b"), 3.0f * GIT_PATIENCE);
         test.Run(() => Pick(": On b"));
-        test.WaitFor(() => Subject().StartsWith("Revert", StringComparison.Ordinal), 5.0f);
+        test.WaitFor(() => Subject().StartsWith("Revert", StringComparison.Ordinal), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: Revert Commit adds a commit that takes it back", () =>
             Subject() == "Revert \"On b\"" && !File.Exists(Path.Combine(repo, "b.txt")));
 
         // A branch merged already deletes straight away, one with a commit nowhere else asks to be forced first
         test.Run(() => Command("git_branch.delete_command"));
-        test.WaitFor(() => Lists(": c   "), 3.0f);
+        test.WaitFor(() => Lists(": c   "), 3.0f * GIT_PATIENCE);
         test.Run(() => Pick(": c   "));
-        test.WaitFor(() => !Local().Contains("c"), 5.0f);
+        test.WaitFor(() => !Local().Contains("c"), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: Delete Branch deletes a merged branch without asking", () => !Local().Contains("c") && textDialog is not { IsOpen: true });
         test.Run(() =>
         {
@@ -139,15 +139,15 @@ internal sealed partial class DawnScene
             Git(repo, "switch", "-q", "main");
             git.Refresh(repo);
         });
-        test.WaitFor(() => git.StatusFor(file)?.Branch == "main", 4.0f);
+        test.WaitFor(() => git.StatusFor(file)?.Branch == "main", 4.0f * GIT_PATIENCE);
         test.Run(() => Command("git_branch.delete_command"));
-        test.WaitFor(() => Lists(": d   "), 3.0f);
+        test.WaitFor(() => Lists(": d   "), 3.0f * GIT_PATIENCE);
         test.Run(() => Pick(": d   "));
-        test.WaitFor(() => textDialog is { IsOpen: true } open && open.Buttons.Any(button => button.Label == Said("git_branch.force_delete")), 5.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } open && open.Buttons.Any(button => button.Label == Said("git_branch.force_delete")), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: deleting a branch that isn't merged asks to Force Delete, and it's still there", () =>
             textDialog is { IsOpen: true } open && open.Buttons.Any(button => button.Label == Said("git_branch.force_delete")) && Local().Contains("d"));
         test.Run(() => Press(Said("git_branch.force_delete")));
-        test.WaitFor(() => !Local().Contains("d"), 5.0f);
+        test.WaitFor(() => !Local().Contains("d"), 5.0f * GIT_PATIENCE);
         test.Check("branch ops: and Force Delete deletes it", () => !Local().Contains("d"));
 
         // A merge that stops on a conflict is the merge state, Merging on the side, the C row and a Commit that finishes it
@@ -161,9 +161,9 @@ internal sealed partial class DawnScene
             Git(repo, "commit", "-q", "-am", "Ours");
             git.Refresh(repo);
         });
-        test.WaitFor(() => git.StatusFor(file)?.Branch == "main" && GitProcess.Run(repo, ["status", "--porcelain"]).Output.Trim().Length == 0, 4.0f);
+        test.WaitFor(() => git.StatusFor(file)?.Branch == "main" && GitProcess.Run(repo, ["status", "--porcelain"]).Output.Trim().Length == 0, 4.0f * GIT_PATIENCE);
         test.Run(() => Command("git_branch.merge_command"));
-        test.WaitFor(() => Lists(": x   "), 3.0f);
+        test.WaitFor(() => Lists(": x   "), 3.0f * GIT_PATIENCE);
         test.Run(() => Pick(": x   "));
         // A status sampled just before merge can arrive with MERGE_HEAD already present. Wait for the conflict
         // row and completion notice too, rather than treating that intermediate "Merging / No changes" as settled.
@@ -172,7 +172,7 @@ internal sealed partial class DawnScene
             && CommitSaid(Rows())?.Text == Said("git.commit_merge")
             && Rows().FirstOrDefault(row => row.Text == Said("git.merge_changes"))?.Children?.Any(row => row.Badge == "C") == true
             && toasts.Cards.Any(card => !card.Closed && card.Text.Contains(HexText.Count("conflict", 1), StringComparison.Ordinal));
-        test.WaitFor(ConflictReady, 6.0f);
+        test.WaitFor(ConflictReady, 6.0f * GIT_PATIENCE);
         test.Settle(0.2f);
         test.Run(() =>
         {
@@ -193,12 +193,11 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            Git(repo, "merge", "--abort");
             chrome.Dialog?.Close();
+            CloseDocumentsUnder(repo);
+            Git(repo, "merge", "--abort");
             foreach (UINotification card in toasts.Cards)
                 card.Close();
-            if (document.Path is { } open && PlatformPaths.IsUnder(open, repo))
-                CloseNow();
             if (before is not null && documents.Contains(before))
                 Show(before);
         });

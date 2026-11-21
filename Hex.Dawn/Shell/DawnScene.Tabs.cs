@@ -48,6 +48,7 @@ internal sealed partial class DawnScene
 
         docTabs.OnSelected = index => Show(documents[index]);
         docTabs.OnClose = index => CloseDocument(documents[index]);
+        docTabs.OnUnpin = index => PinTab(documents[index], false);
         docTabs.OnContextMenu = point =>
         {
             int index = docTabs.TabAt(point);
@@ -92,6 +93,7 @@ internal sealed partial class DawnScene
             tab.IconColor = shown.IsText ? null : FolderColor;
             tab.Tooltip = shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name));
             tab.Modified = shown.Modified;
+            tab.Pinned = shown.Pinned;
             tab.TitleColor = TabGitColor(shown);
             tab.Tag = shown;
         }
@@ -134,10 +136,11 @@ internal sealed partial class DawnScene
     {
         var shown = new Menu("tab");
         shown.Add(Said("tabs.close"), () => CloseDocument(tab), "Ctrl+W", icon: "close");
-        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab), icon: "clear-all");
-        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true), icon: "chrome-close");
-        shown.Add(Said("tabs.close_all"), () => CloseAll(), icon: "close-all");
+        shown.Add(Said("tabs.close_others"), () => CloseAll(except: tab, keepPinned: true), icon: "clear-all");
+        shown.Add(Said("tabs.close_saved"), () => CloseAll(onlySaved: true, keepPinned: true), icon: "chrome-close");
+        shown.Add(Said("tabs.close_all"), () => CloseAll(keepPinned: true), icon: "close-all");
         shown.AddSeparator();
+        shown.Add(Said(tab.Pinned ? "tabs.unpin" : "tabs.pin"), () => PinTab(tab, !tab.Pinned), "Ctrl+K Shift+Enter", tab.Pinned ? "pinned" : "pin");
         shown.Add(Said("tabs.open_to_side"), () => OpenToSide(tab), "Ctrl+\\", "split-horizontal").IsEnabled = () => tab.IsText && tab != document;
         shown.AddSeparator();
         shown.Add(Said("tabs.copy_path"), () => UIClipboard.Copy(tab.Path ?? tab.Name), "Shift+Alt+C", "link").IsEnabled = () => tab.Path is not null;
@@ -150,13 +153,14 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// Closes documents, all of them, all but one, or only the ones with nothing to save. The ones with changes are
-    /// asked about one at a time, the way closing each would.
+    /// asked about one at a time, the way closing each would. Asked for by somebody (the tab's menu, the commands) the
+    /// pinned ones stay, the way VS Code keeps them.
     /// </summary>
-    private void CloseAll(HexDocument? except = null, bool onlySaved = false)
+    private void CloseAll(HexDocument? except = null, bool onlySaved = false, bool keepPinned = false)
     {
         foreach (HexDocument closing in documents.ToList())
         {
-            if (closing == except || (onlySaved && (closing.Modified || closing.CodeEdited)))
+            if (closing == except || (onlySaved && (closing.Modified || closing.CodeEdited)) || (keepPinned && closing.Pinned))
                 continue;
 
             // Nothing to lose goes at once, the first that has something asks and the rest wait for the next go
@@ -172,6 +176,23 @@ internal sealed partial class DawnScene
 
         if (except is not null && documents.Contains(except))
             Show(except);
+    }
+
+    /// <summary>
+    /// Pins a tab or unpins it, Ctrl+K Shift+Enter or the tab's menu. A pinned one goes after the others already pinned,
+    /// at the front, and one unpinned goes after the last of them, so the pinned are always together at the start.
+    /// </summary>
+    private void PinTab(HexDocument tab, bool pin)
+    {
+        if (tab.Pinned == pin || !documents.Remove(tab))
+            return;
+
+        tab.Pinned = pin;
+        int at = 0;
+        while (at < documents.Count && documents[at].Pinned)
+            at++;
+        documents.Insert(at, tab);
+        RebuildTabs();
     }
 
     /// <summary>Shows a file in the explorer, its folders opened up to it.</summary>
@@ -249,7 +270,7 @@ internal sealed partial class DawnScene
         if (LayoutTools)
         {
             // What the selected component is inside of, the outermost first
-            var chain = new List<UIComponent>();
+            List<UIComponent> chain = [];
             for (UIComponent? at = document.Selected; at is not null && at != document.Module.Root; at = at.Parent)
                 chain.Insert(0, at);
 
@@ -275,7 +296,7 @@ internal sealed partial class DawnScene
     /// <summary>The entries of the outline a line is inside of, the outermost first, by how deep each is.</summary>
     private static List<OutlineEntry> OutlineAt(List<OutlineEntry> outline, int line)
     {
-        var chain = new List<OutlineEntry>();
+        List<OutlineEntry> chain = [];
         foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > line)

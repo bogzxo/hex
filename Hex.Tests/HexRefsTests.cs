@@ -63,7 +63,7 @@ public sealed class HexRefsTests : IDisposable
 
         string said = Index().References("DrawList.Text", null, 80, 8000).Text;
 
-        Assert.Contains("Only files that say DrawList", said);
+        Assert.Contains("DrawList.Text by text, approximate", said);
         Assert.Contains("Draw.cs", said);
         Assert.Contains("Uses.cs", said);
         Assert.DoesNotContain("Other.cs", said);

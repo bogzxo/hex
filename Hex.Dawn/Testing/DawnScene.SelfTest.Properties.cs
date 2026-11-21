@@ -99,7 +99,7 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => properties.Shown.Count == 2 && properties.ShownProject is not null && !properties.ProjectBusy, 60.0f);
         test.Check("properties: two files picked in the explorer are shown together", () =>
-            sideTree.SelectedItems.Count == 2 && Value("name") == Said("file_properties.count_items", ("count", "2")) && Value("build_action") == "None");
+            sideTree.SelectedItems.Count == 2 && properties.HeadShown.Name == Said("file_properties.several_files", ("count", "2")) && Value("build_action") == "None");
         test.Run(() => properties.Page.Enter("build_action", new StringValue("Content")));
         test.WaitFor(() => !properties.ProjectBusy && File.ReadAllText(project).Contains("Content Include"), 60.0f);
         test.Check("properties: a Build Action picked for both is the SDK's for both", () =>

@@ -107,6 +107,9 @@ internal sealed partial class HexDocument
     /// <summary>Whether the code of a layout was changed by hand since it was last written out of the layout, and not applied yet.</summary>
     public bool CodeEdited { get; set; }
 
+    /// <summary>Whether its tab is pinned, kept at the front with a pin for its x and left open by Close Others and Close All.</summary>
+    public bool Pinned { get; set; }
+
     // What is selected, in the order it was picked: the last one is the one the inspector shows
     private readonly List<UIComponent> selection = [];
 

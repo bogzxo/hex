@@ -76,7 +76,7 @@ internal sealed partial class DawnScene
     /// <summary>What a keys.hor says, nothing for one that doesn't read.</summary>
     private List<(string Label, string Key)> ReadKeys(string path)
     {
-        var read = new List<(string, string)>();
+        List<(string, string)> read = [];
         try
         {
             HIDLRuntime runtime = new() { Output = null };
@@ -245,7 +245,7 @@ internal sealed partial class DawnScene
             return;
 
         commands.Keys.Remove(key.First, key.Second);
-        var on = new List<MenuItem>();
+        List<MenuItem> on = [];
         if (first is not null)
             on.Add(first);
         foreach (MenuItem other in OthersOn(tidy, first is null ? string.Empty : LabelOf(first)))

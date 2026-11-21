@@ -57,7 +57,10 @@ internal sealed partial class DawnScene : Scene
     private Vector4 DimColor => compositor.Skin?.DimTextColor ?? new Vector4(0.84f, 0.87f, 0.93f, 0.62f);
     private Vector4 ErrorColor => compositor.Skin?.ErrorColor ?? new Vector4(1.0f, 0.45f, 0.4f, 1.0f);
     private Vector4 WarningColor => compositor.Skin?.WarningColor ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
-    private static readonly Vector4 FolderColor = UIFileKinds.FOLDER;
+    // A folder's icon, the skin's text turned down. Folders are the shape of the tree, the colours are left to what the
+    // files are and what git and the problems say of them. It was a blue of its own on every theme, names and all
+    private Vector4 FolderColor => compositor.Skin is { } skin ? skin.TextColor with { W = skin.TextColor.W * FOLDER_ICON } : DimColor;
+    private const float FOLDER_ICON = 0.72f;
 
     public override Camera ActiveCamera { get; protected set; }
 
@@ -96,6 +99,9 @@ internal sealed partial class DawnScene : Scene
 
     // What has to be put together again before the next frame, so a click never rebuilds what it is in the middle of
     private bool tabsDirty = true, treeDirty = true, inspectorDirty = true, codeDirty = true;
+
+    // The palette's git colours the tabs were last made with, see RebuildMarked
+    private (Vector4, Vector4, Vector4) tabsColouredWith;
 
     // Where files are opened from and new ones saved to without a workspace
     private string browseDirectory;
@@ -215,6 +221,11 @@ internal sealed partial class DawnScene : Scene
         AddExtensionsSettings();
         terminalFiles = new HexTerminalFiles(Context);
         languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
+        languages.TypesNear = () =>
+        {
+            HexCodeIndex index = Harness;
+            return file => InterfacesNear(index, file);
+        };
         explorer.FoldersChanged += languages.WorkspaceChanged;
         codeEditing.languages = languages;
 
@@ -540,7 +551,9 @@ internal sealed partial class DawnScene : Scene
     {
         UpdateDialog();
         UpdateClosing();
+        UpdateOpening();
         UpdateHosted();
+        UpdateFileDrops();
         UpdateRenderScale();
         Hex.Shell.HexModes.Update(dt);
         ColourChrome();
@@ -580,11 +593,23 @@ internal sealed partial class DawnScene : Scene
     {
         designer.RevealInTree();
 
+        // The side's rows aren't made again under a name being typed over in them, they are once it's done
+        bool treeHeld = treeDirty && sideTree.Edited is not null;
+
+        // The tabs take git's colours from the palette as they're made, so another look makes them again. A tab kept the
+        // dark look's yellow in the day look, all but invisible on its pill
+        if (compositor.Skin?.Palette is { } palette && (palette.Warning, palette.Success, palette.Error) is var gitColours && gitColours != tabsColouredWith)
+        {
+            tabsColouredWith = gitColours;
+            tabsDirty = true;
+        }
+
         if (tabsDirty) RebuildTabs();
-        if (treeDirty) RebuildTree();
+        if (treeDirty && !treeHeld) RebuildTree();
         if (inspectorDirty) RebuildInspector();
 
-        tabsDirty = treeDirty = inspectorDirty = false;
+        tabsDirty = inspectorDirty = false;
+        treeDirty = treeHeld;
         if (codeShown)
             codeDirty = codeShown = false;
     }
@@ -658,17 +683,19 @@ internal sealed partial class DawnScene : Scene
             .Add("dev_continue", UpdateDevContinue)
             .Add("console", running.UpdateConsole)
             .Add("asked_console", running.RunAskedConsole)
-            .Add("panel", UpdatePanel);
+            .Add("panel", UpdatePanel)
+            .Add("tree_title", FitTreeTitle);
     }
 
-    // Something changed in a folder of the workspace, the explorer reads that folder again and where the languages are is looked for again
+    // Something changed in a folder of the workspace, where the languages are is looked for again, and the explorer reads
+    // that folder again when it had read it, the only folders whose changes it can show
     private void TakeFolderChanges()
     {
-        if (folders.TakeChanges())
-        {
+        var (any, read) = folders.TakeChanges();
+        if (any)
             languagesNear.Clear();
+        if (read)
             treeDirty |= Side == HexSide.Explorer;
-        }
     }
 
     /// <summary>
@@ -709,7 +736,7 @@ internal sealed partial class DawnScene : Scene
     /// </summary>
     private void RestoreBackupsUnder(string folder)
     {
-        var brought = new List<string>();
+        List<string> brought = [];
         foreach (var backup in Backups.All())
         {
             if (backup.Path is not { } path || !PlatformPaths.IsUnder(path, folder))

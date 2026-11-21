@@ -118,7 +118,7 @@ internal sealed partial class HexRunning
     /// <summary>A row for every object in an object, a column for every key any of them has.</summary>
     private void DataTable(HexValues shown, string name, ObjectValue rows)
     {
-        var keys = new List<string>();
+        List<string> keys = [];
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (IRuntimeValue row in rows.Properties.Values)
         {
@@ -194,7 +194,7 @@ internal sealed partial class HexRunning
             }
         }
 
-        var keys = new List<string>();
+        List<string> keys = [];
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (_, texts) in languages)
         {

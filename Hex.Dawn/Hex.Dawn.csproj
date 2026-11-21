@@ -33,6 +33,7 @@
   <ItemGroup>
     <None Include="..\Hex.Installer\Assets\installer\localisation\*.hor" Link="Assets\installer\localisation\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\samples\notebooks\engineering.ipynb" Link="Assets\hex\notebooks\engineering.ipynb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\samples\notebooks\review.ipynb" Link="Assets\hex\notebooks\review.ipynb" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\hex\**\*.hor">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -90,7 +90,7 @@ internal sealed partial class DawnScene
     private void OpenScratchpad()
     {
         SweepScratchpads();
-        var choices = new List<UIChoice>();
+        List<UIChoice> choices = [];
         foreach (FileInfo file in ScratchFiles().Select(path => new FileInfo(path)).OrderByDescending(file => file.LastWriteTimeUtc))
         {
             string name = ScratchName(file.FullName);

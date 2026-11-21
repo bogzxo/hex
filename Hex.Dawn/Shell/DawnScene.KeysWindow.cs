@@ -235,7 +235,7 @@ internal sealed partial class DawnScene
         // the row as well, "user" finds the changed ones
         // Where the key goes off is a word of the row too, "designer" finds the designer's
         var shared = SharedKeys();
-        var rows = new List<UITreeItem>();
+        List<UITreeItem> rows = [];
         foreach (var (item, path) in Commands().OrderBy(pair => CategoryOf(pair.Path), StringComparer.OrdinalIgnoreCase)
             .ThenBy(pair => LabelOf(pair.Item), StringComparer.OrdinalIgnoreCase))
         {

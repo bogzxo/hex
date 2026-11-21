@@ -5,10 +5,19 @@ name: CI
 
 on:
   workflow_dispatch:
+  # Not master: it's only ever development merged, which was tested as it was pushed, and the release build tests it
+  # again. Nor a push of only the site, docs or notes, which have no code to test
   push:
-    branches: [ "master", "development" ]
+    branches: [ "development" ]
+    paths-ignore: [ "site/**", "docs/**", "**/*.md", ".github/workflows/pages.yml", ".github/site-release.py" ]
   pull_request:
     branches: [ "master", "development" ]
+    paths-ignore: [ "site/**", "docs/**", "**/*.md" ]
+
+# A newer push to the same branch takes the place of a run still going on an older one
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

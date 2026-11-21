@@ -53,12 +53,14 @@ internal sealed partial class DawnScene
         editor.OnZoom = notches => ZoomCode(notches > 0.0f ? CODE_ZOOM_STEP : 1.0f / CODE_ZOOM_STEP);
         editor.Padding = new UIEdges(4);
         editor.WordWrap = settings.WrapCode;
+        editor.TabMovesFocus = tabMovesFocus;
         editor.Minimap = settings.Minimap;
         ApplyTextSettings(prepared);
         editor.CaretGlide = CaretGlide;
         editor.Font = codeEditing.codeFont;
         editor.SignatureSource = (name, argument) => codeEditing.Signature(prepared, editor, name, argument);
         editor.OverloadCounter = Said("code.overload_counter", ("index", "{0}"), ("count", "{1}"));
+        editor.DiagnosticWords = (Said("code.diagnostic_error"), Said("code.diagnostic_warning"), Said("code.diagnostic_hint"));
         ShowBackdrop(editor);
         // The code on the middle card's own colour, one surface with the tabs over it and the terminal under it. It was a
         // charcoal of its own written in here, a third colour in the one card
@@ -190,6 +192,10 @@ internal sealed partial class DawnScene
     // What the localisation check last found in each document, kept to go with what running it found
     private readonly Dictionary<HexDocument, IReadOnlyList<UICodeDiagnostic>> localisationFound = [];
 
+    // What ShowDiagnostics has already put under the code, kept between calls and emptied after each, the servers say
+    // what's wrong with a file every time it's typed into and a set was made for every time
+    private readonly HashSet<(int, int, string)> diagnosticsSeen = [];
+
     /// <summary>
     /// Helper method to put what is wrong with a document under its code. The texts it names that the game hasn't got,
     /// and where running it went wrong, if that was in this file.
@@ -209,7 +215,7 @@ internal sealed partial class DawnScene
         // What the run of it says (HexRunning), what the extensions found, the terminal's files and the language servers.
         // The same thing said twice in the same place is said once, the compiler's check and the build that ran it both
         // said a string doesn't go in an int, and the Problems panel listed it twice
-        var seen = new HashSet<(int, int, string)>();
+        HashSet<(int, int, string)> seen = diagnosticsSeen;
         foreach (var source in diagnosticSources)
         {
             foreach (UICodeDiagnostic diagnostic in source(of) ?? [])
@@ -218,6 +224,7 @@ internal sealed partial class DawnScene
                     found.Add(diagnostic);
             }
         }
+        seen.Clear();
         of.Editor.Diagnostics = found;
 
         // Every open file's are in the Problems panel, not only the one on screen
@@ -237,13 +244,15 @@ internal sealed partial class DawnScene
             documents.Remove(document);
         }
 
+        // Looked for once, a file with no \r\n in it was read through to its end twice
+        bool crLf = source.Contains("\r\n", StringComparison.Ordinal);
         var opened = new HexDocument(Path.GetFileNameWithoutExtension(path), stage.CreateModule())
         {
             IsText = true,
             Path = path,
             FallbackDirectory = browseDirectory,
-            CrLf = source.Contains("\r\n", StringComparison.Ordinal),
-            SavedCrLf = source.Contains("\r\n", StringComparison.Ordinal),
+            CrLf = crLf,
+            SavedCrLf = crLf,
             DiskEncoding = Hex.Core.DocumentFile.EncodingOf(path),
             DiskText = source
         };

@@ -164,6 +164,8 @@ img.night-only {
 }
 
 html {
+  /* The scrollbar's room is kept whether it's there or not, so nothing moves sideways when a dialog takes it away */
+  scrollbar-gutter: stable;
   scroll-behavior: smooth;
   scroll-padding-top: 4.5rem;
   -webkit-text-size-adjust: 100%;
@@ -230,6 +232,15 @@ kbd {
   font-size: 0.9em;
 }
 
+/* A flag or a name in a sentence stays on one line rather than breaking at its hyphen */
+p code {
+  white-space: nowrap;
+}
+
+.platform p code {
+  white-space: normal;
+}
+
 kbd {
   padding: 0.1em 0.45em;
   border: 1px solid var(--border);
@@ -259,7 +270,9 @@ kbd {
   margin-inline: auto;
 }
 
-/* The bar across the top */
+/* The bar across the top. One list of the page's parts: a row in the bar where there's room for it, a menu that drops
+   from the bar where there isn't (a popover, so it opens without the page's script and closes with Esc or a press
+   outside it). The part on screen is marked in it */
 
 .bar {
   position: sticky;
@@ -272,47 +285,191 @@ kbd {
   & .wrap {
     display: flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 0.75rem 1.25rem;
     min-block-size: 3.5rem;
   }
+}
 
-  & nav {
-    display: flex;
-    gap: 1.25rem;
-    margin-inline-start: auto;
-  }
+.site-nav {
+  display: flex;
+  align-items: center;
+}
 
-  /* Where the links wouldn't fit in a row the bar is the name and the way to the repository, nothing that scrolls */
-  @media (width < 62rem) {
-    & nav,
-    & .get {
-      display: none;
-    }
+.menu-button svg {
+  inline-size: var(--icon-size);
+  block-size: var(--icon-size);
+}
 
-    & .repo {
-      margin-inline-start: auto;
-    }
+.site-menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 
-    /* The Day/Night switch goes with GitHub on the right, there as it is on a wide screen, once its script has
-       shown it */
-    & .scheme:not([hidden]) {
-      margin-inline-start: auto;
-    }
-
-    & .scheme:not([hidden]) + .repo {
-      margin-inline-start: 0;
-    }
-  }
-
-  & nav a {
+  & a:not(.button) {
     color: var(--dim);
-    font-size: 0.95rem;
     text-decoration: none;
     white-space: nowrap;
 
     &:hover {
       color: var(--text);
     }
+
+    &[aria-current] {
+      color: var(--text);
+    }
+  }
+}
+
+/* Room for the row: the list in the bar, the menu's button and what only the menu has gone */
+@media (width >= 62rem) {
+  .site-nav {
+    margin-inline-start: auto;
+  }
+
+  .site-nav .menu-button,
+  .site-menu .menu-only {
+    display: none;
+  }
+
+  .site-menu {
+    position: static;
+    display: flex;
+    gap: 1.25rem;
+    inset: auto;
+    inline-size: auto;
+    block-size: auto;
+    overflow: visible;
+    border: 0;
+    background: none;
+    color: inherit;
+
+    & a:not(.button) {
+      font-size: 0.95rem;
+    }
+
+    /* Under the part on screen, a line in its face's colour */
+    & a[aria-current] {
+      text-decoration: underline 2px var(--accent);
+      text-underline-offset: 0.45em;
+    }
+  }
+}
+
+/* No room: the name, the Day/Night switch and the menu. GitHub and Download are in the menu */
+@media (width < 62rem) {
+  .bar .repo,
+  .bar .get {
+    display: none;
+  }
+
+  .site-nav {
+    order: 2;
+  }
+
+  .scheme:not([hidden]) {
+    margin-inline-start: auto;
+  }
+
+  /* Without the page's script the switch isn't shown, the menu goes to the right on its own */
+  .bar .wrap:has(.scheme[hidden]) .site-nav {
+    margin-inline-start: auto;
+  }
+
+  .site-menu {
+    position: fixed;
+    inset: 3.75rem var(--gap) auto auto;
+    inline-size: min(20rem, 100dvw - 2 * var(--gap));
+    max-block-size: calc(100dvh - 5rem);
+    overflow: auto;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--background);
+    color: var(--text);
+    box-shadow: 0 1.5rem 4rem -1.5rem var(--shadow);
+    overscroll-behavior: contain;
+
+    & li {
+      display: grid;
+    }
+
+    & a:not(.button) {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-block-size: 44px;
+      padding-inline: 0.75rem;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 1.05rem;
+
+      /* Each part with its face's square, the way the eyebrows have it */
+      &::before {
+        content: "";
+        inline-size: 0.55rem;
+        aspect-ratio: 1;
+        border-radius: 2px;
+        background: var(--accent);
+        opacity: 0.35;
+      }
+
+      &:hover,
+      &[aria-current] {
+        background: var(--surface);
+      }
+
+      &[aria-current]::before {
+        opacity: 1;
+      }
+    }
+
+    & .button {
+      justify-content: center;
+      margin-block-start: 0.5rem;
+    }
+
+    /* It drops in, a little and quickly */
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 0.16s ease, translate 0.16s ease, display 0.16s, overlay 0.16s;
+      transition-behavior: allow-discrete;
+
+      &:not(:popover-open) {
+        opacity: 0;
+        translate: 0 -0.5rem;
+      }
+
+      @starting-style {
+        &:popover-open {
+          opacity: 0;
+          translate: 0 -0.5rem;
+        }
+      }
+    }
+  }
+}
+
+/* How far down the page you are, a line along the bottom of the bar that goes from Dawn's orange through Dusk's
+   violet to Agentic's teal. Moved by the page's scroll itself, nothing runs for it, and left out where that can't */
+.progress {
+  display: none;
+}
+
+@supports (animation-timeline: scroll()) {
+  @keyframes progress {
+    from {
+      scale: 0 1;
+    }
+  }
+
+  .progress {
+    display: block;
+    position: absolute;
+    inset: auto 0 -1px;
+    block-size: 2px;
+    background: linear-gradient(90deg, var(--dawn), var(--dusk) 55%, var(--noon));
+    transform-origin: 0 50%;
+    animation: progress linear both;
+    animation-timeline: scroll(root);
   }
 }
 
@@ -376,8 +533,32 @@ button.button {
   cursor: pointer;
 }
 
+/* A button that reads as a link in a sentence, the request dialog's way in from the words */
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}
+
 /* Asking for an extension or a feature */
-.request:modal {
+/* Styled whether or not it's modal, so it keeps its shape and place while it fades out after it's closed (it stops
+   being :modal the moment it closes) */
+.request {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  max-block-size: calc(100dvh - 2rem);
+  overflow: auto;
   inline-size: min(34rem, 100% - 2rem);
   padding: clamp(1.25rem, 1rem + 2vw, 2rem);
   border: 1px solid var(--border);
@@ -432,6 +613,58 @@ button.button {
   overflow: hidden;
   overscroll-behavior: contain;
   background: color-mix(in oklab, black 55%, transparent);
+}
+
+/* The two dialogs come up from where they'll sit and go back down into it, the shade behind them fading with them.
+   A fade alone for anybody who asked for less motion; where a browser can't keep one up while it leaves, it just goes */
+.request,
+.lightbox {
+  opacity: 0;
+  transition-property: opacity, scale, translate, display, overlay;
+  transition-duration: 0.22s;
+  transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-behavior: allow-discrete;
+
+  @media (prefers-reduced-motion: no-preference) {
+    scale: 0.97;
+    translate: 0 0.75rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition-duration: 0.12s;
+  }
+
+  &[open] {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+
+    @starting-style {
+      opacity: 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @starting-style {
+        scale: 0.97;
+        translate: 0 0.75rem;
+      }
+    }
+  }
+
+  &::backdrop {
+    opacity: 0;
+    transition-property: opacity, display, overlay;
+    transition-duration: 0.22s;
+    transition-behavior: allow-discrete;
+  }
+
+  &[open]::backdrop {
+    opacity: 1;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
 }
 
 /* The top of the page */
@@ -490,6 +723,49 @@ button.button {
   }
 }
 
+/* The three faces named under the pitch, each in its colour and a way to its part of the page, so the names the rest of
+   the page uses mean something from the first screen */
+.face-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-block-size: 2.25rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--accent) 9%, var(--background));
+    color: var(--dim);
+    font-size: 0.9rem;
+    text-decoration: none;
+
+    &::before {
+      content: "";
+      inline-size: 0.55rem;
+      aspect-ratio: 1;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+
+    &:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+  }
+
+  & b {
+    color: var(--accent);
+    font-weight: 750;
+  }
+}
+
 /* The small word under the buttons that it isn't finished and won't be */
 .hero .wip {
   margin-block-start: 1.25rem;
@@ -505,18 +781,39 @@ button.button {
   .actions .button:first-child {
     flex-basis: 100%;
   }
+
+  /* Two of the faces to a line on a phone rather than one each down the screen */
+  .face-chips {
+    gap: 0.4rem;
+
+    & a {
+      gap: 0.35rem;
+      padding-inline: 0.55rem;
+      font-size: 0.84rem;
+    }
+  }
 }
 
 /* A finger wants more to land on than a pointer does */
 @media (pointer: coarse) {
   .button,
-  .bar nav a {
+  .site-menu a {
     min-block-size: 44px;
   }
 
-  .bar nav a {
+  .site-menu a {
     display: inline-flex;
     align-items: center;
+  }
+
+  .face-chips a,
+  .mark,
+  .swipe-controls .dot {
+    min-block-size: 44px;
+  }
+
+  .swipe-controls .dot {
+    inline-size: 44px;
   }
 }
 
@@ -581,7 +878,7 @@ figcaption,
 
 .receipts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 1px;
   overflow: hidden;
   margin-block-start: var(--gap);
@@ -598,7 +895,8 @@ figcaption,
 
   & b {
     display: block;
-    font-size: clamp(1.8rem, 1.3rem + 1.6vw, 2.6rem);
+    font-size: clamp(1.55rem, 1.1rem + 1.8vw, 2.6rem);
+    white-space: nowrap;
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 1.1;
@@ -606,15 +904,26 @@ figcaption,
   }
 
   & span {
+    display: block;
+    margin-block-start: 0.3rem;
     color: var(--dim);
     font-size: 0.92rem;
+    line-height: 1.4;
   }
 }
 
 /* Sections */
 
 section {
-  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
+  --section-space: clamp(3rem, 2rem + 5vw, 6rem);
+
+  padding-block: var(--section-space);
+}
+
+/* A link to a part of the page lands on its words, just under the bar, not on the empty space a section starts with
+   (html's scroll-padding-top keeps it clear of the bar) */
+section[id] {
+  scroll-margin-top: calc(2.25rem - var(--section-space));
 }
 
 section + section {
@@ -627,10 +936,8 @@ section + section {
   gap: 0.6rem;
   margin-block-end: 1rem;
   color: var(--accent);
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.95rem;
+  font-weight: 650;
 
   &::before {
     content: "";
@@ -659,14 +966,6 @@ h2 + p,
 .intro strong,
 h2 + p strong {
   color: var(--text);
-}
-
-.split {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: var(--gap);
-  align-items: center;
-  margin-block-start: clamp(2rem, 1rem + 3vw, 3.5rem);
 }
 
 .features {
@@ -698,8 +997,14 @@ h2 + p strong {
   }
 }
 
-/* A list that's meant as one line is one on a wide screen, however many cards it has */
+/* The editor's eight are two rows of four on a wide screen, never a row and an orphan.
+   A list that's meant as one line is one on a wide screen, however many cards it has */
 @media (width >= 70rem) {
+  .features:not(.row) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+
   .features.row {
     grid-template-columns: none;
     grid-auto-columns: minmax(0, 1fr);
@@ -772,7 +1077,10 @@ h2 + p strong {
 }
 
 /* The screenshot leads. Controls stay in the dialog chrome, clear of the image. */
-.lightbox:modal {
+.lightbox {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   --lightbox-gutter: clamp(0.5rem, 2vw, 1rem);
   --lightbox-padding: clamp(0.75rem, 2vw, 1rem);
 
@@ -919,9 +1227,114 @@ tbody tr:last-child > * {
   border-block-end: 0;
 }
 
-.downloads td,
-.downloads th {
-  text-align: start;
+/* Getting it: the button for the system the page is on, then a card a system, Setup and Portable a row each with a
+   button for each processor. The card of the system the page is on is marked in the accent */
+.get-yours {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-block-start: var(--gap);
+
+  &[hidden] {
+    display: none;
+  }
+
+  & .note {
+    margin: 0;
+  }
+}
+
+.button.big {
+  padding: 0.95rem 1.6rem;
+  font-size: 1.1rem;
+}
+
+.platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin: var(--gap) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+
+  & h3 {
+    font-size: 1.2rem;
+  }
+
+  & > p {
+    color: var(--dim);
+    font-size: 0.92rem;
+  }
+
+  & code {
+    overflow-wrap: anywhere;
+  }
+
+  /* The first of its rows sits at the bottom, so the buttons line up across cards whatever each says above them */
+  & .pick:first-of-type {
+    margin-block-start: auto;
+  }
+
+  &.yours {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  &.yours h3::after {
+    content: "Your system";
+    margin-inline-start: 0.6rem;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+}
+
+/* Where else to look, under the cards: links in a row with room between them, nothing strung between */
+.more-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92rem;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.25rem;
+  }
+
+  @media (pointer: coarse) {
+    & a {
+      min-block-size: 44px;
+    }
+  }
+}
+
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+
+  & > span {
+    min-inline-size: 4.5rem;
+    color: var(--dim);
+    font-size: 0.9rem;
+  }
 }
 
 /* The harness's tools, a name and what it answers with, two to a row where there's room */
@@ -1133,7 +1546,11 @@ tbody tr:last-child > * {
 
 /* The bars of the launch times, drawn to the numbers in the table */
 
+/* Each chart drawn to its own longest bar (--scale, a little over it) and no wider than the words around it, so a
+   number sits by the end of its bar on a wide screen rather than across an empty field from it */
 .bars {
+  --scale: 500;
+
   display: grid;
   gap: 1rem;
   margin-block-start: var(--gap);
@@ -1152,7 +1569,7 @@ tbody tr:last-child > * {
   & i {
     display: block;
     block-size: 1.75rem;
-    inline-size: calc(var(--ms) / 1200 * 100%);
+    inline-size: calc(var(--ms) / var(--scale) * 100%);
     border-radius: 5px;
     background: var(--accent);
   }
@@ -1163,6 +1580,13 @@ tbody tr:last-child > * {
 
   & small {
     color: var(--dim);
+  }
+
+  /* What the face is, under its name */
+  & span:first-child small {
+    display: block;
+    font-size: 0.85rem;
+    line-height: 1.2;
   }
 }
 
@@ -1213,6 +1637,664 @@ pre {
   }
 }
 
+/* Said to a screen reader, not shown */
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The title ends at a caret, the editor's, blinking the way Hex's does. Still for anyone who asked for less motion */
+.hero h1::after {
+  content: "";
+  display: inline-block;
+  inline-size: 0.08em;
+  block-size: 0.82em;
+  margin-inline-start: 0.08em;
+  background: var(--dawn);
+  vertical-align: -0.04em;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: caret 1.1s steps(1) infinite;
+  }
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The numbers, in parts: the launch, Persistent Process, the rest, and the whole table folded under them */
+.numbers-head {
+  margin-block-start: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+  font-size: clamp(1.35rem, 1.1rem + 1vw, 1.75rem);
+}
+
+.numbers-head + p {
+  max-inline-size: 42rem;
+  margin-block-start: 0.75rem;
+  color: var(--dim);
+}
+
+.persistent .bars,
+.persistent .receipts {
+  margin-block-start: 1.25rem;
+}
+
+/* Words beside their chart where there's the room, so a wide screen isn't words down the left and nothing on the
+   right; one over the other where there isn't. The chart and the figures under it share the one column, as wide as
+   each other */
+.pair {
+  & .intro {
+    margin-block-start: 1.25rem;
+  }
+
+  @media (width >= 70rem) {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: calc(var(--gap) * 2);
+    align-items: start;
+
+    & > :last-child > :first-child {
+      margin-block-start: 0;
+    }
+  }
+}
+
+/* Two runs of words of a size, side by side as halves, and starting on one line */
+.pair.even {
+  @media (width >= 70rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.persistent.pair {
+  margin-block-start: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+
+  & .numbers-head {
+    margin-block-start: 0;
+  }
+
+  & .numbers-head + p {
+    margin-block-start: 0.75rem;
+    color: var(--dim);
+  }
+}
+
+/* Little room: a bar's name and number on a line and the bar the whole width under them, rather than a sliver squeezed
+   between the two */
+@container (inline-size < 26rem) {
+  .bars {
+    padding: 1.1rem;
+
+    & div {
+      grid-template-columns: 1fr auto;
+      row-gap: 0.4rem;
+    }
+
+    & i {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      block-size: 1.25rem;
+    }
+  }
+}
+
+#numbers .wrap {
+  container-type: inline-size;
+}
+
+@media (width < 30rem) {
+  /* An odd one out at the end has the whole row, not half of it beside a hole */
+  #numbers .receipts > li:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  #numbers .receipts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    & li {
+      padding: 1rem;
+    }
+
+    & b {
+      font-size: 1.5rem;
+    }
+
+    & span {
+      font-size: 0.85rem;
+    }
+  }
+}
+
+/* Hex next to the other editor, a card a measurement, each drawn to its own scale since the units differ. Hex's bar in
+   the accent, the other one's in a blue it may find familiar (lighter on the dark page, for its words' contrast) */
+.vs {
+  --other: light-dark(#0065a9, #3fa9f5);
+
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 1.25rem 0 0;
+
+  /* Eight cards, two rows of four where there's the room */
+  @media (width >= 70rem) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--border);
+  list-style: none;
+
+  /* Each card's title, words and two bars are rows of the list's own grid, so a card whose words take two lines puts
+     the bars of its whole row down with it and they line up across */
+  & > li {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    align-content: start;
+    padding: 1.1rem 1.25rem 1.25rem;
+    background: var(--surface);
+  }
+
+  & h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  & p {
+    margin-block: 0.15rem 0.8rem;
+    color: var(--dim);
+    font-size: 0.9rem;
+  }
+}
+
+.vs-bar {
+  display: grid;
+  /* The name and the number on a line, the bar the whole width of the card under them */
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem 0.75rem;
+  align-items: center;
+  margin-block-start: 0.45rem;
+
+  & i {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+
+  & > span:first-child {
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  & i {
+    display: block;
+    block-size: 0.9rem;
+    inline-size: max(4px, calc(var(--v) / var(--max) * 100%));
+    border-radius: 0 4px 4px 0;
+    background: var(--accent);
+  }
+
+  & > :last-child {
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  /* Hex in its own colour, Dawn's, its name and its number with its bar */
+  &:not(.code) > span:first-child,
+  &:not(.code) > b {
+    color: var(--accent);
+  }
+
+  &:not(.code) > span:first-child {
+    font-weight: 700;
+  }
+
+  &.code i {
+    background: var(--other);
+  }
+
+  &.code > span {
+    color: var(--other);
+  }
+}
+
+@media (forced-colors: active) {
+  .vs-bar i {
+    background: CanvasText;
+  }
+
+  .vs-bar.code i {
+    background: GrayText;
+  }
+}
+
+.fold {
+  margin-block-start: var(--gap);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+
+  & > summary {
+    padding: 1rem 1.25rem;
+    font-weight: 650;
+  }
+
+  & > p,
+  & > .scroller {
+    margin: 0 1.25rem 1.25rem;
+  }
+
+  & > p:not(.note) {
+    color: var(--dim);
+  }
+
+  & .scroller {
+    background: var(--background);
+  }
+}
+
+/* A summary of ours, a chevron before its words that turns as it opens, and what it opens slides */
+summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  list-style: none;
+  cursor: pointer;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::before {
+    content: "";
+    flex: none;
+    inline-size: 0.6em;
+    block-size: 0.6em;
+    border: solid currentColor;
+    border-width: 0 2px 2px 0;
+    rotate: -45deg;
+    translate: 0 -0.05em;
+  }
+
+  &:dir(rtl)::before {
+    rotate: 135deg;
+  }
+
+  details[open] > &::before {
+    rotate: 45deg;
+    translate: 0 -0.2em;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &::before {
+      transition: rotate 0.2s, translate 0.2s;
+    }
+  }
+}
+
+details::details-content {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  contain: layout;
+}
+
+details:not([open])::details-content {
+  block-size: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  details::details-content {
+    transition: block-size, content-visibility;
+    transition-duration: 0.25s;
+    transition-timing-function: ease-in-out;
+    transition-behavior: allow-discrete;
+  }
+}
+
+/* The editor's cards: what it is in a sentence, the rest a press away. Both texts are faces stacked in one cell, so the
+   card is always as tall as the longer of them and nothing moves when it turns from one to the other; More turns it,
+   Back turns it back. Without the page's script (no .flips on the page) both read one under the other and the buttons
+   aren't there */
+.faces {
+  display: grid;
+}
+
+.face {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.6rem;
+}
+
+/* At the foot of the card where the cards are a grid, so the buttons of a row line up; right under the words in a
+   rail on a phone, where a card is alone and a gap over its button would only look empty */
+/* A card is a column, its faces fill what's left under the title, so every card's button sits at the same place, its
+   foot, in a row of cards or alone in a rail */
+.flips .flip {
+  display: flex;
+  flex-direction: column;
+
+  & > .faces {
+    flex: 1;
+  }
+}
+
+.face-button {
+  margin-block-start: auto;
+  padding: 0.35rem 0.1rem;
+  min-block-size: 2rem;
+  align-items: center;
+
+  @media (pointer: coarse) {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: none;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+}
+
+.front .face-button::after {
+  content: " ›";
+}
+
+.back .face-button::before {
+  content: "‹ ";
+}
+
+.flips .faces {
+  & > .face {
+    grid-area: 1 / 1;
+    transition: opacity 0.22s ease, visibility 0.22s;
+  }
+
+  & .face-button {
+    display: inline-flex;
+  }
+
+  & .back {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    & > .face {
+      transition: opacity 0.22s ease, translate 0.22s ease, visibility 0.22s;
+    }
+
+    & .back {
+      translate: 0.75rem 0;
+    }
+  }
+}
+
+/* The face coming round is visible at once (a transition of visibility is still hidden at its start, and the keyboard
+   couldn't go to its button), only its opacity and place ease in; the one going keeps visibility until it's faded */
+.flips .flip:not(.turned) .front,
+.flips .flip.turned .back {
+  transition-property: opacity, translate;
+}
+
+.flips .flip.turned .faces {
+  & .front {
+    opacity: 0;
+    visibility: hidden;
+
+    @media (prefers-reduced-motion: no-preference) {
+      translate: -0.75rem 0;
+    }
+  }
+
+  & .back {
+    opacity: 1;
+    visibility: visible;
+    translate: 0 0;
+  }
+}
+
+/* Rails. A list that's a grid where there's room is a row you swipe on a phone, each card most of the screen wide
+   with the next one peeking in, snapping as it goes and running out to the screen's edges. Its controls are put in by
+   site.js and only shown while it scrolls */
+@media (width < 44rem) {
+  .swipe {
+    --edge: calc((100vw - min(100vw - 2 * var(--gap), var(--measure))) / 2);
+
+    display: flex;
+    gap: 0.75rem;
+    align-items: start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-inline: calc(-1 * var(--edge));
+    padding: 0.25rem var(--edge) 0.75rem;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--edge);
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Positioned, so what's out of sight in a card (a summary's words for a screen reader) is placed in it and not
+       out past the page's edge where the rail's scroll put it */
+    & > * {
+      position: relative;
+      flex: 0 0 min(84%, 22rem);
+      scroll-snap-align: start;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* The cards that were cells of one framed grid are each a card of their own in a rail */
+  .features.swipe > li,
+  .harness.swipe > div {
+    min-block-size: 100%;
+    padding: 1.25rem;
+    outline: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  .features.swipe,
+  .harness.swipe,
+  .vs.swipe {
+    align-items: stretch;
+  }
+
+  /* The comparison's cards, a rail of their own on a phone rather than eight screens of them */
+  .vs.swipe > li {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .gallery.swipe > figure {
+    flex-basis: min(88%, 24rem);
+  }
+
+  /* A card coming up as it scrolls in is the page's scroll, a rail's is sideways, so in a rail it's simply there */
+  .swipe > .rise {
+    animation: none;
+  }
+}
+
+.swipe-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-block-start: 0.5rem;
+
+  &[hidden] {
+    display: none;
+  }
+
+  & .button {
+    touch-action: manipulation;
+  }
+
+  & .button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    translate: none;
+  }
+
+  & .markers {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    min-inline-size: 4rem;
+    justify-content: center;
+  }
+
+  /* A dot a slide, its target bigger than it looks, the one on screen longer as well as coloured */
+  & .dot {
+    inline-size: 24px;
+    block-size: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    touch-action: manipulation;
+
+    &::after {
+      content: "";
+      display: block;
+      inline-size: 8px;
+      block-size: 8px;
+      margin: auto;
+      border-radius: 4px;
+      background: var(--dim);
+      opacity: 0.5;
+
+      /* The one on screen stretches out and the one left shrinks back, as the rail moves */
+      @media (prefers-reduced-motion: no-preference) {
+        transition: inline-size 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), background-color 0.3s ease, opacity 0.3s ease;
+      }
+    }
+
+    &[aria-current="true"]::after {
+      inline-size: 20px;
+      background: var(--accent);
+      opacity: 1;
+    }
+  }
+
+  & .count {
+    color: var(--dim);
+    font-size: 0.92rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Day to Night and back, the page fades rather than snapping (theme.js starts a view transition). Only the fade: the
+   bar, the pictures and the words go together */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.45s;
+  animation-timing-function: ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Motion, the way Hex has it: short, eased, and only where something arrives or answers you. The pitch comes in once as
+   the page opens, a line after another and the picture last; the bars of the numbers grow to their values as they come
+   into sight, moved by the page's own scroll so a phone has it as much as a desktop; a picture of the gallery leans in
+   a little under a pointer. Only opacity, translate and scale move, and none of it for anybody who asked for less */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      translate: 0 0.9rem;
+    }
+  }
+
+  .hero .pitch > * {
+    animation: arrive 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .hero .pitch > :nth-child(2) { animation-delay: 70ms; }
+  .hero .pitch > :nth-child(3) { animation-delay: 140ms; }
+  .hero .pitch > :nth-child(4) { animation-delay: 210ms; }
+  .hero .pitch > :nth-child(5) { animation-delay: 280ms; }
+  .hero .pitch > :nth-child(n + 6) { animation-delay: 350ms; }
+
+  .hero .proof {
+    animation: arrive 0.8s 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    @keyframes grow {
+      from {
+        scale: 0 1;
+      }
+    }
+
+    .bars i,
+    .vs-bar i {
+      transform-origin: 0 50%;
+      animation: grow linear both;
+      animation-timeline: view();
+      /* Whole by the time it's all on screen, so a bar read anywhere on the page is never part grown */
+      animation-range: entry 0% entry 100%;
+    }
+  }
+
+  @media (hover: hover) {
+    .gallery a img {
+      transition: scale 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+
+    .gallery a:hover img {
+      scale: 1.03;
+    }
+
+    .face-chips a {
+      transition: translate 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .face-chips a:hover {
+      translate: 0 -1px;
+    }
+  }
+}
+
 /* Things come up a little as they scroll into sight. Decoration only, so where a browser can't it's left out,
    and so it is for anyone who asked for less motion */
 
@@ -1225,7 +2307,9 @@ pre {
       }
     }
 
-    .rise {
+    /* The big pieces only, a chart, the comparison, the build: a card or a thumbnail each rising on its own was motion
+       for its own sake, and a big screenshot fading in looked dim for a moment rather than arriving */
+    .rise:not(li, figure, .nots > div) {
       animation: rise auto linear backwards;
       animation-timeline: view();
       animation-range: entry 0% entry 60%;
@@ -1247,7 +2331,9 @@ pre {
 }
 
 @media (forced-colors: active) {
-  .bars i {
+  .bars i,
+  .progress,
+  .swipe-controls .dot[aria-current="true"] {
     background: CanvasText;
   }
 }

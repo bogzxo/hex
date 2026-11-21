@@ -112,7 +112,7 @@ internal sealed partial class DawnScene
             imageView.Color = codeScroll.Color;
             imageInfo.Color = skin.Palette.DimText;
         }
-        foreach (Panel floating in (ReadOnlySpan<Panel?>)[codeEditing?.findBar, debugBar])
+        foreach (Panel? floating in (ReadOnlySpan<Panel?>)[codeEditing?.findBar, debugBar])
         {
             if (floating is null)
                 continue;

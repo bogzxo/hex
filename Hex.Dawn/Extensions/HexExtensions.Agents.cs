@@ -62,7 +62,7 @@ internal sealed partial class HexExtensions
         // Each chat's files for its agent system, in Hex's data folder where Agent Data measures and tidies them
         ("temp", new StringValue(Hex.Core.HexData.AgentTemp)),
         // What an agent is told in its system prompt about the harness, the same for every agent system
-        ("harness_rules", new StringValue(HexAgentProfiles.HARNESS_RULES)),
+        ("harness_rules", new StringValue(HexAgentProfiles.HarnessRules())),
         // What the agent of a chat is told about its Plan tab and the agents beside it, for its own system prompt and
         // never its subagents', which share its chat's connection
         ("plan_rules", new StringValue(HexAgentProfiles.PLAN_RULES)),

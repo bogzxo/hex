@@ -105,6 +105,11 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
     private readonly List<HexAgentEntry> entries = [];
 
+    // The tools of the turn going on by their ids, the rows after the last thing asked, the latest of an id. Every tool an
+    // agent starts, says is done or says a step of asks for its row by id, and looking back through the rows for it was
+    // a walk of the whole turn for each, a long one when a tool still going keeps the old rows from going to their file
+    private readonly Dictionary<string, HexAgentEntry> turnTools = new(StringComparer.Ordinal);
+
     /// <summary>What names its file of rows it no longer keeps, the same across Hex's restarts.</summary>
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -144,14 +149,30 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// </summary>
     public string? Name { get; set; }
 
-    // The most messages a chat keeps, the oldest go after that
-    private const int MOST_MAIL = 100;
+    /// <summary>The most messages a chat keeps, the oldest it has read going first after that.</summary>
+    public const int MOST_MAIL = 50;
 
     private readonly List<HexAgentMail> mail = [];
     private long mailSeen;
 
     /// <summary>Something about the chat that isn't a row moved (what it used), so what shows it is drawn again.</summary>
     public void Moved() => Version++;
+
+    /// <summary>
+    /// Whether its agent's process is still going though its turn was said to be over (a run being started, or one that
+    /// carried on of its own), set by whoever runs it. Such a chat isn't done: what it's sent waits for that run to end.
+    /// </summary>
+    public bool RunGoing
+    {
+        get;
+        set
+        {
+            if (field == value)
+                return;
+            field = value;
+            Version++;
+        }
+    }
 
     /// <summary>The messages other chats' agents sent this one, read or not, on the editor's thread.</summary>
     public IReadOnlyList<HexAgentMail> Mail => mail;
@@ -163,8 +184,18 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public void Post(HexAgentMail message)
     {
         mail.Add(message);
-        if (mail.Count > MOST_MAIL)
-            mail.RemoveAt(0);
+        // Past the most, the oldest read goes, then the oldest unread that isn't an instruction. An instruction the agent
+        // hasn't read yet is never let go of, it still has to act on it
+        long seen = MailSeen;
+        while (mail.Count > MOST_MAIL)
+        {
+            int drop = mail.FindIndex(each => each.Seq <= seen);
+            if (drop < 0)
+                drop = mail.FindIndex(each => !HexMailLog.IsInstruction(each));
+            if (drop < 0)
+                break;
+            mail.RemoveAt(drop);
+        }
         Version++;
     }
 
@@ -281,8 +312,53 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>How long the last turn took (or the one going on has), in seconds.</summary>
     public double TurnSeconds { get; private set; }
 
+    /// <summary>When the turn going on (or the last one) started, in Environment.TickCount64's milliseconds, 0 before any.</summary>
+    public long TurnStarted => turnStarted;
+
+    /// <summary>When its last turn ended in this run of Hex, in Environment.TickCount64's milliseconds, 0 for none (one read back ended before).</summary>
+    public long Ended { get; private set; }
+
     /// <summary>Goes up with every change, the panel redraws when it's moved.</summary>
     public int Version { get; private set; }
+
+    /// <summary>
+    /// Whether it's settled into the lists' Finished group, by the person or by itself a while after it finished
+    /// (HexAgentListOrder.SettlesNow). Kept with the chat. Another turn, or something waiting on the person, unsettles it.
+    /// </summary>
+    public bool Settled { get; private set; }
+
+    /// <summary>
+    /// When the person last unsettled it, in Environment.TickCount64's milliseconds, 0 for never: it settles by itself
+    /// again only that long after, as after it ended.
+    /// </summary>
+    public long UnsettledAt { get; private set; }
+
+    /// <summary>
+    /// Settled into the Finished group, or out of it again. Not a change of what it says, so it isn't made unread by it,
+    /// what writes it down goes by <see cref="SettleVersion"/>.
+    /// </summary>
+    public void Settle(bool settled)
+    {
+        if (Settled == settled)
+            return;
+        Settled = settled;
+        if (!settled)
+            UnsettledAt = Environment.TickCount64;
+        SettleVersion++;
+    }
+
+    /// <summary>Goes up when it settles or unsettles, for what keeps it written down.</summary>
+    public int SettleVersion { get; private set; }
+
+    /// <summary>
+    /// Settled as read back from where it was kept, nothing moving for it. One that wasn't settles by itself only the
+    /// usual while after now, its turn having ended in a Hex before this one.
+    /// </summary>
+    public void RestoreSettled(bool settled)
+    {
+        Settled = settled;
+        UnsettledAt = settled ? 0 : Environment.TickCount64;
+    }
 
     /// <summary>Called something else from its card, nothing going back to what it was asked. Kept with the chat.</summary>
     public void Rename(string? name)
@@ -322,6 +398,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
             entries.Add(row);
         }
 
+        IndexTurnTools();
         Version++;
         Seen = Version;
     }
@@ -347,6 +424,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
     private HexAgentEntry Add(HexAgentEntry entry)
     {
         entries.Add(entry);
+        if (entry.Kind == HexAgentEntryKind.User)
+            turnTools.Clear();
+        else if (entry.Kind == HexAgentEntryKind.Tool && entry.ToolId is { } toolId)
+            turnTools[toolId] = entry;
         if (entries.Count > MOST_ENTRIES + SPILL_BATCH)
         {
             // The oldest to its file, never one still queued, a tool still going or a question still waiting for its answer,
@@ -358,6 +439,12 @@ internal sealed partial class HexAgentChat(int id, string agent)
             {
                 HexAgentEntry[] old = [.. entries.GetRange(0, spill)];
                 entries.RemoveRange(0, spill);
+                foreach (HexAgentEntry gone in old)
+                {
+                    if (gone.Kind == HexAgentEntryKind.Tool && gone.ToolId is { } goneId && turnTools.GetValueOrDefault(goneId) == gone)
+                        turnTools.Remove(goneId);
+                }
+
                 Dropped += spill;
                 Spill?.Invoke(old);
             }
@@ -378,6 +465,7 @@ internal sealed partial class HexAgentChat(int id, string agent)
 
         Running = true;
         Stopped = false;
+        Settled = false;
         turnStarted = Environment.TickCount64;
         TurnSeconds = 0;
         return Add(new HexAgentEntry(HexAgentEntryKind.User, prompt) { AskedText = askedText, ContextLocation = contextLocation });
@@ -398,6 +486,8 @@ internal sealed partial class HexAgentChat(int id, string agent)
     {
         if (!entry.Queued || !entries.Remove(entry))
             return false;
+        // What was asked taken out, the turn the rows say goes back to the one asked before it
+        IndexTurnTools();
         Reshaped++;
         Version++;
         return true;
@@ -407,7 +497,16 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public int Reshaped { get; private set; }
 
     /// <summary>Whether something asked is still waiting for the agent to take it in.</summary>
-    public bool HasQueued => entries.Any(entry => entry.Queued);
+    public bool HasQueued
+    {
+        get
+        {
+            foreach (HexAgentEntry entry in entries)
+                if (entry.Queued)
+                    return true;
+            return false;
+        }
+    }
 
     /// <summary>Resolve the first queued message that matches the prompt, or the oldest when no prompt was given.</summary>
     public bool Taken(string? prompt = null, bool accepted = true)
@@ -538,15 +637,20 @@ internal sealed partial class HexAgentChat(int id, string agent)
         ToolOfTurn(id) ?? Add(new HexAgentEntry(HexAgentEntryKind.Tool, name) { ToolId = id, ToolName = name, Input = input });
 
     // The tool of an id in the turn going on, after the last thing asked
-    private HexAgentEntry? ToolOfTurn(string id)
-    {
-        for (int i = entries.Count - 1; i >= 0 && entries[i].Kind != HexAgentEntryKind.User; i--)
-        {
-            if (entries[i].Kind == HexAgentEntryKind.Tool && entries[i].ToolId == id)
-                return entries[i];
-        }
+    private HexAgentEntry? ToolOfTurn(string id) => turnTools.GetValueOrDefault(id);
 
-        return null;
+    // The tools of the turn going on found again from the rows, after they were read back or one was taken out of the middle
+    private void IndexTurnTools()
+    {
+        turnTools.Clear();
+        int from = entries.Count;
+        while (from > 0 && entries[from - 1].Kind != HexAgentEntryKind.User)
+            from--;
+        for (int i = from; i < entries.Count; i++)
+        {
+            if (entries[i].Kind == HexAgentEntryKind.Tool && entries[i].ToolId is { } id)
+                turnTools[id] = entries[i];
+        }
     }
 
     /// <summary>
@@ -571,7 +675,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>A tool done, by its id, false when there's no tool of that id going (it's added as done then).</summary>
     public bool ToolDone(string id, bool ok, string output)
     {
-        HexAgentEntry? tool = ToolOfTurn(id);
+        // Looked for back past what was asked since too, for one still going: a wait woken by a message the person typed
+        // came back once that message had started a turn of its own, wasn't found in it, and spun in the turn before for good
+        HexAgentEntry? tool = ToolOfTurn(id)
+            ?? entries.FindLast(entry => entry.Kind == HexAgentEntryKind.Tool && entry.ToolId == id && entry.State == HexAgentToolState.Running);
         bool found = tool is not null;
         tool ??= Tool(id, "tool", string.Empty);
         tool.State = ok ? HexAgentToolState.Done : HexAgentToolState.Failed;
@@ -589,20 +696,27 @@ internal sealed partial class HexAgentChat(int id, string agent)
             return;
 
         Running = false;
-        TurnSeconds = (Environment.TickCount64 - turnStarted) / 1000.0;
-        foreach (HexAgentEntry tool in entries.Where(entry => entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running))
+        Ended = Environment.TickCount64;
+        TurnSeconds = (Ended - turnStarted) / 1000.0;
+        foreach (HexAgentEntry entry in entries)
         {
-            tool.State = HexAgentToolState.Failed;
-            tool.Output ??= "the agent stopped before it said how this went";
-            tool.Ended = Environment.TickCount64;
-            tool.Version++;
+            if (entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running)
+            {
+                entry.State = HexAgentToolState.Failed;
+                entry.Output ??= "the agent stopped before it said how this went";
+                entry.Ended = Environment.TickCount64;
+                entry.Version++;
+            }
         }
 
-        foreach (HexAgentEntry asked in entries.Where(entry => entry.Queued))
+        foreach (HexAgentEntry entry in entries)
         {
-            asked.Queued = false;
-            asked.Unheard = true;
-            asked.Version++;
+            if (entry.Queued)
+            {
+                entry.Queued = false;
+                entry.Unheard = true;
+                entry.Version++;
+            }
         }
 
         Version++;

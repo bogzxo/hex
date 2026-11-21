@@ -13,7 +13,7 @@ namespace Hex.Dawn;
 internal sealed partial class DawnScene
 {
     // How many agents up an agent can be from the one somebody started, and how many started by agents run at once
-    private const int AGENTS_DEEPEST = 2, AGENTS_AT_ONCE = 6;
+    private const int AGENTS_DEEPEST = 6, AGENTS_AT_ONCE = 12;
 
     // How long hex_agent_wait waits when it isn't told, the most it waits, and how much of each reply it hands back
     private const int AGENTS_WAIT = 300, AGENTS_WAIT_MOST = 600, AGENTS_REPLY = 6000;
@@ -67,6 +67,11 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_agent_stop", "Stop an agent",
             "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
             McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
+        new(new McpTool("hex_agent_restart", "Restart a stuck agent",
+            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("text", McpSchema.String("What to tell it as it starts again, 'carry on from where you were' by default."))], "id")), AgentRestart),
         new(new McpTool("hex_agent_close", "Close or clear an agent you started",
             "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
             McpSchema.Object([
@@ -88,6 +93,10 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PublishAgentStatuses()
     {
+        // A chat whose run goes on after its turn says so, it read as done while it worked and what it was sent waited
+        foreach (HexAgentChat chat in agentChats)
+            chat.RunGoing = !chat.Running && AgentRunBusy(chat);
+
         if (hub.Pump(AGENTS_REPLY))
         {
             agentsChanged?.Invoke();
@@ -260,7 +269,7 @@ internal sealed partial class DawnScene
             // Those it started, the running ones, or all of them when they're all done already. A client that isn't a chat
             // of the panel didn't start any of its own as far as Hex knows, so it waits for every chat
             HexHubRow[] mine = [.. now.Values.Where(status => caller is null || status.Parent == caller)];
-            ids = [.. (mine.Any(status => status.State == "running") ? mine.Where(status => status.State == "running") : mine).Select(status => status.Id)];
+            ids = [.. (mine.Any(status => status.State.StartsWith("running", StringComparison.Ordinal)) ? mine.Where(status => status.State.StartsWith("running", StringComparison.Ordinal)) : mine).Select(status => status.Id)];
             if (ids.Length == 0)
                 return McpToolResult.Error(caller is null ? "There are no chats to wait for, hex_agent_spawn starts one." : "You haven't started any agents to wait for, hex_agent_spawn starts one.");
         }
@@ -275,7 +284,7 @@ internal sealed partial class DawnScene
             {
                 now = agentStatuses;
                 HexHubRow[] those = [.. ids.Select(id => now.GetValueOrDefault(id)).OfType<HexHubRow>()];
-                int done = those.Count(status => status.State != "running");
+                int done = those.Count(status => !status.State.StartsWith("running", StringComparison.Ordinal));
                 bool over = any ? done > 0 : done == those.Length;
                 bool late = System.Environment.TickCount64 >= deadline;
                 HexAgentMail[] mail = caller is { } me && wakes && now.GetValueOrDefault(me) is { } mine ? mine.Unread : [];
@@ -313,11 +322,11 @@ internal sealed partial class DawnScene
     {
         var said = new StringBuilder();
         if (late)
-            said.Append("Timed out, ").Append(those.Count(status => status.State == "running")).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
-        foreach (HexHubRow status in those.OrderBy(status => status.State == "running"))
+            said.Append("Timed out, ").Append(those.Count(status => status.State.StartsWith("running", StringComparison.Ordinal))).Append(" still running. hex_agent_wait again to go on waiting.\n\n");
+        foreach (HexHubRow status in those.OrderBy(status => status.State.StartsWith("running", StringComparison.Ordinal)))
         {
             said.Append(StatusLine(status)).Append('\n');
-            if (status.State != "running")
+            if (!status.State.StartsWith("running", StringComparison.Ordinal))
                 said.Append(status.Reply.Length > 0 ? status.Reply : "(it said nothing)").Append("\n\n");
         }
 
@@ -420,8 +429,65 @@ internal sealed partial class DawnScene
         }
 
         bool was = chat.Running;
-        StopAgent(chat);
+        // An agent stopping one it started stops what that one started too, nothing else is waiting for them
+        StopAgent(chat, withStarted: true);
         yield return McpToolResult.Text(was ? $"Stopped #{chat.Id}." : $"#{chat.Id} wasn't running.");
+    }
+
+    /// <summary>
+    /// A stuck agent killed with all its process started and started again on its session, the orchestrator's way out
+    /// of an agent hung on a command or still running after its turn (what it was sent waited behind that run for good).
+    /// The agents it started aren't stopped, they're working on their own.
+    /// </summary>
+    private IEnumerable<McpToolResult?> AgentRestart(JsonObject args)
+    {
+        int? caller = CallerOf(args);
+        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        if (chat.Id == caller)
+        {
+            yield return McpToolResult.Error("That's your own chat.");
+            yield break;
+        }
+
+        if (caller is { } asking && chat.Parent != asking)
+        {
+            yield return McpToolResult.Error($"#{chat.Id} wasn't started by you, only the agent that started it restarts it.");
+            yield break;
+        }
+
+        if (!extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
+        {
+            yield return McpToolResult.Error($"#{chat.Id}'s agent system isn't there any more.");
+            yield break;
+        }
+
+        // Killed outright, its whole process tree, rather than asked to stop: a stuck agent doesn't answer the asking
+        bool killed = false;
+        heldSteers.RemoveAll(held => held.Chat == chat);
+        agentsStopping.Remove(chat);
+        if (agentsStarting.Remove(chat))
+            killed = true;
+        foreach (AgentRun each in agentRuns.Where(each => each.Chat == chat).ToList())
+        {
+            KillAgentRun(each);
+            killed = true;
+        }
+        if (chat.Running)
+            chat.Done();
+        chat.RunGoing = false;
+
+        string said = args.String("text") is { Length: > 0 } text ? text
+            : "You were restarted: your process was stopped while it was stuck or still running after its turn. Carry on from where you were.";
+        chat.Note(Said("agents_panel.restarted"));
+        StartAgent(chat, run.Extension, run.Run, said, said);
+        yield return McpToolResult.Text(killed
+            ? $"#{chat.Id} was killed with what it had running and is going again from where it was. hex_agent_wait waits for it."
+            : $"#{chat.Id} wasn't running, it's going again from where it was. hex_agent_wait waits for it.");
     }
 
     /// <summary>

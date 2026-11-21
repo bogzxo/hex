@@ -206,5 +206,11 @@ public sealed class HexAgentPlanTests
         Assert.DoesNotContain('\'', HexAgentProfiles.PLAN_RULES);
         Assert.Contains("hex_plan_update", HexAgentProfiles.PLAN_RULES);
         Assert.DoesNotContain("hex_plan_update", HexAgentProfiles.HARNESS_RULES);
+
+        // The rules an agent is given say where its scratch files go, still with nothing Codex's TOML would choke on
+        string given = HexAgentProfiles.HarnessRules();
+        Assert.StartsWith(HexAgentProfiles.HARNESS_RULES, given);
+        Assert.Contains(HexData.AgentScratch.Replace('\\', '/'), given);
+        Assert.DoesNotContain('\'', given);
     }
 }

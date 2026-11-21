@@ -31,10 +31,17 @@ internal sealed partial class HexLanguages
     // A dub project's import folders by its folder, with when its dub.json or dub.sdl was written
     private static readonly ConcurrentDictionary<string, (DateTime Written, string[] Imports)> dubImports = new(PlatformPaths.Comparer);
 
-    private static readonly Regex ModuleDeclaration = new(@"^\s*module\s+([\w.]+)\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*module\s+([\w.]+)\s*;", RegexOptions.Multiline)]
+    private static partial Regex ModuleDeclaration { get; }
 
     /// <summary>Whether a file is one the compiler looks over.</summary>
-    private static bool Checked(HexDocument of) => of.Path is { } path && Path.GetExtension(path).ToLowerInvariant() is ".d" or ".di";
+    /// <remarks>
+    /// Asked on every key of every open file, so the extension is looked at where it is. It was lowered into a string of
+    /// its own each time.
+    /// </remarks>
+    private static bool Checked(HexDocument of) =>
+        of.Path is { } path && Path.GetExtension(path.AsSpan()) is var extension
+        && (extension.Equals(".d", StringComparison.OrdinalIgnoreCase) || extension.Equals(".di", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>A file is checked so long from now, opened, typed into or saved.</summary>
     private void CheckSoon(HexDocument of, float delay = CHECK_DELAY)
@@ -89,7 +96,9 @@ internal sealed partial class HexLanguages
     {
         if (checking is { IsCompleted: true } done)
         {
-            if (checkingOf is { } of && context.Documents.All.Contains(of) && done.Result is { } found)
+            // A check that threw (a path the import folders couldn't be worked out of) found nothing. Its Result threw on
+            // every tick after, before the check was let go of
+            if (checkingOf is { } of && done.IsCompletedSuccessfully && context.Documents.All.Contains(of) && done.Result is { } found)
             {
                 checkFound[of] = found;
                 context.Documents.DiagnosticsChanged(of);

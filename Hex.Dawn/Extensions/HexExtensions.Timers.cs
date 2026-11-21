@@ -38,23 +38,33 @@ internal sealed partial class HexExtensions
         if (timers.Count == 0)
             return;
 
+        // Gone through as they were at the start of the tick, one called can ask for more or have its extension started
+        // again. The copy is a list kept for it, an array made every tick there was a timer at all was garbage a tick
         long now = System.Environment.TickCount64;
-        foreach (ExtensionTimer timer in timers.ToArray())
+        timersLooked.AddRange(timers);
+        try
         {
-            if (!timer.Extension.Enabled || timer.Extension.Failed is not null)
+            foreach (ExtensionTimer timer in timersLooked)
             {
-                timers.Remove(timer);
-                continue;
+                if (!timer.Extension.Enabled || timer.Extension.Failed is not null)
+                {
+                    timers.Remove(timer);
+                    continue;
+                }
+
+                if (now < timer.Due)
+                    continue;
+
+                if (timer.Repeats) timer.Due = now + (long)(timer.Every * 1000);
+                else timers.Remove(timer);
+
+                if (!timer.Extension.Invoke(timer.Function, HexOf(timer.Extension)))
+                    Failed(timer.Extension);
             }
-
-            if (now < timer.Due)
-                continue;
-
-            if (timer.Repeats) timer.Due = now + (long)(timer.Every * 1000);
-            else timers.Remove(timer);
-
-            if (!timer.Extension.Invoke(timer.Function, HexOf(timer.Extension)))
-                Failed(timer.Extension);
+        }
+        finally
+        {
+            timersLooked.Clear();
         }
 
         WakeForTimers();
@@ -69,14 +79,29 @@ internal sealed partial class HexExtensions
         if (timers.Count == 0)
         {
             waker?.Change(Timeout.Infinite, Timeout.Infinite);
+            wakeFor = long.MinValue;
             return;
         }
 
-        long soonest = timers.Min(timer => timer.Due);
+        long soonest = long.MaxValue;
+        foreach (ExtensionTimer timer in timers)
+            soonest = Math.Min(soonest, timer.Due);
+
+        // Set again only when the soonest moved, it was set again every tick, the same time over and over
+        if (soonest == wakeFor && waker is not null)
+            return;
+
+        wakeFor = soonest;
         long wait = Math.Max(0, soonest - System.Environment.TickCount64);
         waker ??= new Timer(_ => context.Wake());
         waker.Change(wait, Timeout.Infinite);
     }
+
+    // What the timers' waker was last set for, the soonest timer's time, nothing set while there are none
+    private long wakeFor = long.MinValue;
+
+    // The timers as they were at the start of a tick, gone through by UpdateTimers
+    private readonly List<ExtensionTimer> timersLooked = [];
 
     private sealed class ExtensionTimer(HexExtension extension, IRuntimeValue function, double every, long due, bool repeats)
     {

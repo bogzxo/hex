@@ -139,7 +139,11 @@ internal sealed partial class DawnScene
     /// is the person's own terminal and keeps its pager for them.
     /// </summary>
     internal static string McpNoPager(string command) =>
-        System.Text.RegularExpressions.Regex.Replace(command, @"(^|[;&|(]\s*)git(\s+)(?!--no-pager)", "$1git --no-pager$2");
+        GitPaged().Replace(command, "$1git --no-pager$2");
+
+    // A statement of a command line that starts with git and hasn't said --no-pager
+    [GeneratedRegex(@"(^|[;&|(]\s*)git(\s+)(?!--no-pager)")]
+    private static partial Regex GitPaged();
 
     /// <summary>A command line with a marker echoed after it that says its exit code, the way the shell writes that.</summary>
     internal static string McpMarked(string command, string shell, string marker) => shell switch
@@ -156,17 +160,17 @@ internal sealed partial class DawnScene
     internal static (string Output, int? Exit) McpRunOutput(string all, string marker)
     {
         string text = all.Replace("\r", string.Empty);
-        Match done = Regex.Match(text, Regex.Escape(marker) + @"_(-?\d+)_");
+        int done = McpExitAt(text, marker, out int code);
         int typed = text.IndexOf(marker, StringComparison.Ordinal);
 
         // What was typed wrapped right through the marker, so where the output starts isn't known, the lines before
         // the code have to do
-        if (typed < 0 || (done.Success && typed == done.Index))
+        if (typed < 0 || (done >= 0 && typed == done))
         {
-            if (!done.Success)
+            if (done < 0)
                 return (string.Empty, null);
-            string[] before = text[..done.Index].Split('\n');
-            return (string.Join('\n', before.Skip(Math.Max(0, before.Length - 41)).SkipLast(1).Select(line => line.TrimEnd())).Trim('\n'), int.Parse(done.Groups[1].Value));
+            string[] before = text[..done].Split('\n');
+            return (string.Join('\n', before.Skip(Math.Max(0, before.Length - 41)).SkipLast(1).Select(line => line.TrimEnd())).Trim('\n'), code);
         }
 
         // A long command wraps, the output starts after the line with the end of what was typed on it
@@ -174,12 +178,52 @@ internal sealed partial class DawnScene
         if (from < 0)
             return (string.Empty, null);
 
-        if (!done.Success || done.Index <= typed)
+        if (done < 0 || done <= typed)
             return (text[(from + 1)..].TrimEnd(), null);
 
-        int to = text.LastIndexOf('\n', done.Index);
+        int to = text.LastIndexOf('\n', done);
         string output = to > from ? text[(from + 1)..to] : string.Empty;
-        return (string.Join('\n', output.Split('\n').Select(line => line.TrimEnd())).Trim('\n'), int.Parse(done.Groups[1].Value));
+        return (string.Join('\n', output.Split('\n').Select(line => line.TrimEnd())).Trim('\n'), code);
+    }
+
+    /// <summary>
+    /// Whether McpRunOutput would find the command done, its exit code come out after the marker, with nothing cut out or
+    /// joined. Asked every tick a command runs, where the whole of its output was made again each time to find it wasn't.
+    /// </summary>
+    internal static bool McpRunEnded(string all, string marker)
+    {
+        string text = all.Replace("\r", string.Empty);
+        int done = McpExitAt(text, marker, out _);
+        if (done < 0)
+            return false;
+        int typed = text.IndexOf(marker, StringComparison.Ordinal);
+        return typed == done || text.IndexOf('\n', typed) >= 0;
+    }
+
+    /// <summary>
+    /// Where the marker first comes out with an exit code after it, marker_0_ or marker_-1_, -1 while it hasn't. What the
+    /// command line echoes it with (_%^errorlevel%_, _$?_) has no number there and isn't taken. A regex made for each
+    /// marker did this, parsed anew for every command.
+    /// </summary>
+    private static int McpExitAt(string text, string marker, out int code)
+    {
+        code = 0;
+        for (int at = text.IndexOf(marker, StringComparison.Ordinal); at >= 0; at = text.IndexOf(marker, at + 1, StringComparison.Ordinal))
+        {
+            int start = at + marker.Length + 1;
+            if (start > text.Length || text[start - 1] != '_')
+                continue;
+            int digits = start < text.Length && text[start] == '-' ? start + 1 : start;
+            int end = digits;
+            while (end < text.Length && char.IsAsciiDigit(text[end]))
+                end++;
+            if (end == digits || end >= text.Length || text[end] != '_')
+                continue;
+            code = int.Parse(text.AsSpan(start, end - start), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture);
+            return at;
+        }
+
+        return -1;
     }
 
     /// <summary>Long output cut in the middle, its start and end kept and how much went said in between.</summary>
@@ -243,14 +287,16 @@ internal sealed partial class DawnScene
         view.Send(McpMarked(McpNoPager(command), shell, marker) + "\r");
 
         long until = System.Environment.TickCount64 + (long)(Math.Clamp(arguments.Number("timeout") ?? 120.0, 1.0, 600.0) * 1000.0);
-        (string Output, int? Exit) ran = (string.Empty, null);
+        // Each tick only asks whether it's done, what it printed is cut out of the text once, as the text was when the wait ended
+        string seen = string.Empty;
         while (System.Environment.TickCount64 < until)
         {
-            ran = McpRunOutput(view.Screen.AllText(), marker);
-            if (ran.Exit is not null || view.Process is not { IsRunning: true })
+            seen = view.Screen.AllText();
+            if (McpRunEnded(seen, marker) || view.Process is not { IsRunning: true })
                 break;
             yield return null;
         }
+        (string Output, int? Exit) ran = McpRunOutput(seen, marker);
 
         int most = Math.Clamp(arguments.Integer("max_chars") ?? 6000, 400, 200_000);
         string output = McpMiddleCut(ran.Output, most);

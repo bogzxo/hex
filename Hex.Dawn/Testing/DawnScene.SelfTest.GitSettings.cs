@@ -22,7 +22,7 @@ internal sealed partial class DawnScene
     {
         // Git Settings... opens the window at Editor · Git, which has its nine rows
         test.Run(() => GitCommand(Said("git.settings_command"))?.OnPicked?.Invoke());
-        test.WaitFor(() => SettingsPage?.CurrentGroup == EditorSettingsCatalog.GIT, 3.0f);
+        test.WaitFor(() => SettingsPage?.CurrentGroup == EditorSettingsCatalog.GIT, 3.0f * GIT_PATIENCE);
         test.Check("settings: Git Settings... in the palette opens the settings at Editor · Git", () =>
             SettingsPage is { } page && page.CurrentGroup == EditorSettingsCatalog.GIT);
         test.Check("settings: Editor · Git has its nine rows", () =>
@@ -73,7 +73,7 @@ internal sealed partial class DawnScene
         // Commit with nothing staged asks first, and Cancel stages nothing
         string stage = Said("git.smart_stage");
         test.Run(() => GitCommand(Said("git.commit_command"))?.OnPicked?.Invoke());
-        test.WaitFor(() => textDialog is { IsOpen: true } && textDialog.Buttons.Any(button => button.Label == stage), 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && textDialog.Buttons.Any(button => button.Label == stage), 3.0f * GIT_PATIENCE);
         test.Check("settings: smart commit ask, a commit with nothing staged asks to stage everything first", () =>
             textDialog is { IsOpen: true } dialog && dialog.Buttons.Any(button => button.Label == stage));
         test.Run(() => textDialog?.Buttons.First(button => button.Label == Said("git.smart_cancel")).OnPressed?.Invoke());
@@ -91,7 +91,7 @@ internal sealed partial class DawnScene
             ShowSide(HexSide.SourceControl);
             GitCommand(Said("git.commit_command"))?.OnPicked?.Invoke();
         });
-        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text == Said("git.commit_nothing_staged"), 3.0f);
+        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text == Said("git.commit_nothing_staged"), 3.0f * GIT_PATIENCE);
         test.Check("settings: smart commit never refuses with a notice, and the Commit row says nothing is staged", () =>
             messageItem.Text.Contains(Said("git.nothing_staged"), StringComparison.Ordinal) && textDialog is not { IsOpen: true }
             && CommitSaid(SideRows(sideTree.Items))?.Text == Said("git.commit_nothing_staged"));

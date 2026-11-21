@@ -33,6 +33,25 @@ public sealed class McpBridgeSessionTests
     }
 
     [Fact]
+    public void An_answer_lets_go_of_its_call_however_its_id_is_written_and_a_line_that_isnt_json_of_none()
+    {
+        var session = new McpBridgeSession();
+
+        // The same id escaped one way by the client and another by Hex, and a method that isn't a text, which is no call
+        session.FromClient("""{"jsonrpc":"2.0","id":"a+b","method":"tools/call","params":{"name":"hex_read","arguments":{"path":"x"}}}""", connected: true);
+        session.FromClient("""{"jsonrpc":"2.0","id":9,"method":{"not":"a name"}}""", connected: true);
+        session.FromClient("""{"jsonrpc":"2.0","id":3,"method":"tools/list"} trailing""", connected: true);
+        Assert.Equal("""{"id":"a+b","jsonrpc":"2.0","result":{"content":[{"type":"text","text":"x"}]}}""",
+            session.FromHex("""{"id":"a+b","jsonrpc":"2.0","result":{"content":[{"type":"text","text":"x"}]}}"""));
+
+        // Not JSON at all, passed on as it is and letting go of nothing
+        session.FromClient("""{"jsonrpc":"2.0","id":4,"method":"tools/list"}""", connected: true);
+        Assert.Equal("""{"id":4,"result":""", session.FromHex("""{"id":4,"result":"""));
+        JsonObject error = Assert.Single(session.Dropped().Select(line => JsonNode.Parse(line)!.AsObject()));
+        Assert.Equal(4, error["id"]!.GetValue<int>());
+    }
+
+    [Fact]
     public void The_next_hex_is_shaken_hands_with_first_and_its_answer_kept_from_the_client()
     {
         var session = new McpBridgeSession();

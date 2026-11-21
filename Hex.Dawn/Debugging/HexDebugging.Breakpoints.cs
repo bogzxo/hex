@@ -311,7 +311,8 @@ internal sealed partial class HexDebugging
                 Settle(full, line, SettingsOf(full, line) with { LogMessage = message.Length > 0 ? message : null });
             });
 
-    private static readonly Regex HitsSaid = new(@"^\s*(?:(?<kind>==?|>=|%|multiple\s+of|every)\s*)?(?<count>\d+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"^\s*(?:(?<kind>==?|>=|%|multiple\s+of|every)\s*)?(?<count>\d+)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex HitsSaid { get; }
 
     /// <summary>
     /// A hit count as typed, 5 or = 5 for the fifth hit, >= 5 for the fifth and every one after, % 5 or "multiple of 5"

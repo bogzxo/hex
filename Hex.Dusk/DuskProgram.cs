@@ -105,6 +105,10 @@ public static class DuskProgram
 
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
+        // A self test runs as a game to be paced and a game opens the speakers, a terminal has no sound to test
+        if (selfTest)
+            Environment.SetEnvironmentVariable("HORIZON_AUDIO", "off");
+
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
             // A terminal, nobody plays it with a controller
@@ -118,7 +122,7 @@ public static class DuskProgram
                 CustomFrame = true,
                 // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
                 ScaleToDisplay = !selfTest,
-                AppId = "hex-dusk",
+                AppId = HexIdentity.WindowIdOf(HexMode.Dusk),
                 Mode = selfTest && !options.App ? RunMode.Game : RunMode.Application,
                 Behaviour = ApplicationBehaviour.All,
                 WindowSize = size ?? WindowManagerConfiguration.Default1600x900.WindowSize,
@@ -131,6 +135,9 @@ public static class DuskProgram
 
         // F12 is the terminal's, the engine took a screenshot with it and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
+
+        // The frame or two before the terminal draws is Hex's dark ground, not the engine's night blue
+        engine.LoadingScreen.Color = HexIdentity.LOADING_COLOR;
 
         var scene = new DuskScene(options);
 

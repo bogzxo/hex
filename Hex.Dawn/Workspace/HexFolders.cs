@@ -149,22 +149,30 @@ internal sealed class HexFolders : IDisposable
     }
 
     /// <summary>
-    /// Lets go of what was read of the folders the watchers said changed. True if any did, the explorer is put together
-    /// again then. On the editor's thread.
+    /// Lets go of what was read of the folders the watchers said changed. Any is whether anything changed at all, Read
+    /// whether a folder that had been read did (or the watchers lost count), the explorer is put together again then.
+    /// What it shows is all read through here, so a change in a folder nobody read changes nothing it shows. A build writing
+    /// into bin and obj, or an agent into its scratch folder, put the whole explorer together again every tick it wrote.
+    /// On the editor's thread.
     /// </summary>
-    public bool TakeChanges()
+    public (bool Any, bool Read) TakeChanges()
     {
-        bool any = false;
+        bool any = false, wasRead = false;
         while (changed.TryDequeue(out string? folder))
         {
             any = true;
             if (folder.Length == 0)
+            {
                 read.Clear();
+                wasRead = true;
+            }
             else
-                read.Remove(folder);
+            {
+                wasRead |= read.Remove(folder);
+            }
         }
 
-        return any;
+        return (any, wasRead);
     }
 
     /// <summary>Forgets everything that was read, the next look reads the disk again.</summary>

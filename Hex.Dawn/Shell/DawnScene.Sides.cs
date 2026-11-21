@@ -129,8 +129,9 @@ internal sealed partial class DawnScene
     /// </summary>
     private void CentreGrips()
     {
-        leftSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter());
-        rightSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter());
+        // A double click on the line puts the side back to the width the layout has for it
+        leftSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter { OnReset = () => ResetSide(left: true) });
+        rightSplitter ??= chrome.Root.Add(new Hex.Shell.HexSplitter { OnReset = () => ResetSide(left: false) });
 
         UIRect window = chrome.Root.Bounds;
         Vector4 accent = compositor.Skin?.AccentColor ?? Vector4.One;
@@ -142,6 +143,30 @@ internal sealed partial class DawnScene
             new Vector2(left.Bounds.Max.X - window.Min.X, window.Max.Y - left.Bounds.Max.Y), GRIP_HOLD, left.Bounds.Height, accent);
         rightSplitter.Place(ready && right.Shown ? ShownGrip(rightGrips) : null, UIResize.Left,
             new Vector2(right.Bounds.Min.X - window.Min.X, window.Max.Y - right.Bounds.Max.Y), GRIP_HOLD, right.Bounds.Height, accent);
+        // And Agentic's, over its columns while it's up
+        PlaceNoonGrips(window, accent, compositor.Skin is not null);
+    }
+
+    /// <summary>A side back at the width the layout has for it, a double click on its line.</summary>
+    private void ResetSide(bool left)
+    {
+        if (left)
+            settings.LeftWidth = 0.0f;
+        else
+            settings.RightWidth = 0.0f;
+        float width = left ? PreferredSide(0.0f, usualLeft) : PreferredSide(0.0f, usualRight);
+        if (left)
+        {
+            treeScroll.Size = treeScroll.Size with { X = width };
+            sideTree.Size = sideTree.Size with { X = width };
+        }
+        else
+        {
+            inspectorScroll.Size = inspectorScroll.Size with { X = width };
+            running.ValuesTree.Size = running.ValuesTree.Size with { X = width };
+        }
+
+        SaveSettings();
     }
 
     // The list of a side that is showing, which is the one a drag of the side's edge sizes: the widest of them when
@@ -188,6 +213,7 @@ internal sealed partial class DawnScene
     private void ResetPanels()
     {
         settings.LeftWidth = settings.RightWidth = settings.LayersHeight = settings.PanelHeight = 0.0f;
+        settings.NoonFleetWidth = settings.NoonContextWidth = 0.0f;
         bottom.Size = bottom.Size with { Y = 180.0f };
         ApplyPanelSizes();
         SaveSettings();

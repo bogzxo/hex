@@ -4,7 +4,7 @@ namespace Hex.Core.Projects;
 internal sealed record ProjectXmlAttribute(string Name, string Value, int Start, int End, int ValueStart, int ValueEnd);
 
 /// <summary>
-/// An element of a project file and where it is in the text, from its &lt; to past its end tag (or its /&gt;), with the
+/// An element of a project file and where it is in the text, from its &lt; to past its end tag (or its />), with the
 /// elements inside it. Only what an edit has to know is kept, the text itself is never rebuilt from these.
 /// </summary>
 internal sealed class ProjectXmlElement
@@ -12,10 +12,10 @@ internal sealed class ProjectXmlElement
     public string Name { get; init; } = string.Empty;
     public int Start { get; init; }
 
-    /// <summary>Just past the &gt; of the start tag.</summary>
+    /// <summary>Just past the > of the start tag.</summary>
     public int TagEnd { get; set; }
 
-    /// <summary>Just past the &gt; of the end tag, or of the start tag when it closes itself.</summary>
+    /// <summary>Just past the > of the end tag, or of the start tag when it closes itself.</summary>
     public int End { get; set; }
 
     /// <summary>Where the end tag starts, the same as End for one that closes itself.</summary>

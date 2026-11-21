@@ -70,6 +70,10 @@ internal sealed partial class DawnScene
         Add("Notebook/cells", "notebook.to_markdown", notebook => ChangeCell(notebook, CellKind.Markdown), "M", "markdown", can: Picked);
         Add("Notebook/cells", "notebook.to_raw", notebook => ChangeCell(notebook, CellKind.Raw), "R", "file", can: Picked);
 
+        Add("Notebook/clear", "notebook.toggle_output", notebook => HideOutputs(notebook, notebook.Cell!, !OutputsHidden(notebook.Cell!)), "O", "fold", can: Picked);
+        Add("Notebook/clear", "notebook.toggle_code", notebook => HideSource(notebook, notebook.Cell!, !SourceHidden(notebook.Cell!)), icon: "fold",
+            can: notebook => notebook.Cell is { Kind: not CellKind.Markdown });
+        Add("Notebook/clear", "notebook.copy_output", CopyOutputs, icon: "copy", can: notebook => notebook.Cell is { Outputs.Count: > 0 });
         Add("Notebook/clear", "notebook.clear_outputs", notebook => ClearOutputs(notebook, [notebook.Cell!]), icon: "clear-all", can: Picked);
         Add("Notebook/clear", "notebook.clear_all", notebook => ClearOutputs(notebook, notebook.Model.Cells), icon: "clear-all");
 
@@ -200,13 +204,13 @@ internal sealed partial class DawnScene
 
     private void BuildNotebookBar()
     {
-        Button Tool(string icon, string label, Action<HexNotebook> pressed, bool text = false)
+        Button Tool(StackPanel into, string icon, string label, string tip, Action<HexNotebook> pressed, bool text = false)
         {
-            var button = notebookBar.Add(new Button
+            var button = into.Add(new Button
             {
                 Icon = icon,
                 Label = text ? Said(label) : string.Empty,
-                Tooltip = Said(label),
+                Tooltip = Said(tip),
                 Size = new System.Numerics.Vector2(0.0f, 26.0f),
                 LabelScale = 0.13f
             });
@@ -218,28 +222,38 @@ internal sealed partial class DawnScene
             return button;
         }
 
-        Tool("run-all", "notebook.run_all", notebook => RunCells(notebook, notebook.Model.Cells), text: true);
-        Tool("debug-pause", "notebook.interrupt", InterruptKernel);
-        Tool("debug-restart", "notebook.restart", notebook => RestartKernel(notebook));
-        Tool("clear-all", "notebook.clear_all", notebook => ClearOutputs(notebook, notebook.Model.Cells));
+        runAllButton = Tool(notebookBar, "run-all", "notebook.run_all", "notebook.run_all_tip", notebook => RunCells(notebook, notebook.Model.Cells), text: true);
+        interruptButton = Tool(notebookBar, "debug-stop", "notebook.interrupt_button", "notebook.interrupt_tip", InterruptKernel, text: true);
+        restartButton = Tool(notebookBar, "debug-restart", "notebook.restart_button", "notebook.restart_tip", notebook => RestartKernel(notebook), text: true);
+        clearButton = Tool(notebookBar, "clear-all", "notebook.clear_button", "notebook.clear_all_tip", notebook => ClearOutputs(notebook, notebook.Model.Cells), text: true);
         notebookBar.Add(new Divider { Size = new System.Numerics.Vector2(1.0f, 18.0f) });
-        Tool("add", "notebook.code_button", notebook => AddCell(notebook, CellKind.Code, below: true), text: true);
-        Tool("add", "notebook.markdown_button", notebook => AddCell(notebook, CellKind.Markdown, below: true), text: true);
-        notebookBar.Add(new Divider { Size = new System.Numerics.Vector2(1.0f, 18.0f) });
-        kernelButton = Tool("server-process", "notebook.kernel_tip", PickKernel, text: true);
+        addCodeButton = Tool(notebookBar, "add", "notebook.code_button", "notebook.add_code_tip", notebook => AddCell(notebook, CellKind.Code, below: true), text: true);
+        addMarkdownButton = Tool(notebookBar, "add", "notebook.markdown_button", "notebook.add_markdown_tip", notebook => AddCell(notebook, CellKind.Markdown, below: true), text: true);
+
+        // How far a run's got, the cell picked and the kernel, from the right
+        runProgress = notebookStatus.Add(new Label { TextScale = 0.13f, Align = Origin.Right, Anchor = Origin.Right, Visible = false });
+        notebookMode = notebookStatus.Add(new Label { TextScale = 0.13f, Align = Origin.Right, Anchor = Origin.Right, Dim = true });
+        kernelButton = Tool(notebookStatus, "circle-filled", "notebook.kernel_tip", "notebook.kernel_tip", PickKernel, text: true);
+        BuildCellTools();
     }
 
     // Every tick, what the kernel's doing said on its button
     private void UpdateNotebookBar(HexNotebook notebook)
     {
+        UpdateNotebookStatus(notebook);
+        FitNotebookBar(notebookView.Size.X);
+
         // Said again only when it's another, the words made every tick were garbage for nothing
         var now = (notebook, notebook.Kernel, notebook.Kernel?.State, notebook.Starting, notebook.Spec, notebook.Model.KernelName);
         if (now == kernelShown)
             return;
 
         kernelShown = now;
-        kernelButton.Label = KernelStatus(notebook);
-        kernelButton.Icon = notebook.Kernel?.State == KernelState.Busy || notebook.Starting ? "loading~spin" : "server-process";
+        // The kernel's name and state on its button, or only its dot with them in its tip where the bar's too narrow
+        string status = KernelStatus(notebook);
+        kernelButton.Label = barShown < 2 ? status : string.Empty;
+        kernelButton.Tooltip = barShown < 2 ? Said("notebook.kernel_tip") : status;
+        ShowKernelState(notebook);
     }
 
     // What the kernel's button was last made to say from

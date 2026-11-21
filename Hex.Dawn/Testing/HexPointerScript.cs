@@ -40,7 +40,25 @@ internal sealed class HexPointerScript
         Func<bool>? Until = null,
         bool Secondary = false,
         bool Seconds = false,
-        bool Middle = false);
+        bool Middle = false,
+        string? Part = null,
+        float Limit = 0.0f,
+        bool PartEnd = false);
+
+    // The part of the test going on, and how long it may go on for by the clock. A part waiting on something that never
+    // came (a window asking a question nobody answers) held the whole run up for good, its window open on the desktop
+    private string? part;
+    private float partLimit;
+    private readonly System.Diagnostics.Stopwatch partClock = new();
+
+    /// <summary>
+    /// Starts a part of the test that may run for so many seconds by the clock. Past them what's left of it is skipped,
+    /// a failure said with its name, and the run goes on from <see cref="EndPart"/>.
+    /// </summary>
+    public void BeginPart(string name, float seconds) => steps.Enqueue(new Step(Part: name, Limit: seconds));
+
+    /// <summary>Where a part that ran out of time goes on from, what tidies up after it.</summary>
+    public void EndPart() => steps.Enqueue(new Step(PartEnd: true));
 
     private readonly Queue<Step> steps = new();
     private Step? current;
@@ -95,6 +113,9 @@ internal sealed class HexPointerScript
     }
 
     public void Release(Func<Vector2> target) => Glide(target, false, PRESS_TIME);
+
+    /// <summary>Moves to a target with the button still held from a <see cref="Press"/>, a drag that hasn't let go yet.</summary>
+    public void MoveHeld(Func<Vector2> target) => Glide(target, true, MOVE_TIME * 2.0f);
 
     /// <summary>Presses at one place, moves to another with the button held and lets go there.</summary>
     /// <summary>A click with the other button, which is what opens a context menu.</summary>
@@ -166,6 +187,21 @@ internal sealed class HexPointerScript
 
     public void Update(float dt)
     {
+        // A part out of time, what's left of it skipped up to its end
+        if (part is not null && partClock.Elapsed.TotalSeconds > partLimit)
+        {
+            Failed++;
+            Say($"FAIL: {part} ran past its {partLimit / 60.0f:0.#} minutes, the rest of it is skipped");
+            part = null;
+            current = null;
+            down = secondary = middle = false;
+            while (steps.TryDequeue(out var skipped) && !skipped.PartEnd)
+            {
+            }
+
+            return;
+        }
+
         if (current is null)
         {
             if (!steps.TryDequeue(out var next))
@@ -174,6 +210,20 @@ internal sealed class HexPointerScript
                     Say($"{Passed} of {Passed + Failed} checks passed.");
 
                 IsFinished = true;
+                return;
+            }
+
+            if (next.Part is { } named)
+            {
+                part = named;
+                partLimit = next.Limit;
+                partClock.Restart();
+                return;
+            }
+
+            if (next.PartEnd)
+            {
+                part = null;
                 return;
             }
 

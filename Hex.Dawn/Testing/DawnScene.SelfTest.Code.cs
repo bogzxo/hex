@@ -386,7 +386,9 @@ internal sealed partial class DawnScene
             workspaceProblems = null;
             CheckAllFiles();
         });
-        test.WaitFor(() => workspaceProblems is not null && !Working, 5.0f);
+        // Every file of the test's folder is read, as many as the parts before this one left there, a few seconds' worth
+        // on a busy machine after a long run
+        test.WaitFor(() => workspaceProblems is not null && !Working, 30.0f);
         test.Check("code: checking every file lists the one that doesn't parse, on the left", () =>
             workspaceProblems is { } listed && listed.Any(result => result.Path == brokenFile) && bottom.Visible && bottom.Selected == PROBLEMS_PAGE
             && problemList.Any(problem => problem.Path == brokenFile));

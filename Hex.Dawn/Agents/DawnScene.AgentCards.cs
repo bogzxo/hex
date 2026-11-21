@@ -55,7 +55,9 @@ internal sealed partial class DawnScene
         return key;
     }
 
-    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable)
+    /// <param name="quiet">Its name dimmed, a finished chat's in a list where the working ones should read first.</param>
+    /// <param name="rail">A rail of the warning colour down its left, a chat waiting on the person, the one thing in the list meant to catch the eye.</param>
+    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false)
     {
         UISkin? skin = Skin;
         float indent = step * CHAT_STEP;
@@ -85,7 +87,12 @@ internal sealed partial class DawnScene
         // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
         // as one more line of the card's small print
         var state = root.Add(new Badge { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP + 2), TextScale = CARD_SMALL });
-        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Align = Origin.Left });
+        var name = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TITLE), TextScale = CARD_NAME, Bold = chat == agentChat, Dim = quiet, Align = Origin.Left });
+        if (rail)
+        {
+            Vector4 warning = skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
+            root.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(3, AGENT_CARD - 24), Position = new Vector2(2, 0), Radius = 1.5f, Color = warning with { W = 0.9f } });
+        }
         var under = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_UNDER), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
         // A double click on the name renames it in place, the box over it while it does (DawnScene.AgentsPanel.Rename)
         pick.Title = name;
@@ -203,6 +210,8 @@ internal sealed partial class DawnScene
     {
         string time = Took(chat.TurnSeconds);
         (string text, UIBadgeTone tone, string icon, bool dot) = chat.Running ? (Said("agents_panel.card_working", ("time", time)), UIBadgeTone.Info, "", true)
+            // Its turn over but its program still going, on a build or a wait of its own: not done, and said so
+            : chat.RunGoing ? (Said("agents_panel.card_waiting"), UIBadgeTone.Warning, "watch", false)
             : chat.Failed ? (Said("agents_panel.card_failed"), UIBadgeTone.Danger, "error", false)
             : chat.Stopped ? (Said("agents_panel.card_stopped"), UIBadgeTone.Neutral, "debug-stop", false)
             : chat.Unread ? (Said("agents_panel.card_done", ("time", time)), UIBadgeTone.Accent, "", true)

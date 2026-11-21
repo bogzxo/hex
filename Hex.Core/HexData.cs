@@ -8,15 +8,15 @@ namespace Hex.Core;
 /// it's a double click away from Hex.exe, its size can be said and it can be tidied in one place. A Hex whose folder
 /// can't be written (one in Program Files) keeps it in the user's local app data instead, laid out the same, and says
 /// so (<see cref="Fallback"/>). HEX_HOME (or DUSK_HOME) moves it under that folder with the settings, for a test.
-/// <code>
+/// <code><![CDATA[
 /// data/
-///   agents/chats/&lt;workspace&gt;/   chat-*.json, chats.json and history/ of each workspace (HexAgentChatsKept)
+///   agents/chats/<workspace>/   chat-*.json, chats.json and history/ of each workspace (HexAgentChatsKept)
 ///   agents/history/               the older rows of chats no workspace keeps
 ///   agents/images/                pictures pasted into the agents' box
 ///   agents/temp/                  each chat's files for its agent system (MCP config, settings), made again as it starts
 ///   agents/limits.tsv             the agent systems' usage limits last heard
 ///   cache/harness/                the harness's code index and what it saved (stats.tsv)
-/// </code>
+/// ]]></code>
 /// Every file of these was in the settings folder or %TEMP% before, <see cref="MoveOld"/> moves them over once.
 /// </summary>
 public static class HexData
@@ -37,6 +37,12 @@ public static class HexData
     public static string AgentHistory => Path.Combine(Agents, "history");
     public static string AgentImages => Path.Combine(Agents, "images");
     public static string AgentTemp => Path.Combine(Agents, "temp");
+
+    /// <summary>
+    /// Where agents are told to put what they make for themselves (notes, probes, test scripts), inside the temporary files
+    /// so Agent Data counts and clears it with them. They put it in the person's home folder before.
+    /// </summary>
+    public static string AgentScratch => Path.Combine(AgentTemp, "scratch");
     public static string AgentLimits => Path.Combine(Agents, "limits.tsv");
     public static string Cache => Path.Combine(Root, "cache");
     public static string HarnessCache => Path.Combine(Cache, "harness");

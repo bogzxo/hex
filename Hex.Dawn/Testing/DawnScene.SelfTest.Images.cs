@@ -26,8 +26,18 @@ internal sealed partial class DawnScene
         });
         test.Settle(0.3f);
         test.Check("pictures: fitted to the view with its size in the corner", () =>
-            imagePicture.Texture == document.Picture && imagePicture.Size.X > 0 && imagePicture.Size.X <= imageView.Bounds.Width
+            imagePicture.Picture == document.Picture && imagePicture.Shown > 0.0f && imagePicture.Bounds.Width <= imageView.Bounds.Width
             && imageInfo.Text.Contains($"{document.Picture!.Width} × {document.Picture.Height}", StringComparison.Ordinal));
+
+        float fitted = 0.0f;
+        test.Run(() =>
+        {
+            fitted = imagePicture.Shown;
+            imagePicture.ZoomBy(2.0f);
+        });
+        test.Check("pictures: zoomed by the viewer, the size in the corner follows", () =>
+            MathF.Abs(imagePicture.Shown - fitted * 2.0f) < 0.001f && imageInfo.Text.Contains($"{imagePicture.Shown * 100.0f:0}", StringComparison.Ordinal));
+        test.Run(imagePicture.Fit);
 
         test.Run(Save);
         test.Wait();

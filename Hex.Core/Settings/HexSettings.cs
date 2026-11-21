@@ -36,6 +36,9 @@ internal sealed partial class HexSettings
     /// <summary>How wide the lists on the left and the properties on the right were dragged, 0 for as their layout has them.</summary>
     public float LeftWidth, RightWidth;
 
+    /// <summary>How wide Agentic's fleet and its Details were dragged, 0 for the widths Agentic has by itself.</summary>
+    public float NoonFleetWidth, NoonContextWidth;
+
     /// <summary>How tall the list of layers and the panel under the editor were dragged, 0 for what the editor works out by itself.</summary>
     public float LayersHeight, PanelHeight;
 
@@ -228,6 +231,12 @@ internal sealed partial class HexSettings
     /// </summary>
     public bool VisualStudioKeysChosen;
 
+    /// <summary>The steps of the welcome's Getting started seen to from it, by name and a comma between.</summary>
+    public string WelcomeDone = string.Empty;
+
+    /// <summary>Whether Getting started was folded to its one line with Hide.</summary>
+    public bool WelcomeChecklistHidden;
+
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
     /// <summary>
@@ -243,6 +252,18 @@ internal sealed partial class HexSettings
     /// starts, so a change takes a restart.
     /// </summary>
     public bool NoAi;
+
+    /// <summary>
+    /// Whether a chat a usage or session limit stopped is started again by itself once the limit has reset, told to carry
+    /// on, so agentic work left running goes on without anybody there. On unless turned off.
+    /// </summary>
+    public bool AgentsResumeAfterLimit = true;
+
+    /// <summary>
+    /// How many seconds after a chat finished (done, nothing unread, nothing waiting on the person) it settles by itself
+    /// into the lists' Finished group, 0 for never (only when the person settles it).
+    /// </summary>
+    public int AgentsAutoSettleSeconds = 30;
 
     /// <summary>
     /// Whether Don't show again was pressed on the card Agentic puts up while the server is off, saying what switching
@@ -294,6 +315,12 @@ internal sealed partial class HexSettings
     /// as it starts.
     /// </summary>
     public readonly Dictionary<string, System.Text.Json.Nodes.JsonObject> ServerSettings = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether C#'s analyzersEnabled kept as true, what it was before Hex left it off, was moved to the new default once
+    /// (HexLanguages.MoveOldAnalyzersDefault). Switched on after that, it stays on.
+    /// </summary>
+    public bool CSharpAnalyzersMoved;
 
     // The servers' own settings written the way the settings file has them, each server's an object of its sections
     internal HIDLObject ServerSettingsObject()
@@ -349,6 +376,9 @@ internal sealed partial class HexSettings
 
     /// <summary>Whether the walk of the files leaves out what each .gitignore says as well, search.useIgnoreFiles.</summary>
     public bool SearchUseIgnoreFiles = true;
+
+    /// <summary>Whether a file shown opens its folders in the explorer and picks its row there, explorer.autoReveal.</summary>
+    public bool ExplorerAutoReveal = true;
 
     /// <summary>
     /// The language servers added in the settings, one a language, in the order they were added. One for a language

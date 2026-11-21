@@ -22,15 +22,18 @@ internal sealed partial class DawnScene
         commands.Add("Agents/chats", Said("noon.command_parent"), AgentParent, "Alt+Home", "arrow-up", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => InNoon() && agentChat?.Parent is { } parent && ChatById(parent) is not null;
         commands.Add("Agents/chats", Said("noon.command_needs_me"), NextNeedingMe, "Ctrl+Alt+.", "bell", UIKeyUse.BoundWhileTyping);
+        // The finished group opened or folded from the keyboard, in the list and the fleet alike
+        commands.Add("Agents/chats", Said("noon.command_finished"), ToggleFinished, icon: "fold");
         commands.Add("Agents/chats", Said("noon.command_compact"), () => CompactAgent(agentChat), icon: "fold").IsEnabled = () => CanCompact(agentChat);
         commands.Add("Agents/chats", Said("noon.command_stop"), () => StopAgent(agentChat), "Ctrl+Alt+Shift+.", "debug-stop", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => agentChat?.Running == true;
     }
 
     /// <summary>
-    /// Every chat in the order the fleet and the list show them (ChatsInOrder), the newest that somebody started first,
-    /// each followed by the ones it started. Not narrowed by the fleet's filter, what waits on the person (the inbox, the
-    /// next that needs looking at) is everybody's whatever is typed there.
+    /// Every chat in the order the fleet and the list show them (ChatsInOrder): those waiting on the person, then those
+    /// working, then the just finished, then the finished, each followed by the ones it started. Not narrowed by the
+    /// fleet's filter or the finished group being folded, what waits on the person (the inbox, the next that needs looking
+    /// at) is everybody's whatever is on screen, and opening a folded chat lifts it back into the list.
     /// </summary>
     /// <remarks>
     /// It walked the chats its own way once, the oldest first, so with three chats Alt+Page Down went to the card over
@@ -39,12 +42,13 @@ internal sealed partial class DawnScene
     internal List<HexAgentChat> FleetOrder() => ChatsInOrder().ConvertAll(each => each.Chat);
 
     /// <summary>
-    /// The next or the one before of the cards the fleet shows, round from the end to the start. In Noon only those the
-    /// fleet's filter lets through, the keys never going to a chat that isn't on screen.
+    /// The next or the one before of the cards the fleet shows, round from the end to the start. Only those on screen, the
+    /// fleet's filter and the folded finished group's leaving theirs out, the keys never going to a chat that isn't.
     /// </summary>
     private void StepAgent(int by)
     {
-        List<HexAgentChat> order = Face == HexFace.Noon ? FleetShown().ConvertAll(each => each.Chat) : FleetOrder();
+        // The cards on screen, the finished folded away skipped as the eye skips them
+        List<HexAgentChat> order = (Face == HexFace.Noon ? FleetShown() : ChatsShown()).ConvertAll(each => each.Chat);
         if (order.Count == 0)
             return;
         int at = agentChat is null ? -1 : order.IndexOf(agentChat);

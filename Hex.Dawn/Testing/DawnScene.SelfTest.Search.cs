@@ -163,7 +163,9 @@ internal sealed partial class DawnScene
         test.Run(ReplaceAllInFiles);
         test.Wait();
         test.Check("search: Replace All asks once with how many matches in how many files", () =>
-            chrome.Dialog is { } asked && asked.Buttons.Count == 2 && Descendants(asked).OfType<Label>().Any(label => label.Text == "Replace 8 matches in 4 files with 'wombat'?"));
+            chrome.Dialog is { } asked && asked.Buttons.Count == 2 && Descendants(asked).OfType<Label>().Any(label =>
+                label.Text == Said("search.replace_ask", ("matches", Matches(8)), ("files", HexText.Count("file", 4)), ("with", "wombat"))
+                && label.Text.StartsWith("Replace 8 matches in 4 files with 'wombat'?", StringComparison.Ordinal)));
         test.Settle(0.4f);
         test.Click(() => chrome.Dialog is { } asked ? chrome.ToWorld(asked.Buttons[0].Bounds.Center) : test.Pointer.Position);
         test.WaitFor(() => chrome.Dialog is null && Found("quokka", 0), 5.0f);

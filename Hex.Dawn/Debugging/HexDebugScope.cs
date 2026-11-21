@@ -8,7 +8,7 @@ namespace Hex.Dawn;
 /// statics, its aliases and the constants it declares. netcoredbg honours none of a file's usings, Ease.Apply said "does
 /// not exist" in a file with using Horizon.Core.Tweening at the top, and it can't see a const local at all.
 /// </summary>
-internal sealed record HexDebugScope(IReadOnlyList<string> Namespaces, IReadOnlyList<string> StaticTypes,
+internal sealed partial record HexDebugScope(IReadOnlyList<string> Namespaces, IReadOnlyList<string> StaticTypes,
     IReadOnlyDictionary<string, string> Aliases, IReadOnlyDictionary<string, HexDebugConstant> Constants)
 {
     /// <summary>Nothing known, every name as it was written.</summary>
@@ -17,11 +17,16 @@ internal sealed record HexDebugScope(IReadOnlyList<string> Namespaces, IReadOnly
     /// <summary>What an SDK project's implicit usings are when its generated file of them can't be found.</summary>
     public static readonly string[] IMPLICIT = ["System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net.Http", "System.Threading", "System.Threading.Tasks"];
 
-    private static readonly Regex UsingSaid = new(@"^\s*(?:global\s+)?using\s+(?<static>static\s+)?(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly Regex AliasSaid = new(@"^\s*(?:global\s+)?using\s+(?<alias>\w+)\s*=\s*(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly Regex NamespaceSaid = new(@"^\s*namespace\s+(?<name>[\w.]+)", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly Regex ConstantSaid = new(@"\bconst\s+(?<type>[\w.]+\??)\s+(?<declared>\w+\s*=[^;{}]+);", RegexOptions.Compiled);
-    private static readonly Regex DeclaredSaid = new(@"^\s*(?<name>\w+)\s*=\s*(?<value>.+?)\s*$", RegexOptions.Compiled | RegexOptions.Singleline);
+    [GeneratedRegex(@"^\s*(?:global\s+)?using\s+(?<static>static\s+)?(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Multiline)]
+    private static partial Regex UsingSaid { get; }
+    [GeneratedRegex(@"^\s*(?:global\s+)?using\s+(?<alias>\w+)\s*=\s*(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Multiline)]
+    private static partial Regex AliasSaid { get; }
+    [GeneratedRegex(@"^\s*namespace\s+(?<name>[\w.]+)", RegexOptions.Multiline)]
+    private static partial Regex NamespaceSaid { get; }
+    [GeneratedRegex(@"\bconst\s+(?<type>[\w.]+\??)\s+(?<declared>\w+\s*=[^;{}]+);")]
+    private static partial Regex ConstantSaid { get; }
+    [GeneratedRegex(@"^\s*(?<name>\w+)\s*=\s*(?<value>.+?)\s*$", RegexOptions.Singleline)]
+    private static partial Regex DeclaredSaid { get; }
 
     /// <summary>
     /// A file's scope from its text, with the usings the project has for every file (its global usings) after its own.
@@ -91,7 +96,8 @@ internal sealed record HexDebugScope(IReadOnlyList<string> Namespaces, IReadOnly
             to.Add(name);
     }
 
-    private static readonly Regex GlobalUsingSaid = new(@"^\s*global\s+using\s+(?!static\b)(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Compiled | RegexOptions.Multiline);
+    [GeneratedRegex(@"^\s*global\s+using\s+(?!static\b)(?:global::)?(?<name>[\w.]+)\s*;", RegexOptions.Multiline)]
+    private static partial Regex GlobalUsingSaid { get; }
 
     /// <summary>The namespaces a project's generated file of global usings (obj/.../X.GlobalUsings.g.cs) brings in.</summary>
     public static IReadOnlyList<string> GlobalUsingsIn(string generated) =>

@@ -40,7 +40,7 @@ internal sealed class HexAgentHub
     {
         int root = RootOf(chat).Id;
         if (!mail.TryGetValue(root, out HexMailLog? log))
-            mail[root] = log = new HexMailLog();
+            mail[root] = log = new HexMailLog(each => ChatById(each.To) is { } to ? each.Seq > to.MailSeen : each.Kind == "question");
         return log;
     }
 
@@ -155,7 +155,8 @@ internal sealed class HexAgentHub
 
     /// <summary>A chat's state in a word, as the tools say it.</summary>
     public static string StateWord(HexAgentChat chat) =>
-        chat.Running ? "running" : chat.Stopped ? "stopped" : chat.Failed ? "failed" : chat.Entries.Count == 0 ? "new" : "done";
+        chat.Running ? "running" : chat.RunGoing ? "running (its turn ended but its process goes on, hex_agent_restart if it's stuck)"
+        : chat.Stopped ? "stopped" : chat.Failed ? "failed" : chat.Entries.Count == 0 ? "new" : "done";
 }
 
 /// <summary>

@@ -61,7 +61,8 @@ public static class EditorSettingsCatalog
         new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), TEXT),
         Patterns("files_exclude"),
         Patterns("search_exclude"),
-        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH)
+        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH),
+        new("explorer_auto_reveal", HexText.Get("settings_text.explorer_auto_reveal_title"), UIFormKind.Flag, HexText.Get("settings_text.explorer_auto_reveal_help"), FILES)
     ]);
 
     /// <summary>
@@ -174,6 +175,8 @@ public static class EditorSettingsCatalog
         new("run_to_terminal", HexText.Get("settings_catalog.run_to_terminal_title"), UIFormKind.Flag, HexText.Get("settings_catalog.run_to_terminal_help"), RUN),
         new("mcp_server", HexText.Get("settings_catalog.mcp_server_title"), UIFormKind.Flag, HexText.Get("settings_catalog.mcp_server_help"), RUN),
         new("no_ai", HexText.Get("settings_catalog.no_ai_title"), UIFormKind.Flag, HexText.Get("settings_catalog.no_ai_help"), RUN),
+        new("agents_resume_after_limit", HexText.Get("settings_catalog.agents_resume_after_limit_title"), UIFormKind.Flag, HexText.Get("settings_catalog.agents_resume_after_limit_help"), RUN),
+        new("agents_auto_settle_seconds", HexText.Get("settings_catalog.agents_auto_settle_seconds_title"), UIFormKind.Whole, HexText.Get("settings_catalog.agents_auto_settle_seconds_help"), RUN, Least: 0.0f, Most: 3600.0f),
 
         new("snap", HexText.Get("settings_catalog.snap_title"), UIFormKind.Whole, HexText.Get("settings_catalog.snap_help"), DESIGNER, Least: 0.0f, Most: 16.0f),
         new("canvas_handles", HexText.Get("settings_catalog.canvas_handles_title"), UIFormKind.Flag, HexText.Get("settings_catalog.canvas_handles_help"), DESIGNER)
@@ -319,6 +322,8 @@ public static class EditorSettingsCatalog
         ["run_to_terminal"] = Values.Bool(false),
         ["mcp_server"] = Values.Bool(true),
         ["no_ai"] = Values.Bool(false),
+        ["agents_resume_after_limit"] = Values.Bool(true),
+        ["agents_auto_settle_seconds"] = new NumberValue(30.0f),
         ["reopen_last"] = Values.Bool(false),
         ["persistent_process"] = Values.Bool(false),
         ["persistent_at_login"] = Values.Bool(false),
@@ -330,6 +335,7 @@ public static class EditorSettingsCatalog
         ["files_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualFilesExclude),
         ["search_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualSearchExclude),
         ["search_use_ignore_files"] = Values.Bool(true),
+        ["explorer_auto_reveal"] = Values.Bool(true),
         ["snap"] = new NumberValue(0.0f),
         ["canvas_handles"] = Values.Bool(true)
     };

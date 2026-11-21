@@ -7,7 +7,9 @@ internal sealed partial class DawnScene
 {
     private void TestDialogs(HexPointerScript test)
     {
-        string folder = Path.Combine(Path.GetTempPath(), "hex dialog test");
+        // In the run's own folder, a space in its name still. In the temp folder itself two runs at once made, browsed and
+        // deleted the one folder under each other
+        string folder = Path.Combine(testFolder, "hex dialog test");
         string inside = Path.Combine(folder, "inside"), layout = Path.Combine(folder, "a.hor");
         UIFileBrowser? browser = null;
 

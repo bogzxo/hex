@@ -55,7 +55,14 @@ internal sealed partial class DawnScene
         if (settings.Save() is { } problem)
             Say(problem, error: true);
         else
-            KnowSettingsFile();
+            KnowSettingsFile();
+
+        // Getting started on the welcome ticks a step off as the setting it's about changes, wherever it was changed. Made
+        // again now while it's up, otherwise the next time it is
+        if (Welcoming)
+            RefillGettingStarted();
+        else
+            gettingSetupShown = -1;
     }
 
     private void AddSettingsCommands()

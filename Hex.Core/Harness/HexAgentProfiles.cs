@@ -22,6 +22,27 @@ internal static class HexAgentProfiles
     public const int USUAL_BUDGET = 8000;
 
     /// <summary>
+    /// <see cref="HARNESS_RULES"/> and where to put scratch files, the agent data folder's (see <see cref="HexData.AgentScratch"/>),
+    /// which only this run knows. Agents left to choose made their notes, probes and test scripts in the person's home
+    /// folder or the workspace. No apostrophes in it either.
+    /// </summary>
+    public static string HarnessRules()
+    {
+        // There before the agent is told of it, one told to use a folder that isn't there made its own somewhere else
+        try
+        {
+            Directory.CreateDirectory(HexData.AgentScratch);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return HARNESS_RULES + " Scratch files you make for yourself (notes, probes, test scripts, logs, screenshots) go in "
+            + HexData.AgentScratch.Replace('\\', '/') + ", a folder Hex keeps for agents and clears, never in the home folder"
+            + " or the workspace unless you are asked to put them there.";
+    }
+
+    /// <summary>
     /// What an agent the Agents panel runs is told in its system prompt, where it weighs more than the server's
     /// instructions do. Agents left to themselves reached for the shell out of habit and read whole files to find one
     /// method, so this says which of Hex's tools does each of those better. The shell stays theirs, it's only second.

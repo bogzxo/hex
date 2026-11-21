@@ -57,7 +57,7 @@ internal sealed partial class DawnScene
                 hash.Add(each.Running);
             }
 
-            shape = hash.ToHashCode() | 1L << 40;
+            shape = (uint)hash.ToHashCode() | 1L << 40;
             version = chat.Version;
         }
 
@@ -65,7 +65,9 @@ internal sealed partial class DawnScene
         // later at the most, and not under a held button, made again between the press and the letting go every click was lost
         long now = System.Environment.TickCount64;
         bool moved = shape != noonContextDrawn.Shape
-            || (version != noonContextDrawn.Version && now - noonContextDrawn.At >= CONTEXT_REDRAW_MS && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left));
+            || (version != noonContextDrawn.Version && now - noonContextDrawn.At >= CONTEXT_REDRAW_MS && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
+            // Its column dragged to another width, the bars made again as wide as it once the edge is let go of
+            || (noonContextWide != noonContextDrawnWide && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left));
         if (!moved)
         {
             if (chat is not null && noonClock is not null)
@@ -77,6 +79,7 @@ internal sealed partial class DawnScene
             return;
         }
         noonContextDrawn = (shape, version, now);
+        noonContextDrawnWide = noonContextWide;
 
         ClearRows(noonContextRows);
         if (chat is null)
@@ -127,11 +130,11 @@ internal sealed partial class DawnScene
                 if (chat.ContextLimit > 0 && share >= COMPACT_OFFERED && CanCompact(chat))
                 {
                     var row = noonContextRows.Add(new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 24), Color = Vector4.Zero });
-                    Panel bar = row.Add(ContextBar(share, NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8));
+                    Panel bar = row.Add(ContextBar(share, noonContextWide - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8));
                     bar.Fill = UIFill.None;
                     bar.Anchor = Origin.Left;
                     bar.Pivot = Origin.Left;
-                    bar.Size = new Vector2(NOON_CONTEXT - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8, 6);
+                    bar.Size = new Vector2(noonContextWide - noonContext.Padding.Total.X - 10 - COMPACT_BUTTON - 8, 6);
                     row.Add(new Button
                     {
                         Label = Said("noon.compact_now"), Icon = "fold", Danger = true, Anchor = Origin.Right, Pivot = Origin.Right, Size = new Vector2(COMPACT_BUTTON, 22),
@@ -144,8 +147,17 @@ internal sealed partial class DawnScene
 
             if (chat.CacheRead > 0 && chat.InputTokens > 0)
                 ContextLine("database", Said("noon.cache", ("read", Count(chat.CacheRead)), ("share", (100.0 * chat.CacheRead / chat.InputTokens).ToString("0"))));
-            int turns = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.User);
-            int calls = chat.Entries.Count(entry => entry.Kind == HexAgentEntryKind.Tool);
+            // Counted by their places in one go, a closure and an enumerator over the chat's entries for each count
+            int turns = 0, calls = 0;
+            IReadOnlyList<HexAgentEntry> said = chat.Entries;
+            for (int at = 0; at < said.Count; at++)
+            {
+                if (said[at].Kind == HexAgentEntryKind.User)
+                    turns++;
+                else if (said[at].Kind == HexAgentEntryKind.Tool)
+                    calls++;
+            }
+
             ContextLine("history", Said("noon.turns", ("turns", turns.ToString()), ("calls", calls.ToString())));
         }
 
@@ -165,14 +177,20 @@ internal sealed partial class DawnScene
             {
                 ContextLine(LimitIcon(limit), HexAgentLimits.LimitLine(limit, DateTimeOffset.Now));
                 if (limit.Used >= 0)
-                    noonContextRows.Add(LimitBar((float)Math.Clamp(limit.Used, 0.0, 1.0), LimitColour(limit, Skin), NOON_CONTEXT - noonContext.Padding.Total.X - 10));
+                    noonContextRows.Add(LimitBar((float)Math.Clamp(limit.Used, 0.0, 1.0), LimitColour(limit, Skin), noonContextWide - noonContext.Padding.Total.X - 10));
             }
         }
 
         // Who it works with, a click opens them
         HexAgentChat? parent = chat.Parent is { } up ? ChatById(up) : null;
-        HexAgentChat[] started = [.. agentChats.Where(each => each.Parent == chat.Id)];
-        if (parent is not null || started.Length > 0)
+        List<HexAgentChat> started = [];
+        for (int at = 0; at < agentChats.Count; at++)
+        {
+            if (agentChats[at].Parent == chat.Id)
+                started.Add(agentChats[at]);
+        }
+
+        if (parent is not null || started.Count > 0)
         {
             ContextSection(Said("noon.family"));
             if (parent is not null)
@@ -258,7 +276,7 @@ internal sealed partial class DawnScene
                     Icon = icon, IconColor = explorer.FileIconColor(path),
                     // Plain text, a button's label doesn't read colour markup, the name and then its folder after a dot
                     Label = UIRichText.Literal(where.Length > 0 ? name + FILE_DOT + where : name),
-                    Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = path,
+                    Style = "button_flat", Align = Origin.Left, Fill = UIFill.Horizontal, Tooltip = path, OnContextMenu = at => FileRowMenu(at, opened),
                     Size = new Vector2(0, 22), LabelScale = FILE_SCALE, Animated = false, OnPressed = () =>
                     {
                         ShowFace(HexFace.Dawn);
@@ -276,6 +294,17 @@ internal sealed partial class DawnScene
                         noonWait = 0.0f;
                     });
         }
+    }
+
+    // What a file of Details can be shown in, from its row's menu
+    private void FileRowMenu(Vector2 at, string path)
+    {
+        var menu = new Menu("agent file");
+        menu.Add(Said("noon.file_open"), () => { ShowFace(HexFace.Dawn); Open(path); }, icon: "go-to-file");
+        menu.AddSeparator();
+        menu.Add(Said("noon.file_reveal"), () => { ShowFace(HexFace.Dawn); RevealInExplorer(path); }, icon: "files");
+        menu.Add(Said("noon.file_reveal_system"), () => explorer.RevealInExplorer(path), icon: "link-external");
+        ContextMenu.Show(chrome, at, menu);
     }
 
     // The files Details keeps of a chat, the newest, and how many of them show until the rest are asked for
@@ -384,7 +413,10 @@ internal sealed partial class DawnScene
 
     // How the agent is and how long its turn has gone, whole seconds while it runs and the tenths once it's done
     private string ClockLine(HexAgentChat chat) =>
-        $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}s" : $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s")}";
+        chat.RunGoing
+            // The tools' state word for this is written for agents (what to call on it), the person's is plain
+            ? $"$(watch) {UIRichText.Literal(Said("agents_panel.state_waiting"))}"
+            : $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}s" : $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s")}";
 
     /// <summary>
     /// The colour of how full a context is, green while there's plenty, turning amber past half and red as it nears its
@@ -407,7 +439,7 @@ internal sealed partial class DawnScene
     {
         UISkin? skin = Skin;
         Vector4 fill = colour ?? ContextColour(share);
-        float width = across ?? NOON_CONTEXT - noonContext.Padding.Total.X - 10;
+        float width = across ?? noonContextWide - noonContext.Padding.Total.X - 10;
         var track = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, 6), Radius = 3, Color = skin?.Palette.Track ?? new Vector4(0, 0, 0, 0.35f) };
         track.Add(new Panel { Anchor = Origin.Left, Pivot = Origin.Left, Size = new Vector2(MathF.Max(3, width * share), 6), Radius = 3, Color = fill });
         return track;

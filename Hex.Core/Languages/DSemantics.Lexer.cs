@@ -41,6 +41,9 @@ public static partial class DSemantics
         "string", "wstring", "dstring", "size_t", "ptrdiff_t"
     };
 
+    // Every ASCII character as a string of its own, so a piece of punctuation takes none made for it
+    private static readonly string[] Characters = [.. Enumerable.Range(0, 128).Select(code => ((char)code).ToString())];
+
     private static List<Piece> Lex(string text)
     {
         var pieces = new List<Piece>(text.Length / 4);
@@ -139,7 +142,7 @@ public static partial class DSemantics
             }
 
             To(i + 1);
-            pieces.Add(new Piece(DToken.Punctuation, startLine, column, c.ToString()));
+            pieces.Add(new Piece(DToken.Punctuation, startLine, column, c < Characters.Length ? Characters[c] : c.ToString()));
         }
 
         return pieces;

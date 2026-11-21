@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private List<UIChoice> PaletteChoices()
     {
-        var commands = new List<UIChoice>();
+        List<UIChoice> commands = [];
         foreach (Menu bar in menu.Menus)
         {
             if (bar.IsVisible is { } shown && !shown())

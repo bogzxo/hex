@@ -33,35 +33,40 @@ public sealed unsafe class DefaultTerminalTests : IDisposable
         HexDefaultTerminal.Folders = () => (Path.Combine(folder, "config"), Path.Combine(folder, "data"));
         HexDefaultTerminal.Gnome = false;
         if (OperatingSystem.IsWindows())
+            UseTheTestsKeys();
+    }
+
+    // The registry's calls sit in a method of their own, as the lambdas in them are reached on every platform otherwise
+    [SupportedOSPlatform("windows")]
+    private void UseTheTestsKeys()
+    {
+        HexDefaultTerminal.Root = () => Registry.CurrentUser.CreateSubKey(key);
+
+        // The machine's keys stand in a key of the test's own too, and the admin prompt is a write there that's counted
+        HexDefaultTerminal.MachineRoot = () => Registry.CurrentUser.CreateSubKey(key + @"\Machine");
+        HexDefaultTerminal.UsersClassesWork = () => usersClassesWork;
+
+        // What's run inside Windows Terminal's package, written down rather than run
+        HexDefaultTerminal.InPackage = (family, commands) =>
         {
-            HexDefaultTerminal.Root = () => Registry.CurrentUser.CreateSubKey(key);
-
-            // The machine's keys stand in a key of the test's own too, and the admin prompt is a write there that's counted
-            HexDefaultTerminal.MachineRoot = () => Registry.CurrentUser.CreateSubKey(key + @"\Machine");
-            HexDefaultTerminal.UsersClassesWork = () => usersClassesWork;
-
-            // What's run inside Windows Terminal's package, written down rather than run
-            HexDefaultTerminal.InPackage = (family, commands) =>
-            {
-                inPackage.AddRange(commands.Select(command => $"{family}: {command}"));
-                return null;
-            };
-            HexDefaultTerminal.RegisterForEveryone = program =>
-            {
-                prompts++;
-                if (!adminSaysYes)
-                    return "the admin prompt was turned down";
-                using RegistryKey server = HexDefaultTerminal.MachineRoot().CreateSubKey(@"Software\Classes\CLSID\{80CF73D7-0B2D-411E-8996-3E4D4921CA1D}\LocalServer32");
-                server.SetValue(null, $"\"{program}\" --dusk");
-                return null;
-            };
-            HexDefaultTerminal.UnregisterForEveryone = () =>
-            {
-                prompts++;
-                HexDefaultTerminal.MachineRoot().DeleteSubKeyTree(@"Software\Classes\CLSID\{80CF73D7-0B2D-411E-8996-3E4D4921CA1D}", throwOnMissingSubKey: false);
-                return null;
-            };
-        }
+            inPackage.AddRange(commands.Select(command => $"{family}: {command}"));
+            return null;
+        };
+        HexDefaultTerminal.RegisterForEveryone = program =>
+        {
+            prompts++;
+            if (!adminSaysYes)
+                return "the admin prompt was turned down";
+            using RegistryKey server = HexDefaultTerminal.MachineRoot().CreateSubKey(@"Software\Classes\CLSID\{80CF73D7-0B2D-411E-8996-3E4D4921CA1D}\LocalServer32");
+            server.SetValue(null, $"\"{program}\" --dusk");
+            return null;
+        };
+        HexDefaultTerminal.UnregisterForEveryone = () =>
+        {
+            prompts++;
+            HexDefaultTerminal.MachineRoot().DeleteSubKeyTree(@"Software\Classes\CLSID\{80CF73D7-0B2D-411E-8996-3E4D4921CA1D}", throwOnMissingSubKey: false);
+            return null;
+        };
     }
 
     // Whether this Windows starts a COM server of the user's, whether the admin prompt is said yes to, and how many came up

@@ -2,19 +2,23 @@
 
 **This is an IDE. It opens FAST, you write FAST code, and it gets the fuck out of your way, FAST.**
 
-That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools
+That's the point. A native code editor, a proper terminal, a place for your agents, and the tools
 around them. No Electron. No Chromium in a trench coat. No account to open a text file.
 
-**[Website](https://bogzxo.github.io/hex/) · [Download](#get-it) · [The numbers](#fast-as-fuck-with-receipts) · [Gallery](#look-at-the-bloody-thing) · [Features](#lightweight-doesnt-mean-does-fuck-all) · [Build](#build-the-bloody-thing)**
+**[Website](https://bogzxo.github.io/hex/) · [Download](#get-it) · [The numbers](#fast-with-receipts) · [Under the hood](#under-the-hood) · [Gallery](#look-at-it) · [Build](#build-it)**
 
-![Hex Dawn in Solstice, editing C# with the explorer, semantic highlighting, inlay hints, reference counts, inline blame and the minimap](images/readme/editor.png)
+![Hex's editor in Solstice with a small C# synthesiser open: the explorer, semantic colours, reference counts, git blame on the current line and the minimap](site/images/editor-1600.webp)
 
-*Dawn, the editor, in Solstice. The colours, the `pan:` and `value:` hints, the reference counts and the blame at the
-end of the line are csharp-ls and git talking, not a mockup. Captured from the 3.1.0 build measured below; code at 115%.*
+*Dawn, the editor, in Solstice. The colours, the reference counts and the blame are csharp-ls and git talking, not a
+mockup. Taken from 3.3.0 at 3200 × 1800 on a 4K screen with the interface at 125%.*
+
+Hex is one program with three faces, each in its own colour: **Dawn**, the code editor, in orange, **Dusk**, the
+terminal, in violet, and **Agentic**, where your agents work, in teal. The title bar switches between them, and
+whatever you were doing in one stays where you left it.
 
 ## Get it
 
-Pick your machine. **Setup** handles installation, shortcuts and updates. **Portable** is a ZIP you unpack and run.
+Pick your machine. **Setup** adds shortcuts and keeps Hex up to date. **Portable** is a ZIP you unpack and run.
 Neither needs a separate .NET installation.
 
 | System | Setup | Portable |
@@ -27,164 +31,201 @@ Windows Setup is an EXE; unpack the Linux and macOS Setup ZIPs first. Setup can 
 build of the development branch, beside the stable one.
 [All releases](https://github.com/bogzxo/hex/releases) · [What changed](RELEASE_NOTES.md) · [Installation details](docs/installer.md)
 
-Windows needs **10 1809 or newer**. Linux needs a Vulkan loader and driver; on Debian/Ubuntu that's
-`libvulkan1` and the appropriate GPU driver, such as `mesa-vulkan-drivers`. macOS needs **11 or newer**.
-The macOS build is unsigned; after downloading from this repository, remove quarantine from the unpacked folder with
-`xattr -dr com.apple.quarantine /path/to/Hex` if macOS blocks it.
+Windows needs **10 1809 or newer**. Linux needs a Vulkan loader and driver; on Debian/Ubuntu that's `libvulkan1` and
+the GPU's driver, such as `mesa-vulkan-drivers`. macOS needs **11 or newer**; the build is unsigned, so if macOS
+blocks it, run `xattr -dr com.apple.quarantine /path/to/Hex` on the unpacked folder.
 
-## Fast as fuck, with receipts
+## Fast, with receipts
 
-**516 ms to Dusk's first frame. 852 ms to Dawn's, with its window on screen at 456. A 49.3 MiB ZIP for the lot.**
+**450 ms to the editor's first frame, 405 ms to the terminal's, and 56 ms to bring it back once it's asleep.**
 
-Fresh measurements of **Hex 3.1.0 Amphetamine** at `98c6516`, published with the checked-in
-[`FolderProfile`](Hex/Properties/PublishProfiles/FolderProfile.pubxml): Release, Windows x64, NativeAOT, self-contained.
-Measured on 18 November 2026, Windows 11, Ryzen 5 5600X, RTX 3060, 32 GB RAM.
+Fresh measurements of **Hex 3.3.0 Amphetamine**, the same native build you download (Release, Windows x64, NativeAOT,
+self-contained), taken on one ordinary Windows 11 machine, a Ryzen 5 5600X with an RTX 3060 and 32 GB of RAM, busy
+with other work while it ran.
 
-| Measurement | Dawn — editor | Dusk — terminal |
+| Measurement | Dawn, the editor | Dusk, the terminal |
 | --- | ---: | ---: |
-| Process start → first rendered scene, median | **852 ms** | **516 ms** |
-| First-frame range, 10 launches each | 821–1010 ms | 484–534 ms |
-| Process start → window shown, median | 456 ms | 389 ms |
-| Idle working set, median | **201.4 MiB** | **117.2 MiB** |
-| Idle CPU, median, as a percentage of one logical core | 2.96% | 0.76% |
+| Process start to the first rendered scene, median | **450 ms** (431–487), an empty folder | **405 ms** (394–479), one shell |
+| The same, opening Hex's own source with a C# file up | 660 ms (571–693), its window up at 381 | |
+| Private memory 30 s after the first frame, median | 349.7 MiB | 247.2 MiB |
+| CPU at rest, of one logical core, median | 2.09% | 0.39% |
 
-![Warm launch timings: Dawn median 852 ms, range 821–1010; Dusk median 516 ms, range 484–534](images/readme/startup.svg)
+First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU here cover
+Hex itself, not child shells or language servers.
 
-**The first launch of each mode is excluded.** It populates shader caches. These are subsequent launches,
-with Dawn opening this repository and a C# source file, and Dusk opening one shell. First frame means first frame;
-it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or
-language servers. This is one machine, and a busy one: another Hex, its language servers and the agent that ran the
-script were all up. It's not a race rigged against somebody else's editor.
+### Persistent Process. Closed isn't gone.
 
-**Dawn got slower and we're saying so.** The 2.8.0 build measured 492 ms and 149.8 MiB on 4 November. 3.1 sets up a
-whole agent workspace before its first frame and it shows. The window is on screen in under half a second either way.
+Persistent Process keeps Hex asleep in the background once its last window is closed, the window context and a
+minimally loaded engine are kept while the threads remain frozen, awaiting an open request, so opening it again is a
+wake rather than a launch. It's off by default, the switch is in Getting started on the welcome page.
 
-The published folder is **111.5 MiB**, zipped to **49.3 MiB** before runtime caches. It includes all three faces and
-their assets. Release downloads may differ. [Method, raw samples and reproduction commands](docs/benchmarks.md).
+| Start to the window on screen | Median | Range |
+| --- | ---: | ---: |
+| Launched cold | 366 ms | 320–461 ms |
+| Woken from sleep | **56 ms** | 40–201 ms |
 
-### A game engine underneath. Seriously.
+Asleep it uses **5 MiB** of RAM and **0.08%** of one core, 16 ms of CPU in 20 s. It keeps 296 MiB of private memory
+committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and
+the 5 MiB is what actually stays in RAM. Seven cold launches and 36 wakes.
 
-Hex is C# compiled ahead of time to native code. No JIT warming up while you stare at a splash screen.
-The [Horizon engine](https://github.com/bogzxo/horizon) draws the interface through **Vulkan**, with rendering on its
-own thread. On macOS, MoltenVK bridges that to Metal.
+### Next to the other editor
 
-Text, panels, scrolling, animation and optional glass effects go through the rendering engine. There's no DOM to
-lay out, no browser to haul around, and no reason a text editor should need either.
+You know the one, built on a browser. The same machine, with the same projects and files open, both with C# support:
+its current release with its C# kit, C#, Python, Jupyter and C++ extensions installed, Hex with its own C# server.
+Each opened three times in turn after a thrown-away launch, medians, every process of each summed, language servers
+included.
 
-## Look at the bloody thing
+| | Hex | The other one |
+| --- | ---: | ---: |
+| Ready, a small project | **536 ms** | 1,268 ms |
+| Ready, the Horizon repository (995 C# files, 193,000 lines) | **951 ms** | 1,547 ms |
+| Memory, a small project | **383 MiB** | 2,629 MiB |
+| Memory, Horizon | **473 MiB** | 3,126 MiB |
+| CPU 30 s in, a small project, of the whole processor | **0.08%** | 1.3% |
+| CPU 30 s in, Horizon, of the whole processor | **0.12%** | 9.2% |
+| Processes, Horizon | **3** | 47 |
+| The program on disk, extensions and language servers aside | **116 MiB** | 1,092 MiB |
 
-Every picture is the real window, 1600 × 900, straight off the build measured above. Click one for the full size.
-[How they were taken](images/readme/README.md).
+Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting;
+both carry on loading their language servers after that. It's not a race rigged against anybody, it's one machine,
+on one afternoon, and the [method, every launch's numbers and how to reproduce them](docs/benchmarks.md) are written
+down.
+
+## Under the hood
+
+Hex is C# compiled ahead of time to native code by NativeAOT, so there's no JIT warming up while you stare at a splash
+screen and no runtime to install, and it's drawn through Vulkan by the [Horizon engine](https://github.com/bogzxo/horizon),
+a game engine, with MoltenVK bridging that to Metal on macOS. There's no browser underneath, no DOM to lay out and no
+JavaScript runtime idling in the background.
+
+**Two threads, and neither waits on the other.** The window and its rendering run on their own thread, the editor's
+logic on another, the simulation, which ticks up to 120 times a second while something is happening; frames are drawn
+between ticks and blended from the last two, so motion stays smooth whatever the tick rate, and a slow piece of work in
+the editor never stalls a frame that's already on its way to the screen.
+
+**It does nothing when nothing is happening.** Hex runs the engine in its application mode: a frame is only drawn when
+something on screen changed, the simulation slows to four ticks a second once there's been no input and no change for
+a couple of ticks, and the window's thread waits on the system rather than asking it a thousand times a second. Input,
+finished background work and a caret's next blink wake it on time, and a heartbeat frame once a second catches
+anything nobody thought to ask for. A spinner that's turning keeps the frames coming for exactly as long as it turns,
+nothing more.
+
+**The interface is painted, then compared.** Every tick the UI is laid out and painted into a list of quads, and a
+component that hasn't changed since the last tick has its quads taken from the last list as they were rather than
+painted again; the finished list is held up against what's already on screen, and an identical one is dropped before
+it costs the GPU anything. Text is drawn from signed distance fields, so it stays crisp at any interface size, 125% on
+a 4K screen included, without a glyph atlas for every size.
+
+**Startup is cached and staggered.** Images such as the splash screen, icons and font rasters are decompressed after the
+first launch and stored in the cache folder on disk, once cached, the original files are zipped to save space,
+regardless, Hex maintains its minimal footprint, small sacrifices and trade-offs are weighed to strike a fair balance
+between portability, footprint and launch speed. Content that isn't needed for the first frame is loaded off on a
+separate thread, so the render thread can initialise the engine and window unimpeded.
+
+**Asleep means asleep.** With Persistent Process on, closing the last window hides it and puts the engine into a
+dormant state: the simulation doesn't tick, no frames are drawn, not even the heartbeat, and the window's thread waits
+on the system for up to an hour at a time, until the next Hex started hands its folder and files over through a pipe
+and the window comes back.
+
+**Languages through their own servers.** Completion, hovers, definitions, references, rename, quick fixes, inlay hints
+and semantic colours come from the language servers you already rely on, spoken to over LSP, eighteen declared from C#
+to Rust and set up one language at a time, only the ones you want. C# is checked by the compiler alone unless you
+switch its analyzers on, so a file's first errors come in under a second, not half a minute.
+
+**HIDL holds it together.** Layouts, settings files, themes and extensions are HIDL, Horizon's own declarative
+language; Hex's welcome page is a HIDL layout you can open in Hex's own designer, and an extension is a small HIDL
+script, Emmet, snippets and the agent systems among them.
+
+**A terminal that's a terminal.** Dusk talks to shells through ConPTY on Windows and a PTY on Linux and macOS, with
+tabs, split panes, profiles, search and scrollback, and it's the same engine and the same process as the editor, so
+switching faces never flashes: a face is warmed up as you point at its button and a short crossfade carries you over.
+
+**A harness for agents.** Hex keeps a live index of the workspace and answers an agent from it in `path:line`, over an
+MCP server on a pipe only you can open, only from this machine and only with the token Hex writes beside its settings.
+An agent asks for one declaration and gets one declaration, not a grep's worth of noise or a 3,000-line file for one
+method. Writing a previous version of this README took 54 harness calls that handed back 154,000 characters where grep
+and whole-file reads would have read 1,077,000.
+
+## Look at it
+
+Every picture is the real Hex window, 3.3.0 with a small sample project open, taken by an agent driving Hex through
+its own MCP server. Click one for the full size.
 
 | | | |
 | --- | --- | --- |
-| [![Completion list for mixer. with Add, Peak, Render and SampleRate](images/readme/completion.png)](images/readme/completion.png) | [![Hover card for MathF with its documentation](images/readme/hover.png)](images/readme/hover.png) | [![The debugger stopped at a breakpoint with threads, call stack and variables](images/readme/debug.png)](images/readme/debug.png) |
-| **Completion.** The language server's, as you type. | **Hover.** Documentation where the pointer is. | **Debugging.** Stopped in `Render`, stack and locals beside it. |
-| [![Source Control with a side by side diff of Mixer.cs](images/readme/git.png)](images/readme/git.png) | [![Workspace search for Peak, 22 results in 4 files](images/readme/search.png)](images/readme/search.png) | [![A Jupyter notebook with code cells, printed output and two plots](images/readme/notebook.png)](images/readme/notebook.png) |
-| **Git.** What changed, word by word, next to the commit box. | **Search.** The whole workspace, grouped by file. | **Notebooks.** A real Python kernel, real plots. |
-| [![Markdown preview with headings, LaTeX maths and a table](images/readme/markdown.png)](images/readme/markdown.png) | [![The layout designer with its toolbox, the layout's tree and a button's properties](images/readme/designer.png)](images/readme/designer.png) | [![Settings showing the looks: Solstice, Solstice Day, Graphite, Fluid Glass, Frosted Glass, Flat and Visual Studio](images/readme/settings.png)](images/readme/settings.png) |
-| **Markdown.** Tables and maths, drawn natively. | **Designer.** Hex's own welcome page, open in Hex. | **Settings.** Searchable, with the looks up top. |
+| [![Ctrl+. on a line where Stopwatch isn't found, with the fix to add using System.Diagnostics on top of the menu of actions](site/images/actions-800.webp)](site/images/actions-3200.webp) | [![A completion list under mixer. with Add, the Clipped event, Peak, Render and SampleRate, each in its kind's colour](site/images/completion-800.webp)](site/images/completion-3200.webp) | [![A hover card over MathF.Max with its signature, parameters and what it returns](site/images/hover-800.webp)](site/images/hover-3200.webp) |
+| **Ctrl+.** Every fix and refactoring for the line, the best one first. | **Completion.** Straight from the language server as you type, coloured by kind. | **Hover.** Documentation under the pointer. |
+| [![Source Control with a commit message typed and Mixer.cs's changes shown word by word](site/images/git-800.webp)](site/images/git-3200.webp) | [![Workspace search for Peak, 15 results in 3 files, grouped by file](site/images/search-800.webp)](site/images/search-3200.webp) | [![The engineering notebook after Run All, cells timed, with typeset equations and PASS lines](site/images/notebook-800.webp)](site/images/notebook-3200.webp) |
+| **Git.** Word-level diffs next to the commit box. | **Search.** The whole workspace, grouped by file. | **Notebooks.** Real kernels and typeset maths, with every cell timed. |
+| [![A Markdown preview with a table of voices, typeset equations and a task list](site/images/markdown-800.webp)](site/images/markdown-3200.webp) | [![The debugger stopped on a highlighted line with the call stack, variables and breakpoints beside it](site/images/debug-800.webp)](site/images/debug-1600.webp) | [![The layout designer with its toolbox, the layout's tree, the canvas and a button's properties](site/images/designer-800.webp)](site/images/designer-1600.webp) |
+| **Markdown.** Tables and maths, rendered natively. | **Debugging.** Breakpoints, stack and locals beside the code. | **Designer.** Hex's own welcome page, edited in Hex. |
 
-## Lightweight doesn't mean “does fuck all”
+## Dusk. A whole terminal.
 
-- **Code.** Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference
-  counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and `.editorconfig`.
-  Sixteen language servers come declared, C# to Rust; install the supported ones from inside Hex. Their own runtimes
-  and dependencies still apply.
-- **Git.** Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict
-  controls. Keep the context next to the code instead of juggling windows to find out what you changed.
-- **Find your shit.** Quick Open, a command palette of 360 commands, workspace search and replace, searchable settings
-  and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences
-  by hand.
-- **Run, debug and test.** Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping,
-  watches and the Debug view. .NET goes through **netcoredbg**, which Hex fetches the first time you press F5; Python
-  through debugpy; D, C and C++ through lldb-dap. Project properties read and write the relevant `.csproj` settings.
-- **Documents that do things.** Jupyter notebooks with real kernels and outputs; native Markdown previews with tables
-  and maths. Kernels are separate tools, not secretly bundled into the download number.
-- **Build interfaces.** A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values
-  beside the source. [Layouts and HIDL](docs/layouts-and-hidl.md).
-- **Extend it.** Extensions are small HIDL scripts with a catalogue inside Hex. Emmet, snippets and the agent systems
-  are extensions like any other.
+![Hex's terminal running PowerShell, with a directory listing, git history and colour swatches](site/images/terminal-1600.webp)
 
-## Dusk. A whole fucking terminal.
-
-![Hex Dusk in Solstice Dusk running PowerShell, showing a directory listing, Hex's Git history and ANSI colour swatches](images/readme/terminal.png)
-
-*Dusk, the terminal face, in its violet. PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.*
-
-Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and
-macOS. Run it on its own with `Hex --dusk`, use the terminal panel inside Dawn, or switch faces from the title bar.
-The editor stays where you left it.
-
-**Ctrl+Alt+Shift+D** switches Dawn and Dusk. The shortcut is configurable.
-You can also make Dusk your default terminal where the platform supports it; [the setup details are here](docs/hacking.md#building).
+Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. Run it on its own with `Hex --dusk`, use
+the terminal panel inside Dawn, or switch faces from the title bar with **Ctrl+Alt+Shift+D**. Dusk says when a shell
+ended and with what, a shell that failed keeps its pane so you can read why, and its tab says so. You can also make
+Dusk your default terminal where the platform supports it; [the setup details are here](docs/hacking.md#building).
 
 ## Bring your own agent. Or don't.
 
-![Hex Agentic with five Claude Code chats in the fleet, one of them started by another, the open chat's tool calls, allowed request, to-do list and answer in the middle, and its tokens, cost, context, tools and files in Details](images/readme/agentic.png)
+![Agentic: a chat at work with its card, its tool calls, the Changes and Plan tabs, and its model, tokens, cost and context](site/images/agentic-1600.webp)
 
-*Agentic, the agents' face, in its teal. Five small Claude Code chats at work on the demo project. This one was asked
-to add envelopes to the mixer, asked leave to build, ticked off its list and said what it left undecided.*
+Hex doesn't sell you an AI subscription. **Agentic** runs your installed Claude Code, Codex or Antigravity CLI, with
+your own account, a fleet of chats side by side, each card saying its model, tokens, cost and how full its context is.
+Your provider's usage charges still belong to your provider.
 
-Hex doesn't sell you an AI subscription. **Agentic** is a face of its own beside Dawn and Dusk that runs your
-installed Claude Code, Codex or Antigravity CLI, with your own account. Your provider's usage charges still belong to
-your provider. What's in it:
-
-- **The fleet.** Every chat on the left as a card: its agent system, model, tokens, cost, what it's doing right now
-  and a thin bar of how full its context is. A filter over them, and a panel under them of each system's version,
-  session totals and what the harness saved it.
+- **The fleet.** Every chat is a card, and the ones waiting on you stay on top.
 - **Agents that start agents.** One chat can start others, of any system and model, and they sit under it a step in.
-  *Check the maths* above was started by *Review the mixer*, which waited for it and reported for both.
-- **The chat.** Tool calls folded into quiet groups you can open, requests with what was answered, the agent's
-  to-do list ticked off as it goes. A box with `@` for files and declarations, `/` for the system's commands, pasted
-  pictures, and pickers for the model and how hard it thinks.
-- **Details.** On the right, the chat's turns, tokens in and out, cost, how much came from the cache, your plan's
-  limits, which tools it used and how many went through Hex, and the files it touched.
-- **Four tabs.** Chat, Inbox, Changes and Plan, on **Alt+1** to **Alt+4**. Plan is the agent's to-do list by itself.
+- **The Inbox.** Every pending agent request in one place, **Ctrl+Alt+Y** allows, **Ctrl+Alt+N** denies.
+- **Every change reversible.** Each turn checkpointed, keep or undo a hunk, or restore the turn.
+- **80 tools over MCP.** Repository maps, symbol search, references, focused code reads, screenshots, editor commands,
+  the debugger, notebooks and terminals, for any MCP client, not only the agents Hex runs. The server is off until you
+  switch it on. [Agents, MCP and No AI](docs/agents.md).
 
-| | |
-| --- | --- |
-| [![The Inbox: a request from one agent to run dotnet build with Allow and Deny, and two cards for chats that finished](images/readme/agentic-inbox.png)](images/readme/agentic-inbox.png) | [![Changes: one turn's edit to Mixer.cs opened hunk by hunk, each with Keep and Undo, and Restore the turn above](images/readme/agentic-review.png)](images/readme/agentic-review.png) |
-| **The Inbox.** Everything any agent is waiting on you for in one place: leave to run something, a question, a chat that finished while you were elsewhere. **Ctrl+Alt+Y** allows, **Ctrl+Alt+N** denies. | **Changes you can take back.** Every turn is checkpointed as it begins. Diff it, review it hunk by hunk keeping or undoing each, or restore the whole turn. |
+**No AI**, in Settings or `Hex --no-ai`, takes the agents out at the root instead of hiding them: Agentic, the agent
+extensions, their commands and their MCP tools are never loaded, and the first frame comes about 310 ms sooner.
 
-Agents can also connect over MCP. Hex exposes **71 tools**: repository maps, symbol search, references, focused code
-reads, screenshots, editor commands, the debugger, notebooks and terminals, so an agent can ask for one method instead
-of swallowing the whole bloody file. Writing this README took 54 harness calls that handed back 154,000 characters
-where grep and whole-file reads would have read 1,077,000. That's 86% that never went near a context window. Every
-screenshot on this page was taken by an agent driving Hex through that server. The server is off until enabled;
-sending from Agentic enables it. [Agents and MCP](docs/agents.md).
+## Coming from another editor
+
+- **Your keys already work.** The shortcuts you learnt in that other editor, out of the box. Visual Studio's are one
+  switch away.
+- **Your settings come with you.** Point Hex at your old editor's `settings.json`, yours and a folder's. Every change
+  is previewed first, and whatever Hex can't take is listed, not silently dropped.
+- **What doesn't come over.** The other editor's extensions don't run in Hex. Its own are small HIDL scripts with a
+  catalogue inside the editor. If your workflow lives in one marketplace extension, check the catalogue first, or
+  [request it](https://github.com/bogzxo/hex-extensions/issues/new?template=extension_request.yml&labels=enhancement).
 
 ## Make it look how you want
 
 | Solstice Day | Graphite |
 | --- | --- |
-| [![The same C# file and editor layout in Solstice Day, Hex's light look](images/readme/light.png)](images/readme/light.png) | [![The same C# file and editor layout in Graphite](images/readme/graphite.png)](images/readme/graphite.png) |
-| **Fluid Glass** | **Sunset** |
-| [![The same C# file and editor layout in Fluid Glass, panels floating with rounded corners](images/readme/glass.png)](images/readme/glass.png) | [![The same C# file and editor layout in the Sunset theme](images/readme/sunset.png)](images/readme/sunset.png) |
+| [![The same C# file in Solstice Day, Hex's light look](site/images/light-800.webp)](site/images/light-3200.webp) | [![The same C# file in Graphite, a neutral dark grey](site/images/graphite-800.webp)](site/images/graphite-3200.webp) |
+| **Fluid Glass** | **Visual Studio** |
+| [![The same C# file in Fluid Glass](site/images/glass-800.webp)](site/images/glass-3200.webp) | [![The same C# file in the Visual Studio look](site/images/visual-studio-800.webp)](site/images/visual-studio-3200.webp) |
 
-*Same code, different mood. Click any of them for the full-size capture.*
-
-Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic.
-Go light with Solstice Day, back to quiet Graphite, or float the panels in glass. **Settings → Appearance** has themes,
-skins, saved looks, glass, backdrops and motion controls. Change the code size, terminal font, panel widths and
-keybindings too. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.
+Hex comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic.
+Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In
+every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects
+off, UI animation at 0 means nothing moves. It's your screen.
 
 ## What it doesn't do
 
 **It doesn't track you.** No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code.
-
 It does make network requests for features that need them: update checks, changelogs, extension, debugger and
-language-server downloads, and the services you choose to use. Automatic extension and language-server update checks
-have switches. Git remotes, language servers, extensions, notebook kernels and agent CLIs have their own network
-behavior. “No telemetry” isn't a claim that `git fetch` works by fucking magic.
+language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that `git fetch` works by
+magic.
 
-**It doesn't require an installer.** The portable archive works too. Hex uses a writable `settings` folder beside
-the executable when available, with the platform's application-data folder as a fallback. [Platform details](docs/hacking.md#building).
+**It doesn't require an installer.** The portable archive works too. Hex uses a writable `settings` folder beside the
+executable when available, with the platform's application-data folder as a fallback.
+[Platform details](docs/hacking.md#building).
 
-## Build the bloody thing
+## Build it
 
-Use the SDK in [`global.json`](global.json), currently a .NET 11 release candidate. A standalone checkout needs Horizon's
-`development` branch as well as Hex's extensions; this matches the engine checkout in CI.
+Use the SDK in [`global.json`](global.json), currently a .NET 11 release candidate. A standalone checkout needs
+Horizon's `development` branch as well as Hex's extensions; this matches the engine checkout in CI.
 
 ```sh
 git clone --branch development --recursive https://github.com/bogzxo/hex.git
@@ -193,16 +234,16 @@ git clone --branch development --recursive https://github.com/bogzxo/horizon.git
 dotnet build Hex/Hex.csproj
 ```
 
-For the **Windows x64 native build used above**:
+For the **Windows x64 native build measured above**:
 
 ```sh
-dotnet publish Hex/Hex.csproj -p:PublishProfile=FolderProfile
+dotnet publish Hex/Hex.csproj -c Release -r win-x64
 ```
 
 NativeAOT publishing also needs the native toolchain: Visual Studio C++ build tools and the Windows SDK on Windows,
 Clang and zlib development files on Linux, or Xcode command-line tools on macOS.
-[Hacking on Hex](docs/hacking.md) covers the source and self-tests. [Benchmarking](docs/benchmarks.md) covers the measurements.
-There's an [Android tablet build](docs/android.md) of Dawn too.
+[Hacking on Hex](docs/hacking.md) covers the source and self-tests, [Benchmarking](docs/benchmarks.md) the
+measurements. There's an [Android tablet build](docs/android.md) of Dawn too.
 
 Found a bug? [Open an issue](https://github.com/bogzxo/hex/issues) with your OS, Hex version and steps to reproduce it.
 Want to fix it? Send a focused pull request and say how you tested it. Screenshots help when the thing you changed is

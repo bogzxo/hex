@@ -25,9 +25,13 @@ internal sealed partial class DawnScene
     private void BuildModes()
     {
         modeToggle = HexModeSwitch.Add((TitleBar)top, HexFace.Dawn, PickFace);
+        // What the editor's frames are painted as, for a test watching them (Horizon's FrameTrace)
+        compositor.TraceTag = Face;
 
         terminals.Commands.Register("hex_dusk", Said("modes.command_dusk"), SwapMode, "Ctrl+Alt+Shift+D", HexOwns);
         HexModes.InBackground(HexMode.Dawn, TickAgentsOffscreen);
+        // Both ways between the editor and the terminal go through the faces' transition
+        HexModes.Transition = FaceTransition;
         if (!HexAi.Off)
             HexAgentProcess.Woken = Engine.WindowManager.Wake;
         HexModes.Leaving += leavingMode = mode =>
@@ -76,7 +80,7 @@ internal sealed partial class DawnScene
         if (face == HexFace.Dusk)
             SwapMode();
         else
-            ShowFace(face);
+            SwitchFace(face);
     }
 
     /// <summary>To Dusk, in the folder that's open, the window's own when Hex.exe started it.</summary>
@@ -106,6 +110,9 @@ internal sealed partial class DawnScene
             HexModes.FaceWanted = null;
             ShowFace(wanted);
         }
+
+        // Under the cover of Dusk's last frame, the face slides in from the left of it
+        ArriveFace(HexFace.Dusk, Face);
 
         if (Face == HexFace.Noon)
             agentsInput.Focus();

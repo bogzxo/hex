@@ -70,6 +70,7 @@ internal sealed partial class DuskScene
         ("dawn", "the dawn command typed into every shell there is, a file edited in place and saved, no Dawn said", TestDawn),
         ("effects", "the palette over glass, sparks off the cursor at a prompt, a burst for a long command that went well", TestEffects),
         ("path", "a new shell gets the PATH the system has now, not the one Dusk was started with", TestPath),
+        ("filedrop", "files dragged onto Dusk from outside: held over a pane its shell is said, dropped there the path typed at the prompt quoted for the shell, over the title bar Hex is said", TestFileDrop),
         ("micro", "micro in the shell, every key, the mouse, a paste, its splits and colours, how a console TUI gets on in Dusk", TestMicro),
         ("tuikeys", "the arrows pressed for real into micro, the whole way a person's keys go", TestTuiKeys),
         ("claude", "Claude Code in the shell, a TUI drawn on the main screen, its list moved with the arrows", TestClaude),
@@ -78,7 +79,10 @@ internal sealed partial class DuskScene
             TestBackdrop(test);
             TestBackdropArrange(test);
             TestSettingsText(test);
-        })
+        }),
+        ("states", "a tab's icon for a running command, an unseen bell and a failed program, an ended pane kept and started again with Enter, find over the pane", TestStates),
+        ("throughput", "a long build's output typed out by the shell, timed in MB a second, only when asked for by name", TestThroughput),
+        ("looks", "the tabs, a split, an exited program and a bell in every look Hex comes with at 100, 150 and 200%", TestLooks)
     ];
 
     /// <summary>A point inside a rectangle, as far along and up as the shares say, moved across by so much, where the pointer goes.</summary>
@@ -131,6 +135,9 @@ internal sealed partial class DuskScene
             }
 
             // Claude Code is somebody's own, signed in, it's only started when it's asked for by name
+            if (name == "throughput" && !asked.Contains(name))
+                continue;
+
             if (name == "claude" && !asked.Contains(name))
             {
                 test.Run(() => Console.WriteLine("[Dusk self-test] claude left out, it starts your own Claude Code, --selftest claude runs it"));

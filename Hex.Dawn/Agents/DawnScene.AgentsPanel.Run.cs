@@ -58,6 +58,20 @@ internal sealed partial class DawnScene
             agentChats.Add(agentChat);
         }
 
+        // Its turn over but its program still going on a task of its own, what's typed would wait in its mail for that to
+        // end, with no way to see it or get through. The person is answered at once: the leftover is stopped and this
+        // turn starts in its session, which the agent can see was cut short
+        if (agentChat.RunGoing || (!agentChat.Running && AgentRunBusy(agentChat)))
+        {
+            agentsStarting.Remove(agentChat);
+            agentsStopping.Remove(agentChat);
+            foreach (AgentRun leftover in agentRuns.Where(each => each.Chat == agentChat).ToList())
+                KillAgentRun(leftover);
+            agentChat.RunGoing = false;
+            agentChat.Stopped = false;
+            agentChat.Note(Said("agents_panel.woken"));
+        }
+
         bool slash = IsAgentSlash(asked);
         string prompt = slash ? asked : AgentDraftPrompt(asked);
         string? location = !slash && agentDraftContext is { } context
@@ -387,11 +401,14 @@ internal sealed partial class DawnScene
     private readonly Dictionary<HexAgentChat, long> agentsStopping = [];
 
     /// <summary>
-    /// Stops a chat's agent and everything it started. One whose run says how (run's stop, Claude Code's interrupt, Codex's
-    /// turn/interrupt) is told to stop its turn, its session left whole to go on from, and killed only if it hasn't
-    /// within a few seconds. Any other is killed.
+    /// Stops a chat's agent. One whose run says how (run's stop, Claude Code's interrupt, Codex's turn/interrupt) is told to
+    /// stop its turn, its session left whole to go on from, and killed only if it hasn't within a few seconds. Any other is
+    /// killed. The agents it started carry on unless <paramref name="withStarted"/>: the person stopping a chat's turn is
+    /// most often stopping it to say something, after which it goes on waiting for them, and its background work was all
+    /// stopped with it, an hour of three agents' work lost to a press of Stop to add a sentence.
     /// </summary>
-    private void StopAgent(HexAgentChat? chat)
+    /// <param name="withStarted">Whether the agents it started (and theirs) stop too, its menu's Stop with its agents, an agent's hex_agent_stop and closing it.</param>
+    private void StopAgent(HexAgentChat? chat, bool withStarted = false)
     {
         if (chat is null)
             return;
@@ -414,9 +431,30 @@ internal sealed partial class DawnScene
             KillAgentRun(run);
         }
 
-        // The agents it started go with it, nobody's waiting for them now
-        foreach (HexAgentChat started in agentChats.Where(each => each.Parent == chat.Id && each.Running).ToList())
-            StopAgent(started);
+        List<HexAgentChat> running = [.. agentChats.Where(each => each.Parent == chat.Id && each.Running)];
+        if (running.Count == 0)
+            return;
+
+        if (withStarted)
+        {
+            foreach (HexAgentChat started in running)
+                StopAgent(started, withStarted: true);
+            return;
+        }
+
+        // Said in the chat, so the person knows they're still going and where to stop them
+        chat.Note(Said("agents_panel.started_carry_on", ("chats", string.Join(", ", running.Select(started => "#" + started.Id)))));
+    }
+
+    /// <summary>Whether a chat has agents it started still running, for its menu's Stop with its agents.</summary>
+    private bool HasRunningStarted(HexAgentChat chat)
+    {
+        foreach (HexAgentChat each in agentChats)
+        {
+            if (each.Parent == chat.Id && each.Running)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>A run's agent killed and its chat said to be stopped.</summary>
@@ -472,6 +510,7 @@ internal sealed partial class DawnScene
     {
         TickStopping();
         TickCompactAfter();
+        TickResumeAfterLimits();
         for (int r = agentRuns.Count - 1; r >= 0; r--)
         {
             AgentRun run = agentRuns[r];

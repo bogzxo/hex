@@ -94,7 +94,8 @@ internal sealed partial class HexLanguages
         return found;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex ProjectLine = new(@"^\s*(?:Project\(""[^""]*""\)\s*=\s*""[^""]*""\s*,\s*""(?<path>[^""]+)""|<Project\s+Path=""(?<path>[^""]+)"")", System.Text.RegularExpressions.RegexOptions.Compiled);
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*(?:Project\(""[^""]*""\)\s*=\s*""[^""]*""\s*,\s*""(?<path>[^""]+)""|<Project\s+Path=""(?<path>[^""]+)"")")]
+    private static partial System.Text.RegularExpressions.Regex ProjectLine { get; }
 
     /// <summary>
     /// dotnet restore of a solution or a project, in the background with no card (the status bar's count of what's going

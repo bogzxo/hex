@@ -83,14 +83,18 @@ internal sealed partial class HexCodeIndex
             foreach (HexIndexedFile file in files)
             {
                 string inside = prefix.Length == 0 ? file.Relative : file.Relative[(prefix.Length + 1)..];
-                string[] parts = inside.Split('/');
-                for (int level = 0; level < parts.Length && level <= depth; level++)
+                int partCount = inside.AsSpan().Count('/') + 1;
+
+                // The folder at each level is the start of the path up to that many slashes, cut out of it rather than
+                // the path split and joined again
+                int cut = 0;
+                for (int level = 0; level < partCount && level <= depth; level++)
                 {
-                    string folder = string.Join('/', parts.Take(level));
+                    string folder = level == 0 ? string.Empty : inside[..(cut = inside.IndexOf('/', cut + (level > 1 ? 1 : 0)))];
                     if (!folders.TryGetValue(folder, out var entry))
                         folders[folder] = entry = ([], []);
                     entry.All.Add(file);
-                    if (level == parts.Length - 1 || level == depth)
+                    if (level == partCount - 1 || level == depth)
                         entry.Own.Add(file);
                 }
             }

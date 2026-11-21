@@ -50,7 +50,8 @@ internal static partial class HexSearch
                 continue;
 
             string[] lines = open is not null && open.TryGetValue(full, out string? text) ? text.Split('\n') : ReadLines(file);
-            string relative = RelativeTo(roots, file);
+            // Worked out for a file with a match in it, which a few of the workspace's files have
+            string? relative = null;
             for (int line = 0; line < lines.Length && found.Count < MOST_FOUND; line++)
             {
                 string said = lines[line];
@@ -59,6 +60,7 @@ internal static partial class HexSearch
                     continue;
 
                 // The row shows the line without its indent, what's lit is where the match is in that
+                relative ??= RelativeTo(roots, file);
                 string trimmed = said.Trim();
                 int lead = said.Length - said.TrimStart().Length;
                 foreach (var (column, length) in matches)

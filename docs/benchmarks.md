@@ -4,7 +4,9 @@ These are measurements of the local **Hex 2.8.0 “thickboy” development worki
 to Hex and Horizon. They replace the Hex 2.0.0 figures formerly in the README. They are not measurements of the
 existing `v2.8.0` download, a Debug build, or a self-test session.
 
-The README's figures are newer, from 3.1.0 on 18 November, [further down](#the-readmes-numbers-310--18-november-2026).
+The site's figures are newer, from 3.3.0 on 21 November, [further down](#the-sites-numbers-330-against-320--21-november-2026),
+with its Persistent Process figures [just above those](#persistent-process-330--21-november-2026);
+the README's are from 3.1.0 on 18 November, [below those](#the-readmes-numbers-310--18-november-2026).
 The method below is the one they were taken by.
 
 ## Results
@@ -252,6 +254,111 @@ working set (a first launch, see above) and 636 to 639 handles, so the chats lea
 
 Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
 CPU, handles and threads every half second from the outside, the self-tests say the rest.
+
+## Next to VS Code — 21 November 2026
+
+The site's "next to the other editor" cards. Hex: a Release win-x64 NativeAOT publish of `development` at `5346361`
+(Horizon `80108a9`, build 4421), fresh settings, its C# server csharp-ls. VS Code 1.147.0 (`8a14f0cc1b`), a fresh
+profile (`--user-data-dir`) with the user's extensions: C# Dev Kit, C#, the .NET runtime, Python, Pylance, Jupyter,
+C/C++, ESLint and a few editing ones. The machine above, other agents working on it.
+
+Two workspaces: a small C# console project (five files) with `Program.cs` open, and the Horizon repository (995 C#
+files, 193,000 lines, 14 projects) with `Horizon/Engine/GameEngine.cs` open. For each, one thrown-away launch of each
+editor, then three rounds, the two editors in turn. Ready: Hex's own logged "first frame of the scene shown at", VS
+Code's own workbench-ready time from `--prof-append-timers` (a launch of its own, since that flag makes VS Code quit
+once it's written). Then, from a second launch of VS Code and the same launch of Hex, 30 s after start, the whole
+process tree summed (a child counted only if it started after its parent, process ids get reused): private bytes,
+and CPU time over the next 10 s.
+
+| Measurement, median of 3 | Hex | VS Code |
+| --- | ---: | ---: |
+| Ready, small project | **536 ms** (494–628) | 1,268 ms (1,264–1,301) |
+| Ready, Horizon | **951 ms** (677–1,595) | 1,547 ms (1,375–1,654) |
+| Private memory, small project | **383 MiB** | 2,629 MiB |
+| Private memory, Horizon | **473 MiB** | 3,126 MiB |
+| CPU 30 s in, small project, of one core | **0.9%** | 15.8% |
+| CPU 30 s in, Horizon, of one core | **1.4%** | 110.6% |
+| Processes, Horizon | **3** | 47 |
+| Program folder | **116 MiB** | 1,092 MiB (extensions another 2,587 MiB) |
+
+Raw ready, ms: small Hex 628 494 536, VS Code 1301 1268 1264; Horizon Hex 1595 951 677, VS Code 1654 1547 1375.
+Hex's first Horizon round (1,595 ms) is its slowest launch of the day, the machine was busy; an earlier run of build
+4420 on Horizon had a median of 563 ms (544–639) over six. The site gives CPU as a share of the whole processor (12
+threads): divide by 12. VS Code on Horizon is still indexing at 30 s, which is most of its CPU there.
+
+## Persistent Process, 3.3.0 — 21 November 2026
+
+A Release win-x64 NativeAOT publish of `development` at `feb363f` with the notebook gutter change on top (build 4423,
+Hex 3.3.0; `Hex.exe` SHA-256 `054D238BDD46A3C0FBABC575EE9F272957CD1156636B857E1A805A4D8094F941`), made with
+`dotnet publish Hex/Hex.csproj -c Release -r win-x64`. The machine above, not quiet, other agents building and testing
+on it.
+
+The cycle script starts Hex with `HEX_PERSISTENT=1`, a home of its own (`HEX_HOME`) and a pipe of its own
+(`HEX_REMOTE_PIPE`), and times from `Start-Process` to the process having a main window: the cold window. After six
+seconds it closes the window, waits 15 s and reads the asleep process's working set, private bytes and threads, then its
+CPU time over 20 s. Then six times: a second `Hex.exe` started (it hands over to the sleeping one through the pipe and
+exits), timed from its start to the sleeping process having its window again, the window closed again after 5 s and
+the memory read after 8 s more.
+
+| Measurement | Median | Range | Samples |
+| --- | ---: | ---: | ---: |
+| Cold start to window, persistent mode on | **366 ms** | 320–461 ms | 7 |
+| Woken from sleep to window | **56 ms** | 40–201 ms | 36 |
+| Working set asleep (after a wake and close) | 5 MiB | 4–7 MiB | 36 |
+| Working set asleep, 15 s after the first close | 8 MiB | 8 MiB | 6 |
+| Private bytes asleep | 296 MiB | 294–299 MiB | 42 |
+| CPU time asleep, over 20 s | 16 ms (0.08% of a core) | 0–31 ms | 6 |
+| Working set open, 6 s after the cold window | 212 MiB | 211–218 MiB | 6 |
+
+Raw cold windows, ms: 343 320 399 368 365 461 366. Raw wakes, ms, six to a run: 76 56 56 73 55 55, 48 40 42 40 41 42,
+48 57 43 41 41 42, 77 72 56 102 56 42, 47 87 167 56 59 56, 201 87 91 93 98 87. The last run came while the machine was
+busiest and is slower throughout, its first wake (201 ms) the slowest of all. The private bytes stay committed while
+Windows trims the working set, so what's in RAM asleep is the working set. A seventh run was cut short by the session
+it ran in after its cold window, which is counted, and nothing after it is.
+
+First frames of the same executable, timed by an A/B launcher kept outside the repository (`--window --fresh` into an empty workspace, one
+discarded launch, then eight): median **450 ms** (431–487); raw 487 438 462 438 458 450 431 435.
+
+## The site's numbers, 3.3.0 against 3.2.0 — 21 November 2026
+
+`scripts/measure-readme.ps1` on two builds, one after the other the same morning: the `v3.2.0` release's
+`Hex-win-x64.zip` (its installer folder aside), and a Release win-x64 NativeAOT publish of `development` at
+`8b6a9e4` (build 4420, Hex 3.3.0), made with the release workflow's `dotnet publish` command. Six measured launches of
+each face after one discarded launch each, `-SettleSeconds 30 -IdleSeconds 10`: CPU and memory are sampled for 10 s
+once the window has sat for 30 s after its first frame. Dawn opens this repository with `DawnScene.cs`, Dusk one
+shell. Each run had its own `HEX_HOME` and `HEX_REMOTE_PIPE`. The machine is the one above (driver `32.0.16.2114`,
+.NET SDK `11.0.100`) and was not quiet: other agents were building and testing on it.
+
+| Metric | 3.2.0 Dawn | 3.3.0 Dawn | 3.2.0 Dusk | 3.3.0 Dusk |
+| --- | ---: | ---: | ---: | ---: |
+| First rendered scene, median | 721 ms | **660 ms** | 454 ms | **405 ms** |
+| First rendered scene, range | 648–1210 ms | 571–693 ms | 430–540 ms | 394–479 ms |
+| Window shown, median | 440 ms | 381 ms | 367 ms | 333 ms |
+| Working set at rest, median | 231.9 MiB | **253.8 MiB** | 151.2 MiB | 152.6 MiB |
+| Private bytes at rest, median | 340.4 MiB | 349.7 MiB | 254.2 MiB | 247.2 MiB |
+| CPU at rest, % of one core, median | 3.00% | 2.09% | 0.47% | 0.39% |
+
+Raw first frames, ms: 3.2.0 Dawn 696 746 1210 1185 677 648, Dusk 467 430 476 540 440 433; 3.3.0 Dawn 689 639 693 571
+579 680, Dusk 408 479 443 402 394 399. 3.2.0's Dawn had two slow launches (1210, 1185) that 3.3.0's didn't; its median
+without them would be 686 ms. Dawn's working set grew by about 22 MiB.
+
+An A/B of first frames of the same two executables, `--window --fresh` into an empty
+workspace, the builds taken in turn each round, eight rounds: 3.2.0 median 495 ms (431–851), 3.3.0 median 469 ms
+(425–547).
+
+ZIP of each publish folder (`ZipFile.CreateFromDirectory`, `Optimal`, before any launch made caches, no installer):
+3.2.0 52,541,175 bytes (50.1 MiB), 3.3.0 53,005,783 bytes (50.6 MiB).
+
+`--selftest agentic-perf`, three runs of each build, Agentic standing still with a dozen long chats: 3.2.0 22.1, 13.7
+and 17.5% of a core, 3.3.0 22.1, 6.1 and 3.8%. Streaming into a chat and opening groups overlapped between the builds
+(streaming 52.2, 33.8, 52.2% against 24.6, 40.0, 46.1%).
+
+Measured executables, SHA-256: 3.2.0 `82E844ADE60CD673AB4CC0E56AB2DE4D51D7CFA389F4E20ABE5691DB92380B67`, 3.3.0
+`F160C58E3279030AF08A331D2135D528FC73F0AB4C3815770BBA2697A13C84F5`.
+
+The site's other 3.3.0 figures (a C# file's first diagnostics 5–43 s to under 1 s, an idle csharp-ls from four cores to
+none, the first Dusk of a run 1379 to 33 ms, no blank frame switching faces, terminal output 3–5 to 11–18 MB/s) are
+the release notes', measured as each change went in, not in this run.
 
 ## The README's numbers, 3.1.0 — 18 November 2026
 

@@ -40,6 +40,7 @@ internal sealed partial class DawnScene
     // How many rows of text an output shows before it scrolls, and the most of its text that's put in an editor at all
     private const int OUTPUT_ROWS = 30;
     private const int OUTPUT_MOST = 200_000;
+    private const int OUTPUT_WHOLE_ROWS = 100_000;
 
     // The pictures of the outputs on screen, by the data they came out of, kept while it's the same data
     private readonly ConditionalWeakTable<JsonNode, Texture> outputPictures = new();
@@ -79,8 +80,17 @@ internal sealed partial class DawnScene
 
         foreach (JsonObject output in view.Cell.Outputs)
         {
-            if (DrawOutput(notebook, output, now) is { } drawn)
-                view.Outputs.Add(drawn);
+            // An error says what it was first, in a line of its own with the way to the line it failed on
+            if (output["output_type"]?.GetValue<string>() == "error")
+                view.Outputs.Add(ErrorHeader(notebook, view, output));
+
+            if (DrawOutput(notebook, output, now) is not { } drawn)
+                continue;
+            view.Outputs.Add(drawn);
+
+            // Text longer than an output shows says so under it, with all of it a press away
+            if (drawn is CodeEditor text && OutputFooter(view, output, text) is { } footer)
+                view.Outputs.Add(footer);
         }
 
         // The code asking for something typed (input()), a box under what it printed with its prompt, Enter sends it
@@ -113,14 +123,14 @@ internal sealed partial class DawnScene
         switch (type)
         {
             case "stream":
-                return OutputText(NotebookFile.Text(output["text"]), output["name"]?.GetValue<string>() == "stderr");
+                return OutputText(NotebookFile.Text(output["text"]), output["name"]?.GetValue<string>() == "stderr", output, tail: true);
 
             case "error":
             {
                 string traceback = output["traceback"] is JsonArray lines ? string.Join('\n', lines.Select(line => line?.GetValue<string>() ?? string.Empty)) : string.Empty;
                 if (traceback.Length == 0)
                     traceback = $"{output["ename"]?.GetValue<string>()}: {output["evalue"]?.GetValue<string>()}";
-                return OutputText(traceback, error: true);
+                return OutputText(traceback, error: true, output);
             }
 
             case "execute_result":
@@ -196,7 +206,7 @@ internal sealed partial class DawnScene
     }
 
     // Helper method for text in the code's font, its ANSI colours drawn in the terminal's
-    private CodeEditor OutputText(string text, bool error)
+    private CodeEditor OutputText(string text, bool error, JsonObject? output = null, bool tail = false)
     {
         if (text.Length > OUTPUT_MOST)
             text = text[..OUTPUT_MOST];
@@ -204,14 +214,16 @@ internal sealed partial class DawnScene
             text = text[..^1];
 
         var (plain, colours) = AnsiText.Read(text);
-        var editor = new CodeEditor(plain)
+        bool whole = output is not null && wholeOutputs.TryGetValue(output, out _);
+        var editor = new NotebookTextOutput(plain)
         {
+            Error = error,
             ReadOnly = true,
             LineNumbers = false,
             Minimap = false,
             StickyScroll = false,
             CheckSyntax = false,
-            FitRows = OUTPUT_ROWS,
+            FitRows = whole ? OUTPUT_WHOLE_ROWS : OUTPUT_ROWS,
             IndentGuides = false,
             WordWrap = true,
             LightOccurrences = false,
@@ -221,13 +233,124 @@ internal sealed partial class DawnScene
             Font = codeEditing.codeFont,
             Padding = new UIEdges(6.0f, 2.0f, 6.0f, 2.0f),
             Highlighter = PlainHighlighter.Instance,
-            Color = error && compositor.Skin is { } skin ? skin.ErrorColor with { W = 0.08f } : new Vector4(0.0f, 0.0f, 0.0f, 0.0f)
+            Color = error && compositor.Skin is { } skin ? skin.ErrorColor with { W = 0.08f } : Vector4.Zero
         };
         if (compositor.Skin is { } palette)
             editor.AnsiColours = TerminalPalette.FromPalette(palette.Palette).Ansi;
         editor.SemanticSpans = colours;
+
+        // A log longer than the output shows is shown at its end, the newest of it, the way a terminal is
+        if (tail && !whole && editor.Document.LineCount > OUTPUT_ROWS)
+            editor.GoTo(editor.Document.LineCount - 1);
         return editor;
     }
+
+    // The outputs shown whole rather than OUTPUT_ROWS of them, by the output, for as long as it's the same output
+    private readonly ConditionalWeakTable<JsonObject, object> wholeOutputs = new();
+
+    // Helper method for the line under text longer than an output shows, how much of it there is, all of it or less of it,
+    // and a copy of all of it. Null for text that fits
+    private NotebookOutputStrip? OutputFooter(NotebookCellView view, JsonObject output, CodeEditor text)
+    {
+        int lines = text.Document.LineCount;
+        if (lines <= OUTPUT_ROWS)
+            return null;
+
+        bool whole = wholeOutputs.TryGetValue(output, out _);
+        string count = lines.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        var strip = new NotebookOutputStrip
+        {
+            Said = new Label
+            {
+                Text = whole ? Said("notebook.lines_all", ("count", count))
+                    : Said(output["output_type"]?.GetValue<string>() == "stream" ? "notebook.lines_some" : "notebook.lines_first",("shown", OUTPUT_ROWS.ToString(System.Globalization.CultureInfo.CurrentCulture)), ("count", count)),
+                Dim = true, TextScale = 0.12f, Align = Origin.Left, Anchor = Origin.Left
+            }
+        };
+        strip.Add(strip.Said);
+        var more = strip.Add(new Button
+        {
+            Icon = whole ? "fold" : "unfold", Label = Said(whole ? "notebook.show_less" : "notebook.show_all"), LabelScale = 0.12f,
+            Size = new Vector2(0.0f, 22.0f)
+        });
+        more.OnPressed = () =>
+        {
+            if (!wholeOutputs.Remove(output))
+                wholeOutputs.Add(output, output);
+            view.OutputsDrawn = -1;
+        };
+        var copy = strip.Add(new Button { Icon = "copy", Label = Said("notebook.copy_text"), LabelScale = 0.12f, Size = new Vector2(0.0f, 22.0f) });
+        copy.OnPressed = () =>
+        {
+            UIClipboard.Copy(text.Text);
+            Say(Said("notebook.output_copied"));
+        };
+        return strip;
+    }
+
+    // Helper method for the line over an error's traceback, the kind of error and what it said in the error colour, and the
+    // line of the cell it failed on a press away when the traceback says which
+    private NotebookOutputStrip ErrorHeader(HexNotebook notebook, NotebookCellView view, JsonObject output)
+    {
+        string name = output["ename"]?.GetValue<string>() ?? string.Empty;
+        string value = output["evalue"]?.GetValue<string>() ?? string.Empty;
+        var strip = new NotebookOutputStrip
+        {
+            Error = true,
+            Said = new Label
+            {
+                Text = UIRichText.Literal(value.Length > 0 ? $"{name}: {value}" : name),
+                Bold = true, Wrap = true, TextScale = 0.15f, Align = Origin.TopLeft, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft,
+                Color = compositor.Skin?.ErrorColor
+            }
+        };
+        strip.Add(strip.Said);
+
+        string traceback = output["traceback"] is JsonArray lines ? string.Join('\n', lines.Select(line => line?.GetValue<string>() ?? string.Empty)) : string.Empty;
+        if (FailingLine(AnsiText.Read(traceback).Item1, view.Cell.ExecutionCount) is int line)
+        {
+            var go = strip.Add(new Button
+            {
+                Icon = "go-to-file", Label = Said("notebook.go_to_line", ("line", line.ToString(System.Globalization.CultureInfo.CurrentCulture))),
+                LabelScale = 0.12f, Size = new Vector2(0.0f, 22.0f), Anchor = Origin.TopLeft, Pivot = Origin.TopLeft
+            });
+            go.OnPressed = () =>
+            {
+                int index = cellViews.IndexOf(view);
+                if (index < 0)
+                    return;
+                HideSource(notebook, view.Cell, hide: false);
+                EditCell(notebook, index);
+                view.Editor.GoTo(Math.Max(0, line - 1));
+            };
+        }
+
+        return strip;
+    }
+
+    /// <summary>
+    /// The line of the cell an error happened on, out of IPython's traceback: the last "Cell In[n], line k" of this cell's
+    /// run (the deepest frame that's in the cell), else the first "----> k" of an older IPython. Null when it doesn't say.
+    /// </summary>
+    internal static int? FailingLine(string traceback, int? count)
+    {
+        int? found = null;
+        foreach (System.Text.RegularExpressions.Match match in CellLine().Matches(traceback))
+        {
+            if (count is null || match.Groups[1].Value == count.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                found = int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (found is null && ArrowLine().Match(traceback) is { Success: true } arrow)
+            found = int.Parse(arrow.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        return found is > 0 ? found : null;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"Cell In\s*\[(\d+)\],\s*line (\d+)")]
+    private static partial System.Text.RegularExpressions.Regex CellLine();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^-+>\s*(\d+)", System.Text.RegularExpressions.RegexOptions.Multiline)]
+    private static partial System.Text.RegularExpressions.Regex ArrowLine();
 
     // Helper method for a picture out of its base64, decoded once for as long as it's the same data. Its texture is made
     // later while nothing draws, the picture shows it from then on
@@ -332,6 +455,9 @@ internal sealed partial class DawnScene
                 case Label label:
                     label.Size = label.Size with { X = width - 8.0f };
                     break;
+                case NotebookOutputStrip strip:
+                    strip.Fit(width, zoom);
+                    break;
                 case StackPanel written:
                     FitWritten(written, width, zoom);
                     break;
@@ -376,6 +502,50 @@ internal sealed partial class DawnScene
             picturesToFree.Add((picture, FREE_AFTER_FRAMES));
         Engine.WindowManager.RequestExclusive();
     }
+}
+
+/// <summary>
+/// A line with an output, the error over a traceback or the count of lines under a long one: what it says, then its
+/// buttons, the words as wide as the buttons leave.
+/// </summary>
+internal sealed class NotebookOutputStrip : StackPanel
+{
+    public required Label Said { get; init; }
+
+    /// <summary>Whether it says an error, its words in the skin's error colour.</summary>
+    public bool Error { get; init; }
+
+    public NotebookOutputStrip()
+    {
+        Direction = UIDirection.Horizontal;
+        Anchor = Origin.TopLeft;
+        Pivot = Origin.TopLeft;
+        Spacing = 6.0f;
+    }
+
+    public void Fit(float width, float zoom)
+    {
+        float buttons = 0.0f;
+        foreach (UIComponent child in Children)
+        {
+            if (child == Said || !child.Visible)
+                continue;
+
+            // A button sized to its words and icon, it says how wide it is only once it has been
+            if (child is Button { Size.X: <= 0.0f } button)
+                button.Size = button.Size with { X = 34.0f + button.Label.Length * button.LabelScale * 62.0f };
+            buttons += child.Size.X + Spacing;
+        }
+
+        Said.Size = Said.Size with { X = MathF.Max(80.0f, width - buttons - 4.0f) };
+        Size = Size with { X = width };
+    }
+}
+
+/// <summary>Text an output put out, in an editor that can be selected and copied, an error's traceback tinted the error colour.</summary>
+internal sealed class NotebookTextOutput(string text) : CodeEditor(text)
+{
+    public bool Error { get; init; }
 }
 
 /// <summary>A picture an output drew, and the size it came at, the most it's drawn.</summary>

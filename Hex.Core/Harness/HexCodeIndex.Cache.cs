@@ -65,7 +65,7 @@ internal sealed partial class HexCodeIndex
                 int symbolCount = reader.ReadInt32();
                 var symbols = new List<HexSymbol>(symbolCount);
                 for (int s = 0; s < symbolCount; s++)
-                    symbols.Add(new HexSymbol(reader.ReadString(), reader.ReadString(), reader.ReadString(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+                    symbols.Add(new HexSymbol(reader.ReadString(), HexSymbol.SharedKind(reader.ReadString()), reader.ReadString(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
                 cached[path] = (length, written, lines, symbols, fromServer);
             }
         }

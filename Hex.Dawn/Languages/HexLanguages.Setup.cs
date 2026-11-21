@@ -361,6 +361,9 @@ internal sealed partial class HexLanguages
     /// <summary>Whether a step's command is going or anything's being looked for, for the window to follow it more often.</summary>
     internal bool SetupBusy => setupGoing is not null || toolsProbing.Count > 0 || serversProbing.Count > 0;
 
+    /// <summary>Whether a step's command is going, its log and its bar moving.</summary>
+    internal bool SetupRunning => setupGoing is not null;
+
     /// <summary>Whether Set up everything is going.</summary>
     internal bool SettingUpAll => setupAll.Count > 0 && (setupGoing is not null || setupQueue.Count > 0);
 

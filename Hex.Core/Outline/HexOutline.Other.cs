@@ -8,18 +8,48 @@ namespace Hex.Core;
 // shaders, Python, JavaScript and TypeScript, Markdown's headings, the keys of JSON and YAML.
 internal static partial class HexOutline
 {
-    private static readonly Regex CsType = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record(?:\s+(?:struct|class))?|interface|enum)\s+(\w+)", RegexOptions.Compiled);
-    private static readonly Regex CsMember = new(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|override|virtual|async|readonly|unsafe|extern|new|required|partial)\s+)+[\w<>\[\],.?() ]+?\s+(\w+)\s*(\(|\{|=>|=|;)", RegexOptions.Compiled);
-    private static readonly Regex ShaderFunction = new(@"^(\s*)(?:\[[^\]]*\]\s*)*(?:static\s+|inline\s+)?(struct)\s+(\w+)|^(\s*)(?:\[[^\]]*\]\s*)*[\w<>]+\s+(\w+)\s*\([^;]*$", RegexOptions.Compiled);
-    private static readonly Regex DType = new(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|shared|immutable|const|synchronized|extern\([^)]*\)|align\([^)]*\)|@\w+)\s+)*(class|struct|union|interface|enum|template|mixin\s+template)\s+(\w+)", RegexOptions.Compiled);
-    private static readonly Regex DFunction = new(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|override|nothrow|pure|ref|auto|const|immutable|shared|inout|synchronized|deprecated|extern\([^)]*\)|@\w+)\s+)*([\w!.\[\]*]+(?:\([^)]*\))?)\s+(\w+)\s*(?:\([^)]*\)\s*)?\([^)]*\)\s*(?:(?:const|immutable|shared|inout|nothrow|pure|scope|return|@\w+)\s*)*(?:\{.*|in\b.*|out\b.*|do\b.*|if\s*\(.*)?$", RegexOptions.Compiled);
-    private static readonly Regex DField = new(@"^(\s+)(?:(?:public|private|protected|package|static|const|immutable|shared|__gshared)\s+)*[\w!.\[\]*]+(?:\([^)]*\))?\s+(\w+(?:\s*=\s*[^,;]+)?(?:\s*,\s*\w+(?:\s*=\s*[^,;]+)?)*)\s*;\s*$", RegexOptions.Compiled);
-    private static readonly Regex DFieldName = new(@"(?:^|,)\s*(\w+)", RegexOptions.Compiled);
-    private static readonly Regex Python = new(@"^(\s*)(def|class|async def)\s+(\w+)", RegexOptions.Compiled);
-    private static readonly Regex Script = new(@"^(\s*)(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|interface|type|enum)\s+(\w+)|^(\s*)(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(", RegexOptions.Compiled);
-    private static readonly Regex Heading = new(@"^(#{1,6})\s+(.+?)\s*#*\s*$", RegexOptions.Compiled);
-    private static readonly Regex JsonKey = new(@"^(\s*)""([^""]+)""\s*:", RegexOptions.Compiled);
-    private static readonly Regex YamlKey = new(@"^(\s*)([\w.\-""']+)\s*:(\s|$)", RegexOptions.Compiled);
+    [GeneratedRegex(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|unsafe|file|ref|new)\s+)*(class|struct|record(?:\s+(?:struct|class))?|interface|enum)\s+(\w+)")]
+    private static partial Regex CsType();
+
+    [GeneratedRegex(@"^(\s*)(?:(?:public|private|protected|internal|static|sealed|abstract|override|virtual|async|readonly|unsafe|extern|new|required|partial)\s+)+[\w<>\[\],.?() ]+?\s+(\w+)\s*(\(|\{|=>|=|;)")]
+    private static partial Regex CsMember();
+
+    [GeneratedRegex(@"^(\s*)(?:\[[^\]]*\]\s*)*(?:static\s+|inline\s+)?(struct)\s+(\w+)|^(\s*)(?:\[[^\]]*\]\s*)*[\w<>]+\s+(\w+)\s*\([^;]*$")]
+    private static partial Regex ShaderFunction();
+
+    [GeneratedRegex(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|shared|immutable|const|synchronized|extern\([^)]*\)|align\([^)]*\)|@\w+)\s+)*(class|struct|union|interface|enum|template|mixin\s+template)\s+(\w+)")]
+    private static partial Regex DType();
+
+    [GeneratedRegex(@"^(\s*)(?:(?:public|private|protected|package|export|static|final|abstract|override|nothrow|pure|ref|auto|const|immutable|shared|inout|synchronized|deprecated|extern\([^)]*\)|@\w+)\s+)*([\w!.\[\]*]+(?:\([^)]*\))?)\s+(\w+)\s*(?:\([^)]*\)\s*)?\([^)]*\)\s*(?:(?:const|immutable|shared|inout|nothrow|pure|scope|return|@\w+)\s*)*(?:\{.*|in\b.*|out\b.*|do\b.*|if\s*\(.*)?$")]
+    private static partial Regex DFunction();
+
+    [GeneratedRegex(@"^(\s+)(?:(?:public|private|protected|package|static|const|immutable|shared|__gshared)\s+)*[\w!.\[\]*]+(?:\([^)]*\))?\s+(\w+(?:\s*=\s*[^,;]+)?(?:\s*,\s*\w+(?:\s*=\s*[^,;]+)?)*)\s*;\s*$")]
+    private static partial Regex DField();
+
+    [GeneratedRegex(@"(?:^|,)\s*(\w+)")]
+    private static partial Regex DFieldName();
+
+    [GeneratedRegex(@"^(\s*)(def|class|async def)\s+(\w+)")]
+    private static partial Regex Python();
+
+    [GeneratedRegex(@"^(\s*)(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|interface|type|enum)\s+(\w+)|^(\s*)(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(")]
+    private static partial Regex Script();
+
+    [GeneratedRegex(@"^(#{1,6})\s+(.+?)\s*#*\s*$")]
+    private static partial Regex Heading();
+
+    [GeneratedRegex(@"^(\s*)""([^""]+)""\s*:")]
+    private static partial Regex JsonKey();
+
+    [GeneratedRegex(@"^(\s*)([\w.\-""']+)\s*:(\s|$)")]
+    private static partial Regex YamlKey();
+
+
+    // The first words a line of C# that declares something can start with, a modifier or the kind of type. A line that
+    // starts any other way isn't one the two expressions above could match, which is nearly all of the lines of code
+    private static readonly System.Collections.Frozen.FrozenSet<string>.AlternateLookup<ReadOnlySpan<char>> CsStarts =
+        System.Collections.Frozen.FrozenSet.ToFrozenSet(["public", "private", "protected", "internal", "static", "sealed", "abstract", "partial", "readonly", "unsafe", "file", "ref", "new",
+            "override", "virtual", "async", "extern", "required", "class", "struct", "record", "interface", "enum"], StringComparer.Ordinal).GetAlternateLookup<ReadOnlySpan<char>>();
 
     private static readonly HashSet<string> NotNames = ["if", "for", "foreach", "while", "switch", "return", "new", "catch", "using", "lock", "fixed", "nameof", "typeof", "sizeof", "base", "this", "throw", "await", "get", "set", "init", "value", "else"];
 
@@ -38,7 +68,9 @@ internal static partial class HexOutline
             switch (extension)
             {
                 case ".cs":
-                    if (CsType.Match(row) is { Success: true } type)
+                    if (!CsStarts.Contains(FirstWord(row)))
+                        break;
+                    if (CsType().Match(row) is { Success: true } type)
                         entries.Add(new OutlineEntry(type.Groups[3].Value, line, type.Groups[3].Index, Depth(type.Groups[1].Value, 4), type.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1] switch
                         {
                             "interface" => "symbol-interface",
@@ -46,13 +78,13 @@ internal static partial class HexOutline
                             "struct" => "symbol-struct",
                             _ => "symbol-class"
                         }));
-                    else if (CsMember.Match(row) is { Success: true } member && !NotNames.Contains(member.Groups[2].Value))
+                    else if (CsMember().Match(row) is { Success: true } member && !NotNames.Contains(member.Groups[2].Value))
                         entries.Add(new OutlineEntry(member.Groups[2].Value, line, member.Groups[2].Index, Depth(member.Groups[1].Value, 4),
                             member.Groups[3].Value == "(" ? "symbol-method" : member.Groups[3].Value is "{" or "=>" ? "symbol-property" : "symbol-field"));
                     break;
 
                 case ".d" or ".di":
-                    if (DType.Match(row) is { Success: true } dType)
+                    if (DType().Match(row) is { Success: true } dType)
                     {
                         typeDepth = Depth(dType.Groups[1].Value, 4);
                         entries.Add(new OutlineEntry(dType.Groups[3].Value, line, dType.Groups[3].Index, typeDepth, dType.Groups[2].Value switch
@@ -64,17 +96,17 @@ internal static partial class HexOutline
                             _ => "symbol-namespace"
                         }));
                     }
-                    else if (DFunction.Match(row) is { Success: true } dFunction && !NotNames.Contains(dFunction.Groups[2].Value) && !NotNames.Contains(dFunction.Groups[3].Value))
+                    else if (DFunction().Match(row) is { Success: true } dFunction && !NotNames.Contains(dFunction.Groups[2].Value) && !NotNames.Contains(dFunction.Groups[3].Value))
                     {
                         int depth = Depth(dFunction.Groups[1].Value, 4);
                         if (depth <= typeDepth)
                             typeDepth = -1;
                         entries.Add(new OutlineEntry(dFunction.Groups[3].Value, line, dFunction.Groups[3].Index, depth, "symbol-method"));
                     }
-                    else if (typeDepth >= 0 && DField.Match(row) is { Success: true } dField && Depth(dField.Groups[1].Value, 4) == typeDepth + 1)
+                    else if (typeDepth >= 0 && DField().Match(row) is { Success: true } dField && Depth(dField.Groups[1].Value, 4) == typeDepth + 1)
                     {
                         // A field of the type the line is in, every name of int width, height; a field of its own
-                        foreach (Match named in DFieldName.Matches(dField.Groups[2].Value))
+                        foreach (Match named in DFieldName().Matches(dField.Groups[2].Value))
                         {
                             string name = named.Groups[1].Value;
                             if (!NotNames.Contains(name))
@@ -84,7 +116,7 @@ internal static partial class HexOutline
                     break;
 
                 case ".slang" or ".hlsl":
-                    if (ShaderFunction.Match(row) is { Success: true } shader)
+                    if (ShaderFunction().Match(row) is { Success: true } shader)
                     {
                         bool isStruct = shader.Groups[2].Success;
                         System.Text.RegularExpressions.Group name = isStruct ? shader.Groups[3] : shader.Groups[5];
@@ -94,12 +126,12 @@ internal static partial class HexOutline
                     break;
 
                 case ".py":
-                    if (Python.Match(row) is { Success: true } python)
+                    if (Python().Match(row) is { Success: true } python)
                         entries.Add(new OutlineEntry(python.Groups[3].Value, line, python.Groups[3].Index, Depth(python.Groups[1].Value, 4), python.Groups[2].Value == "class" ? "symbol-class" : "symbol-method"));
                     break;
 
                 case ".js" or ".ts" or ".mjs" or ".jsx" or ".tsx":
-                    if (Script.Match(row) is { Success: true } script)
+                    if (Script().Match(row) is { Success: true } script)
                     {
                         bool declared = script.Groups[3].Success;
                         System.Text.RegularExpressions.Group name = declared ? script.Groups[3] : script.Groups[5];
@@ -112,23 +144,34 @@ internal static partial class HexOutline
                 case ".md" or ".markdown":
                     if (row.TrimStart().StartsWith("```", StringComparison.Ordinal))
                         fenced = !fenced;
-                    else if (!fenced && Heading.Match(row) is { Success: true } heading)
+                    else if (!fenced && Heading().Match(row) is { Success: true } heading)
                         entries.Add(new OutlineEntry(heading.Groups[2].Value, line, heading.Groups[2].Index, heading.Groups[1].Length - 1, "symbol-string"));
                     break;
 
                 case ".json":
-                    if (JsonKey.Match(row) is { Success: true } key && Depth(key.Groups[1].Value, 2) <= 3)
+                    if (JsonKey().Match(row) is { Success: true } key && Depth(key.Groups[1].Value, 2) <= 3)
                         entries.Add(new OutlineEntry(key.Groups[2].Value, line, key.Groups[2].Index, Math.Max(0, Depth(key.Groups[1].Value, 2) - 1), "symbol-key"));
                     break;
 
                 case ".yaml" or ".yml":
-                    if (!row.TrimStart().StartsWith('#') && YamlKey.Match(row) is { Success: true } yaml && Depth(yaml.Groups[1].Value, 2) <= 3)
+                    if (!row.TrimStart().StartsWith('#') && YamlKey().Match(row) is { Success: true } yaml && Depth(yaml.Groups[1].Value, 2) <= 3)
                         entries.Add(new OutlineEntry(yaml.Groups[2].Value.Trim('"', '\''), line, yaml.Groups[2].Index, Depth(yaml.Groups[1].Value, 2), "symbol-key"));
                     break;
             }
         }
 
         return entries;
+    }
+
+    // The first word of a line, what's before the first white space after the indent
+    private static ReadOnlySpan<char> FirstWord(string row)
+    {
+        ReadOnlySpan<char> line = row.AsSpan().TrimStart();
+        int end = 0;
+        while (end < line.Length && !char.IsWhiteSpace(line[end]))
+            end++;
+
+        return line[..end];
     }
 
     // how deep a line is by how far in it is, a tab as wide as so many spaces

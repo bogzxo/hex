@@ -57,28 +57,117 @@ internal static class HexHierarchy
     /// <paramref name="relative"/> says a path as the harness does (inside the workspace), <paramref name="more"/> how to
     /// see more when the depth cut something.
     /// </summary>
-    public static string Describe(string title, IReadOnlyList<HexTreeNode> roots, Func<string, string> relative, int budget, string more)
+    public static string Describe(string title, IReadOnlyList<HexTreeNode> roots, Func<string, string> relative, int budget, string more, string leaves = "also")
+    {
+        // Written whole when it fits, else folded a step at a time until it does: the leaves that have nothing under them
+        // named on one line under their parent, then the ones the depth stopped at too, then a node's leaves on its own
+        // line, and last the tree one level deep with how many each has under it
+        string said = string.Empty;
+        for (int fold = 0; fold <= MOST_FOLD; fold++)
+        {
+            said = Render(title, roots, relative, budget, more, leaves, fold, out bool fits);
+            if (fits)
+                break;
+        }
+
+        return said;
+    }
+
+    private const int MOST_FOLD = 5;
+
+    /// <summary>
+    /// The trees of several roots (overloads asked together) made one: a node under a later root that's already under an
+    /// earlier one is marked seen and what's under it dropped, so what overloads share is said once.
+    /// </summary>
+    public static void MarkShared(IReadOnlyList<HexTreeNode> roots)
+    {
+        if (roots.Count < 2)
+            return;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (HexTreeNode root in roots)
+        {
+            var mine = new HashSet<string>(StringComparer.Ordinal);
+            void Walk(HexTreeNode node)
+            {
+                foreach (HexTreeNode child in node.Children)
+                {
+                    if (child.Kind == "more")
+                        continue;
+                    if (seen.Contains(child.Key) && !child.Seen)
+                    {
+                        child.Seen = true;
+                        child.Cut = false;
+                        child.Children.Clear();
+                        child.Outside.Clear();
+                        continue;
+                    }
+                    mine.Add(child.Key);
+                    Walk(child);
+                }
+            }
+
+            Walk(root);
+            seen.UnionWith(mine);
+        }
+    }
+
+    /// <summary>Fewest characters a folded leaf's name is said in, its place left out.</summary>
+    private static string LeafName(HexTreeNode node) =>
+        node.Name + (node.Sites > 1 ? $" x{node.Sites}" : string.Empty) + (node.Children.Count > 0 ? $" ({CountUnder(node)} under)" : string.Empty)
+        + (node.Seen ? " (above)" : node.Cut ? " +" : string.Empty);
+
+    private static string Render(string title, IReadOnlyList<HexTreeNode> roots, Func<string, string> relative, int budget, string more, string leaves, int fold, out bool fits)
     {
         var said = new HexBudget(budget);
         said.Line(title);
         bool cut = false;
+        int hidden = 0;
+
+        // Whether a node goes onto its parent's line of leaves rather than one of its own
+        // (the last fold puts every child of a root there, how many it has under it said with its name)
+        bool Folded(HexTreeNode node) => node.Kind != "more" && (fold >= 5 || fold >= 1 && node.Children.Count == 0 && node.Outside.Count == 0 && (fold >= 2 || !node.Cut));
+
         void Write(HexTreeNode node, int depth)
         {
-            if (!said.Line(LineOf(node, depth, relative)))
+            string indent = new(' ', (depth + 1) * 2);
+            bool inLine = fold >= 3 && depth > 0 && node.Children.Count > 0 && node.Children.All(Folded);
+            string line = LineOf(node, depth, relative);
+            if (fold >= 4 && depth >= 1 && node.Children.Count > 0)
+            {
+                // One level deep only, how many are under it said instead
+                hidden += CountUnder(node);
+                line += $"  ({CountUnder(node)} under it)";
+            }
+            else if (inLine)
+                line += $"  -> {HexBudget.Cut(string.Join(", ", node.Children.Select(LeafName).Distinct()), width: 200)}";
+            if (!said.Line(line))
                 return;
-            cut |= node.Cut;
-            foreach (HexTreeNode child in node.Children)
-                Write(child, depth + 1);
+            cut |= node.Cut || (inLine && node.Children.Any(child => child.Cut));
+
+            if (!inLine && !(fold >= 4 && depth >= 1))
+            {
+                foreach (HexTreeNode child in node.Children.Where(child => !Folded(child)))
+                    Write(child, depth + 1);
+                List<HexTreeNode> folded = [.. node.Children.Where(Folded)];
+                cut |= folded.Any(child => child.Cut);
+                if (folded.Count > 0)
+                    said.Line($"{indent}{leaves}: {HexBudget.Cut(string.Join(", ", folded.Select(LeafName).Distinct()), width: fold >= 5 ? 1500 : 400)}");
+            }
             if (node.Outside.Count > 0)
-                said.Line($"{new string(' ', (depth + 1) * 2)}outside the workspace: {HexBudget.Cut(string.Join(", ", node.Outside), width: 160)}");
+                said.Line($"{indent}outside the workspace: {HexBudget.Cut(string.Join(", ", node.Outside), width: 160)}");
         }
 
         foreach (HexTreeNode root in roots)
             Write(root, 0);
+        if (fold == 4 && hidden > 0)
+            said.Line($"... {hidden} further down didn't fit and were left out, ask from one of them for those.");
         if (cut)
             said.Line($"... marked + have more under them, {more}.");
+        fits = said.LeftOut == 0;
         return said.Finish("ask with a bigger max_chars or less depth");
     }
+
+    private static int CountUnder(HexTreeNode node) => node.Children.Sum(child => 1 + CountUnder(child));
 
     /// <summary>One node's line, indented by its depth.</summary>
     public static string LineOf(HexTreeNode node, int depth, Func<string, string> relative)

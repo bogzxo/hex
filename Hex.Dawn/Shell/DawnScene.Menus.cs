@@ -197,6 +197,9 @@ internal sealed partial class DawnScene
         commands.Add("View/editor", Said("menus.code_in_hack"), codeEditing.ToggleCodeFont, string.Empty, "text-size").IsChecked = () => settings.CodeFont.Length > 0;
         commands.Add("View/editor", Said("menus.split_editor"), ToggleSplit, "Ctrl+\\", "split-horizontal", UIKeyUse.BoundWhileTyping).IsChecked = () => Split;
 
+        // Tab out of the code to the rest of the window, see DawnScene.TabFocus
+        commands.Add("View/editor", Said("menus.tab_moves_focus"), ToggleTabMovesFocus, "Ctrl+M", "arrow-right", UIKeyUse.BoundWhileTyping).IsChecked = () => tabMovesFocus;
+
         // F7 flips a layout between its designer and its code, the way Visual Studio's designers go
         commands.Add("View/editor", Said("menus.toggle_designer_code"), ToggleView, "F7", "layout", UIKeyUse.BoundWhileTyping).IsEnabled =
             () => !document.IsText || IsNotebook(document) || IsMarkdown(document) || running.HasTable || ViewsFor(document).Any();

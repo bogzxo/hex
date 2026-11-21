@@ -40,6 +40,30 @@ internal sealed partial class DawnScene
         test.Hover(() => anchor - new Vector2(0, 180));
         test.Settle(0.2f);
         test.Check("middle scroll: movement after release no longer scrolls", () => TopLine() == before);
+
+        // Slow, over a part of a page that passes it on to the scroll it holds (the settings' search over its rows, as
+        // Agentic's margins pass it to the chat), the rows go by fractions of a pixel every frame. Turned into whole
+        // notches of the wheel they stood still until a notch's worth had gathered, then jumped
+        float rowsFrom = 0.0f;
+        test.Run(() =>
+        {
+            OpenSettings();
+            SettingsPage!.Find(string.Empty);
+        });
+        test.Settle(0.3f);
+        test.Run(() =>
+        {
+            SettingsPage!.RowsScroll.Offset = 0.0f;
+            rowsFrom = SettingsPage.RowsScroll.Offset;
+            anchor = chrome.ToWorld(SettingsPage.Search.Bounds.Center);
+        });
+        test.MiddleClick(() => anchor);
+        test.Hover(() => anchor - new Vector2(0, 14));
+        test.Settle(0.25f);
+        test.Check("middle scroll: slow over a margin moves the rows smoothly, less than a notch and not nothing", () =>
+            SettingsPage!.RowsScroll.Offset - rowsFrom is > 0.5f and < 40.0f);
+        test.MiddleClick(() => anchor);
+        test.Run(CloseSettings);
         test.Run(() =>
         {
             OpenSettings();

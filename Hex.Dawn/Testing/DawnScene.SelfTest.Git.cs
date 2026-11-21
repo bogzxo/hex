@@ -48,7 +48,7 @@ internal sealed partial class DawnScene
         UITreeItem? Row(string path) => explorer.explorerRows.FirstOrDefault(row => PlatformPaths.Same(row.Path, path)).Row;
 
         test.Run(explorer.ShowExplorer);
-        test.WaitFor(() => Row(changed)?.Badge == "M", 5.0f);
+        test.WaitFor(() => Row(changed)?.Badge == "M", 5.0f * GIT_PATIENCE);
         test.Check("git: a file changed since the commit is the warning colour with an M at its end in the same colour", () =>
             Row(changed) is { Badge: "M" } row && row.Color == compositor.Skin!.Palette.Warning && row.BadgeColor == row.Color && row.Detail == "");
         test.Check("git: one nobody added is new, success with a U, and so is its folder", () =>
@@ -61,7 +61,7 @@ internal sealed partial class DawnScene
         string outside = Path.Combine(repo, "made_outside.txt");
         test.Run(() => File.WriteAllText(outside, "hello\n"));
         test.Click(At(() => refreshButton));
-        test.WaitFor(() => Row(outside) is { Badge: "U" }, 3.0f);
+        test.WaitFor(() => Row(outside) is { Badge: "U" }, 3.0f * GIT_PATIENCE);
         test.Check("refresh: the button is there on the explorer and a file made outside is read with its colour", () =>
             refreshButton.Visible && Row(outside) is { Badge: "U" });
 
@@ -72,7 +72,7 @@ internal sealed partial class DawnScene
 
         // Blame, the caret's line says who changed it last, a line changed since the commit that nobody's committed it
         test.Run(() => code.GoTo(0, 0));
-        test.WaitFor(() => code.LineNote?.Text.Contains("Hex self test", StringComparison.Ordinal) == true, 5.0f);
+        test.WaitFor(() => code.LineNote?.Text.Contains("Hex self test", StringComparison.Ordinal) == true, 5.0f * GIT_PATIENCE);
         test.Check("blame: a committed line says who, when and the commit's message", () =>
             code.LineNote is { Line: 0 } note && note.Text.Contains("Hex self test", StringComparison.Ordinal) && note.Text.Contains("First go", StringComparison.Ordinal));
         test.Run(() => code.GoTo(1, 0));
@@ -86,17 +86,17 @@ internal sealed partial class DawnScene
 
         // The gutter, line 2 was changed on the disk, then a line typed at the end and the first one taken out
         bool Marks(params UICodeLineChange[] wanted) => code.LineChanges.SequenceEqual(wanted);
-        test.WaitFor(() => Marks(new UICodeLineChange(1, 1, UILineChangeKind.Modified)), 5.0f);
+        test.WaitFor(() => Marks(new UICodeLineChange(1, 1, UILineChangeKind.Modified)), 5.0f * GIT_PATIENCE);
         test.Check("gutter: a line changed since the commit has a bar beside it", () => Marks(new UICodeLineChange(1, 1, UILineChangeKind.Modified)));
 
         test.Run(() => code.Document.Replace("one\n2\nthree\nfour\n"));
-        test.WaitFor(() => code.LineChanges.Count == 2, 3.0f);
+        test.WaitFor(() => code.LineChanges.Count == 2, 3.0f * GIT_PATIENCE);
         test.Check("gutter: a line typed in is added, worked out as it's typed without a save", () =>
             Marks(new UICodeLineChange(1, 1, UILineChangeKind.Modified), new UICodeLineChange(3, 1, UILineChangeKind.Added)));
 
         // The first line taken out and the rest as committed, a line taken out next to a changed one is one change of both
         test.Run(() => code.Document.Replace("two\nthree\n"));
-        test.WaitFor(() => code.LineChanges.Any(change => change.Kind == UILineChangeKind.Deleted), 3.0f);
+        test.WaitFor(() => code.LineChanges.Any(change => change.Kind == UILineChangeKind.Deleted), 3.0f * GIT_PATIENCE);
         test.Check("gutter: a line taken out is a wedge where it was", () => Marks(new UICodeLineChange(0, 0, UILineChangeKind.Deleted)));
 
         // A long changed line wrapped onto a few rows, and a fold over changed lines, for a look with HEX_SELFTEST_SHOTS set
@@ -107,7 +107,7 @@ internal sealed partial class DawnScene
             if (!wrapped) ToggleWrap();
             code.Document.Replace("one\n" + string.Concat(Enumerable.Repeat("a long changed line that wraps ", 12)) + "\nthree\nfour\n");
         });
-        test.WaitFor(() => code.LineChanges.Count == 2, 3.0f);
+        test.WaitFor(() => code.LineChanges.Count == 2, 3.0f * GIT_PATIENCE);
         test.Settle(0.3f);
         test.Run(() =>
         {
@@ -133,10 +133,10 @@ internal sealed partial class DawnScene
             Git(repo, "add", "changed.txt");
             Git(repo, "commit", "-q", "-m", "Second go");
         });
-        test.WaitFor(() => Row(changed)?.Badge == "", 5.0f);
+        test.WaitFor(() => Row(changed)?.Badge == "", 5.0f * GIT_PATIENCE);
         test.Check("git: a commit made outside of Hex takes the colour off again", () =>
             Row(changed) is { Badge: "" } row && row.Color is null && docTabs.Tabs.First(tab => tab.Tag == document).TitleColor is null);
-        test.WaitFor(() => code.LineChanges.Count == 0, 3.0f);
+        test.WaitFor(() => code.LineChanges.Count == 0, 3.0f * GIT_PATIENCE);
         test.Check("gutter: and the bars go with it", () => code.LineChanges.Count == 0);
 
         // Source Control, the side of what's changed, a file staged from its right click and committed with a message
@@ -145,23 +145,23 @@ internal sealed partial class DawnScene
             row.Tooltip is { Length: > 0 } tip && path.Replace('\\', '/').EndsWith("/" + tip, StringComparison.Ordinal) && row.Parent?.Text.StartsWith(section, StringComparison.Ordinal) == true);
 
         test.Run(() => ShowSide(HexSide.SourceControl));
-        test.WaitFor(() => Under("Changes", added) is not null, 4.0f);
+        test.WaitFor(() => Under("Changes", added) is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: the side lists what's changed, a new file with its folder dim and its U at the end in the success colour", () =>
             Side == HexSide.SourceControl && Under("Changes", added) is { Detail: "src", Badge: "U" } row && row.BadgeColor == compositor.Skin!.Palette.Success
             && row.Color == row.BadgeColor && row.Parent is { Text: "Changes", Badge: "2" });
         test.RightClick(TreeRow(() => Under("Changes", added)));
         test.Wait();
         PickFromMenu("Stage");
-        test.WaitFor(() => Under("Staged Changes", added) is not null, 4.0f);
+        test.WaitFor(() => Under("Staged Changes", added) is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: Stage from its right click moves it to the staged changes", () =>
             Under("Staged Changes", added) is not null && Under("Changes", added) is null);
 
         // The side is put together again as git answers, so the box's Commit is waited for before it's clicked, nothing typed
         // in the box so it asks for the message
-        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f);
+        test.WaitFor(() => CommitSaid(SideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f * GIT_PATIENCE);
         test.Wait();
         test.Click(At(() => commitButton));
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Check("source control: the commit's box takes lines and colours Markdown, with the summary's length under it", () =>
             Descendants(textDialog!.Body).OfType<CodeEditor>().FirstOrDefault() is { WordWrap: true } box && box.Highlighter is not null
             && Descendants(textDialog!.Body).OfType<Label>().Any(label => label.Text.Contains("Ctrl+Enter", StringComparison.Ordinal)));
@@ -171,7 +171,7 @@ internal sealed partial class DawnScene
             box.Text = "Add the new one\n\n# Why\nSo there's **something** in src";
             box.OnControlEnter!();
         });
-        test.WaitFor(() => Under("Staged Changes", added) is null && GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Add the new one", 10.0f);
+        test.WaitFor(() => Under("Staged Changes", added) is null && GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Add the new one", 10.0f * GIT_PATIENCE);
         test.Check("source control: Commit with a message commits what was staged, and it's gone from the side", () =>
             GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Add the new one" && Under("Staged Changes", added) is null
             && GitProcess.Run(repo, ["log", "-1", "--format=%B"]).Output.Contains("# Why\nSo there's **something** in src", StringComparison.Ordinal));
@@ -191,9 +191,9 @@ internal sealed partial class DawnScene
             edited = document;
             code.Document.Replace("zero\n2\nthree\nfour\n");
         });
-        test.WaitFor(() => code.LineChanges.Count == 2, 4.0f);
+        test.WaitFor(() => code.LineChanges.Count == 2, 4.0f * GIT_PATIENCE);
         test.Run(OpenChangesHere);
-        test.WaitFor(() => document.DiffOf is not null, 4.0f);
+        test.WaitFor(() => document.DiffOf is not null, 4.0f * GIT_PATIENCE);
         test.Settle(0.3f);
         test.Run(() =>
         {
@@ -221,7 +221,7 @@ internal sealed partial class DawnScene
         test.Run(() => code.OnChangePressed!(new UICodeLineChange(3, 1, UILineChangeKind.Added)));
         test.Wait();
         PickFromMenu("Stage Change");
-        test.WaitFor(() => GitProcess.Run(repo, ["show", ":changed.txt"]).Output == "one\n2\nthree\nfour\n", 5.0f);
+        test.WaitFor(() => GitProcess.Run(repo, ["show", ":changed.txt"]).Output == "one\n2\nthree\nfour\n", 5.0f * GIT_PATIENCE);
         test.Check("hunks: Stage Change from the gutter stages that change and nothing else", () =>
             GitProcess.Run(repo, ["show", ":changed.txt"]).Output == "one\n2\nthree\nfour\n" && File.ReadAllText(changed) == "one\n2\nthree\n");
 
@@ -249,9 +249,10 @@ internal sealed partial class DawnScene
             code.Document.Replace("kept twice\n");
             Save();
         });
-        test.WaitFor(() => HexLocalHistory.Versions(LocalHistoryRoot, changed).Count >= 2, 4.0f);
+        test.WaitFor(() => HexLocalHistory.Versions(LocalHistoryRoot, changed).Count >= 2, 4.0f * GIT_PATIENCE);
         test.Run(ShowLocalHistory);
-        test.Wait();
+        // The list of copies is read off the editor's thread, a few frames on an idle machine and more on a busy one
+        test.WaitFor(() => textDialog is { IsOpen: true } && Chooser().Items.Length >= 2, 4.0f * GIT_PATIENCE);
         test.Check("history: every save is kept, the newest first", () =>
             textDialog is { IsOpen: true } && Chooser().Items.Length >= 2 && HexLocalHistory.Versions(LocalHistoryRoot, changed) is { Count: >= 2 } kept
             && File.ReadAllText(kept[0].Copy) == "kept twice\n");
@@ -267,7 +268,7 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Run(() => textDialog?.Buttons.First(button => button.Label == "Compare").OnPressed?.Invoke());
         test.Wait();
-        test.WaitFor(() => document.DiffKind == "history", 3.0f);
+        test.WaitFor(() => document.DiffKind == "history", 3.0f * GIT_PATIENCE);
         test.Check("history: an older copy compared with the file is a diff of the two", () =>
             document.DiffKind == "history" && code.Text.Contains("kept once", StringComparison.Ordinal) && code.Text.Contains("kept twice", StringComparison.Ordinal));
         test.Run(() =>
@@ -276,7 +277,7 @@ internal sealed partial class DawnScene
             Show(edited!);
             ShowFileHistory();
         });
-        test.WaitFor(() => textDialog is { IsOpen: true } && Chooser().Items.Length >= 2, 4.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && Chooser().Items.Length >= 2, 4.0f * GIT_PATIENCE);
         test.Check("history: git's history of the file lists the commits that changed it", () =>
             Chooser().Items.Any(item => item.Contains("Second go", StringComparison.Ordinal)) && Chooser().Items.Any(item => item.Contains("First go", StringComparison.Ordinal)));
         test.Run(() =>
@@ -286,7 +287,7 @@ internal sealed partial class DawnScene
             list.Choose(second);
             list.OnActivated!(list.Items[second]);
         });
-        test.WaitFor(() => document.DiffKind.StartsWith("commit ", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => document.DiffKind.StartsWith("commit ", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("history: and a commit picked shows what it did to the file", () =>
             document.DiffKind.StartsWith("commit ", StringComparison.Ordinal) && code.Text.Contains("two", StringComparison.Ordinal) && code.Text.Contains("2", StringComparison.Ordinal));
         test.Run(() =>
@@ -297,18 +298,18 @@ internal sealed partial class DawnScene
         });
 
         // Read again from the disk by itself, nothing of Hex's in it, a save now would ask about writing over the checkout
-        test.WaitFor(() => code.Text == File.ReadAllText(changed), 4.0f);
+        test.WaitFor(() => code.Text == File.ReadAllText(changed), 4.0f * GIT_PATIENCE);
 
         // The branch at the left of the status bar, a switch made in the terminal said there, and one picked from its list
-        test.WaitFor(() => branchItem.Text.Contains("main", StringComparison.Ordinal), 3.0f);
+        test.WaitFor(() => branchItem.Text.Contains("main", StringComparison.Ordinal), 3.0f * GIT_PATIENCE);
         test.Check("branch: the status bar says the branch checked out", () => branchItem.Text.Contains("$(git-branch) main", StringComparison.Ordinal));
         test.Run(() => Git(repo, "switch", "-q", "-c", "feature"));
-        test.WaitFor(() => branchItem.Text.Contains("feature", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => branchItem.Text.Contains("feature", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("branch: a branch made and checked out in the terminal is said there", () => branchItem.Text.Contains("$(git-branch) feature", StringComparison.Ordinal));
 
         ListBox Chooser() => Descendants(textDialog!.Body).OfType<ListBox>().First();
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(branchItem).Center));
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Check("branch: a click on it lists the branches, a new one to make first", () =>
             textDialog is { IsOpen: true } && Chooser().Items is { Length: >= 3 } items && items[0].Contains(Said("git.new_branch"), StringComparison.Ordinal)
             && items.Any(item => item.Contains(": main", StringComparison.Ordinal)));
@@ -319,7 +320,7 @@ internal sealed partial class DawnScene
             list.Choose(main);
             list.OnActivated!(list.Items[main]);
         });
-        test.WaitFor(() => branchItem.Text.Contains("$(git-branch) main", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => branchItem.Text.Contains("$(git-branch) main", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("branch: and picking one switches to it", () =>
             branchItem.Text.Contains("$(git-branch) main", StringComparison.Ordinal) && GitProcess.Run(repo, ["branch", "--show-current"]).Output.Trim() == "main");
 
@@ -331,7 +332,7 @@ internal sealed partial class DawnScene
             File.WriteAllText(conflicted, "top\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\nbottom\n");
             Open(conflicted);
         });
-        test.WaitFor(() => conflicts.Count == 1, 3.0f);
+        test.WaitFor(() => conflicts.Count == 1, 3.0f * GIT_PATIENCE);
         test.Check("conflicts: a conflict is found and each side lit", () => conflicts.Count == 1 && code.LineHighlights.Count >= 4);
         test.Run(() =>
         {
@@ -368,10 +369,10 @@ internal sealed partial class DawnScene
             Git(repo, "remote", "add", "origin", origin);
             git.Refresh(repo);
         });
-        test.WaitFor(() => syncItem.Text.Contains("Publish", StringComparison.Ordinal), 5.0f);
+        test.WaitFor(() => syncItem.Text.Contains("Publish", StringComparison.Ordinal), 5.0f * GIT_PATIENCE);
         test.Check("sync: a branch that isn't on the remote offers to publish it", () => syncItem.Text.Contains("Publish", StringComparison.Ordinal));
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(syncItem).Center));
-        test.WaitFor(() => GitProcess.Run(origin, ["log", "-1", "--format=%s"]).Output.Trim().Length > 0 && syncItem.Text == "$(sync)", 10.0f);
+        test.WaitFor(() => GitProcess.Run(origin, ["log", "-1", "--format=%s"]).Output.Trim().Length > 0 && syncItem.Text == "$(sync)", 10.0f * GIT_PATIENCE);
         test.Check("sync: and publishing pushes it and has it follow the remote's", () =>
             GitProcess.Run(repo, ["rev-parse", "--abbrev-ref", "main@{upstream}"]).Output.Trim() == "origin/main" && syncItem.Text == "$(sync)");
 
@@ -391,14 +392,14 @@ internal sealed partial class DawnScene
 
         // Sync asks first, how many come and go and with where, the way VS Code's git.confirmSync does
         string syncButton = Said("git.sync");
-        test.WaitFor(() => syncItem.Text.Contains("1$(arrow-down)", StringComparison.Ordinal), 5.0f);
+        test.WaitFor(() => syncItem.Text.Contains("1$(arrow-down)", StringComparison.Ordinal), 5.0f * GIT_PATIENCE);
         test.Click(() => chrome.ToWorld(statusBar.ItemBounds(syncItem).Center));
-        test.WaitFor(() => textDialog is { IsOpen: true } && textDialog.Buttons.Any(button => button.Label == syncButton), 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true } && textDialog.Buttons.Any(button => button.Label == syncButton), 3.0f * GIT_PATIENCE);
         test.Check("sync: Sync asks first, pulling 1 and pushing 0 with origin/main", () =>
             textDialog is { IsOpen: true } dialog && dialog.Buttons.Any(button => button.Label == syncButton) && !File.Exists(Path.Combine(repo, "theirs.txt"))
             && Descendants(dialog).OfType<Label>().Any(label => label.Text.Contains("Pull 1 and push 0 commits with origin/main", StringComparison.Ordinal)));
         test.Run(() => textDialog?.Buttons.First(button => button.Label == syncButton).OnPressed?.Invoke());
-        test.WaitFor(() => said.Any(line => line.Text.Contains("git push done", StringComparison.Ordinal)), 10.0f);
+        test.WaitFor(() => said.Any(line => line.Text.Contains("git push done", StringComparison.Ordinal)), 10.0f * GIT_PATIENCE);
         test.Check("sync: Sync pulls in what somebody else pushed", () =>
             File.Exists(Path.Combine(repo, "theirs.txt")) && GitProcess.Run(repo, ["log", "-1", "--format=%s"]).Output.Trim() == "Their commit");
         test.Check("settings: pull mode rebase reaches git pull", () => said.Any(line => line.Text == "git pull --rebase, git push done"));
@@ -426,6 +427,11 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Run(() => DeleteGitFolder(repo));
     }
+
+    // How many times over the git parts wait for what git does, a wait being over the moment it's done. Every one of
+    // them waits on a git process or two, which take a few hundred milliseconds on an idle machine and seconds on a busy
+    // one, and a busy machine failed the parts that passed alone a minute before
+    private const float GIT_PATIENCE = 3.0f;
 
     private static void Git(string folder, params string[] arguments)
     {

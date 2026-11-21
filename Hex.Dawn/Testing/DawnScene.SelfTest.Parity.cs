@@ -145,7 +145,9 @@ internal sealed partial class DawnScene
             explorer.AddFolder(folder);
         });
         test.WaitFor(() => Listed("main.cs"), 3.0f);
-        test.Check("parity: the explorer lists .github and .gitignore", () => Listed(".github") && Listed(".gitignore") && Listed("src"));
+        // .github with only workflows in it is the one row .github/workflows, a chain of single folders
+        test.Check("parity: the explorer lists .github and .gitignore", () => (Listed(".github") || Listed(Path.Combine(".github", "workflows")))
+            && Listed(".gitignore") && Listed("src"));
         test.Check("parity: but not .git, nor .DS_Store", () => !Listed(".git") && !Listed(".DS_Store"));
 
         test.Run(() =>

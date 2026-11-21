@@ -53,11 +53,15 @@ function keep(pinned) {
 if (meta && button) {
   apply(meta.content === 'light' || meta.content === 'dark' ? meta.content : null);
   button.hidden = false;
+  // The whole page fades from one look to the other, the old one a picture over the new one going out (a view
+  // transition). Where there's none, or less motion was asked for, it changes at once
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   button.addEventListener('click', () => {
     const target = shown() === 'dark' ? 'light' : 'dark';
     const pinned = target === system() ? null : target;
     keep(pinned);
-    apply(pinned);
+    if (document.startViewTransition && !reduced.matches) document.startViewTransition(() => apply(pinned));
+    else apply(pinned);
   });
 
   systemDark.addEventListener('change', updateButton);

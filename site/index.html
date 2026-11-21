@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <!-- Day or Night as it was pinned with the switch in the bar, before anything's drawn so the page never flashes the other -->
+  <!-- The cards that turn are laid out for it before the first paint, so they don't settle once the page's script runs -->
+  <script>document.documentElement.classList.add('flips');</script>
   <script>try { const scheme = localStorage.getItem("color-scheme"); if (scheme === "light" || scheme === "dark") document.querySelector('meta[name="color-scheme"]').content = scheme; } catch {}</script>
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
@@ -24,6 +26,7 @@
   <script defer src="gallery.js"></script>
   <script defer src="request.js"></script>
   <script defer src="theme.js"></script>
+  <script defer src="site.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to the content</a>
@@ -31,14 +34,23 @@
   <header class="bar">
     <div class="wrap">
       <a class="mark" href="#top" aria-label="Hex, to the top"><img src="images/hex.png" width="28" height="28" alt="">Hex</a>
-      <nav aria-label="On this page">
-        <a href="#numbers">Numbers</a>
-        <a href="#gallery">Gallery</a>
-        <a href="#features">Features</a>
-        <a href="#dusk">Dusk</a>
-        <a href="#agents">Agents</a>
-        <a href="#looks">Looks</a>
-        <a href="#build">Build</a>
+      <nav class="site-nav" aria-label="On this page">
+        <button type="button" class="button small quiet menu-button" popovertarget="site-menu" aria-controls="site-menu">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          <span>Menu</span>
+        </button>
+        <ul id="site-menu" class="site-menu" popover>
+          <li><a href="#switch">Switching</a></li>
+          <li><a href="#numbers">Numbers</a></li>
+          <li><a href="#gallery">Gallery</a></li>
+          <li><a href="#features">Features</a></li>
+          <li class="dusk"><a href="#dusk">Dusk</a></li>
+          <li class="noon"><a href="#agents">Agents</a></li>
+          <li><a href="#looks">Looks</a></li>
+          <li><a href="#build">Build</a></li>
+          <li class="menu-only"><a href="https://github.com/bogzxo/hex">GitHub</a></li>
+          <li class="menu-only"><a class="button" href="#get-it">Download</a></li>
+        </ul>
       </nav>
       <button type="button" class="button small quiet icon-button scheme" id="scheme" aria-label="Switch to Solstice Night" hidden>
         <svg class="to-day" hidden viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
@@ -47,6 +59,8 @@
       <a class="button small quiet repo" href="https://github.com/bogzxo/hex">GitHub</a>
       <a class="button small get" href="#get-it">Download</a>
     </div>
+    <!-- How far down the page you are, in Dawn's, Dusk's and Agentic's colours in turn -->
+    <span class="progress" aria-hidden="true"></span>
   </header>
 
   <main id="main">
@@ -56,128 +70,245 @@
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
         <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
+        <ul class="face-chips" aria-label="Hex's three faces, one program">
+          <li><a href="#features"><b>Dawn</b> the code editor</a></li>
+          <li class="dusk"><a href="#dusk"><b>Dusk</b> the terminal</a></li>
+          <li class="noon"><a href="#agents"><b>Agentic</b> your agents</a></li>
+        </ul>
         <div class="actions">
-          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.2 Amphetamine<!-- /release:button --></a>
-          <a class="button quiet" href="#numbers">Show me the receipts</a>
-          <a class="button quiet" href="https://github.com/bogzxo/hex">Source on GitHub</a>
-          <button type="button" class="button quiet" commandfor="request" command="show-modal">Request a feature</button>
+          <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.2.0 Amphetamine<!-- /release:button --></a>
+          <a class="button quiet" href="#next-to-the-other">Show me the receipts</a>
         </div>
-        <p class="note wip">Hex is a work in progress. More features are always on the way :)</p>
+        <p class="note wip"><a href="https://github.com/bogzxo/hex">Source on GitHub</a>. Hex is a work in progress, more features are always on the way, and you can <button type="button" class="link" commandfor="request" command="show-modal">request one</button> :)</p>
         </div>
 
         <div class="proof">
         <figure class="shot" style="margin-inline: 0">
           <!-- One picture a look, the stylesheet showing the one the page is in. A <source media> only knows the system's
                choice, never the switch's -->
-          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
-          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
+          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w, images/editor-3200.webp 3200w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
+          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w, images/light-3200.webp 3200w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
         </figure>
-        <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
+        <p class="note">Dawn, the editor. Semantic colours, hints, reference counts and blame, live from csharp-ls and git, not a mockup. It follows your system between Solstice and Solstice Day.</p>
 
-        <ul class="receipts" aria-label="Measured on the 3.1.0 build">
-          <li><b>516 ms</b><span>to Dusk's first frame, from a cold process</span></li>
-          <li><b>852 ms</b><span>to Dawn's, its window up at 456</span></li>
-          <li><b>49.3 MiB</b><span>zipped, all three faces and their assets</span></li>
-          <li><b>0</b><span>browsers shipped inside it</span></li>
+        <ul class="receipts" aria-label="Measured on the 3.3.0 build">
+          <li><b>56 ms</b><span>woken from sleep</span></li>
+          <li><b>381 ms</b><span>editor window, cold start</span></li>
+          <li><b>50.6 MiB</b><span>zipped, all three faces</span></li>
+          <li><b>0</b><span>browsers shipped inside</span></li>
         </ul>
         </div>
       </div>
     </div>
 
+    <section id="switch">
+      <div class="wrap">
+        <p class="eyebrow">Coming from another editor</p>
+        <h2>Switch without starting over</h2>
+        <p>Most of what your hands know comes over on the first day. The extensions don't, and that's where Hex is honestly behind: if your work lives in one marketplace extension, look for it in Hex's catalogue before you switch.</p>
+        <ul class="features row swipe" data-label="Coming from another editor">
+          <li>
+            <h3>Your keys already work</h3>
+            <p>The other editor's shortcuts are Hex's by default. Visual Studio's are one switch away.</p>
+          </li>
+          <li>
+            <h3>Your settings come with you</h3>
+            <p>Point Hex at your old editor's <code>settings.json</code>, yours and a folder's. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
+          </li>
+          <li>
+            <h3>The same language servers</h3>
+            <p>Hex speaks LSP to the servers you already rely on, eighteen declared from C# to Rust, set up one language at a time and only the ones you want.</p>
+          </li>
+          <li class="behind">
+            <h3>What doesn't come over</h3>
+            <p>The other editor's extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. Missing one? <button type="button" class="link" commandfor="request" command="show-modal">Request it</button>.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section id="numbers">
       <div class="wrap">
         <p class="eyebrow">Measured, not vibes</p>
-        <h2>Fast as fuck, with receipts</h2>
-        <p>Fresh measurements of <strong>Hex 3.1.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained. Taken on 18 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Ten launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
-
-        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn 852 milliseconds, ranging 821 to 1010. Dusk 516 milliseconds, ranging 484 to 534.">
-          <div><span>Dawn</span><i style="--ms: 852"></i><span><b>852 ms</b> <small>821–1010</small></span></div>
-          <div class="dusk"><span>Dusk</span><i style="--ms: 516"></i><span><b>516 ms</b> <small>484–534</small></span></div>
-        </div>
-
-        <div class="scroller rise" tabindex="0" role="region" aria-label="What was measured">
-          <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
-            <thead>
-              <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
-            </thead>
-            <tbody>
-              <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>852 ms</strong></td><td><strong>516 ms</strong></td></tr>
-              <tr><th scope="row">First-frame range, 10 launches each</th><td>821–1010 ms</td><td>484–534 ms</td></tr>
-              <tr><th scope="row">Process start to window shown, median</th><td>456 ms</td><td>389 ms</td></tr>
-              <tr><th scope="row">Idle working set, median</th><td><strong>201.4 MiB</strong></td><td><strong>117.2 MiB</strong></td></tr>
-              <tr><th scope="row">Idle CPU, median, of one logical core</th><td>2.96%</td><td>0.76%</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers. This is one machine, and a busy one. It's not a race rigged against somebody else's editor. <strong>Dawn got slower and I'm saying so:</strong> 2.8.0 measured 492 ms. 3.1 sets up a whole agent workspace before its first frame and it shows, don't like this regression? Disable AI through the global NoAI toggle. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method, raw samples and reproduction commands</a>.</p>
-
-        <div class="split">
+        <h2>Fast, with receipts</h2>
+        <!-- The words and their chart side by side where there's the room, one over the other where there isn't -->
+        <div class="pair">
           <div>
-            <h3>A game engine underneath. Seriously.</h3>
-            <p class="intro">Hex is C# compiled ahead of time to native code. No JIT warming up while you stare at a splash screen. The <a href="https://github.com/bogzxo/horizon">Horizon engine</a> draws the interface through <strong>Vulkan</strong>, with rendering on its own thread. On macOS, MoltenVK bridges that to Metal.</p>
-            <p class="intro">There's no DOM to lay out, no browser to haul around, and no reason a text editor should need either.</p>
+            <p class="intro">Hex is C# compiled ahead of time to native code and drawn through Vulkan by the <a href="https://github.com/bogzxo/horizon">Horizon engine</a>, a game engine, with no browser underneath.</p>
+            <p class="note">Measured on <strong>Hex 3.3.0 Amphetamine</strong>, the release coming next, on one ordinary Windows machine. The pictures on this page are of it too. How it was all taken is folded under the numbers.</p>
           </div>
-          <pre class="rise"><code><span class="d">// Hex.exe, start to first frame</span>
-<span class="t">main</span>                      <span class="s">16 ms</span>
-<span class="t">device made</span>              <span class="s">316 ms</span>
-<span class="t">window shown</span>             <span class="s">456 ms</span>
-<span class="t">scene set up</span>             <span class="s">797 ms</span>
-<span class="c">first frame of the scene</span> <span class="k">852 ms</span></code></pre>
+          <div>
+            <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
+              <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
+              <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
+            </div>
+            <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 660 ms (571–693), its window up at 381.</p>
+          </div>
         </div>
+
+        <div class="persistent pair">
+          <div>
+            <h3 class="numbers-head">Persistent Process. Closed isn't gone.</h3>
+            <p>Close the last window and Hex goes to sleep instead of quitting, so opening it again is a wake, not a launch. It's off by default, the switch is in Getting started on the welcome page.</p>
+            <p class="note">The window context and a minimally loaded engine are kept while the threads stay frozen, waiting for an open request.</p>
+          </div>
+          <div>
+            <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 366 milliseconds, ranging 320 to 461. Woken from sleep 56 milliseconds, ranging 40 to 201.">
+              <div><span>Cold</span><i style="--ms: 366"></i><span><b>366 ms</b> <small>320–461</small></span></div>
+              <div><span>Woken</span><i style="--ms: 56"></i><span><b>56 ms</b> <small>40–201</small></span></div>
+            </div>
+            <ul class="receipts rise" aria-label="Hex asleep">
+              <li><b>5 MiB</b><span>of RAM in use while it sleeps</span></li>
+              <li><b>0.08%</b><span>of one core, 16 ms of CPU in 20 s asleep</span></li>
+              <li><b>6.5×</b><span>sooner on screen woken than launched</span></li>
+            </ul>
+            <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
+          </div>
+        </div>
+
+        <h3 class="numbers-head" id="next-to-the-other">Next to the other editor</h3>
+        <p>You know the one, built on a browser. The same machine, with the same projects and files open, both with C# support: its current release with its C# kit, C#, Python, Jupyter and C++ extensions installed, Hex with its own C# server. Each opened three times in turn after a thrown-away launch, medians.</p>
+        <ul class="vs swipe rise" aria-label="Hex next to the other editor" data-label="Hex next to the other editor">
+            <li>
+              <h4>Ready, a small project</h4>
+              <p>Start to the editor on screen with the file open</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 536; --max: 1268"></i><b>536 ms</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1268; --max: 1268"></i><span>1,268 ms</span></div>
+            </li>
+            <li>
+              <h4>Ready, a large repository</h4>
+              <p>Horizon, 995 C# files and 193,000 lines</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 951; --max: 1547"></i><b>951 ms</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1547; --max: 1547"></i><span>1,547 ms</span></div>
+            </li>
+            <li>
+              <h4>Memory, a small project</h4>
+              <p>Every process of each, language servers included, 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 383; --max: 2629"></i><b>383 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 2629; --max: 2629"></i><span>2,629 MiB</span></div>
+            </li>
+            <li>
+              <h4>Memory, a large repository</h4>
+              <p>The same, on Horizon</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 473; --max: 3126"></i><b>473 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 3126; --max: 3126"></i><span>3,126 MiB</span></div>
+            </li>
+            <li>
+              <h4>CPU, a small project</h4>
+              <p>Of the whole processor, 12 threads, sat untouched 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 0.08; --max: 1.3"></i><b>0.08%</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1.3; --max: 1.3"></i><span>1.3%</span></div>
+            </li>
+            <li>
+              <h4>CPU, a large repository</h4>
+              <p>The same, on Horizon</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 0.12; --max: 9.2"></i><b>0.12%</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 9.2; --max: 9.2"></i><span>9.2%</span></div>
+            </li>
+            <li>
+              <h4>Processes</h4>
+              <p>Running on Horizon, 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 3; --max: 47"></i><b>3</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 47; --max: 47"></i><span>47</span></div>
+            </li>
+            <li>
+              <h4>On disk</h4>
+              <p>The program as installed, extensions and language servers aside</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 116; --max: 1092"></i><b>116 MiB</b></div>
+              <div class="vs-bar code"><span>The other one</span><i style="--v: 1092; --max: 1092"></i><span>1,092 MiB</span></div>
+            </li>
+        </ul>
+        <details class="fold">
+          <summary>Every measurement, and how they were taken</summary>
+          <p>Next to the other editor, Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then.</p>
+          <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
+          <div class="scroller" tabindex="0" role="region" aria-label="What was measured">
+            <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
+              <thead>
+                <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>660 ms</strong></td><td><strong>405 ms</strong></td></tr>
+                <tr><th scope="row">First-frame range, 6 launches each</th><td>571–693 ms</td><td>394–479 ms</td></tr>
+                <tr><th scope="row">Process start to window shown, median</th><td>381 ms</td><td>333 ms</td></tr>
+                <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>253.8 MiB</strong></td><td><strong>152.6 MiB</strong></td></tr>
+                <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>349.7 MiB</td><td>247.2 MiB</td></tr>
+                <tr><th scope="row">CPU at rest, median, of one logical core</th><td>2.09%</td><td>0.39%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
+        </details>
+
       </div>
     </section>
 
     <section id="gallery">
       <div class="wrap">
         <p class="eyebrow">Unedited, 1600 × 900</p>
-        <h2>Look at the bloody thing</h2>
-        <p>Every picture is the real Hex window. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
+        <h2>The real window, unedited</h2>
+        <p>Every picture is the real Hex window, most of them 3.3.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
-        <div class="gallery">
+        <div class="gallery swipe" data-label="Screenshots">
           <figure class="rise">
-            <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
-            <figcaption><b>Completion.</b> The language server's, as you type, every member in its own colour.</figcaption>
+            <a href="images/actions-3200.webp"><img src="images/actions-800.webp" srcset="images/actions-800.webp 800w, images/actions-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Stopwatch isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Diagnostics, at the top, then csharp-ls's refactorings to extract a method or generate the missing name"></a>
+            <figcaption><b><kbd>Ctrl+.</kbd></b> Every fix and refactoring for the line, the best one first.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
-            <figcaption><b>The web.</b> HTML, CSS and SCSS, with CSS completing inside a page's own <code>&lt;style&gt;</code>.</figcaption>
+            <a href="images/explorer-1600.webp"><img src="images/explorer-800.webp" srcset="images/explorer-800.webp 800w, images/explorer-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The explorer with mi typed into its find box, Mixer.cs found and outlined, a dot on the project folder for a change under it and a chain of single folders shown as one row"></a>
+            <figcaption><b>The explorer.</b> Type to find a file. Changes and problems are flagged on their folders.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
-            <figcaption><b>TypeScript.</b> TypeScript 7's own server, the native one: type errors as you go and members after a dot.</figcaption>
+            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" srcset="images/welcome-800.webp 800w, images/welcome-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
+            <figcaption><b>Welcome.</b> Open a folder and get to work. Setup is six steps, tracked for you.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/hover-1600.webp"><img src="images/hover-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
-            <figcaption><b>Hover.</b> Documentation where the pointer is.</figcaption>
+            <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" srcset="images/terminal-states-800.webp 800w, images/terminal-states-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
+            <figcaption><b>Shells that report their exit.</b> The exit code stays on screen and the tab is flagged.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/debug-1600.webp"><img src="images/debug-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
-            <figcaption><b>Debugging.</b> Stopped in Render, stack and locals beside it.</figcaption>
+            <a href="images/completion-3200.webp"><img src="images/completion-800.webp" srcset="images/completion-800.webp 800w, images/completion-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
+            <figcaption><b>Completion.</b> Straight from the language server as you type, coloured by kind.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/git-1600.webp"><img src="images/git-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
-            <figcaption><b>Git.</b> What changed, word by word, next to the commit box.</figcaption>
+            <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" srcset="images/webdev-800.webp 800w, images/webdev-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
+            <figcaption><b>The web.</b> HTML, CSS and SCSS, CSS included inside a page's <code>&lt;style&gt;</code>.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/search-1600.webp"><img src="images/search-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
+            <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" srcset="images/typescript-800.webp 800w, images/typescript-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
+            <figcaption><b>TypeScript.</b> TypeScript 7's native server: type errors and members as you type.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/hover-3200.webp"><img src="images/hover-800.webp" srcset="images/hover-800.webp 800w, images/hover-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
+            <figcaption><b>Hover.</b> Documentation under the pointer.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/debug-1600.webp"><img src="images/debug-800.webp" srcset="images/debug-800.webp 800w, images/debug-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
+            <figcaption><b>Debugging.</b> Breakpoints, stack and locals beside the code.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/git-3200.webp"><img src="images/git-800.webp" srcset="images/git-800.webp 800w, images/git-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
+            <figcaption><b>Git.</b> Word-level diffs next to the commit box.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/search-3200.webp"><img src="images/search-800.webp" srcset="images/search-800.webp 800w, images/search-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
             <figcaption><b>Search.</b> The whole workspace, grouped by file.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Jupyter notebook with a Markdown heading, two Python cells, a line of printed output and the top of two plots"></a>
-            <figcaption><b>Notebooks.</b> A real Python kernel, real plots.</figcaption>
+            <a href="images/notebook-3200.webp"><img src="images/notebook-800.webp" srcset="images/notebook-800.webp 800w, images/notebook-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
+            <figcaption><b>Notebooks.</b> Real kernels and typeset maths, with every cell timed.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
-            <figcaption><b>Markdown.</b> Tables and maths, drawn natively.</figcaption>
+            <a href="images/markdown-3200.webp"><img src="images/markdown-800.webp" srcset="images/markdown-800.webp 800w, images/markdown-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
+            <figcaption><b>Markdown.</b> Tables and maths, rendered natively.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/designer-1600.webp"><img src="images/designer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
-            <figcaption><b>Designer.</b> Hex's own welcome page, open in Hex.</figcaption>
+            <a href="images/designer-1600.webp"><img src="images/designer-800.webp" srcset="images/designer-800.webp 800w, images/designer-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
+            <figcaption><b>Designer.</b> Hex's own welcome page, edited in Hex.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used chips under it, the sections down the left, and each setting with what sets it right beside what it says"></a>
-            <figcaption><b>Settings.</b> Searchable, and one press shows only what you changed.</figcaption>
+            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" srcset="images/settings-800.webp 800w, images/settings-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used under it, the sections down the left, and each setting saying in a line what it does"></a>
+            <figcaption><b>Settings.</b> Every setting explained in one line. One click shows what you changed.</figcaption>
           </figure>
         </div>
       </div>
@@ -186,31 +317,111 @@
     <section id="features">
       <div class="wrap">
         <p class="eyebrow">Dawn, the editor</p>
-        <h2>Lightweight doesn't mean “does fuck all”</h2>
-        <ul class="features">
-          <li class="rise">
+        <h2>Lightweight doesn't mean bare</h2>
+        <ul class="features swipe" data-label="What the editor does">
+          <li class="rise flip">
             <h3>Code</h3>
-            <p>Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them: TypeScript 7's native server, and VS Code's own for HTML, CSS and JSON, each file going to one of them so nothing is said twice.</p>
+            <div class="faces">
+              <div class="face front">
+                <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-code">More<span class="visually-hidden"> about Code</span></button>
+              </div>
+              <div class="face back" id="more-code">
+                <p>Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Code</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
+            <h3><kbd>Ctrl+.</kbd> and it's sorted</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>One menu of everything that can be done to the line or the selection.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-ctrl-and-it-s-sorted">More<span class="visually-hidden"> about Ctrl+. and it's sorted</span></button>
+              </div>
+              <div class="face back" id="more-ctrl-and-it-s-sorted">
+                <p>The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Ctrl+. and it's sorted</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
             <h3>Git</h3>
-            <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls. Keep the context next to the code instead of juggling windows to find out what you changed.</p>
+            <div class="faces">
+              <div class="face front">
+                <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-git">More<span class="visually-hidden"> about Git</span></button>
+              </div>
+              <div class="face back" id="more-git">
+                <p>Keep the context next to the code instead of juggling windows to find out what you changed.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Git</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
-            <h3>Find your shit</h3>
-            <p>Quick Open, a command palette of 360 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.</p>
+          <li class="rise flip">
+            <h3>Find anything</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-find-your-shit">More<span class="visually-hidden"> about Find anything</span></button>
+              </div>
+              <div class="face back" id="more-find-your-shit">
+                <p>Import your old editor's settings instead of rebuilding your preferences by hand.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Find anything</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Run, debug and test</h3>
-            <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches. .NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
+            <div class="faces">
+              <div class="face front">
+                <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-run-debug-and-test">More<span class="visually-hidden"> about Run, debug and test</span></button>
+              </div>
+              <div class="face back" id="more-run-debug-and-test">
+                <p>.NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Run, debug and test</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
-            <h3>Documents that do things</h3>
-            <p>Jupyter notebooks with real kernels and outputs; native Markdown previews with tables and maths. Kernels are separate tools, not secretly bundled into the download number.</p>
+          <li class="rise flip">
+            <h3>Notebooks for engineers</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Jupyter notebooks with real kernels, typeset maths and plots.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-notebooks-for-engineers">More<span class="visually-hidden"> about Notebooks for engineers</span></button>
+              </div>
+              <div class="face back" id="more-notebooks-for-engineers">
+                <p>Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Notebooks for engineers</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Build interfaces</h3>
-            <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source. Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+            <div class="faces">
+              <div class="face front">
+                <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-build-interfaces">More<span class="visually-hidden"> about Build interfaces</span></button>
+              </div>
+              <div class="face back" id="more-build-interfaces">
+                <p>Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Build interfaces</span></button>
+              </div>
+            </div>
+          </li>
+          <li class="rise flip">
+            <h3>Usable by everyone</h3>
+            <div class="faces">
+              <div class="face front">
+                <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-usable-by-everyone">More<span class="visually-hidden"> about Usable by everyone</span></button>
+              </div>
+              <div class="face back" id="more-usable-by-everyone">
+                <p>Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Usable by everyone</span></button>
+              </div>
+            </div>
           </li>
         </ul>
       </div>
@@ -219,12 +430,15 @@
     <section id="dusk" class="dusk">
       <div class="wrap">
         <p class="eyebrow">Dusk, the terminal</p>
-        <h2>Dusk. A whole fucking terminal.</h2>
-        <p>Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
+        <h2>Dusk. A whole terminal.</h2>
+        <div class="pair even">
+        <p class="intro">Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
+        <p class="intro">A shell that failed keeps its pane and its exit code, so you can read why. The first Dusk of a run opens in about 30 ms, and going between the faces is a short crossfade, never a flash.</p>
+        </div>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
         </figure>
-        <p class="note">PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.</p>
+        <p class="note">PowerShell running a showcase script: real files, real Git history, full ANSI colour.</p>
       </div>
     </section>
 
@@ -246,35 +460,35 @@
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: a Claude Code chat working on Hex itself, its card on the left with a Working badge, the chat in the middle with its tool calls, Changes and Plan tabs with their counts as badges, and on the right its model, tokens, cost, context, limits, how many times it used each tool and the files it touched">
         </figure>
-        <p class="note">Claude Code at work on Hex itself, the chat that built this release. The badges say how each agent is doing, what changed and how far its plan has got.</p>
+        <p class="note">Claude Code building this release, inside Hex. Badges show each agent's state, its changes and its plan's progress.</p>
 
-        <div class="gallery pairs">
+        <div class="gallery pairs swipe" data-label="Agentic screenshots">
           <figure class="rise">
-            <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
-            <figcaption><b>The Inbox.</b> Everything any agent is waiting on you for, in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
+            <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" srcset="images/agentic-inbox-800.webp 800w, images/agentic-inbox-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
+            <figcaption><b>The Inbox.</b> Every pending agent request in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
-            <figcaption><b>Changes you can take back.</b> Every turn is checkpointed. Keep or undo each hunk, or restore the whole turn.</figcaption>
+            <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" srcset="images/agentic-review-800.webp 800w, images/agentic-review-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
+            <figcaption><b>Every change reversible.</b> Each turn checkpointed. Keep or undo a hunk, or restore the turn.</figcaption>
           </figure>
         </div>
 
-        <ul class="features row">
+        <ul class="features row swipe" data-label="Agentic">
           <li class="rise">
             <h3>The fleet</h3>
-            <p>Every chat is a card: its agent system, model, tokens, cost, what it's doing right now and a thin bar of how full its context is.</p>
+            <p>Every chat is a card: its model, tokens, cost, what it's doing and how full its context is. Finished agents fold into a Finished group a few minutes after they end, so the ones waiting on you stay on top.</p>
           </li>
           <li class="rise">
             <h3>Agents that start agents</h3>
-            <p>One chat can start others, of any system and model, and they sit under it a step in. It waits for them and reports for all.</p>
+            <p>One chat can start others, of any system and model, and they sit under it a step in. Twelve can run at once. It waits for them and reports for all.</p>
           </li>
           <li class="rise">
-            <h3>Details, down to the cent</h3>
-            <p>Turns, tokens in and out, cost, how much came from the cache, your plan's limits, which tools went through Hex and the files it touched.</p>
+            <h3>Stuck? Start it again</h3>
+            <p><code>hex_agent_restart</code> kills a stuck agent along with whatever it had running and starts it again where it was. A chat whose process outlived its turn says it's still running.</p>
           </li>
           <li class="rise">
-            <h3>One method, not the whole bloody file</h3>
-            <p>Over MCP Hex exposes <strong>71 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals. Off until you enable it.</p>
+            <h3>One method, not the whole file</h3>
+            <p>Over MCP Hex exposes <strong>80 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
           </li>
           <li class="rise">
             <h3>86% that never went near a context window</h3>
@@ -284,7 +498,7 @@
 
         <h3 class="harness-head">The harness: answers, not file dumps</h3>
         <p>An agent's bill on an existing <strong>massive</strong> codebase is mostly what it reads. Hex keeps a live index of the workspace and answers an agent from it in <code>path:line</code>, so the agent gets the lines it asked about instead of a grep's worth of noise or a 3,000-line file for one method. These are the real tools, and Hex counts the input tokens each one saved in a window of its own.</p>
-        <dl class="harness">
+        <dl class="harness swipe" data-label="The harness's tools">
           <div><dt><code>hex_map</code></dt><dd>The folders a few levels down, the languages in each and the main types they declare. Where to start in a codebase it's never seen.</dd></div>
           <div><dt><code>hex_symbols</code></dt><dd>Where a name is declared, ranked: exact first, then by its capitals (<code>QM</code> finds <code>QueueMcp</code>). One line a hit.</dd></div>
           <div><dt><code>hex_search</code></dt><dd>Text or a regex across the workspace, ranked and grouped by file, lines cut to the match. In place of grep, rg and Select-String.</dd></div>
@@ -305,23 +519,23 @@
       <div class="wrap">
         <p class="eyebrow">Appearance</p>
         <h2>Make it look how you want</h2>
-        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, or float the panels in glass. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
-        <div class="gallery pairs">
+        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen.</p>
+        <div class="gallery pairs swipe" data-label="Looks">
           <figure class="rise">
-            <a href="images/light-1600.webp"><img src="images/light-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
+            <a href="images/light-3200.webp"><img src="images/light-800.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
             <figcaption><b>Solstice Day.</b> For a bright room.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/graphite-1600.webp"><img src="images/graphite-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Graphite, a neutral dark grey"></a>
+            <a href="images/graphite-3200.webp"><img src="images/graphite-800.webp" srcset="images/graphite-800.webp 800w, images/graphite-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Graphite, a neutral dark grey"></a>
             <figcaption><b>Graphite.</b> Quiet.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating with a blue accent"></a>
-            <figcaption><b>Fluid Glass.</b> Panels that float.</figcaption>
+            <a href="images/glass-3200.webp"><img src="images/glass-800.webp" srcset="images/glass-800.webp 800w, images/glass-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating over a dark blue with a blue accent"></a>
+            <figcaption><b>Fluid Glass.</b> Floating panels.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/sunset-1600.webp"><img src="images/sunset-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Sunset theme, a warm plum with rounded panels"></a>
-            <figcaption><b>Sunset.</b> Something warmer.</figcaption>
+            <a href="images/visual-studio-3200.webp"><img src="images/visual-studio-800.webp" srcset="images/visual-studio-800.webp 800w, images/visual-studio-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Visual Studio look, a neutral dark grey with blue file icons"></a>
+            <figcaption><b>Visual Studio.</b> For the muscle memory.</figcaption>
           </figure>
         </div>
         <p class="note">Same code, different mood.</p>
@@ -335,7 +549,7 @@
         <div class="nots">
           <div class="rise">
             <h3>It doesn't track you</h3>
-            <p>No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code. It does make network requests for features that need them: update checks, changelogs, extension, debugger and language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that <code>git fetch</code> works by fucking magic.</p>
+            <p>No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code. It does make network requests for features that need them: update checks, changelogs, extension, debugger and language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that <code>git fetch</code> works by magic.</p>
           </div>
           <div class="rise">
             <h3>It doesn't require an installer</h3>
@@ -347,53 +561,58 @@
 
     <section id="get-it">
       <div class="wrap">
-        <p class="eyebrow"><!-- release:title -->Hex 3.1.2 Amphetamine<!-- /release:title --></p>
+        <p class="eyebrow"><!-- release:title -->Hex 3.2.0 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
-        <p>Pick your machine. <strong>Setup</strong> handles installation, shortcuts and updates. <strong>Portable</strong> is a ZIP you unpack and run. Neither needs a separate .NET installation.</p>
-        <div class="scroller downloads" tabindex="0" role="region" aria-label="Downloads">
-          <table style="--label-2: 'Setup'; --label-3: 'Portable'">
-            <thead>
-              <tr><th scope="col">System</th><th scope="col">Setup</th><th scope="col">Portable</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">Windows</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe">ARM64</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip">ARM64</a></td>
-              </tr>
-              <tr>
-                <th scope="row">Linux</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip">ARM64</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip">ARM64</a></td>
-              </tr>
-              <tr>
-                <th scope="row">macOS</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip">Intel</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip">Intel</a></td>
-              </tr>
-            </tbody>
-          </table>
+        <p>One download, nothing else to install, not even .NET. Setup adds shortcuts and keeps Hex up to date; Portable is a ZIP you unpack and run.</p>
+
+        <!-- The button for the system the page is opened on, put together by site.js from the cards under it -->
+        <div class="get-yours" hidden>
+          <a class="button big" href="#get-it"></a>
+          <p class="note"></p>
         </div>
-        <p class="note">Windows needs 10 1809 or newer. Linux needs a Vulkan loader and driver. macOS needs 11 or newer; the build is unsigned, so <code>xattr -dr com.apple.quarantine /path/to/Hex</code> if macOS blocks it. <a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
+
+        <ul class="platforms">
+          <li class="platform" data-os="windows">
+            <h3>Windows</h3>
+            <p>Windows 10 1809 or newer.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe" data-arch="arm64">ARM64</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip" data-arch="arm64">ARM64</a></div>
+          </li>
+          <li class="platform" data-os="mac">
+            <h3>macOS</h3>
+            <p>macOS 11 or newer. The build is unsigned: if macOS blocks it, run <code>xattr -dr com.apple.quarantine /path/to/Hex</code>.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip" data-arch="x64">Intel</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip" data-arch="x64">Intel</a></div>
+          </li>
+          <li class="platform" data-os="linux">
+            <h3>Linux</h3>
+            <p>A Vulkan loader and driver.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip" data-arch="arm64">ARM64</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip" data-arch="arm64">ARM64</a></div>
+          </li>
+        </ul>
+        <ul class="more-links">
+          <li><a href="https://github.com/bogzxo/hex/releases">All releases</a></li>
+          <li><a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a></li>
+          <li><a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></li>
+        </ul>
         <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
-        <div class="whats-new"><!-- release:notes -->
-<h3>What's new in 3.1.2 Amphetamine</h3>
-<p>Badges in Agentic, a settings window that finds what you changed, a welcome page that fills the window, and a lot that feels quicker.</p>
-<details><summary>Everything in 3.1.2</summary><h4>Agentic</h4>
-<ul><li>each agent's card says how it's doing on a badge, Working in blue with a beating dot, Failed in red, a finished chat you haven't seen in the accent</li><li>the tabs' counts are badges, Inbox's in the accent, the Plan's green once every step is done, and the Plan's bar is green the whole way rather than going red at 100%</li><li>Details counts each tool on a badge in the tool's colour</li><li>/ commands complete wherever the word is in the box, Tab takes only that word, Enter sends a command written out in full, and a message that starts with a slash is sent as a message</li><li>the list of / commands walks with held arrow keys, Up goes up it rather than closing it, and it scrolls smoothly past its first page</li><li>a picture opened full screen zooms round the pointer and keeps the part you dragged to in sight</li><li>agents can read git's diff of a file and see which files other chats' plans are about to change</li></ul>
+        <div class="whats-new"><!-- release:notes --><h3>What's new in 3.2.0 Amphetamine</h3>
+<p>Sharper text, a Hex that stays ready in the background, and agents that share their servers, keep their data in one place and get eight new tools.</p>
+<details><summary>Everything in 3.2.0</summary><h4>text</h4>
+<ul><li>letters are made at the size they're drawn instead of out of a distance field, their x height and baseline on whole pixels, so text at 100% and 125% is crisp where it was soft</li><li>subpixel smoothing the way Windows' ClearType draws it, on a screen under 150% when Windows has ClearType on, grey on Mac, Linux, phones and Retina screens; Text smoothing in Settings picks auto, subpixel or grayscale</li><li>text no longer steps at its edges while a window slides or fades in</li><li>one interface size for the whole of Hex, the title bar and its menus included, on top of the screen's own scale; View, Interface Size and Settings pick it, and the code's zoom and the terminal's font go on top of it</li></ul>
 <h4>the editor</h4>
-<ul><li>the settings window has All, Modified and Commonly used under its search, a press each; what sets a setting sits beside what it says, the key shows when you look at a row, and a changed setting has a dot</li><li>the welcome page uses the whole window, three columns on a wide one, with Getting started for the settings nobody finds by looking</li><li>spelling is checked as you type in comments, text, Markdown and page words, never code</li><li>notification cards slide, fade and make room smoothly instead of jumping</li><li>No AI in Settings or <code>--no-ai</code> leaves the agents out altogether</li></ul>
-<h4>languages</h4>
-<ul><li>the Language Servers window sets up each language a step at a time, and says every server is optional, set up only the ones you want</li><li>a notebook's code cells are read by its language's server, so a missing import is underlined</li><li>servers that wait to be asked what's wrong with a file (TypeScript 7's) are asked</li></ul></details>
-<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.1.2">The release on GitHub</a></p>
-<!-- /release:notes --></div>
+<ul><li>Persistent Process in Settings (and Speed on the welcome page): closing the window puts Hex to sleep instead of quitting, a few MB of memory and no CPU, and opening Hex again shows a window in well under a second; File, Exit still quits</li><li>Start with Windows starts Hex asleep when you sign in, so the first window is as quick as the rest</li><li>Hex starts quicker, the first frame sooner and the work that can wait done a moment after</li><li>a file with a line a fifth of a megabyte long (an agent's chat saved as JSON) opens and scrolls at once, coloured all along</li><li>every right-click menu is grouped and short enough to read, what throws something away last and in the error colour, the Run menu split into the session, stepping and what's looked at</li><li>a workspace whose .gitignore leaves out the repositories cloned into it has their code indexed again</li><li>the About box shows Hex's icon again</li><li>closing the window while it was idle no longer skips asking about unsaved changes</li><li>the usage limits shown for Claude are the latest it said, and a limit that's been reached shows 100%</li><li>keys that clashed (Properties and Agentic's fleet, Allow and Deny) only answer where they mean something</li><li>many places do less work each frame, and work that blocked the window happens beside it</li></ul>
+<h4>Agentic</h4>
+<ul><li>the Plan tab is a plan to work from: what's being done now, what needs you, what's next, the steps done folded away, filters, a step's note, files and owner a click away, and steps you add, edit, reorder or drop reach the agent</li><li>a chat's title is renamed in place on its card, from its menu, F2 or a double click</li><li>Agent Data in the Agents menu and at the foot of Agentic says how much the chats, pictures and the agents' files take, and clears old chats, pictures nothing mentions and temporary files; it all lives in a data folder next to Hex</li><li>Claude Code agents share Hex's servers instead of each starting its own: one Roslyn navigator for a workspace, no language servers of their own, a gigabyte less for every agent running</li><li>new tools for agents, in any language with a language server: callers and callees a few levels deep, implementations, type hierarchies, a rename across every file at once, a line's fixes, a file's errors, a declaration replaced by name and the projects and what uses what; hex_edit and hex_write answer with the file's errors after</li><li>an agent can show you pictures in the chat, and a tool's row opens or reveals the files it was given from its menu</li><li>the thinking dots no longer make the chat jump</li><li>Claude Code's chat carries on after a /compact instead of failing</li><li>the setting that keeps Claude Code on Hex's tools says plainly what each choice does</li></ul></details>
+<p class="note"><a href="https://github.com/bogzxo/hex/releases/tag/v3.2.0">The release on GitHub</a></p><!-- /release:notes --></div>
       </div>
     </section>
 
     <section id="build">
       <div class="wrap">
         <p class="eyebrow">From source</p>
-        <h2>Build the bloody thing</h2>
+        <h2>Build it from source</h2>
         <p>Use the SDK in <code>global.json</code>, currently a .NET 11 release candidate. A standalone checkout needs Horizon's <code>development</code> branch as well as Hex's extensions.</p>
         <pre class="rise" style="margin-block-start: var(--gap)"><code><span class="c">git</span> clone --branch development --recursive https://github.com/bogzxo/hex.git
 <span class="c">cd</span> hex
@@ -428,7 +647,7 @@
   <footer class="end">
     <div class="wrap">
       <span>Hex, by <a href="https://github.com/bogzxo">bogzxo</a>. Drawn in Solstice, like the editor.</span>
-      <span>No analytics. No cookies. No web fonts. It's a static HTML5 page, following modern web-dev practices.</span>
+      <span>No analytics. No cookies. No web fonts. It's a static HTML5 page, following modern web-dev practices. Inspired by <a href="https://modernmotherfuckingwebsite.dreamstation.systems/" target="_blank">modernmotherfuckingwebsite</a> :3</span>
     </div>
   </footer>
 

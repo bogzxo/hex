@@ -94,7 +94,7 @@ internal sealed partial class DawnScene
     {
         string[] fonts = Array.Find(EditorSettingsCatalog.Settings, row => row.Key == "code_font")?.Choices ?? [];
         List<ISettingsSource> sources = ImportSources();
-        var rows = new List<ImportRow>();
+        List<ImportRow> rows = [];
         foreach (VsCodeSetting setting in VsCodeSettings.Plan(read, fonts))
         {
             // The first source that has the key sets it, the same one its row in the window is
@@ -122,7 +122,7 @@ internal sealed partial class DawnScene
         if (textDialog is { IsOpen: true })
             textDialog.Close();
 
-        var toggles = new List<(ToggleButton Toggle, ImportRow Row)>();
+        List<(ToggleButton Toggle, ImportRow Row)> toggles = [];
         List<ImportRow> Ticked() => [.. toggles.Where(pair => pair.Toggle.State).Select(pair => pair.Row)];
 
         UIDialog dialog = UIDialog.Show(chrome, Said(workspace ? "settings_import.title_workspace" : "settings_import.title"),

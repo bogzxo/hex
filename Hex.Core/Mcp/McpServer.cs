@@ -189,7 +189,8 @@ internal sealed class McpServer(IMcpTools tools, string name, string version, st
         if (called is null || tools.Tools.FirstOrDefault(tool => tool.Name == called) is not { } tool)
             return McpProtocol.Error(id, McpProtocol.INVALID_PARAMS, called is null ? "tools/call needs the name of a tool." : $"There's no tool called {called}, tools/list has them.");
 
-        JsonObject arguments = parameters["arguments"] as JsonObject ?? [];
+        // The names a model guesses (file_path for path, name for symbol) put right before they're checked
+        JsonObject arguments = McpSchema.Normalize(tool.InputSchema, parameters["arguments"] as JsonObject ?? []);
         if (McpSchema.Check(tool.InputSchema, arguments) is { } wrong)
             return McpProtocol.Result(id, McpToolResult.Error($"{called} can't take those arguments. {wrong}").ToJson());
 

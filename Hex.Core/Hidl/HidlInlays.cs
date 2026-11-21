@@ -5,7 +5,7 @@ namespace Hex.Core;
 
 /// <summary>
 /// HIDL's inlay hints, the name of the parameter each argument of a call goes to, for the functions a file declares
-/// itself (func name(a, b), let name = func(a, b), let name = (a, b) =&gt; or let name = a =&gt;). A parameter with a default
+/// itself (func name(a, b), let name = func(a, b), let name = (a, b) => or let name = a =>). A parameter with a default
 /// (b = 2) still says its name. An argument that's already a name the same as its parameter goes without, it'd only say
 /// the same thing twice. Worked out from the tokens, so a file halfway through being typed still gets what can be made
 /// out of it.

@@ -109,7 +109,7 @@ internal sealed partial class HexCodeEditing
     /// </summary>
     private void RenameByWords(HexDocument here, string name, string renamed, bool codeOnly = false)
     {
-        if (renamed.Length == 0 || renamed == name || !Regex.IsMatch(renamed, "^[A-Za-z_][A-Za-z0-9_]*$"))
+        if (renamed.Length == 0 || renamed == name || !IsName.IsMatch(renamed))
         {
             context.Notices.Say(context.Strings.Said("code_hints.not_a_name", ("renamed", renamed)), error: true);
             return;
@@ -137,6 +137,12 @@ internal sealed partial class HexCodeEditing
                 new DialogChoice(context.Strings.Said("keys.leave_it")));
         }, quiet: true);
     }
+
+    // A whole text that is a name, and the key a value is being written to at the end of a line
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
+    private static partial Regex IsName { get; }
+    [GeneratedRegex(@"([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*$")]
+    private static partial Regex KeyBefore { get; }
 
     // A name as a word of its own
     private static string NamePattern(string name) => $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}(?![A-Za-z0-9_])";
@@ -298,7 +304,7 @@ internal sealed partial class HexCodeEditing
     {
         string line = code.Document.LineAt(swatch.Line);
         string before = line[..Math.Min(swatch.Column, line.Length)];
-        Match key = Regex.Match(before, @"([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*$");
+        Match key = KeyBefore.Match(before);
         string where = (swatch.Line + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
         return key.Success
             ? context.Strings.Said("code_hints.colour_text_key", ("key", key.Groups[1].Value), ("line", where))

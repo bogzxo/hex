@@ -54,6 +54,7 @@ internal static class VsCodeSettings
         ("files.exclude", "files_exclude", Patterns),
         ("search.exclude", "search_exclude", Patterns),
         ("search.useIgnoreFiles", "search_use_ignore_files", Flag),
+        ("explorer.autoReveal", "explorer_auto_reveal", Flag),
         ("git.autofetch", "git_autofetch", Flag),
         ("git.confirmSync", "git_confirm_sync", Flag),
         ("git.enableSmartCommit", "git_smart_commit", SmartCommit),

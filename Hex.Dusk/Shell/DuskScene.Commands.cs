@@ -40,8 +40,10 @@ internal sealed partial class DuskScene
                 continue;
 
             bool down = keyboard.IsDown(key.Key) && control == key.Control && shift == key.Shift && alt == key.Alt;
-            bool pressed = down && !keysDown.Contains(command);
-            if (down) keysDown.Add(command); else keysDown.Remove(command);
+            // Add says whether it wasn't held already, and with nothing held there's nothing to let go of
+            bool pressed = down && keysDown.Add(command);
+            if (!down && keysDown.Count > 0)
+                keysDown.Remove(command);
 
             // A terminal gets its keys through the panel, a text box keeps them to itself and so does the picture being laid out
             if (pressed && !typing && chrome.Dialog is null)

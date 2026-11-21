@@ -76,7 +76,8 @@ internal sealed partial class DawnScene
         });
 
         test.Run(() => explorer.MakeFile(Path.Combine(folderB, "made.hor")));
-        test.Wait();
+        // Its row comes with the next read of the folder, a few frames on an idle machine and more on a busy one
+        test.WaitFor(() => document.Path == Path.Combine(folderB, "made.hor") && explorer.explorerRows.Any(row => row.Path.EndsWith("made.hor")), 5.0f);
         test.Check("workspace: a file made in a folder is there and open", () =>
             System.IO.File.Exists(Path.Combine(folderB, "made.hor")) && document.Path == Path.Combine(folderB, "made.hor") && explorer.explorerRows.Any(row => row.Path.EndsWith("made.hor")));
 

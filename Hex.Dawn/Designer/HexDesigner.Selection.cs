@@ -291,9 +291,15 @@ internal sealed partial class HexDesigner
         UIComponent container = document.Selected?.Parent ?? document.Module.Root;
 
         Select(null);
+
+        // What the designer counts as the layout's, walked once rather than once for every child
+        var walked = new HashSet<UIComponent>(ReferenceEqualityComparer.Instance);
+        foreach (var (component, _) in document.Walk())
+            walked.Add(component);
+
         foreach (var component in container.Children)
         {
-            if (document.Walk().Any(pair => pair.Component == component))
+            if (walked.Contains(component))
                 document.ToggleSelected(component);
         }
 

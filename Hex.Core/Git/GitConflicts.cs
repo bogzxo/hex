@@ -3,7 +3,7 @@ namespace Hex.Core.Git;
 /// <summary>
 /// A block a merge left in a file for somebody to decide, by the lines its markers are on. Current (ours, HEAD) is between
 /// the <c>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</c> and the <c>=======</c>, incoming (theirs) between that and the
-/// <c>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</c>, and with diff3 the common ancestor's after a <c>|||||||</c> in the first half.
+/// <c>>>>>>>></c>, and with diff3 the common ancestor's after a <c>|||||||</c> in the first half.
 /// </summary>
 /// <param name="Base">The line of the <c>|||||||</c>, -1 when there's none.</param>
 internal readonly record struct GitConflict(int Start, int Base, int Middle, int End)

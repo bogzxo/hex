@@ -51,7 +51,8 @@ internal sealed partial class DawnScene
             Problems),
 
         new(new McpTool("hex_outline", "Outline",
-            "List what the current file declares (functions, types, values) with their lines, the way the outline shows them.", McpSchema.Empty(), ReadOnly: true),
+            "List what a file declares (functions, types, values) with their lines, the way the outline shows them, the current file's when path isn't said.",
+            McpSchema.Object([("path", McpSchema.String("The file, the current one by default. It needn't be open."))]), ReadOnly: true),
             Outline),
 
         new(new McpTool("hex_find_in_files", "Find in files",
@@ -233,8 +234,27 @@ internal sealed partial class DawnScene
 
     private IEnumerable<McpToolResult?> Outline(JsonObject arguments)
     {
-        List<OutlineEntry> entries = OutlineHere();
-        var said = new StringBuilder($"The outline of {McpWhere(document)}, {entries.Count} entries.\n");
+        List<OutlineEntry> entries;
+        string where;
+        if (arguments.String("path") is { Length: > 0 } path && McpPath(path) is var full && !(document?.Path is { } current && PlatformPaths.Same(current, full)))
+        {
+            // A file not the current one, outlined from its text in the editor or on the disk
+            string? text = Context.Documents.Find(full) is { } open ? open.Editor.Text : File.Exists(full) ? File.ReadAllText(full) : null;
+            if (text is null)
+            {
+                yield return McpToolResult.Error($"There's no file {full}.");
+                yield break;
+            }
+            entries = HexOutline.Outline(text, full);
+            where = full;
+        }
+        else
+        {
+            entries = OutlineHere();
+            where = McpWhere(document);
+        }
+
+        var said = new StringBuilder($"The outline of {where}, {entries.Count} entries.\n");
         foreach (OutlineEntry entry in entries)
             said.Append(' ', Math.Min(entry.Depth, 10) * 2).Append($"{entry.Name}  ({entry.Icon.Replace("symbol-", string.Empty)}, line {entry.Line + 1})\n");
 

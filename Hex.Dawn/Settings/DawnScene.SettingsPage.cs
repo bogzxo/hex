@@ -233,7 +233,7 @@ internal sealed partial class DawnScene
     /// <summary>The skins and themes the designer can show a layout in, as the window lists them.</summary>
     private static List<(UISkinChoice Skin, string? Theme, string Text)> LayoutSkins()
     {
-        var all = new List<(UISkinChoice, string?, string)>();
+        List<(UISkinChoice, string?, string)> all = [];
         foreach (UISkinChoice skin in UISkins.Available)
         {
             if (skin.Themes.Count == 0)
@@ -313,6 +313,8 @@ internal sealed partial class DawnScene
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "mcp_server" => Values.Bool(hex.settings.McpServer),
             "no_ai" => Values.Bool(hex.settings.NoAi),
+            "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
+            "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
             "debugger_path" => new StringValue(hex.settings.DebuggerPath),
             "backdrop" => Values.Bool(hex.settings.BackdropOn),
             "backdrop_terminal" => Values.Bool(hex.settings.BackdropTerminal),
@@ -482,7 +484,13 @@ internal sealed partial class DawnScene
                     settings.McpServer = agents.Value;
                     hex.ApplyMcp();
                     break;
-                case ("no_ai", BooleanValue noAi):
+                case ("agents_resume_after_limit", BooleanValue resume):
+                settings.AgentsResumeAfterLimit = resume.Value;
+                break;
+                case ("agents_auto_settle_seconds", NumberValue settle):
+                    settings.AgentsAutoSettleSeconds = (int)Math.Clamp(MathF.Round(settle.Value), 0.0f, 3600.0f);
+                    break;
+            case ("no_ai", BooleanValue noAi):
                     settings.NoAi = noAi.Value;
                     hex.NoAiChanged();
                     break;

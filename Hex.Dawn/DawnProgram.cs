@@ -188,6 +188,12 @@ public static partial class DawnProgram
         // The editor lays itself out to whatever window it gets, so it takes all there is
         Vector2? size = ParseSize(ValueOf(args, ARGUMENT_SIZE));
 
+        // A self test runs as a game to be paced, and a game opens the speakers: their thread clearing a silent buffer
+        // every couple of milliseconds was a quarter of what agentic-perf measured of an idle editor. An editor has no
+        // sound, so neither has its self test
+        if (selfTest)
+            Environment.SetEnvironmentVariable("HORIZON_AUDIO", "off");
+
         using var engine = new GameEngine(GameEngineConfiguration.Default with
         {
             // A text editor, nobody plays it with a controller
@@ -201,7 +207,7 @@ public static partial class DawnProgram
                 CustomFrame = true,
                 // Drawn at the scale of whatever screen it's on like any other program, a self test the same size anywhere
                 ScaleToDisplay = !selfTest,
-                AppId = "hex-dawn",
+                AppId = HexIdentity.WindowIdOf(HexMode.Dawn),
 
 
                 Mode = selfTest && !nativeShortcuts ? RunMode.Game : RunMode.Application,
@@ -218,11 +224,14 @@ public static partial class DawnProgram
         // F12 is go to definition, the engine took a screenshot with it as well and left a folder of them by Hex.exe
         engine.ScreenshotKey = null;
 
+        // The frame or two before the editor draws is the ground of Hex's own dark look, not the engine's night blue
+        engine.LoadingScreen.Color = HexIdentity.LOADING_COLOR;
+
         Horizon.Core.Diagnostics.StartupTrace.Mark("engine made");
 
         // The terminal in the same window, Ctrl+Alt+Shift+D, when Hex.exe says how to make it. Not in a self test, which
         // is the one mode and nothing else, unless it asks for the suite that goes between the two
-        bool bothTested = selfTest && options.Suites?.Contains("dusk-noon", StringComparer.Ordinal) == true;
+        bool bothTested = selfTest && options.Suites?.Any(suite => suite is "dusk-noon" or "face-switch") == true;
         DawnScene MakeEditor(HexOptions with)
         {
             var editor = new DawnScene(with);

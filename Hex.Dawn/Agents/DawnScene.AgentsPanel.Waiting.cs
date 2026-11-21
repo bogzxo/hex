@@ -30,8 +30,8 @@ internal sealed partial class DawnScene
         HexAgentEntry? waiting = chat is not { HasPending: true } ? null
             : HexAgentHub.Approvals(chat).FirstOrDefault() ?? chat.FirstPending(HexAgentEntryKind.Question);
         int others = 0;
-        foreach (HexAgentChat each in agentChats)
-            if (each != chat && each.HasPending)
+        for (int i = 0; i < agentChats.Count; i++)
+            if (agentChats[i] != chat && agentChats[i].HasPending)
                 others++;
         var now = (chat?.Id ?? -1, waiting, others, (int)agentsView.Size.X);
         if (now == agentsWaitStripDrawn)

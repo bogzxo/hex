@@ -81,8 +81,7 @@ internal sealed class McpProcessUpstream : IMcpUpstream
         {
             foreach (string line in outgoing.GetConsumingEnumerable())
             {
-                input.Write(Encoding.UTF8.GetBytes(line + "\n"));
-                input.Flush();
+                McpProtocol.WriteLine(input, line);
             }
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)

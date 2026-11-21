@@ -8,7 +8,8 @@ namespace Hex.Dawn;
 internal sealed partial class HexLanguages
 {
     // A using of a namespace on a line of its own, global or static or not, and what it's of
-    private static readonly Regex UsingLine = new(@"^\s*(?:global\s+)?using\s+(?:static\s+)?(?<name>[A-Za-z_][\w.]*)\s*;\s*$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^\s*(?:global\s+)?using\s+(?:static\s+)?(?<name>[A-Za-z_][\w.]*)\s*;\s*$")]
+    private static partial Regex UsingLine { get; }
 
     /// <summary>
     /// A server's edits to a file with any that put a single using in amongst the file's usings moved to where it goes

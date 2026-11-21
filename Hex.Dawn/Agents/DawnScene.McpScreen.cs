@@ -33,7 +33,7 @@ internal sealed partial class DawnScene
                 ("y", McpSchema.Number("Top of the region in window pixels.")),
                 ("width", McpSchema.Number("Width of the region.")),
                 ("height", McpSchema.Number("Height of the region.")),
-                ("scale", McpSchema.Number("Shrink the picture by this much, 0.1 to 1, 1 as it comes."))]), ReadOnly: true),
+                ("scale", McpSchema.Number("Shrink the picture by this much, 0.1 to 1, 1 as it comes. Unsaid, it's shrunk to 1600 pixels on its longer side when it's bigger (the answer says by how much, for hex_click's positions)."))]), ReadOnly: true),
             Screenshot, Timeout: 20.0f),
 
         new(new McpTool("hex_ui_tree", "UI tree",
@@ -75,6 +75,9 @@ internal sealed partial class DawnScene
             Hover)
     ];
 
+    // The longest side of a screenshot when its scale isn't said, in pixels
+    private const int MCP_SCREENSHOT_LONGEST = 1600;
+
     private IEnumerable<McpToolResult?> Screenshot(JsonObject arguments)
     {
         Task<ImagePixels> capture = Engine.CapturePixels();
@@ -85,7 +88,9 @@ internal sealed partial class DawnScene
         int x = Math.Clamp(arguments.Integer("x") ?? 0, 0, frame.Width - 1), y = Math.Clamp(arguments.Integer("y") ?? 0, 0, frame.Height - 1);
         int width = Math.Clamp(arguments.Integer("width") ?? frame.Width - x, 1, frame.Width - x);
         int height = Math.Clamp(arguments.Integer("height") ?? frame.Height - y, 1, frame.Height - y);
-        float scale = (float)Math.Clamp(arguments.Number("scale") ?? 1.0, 0.1, 1.0);
+        // Unless a scale is said, no bigger than a model looks at (Claude brings a picture's longer side down to about
+        // 1568): a 4K window whole was 1.8 s a call, most of it making a PNG of pixels nobody saw
+        float scale = (float)Math.Clamp(arguments.Number("scale") ?? Math.Min(1.0, MCP_SCREENSHOT_LONGEST / (double)Math.Max(width, height)), 0.1, 1.0);
 
         // Cut, shrunk and made a PNG off the editor's thread, a big window is a few megabytes to go through
         Task<(byte[] Png, int Width, int Height)> made = Task.Run(() => HexPictures.Cut(frame, x, y, width, height, scale));

@@ -49,6 +49,7 @@ public static partial class DSemantics
         List<Piece> p = Lex(text);
         int n = p.Count;
         var (close, enclosing) = Brackets(p);
+        int[] opener = Openers(close);
         var kinds = new SyntaxKind?[n];
         var modifiers = new SyntaxModifiers[n];
         var scopes = new Dictionary<string, (SyntaxKind Kind, SyntaxModifiers Modifiers)>?[n];
@@ -73,7 +74,7 @@ public static partial class DSemantics
                 stack.Pop();
 
             Frame frame = stack.Peek();
-            Frame? function = stack.FirstOrDefault(each => each.Kind == Scope.Function);
+            Frame? function = NearestFunction(stack);
             scopes[i] = function?.Names;
             Piece piece = p[i];
 
@@ -225,7 +226,7 @@ public static partial class DSemantics
 
             // A function, a type and a name before a bracket, its parameters (and maybe its template's before them), whatever
             // goes after them (const, pure, @safe, an if) and then its body, a ; or a =>
-            if (i + 1 < n && p[i + 1].Is('(') && i > 0 && EndsType(p, i - 1) && StartsStatement(p, close, enclosing, i - 1))
+            if (i + 1 < n && p[i + 1].Is('(') && i > 0 && EndsType(p, i - 1) && StartsStatement(p, opener, i - 1))
             {
                 int runtime = i + 1;
                 if (close[runtime] + 1 < n && p[close[runtime] + 1].Is('('))
@@ -256,7 +257,7 @@ public static partial class DSemantics
 
             // A variable, a type (or auto, immutable, enum) and a name before an =, a ; or a comma, at the start of a statement
             if (i + 1 < n && (p[i + 1].Is(';') || (p[i + 1].Is('=') && !(i + 2 < n && (p[i + 2].Is('=') || p[i + 2].Is('>')))))
-                && i > 0 && EndsType(p, i - 1) && StartsStatement(p, close, enclosing, i - 1)
+                && i > 0 && EndsType(p, i - 1) && StartsStatement(p, opener, i - 1)
                 && (enclosing[i] < 0 || p[enclosing[i]].Is('{')))
             {
                 SyntaxModifiers storage = Storage(p, close, i - 1);
@@ -401,7 +402,7 @@ public static partial class DSemantics
 
     // Whether the type that ends at a place starts a statement, going back over it (names, dots, a template's !(...), the
     // brackets of an array or a const(...), storage words and attributes) to a ; a brace, a colon or the start
-    private static bool StartsStatement(List<Piece> p, int[] close, int[] enclosing, int at)
+    private static bool StartsStatement(List<Piece> p, int[] opener, int at)
     {
         int words = 0;
         for (int i = at; i >= 0; i--)
@@ -409,7 +410,7 @@ public static partial class DSemantics
             Piece piece = p[i];
             if (piece.Is(')') || piece.Is(']'))
             {
-                int open = OpenOf(close, i);
+                int open = opener[i];
                 if (open < 0)
                     return false;
 
@@ -442,16 +443,31 @@ public static partial class DSemantics
         return true;
     }
 
-    // The bracket a closing one closes, -1 for none
-    private static int OpenOf(int[] close, int at)
+    // The bracket every token is closed by, found once for the file: the last token before it that says it closes there, -1
+    // for none. Looking back for it from each closing bracket was a walk over the file for every one
+    private static int[] Openers(int[] close)
     {
-        for (int i = at - 1; i >= 0; i--)
+        var opener = new int[close.Length];
+        Array.Fill(opener, -1);
+        for (int i = 0; i < close.Length; i++)
         {
-            if (close[i] == at)
-                return i;
+            if (close[i] > i)
+                opener[close[i]] = i;
         }
 
-        return -1;
+        return opener;
+    }
+
+    // The innermost function the stack is in, a walk over the frames with no enumerator or closure made for it
+    private static Frame? NearestFunction(Stack<Frame> stack)
+    {
+        foreach (Frame each in stack)
+        {
+            if (each.Kind == Scope.Function)
+                return each;
+        }
+
+        return null;
     }
 
     // What the storage words of a declaration ending at a place say, immutable and const readonly, enum a manifest

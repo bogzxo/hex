@@ -80,7 +80,9 @@ internal sealed partial class DawnScene
             return null;
 
         // A tick for a turn that went, the error's mark for one that ended failing
-        bool failed = entry.Kind == HexAgentEntryKind.Error || entries.Skip(at).Any(each => each.Kind == HexAgentEntryKind.Error);
+        bool failed = false;
+        for (int i = at; i < entries.Count && !failed; i++)
+            failed = entries[i].Kind == HexAgentEntryKind.Error;
         var line = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6, Size = new Vector2(0, 22), Anchor = Origin.Left, Pivot = Origin.Left };
         if (counted.Length > 0)
             line.Add(new Label { Text = $"$({(failed ? "error" : "check")}) {UIRichText.Literal(counted)}", TextScale = 0.125f, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });

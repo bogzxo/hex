@@ -45,6 +45,126 @@ internal static class McpSchema
     /// <summary>An object that takes nothing.</summary>
     public static JsonObject Empty() => Object([]);
 
+    // The other names a model gives an argument (the ones of its own tools, Read's file_path, or a near guess), each
+    // with the names it may mean in the order tried, the first a tool takes and wasn't given being the one
+    private static readonly Dictionary<string, string[]> ALIASES = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["file_path"] = ["path", "paths"],
+        ["filepath"] = ["path", "paths"],
+        ["file"] = ["path", "paths"],
+        ["filename"] = ["path", "paths"],
+        ["file_name"] = ["path", "paths"],
+        ["target_file"] = ["path", "paths"],
+        ["uri"] = ["path", "paths"],
+        ["path"] = ["paths", "file", "folder"],
+        ["files"] = ["paths", "path"],
+        ["name"] = ["symbol", "query"],
+        ["symbol"] = ["name", "query"],
+        ["symbol_name"] = ["symbol", "name", "query"],
+        ["identifier"] = ["symbol", "name", "query"],
+        ["function"] = ["symbol", "name"],
+        ["method"] = ["symbol", "name"],
+        ["query"] = ["symbol", "pattern", "name"],
+        ["q"] = ["query", "symbol", "pattern"],
+        ["search"] = ["query", "pattern", "symbol"],
+        ["pattern"] = ["query"],
+        ["text"] = ["query", "new_text"],
+        ["line_number"] = ["line"],
+        ["start"] = ["start_line", "line"],
+        ["end"] = ["end_line"],
+        ["max"] = ["max_chars", "most"],
+        ["limit"] = ["max_chars", "most"],
+        ["directory"] = ["folder", "under", "path"],
+        ["dir"] = ["folder", "under", "path"],
+        ["old_text"] = ["old_string"],
+        ["content"] = ["new_text", "text"],
+        ["code"] = ["new_text"]
+    };
+
+    /// <summary>
+    /// A call's arguments with the names a tool doesn't take put to the ones it does (file_path to path, name to symbol,
+    /// camelCase to snake_case), and a value of the near kind made the kind it should be (a list for one string, "3" for
+    /// a whole number, "true" for a flag). What still doesn't fit is left for <see cref="Check"/> to say. The same object
+    /// when nothing was changed.
+    /// </summary>
+    public static JsonObject Normalize(JsonObject schema, JsonObject arguments)
+    {
+        if (schema["properties"] is not JsonObject properties)
+            return arguments;
+
+        JsonObject? made = null;
+        JsonObject Made() => made ??= (JsonObject)arguments.DeepClone();
+        foreach (var (given, _) in arguments.ToList())
+        {
+            if (properties.ContainsKey(given))
+                continue;
+
+            string? to = null;
+            string snake = Snake(given);
+            if (properties.ContainsKey(snake) && !arguments.ContainsKey(snake))
+                to = snake;
+            else if ((ALIASES.TryGetValue(given, out string[]? meant) || ALIASES.TryGetValue(snake, out meant))
+                && meant.FirstOrDefault(each => properties.ContainsKey(each) && !arguments.ContainsKey(each)) is { } found)
+                to = found;
+            if (to is null)
+                continue;
+
+            JsonObject into = Made();
+            JsonNode? value = into[given];
+            into.Remove(given);
+            into[to] = value;
+        }
+
+        // Values of the near kind made the kind the schema says
+        foreach (var (name, value) in (made ?? arguments).ToList())
+        {
+            if (value is null || properties[name] is not JsonObject property || property["type"] is not JsonValue type || type.GetValueKind() != JsonValueKind.String)
+                continue;
+            JsonValueKind kind = value.GetValueKind();
+            JsonNode? fitted = type.GetValue<string>() switch
+            {
+                // Several strings for one (paths as a list) joined the way the tool reads them, a comma between
+                "string" when kind == JsonValueKind.Array && value.AsArray().All(each => each?.GetValueKind() == JsonValueKind.String) =>
+                    string.Join(",", value.AsArray().Select(each => each!.GetValue<string>())),
+                "array" when kind is JsonValueKind.String or JsonValueKind.Number => new JsonArray(value.DeepClone()),
+                "integer" or "number" when kind == JsonValueKind.String && double.TryParse(value.GetValue<string>(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double number) =>
+                    JsonValue.Create(number),
+                "boolean" when kind == JsonValueKind.String && value.GetValue<string>().ToLowerInvariant() is "true" or "false" =>
+                    JsonValue.Create(value.GetValue<string>().Equals("true", StringComparison.OrdinalIgnoreCase)),
+                _ => null
+            };
+            if (fitted is not null)
+                Made()[name] = fitted;
+        }
+
+        return made ?? arguments;
+    }
+
+    // filePath to file_path, maxChars to max_chars
+    private static string Snake(string name)
+    {
+        var made = new System.Text.StringBuilder(name.Length + 4);
+        for (int at = 0; at < name.Length; at++)
+        {
+            char c = name[at];
+            if (char.IsUpper(c) && at > 0 && name[at - 1] != '_')
+                made.Append('_');
+            made.Append(c == '-' ? '_' : char.ToLowerInvariant(c));
+        }
+
+        return made.ToString();
+    }
+
+    /// <summary>The arguments a schema takes in one line, the required ones said so, for an error to end with.</summary>
+    public static string Takes(JsonObject schema)
+    {
+        JsonObject properties = schema["properties"] as JsonObject ?? [];
+        if (properties.Count == 0)
+            return "It takes no arguments.";
+        HashSet<string> required = schema["required"] is JsonArray names ? [.. names.Select(name => name?.GetValue<string>() ?? string.Empty)] : [];
+        return $"It takes {string.Join(", ", properties.Select(each => required.Contains(each.Key) ? each.Key + " (required)" : each.Key))}.";
+    }
+
     /// <summary>
     /// What's wrong with a call's arguments by a schema made here, null when nothing is. One that's missing, one that
     /// isn't a property, and one of the wrong kind, said the way a model can put right.
@@ -58,7 +178,7 @@ internal static class McpSchema
             {
                 string wanted = name?.GetValue<string>() ?? string.Empty;
                 if (arguments[wanted] is null)
-                    return $"'{wanted}' is required.";
+                    return $"'{wanted}' is required. {Takes(schema)}";
             }
         }
 

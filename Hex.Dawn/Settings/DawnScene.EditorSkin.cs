@@ -72,7 +72,7 @@ internal sealed partial class DawnScene
     /// <summary>Every skin there is in every theme of it, the flat one first, as the dropdown of the editor's skin lists them.</summary>
     private static List<(UISkinChoice Skin, string? Theme, string Text)> EditorSkins()
     {
-        var all = new List<(UISkinChoice, string?, string)>();
+        List<(UISkinChoice, string?, string)> all = [];
         foreach (UISkinChoice skin in UISkins.Available.OrderBy(skin => skin.Name == TOOL_SKIN_NAME ? 0 : 1))
         {
             if (skin.Themes.Count == 0)

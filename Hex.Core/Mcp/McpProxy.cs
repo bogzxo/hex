@@ -98,8 +98,7 @@ internal static class McpProxy
         {
             try
             {
-                write.Write(Encoding.UTF8.GetBytes(line + "\n"));
-                write.Flush();
+                McpProtocol.WriteLine(write, line);
                 return true;
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
@@ -245,15 +244,7 @@ internal static class McpProxy
         Link? link = first;
         bool clientGone = false;
 
-        void ToClient(string line)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(line + "\n");
-            lock (writing)
-            {
-                stdout.Write(bytes);
-                stdout.Flush();
-            }
-        }
+        void ToClient(string line) => McpProtocol.WriteLine(stdout, line, writing);
 
         var fromClient = new Thread(() =>
         {

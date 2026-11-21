@@ -76,10 +76,10 @@ public sealed class HidlInlayTests
     {
         const string code = "func box(at, size = vec(16, 16), colour = \"white\") { }\nlet clip = (text, width = 40) => text;\nlet twice = x => x * 2;\nlet old = func(a, b) { };\n";
 
-        Assert.Equal(["at", "size = vec(16, 16)", "colour = \"white\""], HidlFunctions.Signature(code, "box"));
-        Assert.Equal(["text", "width = 40"], HidlFunctions.Signature(code, "clip"));
-        Assert.Equal(["x"], HidlFunctions.Signature(code, "twice"));
-        Assert.Equal(["a", "b"], HidlFunctions.Signature(code, "old"));
+        Assert.Equal(["at", "size = vec(16, 16)", "colour = \"white\""], HidlFunctions.Signature(code, "box")!);
+        Assert.Equal(["text", "width = 40"], HidlFunctions.Signature(code, "clip")!);
+        Assert.Equal(["x"], HidlFunctions.Signature(code, "twice")!);
+        Assert.Equal(["a", "b"], HidlFunctions.Signature(code, "old")!);
         Assert.Null(HidlFunctions.Signature(code, "nope"));
     }
 }

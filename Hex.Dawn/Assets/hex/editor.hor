@@ -114,13 +114,6 @@ let image_view = compositor.panel({
     color: vec(0.04, 0.045, 0.06, 1),
 });
 
-let image_picture = compositor.image({
-    parent: image_view,
-    anchor: "center",
-    pivot: "center",
-    size: vec(64, 64),
-});
-
 let image_info = compositor.label({
     parent: image_view,
     anchor: "bottom_left",

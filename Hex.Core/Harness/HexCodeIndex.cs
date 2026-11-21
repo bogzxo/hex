@@ -132,41 +132,30 @@ internal sealed partial class HexCodeIndex
             lastLook = Environment.TickCount64;
             LoadCacheOnce(now);
 
-            List<string> paths = now.Length == 0 ? [] : HexSearch.TextFilesUnder(now);
-            var files = new HexIndexedFile?[paths.Count];
+            // The length and time of each file come with the walk, out of its folder's listing
+            List<HexWalkedFile> paths = now.Length == 0 ? [] : HexSearch.TextFilesWithFactsUnder(now);
+            var made = new HexIndexedFile[paths.Count];
             var toRead = new List<int>();
             for (int i = 0; i < paths.Count; i++)
             {
-                string path = paths[i];
-                long length, written;
-                try
-                {
-                    var info = new FileInfo(path);
-                    (length, written) = (info.Length, info.LastWriteTimeUtc.Ticks);
-                }
-                catch (Exception)
-                {
-                    continue;
-                }
-
+                var (path, length, written) = paths[i];
                 if (was.File(path) is { } kept && kept.Length == length && kept.Written == written)
-                    files[i] = ServerSymbolsFor(kept);
+                    made[i] = ServerSymbolsFor(kept);
                 else if (Cached(path, length, written) is { } fromDisk)
-                    files[i] = ServerSymbolsFor(new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, fromDisk.Lines, fromDisk.Symbols, fromDisk.FromServer));
+                    made[i] = ServerSymbolsFor(new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, fromDisk.Lines, fromDisk.Symbols, fromDisk.FromServer));
                 else
                 {
-                    files[i] = new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, []);
+                    made[i] = new HexIndexedFile(path, HexSearch.RelativeTo(now, path), length, written, []);
                     toRead.Add(i);
                 }
             }
 
             Parallel.ForEach(toRead, i =>
             {
-                HexIndexedFile stub = files[i]!;
-                files[i] = ServerSymbolsFor(new HexIndexedFile(stub.Path, stub.Relative, stub.Length, stub.Written, HexSearch.ReadLines(stub.Path)));
+                HexIndexedFile stub = made[i];
+                made[i] = ServerSymbolsFor(HexIndexedFile.Read(stub.Path, stub.Relative, stub.Length, stub.Written));
             });
 
-            HexIndexedFile[] made = [.. files.Where(file => file is not null).Select(file => file!)];
             bool rootsMoved = !now.SequenceEqual(was.Roots, StringComparer.OrdinalIgnoreCase);
             int logged = rootsMoved ? 0 : Log(was, made);
             if (logged > 0 || rootsMoved || symbolsMoved || made.Length != was.Files.Length)

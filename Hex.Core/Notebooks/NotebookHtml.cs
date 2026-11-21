@@ -6,7 +6,7 @@ namespace Hex.Core.Notebooks;
 /// <summary>
 /// HTML an output came in (IPython's HTML, a class's _repr_html_) written as markdown, which Hex draws. Headings, bold,
 /// italics, code, links, lists and paragraphs come through, styles and scripts are dropped, the rest is its text. It's
-/// what the HTML says rather than how it looks, but it beat showing "&lt;IPython.core.display.HTML object&gt;".
+/// what the HTML says rather than how it looks, but it beat showing "&lt;IPython.core.display.HTML object>".
 /// </summary>
 internal static partial class NotebookHtml
 {
@@ -27,7 +27,7 @@ internal static partial class NotebookHtml
         return GapPattern().Replace(text, "\n\n").Trim();
     }
 
-    /// <summary>Whether a result's text is only Python's name for the object (&lt;IPython.core.display.HTML object&gt;), which its other forms say better.</summary>
+    /// <summary>Whether a result's text is only Python's name for the object (&lt;IPython.core.display.HTML object>), which its other forms say better.</summary>
     public static bool IsBareRepr(string plain)
     {
         string said = plain.Trim();

@@ -37,7 +37,7 @@ internal sealed partial class DawnScene
 
         RenderScaleSettings wanted = RenderScaleOf(settings, Engine.WindowManager.Features);
 
-        var problems = new List<string>();
+        List<string> problems = [];
         wanted = RenderScaleEnvironment.Apply(wanted, System.Environment.GetEnvironmentVariable, problems);
         foreach (string problem in problems)
             Horizon.Logging.Log.Warning("[Hex] " + problem);

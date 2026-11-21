@@ -60,9 +60,11 @@ internal sealed partial class DawnScene
         // A row's name is written in bold, so it's looked for inside what the row says
         test.Check("text settings: they're called Tab size, Insert spaces, Detect indentation, Line numbers, Indent guides and Use .editorconfig", () =>
             SettingsPage is { } page && keys.Zip(titles).All(pair => page.TitleShown(pair.First) is { } shown && shown.Contains(pair.Second)));
+        // The row shows the first sentence of its help, the rest is in its tooltip
+        bool Says(SettingsPage page, string key, string words) => page.Settings.First(setting => setting.Key == key).Help.Contains(words, StringComparison.Ordinal);
         test.Check("text settings: each has its help, the tab rows saying .editorconfig wins, and none is changed yet", () =>
             SettingsPage is { } page && keys.All(key => page.HelpShown(key) is { Length: > 20 } && !page.IsModified!(key))
-            && page.HelpShown("tab_size")!.Contains(".editorconfig") && page.HelpShown("insert_spaces")!.Contains(".editorconfig"));
+            && Says(page, "tab_size", ".editorconfig") && Says(page, "insert_spaces", ".editorconfig"));
         test.Check("text settings: nothing changed shows no dot on Editor · Files or Terminal · System", () =>
             SettingsPage is { } page && !page.SectionsChanged.Contains(EditorSettingsCatalog.FILES) && !page.SectionsChanged.Contains("Terminal · System")
             && !page.SectionsChanged.Contains(EditorSettingsCatalog.TEXT));
@@ -255,7 +257,8 @@ internal sealed partial class DawnScene
                 FormatOnSave = true,
                 FilesExclude = ["**/*.log"],
                 SearchExclude = ["**/fixtures", "vendor/"],
-                SearchUseIgnoreFiles = false
+                SearchUseIgnoreFiles = false,
+                ExplorerAutoReveal = false
             };
             if (written.Save() is not null)
                 return false;
@@ -263,7 +266,7 @@ internal sealed partial class DawnScene
             var read = new HexSettings(file);
             return read is { TabSize: 3, InsertSpaces: false, DetectIndentation: false, LineNumbers: false, IndentGuides: false, UseEditorConfig: false }
                 && read is { RenderWhitespace: "boundary", CursorStyle: "underline", CaretFastAfter: 2.0f, CaretFastRate: 120.0f, StickyScroll: false, FormatOnSave: true } && read.Rulers.SequenceEqual([80, 120])
-                && read is { SearchUseIgnoreFiles: false } && read.FilesExclude.SequenceEqual(["**/*.log"]) && read.SearchExclude.SequenceEqual(["**/fixtures", "vendor/"])
+                && read is { SearchUseIgnoreFiles: false, ExplorerAutoReveal: false } && read.FilesExclude.SequenceEqual(["**/*.log"]) && read.SearchExclude.SequenceEqual(["**/fixtures", "vendor/"])
                 && SettingsSections.Read(file) is { } all && SettingsSections.Section(all, SettingsSections.EDITOR).Keys.Order(StringComparer.Ordinal)
                     .SequenceEqual(keys.Order(StringComparer.Ordinal));
         });

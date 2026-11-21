@@ -41,7 +41,7 @@ internal sealed partial class DawnScene
 
         // The pointer on a row brings up its buttons, and one click on Stage stages it
         test.Run(() => ShowSide(HexSide.SourceControl));
-        test.WaitFor(() => Changed() is not null, 4.0f);
+        test.WaitFor(() => Changed() is not null, 4.0f * GIT_PATIENCE);
         test.Hover(TreeAction(Changed, stage));
         test.Settle(0.2f);
 
@@ -55,7 +55,7 @@ internal sealed partial class DawnScene
         test.Check("source control: the pointer on a row brings up Open File, Discard and Stage, what they do said over them", () =>
             Changed() is { Actions: { } actions } && actions.Select(action => action.Icon).SequenceEqual(["go-to-file", "discard", "add"]) && sideTree.Tooltip == stage);
         test.Click(TreeAction(Changed, stage));
-        test.WaitFor(() => Staged() is not null, 4.0f);
+        test.WaitFor(() => Staged() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: one click on Stage moves the file to the staged changes, and doesn't open it", () =>
             Staged() is not null && Changed() is null && !(document.DiffOf is { } of && PlatformPaths.Same(of, outside)));
 
@@ -65,25 +65,25 @@ internal sealed partial class DawnScene
             sideTree.Selected = Staged();
             sideTree.PressKey(' ');
         });
-        test.WaitFor(() => Changed() is not null, 4.0f);
+        test.WaitFor(() => Changed() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: Space on a staged file unstages it", () => Changed() is not null && Staged() is null);
         test.Run(() =>
         {
             sideTree.Selected = Changed();
             sideTree.PressKey(' ');
         });
-        test.WaitFor(() => Staged() is not null, 4.0f);
+        test.WaitFor(() => Staged() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: and Space on a changed one stages it", () => Staged() is not null && Changed() is null);
 
         // The headings' buttons, every file of the section at once
         test.Click(TreeAction(() => Heading("Staged Changes"), Said("git.unstage_all")));
-        test.WaitFor(() => Changed() is not null, 4.0f);
+        test.WaitFor(() => Changed() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: Unstage All on the staged heading unstages them all", () => Changed() is not null && Staged() is null);
         test.Click(TreeAction(() => Heading("Changes"), Said("git.stage_all")));
-        test.WaitFor(() => Staged() is not null, 4.0f);
+        test.WaitFor(() => Staged() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: and Stage All on the changes' heading stages them all", () => Staged() is not null && Changed() is null);
         test.Click(TreeAction(Staged, unstage));
-        test.WaitFor(() => Changed() is not null, 4.0f);
+        test.WaitFor(() => Changed() is not null, 4.0f * GIT_PATIENCE);
         test.Check("source control: Unstage on a staged row takes it out again", () => Changed() is not null && Staged() is null);
 
         // Delete asks first, Enter shows the change
@@ -92,7 +92,7 @@ internal sealed partial class DawnScene
             sideTree.Selected = Changed();
             sideTree.PressKey(UIKeyboard.DELETE);
         });
-        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f);
+        test.WaitFor(() => textDialog is { IsOpen: true }, 3.0f * GIT_PATIENCE);
         test.Check("source control: Delete on a changed file asks before throwing it away", () =>
             textDialog is { IsOpen: true } dialog && dialog.Buttons.Any(button => button.Label == Said("git.discard_yes")) && File.Exists(outside));
         test.Run(() => textDialog?.Buttons.First(button => button.Label == Said("git.discard_no")).OnPressed?.Invoke());
@@ -102,7 +102,7 @@ internal sealed partial class DawnScene
             sideTree.Selected = Changed();
             sideTree.PressKey(UIKeyboard.ENTER);
         });
-        test.WaitFor(() => document.DiffOf is { } of && PlatformPaths.Same(of, outside), 4.0f);
+        test.WaitFor(() => document.DiffOf is { } of && PlatformPaths.Same(of, outside), 4.0f * GIT_PATIENCE);
         test.Check("source control: Enter on a file shows what changed in it", () =>
             File.Exists(outside) && document.DiffOf is { } of && PlatformPaths.Same(of, outside));
         test.Run(() =>
@@ -113,12 +113,12 @@ internal sealed partial class DawnScene
 
         // A deleted file's row, and its diff, all of what it had taken out
         test.Run(() => File.Delete(same));
-        test.WaitFor(() => under("Changes", same) is { Badge: "D" }, 5.0f);
+        test.WaitFor(() => under("Changes", same) is { Badge: "D" }, 5.0f * GIT_PATIENCE);
         test.Check("source control: a deleted file has its D in the error colour, and no Open File", () =>
             under("Changes", same) is { Badge: "D" } row && row.BadgeColor == compositor.Skin!.Palette.Error
             && row.Actions is { } actions && actions.All(action => action.Icon != "go-to-file"));
         test.Click(TreeRow(() => under("Changes", same)));
-        test.WaitFor(() => document.DiffOf is { } of && PlatformPaths.Same(of, same), 4.0f);
+        test.WaitFor(() => document.DiffOf is { } of && PlatformPaths.Same(of, same), 4.0f * GIT_PATIENCE);
         test.Check("source control: a click on a deleted file shows what went, all of it", () =>
             document.DiffOf is { } of && PlatformPaths.Same(of, same) && code.Text.Contains("never touched", StringComparison.Ordinal) && document.DiffChanges.Count == 1);
         test.Run(() =>
@@ -127,7 +127,7 @@ internal sealed partial class DawnScene
             Git(repo, "checkout", "--", "same.txt");
             ShowSide(HexSide.SourceControl);
         });
-        test.WaitFor(() => under("Changes", same) is null && CommitSaid(sideRows(sideTree.Items)) is not null, 5.0f);
+        test.WaitFor(() => under("Changes", same) is null && CommitSaid(sideRows(sideTree.Items)) is not null, 5.0f * GIT_PATIENCE);
 
         // The chevron at the end of the box's Commit, the menu of what else a commit can be
         test.Click(At(() => commitMore));
@@ -139,7 +139,7 @@ internal sealed partial class DawnScene
 
         // Amend, the last message in the box, and with nothing staged only the message changes
         test.Run(() => GitMenuItem(Said("git.amend_command"))?.OnPicked?.Invoke());
-        test.WaitFor(() => CommitBox() is { } box && box.Text.StartsWith("Add the new one", StringComparison.Ordinal), 4.0f);
+        test.WaitFor(() => CommitBox() is { } box && box.Text.StartsWith("Add the new one", StringComparison.Ordinal), 4.0f * GIT_PATIENCE);
         test.Check("amend: Amend Last Commit fills the box with the last commit's message", () =>
             CommitBox() is { } box && box.Text.StartsWith("Add the new one\n\n# Why", StringComparison.Ordinal));
         test.Run(() =>
@@ -148,7 +148,7 @@ internal sealed partial class DawnScene
             box.Text = "Add the new one, amended";
             box.OnControlEnter!();
         });
-        test.WaitFor(() => LastSubject(repo) == "Add the new one, amended", 10.0f);
+        test.WaitFor(() => LastSubject(repo) == "Add the new one, amended", 10.0f * GIT_PATIENCE);
         test.Check("amend: and amending rewrites the commit HEAD is on, leaving what isn't staged alone", () =>
             LastSubject(repo) == "Add the new one, amended" && GitProcess.Run(repo, ["rev-list", "--count", "HEAD"]).Output.Trim() == "3"
             && !GitProcess.Run(repo, ["show", "--name-only", "--format=", "HEAD"]).Output.Contains("made_outside", StringComparison.Ordinal));
@@ -156,16 +156,16 @@ internal sealed partial class DawnScene
 
         // Undo takes it back, what it changed staged and its message waiting for the next commit
         test.Run(() => GitMenuItem(Said("git.undo_command"))?.OnPicked?.Invoke());
-        test.WaitFor(() => LastSubject(repo) == "Second go" && under("Staged Changes", added) is not null, 6.0f);
+        test.WaitFor(() => LastSubject(repo) == "Second go" && under("Staged Changes", added) is not null, 6.0f * GIT_PATIENCE);
         test.Check("undo: Undo Last Commit takes it back with its changes left staged, and says what it took back", () =>
             LastSubject(repo) == "Second go" && GitProcess.Run(repo, ["diff", "--cached", "--name-only"]).Output.Contains("src/added.txt", StringComparison.Ordinal)
             && under("Staged Changes", added) is not null && said.Any(line => line.Text.Contains("Add the new one, amended", StringComparison.Ordinal)));
-        test.WaitFor(() => CommitSaid(sideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f);
+        test.WaitFor(() => CommitSaid(sideRows(sideTree.Items))?.Text.StartsWith("Commit 1 staged", StringComparison.Ordinal) == true, 4.0f * GIT_PATIENCE);
         test.Click(At(() => commitButton));
-        test.WaitFor(() => CommitBox() is not null, 3.0f);
+        test.WaitFor(() => CommitBox() is not null, 3.0f * GIT_PATIENCE);
         test.Check("undo: and the next commit's box starts with the message taken back", () => CommitBox()?.Text == "Add the new one, amended");
         test.Run(() => CommitBox()?.OnControlEnter!());
-        test.WaitFor(() => LastSubject(repo) == "Add the new one, amended" && under("Staged Changes", added) is null, 10.0f);
+        test.WaitFor(() => LastSubject(repo) == "Add the new one, amended" && under("Staged Changes", added) is null, 10.0f * GIT_PATIENCE);
         test.Run(() => chrome.Dialog?.Close());
     }
 
@@ -200,7 +200,7 @@ internal sealed partial class DawnScene
             explorer.AddFolder(merge);
             ShowSide(HexSide.SourceControl);
         });
-        test.WaitFor(() => Merging() is not null, 6.0f);
+        test.WaitFor(() => Merging() is not null, 6.0f * GIT_PATIENCE);
         test.Check("merge: a merge going on says so just above Commit, in the warning colour, naming Abort Merge", () =>
             Merging() is { } row && row.Color == WarningColor && row.Tooltip.Contains("Abort Merge", StringComparison.Ordinal)
             && Heading()!.Children!.IndexOf(row) == Heading()!.Children!.IndexOf(CommitRow()!) - 1);
@@ -211,13 +211,13 @@ internal sealed partial class DawnScene
             Git(merge, "add", "a.txt");
             git.Refresh(merge);
         });
-        test.WaitFor(() => Heading()?.Children?.Any(row => row.Text == Said("git.merge_changes")) == false && CommitRow()?.Text == Said("git.commit_merge"), 5.0f);
+        test.WaitFor(() => Heading()?.Children?.Any(row => row.Text == Said("git.merge_changes")) == false && CommitRow()?.Text == Said("git.commit_merge"), 5.0f * GIT_PATIENCE);
         test.Click(TreeRow(CommitRow));
-        test.WaitFor(() => CommitBox() is not null, 3.0f);
+        test.WaitFor(() => CommitBox() is not null, 3.0f * GIT_PATIENCE);
         test.Check("merge: the commit box starts with git's message for the merge, its # lines left out", () =>
             CommitBox() is { } box && box.Text.StartsWith("Merge branch 'other'", StringComparison.Ordinal) && !box.Text.Contains('#'));
         test.Run(() => CommitBox()?.OnControlEnter!());
-        test.WaitFor(() => GitProcess.Run(merge, ["rev-list", "--parents", "-n", "1", "HEAD"]).Output.Trim().Split(' ').Length == 3 && Merging() is null, 10.0f);
+        test.WaitFor(() => GitProcess.Run(merge, ["rev-list", "--parents", "-n", "1", "HEAD"]).Output.Trim().Split(' ').Length == 3 && Merging() is null, 10.0f * GIT_PATIENCE);
         test.Check("merge: and committing finishes the merge, a commit of two parents, and the Merging row goes", () =>
             GitProcess.Run(merge, ["rev-list", "--parents", "-n", "1", "HEAD"]).Output.Trim().Split(' ').Length == 3 && Merging() is null
             && sideRows(sideTree.Items).Any(row => row.Text.StartsWith("git_merge", StringComparison.Ordinal)));

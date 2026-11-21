@@ -324,7 +324,8 @@ internal sealed partial class DawnScene
         // The wheel over the margin beside the chat's column scrolls the chat, not only over the column
         float wheelFrom = 0;
         test.Run(() => agentsScroll.Offset = wheelFrom = MathF.Floor(agentsScroll.MaxOffset * 0.5f));
-        test.Hover(() => chrome.ToWorld(new Vector2(noonCenter.Bounds.Min.X + 4, noonCenter.Bounds.Center.Y)));
+        // Clear of the strip on the line that the fleet is dragged by (HexSplitter), which takes the pointer there
+        test.Hover(() => chrome.ToWorld(new Vector2(noonCenter.Bounds.Min.X + GRIP_HOLD + 4, noonCenter.Bounds.Center.Y)));
         test.Run(() => compositor.Scroll(-2));
         test.Settle(0.3f);
         test.Check("agents layout: in Agentic the wheel over the margins round the chat scrolls it", () =>

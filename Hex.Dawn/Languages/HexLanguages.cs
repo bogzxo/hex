@@ -1,4 +1,6 @@
-﻿using Horizon.UI.Components;
+﻿using System.Text.Json.Nodes;
+
+using Horizon.UI.Components;
 using Horizon.UI.Scripting;
 using Horizon.UI.Skinning;
 
@@ -51,6 +53,8 @@ internal sealed partial class HexLanguages
     public HexLanguages(DawnContext with)
     {
         context = with;
+        if (MoveOldAnalyzersDefault(settings))
+            with.Settings.Save();
 
         // C# in ReSharper's colours whatever the skin (or Visual Studio's, or the skin's, as the settings say), the way it
         // looks where most of it is written
@@ -58,6 +62,7 @@ internal sealed partial class HexLanguages
 
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
+        with.Documents.Edited += _ => WarmTyped();
         with.Documents.Closed += StopLinting;
         with.Documents.Saved += LintSaved;
         with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
@@ -84,6 +89,32 @@ internal sealed partial class HexLanguages
         with.Settings.AddSource(() => new ServerSource(this), SERVER_SECTION);
     }
 
+    /// <summary>C#'s analyzers switch by its dotted path in csharp-ls's settings.</summary>
+    internal const string CSHARP_ANALYZERS = "csharp.analyzersEnabled";
+
+    /// <summary>
+    /// Once, C#'s analyzersEnabled kept as true put back to the catalog's, which is off now: true was the catalog's own
+    /// until then, kept only by switching it off and on again. A false the user chose stays, and so does a true chosen
+    /// after this. True when the settings changed and want saving.
+    /// </summary>
+    internal static bool MoveOldAnalyzersDefault(HexSettings settings)
+    {
+        if (settings.CSharpAnalyzersMoved)
+            return false;
+
+        settings.CSharpAnalyzersMoved = true;
+        if (settings.ServerSettings.GetValueOrDefault("csharp") is { } told && told["csharp"] is JsonObject section
+            && section["analyzersEnabled"] is JsonValue kept && kept.TryGetValue(out bool on) && on)
+        {
+            section.Remove("analyzersEnabled");
+            if (section.Count == 0)
+                told.Remove("csharp");
+            if (told.Count == 0)
+                settings.ServerSettings.Remove("csharp");
+        }
+        return true;
+    }
+
     /// <summary>A folder going in the trash, the servers started in it stopped first, their files let go of.</summary>
     private void StopServersUnder(string folder)
     {
@@ -104,7 +135,10 @@ internal sealed partial class HexLanguages
             return inWorkspace;
 
         string folder = Path.GetDirectoryName(full) ?? System.Environment.CurrentDirectory;
-        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(Path.GetExtension(CodeLanguages.WithoutBackupSuffix(full)), StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
+
+        // The file's own extension worked out once, not again for every extension of every server
+        string own = Path.GetExtension(CodeLanguages.WithoutBackupSuffix(full));
+        if (serverEntries.Find(entry => entry.Extensions.Any(extension => extension.Equals(own, StringComparison.OrdinalIgnoreCase))) is { Reload.Length: > 0 } server)
         {
             for (string? above = folder; above is not null; above = Path.GetDirectoryName(above))
             {
@@ -126,9 +160,11 @@ internal sealed partial class HexLanguages
     internal void WorkspaceChanged()
     {
         EditWorkspaceChanged();
-        var moved = linters.Where(pair => pair.Key.Path is { } path &&
-            (!PlatformPaths.Same(pair.Value.RootDirectory, ServerRootFor(path))
-                || !PlatformPaths.Comparer.Equals(lintSolutions.GetValueOrDefault(pair.Key), SolutionFor(pair.Key, ServerRootFor(path))))).ToArray();
+
+        // Each file's folder worked out once, it walks up the disk looking for a project
+        var moved = linters.Where(pair => pair.Key.Path is { } path && ServerRootFor(path) is var root &&
+            (!PlatformPaths.Same(pair.Value.RootDirectory, root)
+                || !PlatformPaths.Comparer.Equals(lintSolutions.GetValueOrDefault(pair.Key), SolutionFor(pair.Key, root)))).ToArray();
         foreach (var (document, _) in moved)
         {
             StopLinting(document);
@@ -469,7 +505,10 @@ internal sealed partial class HexLanguages
 
                 lintIn.Remove(due);
                 if (linters.TryGetValue(due, out LanguageServer? server) && due.Path is { } path)
+                {
                     server.Change(path, due.Editor.Text);
+                    agentSent[Path.GetFullPath(path)] = System.Environment.TickCount64;
+                }
             }
 
             dueNow.Clear();
@@ -502,6 +541,7 @@ internal sealed partial class HexLanguages
 
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
+                WarmHeard(server);
                 string full = Path.GetFullPath(path);
                 if (notebookShadows.Count > 0 && NotebookFound(server, full, found))
                     continue;
@@ -520,6 +560,8 @@ internal sealed partial class HexLanguages
 
         UpdateChecks(dt);
         UpdateAnswers();
+        UpdateWarm();
+        UpdateLightbulb();
         UpdateDocumentHighlights();
         ServersStopped();
         AskNext();
@@ -537,8 +579,12 @@ internal sealed partial class HexLanguages
         IReadOnlyList<LanguageServer> servers = LanguageServers.Running;
         foreach (LanguageServer server in servers)
         {
-            if (server.Failure is null)
-                server.FilesChanged(changes);
+            if (server.Failure is null && ServerFiles(server, changes) is { Count: > 0 } its)
+            {
+                server.FilesChanged(its);
+                if (its.Any(change => IsProjectFile(change.Path)))
+                    WarmAgainAfter(server);
+            }
         }
 
         // A project of a server's that reads them only as it starts, the server started again a moment after. And one that
@@ -554,6 +600,86 @@ internal sealed partial class HexLanguages
     }
 
     /// <summary>
+    /// The changes a server is told of, none in a hidden folder (.git, .hexbase's copies of the repositories) nor for C#
+    /// in a build's output, and of the rest those it asked to watch (LanguageServer.Watches). Outside its folder too, a
+    /// solution of Hex's has the engine's projects beside it. csharp-ls adds a .cs made anywhere under a project's folder
+    /// to that project, so the agents' scratch files in Hex's data folder (hex/Hex/bin/...) became part of Hex.csproj.
+    /// Nor anything in another repository's working copy, a git worktree beside the clones (hexwt-*, horizonwt-*) that
+    /// isn't a dot folder: csharp-ls loads the whole solution again for any project file it's told of, and an agent
+    /// building in its worktree had the editor's solution loaded again every restore.
+    /// </summary>
+    internal static List<(string Path, LanguageServerFileChange Change)> ServerFiles(LanguageServer server, IReadOnlyList<(string Path, LanguageServerFileChange Change)> changes)
+    {
+        string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        bool dotnet = server.LanguageId == "csharp";
+        var its = new List<(string Path, LanguageServerFileChange Change)>();
+        Dictionary<string, bool>? copies = null;
+        foreach (var change in changes)
+        {
+            string full = Path.GetFullPath(change.Path);
+            if (!InSkippedFolder(Path.GetRelativePath(root, full), dotnet) && server.Watches(full, change.Change)
+                && !InRepositoryCopy(root, full, copies ??= new Dictionary<string, bool>(PlatformPaths.Comparer)))
+                its.Add(change);
+        }
+        return its;
+    }
+
+    /// <summary>A project file, which has csharp-ls load its solution again, a solution or what every project imports.</summary>
+    internal static bool IsProjectFile(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj" or ".sln" or ".slnx" or ".props" or ".targets";
+
+    /// <summary>
+    /// Whether a file is in the working copy of another repository than the server's, a worktree or a dot folder with a
+    /// .git of its own (HexSearch.IsRepositoryCopy), going up its folders to the first that's a repository or holds the
+    /// server's folder. A repository of its own beside it (the engine cloned next to Hex) and a submodule are the
+    /// server's to hear of, its solution has their projects in it. What each folder was is kept in <paramref name="seen"/>
+    /// for the rest of the changes said together, a build writes hundreds in a few folders.
+    /// </summary>
+    internal static bool InRepositoryCopy(string root, string full, Dictionary<string, bool> seen)
+    {
+        var walked = new List<string>();
+        bool copy = false;
+        for (string? folder = Path.GetDirectoryName(full); folder is not null && Path.GetDirectoryName(folder) is not null; folder = Path.GetDirectoryName(folder))
+        {
+            if (seen.TryGetValue(folder, out bool known))
+            {
+                copy = known;
+                break;
+            }
+            walked.Add(folder);
+
+            // The server's own folder or one above it, the copy isn't another's
+            if (PlatformPaths.IsUnder(root, folder))
+                break;
+
+            string git = Path.Combine(folder, ".git");
+            bool gitFolder = Directory.Exists(git), gitFile = !gitFolder && File.Exists(git);
+            if (gitFolder || gitFile)
+            {
+                copy = Hex.Core.HexSearch.IsRepositoryCopy(folder);
+                break;
+            }
+        }
+
+        foreach (string folder in walked)
+            seen[folder] = copy;
+        return copy;
+    }
+
+    // Helper method to say whether a path from a server's folder goes through a hidden folder, or bin or obj for .NET
+    private static bool InSkippedFolder(string relative, bool buildOutput)
+    {
+        string[] parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (string part in parts.AsSpan(0, parts.Length - 1))
+        {
+            if ((part.Length > 1 && part[0] == '.' && part != "..")
+                || (buildOutput && (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase))))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Whether a project file that changed is one of a server's, in the folder it runs in and not in a build's output or
     /// a hidden folder. Any restore anywhere in the workspace (a copy of the repositories in .hexbase building its self
     /// tests) started csharp-ls again, and the engine's solution takes it half a minute to load, completing nothing meanwhile.
@@ -562,20 +688,12 @@ internal sealed partial class HexLanguages
     {
         string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string full = Path.GetFullPath(changed);
-        if (!PlatformPaths.IsUnder(full, root))
+        if (!PlatformPaths.IsUnder(full, root) || InRepositoryCopy(root, full, new Dictionary<string, bool>(PlatformPaths.Comparer)))
             return false;
 
         // The folders it's in, the file's own name (.editorconfig) left out. A build's or a restore's own folders aren't a
         // project changing: csharp-ls 0.29 restores a project itself as it loads it, the restore wrote obj's assets and
         // props, Hex started it again for them a moment later, and the completion it was working on never came back
-        string[] parts = Path.GetRelativePath(root, full).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (string part in parts.AsSpan(0, parts.Length - 1))
-        {
-            if (part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase)
-                || (part.Length > 1 && part[0] == '.' && part != ".."))
-                return false;
-        }
-
-        return true;
+        return !InSkippedFolder(Path.GetRelativePath(root, full), buildOutput: true);
     }
 }

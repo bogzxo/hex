@@ -48,7 +48,9 @@ internal sealed partial class DawnScene
         test.Check("servers window: Overview leads with what's left, at display size, and has a row for each language", () =>
         {
             var heading = Descendants(serversPage!).OfType<Label>().FirstOrDefault(label => label.TextScale == SERVERS_DISPLAY);
-            return heading is not null && (heading.Text.Contains(Said("server_window.ready")) || heading.Text.Contains("left"))
+            // Python has no environment yet, so what's left names it, and the heading isn't the one said while looking
+            return heading is not null && heading.Text != Said("server_window.checking") && heading.Text != Said("server_window.ready")
+                && heading.Text.Contains(languages.LanguageNameOf(py))
                 && Words().Any(text => text.Contains(languages.LanguageNameOf(py))) && Words().Any(text => text.Contains(languages.LanguageNameOf(cs)));
         });
         test.Check("servers window: the status bar says Set up for Python, which has no environment yet", () => setupItemFor == "python");

@@ -13,7 +13,8 @@ namespace Hex.Dawn;
 internal sealed partial class HexDebugging
 {
     // What the test host says once it's waiting, its process id after the words Process Id
-    private static readonly Regex HostSaid = new(@"Process Id:\s*(\d+)", RegexOptions.Compiled);
+    [GeneratedRegex(@"Process Id:\s*(\d+)")]
+    private static partial Regex HostSaid { get; }
 
     // The token owns the test process, attachment and all queued callbacks for one attempt.
     private CancellationTokenSource? testAttempt;

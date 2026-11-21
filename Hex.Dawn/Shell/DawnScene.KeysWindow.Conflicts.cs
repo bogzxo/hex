@@ -43,7 +43,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private static KeysAsked ReadKeysFilter(string typed)
     {
-        var words = new List<string>();
+        List<string> words = [];
         bool modified = false, conflicts = false, unknown = false;
         KeySource? source = null;
         KeyWhen? when = null;
@@ -119,7 +119,7 @@ internal sealed partial class DawnScene
     /// <summary>The other menu commands on a key, each once, the ones a key pressed for a command would take it from.</summary>
     private List<MenuItem> OthersOn(string tidy, string label)
     {
-        var others = new List<MenuItem>();
+        List<MenuItem> others = [];
         foreach (var (other, _) in Commands())
         {
             string named = LabelOf(other);
@@ -136,7 +136,7 @@ internal sealed partial class DawnScene
     /// </summary>
     private List<MenuItem> OverlapsOn(string tidy, string label)
     {
-        var others = new List<MenuItem>();
+        List<MenuItem> others = [];
         foreach (var (other, _) in Commands())
         {
             string named = LabelOf(other);

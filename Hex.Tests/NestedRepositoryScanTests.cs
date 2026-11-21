@@ -33,6 +33,35 @@ public sealed class NestedRepositoryScanTests
     }
 
     [Fact]
+    public void Looks_down_only_from_what_was_made_as_far_as_the_whole_look_goes()
+    {
+        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "hex-nested-made-" + Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string Folder(string name, bool git = false)
+            {
+                string folder = Path.GetFullPath(Path.Combine(root, name));
+                Directory.CreateDirectory(folder);
+                if (git) Directory.CreateDirectory(Path.Combine(folder, ".git"));
+                return folder;
+            }
+            string clone = Folder("projects/clone", git: true), inner = Folder("projects/clone/external/mod", git: true);
+            string initialised = Folder("lib", git: true), file = Path.Combine(initialised, "a.cs");
+            File.WriteAllText(file, string.Empty);
+            string empty = Folder("empty"), elsewhere = Folder("untouched", git: true);
+            Folder("bin/hidden", git: true);
+            string deep = Folder("one/two/three/four/five/six", git: true);
+
+            var (found, made) = HexGit.FindDownFrom([root], [Path.Combine(root, "projects"), file, empty, Path.Combine(root, "bin/hidden"), deep, root]);
+            Assert.Equal(new[] { clone, inner, initialised }.Order(), found.Order());
+            Assert.DoesNotContain(elsewhere, found);
+            Assert.Equal(new[] { Path.Combine(root, "projects"), empty }.Order(), made.Order());
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void Measure_requested_workspace_scan_without_modifying_it()
     {
         string? root = Environment.GetEnvironmentVariable("HEX_NESTED_BENCH_ROOT");
