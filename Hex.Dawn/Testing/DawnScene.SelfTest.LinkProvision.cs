@@ -111,12 +111,10 @@ internal sealed partial class DawnScene
         test.WaitFor(() => ReadProvisionTestFile(Path.Combine(nested, "joiner.txt")) == PROVISION_TEST_BACK, 35.0f);
         test.Check("link-provision: a later joiner edit reached the host", () =>
             ReadProvisionTestFile(Path.Combine(nested, "joiner.txt")) == PROVISION_TEST_BACK);
-        test.Run(() =>
-        {
-            if (linkTestPeer is not { HasExited: true })
-                Console.WriteLine("[Hex self-test] link-provision: joiner still running at host teardown");
-            StopLink();
-        });
+        test.WaitFor(() => linkTestPeer is { HasExited: true }, 50.0f);
+        test.Check("link-provision: joiner completed its checks before the host closed the link", () =>
+            linkTestPeer is { HasExited: true, ExitCode: 0 });
+        test.Run(StopLink);
     }
 
     private void TestLinkProvisionJoiner(HexPointerScript test, string destination)
@@ -177,7 +175,12 @@ internal sealed partial class DawnScene
                 flushed = sync.Flush();
         });
         test.WaitFor(() => flushed is { IsCompleted: true }, 35.0f);
-        test.Check("link-provision: joiner flushed its edit to the host", () => flushed is { IsCompletedSuccessfully: true });
+        test.Check("link-provision: joiner flushed its edit to the host", () =>
+        {
+            if (flushed?.Exception is { } error)
+                Console.WriteLine($"[Hex self-test] link-provision: flush failed, {error.GetBaseException().Message}");
+            return flushed is { IsCompletedSuccessfully: true };
+        });
         test.Run(StopLink);
     }
 
