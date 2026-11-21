@@ -1,27 +1,28 @@
 ﻿namespace Hex.Dawn;
 
-internal static class HexBuildProblems
+internal static partial class HexBuildProblems
 {
     internal static List<TerminalProblem> Read(string output, int exitCode, string? builtFile = null)
     {
         List<TerminalProblem> problems = [];
         var reader = new TerminalProblemReader(TerminalProblemMatcher.Shipped, problems.Add);
-        reader.Feed(output.ReplaceLineEndings("\n") + "\n\n\n");
-        problems.AddRange(CMakeProblems(output, builtFile));
-        if (exitCode != 0) problems.AddRange(LinkerSources(output, builtFile));
-        if (exitCode != 0 && DotnetSdkProblem(output, builtFile) is { } sdk) problems.Add(sdk);
+        // The output's line endings are made one kind once, and the readers that look for a heading of their own are only
+        // given it when the heading's words are in it, a build's output being a long one
+        string text = output.ReplaceLineEndings("\n");
+        reader.Feed(text + "\n\n\n");
+        if (text.Contains("CMake ", StringComparison.Ordinal)) problems.AddRange(CMakeProblems(text, builtFile));
+        if (exitCode != 0 && text.Contains(": error: ", StringComparison.Ordinal)) problems.AddRange(LinkerSources(text, builtFile));
+        if (exitCode != 0 && text.Contains("A compatible .NET SDK was not found.", StringComparison.Ordinal) && DotnetSdkProblem(text, builtFile) is { } sdk) problems.Add(sdk);
         if (exitCode != 0 && builtFile is not null && !problems.Any(problem => !problem.Warning))
             foreach (string line in HexDebugging.LinkErrorsIn(output))
                 problems.Add(new TerminalProblem(builtFile, 1, 1, line, false, "link"));
         return problems;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex LinkerHeader = new(
-        @"^(?:lld-link|ld\.lld)(?:\.exe)?: error: (?<message>.+)$",
-        System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex LinkerReference = new(
-        @"^>>> referenced by (?<file>.+):(?<line>\d+)(?: \((?<full>.+):\d+\))?$",
-        System.Text.RegularExpressions.RegexOptions.Compiled);
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?:lld-link|ld\.lld)(?:\.exe)?: error: (?<message>.+)$")]
+    private static partial System.Text.RegularExpressions.Regex LinkerHeader { get; }
+    [System.Text.RegularExpressions.GeneratedRegex(@"^>>> referenced by (?<file>.+):(?<line>\d+)(?: \((?<full>.+):\d+\))?$")]
+    private static partial System.Text.RegularExpressions.Regex LinkerReference { get; }
 
     private static IEnumerable<TerminalProblem> LinkerSources(string output, string? builtFile)
     {
@@ -64,9 +65,8 @@ internal static class HexBuildProblems
         return new(file, 1, 1, string.Join("\n", details), false, "dotnet-sdk");
     }
 
-    private static readonly System.Text.RegularExpressions.Regex CMakeHeader = new(
-        @"^CMake (?<kind>Error|Warning(?: \(dev\))?)(?: at (?<file>.+):(?<line>\d+)(?: \([^)]*\))?| in (?<file>.+))?:\s*(?<message>.*)$",
-        System.Text.RegularExpressions.RegexOptions.Compiled);
+    [System.Text.RegularExpressions.GeneratedRegex(@"^CMake (?<kind>Error|Warning(?: \(dev\))?)(?: at (?<file>.+):(?<line>\d+)(?: \([^)]*\))?| in (?<file>.+))?:\s*(?<message>.*)$")]
+    private static partial System.Text.RegularExpressions.Regex CMakeHeader { get; }
 
     private static IEnumerable<TerminalProblem> CMakeProblems(string output, string? builtFile)
     {
