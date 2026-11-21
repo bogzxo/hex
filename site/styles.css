@@ -698,8 +698,14 @@ h2 + p strong {
   }
 }
 
-/* A list that's meant as one line is one on a wide screen, however many cards it has */
+/* The editor's nine are three rows of three on a wide screen, never four and an orphan.
+   A list that's meant as one line is one on a wide screen, however many cards it has */
 @media (width >= 70rem) {
+  .features:not(.row) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+
   .features.row {
     grid-template-columns: none;
     grid-auto-columns: minmax(0, 1fr);
@@ -1166,6 +1172,106 @@ tbody tr:last-child > * {
   }
 }
 
+/* This release against the last, a pair of bars a measurement, each pair drawn to its own scale since the units differ */
+
+.versus {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-block-start: var(--gap);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  list-style: none;
+
+  & > li {
+    padding: 1.25rem 1.4rem;
+    outline: 1px solid var(--border);
+  }
+
+  & h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  & .better {
+    margin-block: 0.2rem 0.75rem;
+    color: var(--dim);
+    font-size: 0.85rem;
+  }
+
+  & .pair {
+    display: grid;
+    grid-template-columns: 3rem 1fr minmax(6.5rem, auto);
+    gap: 0.75rem;
+    align-items: center;
+    margin-block-start: 0.4rem;
+    font-size: 0.92rem;
+  }
+
+  & .pair > span:first-child {
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  & i {
+    display: block;
+    block-size: 0.9rem;
+    /* A range starts where its low end is, a single value at the baseline; a value too small to see still shows */
+    margin-inline-start: calc(var(--from, 0) / var(--max) * 100%);
+    inline-size: max(4px, calc((var(--to) - var(--from, 0)) / var(--max) * 100%));
+    border-radius: 0 4px 4px 0;
+    background: var(--accent);
+  }
+
+  & .was i {
+    background: var(--dim);
+  }
+
+  & .pair > :last-child {
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  & .pair b {
+    color: var(--text);
+  }
+}
+
+.versus-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-block-start: 2.5rem;
+  color: var(--dim);
+  font-size: 0.92rem;
+
+  & h3 {
+    flex-basis: 100%;
+    margin-block-end: 0.25rem;
+    color: var(--text);
+    font-size: 1.35rem;
+  }
+
+  & span::before {
+    content: "";
+    display: inline-block;
+    inline-size: 0.8rem;
+    block-size: 0.8rem;
+    margin-inline-end: 0.4rem;
+    border-radius: 2px;
+    background: var(--accent);
+    vertical-align: -0.05em;
+  }
+
+  & .was::before {
+    background: var(--dim);
+  }
+}
+
 pre {
   overflow-x: auto;
   margin: 0;
@@ -1247,7 +1353,14 @@ pre {
 }
 
 @media (forced-colors: active) {
-  .bars i {
+  .bars i,
+  .versus i,
+  .versus-key span::before {
     background: CanvasText;
+  }
+
+  .versus .was i,
+  .versus-key .was::before {
+    background: GrayText;
   }
 }

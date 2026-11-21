@@ -69,15 +69,15 @@
         <figure class="shot" style="margin-inline: 0">
           <!-- One picture a look, the stylesheet showing the one the page is in. A <source media> only knows the system's
                choice, never the switch's -->
-          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
-          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a C# file open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame at the end of the current line and a minimap">
+          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
+          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
         </figure>
         <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
 
-        <ul class="receipts" aria-label="Measured on the 3.1.0 build">
-          <li><b>516 ms</b><span>to Dusk's first frame, from a cold process</span></li>
-          <li><b>852 ms</b><span>to Dawn's, its window up at 456</span></li>
-          <li><b>49.3 MiB</b><span>zipped, all three faces and their assets</span></li>
+        <ul class="receipts" aria-label="Measured on the 3.3.0 build">
+          <li><b>405 ms</b><span>to Dusk's first frame, from a cold process</span></li>
+          <li><b>660 ms</b><span>to Dawn's, its window up at 381</span></li>
+          <li><b>50.6 MiB</b><span>zipped, all three faces and their assets</span></li>
           <li><b>0</b><span>browsers shipped inside it</span></li>
         </ul>
         </div>
@@ -88,11 +88,11 @@
       <div class="wrap">
         <p class="eyebrow">Measured, not vibes</p>
         <h2>Fast as fuck, with receipts</h2>
-        <p>Fresh measurements of <strong>Hex 3.1.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained. Taken on 18 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Ten launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
+        <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches. Dawn opens Hex's own source with a C# file up; Dusk opens one shell.</p>
 
-        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn 852 milliseconds, ranging 821 to 1010. Dusk 516 milliseconds, ranging 484 to 534.">
-          <div><span>Dawn</span><i style="--ms: 852"></i><span><b>852 ms</b> <small>821–1010</small></span></div>
-          <div class="dusk"><span>Dusk</span><i style="--ms: 516"></i><span><b>516 ms</b> <small>484–534</small></span></div>
+        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn 660 milliseconds, ranging 571 to 693. Dusk 405 milliseconds, ranging 394 to 479.">
+          <div><span>Dawn</span><i style="--ms: 660"></i><span><b>660 ms</b> <small>571–693</small></span></div>
+          <div class="dusk"><span>Dusk</span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
         </div>
 
         <div class="scroller rise" tabindex="0" role="region" aria-label="What was measured">
@@ -101,16 +101,62 @@
               <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
             </thead>
             <tbody>
-              <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>852 ms</strong></td><td><strong>516 ms</strong></td></tr>
-              <tr><th scope="row">First-frame range, 10 launches each</th><td>821–1010 ms</td><td>484–534 ms</td></tr>
-              <tr><th scope="row">Process start to window shown, median</th><td>456 ms</td><td>389 ms</td></tr>
-              <tr><th scope="row">Idle working set, median</th><td><strong>201.4 MiB</strong></td><td><strong>117.2 MiB</strong></td></tr>
-              <tr><th scope="row">Idle CPU, median, of one logical core</th><td>2.96%</td><td>0.76%</td></tr>
+              <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>660 ms</strong></td><td><strong>405 ms</strong></td></tr>
+              <tr><th scope="row">First-frame range, 6 launches each</th><td>571–693 ms</td><td>394–479 ms</td></tr>
+              <tr><th scope="row">Process start to window shown, median</th><td>381 ms</td><td>333 ms</td></tr>
+              <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>253.8 MiB</strong></td><td><strong>152.6 MiB</strong></td></tr>
+              <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>349.7 MiB</td><td>247.2 MiB</td></tr>
+              <tr><th scope="row">CPU at rest, median, of one logical core</th><td>2.09%</td><td>0.39%</td></tr>
             </tbody>
           </table>
         </div>
 
-        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers. This is one machine, and a busy one. It's not a race rigged against somebody else's editor. <strong>Dawn got slower and I'm saying so:</strong> 2.8.0 measured 492 ms. 3.1 sets up a whole agent workspace before its first frame and it shows, don't like this regression? Disable AI through the global NoAI toggle. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method, raw samples and reproduction commands</a>.</p>
+        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <strong>Dawn got heavier and I'm saying so:</strong> 3.2.0, measured the same way the same morning, sat at 231.9 MiB against 3.3.0's 253.8. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
+
+        <div class="versus-key">
+          <h3>3.3.0 against 3.2.0</h3>
+          <span class="was">3.2.0</span>
+          <span>3.3.0</span>
+        </div>
+        <ul class="versus rise" aria-label="3.3.0 against 3.2.0, measurement by measurement">
+          <li>
+            <h4>A C# file's first errors</h4>
+            <p class="better">Seconds, lower is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--from: 5; --to: 43; --max: 43"></i><span>5–43 s</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--to: 1; --max: 43"></i><b>under 1 s</b></div>
+          </li>
+          <li>
+            <h4>csharp-ls, doing nothing</h4>
+            <p class="better">Logical cores kept busy, lower is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--to: 4; --max: 4"></i><span>4 cores</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--to: 0; --max: 4"></i><b>0</b></div>
+          </li>
+          <li>
+            <h4>The first Dusk of a run</h4>
+            <p class="better">Milliseconds to open it from Dawn, lower is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--to: 1379; --max: 1379"></i><span>1,379 ms</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--to: 33; --max: 1379"></i><b>33 ms</b></div>
+          </li>
+          <li>
+            <h4>Terminal output</h4>
+            <p class="better">MB/s through a pane, higher is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--from: 3; --to: 5; --max: 18"></i><span>3–5 MB/s</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--from: 11; --to: 18; --max: 18"></i><b>11–18 MB/s</b></div>
+          </li>
+          <li>
+            <h4>Dawn's first frame</h4>
+            <p class="better">Milliseconds, median of 6, lower is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--to: 721; --max: 721"></i><span>721 ms</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--to: 660; --max: 721"></i><b>660 ms</b></div>
+          </li>
+          <li>
+            <h4>Dawn at rest</h4>
+            <p class="better">Percent of one core, median of 6, lower is better</p>
+            <div class="pair was"><span>3.2.0</span><i style="--to: 3.00; --max: 3.00"></i><span>3.00%</span></div>
+            <div class="pair"><span>3.3.0</span><i style="--to: 2.09; --max: 3.00"></i><b>2.09%</b></div>
+          </li>
+        </ul>
+        <p class="note">Switching between Dawn, Agentic and Dusk now draws no blank frame at all. The top four are from the work on 3.3.0, measured as each change went in; the bottom two are the run above, 3.2.0's download against 3.3.0's build. The agentic-perf self test, Agentic with a dozen long chats, three runs of each build: standing still it used a median 6.1% of a core against 17.5% (ranges 3.8–22.1 and 13.7–22.1, so they overlap); streaming and opening groups came out within the noise.</p>
 
         <div class="split">
           <div>
@@ -119,11 +165,12 @@
             <p class="intro">There's no DOM to lay out, no browser to haul around, and no reason a text editor should need either.</p>
           </div>
           <pre class="rise"><code><span class="d">// Hex.exe, start to first frame</span>
-<span class="t">main</span>                      <span class="s">16 ms</span>
-<span class="t">device made</span>              <span class="s">316 ms</span>
-<span class="t">window shown</span>             <span class="s">456 ms</span>
-<span class="t">scene set up</span>             <span class="s">797 ms</span>
-<span class="c">first frame of the scene</span> <span class="k">852 ms</span></code></pre>
+<span class="t">main</span>                      <span class="s">14 ms</span>
+<span class="t">editor made</span>              <span class="s">226 ms</span>
+<span class="t">device made</span>              <span class="s">368 ms</span>
+<span class="t">window shown</span>             <span class="s">388 ms</span>
+<span class="t">scene set up</span>             <span class="s">678 ms</span>
+<span class="c">first frame of the scene</span> <span class="k">680 ms</span></code></pre>
         </div>
       </div>
     </section>
@@ -132,9 +179,25 @@
       <div class="wrap">
         <p class="eyebrow">Unedited, 1600 × 900</p>
         <h2>Look at the bloody thing</h2>
-        <p>Every picture is the real Hex window. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
+        <p>Every picture is the real Hex window, most of them 3.3.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
         <div class="gallery">
+          <figure class="rise">
+            <a href="images/actions-1600.webp"><img src="images/actions-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Sum isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Linq, at the top, then two refactorings from csharp-ls and the editor's own Rename and Organise Imports"></a>
+            <figcaption><b><kbd>Ctrl+.</kbd></b> The fix the server would pick on top, then everything else that can be done to the line.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/explorer-1600.webp"><img src="images/explorer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The explorer with mi typed into its find box, Mixer.cs found and outlined, a dot on the project folder for a change under it and a chain of single folders shown as one row"></a>
+            <figcaption><b>The explorer.</b> Type to find a file. Dots say where the changes and problems are.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
+            <figcaption><b>Welcome.</b> One thing to do first, and a checklist of six that ticks itself off.</figcaption>
+          </figure>
+          <figure class="rise">
+            <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
+            <figcaption><b>Shells that say how they ended.</b> A failed one keeps its pane and its tab says so.</figcaption>
+          </figure>
           <figure class="rise">
             <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
             <figcaption><b>Completion.</b> The language server's, as you type, every member in its own colour.</figcaption>
@@ -164,8 +227,8 @@
             <figcaption><b>Search.</b> The whole workspace, grouped by file.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Jupyter notebook with a Markdown heading, two Python cells, a line of printed output and the top of two plots"></a>
-            <figcaption><b>Notebooks.</b> A real Python kernel, real plots.</figcaption>
+            <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
+            <figcaption><b>Notebooks.</b> A real kernel, typeset maths, and each cell's count and time.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
@@ -176,8 +239,8 @@
             <figcaption><b>Designer.</b> Hex's own welcome page, open in Hex.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used chips under it, the sections down the left, and each setting with what sets it right beside what it says"></a>
-            <figcaption><b>Settings.</b> Searchable, and one press shows only what you changed.</figcaption>
+            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used under it, the sections down the left, and each setting saying in a line what it does"></a>
+            <figcaption><b>Settings.</b> Each one says what it does in a line, and one press shows only what you changed.</figcaption>
           </figure>
         </div>
       </div>
@@ -190,7 +253,15 @@
         <ul class="features">
           <li class="rise">
             <h3>Code</h3>
-            <p>Language-server completion, hovers, definitions, references, rename, quick fixes, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them: TypeScript 7's native server, and VS Code's own for HTML, CSS and JSON, each file going to one of them so nothing is said twice.</p>
+            <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p>
+          </li>
+          <li class="rise">
+            <h3><kbd>Ctrl+.</kbd> and it's sorted</h3>
+            <p>One menu of everything that can be done to the line or the selection. The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p>
+          </li>
+          <li class="rise">
+            <h3>An explorer you work in</h3>
+            <p>Type to find a file. New File and Rename name it right on its row, and <kbd>Esc</kbd> takes it back. Drag to move, hold <kbd>Ctrl</kbd> to copy. Open files are marked, a folder carries a dot for a change or a problem somewhere under it, and a chain of single folders is one row.</p>
           </li>
           <li class="rise">
             <h3>Git</h3>
@@ -198,19 +269,23 @@
           </li>
           <li class="rise">
             <h3>Find your shit</h3>
-            <p>Quick Open, a command palette of 360 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.</p>
+            <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.</p>
           </li>
           <li class="rise">
             <h3>Run, debug and test</h3>
             <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches. .NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
           </li>
           <li class="rise">
-            <h3>Documents that do things</h3>
-            <p>Jupyter notebooks with real kernels and outputs; native Markdown previews with tables and maths. Kernels are separate tools, not secretly bundled into the download number.</p>
+            <h3>Notebooks for engineers</h3>
+            <p>Jupyter notebooks with real kernels, typeset maths and plots. Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p>
           </li>
           <li class="rise">
             <h3>Build interfaces</h3>
             <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source. Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+          </li>
+          <li class="rise">
+            <h3>Usable by everyone</h3>
+            <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window. Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p>
           </li>
         </ul>
       </div>
@@ -221,6 +296,7 @@
         <p class="eyebrow">Dusk, the terminal</p>
         <h2>Dusk. A whole fucking terminal.</h2>
         <p>Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
+        <p class="intro">Dusk says when a shell ended and with what. A shell that failed keeps its pane, so you can read why. Tabs show busy, rung and failed, and find floats over the pane. Going between Dawn, Agentic and Dusk never flashes: a face warms up as you point at its button and a short crossfade carries you over. The first Dusk of a run opens in about 30 ms, not over a second.</p>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
         </figure>
@@ -262,19 +338,19 @@
         <ul class="features row">
           <li class="rise">
             <h3>The fleet</h3>
-            <p>Every chat is a card: its agent system, model, tokens, cost, what it's doing right now and a thin bar of how full its context is.</p>
+            <p>Every chat is a card: its model, tokens, cost, what it's doing and how full its context is. Finished agents fold into a Finished group a few minutes after they end, so the ones waiting on you stay on top.</p>
           </li>
           <li class="rise">
             <h3>Agents that start agents</h3>
-            <p>One chat can start others, of any system and model, and they sit under it a step in. It waits for them and reports for all.</p>
+            <p>One chat can start others, of any system and model, and they sit under it a step in. Twelve can run at once. It waits for them and reports for all.</p>
           </li>
           <li class="rise">
-            <h3>Details, down to the cent</h3>
-            <p>Turns, tokens in and out, cost, how much came from the cache, your plan's limits, which tools went through Hex and the files it touched.</p>
+            <h3>Stuck? Start it again</h3>
+            <p><code>hex_agent_restart</code> kills a stuck agent along with whatever it had running and starts it again where it was. A chat whose process outlived its turn says it's still running.</p>
           </li>
           <li class="rise">
             <h3>One method, not the whole bloody file</h3>
-            <p>Over MCP Hex exposes <strong>71 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
+            <p>Over MCP Hex exposes <strong>80 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
           </li>
           <li class="rise">
             <h3>86% that never went near a context window</h3>
@@ -305,7 +381,7 @@
       <div class="wrap">
         <p class="eyebrow">Appearance</p>
         <h2>Make it look how you want</h2>
-        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, or float the panels in glass. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
+        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
         <div class="gallery pairs">
           <figure class="rise">
             <a href="images/light-1600.webp"><img src="images/light-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
@@ -316,12 +392,12 @@
             <figcaption><b>Graphite.</b> Quiet.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating with a blue accent"></a>
+            <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating over a dark blue with a blue accent"></a>
             <figcaption><b>Fluid Glass.</b> Panels that float.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/sunset-1600.webp"><img src="images/sunset-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Sunset theme, a warm plum with rounded panels"></a>
-            <figcaption><b>Sunset.</b> Something warmer.</figcaption>
+            <a href="images/visual-studio-1600.webp"><img src="images/visual-studio-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Visual Studio look, a neutral dark grey with blue file icons"></a>
+            <figcaption><b>Visual Studio.</b> For the muscle memory.</figcaption>
           </figure>
         </div>
         <p class="note">Same code, different mood.</p>

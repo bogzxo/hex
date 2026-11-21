@@ -4,7 +4,8 @@ These are measurements of the local **Hex 2.8.0 “thickboy” development worki
 to Hex and Horizon. They replace the Hex 2.0.0 figures formerly in the README. They are not measurements of the
 existing `v2.8.0` download, a Debug build, or a self-test session.
 
-The README's figures are newer, from 3.1.0 on 18 November, [further down](#the-readmes-numbers-310--18-november-2026).
+The site's figures are newer, from 3.3.0 on 21 November, [further down](#the-sites-numbers-330-against-320--21-november-2026);
+the README's are from 3.1.0 on 18 November, [below those](#the-readmes-numbers-310--18-november-2026).
 The method below is the one they were taken by.
 
 ## Results
@@ -252,6 +253,47 @@ working set (a first launch, see above) and 636 to 639 handles, so the chats lea
 
 Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
 CPU, handles and threads every half second from the outside, the self-tests say the rest.
+
+## The site's numbers, 3.3.0 against 3.2.0 — 21 November 2026
+
+`scripts/measure-readme.ps1` on two builds, one after the other the same morning: the `v3.2.0` release's
+`Hex-win-x64.zip` (its installer folder aside), and a Release win-x64 NativeAOT publish of `development` at
+`8b6a9e4` (build 4420, Hex 3.3.0), made with the release workflow's `dotnet publish` command. Six measured launches of
+each face after one discarded launch each, `-SettleSeconds 30 -IdleSeconds 10`: CPU and memory are sampled for 10 s
+once the window has sat for 30 s after its first frame. Dawn opens this repository with `DawnScene.cs`, Dusk one
+shell. Each run had its own `HEX_HOME` and `HEX_REMOTE_PIPE`. The machine is the one above (driver `32.0.16.2114`,
+.NET SDK `11.0.100`) and was not quiet: other agents were building and testing on it.
+
+| Metric | 3.2.0 Dawn | 3.3.0 Dawn | 3.2.0 Dusk | 3.3.0 Dusk |
+| --- | ---: | ---: | ---: | ---: |
+| First rendered scene, median | 721 ms | **660 ms** | 454 ms | **405 ms** |
+| First rendered scene, range | 648–1210 ms | 571–693 ms | 430–540 ms | 394–479 ms |
+| Window shown, median | 440 ms | 381 ms | 367 ms | 333 ms |
+| Working set at rest, median | 231.9 MiB | **253.8 MiB** | 151.2 MiB | 152.6 MiB |
+| Private bytes at rest, median | 340.4 MiB | 349.7 MiB | 254.2 MiB | 247.2 MiB |
+| CPU at rest, % of one core, median | 3.00% | 2.09% | 0.47% | 0.39% |
+
+Raw first frames, ms: 3.2.0 Dawn 696 746 1210 1185 677 648, Dusk 467 430 476 540 440 433; 3.3.0 Dawn 689 639 693 571
+579 680, Dusk 408 479 443 402 394 399. 3.2.0's Dawn had two slow launches (1210, 1185) that 3.3.0's didn't; its median
+without them would be 686 ms. Dawn's working set grew by about 22 MiB.
+
+An A/B of first frames of the same two executables, `--window --fresh` into an empty
+workspace, the builds taken in turn each round, eight rounds: 3.2.0 median 495 ms (431–851), 3.3.0 median 469 ms
+(425–547).
+
+ZIP of each publish folder (`ZipFile.CreateFromDirectory`, `Optimal`, before any launch made caches, no installer):
+3.2.0 52,541,175 bytes (50.1 MiB), 3.3.0 53,005,783 bytes (50.6 MiB).
+
+`--selftest agentic-perf`, three runs of each build, Agentic standing still with a dozen long chats: 3.2.0 22.1, 13.7
+and 17.5% of a core, 3.3.0 22.1, 6.1 and 3.8%. Streaming into a chat and opening groups overlapped between the builds
+(streaming 52.2, 33.8, 52.2% against 24.6, 40.0, 46.1%).
+
+Measured executables, SHA-256: 3.2.0 `82E844ADE60CD673AB4CC0E56AB2DE4D51D7CFA389F4E20ABE5691DB92380B67`, 3.3.0
+`F160C58E3279030AF08A331D2135D528FC73F0AB4C3815770BBA2697A13C84F5`.
+
+The site's other 3.3.0 figures (a C# file's first diagnostics 5–43 s to under 1 s, an idle csharp-ls from four cores to
+none, the first Dusk of a run 1379 to 33 ms, no blank frame switching faces, terminal output 3–5 to 11–18 MB/s) are
+the release notes', measured as each change went in, not in this run.
 
 ## The README's numbers, 3.1.0 — 18 November 2026
 
