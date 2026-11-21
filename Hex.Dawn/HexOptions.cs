@@ -23,4 +23,6 @@ namespace Hex.Dawn;
 /// <param name="Mcp">Whether the MCP server for agents is up for this run whatever the settings say, see DawnScene.Mcp.</param>
 /// <param name="Face">The face to start in, dawn or noon (agentic), null for the one the workspace was left in.</param>
 /// <param name="NoAi">Whether this run is without the agents whatever the settings say, see HexAi.</param>
-internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null, bool Fresh = false, HexLaunchFile[]? Files = null, bool Mcp = false, string? Face = null, bool NoAi = false);
+/// <param name="Link">Whether Hex Link is on for this run whatever the settings say, see DawnScene.Link.</param>
+/// <param name="LinkPort">The port Link listens on for this run, null for the link_port setting's.</param>
+internal sealed record HexOptions(string? Open, string Workspace, bool SelfTest, bool Wheel, string[] Check, bool Exit, bool Exercise = false, float? Scale = null, bool Browse = false, bool Watch = false, string? View = null, string[]? Console = null, string[]? Suites = null, int Line = 0, string? Folder = null, bool Fresh = false, HexLaunchFile[]? Files = null, bool Mcp = false, string? Face = null, bool NoAi = false, bool Link = false, int? LinkPort = null);

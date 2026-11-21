@@ -392,6 +392,9 @@ internal sealed partial class DawnScene : Scene
         // The door for agents, once the workspace's folders are known for the bridge to pick this Hex by
         BuildMcp();
 
+        // And the door for other machines, Hex Link, nothing listening unless it's on
+        BuildLink();
+
         Horizon.Core.Diagnostics.StartupTrace.Mark("editor: extensions started, MCP");
         // Every part is made by now, what each tick does is put in order
         DeclareTicks();
@@ -675,7 +678,8 @@ internal sealed partial class DawnScene : Scene
             panelTicks.Add("agents_panel", UpdateAgentsPanel);
         panelTicks
             .Add("spelling", UpdateSpelling)
-            .Add("mcp", UpdateMcp);
+            .Add("mcp", UpdateMcp)
+            .Add("link", UpdateLink);
         if (!HexAi.Off)
             panelTicks.Add("noon", UpdateNoon).Add("chats_kept", UpdateChatsKept).Add("agent_data", UpdateAgentData);
         panelTicks

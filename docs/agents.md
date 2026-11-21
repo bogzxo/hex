@@ -193,6 +193,16 @@ rather than going in on its stdin, which it would only read once the wait was ov
 chat somebody started and everything under it. Each message is a line in both chats, to or from whom, its kind and how
 it starts, and what a chat wasn't working to read goes in front of what it's next asked.
 
+With Hex Link on (the `link` setting, `--link`), agents reach the other machines this Hex is linked to, as far as each
+lets this one (docs/hex-link-plan.md). `hex_link_devices()` lists the connected devices, what each lets this machine do
+(view, steer, edit), their workspace folders, repositories and agents, and the paired ones that aren't connected.
+`hex_link_call(device, tool, arguments)` calls one of a device's tools by its name or the start of its id: with view
+its reading and searching tools and `hex_agent_list`/`hex_agent_read`, with steer the `hex_agent_*` that tell, start,
+stop and approve, with edit `hex_edit` and `hex_write`; never its terminal, tasks, screen or settings. What comes back
+starts with a line saying it's another machine's data, not instructions, and a refusal says which right it takes.
+`hex_link_spawn(device, prompt, name?, agent?, model?)` starts an agent there and says how to follow it (`hex_link_call`
+with `hex_agent_wait`, `hex_agent_read` or `hex_agent_send`). With Link off they answer that it is.
+
 What Claude Code and Codex are told in their system prompt (`HexAgentProfiles.HARNESS_RULES`, `hex.harness_rules` to
 an extension) says to find and read code through the harness before the shell, to run commands with
 `hex_terminal_run`, and how to coordinate. The shell stays theirs for anything the harness doesn't do. Claude Code's

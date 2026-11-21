@@ -1,0 +1,264 @@
+namespace Hex.Dawn;
+
+// What the rest of the editor sees of Link and does with it, on the editor's thread: the Link window, the pairing
+// dialog, Agentic's sections of other devices, the palette's commands and the self tests all go through these. Reading
+// them is cheap (the lists are copies made as they're asked for), so a window may ask every time it draws, and
+// LinkChanged says when it's worth drawing again.
+internal sealed partial class DawnScene
+{
+    /// <summary>Something shown of Link moved (a link, a device, a pairing, presence, the LAN). On the editor's thread.</summary>
+    internal event Action? LinkChanged;
+
+    /// <summary>Goes up each time <see cref="LinkChanged"/> is said, for a window that would rather compare than listen.</summary>
+    internal int LinkVersion { get; private set; }
+
+    /// <summary>Whether Link is up.</summary>
+    internal bool LinkOn => linkTransport is not null;
+
+    /// <summary>The port it listens on, 0 while it's off or doesn't listen (a tablet).</summary>
+    internal int LinkPort => linkTransport?.Port ?? 0;
+
+    /// <summary>This device as the others know it (its id, the name it goes by, its fingerprint), null while Link is off.</summary>
+    internal HexLinkDevice? LinkDevice => linkIdentity?.Device;
+
+    /// <summary>How this device's key is kept on the disk, for the window to say (the file alone is said as a warning), null while off.</summary>
+    internal HexLinkProtection? LinkProtection => linkIdentity?.Protection;
+
+    /// <summary>The devices this one has paired with, by name, linked or not.</summary>
+    internal IReadOnlyList<HexLinkKnown> LinkKnown => linkTrust?.Known ?? [];
+
+    /// <summary>The devices linked now, each the other machine as this one sees it (its fleet, chats, files and tools).</summary>
+    internal IReadOnlyList<HexLinkPeer> LinkPeers => link?.Peers ?? [];
+
+    /// <summary>The Hexes heard on the LAN, this one left out.</summary>
+    internal IReadOnlyList<HexLinkNearby> LinkNearby => linkDiscovery?.Found ?? [];
+
+    /// <summary>Why the LAN can't be looked at, null when it can or Link is off.</summary>
+    internal string? LinkNearbyOff => linkDiscovery?.Off;
+
+    /// <summary>Where each linked device's person is, the latest each said, by device id.</summary>
+    internal IReadOnlyDictionary<string, LinkPresenceSeen> LinkPresence => linkPresence;
+
+    /// <summary>The audit log's latest events, oldest first, at most <paramref name="count"/>.</summary>
+    internal List<HexLinkAuditEntry> LinkAuditLatest(int count) => linkAudit?.Latest(count) ?? [];
+
+    /// <summary>Where the audit log, the remote files' copies and the patches offered are kept, empty while Link is off.</summary>
+    internal string LinkDataFolder => linkData;
+
+    /// <summary>A pairing waiting on the person here, null when there's none. The UI shows it and calls Decide.</summary>
+    internal LinkPairingAsk? LinkPairingPending => linkPairingPending;
+
+    /// <summary>When the pairing window closes, null when it's closed.</summary>
+    internal DateTime? LinkPairingUntil => linkTransport?.PairingUntil;
+
+    /// <summary>The TLS version a device's link was made with (Tls13, Tls12), null when it isn't linked.</summary>
+    internal System.Security.Authentication.SslProtocols? LinkTlsOf(string id) =>
+        linkTransport?.LinkTo(id)?.Stream is System.Net.Security.SslStream ssl ? ssl.SslProtocol : null;
+
+    /// <summary>Whether a known device is one the person cut, which isn't dialled again until they connect it by hand.</summary>
+    internal bool LinkHeldOff(string id) => linkHeldOff.Contains(id);
+
+    /// <summary>
+    /// Opens the pairing window: for the next five minutes (or <paramref name="window"/>) one unknown device may pair,
+    /// and the person is asked about it (<see cref="LinkPairingPending"/>, and Hex's dialog until the Link window has its own).
+    /// </summary>
+    internal bool LinkOpenPairing(TimeSpan? window = null)
+    {
+        if (linkTransport is not { Listening: true } transport)
+            return false;
+        transport.OpenPairing(window ?? LINK_PAIRING_WINDOW, pairing => LinkAskPerson(pairing, host: true));
+        linkDirty = true;
+        return true;
+    }
+
+    /// <summary>Closes the pairing window, a pairing already under way going on to its end.</summary>
+    internal void LinkClosePairing()
+    {
+        linkTransport?.ClosePairing();
+        linkDirty = true;
+    }
+
+    /// <summary>
+    /// Pairs with the device at an address, which has to have its pairing window open. The person here is asked about
+    /// it as the person there is, unless <paramref name="ask"/> answers instead (a self test, never the program). Once
+    /// paired the connection carries on as a link. How it ended, never throws but for Link being off.
+    /// </summary>
+    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null)
+    {
+        HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
+        CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
+        HexLinkPairResult result;
+        try
+        {
+            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop);
+        }
+        catch (OperationCanceledException)
+        {
+            result = HexLinkPairResult.Failed("failed");
+        }
+
+        PostLink(() => LinkPairEnded(result));
+        if (result.Connection is { } connection)
+            await LinkAdd(connection);
+        return result;
+    }
+
+    /// <summary>
+    /// Links to a known device at an address (<paramref name="expectId"/> the one that has to answer there, when it's
+    /// said). The peer once it's up; throws HexLinkRefused with why when it isn't let in (unknown when the other end
+    /// doesn't know this one, busy when they're linked already).
+    /// </summary>
+    internal async Task<HexLinkPeer> LinkConnect(string host, int port, string? expectId = null)
+    {
+        HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
+        HexLinkConnection connection = await transport.Dial(host, port, expectId, linkCancel?.Token ?? CancellationToken.None);
+        PostLink(() => linkHeldOff.Remove(connection.Device.Id));
+        return await LinkAdd(connection) ?? throw new HexLinkRefused("refused", Said("link.not_linked", ("device", connection.Device.Name), ("why", "hello failed")));
+    }
+
+    /// <summary>A device's link cut by the person, not dialled again until they connect it. False when it wasn't linked.</summary>
+    internal bool LinkDisconnect(string id)
+    {
+        linkHeldOff.Add(id);
+        linkDirty = true;
+        return link?.Remove(id, "it was disconnected here") == true;
+    }
+
+    /// <summary>A device forgotten: its pin gone, its link cut the same moment, and it can't link again without pairing.</summary>
+    internal bool LinkForget(string id)
+    {
+        if (linkTrust is null)
+            return false;
+        string name = linkTrust.Find(id)?.Device.Name ?? id;
+        bool forgot = linkTrust.Forget(id);
+        link?.Remove(id, "it was forgotten here");
+        linkRedial.Soon(id);
+        linkHeldOff.Remove(id);
+        // The transport writes it in the audit log as it cuts the link
+        if (forgot)
+            Say(Said("link.forgotten", ("device", name)));
+
+        linkDirty = true;
+        return forgot;
+    }
+
+    /// <summary>What a device may do here from now on, told to it at once and checked on its next request. False when it isn't known.</summary>
+    internal bool LinkSetRights(string id, HexLinkRights rights)
+    {
+        if (linkTrust?.SetRights(id, rights) != true)
+            return false;
+        linkAudit?.Write("rights", id, string.Join(' ', HexLinkTrust.RightsNames(rights)));
+        link?.RightsMoved(id);
+        linkDirty = true;
+        return true;
+    }
+
+    /// <summary>A known device called something else here. False when it isn't known.</summary>
+    internal bool LinkRename(string id, string name)
+    {
+        string named = name.Trim();
+        if (named.Length == 0 || linkTrust?.Rename(id, named.Length > 64 ? named[..64] : named) != true)
+            return false;
+        linkDirty = true;
+        return true;
+    }
+
+    /* Pairing, asking the person */
+
+    /// <summary>
+    /// A pairing to ask the person about, from the transport's thread: shown on the editor's, answered when they pick
+    /// (or the pairing ends without them, which its Ended token says, and the dialog closes).
+    /// </summary>
+    private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host)
+    {
+        var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended);
+        pairing.Ended.Register(() =>
+        {
+            ask.Decide(null);
+            LinkMoved();
+        });
+        PostLink(() => ShowLinkPairing(ask));
+        return ask.Answer;
+    }
+
+    // The pairing asked about with Hex's own dialog, until the Link window has a dialog of its own
+    private void ShowLinkPairing(LinkPairingAsk ask)
+    {
+        if (ask.IsDecided)
+            return;
+
+        linkPairingPending?.Decide(null);
+        CloseLinkPairingDialog();
+        linkPairingPending = ask;
+        linkDirty = true;
+
+        string viewOnly = Said("link.pair_view"), viewSteer = Said("link.pair_view_steer"), viewEdit = Said("link.pair_view_edit"), all = Said("link.pair_all"), cancel = Said("link.pair_cancel");
+        string text = Said(ask.Host ? "link.pair_text_host" : "link.pair_text_joiner", ("device", ask.Other.Name), ("fingerprint", ask.Other.Fingerprint),
+            ("address", ask.Address), ("code", ask.Code));
+        ((IWindows)this).Ask(Said("link.pair_title", ("code", ask.Code)), text, [viewOnly, viewSteer, viewEdit, all, cancel], answered =>
+        {
+            ask.Decide(answered == viewOnly ? HexLinkRights.View
+                : answered == viewSteer ? HexLinkRights.View | HexLinkRights.Steer
+                : answered == viewEdit ? HexLinkRights.View | HexLinkRights.Edit
+                : answered == all ? HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit
+                : null);
+            linkDirty = true;
+        }, risky: all);
+        linkPairingDialog = textDialog;
+    }
+
+    private void CloseLinkPairingDialog()
+    {
+        if (linkPairingDialog is { IsOpen: true } open && open == textDialog)
+            open.Close();
+        linkPairingDialog = null;
+    }
+
+    // How a pairing ended, said, the device's redials started over when it paired
+    private void LinkPairEnded(HexLinkPairResult result)
+    {
+        linkDirty = true;
+        string device = result.Device?.Name ?? Said("link.another_device");
+        if (result.Paired)
+        {
+            linkRedial.Soon(result.Device!.Id);
+            Say(Said("link.paired", ("device", device), ("granted", LinkRightsSaid(result.Granted))));
+            return;
+        }
+
+        if (result.Reason == "declined-here")
+            return;
+        Say(Said("link.pair_failed", ("device", device), ("why", Said("link.pair_reason_" + (result.Reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" ? result.Reason.Replace('-', '_') : "failed")))), error: true);
+    }
+}
+
+/// <summary>
+/// A pairing waiting on the person, the model the pairing dialog shows: the other device (its id proved, its name only
+/// what it says), the six digits both screens show, where it is, and whether this machine is the one that opened its
+/// pairing window (the host) or the one that came to pair. <see cref="Decide"/> once the person has looked, with what
+/// this machine grants the other or null to decline. <see cref="Ended"/> is cancelled when the pairing ends without
+/// this side's answer (the other declined, two minutes passed, the connection broke); the dialog closes then.
+/// </summary>
+internal sealed class LinkPairingAsk(HexLinkDevice other, string code, string address, bool host, CancellationToken ended)
+{
+    private readonly TaskCompletionSource<HexLinkRights?> answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public HexLinkDevice Other { get; } = other;
+
+    public string Code { get; } = code;
+
+    public string Address { get; } = address;
+
+    public bool Host { get; } = host;
+
+    public CancellationToken Ended { get; } = ended;
+
+    /// <summary>Whether it's been answered, or ended without an answer.</summary>
+    public bool IsDecided => answer.Task.IsCompleted;
+
+    /// <summary>What the person answered, the transport waiting on it.</summary>
+    internal Task<HexLinkRights?> Answer => answer.Task;
+
+    /// <summary>The person's answer, what this machine grants the other, null to decline. Only the first counts.</summary>
+    public void Decide(HexLinkRights? granted) => answer.TrySetResult(granted);
+}

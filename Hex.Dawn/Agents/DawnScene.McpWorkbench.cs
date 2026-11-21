@@ -96,7 +96,7 @@ internal sealed partial class DawnScene
         // The agents', their mail's and their plans' alongside the call going on: they touch chats, not the screen, and
         // queued behind another agent's long call (a build in the terminal, a wait on a language server) an orchestrator's
         // send or restart timed out before it started
-        .. Alongside(Behind(AgentsTools())), .. AskTools(), .. Alongside(Behind(PlanTools())), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Alongside(Behind(AgentMailTools())), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        .. Alongside(Behind(AgentsTools())), .. AskTools(), .. Alongside(Behind(PlanTools())), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Alongside(Behind(AgentMailTools())), .. LinkTools(), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
@@ -301,6 +301,13 @@ internal sealed partial class DawnScene
         if (key == "mcp_server")
         {
             yield return McpToolResult.Error("mcp_server is the door you came in by, it's only changed by hand.");
+            yield break;
+        }
+
+        // Link is a door for other machines, opening it or moving it is the person's to do
+        if (key is "link" or "link_port" or "link_discoverable")
+        {
+            yield return McpToolResult.Error($"{key} opens Hex to other machines, it's only changed by hand.");
             yield break;
         }
 

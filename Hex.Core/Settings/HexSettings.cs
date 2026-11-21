@@ -247,6 +247,23 @@ internal sealed partial class HexSettings
     public bool McpServer = true;
 
     /// <summary>
+    /// Whether Hex Link is on: this Hex listening for the devices it has paired with, dialling them, and found on the
+    /// LAN when <see cref="LinkDiscoverable"/> says so (docs/hex-link-plan.md). Off as it comes, nothing listens until the
+    /// person turns it on, and like <see cref="McpServer"/> it's the user's own settings alone that switch it, never a
+    /// folder's, so a repository somebody cloned can't open the door.
+    /// </summary>
+    public bool Link;
+
+    /// <summary>The TCP port Link listens on, 47833 unless somebody changes it.</summary>
+    public int LinkPort = HexLinkTransport.DEFAULT_PORT;
+
+    /// <summary>What this device is called to the others, empty for the machine's own name.</summary>
+    public string LinkName = string.Empty;
+
+    /// <summary>Whether, while Link is on, this Hex says it's here on the LAN (mDNS) so others can find it to pair.</summary>
+    public bool LinkDiscoverable = true;
+
+    /// <summary>
     /// Whether Hex is without its agents, No AI. Agentic, the Agents panel, the chats and the extensions that are agent
     /// systems never made, and the MCP server's tools about agents left out of it (see HexAi). Read as the editor
     /// starts, so a change takes a restart.
