@@ -129,7 +129,7 @@ internal sealed partial class DawnScene
     {
         if (linkTrust is null)
             return false;
-        string name = linkTrust.Find(id)?.Device.Name ?? id;
+        string name = LinkNameOf(id);
         bool forgot = linkTrust.Forget(id);
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
@@ -153,15 +153,30 @@ internal sealed partial class DawnScene
         return true;
     }
 
-    /// <summary>A known device called something else here. False when it isn't known.</summary>
+    /// <summary>
+    /// A known device called something of the person's own here, which wins over what it calls itself (cleaned, 1 to 40
+    /// characters). False when it isn't known or nothing of the name is left.
+    /// </summary>
     internal bool LinkRename(string id, string name)
     {
-        string named = name.Trim();
-        if (named.Length == 0 || linkTrust?.Rename(id, named.Length > 64 ? named[..64] : named) != true)
+        if (HexLinkNames.Clean(name) is not { } named || linkTrust?.Rename(id, named) != true)
             return false;
         linkDirty = true;
         return true;
     }
+
+    /// <summary>A known device shown by its own name again, what the person called it here let go of. False when it isn't known.</summary>
+    internal bool LinkUseOwnName(string id)
+    {
+        if (linkTrust?.Rename(id, null) != true)
+            return false;
+        linkDirty = true;
+        return true;
+    }
+
+    /// <summary>What a device is shown as here: the person's name for it, else its own (cleaned), else the start of its id.</summary>
+    internal string LinkNameOf(string id, string? said = null) =>
+        linkTrust?.Find(id)?.Shown is { Length: > 0 } shown ? shown : HexLinkNames.Clean(said) ?? (id.Length > 8 ? id[..8] : id);
 
     /* Pairing, asking the person */
 

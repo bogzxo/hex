@@ -45,7 +45,7 @@ internal sealed partial class DawnScene
         linkDirty = true;
         linkPairCloseAt = 0;
 
-        string device = ask.Other.Name;
+        string device = HexLinkNames.Clean(ask.Other.Name) ?? ask.Other.Fingerprint;
         UIDialog dialog = UIDialog.Show(chrome, Said("link.pair_dialog_title", ("device", device)), string.Empty,
             new DialogChoice(Said("link.pair_go"), () =>
             {

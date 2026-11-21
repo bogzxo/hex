@@ -153,7 +153,7 @@ internal sealed partial class DawnScene
     private void LinkForgetCommand()
     {
         List<(string Text, Action Picked)> devices = [.. LinkKnown.Select(known => (
-            $"{known.Device.Name}  ({known.Device.Fingerprint})",
+            $"{known.Shown}  ({known.Device.Fingerprint})",
             (Action)(() => LinkForget(known.Device.Id))))];
         ChooseFrom(Said("link.forget_title"), Said("link.forget_text"), devices);
     }

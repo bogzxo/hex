@@ -36,7 +36,7 @@ internal sealed partial class DawnScene
     private WindowPanel? linkWindow;
     private StackPanel? linkWindowHead, linkWindowPairing, linkWindowDevices, linkWindowNearby, linkWindowActivity;
     private TextBox? linkNameBox, linkAddressBox;
-    private Label? linkPairingCountdown;
+    private Label? linkPairingCountdown, linkNameSeen;
 
     // Whether the window's parts are to be made again, and the second the countdown was last written for
     private bool linkWindowStale;
@@ -51,7 +51,7 @@ internal sealed partial class DawnScene
     // A menu of the devices linked now, the one picked cut (and not dialled again until it's connected by hand)
     private void LinkDisconnectCommand()
     {
-        List<(string Text, Action Picked)> devices = [.. LinkPeers.Select(peer => (peer.Device.Name, (Action)(() => LinkDisconnect(peer.Device.Id))))];
+        List<(string Text, Action Picked)> devices = [.. LinkPeers.Select(peer => (LinkNameOf(peer.Device.Id, peer.Device.Name), (Action)(() => LinkDisconnect(peer.Device.Id))))];
         ChooseFrom(Said("link.disconnect_title"), Said("link.disconnect_text"), devices);
     }
 
@@ -80,7 +80,7 @@ internal sealed partial class DawnScene
             linkWindow = null;
             linkWindowHead = linkWindowPairing = linkWindowDevices = linkWindowNearby = linkWindowActivity = null;
             linkNameBox = linkAddressBox = null;
-            linkPairingCountdown = null;
+            linkPairingCountdown = linkNameSeen = null;
         };
 
         var scroll = window.Add(new ScrollPanel { Fill = UIFill.Both, Padding = new UIEdges(18, 14, 12, 16) });
@@ -153,7 +153,9 @@ internal sealed partial class DawnScene
         if (linkNameBox is not null && chrome.Compositor.Focus != linkNameBox && linkNameBox.Text != settings.LinkName)
             linkNameBox.Text = settings.LinkName;
         if (linkNameBox is not null)
-            linkNameBox.Placeholder = LinkDevice?.Name ?? System.Environment.MachineName;
+            linkNameBox.Placeholder = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty;
+        if (linkNameSeen is not null)
+            linkNameSeen.Text = UIRichText.Literal(Said("link.name_seen_as", ("name", LinkDevice?.Name ?? LinkNameWanted)));
         if (linkAddressBox is not null)
             linkAddressBox.Enabled = LinkOn;
     }
@@ -214,24 +216,38 @@ internal sealed partial class DawnScene
         row.Add(new Label { Text = Said("link.name_label"), TextScale = LINK_TEXT, Size = new Vector2(120, LINK_ROW), Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
         linkNameBox = row.Add(new TextBox
         {
-            Text = settings.LinkName, Placeholder = LinkDevice?.Name ?? System.Environment.MachineName, MaxLength = 64,
+            Text = settings.LinkName, Placeholder = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty, MaxLength = HexLinkNames.MOST,
             Size = new Vector2(300, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("settings_catalog.link_name_help")
         });
         void Keep()
         {
-            string named = linkNameBox?.Text.Trim() ?? string.Empty;
+            // Cleaned as every device's name is, 40 characters at the most, empty for the machine's own
+            string named = HexLinkNames.Clean(linkNameBox?.Text) ?? string.Empty;
+            if (linkNameBox is not null && linkNameBox.Text != named)
+                linkNameBox.Text = named;
             if (named == settings.LinkName)
                 return;
             settings.LinkName = named;
             SaveSettings();
             SettingsPage?.Refresh("link_name");
             ApplyLink();
-            Say(Said("link.renamed_here", ("name", named.Length > 0 ? named : System.Environment.MachineName)));
+            LinkTakeName();
+            Say(Said("link.renamed_here", ("name", LinkNameWanted)));
         }
 
         linkNameBox.OnSubmitted = _ => Keep();
         row.Add(new Button { Label = Said("link.name_keep"), Size = new Vector2(80, LINK_ROW), LabelScale = LINK_TEXT, Animated = false, Anchor = Origin.Left, Pivot = Origin.Left, OnPressed = Keep });
-        return row;
+        // Back to the machine's own name, the setting emptied
+        row.Add(LinkButton(Said("link.name_reset"), "discard", () =>
+        {
+            if (linkNameBox is not null)
+                linkNameBox.Text = string.Empty;
+            Keep();
+        }));
+        var holder = new StackPanel { Spacing = 4.0f, Fill = UIFill.Horizontal };
+        holder.Add(row);
+        linkNameSeen = holder.Add(new Label { TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(128, 0, 0, 0) });
+        return holder;
     }
 
     /* Pairing and connecting */
@@ -335,7 +351,7 @@ internal sealed partial class DawnScene
             return;
         }
 
-        foreach (HexLinkKnown device in known.OrderBy(each => LinkPeerOf(each.Device.Id) is null ? 1 : 0).ThenBy(each => each.Device.Name, StringComparer.OrdinalIgnoreCase))
+        foreach (HexLinkKnown device in known.OrderBy(each => LinkPeerOf(each.Device.Id) is null ? 1 : 0).ThenBy(each => each.Shown, StringComparer.OrdinalIgnoreCase))
             devices.Add(LinkDeviceCard(device));
     }
 
@@ -363,7 +379,7 @@ internal sealed partial class DawnScene
 
         // Its name with the computer's glyph in its colour, linked or not, and the TLS it's linked over
         var top = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, 22) });
-        top.Add(new Label { Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(known.Device.Name)}[/b]", TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
+        top.Add(new Label { Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(known.Shown)}[/b]", TextScale = LINK_HEADING, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
         top.Add(new Badge
         {
             Text = Said(peer is not null ? "link.device_connected" : LinkHeldOff(id) ? "link.device_held_off" : "link.device_not_connected"),
@@ -372,6 +388,10 @@ internal sealed partial class DawnScene
         if (peer is not null && LinkTlsOf(id) is { } tls)
             top.Add(new Badge { Text = LinkTlsSaid(tls), Icon = "lock", Tone = UIBadgeTone.Neutral, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
 
+        // What it calls itself, when the person here calls it something else
+        if (known.Named is not null)
+            column.Add(new Label { Text = UIRichText.Literal(Said("link.device_calls_itself", ("name", known.Device.Name))), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+
         // Where it is and what it is
         string where = peer?.Session.Connection.Address is { Length: > 0 } address ? address
             : known.Address.Length > 0 ? (known.Port > 0 ? $"{known.Address}:{known.Port.ToString(CultureInfo.InvariantCulture)}" : known.Address) : Said("link.device_no_address");
@@ -379,7 +399,7 @@ internal sealed partial class DawnScene
         column.Add(new Label { Text = UIRichText.Literal(what), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal });
 
         // What it may do here, a switch each, every change through LinkSetRights and never more than was ticked
-        column.Add(new Label { Text = Said("link.device_may_here", ("device", UIRichText.Literal(known.Device.Name))), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
+        column.Add(new Label { Text = Said("link.device_may_here", ("device", UIRichText.Literal(known.Shown))), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         var rights = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 18.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
         foreach (HexLinkRights right in (ReadOnlySpan<HexLinkRights>)[HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit])
         {
@@ -423,11 +443,13 @@ internal sealed partial class DawnScene
             buttons.Add(LinkButton(Said("link.device_disconnect"), "debug-disconnect", () => LinkDisconnect(id)));
         else
             buttons.Add(LinkButton(Said("link.device_connect"), "plug", () => LinkConnectKnown(known))).Enabled = LinkOn && LinkAddressesOf(known, LinkNearby).Count > 0;
-        buttons.Add(LinkButton(Said("link.device_rename"), "edit", () => AskText(Said("link.rename_title"), Said("link.rename_text", ("device", known.Device.Name)), known.Device.Name, Said("link.rename_button"), typed =>
+        buttons.Add(LinkButton(Said("link.device_rename"), "edit", () => AskText(Said("link.rename_title"), Said("link.rename_text", ("device", known.Device.Name)), known.Shown, Said("link.rename_button"), typed =>
         {
             if (LinkRename(id, typed))
                 linkWindowStale = true;
         })));
+        if (known.Named is not null)
+            buttons.Add(LinkButton(Said("link.device_own_name"), "discard", () => LinkUseOwnName(id)));
         Button forget = buttons.Add(LinkButton(Said("link.device_forget"), "trash", () => AskForgetDevice(known)));
         forget.Danger = true;
         return card;
@@ -448,7 +470,7 @@ internal sealed partial class DawnScene
     private void AskForgetDevice(HexLinkKnown known)
     {
         string yes = Said("link.forget_go");
-        Context.Windows.Ask(Said("link.forget_ask_title", ("device", known.Device.Name)), Said("link.forget_ask_text", ("device", known.Device.Name)), [Said("link.pair_cancel"), yes], answer =>
+        Context.Windows.Ask(Said("link.forget_ask_title", ("device", known.Shown)), Said("link.forget_ask_text", ("device", known.Shown)), [Said("link.pair_cancel"), yes], answer =>
         {
             if (answer == yes)
                 LinkForget(known.Device.Id);
@@ -503,7 +525,7 @@ internal sealed partial class DawnScene
             string addresses = string.Join(", ", HexLinkAddresses.Preferred(heard.Addresses).Take(2).Select(HexLinkAddresses.Show));
             row.Add(new Label
             {
-                Text = $"$(vm) [b]{UIRichText.Literal(heard.Name)}[/b]  {UIRichText.Literal(addresses)}:{heard.Port.ToString(CultureInfo.InvariantCulture)}",
+                Text = $"$(vm) [b]{UIRichText.Literal(HexLinkNames.Clean(heard.Name) ?? heard.Id8)}[/b]  {UIRichText.Literal(addresses)}:{heard.Port.ToString(CultureInfo.InvariantCulture)}",
                 TextScale = LINK_TEXT, Size = new Vector2(420, LINK_ROW), Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left
             });
             if (linked)
@@ -537,7 +559,7 @@ internal sealed partial class DawnScene
         {
             HexLinkAuditEntry entry = latest[i];
             string who = entry.Device.Length == 0 ? string.Empty
-                : LinkKnown.FirstOrDefault(each => each.Device.Id.Equals(entry.Device, StringComparison.OrdinalIgnoreCase))?.Device.Name ?? (entry.Device.Length > 8 ? entry.Device[..8] : entry.Device);
+                : LinkKnown.FirstOrDefault(each => each.Device.Id.Equals(entry.Device, StringComparison.OrdinalIgnoreCase))?.Shown ?? (entry.Device.Length > 8 ? entry.Device[..8] : entry.Device);
             bool loud = entry.Event is "refused" or "steer" or "edit";
             string line = $"{entry.Time.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)}  [b]{UIRichText.Literal(entry.Event)}[/b]  {UIRichText.Literal(who)}  {UIRichText.Literal(OneLine(entry.Detail, 160))}";
             activity.Add(new Label

@@ -374,7 +374,7 @@ internal sealed partial class DawnScene
             if (peer.IsClosed || peer.Protocol == 0)
                 continue;
             if (linkGrantsSeen.TryGetValue(peer.Device.Id, out HexLinkRights was) && was != peer.Granted)
-                Say(Said("link.rights_changed_there", ("device", peer.Device.Name), ("there", LinkRightsSaid(peer.Granted))));
+                Say(Said("link.rights_changed_there", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted))));
             linkGrantsSeen[peer.Device.Id] = peer.Granted;
         }
     }

@@ -26,7 +26,7 @@ internal sealed partial class DawnScene
     // made at, and every remote chat (stand-in or mirror) to the card it is
     private readonly Dictionary<(string Device, int Id), HexAgentChat> linkStandIns = [];
     private readonly Dictionary<HexAgentChat, LinkRemoteCard> linkRemoteOf = [];
-    private readonly Dictionary<string, long> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (long Version, string Name)> linkStandInsAt = new(StringComparer.OrdinalIgnoreCase);
 
     // How much the cards of a device's section are indented, and how tall its heading is
     private const float LINK_SECTION_HEAD = 34.0f;
@@ -61,7 +61,7 @@ internal sealed partial class DawnScene
         foreach (HexLinkPeer peer in LinkPeers)
         {
             key = key * 31 + string.GetHashCode(peer.Device.Id, StringComparison.Ordinal);
-            key = key * 31 + string.GetHashCode(peer.Device.Name, StringComparison.Ordinal);
+            key = key * 31 + string.GetHashCode(LinkNameOf(peer.Device.Id, peer.Device.Name), StringComparison.Ordinal);
             key = key * 31 + (int)peer.Granted + (peer.IsClosed ? 8 : 0);
             key = key * 31 + peer.FleetVersion + peer.Fleet.Count;
         }
@@ -90,7 +90,7 @@ internal sealed partial class DawnScene
             List<(HexLinkRow Row, int Step)> ordered = LinkFleetInOrder(peer.Fleet);
             if (ordered.Count == 0)
             {
-                rows.Add(new Label { Text = Said("link.fleet_none", ("device", UIRichText.Literal(peer.Device.Name))), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(10, 0, 0, 0), Size = new Vector2(0, 22) });
+                rows.Add(new Label { Text = Said("link.fleet_none", ("device", UIRichText.Literal(LinkNameOf(peer.Device.Id, peer.Device.Name)))), TextScale = 0.125f, Dim = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(10, 0, 0, 0), Size = new Vector2(0, 22) });
                 tall += 22 + rows.Spacing;
                 continue;
             }
@@ -98,7 +98,7 @@ internal sealed partial class DawnScene
             foreach (var (row, step) in ordered)
             {
                 HexAgentChat standIn = LinkStandIn(peer, row);
-                var remote = new LinkRemoteCard(peer.Device.Id, peer.Device.Name, row.Id);
+                var remote = new LinkRemoteCard(peer.Device.Id, LinkNameOf(peer.Device.Id, peer.Device.Name), row.Id);
                 AgentCard card = AgentCardOf(standIn, step, closable: false, rail: row.Waiting, remote: remote);
                 rows.Add(card.Root);
                 refreshes.Add(card.Refresh);
@@ -116,8 +116,8 @@ internal sealed partial class DawnScene
         var head = new StackPanel { Direction = UIDirection.Horizontal, Spacing = 6.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_SECTION_HEAD), Padding = new UIEdges(10, 10, 0, 2) };
         head.Add(new Label
         {
-            Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(OneLine(peer.Device.Name, 40))}[/b]", TextScale = 0.13f, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left,
-            Tooltip = Said("link.fleet_head_tip", ("device", peer.Device.Name), ("there", LinkRightsSaid(peer.Granted)))
+            Text = $"[color:{HexColour(tint)}]$(vm)[/color] [b]{UIRichText.Literal(LinkNameOf(peer.Device.Id, peer.Device.Name))}[/b]", TextScale = 0.13f, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left,
+            Tooltip = Said("link.fleet_head_tip", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted)))
         });
         foreach (Badge chip in LinkRightsChips(peer.Granted))
             head.Add(chip);
@@ -172,7 +172,9 @@ internal sealed partial class DawnScene
     private HexAgentChat LinkStandIn(HexLinkPeer peer, HexLinkRow row)
     {
         string device = peer.Device.Id;
-        if (linkStandInsAt.GetValueOrDefault(device, -1) != peer.FleetVersion)
+        // Made again when its fleet moved or it's shown by another name now
+        var now = (peer.FleetVersion, LinkNameOf(device, peer.Device.Name));
+        if (linkStandInsAt.GetValueOrDefault(device, (-1, string.Empty)) != now)
         {
             // A new version of the fleet, every stand-in of the device made again from it
             foreach (var key in linkStandIns.Keys.Where(key => key.Device == device).ToList())
@@ -183,7 +185,7 @@ internal sealed partial class DawnScene
                     linkRemoteOf.Remove(old);
             }
 
-            linkStandInsAt[device] = peer.FleetVersion;
+            linkStandInsAt[device] = now;
         }
 
         if (linkStandIns.TryGetValue((device, row.Id), out HexAgentChat? made))
@@ -209,7 +211,7 @@ internal sealed partial class DawnScene
         chat.MirrorHead(row.Name, running, row.Seconds);
         chat.Seen = chat.Version;
         linkStandIns[(device, row.Id)] = chat;
-        linkRemoteOf[chat] = new LinkRemoteCard(device, peer.Device.Name, row.Id);
+        linkRemoteOf[chat] = new LinkRemoteCard(device, now.Item2, row.Id);
         return chat;
     }
 
@@ -235,7 +237,7 @@ internal sealed partial class DawnScene
         if (remote is null && !LinkBadgesShown)
             return 0.0f;
         string id = remote?.DeviceId ?? LinkDevice?.Id ?? string.Empty;
-        string name = OneLine(remote?.DeviceName ?? LinkDevice?.Name ?? LinkNameWanted, 16);
+        string name = OneLine(remote?.DeviceName ?? LinkDevice?.Name ?? LinkNameWanted, 18);
         Vector4 tint = LinkDeviceTint(id, Skin);
         var badge = root.Add(new Badge
         {

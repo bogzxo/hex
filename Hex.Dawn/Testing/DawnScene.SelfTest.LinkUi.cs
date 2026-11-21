@@ -20,9 +20,19 @@ internal sealed partial class DawnScene
     // What's typed in the box and sent to B's chat, and the environment that has B say each Steer request it hears
     private const string LINK_UI_SENT = "Hello from A over the link", LINK_TEST_UI = "HEX_LINK_TEST_UI";
 
+    // B's side: what the other end was last said to be called
+    private string? linkTestOtherName;
+
     /// <summary>B's side: the Steer requests its audit has since the last said, each said on a line of its own.</summary>
     private void LinkTestSaySteered(ref DateTime seen)
     {
+        // And what the other end calls itself, each time it changes
+        if (LinkPeers.FirstOrDefault() is { } other && other.Device.Name != linkTestOtherName)
+        {
+            linkTestOtherName = other.Device.Name;
+            Console.WriteLine($"[Hex self-test] link-peer: other is called {other.Device.Name}");
+        }
+
         foreach (HexLinkAuditEntry entry in LinkAuditLatest(40))
         {
             if (entry.Time <= seen || entry.Event != "steer")
@@ -122,6 +132,51 @@ internal sealed partial class DawnScene
                 && Descendants(linkWindowDevices).OfType<Badge>().Count(badge => badge.Text == Said("link.right_title_steer")) == 1;
         });
         Shot("link_ui_window_device.png");
+
+        // This device's name: the machine's when the box is empty, typed and kept, heard by B at once, then back
+        string machine = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty;
+        test.Check("link-ui: the name box is link_name, empty, with the machine's name in it greyed and said as what others see", () =>
+            linkNameBox is { Text.Length: 0 } box && box.Placeholder == machine && settings.LinkName.Length == 0
+            && linkNameSeen?.Text.Contains(machine, StringComparison.Ordinal) == true);
+        test.Run(() => linkNameBox!.Text = "  A‮ renamed  ");
+        test.Click(() => Centre(WindowButton(Said("link.name_keep"))));
+        test.WaitFor(() => LinkTestPeerSaid("other is called A renamed"), 15.0f);
+        test.Check("link-ui: a name kept is cleaned into link_name, and B hears it at once over the link", () =>
+            settings.LinkName == "A renamed" && LinkDevice?.Name == "A renamed" && LinkTestPeerSaid("other is called A renamed"));
+        Shot("link_ui_renamed_here.png");
+        test.Click(() => Centre(WindowButton(Said("link.name_reset"))));
+        // B heard the machine's name as the link came up, and again now
+        bool HeardMachineAgain() => linkTestPeerSaid.Count(line => line.EndsWith($"link-peer: other is called {machine}", StringComparison.Ordinal)) >= 2;
+        test.WaitFor(HeardMachineAgain, 15.0f);
+        test.Check("link-ui: Use the Machine's Name empties link_name and B hears the machine's name", () =>
+            settings.LinkName.Length == 0 && LinkDevice?.Name == machine && HeardMachineAgain());
+
+        // B called something of this machine's own, which wins everywhere it's shown, and undone
+        const string LOCAL = "Bee box";
+        test.Run(() => LinkRename(peerId!, LOCAL));
+        test.Settle(0.4f);
+        test.Check("link-ui: B named here shows by that name in the window, saying what it calls itself, with Use Its Own Name", () =>
+            linkWindowDevices is { } devices && Descendants(devices).OfType<Label>().Any(label => label.Text.Contains(LOCAL, StringComparison.Ordinal))
+            && Descendants(devices).OfType<Label>().Any(label => label.Text.Contains(Said("link.device_calls_itself", ("name", LINK_PEER_NAME)), StringComparison.Ordinal))
+            && WindowButton(Said("link.device_own_name")) is not null);
+        test.Run(() =>
+        {
+            linkWindow?.Close();
+            ShowFace(HexFace.Noon);
+            noonWait = 0.0f;
+        });
+        test.WaitFor(() => Descendants(noonFleetRows).OfType<Badge>().Any(badge => badge.Text == LOCAL), 15.0f);
+        test.Check("link-ui: the fleet's section and B's badge say the name given here", () =>
+            Descendants(noonFleetRows).OfType<Badge>().Any(badge => badge.Text == LOCAL)
+            && Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text.Contains(LOCAL, StringComparison.Ordinal)));
+        Shot("link_ui_named_here.png");
+        // The window that went is gone before it's opened again
+        test.Settle(0.6f);
+        test.Run(ShowLinkWindow);
+        test.Settle(0.4f);
+        test.Click(() => Centre(WindowButton(Said("link.device_own_name"))));
+        test.Settle(0.3f);
+        test.Check("link-ui: Use Its Own Name gives B its own name back", () => LinkKnown.FirstOrDefault(known => known.Device.Id == peerId) is { Named: null, Shown: LINK_PEER_NAME });
 
         // Agentic's fleet with a section of B's, its chat and B's badge
         test.Run(() =>

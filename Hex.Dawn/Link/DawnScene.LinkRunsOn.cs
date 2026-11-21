@@ -105,7 +105,7 @@ internal sealed partial class DawnScene
             return false;
 
         HexLinkPeer? there = LinkRunsOnPeer();
-        string current = there?.Device.Name ?? Said("link.runs_on_here");
+        string current = there is null ? Said("link.runs_on_here") : LinkNameOf(there.Device.Id, there.Device.Name);
         float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
         Button picker = agentsOptions.Add(Picker(agentsCompose.Bounds.Width >= 300 ? current : string.Empty, "vm", there is not null,
             Said("link.runs_on_tip", ("device", current)), () => { }));
@@ -121,7 +121,7 @@ internal sealed partial class DawnScene
         var (agent, model) = linkRemotePicked.GetValueOrDefault(id);
         LinkRemoteSystem? system = systems.FirstOrDefault(each => each.Id == agent) ?? systems.FirstOrDefault(each => !each.Missing);
         string agentShown = system?.Name ?? agent ?? Said("link.runs_on_agent_default");
-        Button agentPicker = agentsOptions.Add(Picker(agentShown, "robot", false, Said("link.runs_on_agent_tip", ("device", there.Device.Name)), () => { }));
+        Button agentPicker = agentsOptions.Add(Picker(agentShown, "robot", false, Said("link.runs_on_agent_tip", ("device", current)), () => { }));
         agentPicker.Size = new System.Numerics.Vector2(MathF.Min(MathF.Ceiling((Skin?.Font.Measure(agentShown, 0.135f).X ?? 60) + 44.0f), 150), 32);
         agentPicker.OnPressed = () =>
         {
@@ -170,7 +170,7 @@ internal sealed partial class DawnScene
         foreach (HexLinkPeer peer in LinkRunsOnDevices())
         {
             string id = peer.Device.Id;
-            menu.Add(peer.Device.Name, () => LinkPickRunsOn(id), icon: "vm").IsChecked = () => LinkRunsOnPeer()?.Device.Id == id;
+            menu.Add(LinkNameOf(id, peer.Device.Name), () => LinkPickRunsOn(id), icon: "vm").IsChecked = () => LinkRunsOnPeer()?.Device.Id == id;
         }
 
         return menu;
@@ -267,7 +267,7 @@ internal sealed partial class DawnScene
     /// <summary>A new chat started on a device with what was typed, opened on screen once the device says its number.</summary>
     private void LinkSpawnThere(HexLinkPeer peer, string prompt)
     {
-        string id = peer.Device.Id, name = peer.Device.Name;
+        string id = peer.Device.Id, name = LinkNameOf(peer.Device.Id, peer.Device.Name);
         var (agent, model) = linkRemotePicked.GetValueOrDefault(id);
         agent ??= linkRemoteSystems.GetValueOrDefault(id)?.FirstOrDefault(each => !each.Missing)?.Id;
         var arguments = new JsonObject { ["prompt"] = prompt };

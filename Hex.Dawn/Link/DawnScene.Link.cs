@@ -109,14 +109,30 @@ internal sealed partial class DawnScene
         }
         else if (linkTransport is not null)
         {
-            linkIdentity!.Name = LinkNameWanted;
+            LinkTakeName();
             LinkAnnounce(!options.SelfTest);
             linkDirty = true;
         }
     }
 
+    /// <summary>
+    /// The name link_name says taken while Link is up (a self test's Link too): told to the devices linked now at once
+    /// rather than at the next link, the old one said goodbye to on the network and the new one announced.
+    /// </summary>
+    internal void LinkTakeName()
+    {
+        if (linkIdentity is null || linkIdentity.Name == LinkNameWanted)
+            return;
+        linkIdentity.Name = LinkNameWanted;
+        foreach (HexLinkPeer peer in LinkPeers)
+            peer.SayName(linkIdentity.Name);
+        linkDiscovery?.StopAnnouncing();
+        LinkAnnounce(!options.SelfTest && !linkByTest);
+        linkDirty = true;
+    }
+
     /// <summary>What this device is called, the link_name setting or the machine's name.</summary>
-    private string LinkNameWanted => settings.LinkName.Trim() is { Length: > 0 } named ? named : System.Environment.MachineName;
+    private string LinkNameWanted => HexLinkNames.Clean(settings.LinkName) ?? HexLinkNames.Clean(System.Environment.MachineName) ?? "Hex";
 
     /// <summary>
     /// Puts Link up: the device's key read (made the first time), the known devices read, the listener on its port
@@ -324,7 +340,7 @@ internal sealed partial class DawnScene
             linkItem.Tooltip = peers.Count == 0
                 ? Said(linkTransport?.PairingOpen == true ? "link.status_tip_pairing" : "link.status_tip_none")
                 : Said("link.status_tip", ("devices", string.Join("\n", peers.Select(peer =>
-                    Said("link.status_tip_device", ("device", peer.Device.Name), ("there", LinkRightsSaid(peer.Granted)), ("here", LinkRightsSaid(linkTrust?.Find(peer.Device.Id)?.Rights ?? HexLinkRights.None)))))));
+                    Said("link.status_tip_device", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name)), ("there", LinkRightsSaid(peer.Granted)), ("here", LinkRightsSaid(linkTrust?.Find(peer.Device.Id)?.Rights ?? HexLinkRights.None)))))));
         }
 
         LinkVersion++;
@@ -372,7 +388,14 @@ internal sealed partial class DawnScene
             return;
         linkRedial.Soon(peer.Device.Id);
         linkHeldOff.Remove(peer.Device.Id);
-        Say(Said("link.connected", ("device", peer.Device.Name)));
+        // Its name as it says it kept as its own (the person's name for it, if any, still wins), and kept as it changes
+        linkTrust?.Seen(peer.Device.Id, peer.Device, string.Empty);
+        peer.Renamed = device => PostLink(() =>
+        {
+            linkTrust?.Seen(device.Id, device, string.Empty);
+            linkDirty = true;
+        });
+        Say(Said("link.connected", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name))));
         linkDirty = true;
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {
@@ -398,7 +421,7 @@ internal sealed partial class DawnScene
         linkDirty = true;
         if (linkTransport is null)
             return;
-        Say(Said("link.disconnected", ("device", device.Name), ("why", why)));
+        Say(Said("link.disconnected", ("device", LinkNameOf(device.Id, device.Name)), ("why", why)));
     }
 
     // A device forgotten here (or elsewhere through the file): what's shown of it goes
