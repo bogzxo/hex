@@ -597,6 +597,58 @@ button.link {
   background: color-mix(in oklab, black 55%, transparent);
 }
 
+/* The two dialogs come up from where they'll sit and go back down into it, the shade behind them fading with them.
+   A fade alone for anybody who asked for less motion; where a browser can't keep one up while it leaves, it just goes */
+.request,
+.lightbox {
+  opacity: 0;
+  transition-property: opacity, scale, translate, display, overlay;
+  transition-duration: 0.22s;
+  transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-behavior: allow-discrete;
+
+  @media (prefers-reduced-motion: no-preference) {
+    scale: 0.97;
+    translate: 0 0.75rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition-duration: 0.12s;
+  }
+
+  &[open] {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+
+    @starting-style {
+      opacity: 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @starting-style {
+        scale: 0.97;
+        translate: 0 0.75rem;
+      }
+    }
+  }
+
+  &::backdrop {
+    opacity: 0;
+    transition-property: opacity, display, overlay;
+    transition-duration: 0.22s;
+    transition-behavior: allow-discrete;
+  }
+
+  &[open]::backdrop {
+    opacity: 1;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+
 /* The top of the page */
 
 .hero {
@@ -710,6 +762,17 @@ button.link {
 @container pitch (inline-size < 30rem) {
   .actions .button:first-child {
     flex-basis: 100%;
+  }
+
+  /* Two of the faces to a line on a phone rather than one each down the screen */
+  .face-chips {
+    gap: 0.4rem;
+
+    & a {
+      gap: 0.35rem;
+      padding-inline: 0.55rem;
+      font-size: 0.84rem;
+    }
   }
 }
 
@@ -845,10 +908,8 @@ section + section {
   gap: 0.6rem;
   margin-block-end: 1rem;
   color: var(--accent);
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.95rem;
+  font-weight: 650;
 
   &::before {
     content: "";
@@ -1209,6 +1270,29 @@ tbody tr:last-child > * {
   }
 }
 
+/* Where else to look, under the cards: links in a row with room between them, nothing strung between */
+.more-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92rem;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.25rem;
+  }
+
+  @media (pointer: coarse) {
+    & a {
+      min-block-size: 44px;
+    }
+  }
+}
+
 .pick {
   display: flex;
   flex-wrap: wrap;
@@ -1431,9 +1515,14 @@ tbody tr:last-child > * {
 
 /* The bars of the launch times, drawn to the numbers in the table */
 
+/* Each chart drawn to its own longest bar (--scale, a little over it) and no wider than the words around it, so a
+   number sits by the end of its bar on a wide screen rather than across an empty field from it */
 .bars {
+  --scale: 500;
+
   display: grid;
   gap: 1rem;
+  max-inline-size: 52rem;
   margin-block-start: var(--gap);
   padding: 1.5rem;
   border: 1px solid var(--border);
@@ -1450,7 +1539,7 @@ tbody tr:last-child > * {
   & i {
     display: block;
     block-size: 1.75rem;
-    inline-size: calc(var(--ms) / 1200 * 100%);
+    inline-size: calc(var(--ms) / var(--scale) * 100%);
     border-radius: 5px;
     background: var(--accent);
   }
@@ -2126,7 +2215,9 @@ details:not([open])::details-content {
       }
     }
 
-    .rise {
+    /* The big pieces only, a chart, a picture, the build: a card or a thumbnail each rising on its own was motion
+       for its own sake */
+    .rise:not(li, figure:not(.shot), .nots > div) {
       animation: rise auto linear backwards;
       animation-timeline: view();
       animation-range: entry 0% entry 60%;
