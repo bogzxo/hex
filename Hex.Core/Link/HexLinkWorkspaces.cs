@@ -70,13 +70,33 @@ internal static class HexLinkWorkspaces
             // No commit yet, HEAD names nothing and git says so for the lot, the top folder asked alone
             GitResult top = GitProcess.Run(folder, ["rev-parse", "--show-toplevel"]);
             string found = top.Output.Trim();
-            return top.Ok && Directory.Exists(found) ? new HexLinkRepository(Path.GetFileName(Path.TrimEndingDirectorySeparator(found)), string.Empty, string.Empty, found) : null;
+            if (!top.Ok || !Directory.Exists(found))
+                return null;
+            found = AsAsked(folder, found);
+            return new HexLinkRepository(Path.GetFileName(Path.TrimEndingDirectorySeparator(found)), string.Empty, string.Empty, found);
         }
 
-        string path = Path.GetFullPath(lines[0]);
+        string path = AsAsked(folder, lines[0]);
         string head = lines[1];
         GitResult named = GitProcess.Run(folder, ["rev-parse", "--abbrev-ref", "HEAD"]);
         string branch = named.Ok ? named.Output.Trim() : string.Empty;
         return new HexLinkRepository(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)), branch, head, path);
+    }
+
+    /// <summary>
+    /// The top folder git said, spelled as the folder it was asked about is. Git resolves links on the way (macOS's temp
+    /// folder under /var is /private/var to it), so a folder inside a linked path would seem to be outside its own
+    /// repository; then the top is found by going up from the asked folder as many levels as git says it's below the top.
+    /// </summary>
+    private static string AsAsked(string folder, string top)
+    {
+        string asked = Path.GetFullPath(folder), said = Path.TrimEndingDirectorySeparator(Path.GetFullPath(top));
+        if (PlatformPaths.IsUnder(asked, said))
+            return said;
+        GitResult up = GitProcess.Run(folder, ["rev-parse", "--show-cdup"]);
+        if (!up.Ok)
+            return said;
+        string spelled = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(asked, up.Output.Trim())));
+        return Directory.Exists(spelled) ? spelled : said;
     }
 }
