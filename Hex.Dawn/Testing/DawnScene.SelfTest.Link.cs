@@ -366,6 +366,9 @@ internal sealed partial class DawnScene
             RedirectStandardError = true,
             WorkingDirectory = AppContext.BaseDirectory
         };
+        // Run as "dotnet Hex.dll" the process is dotnet, which is told the program to run before its arguments
+        if (LinkTestRunByHost() is { } program)
+            start.ArgumentList.Add(program);
         foreach (string argument in (string[])["--selftest", "link-peer", "--exit", "--size", "1200x800"])
             start.ArgumentList.Add(argument);
         start.Environment["HEX_HOME"] = peerHome;
@@ -394,6 +397,18 @@ internal sealed partial class DawnScene
         linkTestPeer = process;
         AppDomain.CurrentDomain.ProcessExit -= KillLinkTestPeer;
         AppDomain.CurrentDomain.ProcessExit += KillLinkTestPeer;
+    }
+
+    /// <summary>
+    /// The program's own file when this Hex was started by the dotnet host ("dotnet Hex.dll", which Windows' firewall
+    /// already lets listen), so a second Hex is started the same way; null when the process is Hex itself.
+    /// </summary>
+    internal static string? LinkTestRunByHost()
+    {
+        if (!string.Equals(Path.GetFileNameWithoutExtension(System.Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
+            return null;
+        string program = Path.Combine(AppContext.BaseDirectory, "Hex.dll");
+        return File.Exists(program) ? program : null;
     }
 
     // Whether B printed a line with this in it
