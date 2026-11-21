@@ -185,6 +185,8 @@ internal sealed partial class DawnScene
             ["made"] = agentChatsMade,
             ["caller"] = CallerOf(args),
             ["note"] = args.String("note") ?? string.Empty,
+            // The others at work, killed as this Hex goes and told to carry on in the next
+            ["working"] = new JsonArray([.. agentChats.Where(chat => chat.Id != CallerOf(args) && (chat.Running || AgentRunBusy(chat))).Select(chat => (JsonNode)chat.Id)]),
             ["chats"] = new JsonArray([.. agentChats.Select(chat => (JsonNode)HexAgentChatStore.Write(chat))])
         };
         string file = Path.Combine(Path.GetTempPath(), $"hex-dev-resume-{System.Environment.ProcessId}.json");
@@ -225,9 +227,14 @@ internal sealed partial class DawnScene
         if ((devRestartIn -= dt) > 0.0f)
             return;
 
+        // Every run killed outright with all it started, not asked to stop: asked, an agent took its time and this Hex had
+        // gone before it did, and one whose turn had ended while its process went on wasn't asked at all. Both worked on
+        // beside the one the new Hex started, two agents in one worktree
         devRestartWith = null;
-        foreach (HexAgentChat chat in agentChats.Where(chat => chat.Running).ToList())
-            StopAgent(chat);
+        agentsStarting.Clear();
+        agentsStopping.Clear();
+        foreach (AgentRun run in agentRuns.ToList())
+            KillAgentRun(run);
 
         // The new build started by a guard running from the good one, which puts the good one back and starts it again if
         // the new one doesn't come up. Without a good one kept, the new build is started as it is
@@ -322,6 +329,49 @@ internal sealed partial class DawnScene
         // The agent that restarted carries on, in the session it was in, once its extension is up
         if (resume["caller"]?.GetValue<int>() is { } caller && ChatById(caller) is { } going)
             devContinue = (going, resume["note"]?.GetValue<string>() ?? string.Empty, 30.0f);
+
+        // And so do the others that were at work, they were stopped by the restart, not by anybody wanting them stopped
+        foreach (JsonNode? id in resume["working"] as JsonArray ?? [])
+        {
+            if (id?.GetValue<int>() is { } working && ChatById(working) is { } chat)
+                devCarryOn.Add(chat);
+        }
+        devCarryOnWait = 30.0f;
+    }
+
+    // The chats that were at work when the last build restarted, carried on as their agent systems come up
+    private readonly List<HexAgentChat> devCarryOn = [];
+    private float devCarryOnWait;
+
+    /// <summary>Each chat that was working when Hex restarted started again in its session, told why it stopped.</summary>
+    private void UpdateDevCarryOn(float dt)
+    {
+        if (devCarryOn.Count == 0)
+            return;
+
+        devCarryOnWait -= dt;
+        for (int i = devCarryOn.Count - 1; i >= 0; i--)
+        {
+            HexAgentChat chat = devCarryOn[i];
+            if (!agentChats.Contains(chat) || chat.Running || AgentRunBusy(chat))
+            {
+                devCarryOn.RemoveAt(i);
+                continue;
+            }
+            if (!extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
+            {
+                if (devCarryOnWait <= 0.0f)
+                {
+                    devCarryOn.RemoveAt(i);
+                    chat.Error(Said("dev.no_agent", ("agent", chat.Agent)));
+                }
+                continue;
+            }
+
+            devCarryOn.RemoveAt(i);
+            string told = $"[Hex restarted into a new build, {HexAbout.Label}, while you were working, which stopped you and everything you had running. You're in the same session: check what was left half done (builds, test runs) and carry on from where you were.]";
+            StartAgent(chat, run.Extension, run.Run, told, Said("dev.carried_on"));
+        }
     }
 
     // The end of what a crashed build printed, its own lines rather than the engine's chatter, and every line of a crash
@@ -347,6 +397,7 @@ internal sealed partial class DawnScene
     /// <summary>The agent that restarted Hex started again in the new build, as soon as its extension has said how.</summary>
     private void UpdateDevContinue(float dt)
     {
+        UpdateDevCarryOn(dt);
         if (devContinue is not { } going)
             return;
 

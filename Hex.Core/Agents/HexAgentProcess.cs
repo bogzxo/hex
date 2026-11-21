@@ -151,6 +151,8 @@ internal sealed class HexAgentProcess : IDisposable
         var process = new Process { StartInfo = info, EnableRaisingEvents = true };
         var running = new HexAgentProcess(process);
         process.Start();
+        // Held in a job of its own at once, before it's had the time to start anything, so whatever it starts is held too
+        running.job = HexAgentJob.Hold(process);
 
         // Said before the readers start, which close it as the program goes: set after them, a program that went at once
         // was left taking input
@@ -263,7 +265,13 @@ internal sealed class HexAgentProcess : IDisposable
         }
     }
 
-    /// <summary>Kills it and every process it started.</summary>
+    // The job its processes are held in, Windows only (HexAgentJob)
+    private HexAgentJob? job;
+
+    /// <summary>
+    /// Kills it and every process it started: its job where it has one, which has them all whatever ended in between, and
+    /// its tree as well, for what the job didn't take (a process started before it was held, or no jobs at all).
+    /// </summary>
     public void Stop()
     {
         try
@@ -274,6 +282,9 @@ internal sealed class HexAgentProcess : IDisposable
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
         }
+
+        job?.Dispose();
+        job = null;
     }
 
     public void Dispose()

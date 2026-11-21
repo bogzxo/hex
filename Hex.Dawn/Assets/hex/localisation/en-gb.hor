@@ -3686,6 +3686,7 @@ let strings = {
 
     dev: {
         continued: "carried on in the new build",
+        carried_on: "carried on after Hex restarted under it",
         no_agent: "{agent} wasn't there in the new build to carry on with"
     },
 
