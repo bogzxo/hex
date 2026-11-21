@@ -11,13 +11,24 @@ internal static class HexAgentChatStore
 {
     public static JsonObject Write(HexAgentChat chat)
     {
-        var options = new JsonObject();
-        foreach (var (key, value) in chat.Options)
-            options[key] = value;
-
         var rows = new JsonArray();
         foreach (HexAgentEntry entry in chat.Entries)
             rows.Add((JsonNode)RowOf(entry));
+
+        JsonObject written = Head(chat);
+        written["rows"] = rows;
+        return written;
+    }
+
+    /// <summary>
+    /// A chat as it's written down without its rows, what it is and what it used, which a link sends on its own when
+    /// only that changed.
+    /// </summary>
+    public static JsonObject Head(HexAgentChat chat)
+    {
+        var options = new JsonObject();
+        foreach (var (key, value) in chat.Options)
+            options[key] = value;
 
         return new JsonObject
         {
@@ -40,8 +51,7 @@ internal static class HexAgentChatStore
             ["settled"] = chat.Settled,
             ["key"] = chat.Key,
             ["dropped"] = chat.Dropped,
-            ["plan"] = chat.Plan?.ToStored(),
-            ["rows"] = rows
+            ["plan"] = chat.Plan?.ToStored()
         };
     }
 
