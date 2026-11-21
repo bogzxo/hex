@@ -318,7 +318,7 @@ relay for machines with no route between them, the debugger shared read-only, a 
 ## Status
 
 Kept current by the orchestrator (chat #107) at every phase change, so another agent can take over.
-Last updated 2026-11-21, during phase 2.
+Last updated 2026-11-21 19:15, phase 2 finishing, sync engine merged.
 
 **Where things are**
 - Integration branch: hex `feat/hex-link`, worktree `../hexwt-link` (beside `hex/`). No engine changes so far (engine
@@ -340,12 +340,18 @@ Last updated 2026-11-21, during phase 2.
   linked over LAN and Tailscale with the transport's console harness (TLS 1.2 to the Mac).
 
 **Running**
-- #111 `feat/hex-link-wiring` (`../hexwt-link-wiring`): phase 2, `Hex.Dawn/Link/DawnScene.Link*.cs`, settings
-  `link*`, `--link`, tools `hex_link_devices/call/spawn`, self tests `link` and `link-peer`.
-- #112 `feat/hex-link-sync` (`../hexwt-link-sync`): `Hex.Core/Link/HexLinkSync*.cs`, the working-tree sync engine.
+- #111 `feat/hex-link-wiring` (`../hexwt-link-wiring`), head 94e2b75 (768604f wiring, 50deefc self test, 94e2b75
+  goldens + docs): phase 2 written and unit tested (385 of 385 in its filter). `Hex.Dawn/Link/DawnScene.Link*.cs`,
+  settings `link*`, `--link`, tools `hex_link_devices/call/spawn`, self tests `link` and `link-peer`. Left: the
+  `link` self test green three times (first run 21 of 22, fixed since), `mcp`, `agents-layout`, `settings` once,
+  then its report. Not merged yet.
+- #112 `feat/hex-link-sync`: finished and merged (bb03029, c61191b). `HexLinkSync` (start, flush, resolve, state,
+  conflicts, skipped), the manifest gains `root` (the repository's first commit). 164 `HexLink` unit tests on
+  `feat/hex-link`. `The_fleet_is_sent_at_most_five_times_a_second...` failed once under a loaded machine and
+  passed three reruns: to be made sturdier.
 
 **Next, in order**
-1. Review and merge #111 and #112 into `feat/hex-link`; unit tests and the `link` self test green; `mac-sync`,
+1. Review and merge #111 into `feat/hex-link`; unit tests and the `link` self test green; `mac-sync`,
    `mac-build`, `mac-test`.
 2. Phase 3 UI worker: Link window, pairing dialog, status item, a section per device in Agentic's fleet, remote
    chats in both machines' chat lists with a device badge, the **Runs on** picker in the box.
