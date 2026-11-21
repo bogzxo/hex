@@ -19,11 +19,16 @@ internal sealed partial class DawnScene
     private Hex.Core.HexSettings? startSettings;
     private string startBrowse = string.Empty;
 
+    // The files open as the run began. A part leaving the test's files open in tabs had the layout suite after it find
+    // them where it looked for the welcome over an empty layout
+    private string[] startDocuments = [];
+
     /// <summary>Keeps how the window is laid out as the run begins, for <see cref="TidyAfterSuite"/> to put back.</summary>
     private void KeepStartLayout()
     {
         startSettings = settings.Snapshot();
         startBrowse = browseDirectory;
+        startDocuments = [.. documents.Select(open => open.Path).OfType<string>()];
         KeepStartWindow();
     }
 
@@ -140,6 +145,17 @@ internal sealed partial class DawnScene
         {
             bool ours = open.Path is { } path ? PlatformPaths.IsUnder(path, testFolder) : documents.Count > 1;
             if ((open.Modified || open.CodeEdited) && ours)
+            {
+                Show(open);
+                CloseNow();
+            }
+        }
+
+        // And the test's files a part opened and left open, saved or not changed, closed as well
+        foreach (HexDocument open in documents.ToList())
+        {
+            if (open.Path is { } path && PlatformPaths.IsUnder(path, testFolder) && !startDocuments.Any(each => PlatformPaths.Same(each, path))
+                && documents.Contains(open) && !open.Modified && !open.CodeEdited)
             {
                 Show(open);
                 CloseNow();
