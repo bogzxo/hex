@@ -68,7 +68,8 @@ internal sealed partial class DawnScene
         HexLinkSync? sync = entry.Sync;
         if (sync is null)
             return new LinkSyncShown(entry.DeviceId, entry.DeviceName, entry.Folder, HexLinkSyncState.Off, $"Sync of {entry.Folder} with {entry.DeviceName} waits for it to link", null, 0, 0, 0, 0, false);
-        return new LinkSyncShown(entry.DeviceId, entry.DeviceName, entry.Folder, sync.State, sync.Summary, sync.Why, sync.Sent, sync.Received, sync.Conflicts.Count, sync.Skipped.Count, sync.PullOnly);
+        return new LinkSyncShown(entry.DeviceId, entry.DeviceName, entry.Folder, sync.State, sync.Summary, sync.Why, sync.Sent, sync.Received, sync.Conflicts.Count, sync.Skipped.Count, sync.PullOnly,
+            sync.FilesDone, sync.FilesTotal, sync.BytesDone, sync.BytesTotal, sync.Queued, sync.Detail);
     }
 
     /// <summary>The files in conflict across every sync, each with where the other machine's version was put beside it.</summary>
@@ -150,6 +151,7 @@ internal sealed partial class DawnScene
                 var sync = new HexLinkSync(peer, local, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
                     ApplyLocal = LinkCompareAndReplace,
+                    RenameLocal = LinkRenameCase,
                     Excludes = () => services.Excludes
                 };
                 sync.Changed = () => PostLink(() => LinkSyncMoved(entry));
@@ -293,23 +295,45 @@ internal sealed partial class DawnScene
     /// <summary>Writes a file from Link and refreshes a clean editor tab with the incoming text.</summary>
     internal async Task LinkWriteLocal(string fullPath, byte[] bytes)
     {
-        if (await OnEditorForLink(() => Context.Documents.Find(fullPath) is { } open && HasChanges(open)))
+        LinkTabStamp before = await OnEditorForLink(() => LinkTabBeforeWrite(fullPath));
+        if (before.Dirty)
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{fullPath} has unsaved changes in the editor.");
         await Task.Run(() => HexLinkFiles.WriteAtomic(fullPath, bytes));
         if (LinkText(bytes) is not { } text)
             return;
         await OnEditorForLink(() =>
         {
-            LinkTakeIntoTab(fullPath, text);
+            LinkTakeIntoTab(fullPath, text, before);
             return true;
         });
     }
 
-    private void LinkTakeIntoTab(string fullPath, string text)
+    internal async Task LinkRenameCase(string from, string to, string expected, CancellationToken cancel)
     {
-        if (Context.Documents.Find(fullPath) is { } open && open.Picture is null && open.IsText &&
-            text != open.DiskText && !HasChanges(open))
-            TakeFromDisk(open, text);
+        if (await OnEditorForLink(() => Context.Documents.Find(from) is { } open && HasChanges(open)).WaitAsync(cancel))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The file has unsaved changes in the editor.",
+                new JsonObject { ["editor_dirty"] = true });
+        await Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
+    }
+
+    private readonly record struct LinkTabStamp(HexDocument? Document, string? DiskText, bool Dirty);
+
+    private LinkTabStamp LinkTabBeforeWrite(string full)
+    {
+        HexDocument? open = Context.Documents.Find(full);
+        return new LinkTabStamp(open, open?.DiskText, open is not null && HasChanges(open));
+    }
+
+    // A queued editor refresh may arrive after a save, reload or close. Keep the newer document state in that case.
+    private bool LinkTakeIntoTab(string full, string text, LinkTabStamp before)
+    {
+        if (before.Document is not { } open || !ReferenceEquals(Context.Documents.Find(full), open) ||
+            open.DiskText != before.DiskText || open.Picture is not null || !open.IsText || text == open.DiskText)
+            return false;
+        if (HasChanges(open))
+            return true;
+        TakeFromDisk(open, text);
+        return false;
     }
 
     /* What's said of a sync as it moves */
@@ -439,7 +463,9 @@ internal sealed partial class DawnScene
         try
         {
             string mine = HexLinkFiles.Resolve(folders, path), theirs = HexLinkFiles.Resolve(folders, copy);
-            string mineText = File.Exists(mine) ? File.ReadAllText(mine) : string.Empty;
+            string mineText = Context.Documents.Find(mine) is { IsText: true } open && HasChanges(open)
+                ? open.Editor.Text
+                : File.Exists(mine) ? File.ReadAllText(mine) : string.Empty;
             string theirText = File.Exists(theirs) ? File.ReadAllText(theirs) : string.Empty;
             OpenDiff(mine, "link", Said("link.sync_difference_title", ("name", Path.GetFileName(mine)), ("device", sync.Device.Name)), GitDiffText.Of(theirText, mineText), -1);
             return true;
@@ -457,7 +483,8 @@ internal sealed partial class DawnScene
 /// how many files went each way, how many are in conflict and how many don't travel.
 /// </summary>
 internal sealed record LinkSyncShown(string DeviceId, string DeviceName, string Folder, HexLinkSyncState State, string Summary, string? Why,
-    int Sent, int Received, int Conflicts, int Skipped, bool PullOnly);
+    int Sent, int Received, int Conflicts, int Skipped, bool PullOnly,
+    int FilesDone = 0, int FilesTotal = 0, long BytesDone = 0, long BytesTotal = 0, int Queued = 0, string? Detail = null);
 
 /// <summary>A file in conflict as the Link window lists it, the device and folder it's synced with, its wire path, what happened and the copy of theirs beside it.</summary>
 internal sealed record LinkConflictShown(string DeviceId, string DeviceName, string Folder, string Path, string Kind, string? Copy);

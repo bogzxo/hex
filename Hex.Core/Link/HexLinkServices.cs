@@ -46,6 +46,10 @@ internal interface IHexLinkServices
     /// <summary>Where the authenticated device can dial this editor after the connection closes.</summary>
     JsonObject RedialAdvertisement() => HexLinkRedial.Advertisement(0, []);
 
+    /// <summary>Renames an unchanged file within its current directory.</summary>
+    Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
+        Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
+
     /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);
