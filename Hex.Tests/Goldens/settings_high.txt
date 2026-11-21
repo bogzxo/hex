@@ -113,6 +113,7 @@ edit_predictions_disabled_languages = ["plaintext", "markdown"]
 edit_predictions_exclude = [     "**/.env",     "**/.env.*",     "**/*.pem",     "**/*.key",     "**/*.pfx",     "**/*.p12",     "**/id_rsa*",     "**/id_ed25519*",     "**/*secret*",     "**/*credential*",     "**/.npmrc",     "**/.pypirc",     "**/.netrc",     "**/*.kdbx" ]
 edit_predictions_workspace = true
 edit_predictions_share = false
+edit_predictions_notice_done = false
 files_associations = {}
 files_exclude = [     "**/.git",     "**/.svn",     "**/.hg",     "**/CVS",     "**/.DS_Store",     "**/Thumbs.db",     "**/.vs" ]
 search_exclude = [     "**/node_modules",     "**/bin",     "**/obj",     "**/venv",     "**/.venv",     "**/__pycache__",     "**/target",     "**/dist",     "**/.terraform",     "**/.gradle",     "**/.tox",     "**/.pytest_cache",     "**/Build History" ]

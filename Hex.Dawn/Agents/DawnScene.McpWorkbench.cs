@@ -304,6 +304,13 @@ internal sealed partial class DawnScene
             yield break;
         }
 
+        // Whether code is sent to a model, where to, and whether it's shared with other devices is the person's to say
+        if (key is "edit_predictions" or "edit_predictions_share" or "edit_predictions_api_url" or "edit_predictions_provider")
+        {
+            yield return McpToolResult.Error($"{key} decides where code is sent, it's only changed by hand in the settings window.");
+            yield break;
+        }
+
         // A secret is typed into the settings window by the person whose it is, never handed over or back through here
         if (EditorSettingsCatalog.IsSecret(key))
         {

@@ -83,15 +83,18 @@ internal sealed partial class DawnScene
         if (changed != document || !PredictionSettings.On(settings))
             return;
 
+        // An edit the prediction is still showing after was its own, typed through or a word of it taken (Ctrl+Right):
+        // whatever ended it would have said so first
         UITextDocument text = changed.Editor.Document;
-        if (through && predictionShownIn == changed)
+        through = predictionShownIn == changed && (through || changed.Editor.HasPrediction);
+        if (through)
         {
             predictionShownVersion = text.Version;
             predictionShownCaret = text.Caret;
         }
 
         RememberEdited(changed, text.Caret.Line);
-        predictions.Edited(changed, text.Version, through && predictionShownIn == changed);
+        predictions.Edited(changed, text.Version, through);
     }
 
     /// <summary>Every tick: the engine asked, a finished prediction given to the editor, the status item brought up to date.</summary>

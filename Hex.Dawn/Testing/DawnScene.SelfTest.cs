@@ -212,6 +212,7 @@ internal sealed partial class DawnScene
         ("file-icons", "file-type font glyphs, extension matching and unknown-file fallbacks", TestFileIcons),
         ("tree-looks", "the explorer and a file's Properties in every look Hex comes with at 100, 150 and 200%, several picked, a folder and no workspace", TestTreeLooks),
         ("problems", "search, severity groups, colours and navigation in the problems panel", TestProblems),
+        ("prediction", "edit prediction against a fake model server: ghost text, Tab, typing through, cancelling, a diff, the status item, secrets never sent, errors said, frame time", TestPrediction),
         ("updates", "update close-prompt cancellation and failed handoff preserve the editor", TestUpdateHandoff),
         ("save-integrity", "encoding, Save As and failed-write preservation", TestDocumentSave),
         ("lossless", "every .hor of the engine's Assets and Hex's own saved unchanged byte for byte, a hand written layout edited in place", TestLossless),
