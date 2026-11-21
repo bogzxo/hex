@@ -251,7 +251,8 @@ internal sealed partial class DawnScene
         });
         test.WaitFor(() => HexLocalHistory.Versions(LocalHistoryRoot, changed).Count >= 2, 4.0f * GIT_PATIENCE);
         test.Run(ShowLocalHistory);
-        test.Wait();
+        // The list of copies is read off the editor's thread, a few frames on an idle machine and more on a busy one
+        test.WaitFor(() => textDialog is { IsOpen: true } && Chooser().Items.Length >= 2, 4.0f * GIT_PATIENCE);
         test.Check("history: every save is kept, the newest first", () =>
             textDialog is { IsOpen: true } && Chooser().Items.Length >= 2 && HexLocalHistory.Versions(LocalHistoryRoot, changed) is { Count: >= 2 } kept
             && File.ReadAllText(kept[0].Copy) == "kept twice\n");
