@@ -233,6 +233,26 @@ public sealed class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task Both_sides_saving_one_file_at_once_while_it_runs_is_a_conflict_whichever_is_heard_first()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        foreach (LinkServices side in new[] { pair.A, pair.B })
+            Put(side, "race.txt", "base");
+        using HexLinkSync sync = SyncOf(pair);
+        await sync.Start();
+        await Settled(sync);
+
+        Put(pair.B, "race.txt", "saved there");
+        Put(pair.A, "race.txt", "saved here");
+        Assert.True(await Until(() => sync.Conflicts.Count == 1), sync.Summary);
+        await Settled(sync);
+        Assert.Equal("saved here", Get(pair.A, "race.txt"));
+        Assert.Equal("saved there", Get(pair.B, "race.txt"));
+        Assert.Equal("saved there", Get(pair.A, "race.theirs-laptop.txt"));
+        Assert.Equal(0, sync.Sent);
+    }
+
+    [Fact]
     public async Task A_delete_is_carried_both_ways()
     {
         using var pair = await LinkedPair.Up(EDIT, EDIT);
