@@ -96,6 +96,9 @@ internal sealed class HexPointerScript
 
     public void Release(Func<Vector2> target) => Glide(target, false, PRESS_TIME);
 
+    /// <summary>Moves to a target with the button still held from a <see cref="Press"/>, a drag that hasn't let go yet.</summary>
+    public void MoveHeld(Func<Vector2> target) => Glide(target, true, MOVE_TIME * 2.0f);
+
     /// <summary>Presses at one place, moves to another with the button held and lets go there.</summary>
     /// <summary>A click with the other button, which is what opens a context menu.</summary>
     public void RightClick(Func<Vector2> target)

@@ -484,6 +484,7 @@ internal sealed partial class DawnScene
         ("notebook-zoom", "centred notebook zoom and viewport resize", TestNotebookZoom),
         ("notebookhtml", "a notebook exported as HTML from the palette through the save dialog, unsaved edits in it, the notebook left unsaved, SVG kept vector", TestNotebookHtml),
         ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
+        ("explorer-inplace", "the explorer worked in place: open files marked, the shown file revealed, type to find, rename and new file or folder on their rows, drag and drop with its cues, menus folded at 200% and Properties' read-only values as text", TestExplorerInPlace),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),

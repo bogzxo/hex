@@ -584,11 +584,14 @@ internal sealed partial class DawnScene : Scene
     {
         designer.RevealInTree();
 
+        // The side's rows aren't made again under a name being typed over in them, they are once it's done
+        bool treeHeld = treeDirty && sideTree.Edited is not null;
         if (tabsDirty) RebuildTabs();
-        if (treeDirty) RebuildTree();
+        if (treeDirty && !treeHeld) RebuildTree();
         if (inspectorDirty) RebuildInspector();
 
-        tabsDirty = treeDirty = inspectorDirty = false;
+        tabsDirty = inspectorDirty = false;
+        treeDirty = treeHeld;
         if (codeShown)
             codeDirty = codeShown = false;
     }

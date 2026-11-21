@@ -90,6 +90,7 @@ internal sealed partial class DawnScene
 
         // As wide as the components' list whichever of the two is showing, dragged by its edge the same way
         SideGrip(sideTree, UIResize.Right, left: true);
+        WireExplorerInPlace();
     }
 
     /// <summary>Whether the side bar shows the tree, or the rows of the designer.</summary>
@@ -117,6 +118,12 @@ internal sealed partial class DawnScene
         explorerMade = 0;
         UseSideTree(true);
         WatchFolders();
+        WireExplorerDrops();
+        GatherOpenInTabs();
+
+        // The folders of a file shown opened first, so its row is there to pick (explorer_auto_reveal)
+        if (follow && settings.ExplorerAutoReveal)
+            OpenFoldersOfShown();
 
         // The Solution view, the solution's projects instead of the folders (DawnScene.Solution)
         var items = new List<UITreeItem>();
@@ -146,7 +153,7 @@ internal sealed partial class DawnScene
             if (rows.Count > 0) sideTree.Reveal(rows[0]);
             pendingExplorerSelection = null;
         }
-        else if (follow) ShowOpenInExplorer();
+        else if (follow && settings.ExplorerAutoReveal) ShowOpenInExplorer();
         else
         {
             var selectedSet = new HashSet<string>(selected, PlatformPaths.Comparer);
@@ -313,6 +320,7 @@ internal sealed partial class DawnScene
             Tag = new SideTag(Pressed: () => explorer.ExplorerPressed(entry), Menu: _ => explorer.ShowExplorerMenu(entry))
         };
 
+        row.Pip = openInTabs.Contains(file) ? openInTabMark : null;
         explorer.explorerRows.Add((file, false, row));
         explorerMade++;
         DecorateRow(row, file, false, null);
@@ -485,6 +493,8 @@ internal sealed partial class DawnScene
     {
         designer.treeRows.Clear();
         fileRows.Clear();
+        sideTree.DropAt = null;
+        sideTree.OnDrop = null;
         KeepSidePlace();
         ApplySide();
         ShowExplorerHead(Side);

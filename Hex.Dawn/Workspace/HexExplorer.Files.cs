@@ -178,28 +178,75 @@ internal sealed partial class HexExplorer
         }
     }
 
+    /// <summary>
+    /// A row's name typed over in the explorer rather than asked for in a dialog, by the path of the row. False when the
+    /// explorer isn't showing it, and the dialog asks. The scene's.
+    /// </summary>
+    internal Func<string, bool>? RenameInPlace { get; set; }
+
+    /// <summary>A new file (false) or folder (true) named on a row of its own in a folder of the explorer, false when it can't be. The scene's.</summary>
+    internal Func<string, bool, bool>? NewInPlace { get; set; }
+
     internal void NewFileIn(string folder)
     {
+        if (NewInPlace?.Invoke(folder, false) == true)
+            return;
+
         string extension = GuessExtension(folder);
-        context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", ShownFolder(folder)), ("extension", extension)), "new" + extension, context.Strings.Said("explorer_files.make"), string.Empty, name =>
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_file_title"), context.Strings.Said("explorer_files.new_file_text", ("folder", ShownFolder(folder)), ("extension", extension)), "new" + extension, context.Strings.Said("explorer_files.make"), string.Empty, name => MakeNamedFile(folder, name, extension), (0, "new".Length));
+    }
+
+    /// <summary>
+    /// A file made in a folder by what was typed for it, the extension put on when it has none. A path down from the
+    /// folder ("util/Tool.cs") makes the folders on the way, the way VS Code does.
+    /// </summary>
+    /// <returns>Whether it was made.</returns>
+    internal bool MakeNamedFile(string folder, string typed, string extension)
+    {
+        string name = typed.Trim();
+        string[] parts = name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !parts.All(IsPlainName))
         {
-            // A path down from the folder ("util/Tool.cs") makes the folders on the way, the way VS Code does
-            name = name.Trim();
-            string[] parts = name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0 || !parts.All(IsPlainName))
-            {
-                context.Notices.Say(context.Strings.Said("explorer_files.bad_file_name", ("name", name)), error: true);
-                return;
-            }
+            context.Notices.Say(context.Strings.Said("explorer_files.bad_file_name", ("name", name)), error: true);
+            return false;
+        }
 
-            if (Path.GetExtension(parts[^1]).Length == 0)
-                parts[^1] += extension;
+        if (Path.GetExtension(parts[^1]).Length == 0)
+            parts[^1] += extension;
 
-            lastMadeExtension = Path.GetExtension(parts[^1]).ToLowerInvariant();
-            for (int down = 0; down < parts.Length; down++)
-                workspace.Expanded.Add(Path.GetFullPath(Path.Combine([folder, .. parts[..down]])));
-            MakeFile(Path.Combine([folder, .. parts]));
-        }, (0, "new".Length));
+        lastMadeExtension = Path.GetExtension(parts[^1]).ToLowerInvariant();
+        for (int down = 0; down < parts.Length; down++)
+            workspace.Expanded.Add(Path.GetFullPath(Path.Combine([folder, .. parts[..down]])));
+        return MakeFile(Path.Combine([folder, .. parts]));
+    }
+
+    /// <summary>
+    /// What's wrong with a name typed for a file or a folder in a folder, said under the row as it's typed. Null when
+    /// nothing is. <paramref name="current"/> is the path of what's being renamed, which its own name doesn't clash with,
+    /// and <paramref name="extension"/> what a new file's name gets when it has none.
+    /// </summary>
+    internal string? NameProblem(string folder, string typed, string? current, string extension = "")
+    {
+        string name = typed.Trim();
+        string[] parts = name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+            return context.Strings.Said("explorer_files.name_empty");
+
+        char[] invalid = Path.GetInvalidFileNameChars();
+        foreach (string part in parts)
+        {
+            if (part is "." or "..")
+                return context.Strings.Said("explorer_files.name_dots");
+            if (part.IndexOfAny(invalid) is >= 0 and int bad)
+                return context.Strings.Said("explorer_files.name_bad_char", ("char", char.IsControl(part[bad]) ? $"U+{(int)part[bad]:X4}" : part[bad].ToString()));
+        }
+
+        if (extension.Length > 0 && Path.GetExtension(parts[^1]).Length == 0)
+            parts[^1] += extension;
+
+        string to = Path.GetFullPath(Path.Combine([folder, .. parts]));
+        bool itself = current is not null && PlatformPaths.Same(to, Path.GetFullPath(current));
+        return !itself && (File.Exists(to) || Directory.Exists(to)) ? context.Strings.Said("explorer_files.name_taken", ("name", parts[^1])) : null;
     }
 
     /// <summary>
@@ -233,12 +280,13 @@ internal sealed partial class HexExplorer
     }
 
     /// <summary>Makes a file that isn't there yet, opens up the folder it is in, and opens it.</summary>
-    internal void MakeFile(string path)
+    /// <returns>Whether it was made.</returns>
+    internal bool MakeFile(string path)
     {
         if (File.Exists(path) || Directory.Exists(path))
         {
             context.Notices.Say(context.Strings.Said("explorer_files.already_there", ("name", Path.GetFileName(path))), error: true);
-            return;
+            return false;
         }
 
         try
@@ -249,39 +297,61 @@ internal sealed partial class HexExplorer
         catch (Exception e)
         {
             context.Notices.Say(context.Strings.Said("explorer_files.not_made", ("path", path), ("why", e.Message)), error: true);
-            return;
+            return false;
         }
 
         workspace.Expanded.Add(Path.GetDirectoryName(Path.GetFullPath(path))!);
         treeDirty = true;
         context.Documents.Open(path);
         context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
+        return true;
     }
 
     internal void NewFolderIn(string folder)
     {
-        context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", ShownFolder(folder))), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name =>
+        if (NewInPlace?.Invoke(folder, true) == true)
+            return;
+
+        context.Windows.Prompt(context.Strings.Said("explorer_files.new_folder_title"), context.Strings.Said("explorer_files.new_folder_text", ("folder", ShownFolder(folder))), "new folder", context.Strings.Said("explorer_files.make"), string.Empty, name => MakeNamedFolder(folder, name));
+    }
+
+    /// <summary>A folder made in a folder by what was typed for it, both opened in the explorer.</summary>
+    /// <returns>Whether it was made.</returns>
+    internal bool MakeNamedFolder(string folder, string typed)
+    {
+        string name = typed.Trim();
+        string path = Path.Combine(folder, name);
+
+        if (!IsPlainName(name) || Directory.Exists(path) || File.Exists(path))
         {
-            name = name.Trim();
-            string path = Path.Combine(folder, name);
+            context.Notices.Say(context.Strings.Said("explorer_files.bad_folder_name", ("name", name)), error: true);
+            return false;
+        }
 
-            if (!IsPlainName(name) || Directory.Exists(path) || File.Exists(path))
-            {
-                context.Notices.Say(context.Strings.Said("explorer_files.bad_folder_name", ("name", name)), error: true);
-                return;
-            }
-
+        try
+        {
             Directory.CreateDirectory(path);
-            workspace.Expanded.Add(Path.GetFullPath(folder));
-            workspace.Expanded.Add(Path.GetFullPath(path));
-            treeDirty = true;
-            KeepWorkspace();
-            context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
-        });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            context.Notices.Say(context.Strings.Said("explorer_files.not_made", ("path", path), ("why", e.Message)), error: true);
+            return false;
+        }
+
+        workspace.Expanded.Add(Path.GetFullPath(folder));
+        workspace.Expanded.Add(Path.GetFullPath(path));
+        treeDirty = true;
+        KeepWorkspace();
+        context.Notices.Say(context.Strings.Said("explorer_files.made", ("path", path)));
+        return true;
     }
 
     internal void RenamePath(string path)
     {
+        // In place on its row when the explorer shows it, the dialog only where it doesn't
+        if (RenameInPlace?.Invoke(path) == true)
+            return;
+
         string old = Path.GetFileName(path.TrimEnd('\\', '/'));
 
         // Just the name picked out, not its extension, the way VS Code does. A folder or a dotfile (.gitignore) has all of it

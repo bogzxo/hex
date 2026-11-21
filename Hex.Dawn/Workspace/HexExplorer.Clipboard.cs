@@ -67,6 +67,25 @@ internal sealed partial class HexExplorer
         });
     }
 
+    /// <summary>
+    /// Files and folders dropped on a folder of the explorer, moved there or copied, the clipboard left as it was. Off the
+    /// editor's thread like a paste.
+    /// </summary>
+    internal void TransferAsync(IReadOnlyList<string> sources, string folder, bool cut)
+    {
+        if (transferring || sources.Count == 0)
+            return;
+
+        string into = Path.GetFullPath(folder);
+        string[] from = sources.ToArray();
+        transferring = true;
+        context.Work.InBackground("explorer-transfer", () => Transfer(from, into, cut), results =>
+        {
+            transferring = false;
+            FinishTransfer(results, into, cut, int.MinValue, cut ? "explorer_files.dropped_moved" : "explorer_files.dropped_copied");
+        });
+    }
+
     internal sealed record TransferResult(string From, string? To, string? Error);
 
     internal static List<TransferResult> Transfer(IReadOnlyList<string> sources, string into, bool cut)
@@ -99,7 +118,7 @@ internal sealed partial class HexExplorer
         return results;
     }
 
-    private List<string> FinishTransfer(List<TransferResult> results, string into, bool cut, int version)
+    private List<string> FinishTransfer(List<TransferResult> results, string into, bool cut, int version, string said = "explorer_files.pasted")
     {
         var made = new List<string>();
         foreach (var result in results)
@@ -124,7 +143,8 @@ internal sealed partial class HexExplorer
             FoldersChanged?.Invoke();
             PastedPaths?.Invoke(made);
             KeepWorkspace();
-            context.Notices.Say(context.Strings.Said("explorer_files.pasted", ("name", Path.GetFileName(made[0])), ("folder", Path.GetFileName(into))));
+            string name = made.Count > 1 ? context.Strings.Said("explorer_files.drag_many", ("count", made.Count.ToString())) : Path.GetFileName(made[0]);
+            context.Notices.Say(context.Strings.Said(said, ("name", name), ("folder", Path.GetFileName(into))));
         }
 
         return made;

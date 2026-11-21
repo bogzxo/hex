@@ -1888,6 +1888,15 @@ let strings = {
         cut_said: "cut {name}, paste it into a folder to move it",
         copied_said: "copied {name}, paste it into a folder",
         pasted: "pasted {name} into {folder}",
+        dropped_moved: "moved {name} into {folder}",
+        dropped_copied: "copied {name} into {folder}",
+        drag_many: "{count} items",
+        name_empty: "Type a name",
+        name_bad_char: "A name can't have {char} in it",
+        name_dots: "A name can't be . or ..",
+        name_taken: "{name} is already in this folder",
+        new_file_hint: "File name",
+        new_folder_hint: "Folder name",
         not_copied: "couldn't copy {name}, {why}"
     },
 
@@ -2532,6 +2541,8 @@ let strings = {
         search_exclude_title: "Search exclude",
         search_exclude_help: "Globs left out of quick open, Find in Files and the watcher but still shown in the explorer, what gets built and what package managers fetch. On top of Files exclude. VS Code's search.exclude.",
         search_exclude_placeholder: "**/fixtures",
+        explorer_auto_reveal_title: "Reveal the open file",
+        explorer_auto_reveal_help: "Whether switching to a file opens its folders in the explorer and picks its row. VS Code's explorer.autoReveal.",
         search_use_ignore_files_title: "Use .gitignore",
         search_use_ignore_files_help: "Whether quick open, Find in Files and the watcher leave out what each .gitignore says, the one at the top of a folder and the ones in the folders under it. The explorer still shows those files.",
         add_pattern: "Add Pattern",
@@ -2805,6 +2816,7 @@ let strings = {
         files_exclude: "files.exclude hide hidden ignore glob explorer watcher exclude",
         search_exclude: "search.exclude ignore glob quick open find in files node_modules watcher exclude files.watcherExclude",
         search_use_ignore_files: "search.useIgnoreFiles gitignore ignore files git",
+        explorer_auto_reveal: "explorer.autoReveal reveal follow active open file select explorer",
         git_blame: "blame annotate git.blame.editorDecoration.enabled",
         git_autofetch: "autofetch git.autofetch",
         git_confirm_sync: "git.confirmSync",
@@ -4201,6 +4213,7 @@ let strings = {
     },
 
     side_tree: {
+        find_nothing: "No match",
         no_folders: "No folders yet. File, Add Folder puts one in.",
         browsing: "Open a folder with File, Open Folder",
         no_workspace: "No folder is open. Open one to see its files here, or a workspace to open several at once.",

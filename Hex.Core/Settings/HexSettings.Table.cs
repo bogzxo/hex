@@ -226,6 +226,7 @@ internal sealed partial class HexSettings
             },
             (settings, written) => written.Add("search_exclude", Horizon.HIDL.Library.Natives.List(settings.SearchExclude))),
         Flag("search_use_ignore_files", settings => settings.SearchUseIgnoreFiles, (settings, value) => settings.SearchUseIgnoreFiles = value),
+        Flag("explorer_auto_reveal", settings => settings.ExplorerAutoReveal, (settings, value) => settings.ExplorerAutoReveal = value),
         Special(LANGUAGE_OVERRIDES,
             (settings, values) => settings.ReadLanguageOverrides(values),
             (settings, written) => written.Add(LANGUAGE_OVERRIDES, settings.LanguageOverridesObject())),

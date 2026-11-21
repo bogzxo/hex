@@ -365,6 +365,9 @@ internal sealed partial class HexSettings
     /// <summary>Whether the walk of the files leaves out what each .gitignore says as well, search.useIgnoreFiles.</summary>
     public bool SearchUseIgnoreFiles = true;
 
+    /// <summary>Whether a file shown opens its folders in the explorer and picks its row there, explorer.autoReveal.</summary>
+    public bool ExplorerAutoReveal = true;
+
     /// <summary>
     /// The language servers added in the settings, one a language, in the order they were added. One for a language
     /// language_servers.hor has a server for as well is used instead of that one (HexLanguages).

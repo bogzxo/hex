@@ -61,7 +61,8 @@ public static class EditorSettingsCatalog
         new("format_on_type", HexText.Get("settings_text.format_on_type_title"), UIFormKind.Flag, HexText.Get("settings_text.format_on_type_help"), TEXT),
         Patterns("files_exclude"),
         Patterns("search_exclude"),
-        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH)
+        new("search_use_ignore_files", HexText.Get("settings_text.search_use_ignore_files_title"), UIFormKind.Flag, HexText.Get("settings_text.search_use_ignore_files_help"), SEARCH),
+        new("explorer_auto_reveal", HexText.Get("settings_text.explorer_auto_reveal_title"), UIFormKind.Flag, HexText.Get("settings_text.explorer_auto_reveal_help"), FILES)
     ]);
 
     /// <summary>
@@ -332,6 +333,7 @@ public static class EditorSettingsCatalog
         ["files_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualFilesExclude),
         ["search_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualSearchExclude),
         ["search_use_ignore_files"] = Values.Bool(true),
+        ["explorer_auto_reveal"] = Values.Bool(true),
         ["snap"] = new NumberValue(0.0f),
         ["canvas_handles"] = Values.Bool(true)
     };
