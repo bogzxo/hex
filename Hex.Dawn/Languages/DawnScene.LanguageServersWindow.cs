@@ -95,8 +95,10 @@ internal sealed partial class DawnScene
         if (languages.SetupVersion != serversVersion && !typing)
             serversDirty = true;
 
-        // While a command goes its log and its bar move, a few times a second is enough
-        if (languages.SetupBusy && !typing && Environment.TickCount64 - serversRebuiltAt > 400)
+        // While a command goes its log and its bar move, a few times a second is enough. Only a command, the tools and
+        // servers looked for say so with SetupVersion as each is found; on a busy machine the look took seconds and the
+        // window was made again every 400 ms of it for nothing
+        if (languages.SetupRunning && !typing && Environment.TickCount64 - serversRebuiltAt > 400)
             serversDirty = true;
 
         // A setting typed into goes in once the typing's stopped a moment, the way the settings take a text
@@ -106,7 +108,10 @@ internal sealed partial class DawnScene
             typed();
         }
 
-        if (serversDirty)
+        // Not while the pointer is held down. Made again between a press and its letting go, the button pressed was
+        // gone from under the pointer and the click with it, the list's pages and a language's tabs taking two or three
+        // clicks while the tools and servers were being looked for. What changed is shown once it's let go
+        if (serversDirty && !compositor.Pointer.Down)
             FillLanguageServers();
     }
 
