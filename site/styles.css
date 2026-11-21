@@ -1646,10 +1646,15 @@ pre {
   background: var(--border);
   list-style: none;
 
+  /* Each card's title, words and two bars are rows of the list's own grid, so a card whose words take two lines puts
+     the bars of its whole row down with it and they line up across */
   & > li {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    align-content: start;
     padding: 1.1rem 1.25rem 1.25rem;
     background: var(--surface);
-    container-type: inline-size;
   }
 
   & h4 {
@@ -1667,10 +1672,16 @@ pre {
 
 .vs-bar {
   display: grid;
-  grid-template-columns: 6.5rem 1fr minmax(5.5rem, auto);
-  gap: 0.75rem;
+  /* The name and the number on a line, the bar the whole width of the card under them */
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem 0.75rem;
   align-items: center;
   margin-block-start: 0.45rem;
+
+  & i {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   font-size: 0.92rem;
   font-variant-numeric: tabular-nums;
 
@@ -1708,19 +1719,6 @@ pre {
 
   &.code > span {
     color: var(--other);
-  }
-}
-
-/* A narrow card: the name and the number on a line, the bar the whole width under them */
-@container (inline-size < 22rem) {
-  .vs-bar {
-    grid-template-columns: 1fr auto;
-    row-gap: 0.3rem;
-
-    & i {
-      grid-column: 1 / -1;
-      grid-row: 2;
-    }
   }
 }
 

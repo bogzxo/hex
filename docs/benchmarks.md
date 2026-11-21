@@ -255,6 +255,37 @@ working set (a first launch, see above) and 636 to 639 handles, so the chats lea
 Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
 CPU, handles and threads every half second from the outside, the self-tests say the rest.
 
+## Next to VS Code — 21 November 2026
+
+The site's "next to the other editor" cards. Hex: a Release win-x64 NativeAOT publish of `development` at `5346361`
+(Horizon `80108a9`, build 4421), fresh settings, its C# server csharp-ls. VS Code 1.147.0 (`8a14f0cc1b`), a fresh
+profile (`--user-data-dir`) with the user's extensions: C# Dev Kit, C#, the .NET runtime, Python, Pylance, Jupyter,
+C/C++, ESLint and a few editing ones. The machine above, other agents working on it.
+
+Two workspaces: a small C# console project (five files) with `Program.cs` open, and the Horizon repository (995 C#
+files, 193,000 lines, 14 projects) with `Horizon/Engine/GameEngine.cs` open. For each, one thrown-away launch of each
+editor, then three rounds, the two editors in turn. Ready: Hex's own logged "first frame of the scene shown at", VS
+Code's own workbench-ready time from `--prof-append-timers` (a launch of its own, since that flag makes VS Code quit
+once it's written). Then, from a second launch of VS Code and the same launch of Hex, 30 s after start, the whole
+process tree summed (a child counted only if it started after its parent, process ids get reused): private bytes,
+and CPU time over the next 10 s.
+
+| Measurement, median of 3 | Hex | VS Code |
+| --- | ---: | ---: |
+| Ready, small project | **536 ms** (494–628) | 1,268 ms (1,264–1,301) |
+| Ready, Horizon | **951 ms** (677–1,595) | 1,547 ms (1,375–1,654) |
+| Private memory, small project | **383 MiB** | 2,629 MiB |
+| Private memory, Horizon | **473 MiB** | 3,126 MiB |
+| CPU 30 s in, small project, of one core | **0.9%** | 15.8% |
+| CPU 30 s in, Horizon, of one core | **1.4%** | 110.6% |
+| Processes, Horizon | **3** | 47 |
+| Program folder | **116 MiB** | 1,092 MiB (extensions another 2,587 MiB) |
+
+Raw ready, ms: small Hex 628 494 536, VS Code 1301 1268 1264; Horizon Hex 1595 951 677, VS Code 1654 1547 1375.
+Hex's first Horizon round (1,595 ms) is its slowest launch of the day, the machine was busy; an earlier run of build
+4420 on Horizon had a median of 563 ms (544–639) over six. The site gives CPU as a share of the whole processor (12
+threads): divide by 12. VS Code on Horizon is still indexing at 30 s, which is most of its CPU there.
+
 ## Persistent Process, 3.3.0 — 21 November 2026
 
 A Release win-x64 NativeAOT publish of `development` at `feb363f` with the notebook gutter change on top (build 4423,
