@@ -40,11 +40,12 @@ internal sealed record HexLinkDevice(string Id, string Name, string Os = "", str
 /// hands to whoever speaks the protocol over it (HexLinkSession). The stream is the encrypted one. What the device
 /// may do here is asked each time rather than kept, so a right taken away in Link's window holds from its next request.
 /// </summary>
-internal sealed class HexLinkConnection(Stream stream, HexLinkDevice device, string address, bool dialled, Func<HexLinkRights> rights, Action? closed = null) : IDisposable
+internal sealed class HexLinkConnection(Stream stream, HexLinkDevice device, string address, bool dialled, Func<HexLinkRights> rights,
+    Action? closed = null, HexLinkBulkSupport bulk = HexLinkBulkSupport.None, HexLinkAudit? audit = null) : IDisposable
 {
     private int disposed;
 
-    /// <summary>What's read and written, a line of JSON a message.</summary>
+    /// <summary>The authenticated stream carrying JSON messages and, when negotiated, binary frames.</summary>
     public Stream Stream { get; } = stream;
 
     /// <summary>Who's at the other end.</summary>
@@ -58,6 +59,18 @@ internal sealed class HexLinkConnection(Stream stream, HexLinkDevice device, str
 
     /// <summary>What the device may do here now, None once it's forgotten.</summary>
     public HexLinkRights Rights => rights();
+
+    /// <summary>The best bulk format supported by both ends of this connection.</summary>
+    public HexLinkBulkSupport Bulk { get; } = bulk;
+
+    public void ReportFault(string operation, Exception error)
+    {
+        string detail = $"{operation}: {error.GetType().Name}: {error.Message}";
+        if (audit is not null)
+            audit.Write("session fault", Device.Id, detail);
+        else
+            Console.WriteLine($"[Hex] Link {Device.Name}, {detail}");
+    }
 
     public void Dispose()
     {

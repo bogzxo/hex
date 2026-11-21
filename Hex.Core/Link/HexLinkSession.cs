@@ -1,7 +1,7 @@
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 
 namespace Hex.Core;
 
@@ -55,11 +55,10 @@ internal sealed class HexLinkException(int code, string message, JsonNode? detai
 /// <see cref="MOST_REQUESTS"/> a second (the rest are told busy), and a link that goes quiet is noticed by pinging it.
 /// <para>
 /// Each request is answered on a task of its own, so a slow one (a file read, a tool that waits) never holds up a ping.
-/// Notifications are handed over on the reading task in the order they came, the chunks of a git bundle have to be
-/// written in order, so whoever takes them does it quickly. Answers go out under a lock in whatever order they're done.
+/// Notifications are dispatched in arrival order by a separate task. One writer prioritizes control between messages.
 /// </para>
 /// </summary>
-internal sealed class HexLinkSession : IDisposable
+internal sealed partial class HexLinkSession : IDisposable
 {
     /// <summary>
     /// The longest line either end may send, in bytes. A file read is up to 8 MB (HexLinkFiles.MOST_READ), which as
@@ -77,19 +76,29 @@ internal sealed class HexLinkSession : IDisposable
     private static readonly TimeSpan PATIENCE = TimeSpan.FromMinutes(2);
 
     private readonly Stream stream;
-    private readonly Lock writing = new();
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonNode?>> asked = new();
+    private readonly Channel<Notice> notices = Bounded<Notice>(32);
+    private readonly SemaphoreSlim handlers = new(MOST_REQUESTS);
+    private int requestBytes;
+    private int noticeBytes;
+    private int started;
+
+    private readonly record struct Notice(string? Method, JsonObject Message, int Bytes, TaskCompletionSource<JsonNode?>? Answer = null);
+    private readonly record struct PendingAsk(TaskCompletionSource<JsonNode?> Answer, bool Priority);
+
+    private static Channel<T> Bounded<T>(int capacity) => Channel.CreateBounded<T>(new BoundedChannelOptions(capacity)
+    {
+        SingleReader = true
+    });
+    private readonly ConcurrentDictionary<long, PendingAsk> asked = new();
     private readonly CancellationTokenSource closing = new();
     private long lastId;
     private int ended;
 
-    // What a message is written into, the session's for its life and only used under writing
-    private readonly ArrayBufferWriter<byte> sendBuffer = new();
-    private readonly Utf8JsonWriter sendWriter = new(Stream.Null, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
-
     // The requests counted in the second going on, for the rate limit, and when it started
     private long rateSecond;
     private int rateCount;
+    private int legacyNoticeCount;
+    private int controlCount;
 
     // When anything was last heard from the other end, Environment.TickCount64
     private long heard = Environment.TickCount64;
@@ -111,7 +120,7 @@ internal sealed class HexLinkSession : IDisposable
     /// </summary>
     public Func<string, JsonObject, CancellationToken, Task<JsonNode?>>? Requested { get; set; }
 
-    /// <summary>What takes a notification from the other end, on the reading task, in the order they came.</summary>
+    /// <summary>What takes a notification from the other end, on a dispatch task, in the order they came.</summary>
     public Action<string, JsonObject>? Told { get; set; }
 
     /// <summary>Called once when the link goes, for whatever reason, with the reason.</summary>
@@ -134,8 +143,15 @@ internal sealed class HexLinkSession : IDisposable
     /// <summary>Starts reading and pinging, once the handlers are set.</summary>
     public HexLinkSession Start()
     {
-        _ = Task.Run(Read);
+        if (Interlocked.Exchange(ref started, 1) != 0 || IsClosed)
+            return this;
+
         pinger = new Timer(_ => Ping(), null, PingEvery, PingEvery);
+        if (IsClosed)
+            pinger.Dispose();
+        _ = Task.Run(Write);
+        _ = Task.Run(Dispatch);
+        _ = Task.Run(Read);
         return this;
     }
 
@@ -149,31 +165,27 @@ internal sealed class HexLinkSession : IDisposable
         if (IsClosed)
             throw new HexLinkException(HexLinkErrors.CLOSED, $"The link is closed, {Why}");
 
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancel, closing.Token);
+        limit.CancelAfter(timeout ?? PATIENCE);
         long id = Interlocked.Increment(ref lastId);
         var answer = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        asked[id] = answer;
+        bool priority = IsControl(method);
+        asked[id] = new PendingAsk(answer, priority);
         try
         {
-            var message = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method };
-            if (parameters is not null)
-                message["params"] = parameters;
-            if (!Send(message))
+            JsonObject message = Message(method, parameters);
+            message["id"] = id;
+            if (!await SendAsync(message, priority, limit.Token))
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, $"{method} is too much to send over a link.");
-
-            // Gone between the check and the send, the close may have failed the asks before this one was in
-            if (IsClosed)
-                answer.TrySetException(new HexLinkException(HexLinkErrors.CLOSED, $"The link is closed, {Why}"));
-
-            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            limit.CancelAfter(timeout ?? PATIENCE);
-            try
-            {
-                return await answer.Task.WaitAsync(limit.Token);
-            }
-            catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
-            {
-                throw new HexLinkException(HexLinkErrors.TIMED_OUT, $"{method} had no answer in {(timeout ?? PATIENCE).TotalSeconds:0} seconds.");
-            }
+            return await answer.Task.WaitAsync(limit.Token);
+        }
+        catch (Exception e) when (IsClosed && !cancel.IsCancellationRequested && e is OperationCanceledException or ChannelClosedException)
+        {
+            throw new HexLinkException(HexLinkErrors.CLOSED, $"The link closed, {Why}");
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            throw new HexLinkException(HexLinkErrors.TIMED_OUT, $"{method} had no answer in {(timeout ?? PATIENCE).TotalSeconds:0} seconds.");
         }
         finally
         {
@@ -181,14 +193,47 @@ internal sealed class HexLinkSession : IDisposable
         }
     }
 
-    /// <summary>Tells the other end something it doesn't answer, false when it couldn't go (the link's gone, or it's too big).</summary>
+    /// <summary>
+    /// Queues a notification. Existing git and prediction producers wait for capacity and delivery so they can
+    /// stop an ordered stream on failure.
+    /// </summary>
     public bool Tell(string method, JsonObject? parameters = null)
+    {
+        if (IsClosed)
+            return false;
+
+        JsonObject message = Message(method, parameters);
+        if (!IsLegacyStreamNotice(method))
+        {
+            if (TrySend(new Outgoing(message), IsControl(method)))
+                return true;
+            Close("its notification send queue filled");
+            return false;
+        }
+
+        try
+        {
+            return SendAsync(message, priority: false, closing.Token).AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception) when (IsClosed)
+        {
+            return false;
+        }
+    }
+
+    private static JsonObject Message(string method, JsonObject? parameters)
     {
         var message = new JsonObject { ["jsonrpc"] = "2.0", ["method"] = method };
         if (parameters is not null)
             message["params"] = parameters;
-        return Send(message);
+        return message;
     }
+
+    private static bool IsLegacyStreamNotice(string method) =>
+        method is "git/chunk" or "git/done" or "predict/chunk" or "predict/done";
+
+    private static bool IsControl(string method) =>
+        method is "link/ping" or "link/rights" or "predict/cancel" or "link/bulk/open" or "link/bulk/complete";
 
     /// <summary>Closes the link, saying why. The asks still waiting fail, <see cref="Closed"/> is called once.</summary>
     public void Close(string why)
@@ -199,95 +244,55 @@ internal sealed class HexLinkSession : IDisposable
         Volatile.Write(ref ended, 1);
         try { pinger?.Dispose(); } catch (Exception) { }
         try { closing.Cancel(); } catch (Exception) { }
+        control.Writer.TryComplete();
+        replies.Writer.TryComplete();
+        outgoing.Writer.TryComplete();
+        bulkControl.Writer.TryComplete();
+        bulkOutgoing.Writer.TryComplete();
+        notices.Writer.TryComplete();
         Connection.Dispose();
-        foreach (var (_, waiting) in asked)
-            waiting.TrySetException(new HexLinkException(HexLinkErrors.CLOSED, $"The link closed, {why}"));
         Closed?.Invoke(this, why);
     }
 
     public void Dispose() => Close("it was closed here");
 
-    // A message written as a line, false when it can't be. Not indented, so there's never a new line inside a message
-    private bool Send(JsonNode message)
+    private async Task Dispatch()
     {
-        if (IsClosed)
-            return false;
-
-        lock (writing)
-        {
-            try
-            {
-                sendBuffer.ResetWrittenCount();
-                sendWriter.Reset(sendBuffer);
-                message.WriteTo(sendWriter);
-                sendWriter.Flush();
-                // The other end would cut the link for it, so it doesn't go, and whoever sent it hears so
-                if (sendBuffer.WrittenCount + 1 > MOST_LINE)
-                    return false;
-                stream.Write(sendBuffer.WrittenSpan);
-                stream.WriteByte((byte)'\n');
-                stream.Flush();
-                return true;
-            }
-            catch (Exception e) when (e is IOException or ObjectDisposedException or NotSupportedException or InvalidOperationException)
-            {
-                // Closed off the lock, closing disposes the stream another write may be waiting on
-            }
-        }
-
-        Close("it couldn't be written to");
-        return false;
-    }
-
-    // Lines read until the other end goes, a line too long or anything the stream throws closing the link
-    private async Task Read()
-    {
-        byte[] chunk = new byte[64 * 1024];
-        var line = new ArrayBufferWriter<byte>(4096);
-        string why = "the other end hung up";
         try
         {
-            while (!IsClosed)
+            await foreach (Notice notice in notices.Reader.ReadAllAsync(closing.Token))
             {
-                int read = await stream.ReadAsync(chunk, closing.Token);
-                if (read == 0)
-                    break;
-                Volatile.Write(ref heard, Environment.TickCount64);
-
-                int from = 0;
-                while (from < read)
+                try
                 {
-                    int end = Array.IndexOf(chunk, (byte)'\n', from, read - from);
-                    int upTo = end < 0 ? read : end;
-                    if (line.WrittenCount + (upTo - from) > MOST_LINE)
-                    {
-                        why = "it sent a line longer than a link takes";
-                        return;
-                    }
-
-                    line.Write(chunk.AsSpan(from, upTo - from));
-                    if (end < 0)
-                        break;
-
-                    Received(line.WrittenSpan);
-                    // A big line's buffer let go of rather than kept for the link's life
-                    if (line.Capacity > 1024 * 1024)
-                        line = new ArrayBufferWriter<byte>(4096);
+                    if (notice.Answer is { } answer)
+                        CompleteAnswer(answer, notice.Message);
                     else
-                        line.ResetWrittenCount();
-                    from = end + 1;
+                        Told?.Invoke(notice.Method!, notice.Message);
+                }
+                catch (Exception e)
+                {
+                    if (notice.Answer is { } answer)
+                        answer.TrySetException(new HexLinkException(HexLinkErrors.INVALID_REQUEST, "The Link reply could not be read."));
+                    AuditFault(notice.Method ?? "reply", e);
+                }
+                finally
+                {
+                    Interlocked.Add(ref noticeBytes, -notice.Bytes);
                 }
             }
         }
-        catch (Exception e) when (e is IOException or ObjectDisposedException or OperationCanceledException or NotSupportedException or InvalidOperationException)
+        catch (OperationCanceledException) when (IsClosed)
         {
-            why = "the connection broke";
         }
         finally
         {
-            Close(why);
+            while (notices.Reader.TryRead(out _))
+            {
+            }
         }
     }
+
+    private void AuditFault(string operation, Exception error) => Connection.ReportFault(operation, error);
 
     // A line taken apart, nothing in it ever let throw out of here: it's the other machine's, whatever it says
     private void Received(ReadOnlySpan<byte> line)
@@ -302,13 +307,13 @@ internal sealed class HexLinkSession : IDisposable
         }
         catch (JsonException)
         {
-            Send(Error(null, HexLinkErrors.PARSE_ERROR, "That isn't JSON.", null));
+            Reply(Error(null, HexLinkErrors.PARSE_ERROR, "That isn't JSON.", null));
             return;
         }
 
         if (parsed is not JsonObject message)
         {
-            Send(Error(null, HexLinkErrors.INVALID_REQUEST, "A link speaks a JSON-RPC message a line, one at a time.", null));
+            Reply(Error(null, HexLinkErrors.INVALID_REQUEST, "A link speaks a JSON-RPC message a line, one at a time.", null));
             return;
         }
 
@@ -319,69 +324,147 @@ internal sealed class HexLinkSession : IDisposable
             if (method is null)
             {
                 if (id is not null)
-                    Answered(id, message);
+                    Answered(id, message, line.Length);
                 return;
             }
 
             JsonObject parameters = message["params"] as JsonObject ?? [];
             if (id is null)
             {
-                Told?.Invoke(method, parameters);
+                ReceiveNotice(method, parameters, line.Length);
                 return;
             }
 
             // Only a number or a short string is an id, it's sent back as it came
             if (id.GetValueKind() is not (JsonValueKind.Number or JsonValueKind.String) || id.ToJsonString().Length > 100)
             {
-                Send(Error(null, HexLinkErrors.INVALID_REQUEST, "A request's id is a number or a short string.", null));
-                return;
-            }
-
-            if (!Admitted())
-            {
-                Send(Error(id, HexLinkErrors.BUSY, $"Too many requests, a link takes {MOST_REQUESTS} a second.", null));
+                Reply(Error(null, HexLinkErrors.INVALID_REQUEST, "A request's id is a number or a short string.", null));
                 return;
             }
 
             if (method == "link/ping")
             {
-                Send(McpProtocol.Result(id, new JsonObject()));
+                if (Admitted(priority: true))
+                    Reply(McpProtocol.Result(id, new JsonObject()), urgent: true);
                 return;
             }
 
-            id = id.DeepClone();
-            _ = Task.Run(() => Answer(id, method, parameters));
-        }
-        catch (Exception)
-        {
-            // Something in it of a kind nobody expected, the link goes on without it
-        }
-    }
-
-    // Counted against the second going on, false past the most
-    private bool Admitted()
-    {
-        long second = Environment.TickCount64 / 1000;
-        lock (asked)
-        {
-            if (second != rateSecond)
+            if (!Admitted())
             {
-                rateSecond = second;
-                rateCount = 0;
+                Reply(Error(id, HexLinkErrors.BUSY, $"Too many requests, a link takes {MOST_REQUESTS} a second.", null));
+                return;
             }
 
-            return ++rateCount <= MOST_REQUESTS;
+            if (!handlers.Wait(0))
+            {
+                Reply(Error(id, HexLinkErrors.BUSY, "The link is already handling too many requests.", null));
+                return;
+            }
+
+            int bytes = line.Length;
+            if (Interlocked.Add(ref requestBytes, bytes) > 2 * MOST_LINE)
+            {
+                ReleaseRequest(bytes);
+                Reply(Error(id, HexLinkErrors.BUSY, "The link already has too much request data to process.", null));
+                return;
+            }
+
+            IncomingBulk? reserved = null;
+            try
+            {
+                if (method == "link/bulk/open")
+                    reserved = ReserveIncoming(parameters, bytes);
+            }
+            catch (HexLinkException e)
+            {
+                ReleaseRequest(bytes);
+                Reply(Error(id, e.Code, e.Message, e.Detail));
+                return;
+            }
+            catch
+            {
+                ReleaseRequest(bytes);
+                throw;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try { await Answer(id, method, parameters, reserved); }
+                finally { ReleaseRequest(bytes); }
+            });
+        }
+        catch (Exception e)
+        {
+            AuditFault("receive", e);
         }
     }
 
-    private async Task Answer(JsonNode id, string method, JsonObject parameters)
+    private void ReleaseRequest(int bytes)
+    {
+        Interlocked.Add(ref requestBytes, -bytes);
+        handlers.Release();
+    }
+
+    private void Reply(JsonObject message, bool urgent = false)
+    {
+        if (!TrySend(new Outgoing(message), priority: urgent, reply: true))
+            Close("its control queue filled");
+    }
+
+    private void ReceiveNotice(string method, JsonObject parameters, int bytes)
+    {
+        bool legacy = IsLegacyStreamNotice(method);
+        if (!Admitted(legacy, priority: IsControl(method)))
+        {
+            if (legacy)
+                Close("it sent legacy stream notifications too quickly");
+            return;
+        }
+
+        DispatchInOrder(new Notice(method, parameters, bytes));
+    }
+
+    private void DispatchInOrder(Notice notice)
+    {
+        if (Interlocked.Add(ref noticeBytes, notice.Bytes) <= 2 * MOST_LINE && notices.Writer.TryWrite(notice))
+            return;
+
+        Interlocked.Add(ref noticeBytes, -notice.Bytes);
+        Close("its notification queue filled");
+    }
+
+    // Only the reader uses these counters. Existing ordered base64 streams had no quota in older peers.
+    private bool Admitted(bool legacyNotice = false, bool priority = false)
+    {
+        long second = Environment.TickCount64 / 1000;
+        if (second != rateSecond)
+        {
+            rateSecond = second;
+            rateCount = 0;
+            legacyNoticeCount = 0;
+            controlCount = 0;
+        }
+
+        if (priority)
+            return ++controlCount <= 32;
+        return legacyNotice ? ++legacyNoticeCount <= 1024 : ++rateCount <= MOST_REQUESTS;
+    }
+
+    private async Task Answer(JsonNode id, string method, JsonObject parameters, IncomingBulk? reserved)
     {
         JsonObject answer;
         try
         {
-            if (Requested is not { } requested)
+            JsonNode? result;
+            if (reserved is not null)
+                result = await reserved.Open(parameters["metadata"] as JsonObject ?? []);
+            else if (method == "link/bulk/complete")
+                result = await FinishIncoming(parameters);
+            else if (Requested is { } requested)
+                result = await requested(method, parameters, closing.Token);
+            else
                 throw new HexLinkException(HexLinkErrors.METHOD_NOT_FOUND, $"This end answers no {method}.");
-            answer = McpProtocol.Result(id, await requested(method, parameters, closing.Token));
+            answer = McpProtocol.Result(id, result);
         }
         catch (HexLinkException e)
         {
@@ -393,20 +476,37 @@ internal sealed class HexLinkSession : IDisposable
         }
         catch (Exception e)
         {
+            AuditFault(method, e);
             answer = Error(id, HexLinkErrors.INTERNAL_ERROR, e.Message, null);
         }
 
-        // An answer too big for the link said as that instead, so the asker isn't left waiting
-        if (!Send(answer) && !IsClosed)
-            Send(Error(id, HexLinkErrors.TOO_BIG, $"The answer to {method} is too big to send over a link.", null));
+        try
+        {
+            if (!await SendAsync(answer, IsControl(method), closing.Token))
+                Reply(Error(id, HexLinkErrors.TOO_BIG, $"The answer to {method} is too big to send over a link.", null));
+        }
+        catch (Exception) when (IsClosed)
+        {
+        }
     }
 
     // An answer to one of ours, the asker let go with it, one to nothing we asked dropped
-    private void Answered(JsonNode id, JsonObject message)
+    private void Answered(JsonNode id, JsonObject message, int bytes)
     {
-        if (id.GetValueKind() != JsonValueKind.Number || !id.AsValue().TryGetValue(out long number) || !asked.TryGetValue(number, out var waiting))
+        if (id.GetValueKind() != JsonValueKind.Number || !id.AsValue().TryGetValue(out long number) ||
+            !asked.TryGetValue(number, out PendingAsk waiting))
             return;
 
+        // RPCs such as sync/flush promise that earlier notifications have already been handled on return.
+        // Control replies can proceed while a notification handler is waiting on disk or other work.
+        if (!waiting.Priority && Volatile.Read(ref noticeBytes) != 0)
+            DispatchInOrder(new Notice(null, message, bytes, waiting.Answer));
+        else
+            CompleteAnswer(waiting.Answer, message);
+    }
+
+    private static void CompleteAnswer(TaskCompletionSource<JsonNode?> waiting, JsonObject message)
+    {
         if (message["error"] is JsonObject error)
         {
             int code = error["code"] is JsonValue said && said.TryGetValue(out int got) ? got : HexLinkErrors.INTERNAL_ERROR;
@@ -427,6 +527,7 @@ internal sealed class HexLinkSession : IDisposable
             ((JsonObject)error["error"]!)["data"] = data.DeepClone();
         return error;
     }
+
 
     // Every while, a ping, and the link closed when nothing at all has been heard for the pings it may miss
     private void Ping()
