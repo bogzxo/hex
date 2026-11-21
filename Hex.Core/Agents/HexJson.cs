@@ -23,13 +23,43 @@ internal static class HexJson
         if (trimmed.Length == 0 || trimmed[0] is not ('{' or '['))
             return null;
 
+        // Read as a document and turned into HIDL values as it's walked, no tree of nodes made on the way, which every line
+        // an agent printed had made
         try
         {
-            return ToHidl(JsonNode.Parse(trimmed));
+            using JsonDocument document = JsonDocument.Parse(trimmed);
+            return ToHidl(document.RootElement);
         }
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    private static IRuntimeValue ToHidl(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var properties = new List<(string, IRuntimeValue)>();
+                foreach (JsonProperty property in element.EnumerateObject())
+                    properties.Add((property.Name, ToHidl(property.Value)));
+                return Natives.Object([.. properties]);
+            case JsonValueKind.Array:
+                var items = new List<IRuntimeValue>(element.GetArrayLength());
+                foreach (JsonElement item in element.EnumerateArray())
+                    items.Add(ToHidl(item));
+                return new ListValue([.. items]);
+            case JsonValueKind.String:
+                return new StringValue(element.GetString()!);
+            case JsonValueKind.Number:
+                return new NumberValue((float)element.GetDouble());
+            case JsonValueKind.True:
+                return Values.Bool(true);
+            case JsonValueKind.False:
+                return Values.Bool(false);
+            default:
+                return Values.Null;
         }
     }
 

@@ -150,7 +150,7 @@ internal sealed class McpSharedServers
             try
             {
                 foreach (string line in outgoing.GetConsumingEnumerable())
-                    pipe.Write(Encoding.UTF8.GetBytes(line + "\n"));
+                    McpProtocol.WriteLine(pipe, line, flush: false);
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
             {

@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -26,6 +28,40 @@ internal static class McpProtocol
 
     /// <summary>Whether a version is at least another, for what came in with a later one (a tool's title, its annotations).</summary>
     public static bool AtLeast(string version, string since) => string.CompareOrdinal(version, since) >= 0;
+
+    /// <summary>
+    /// A line written to a stream as UTF-8 with its new line, in one write. It's encoded into a buffer lent for it rather
+    /// than made as a text with the new line on the end and then as bytes, which for a tool's answer with a picture in it
+    /// was two copies of a few megabytes for every line passed on. <paramref name="gate"/> is held for the write alone.
+    /// </summary>
+    public static void WriteLine(Stream to, string line, Lock? gate = null, bool flush = true)
+    {
+        int count = Encoding.UTF8.GetByteCount(line);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(count + 1);
+        try
+        {
+            Encoding.UTF8.GetBytes(line, buffer);
+            buffer[count] = (byte)'\n';
+            if (gate is null)
+            {
+                to.Write(buffer, 0, count + 1);
+                if (flush)
+                    to.Flush();
+                return;
+            }
+
+            lock (gate)
+            {
+                to.Write(buffer, 0, count + 1);
+                if (flush)
+                    to.Flush();
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
 
     /// <summary>An answer to a request.</summary>
     public static JsonObject Result(JsonNode? id, JsonNode? result) =>

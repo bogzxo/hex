@@ -447,7 +447,16 @@ internal sealed partial class HexAgentChat(int id, string agent)
     public int Reshaped { get; private set; }
 
     /// <summary>Whether something asked is still waiting for the agent to take it in.</summary>
-    public bool HasQueued => entries.Any(entry => entry.Queued);
+    public bool HasQueued
+    {
+        get
+        {
+            foreach (HexAgentEntry entry in entries)
+                if (entry.Queued)
+                    return true;
+            return false;
+        }
+    }
 
     /// <summary>Resolve the first queued message that matches the prompt, or the oldest when no prompt was given.</summary>
     public bool Taken(string? prompt = null, bool accepted = true)
@@ -636,19 +645,25 @@ internal sealed partial class HexAgentChat(int id, string agent)
         Running = false;
         Ended = Environment.TickCount64;
         TurnSeconds = (Ended - turnStarted) / 1000.0;
-        foreach (HexAgentEntry tool in entries.Where(entry => entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running))
+        foreach (HexAgentEntry entry in entries)
         {
-            tool.State = HexAgentToolState.Failed;
-            tool.Output ??= "the agent stopped before it said how this went";
-            tool.Ended = Environment.TickCount64;
-            tool.Version++;
+            if (entry.Kind == HexAgentEntryKind.Tool && entry.State == HexAgentToolState.Running)
+            {
+                entry.State = HexAgentToolState.Failed;
+                entry.Output ??= "the agent stopped before it said how this went";
+                entry.Ended = Environment.TickCount64;
+                entry.Version++;
+            }
         }
 
-        foreach (HexAgentEntry asked in entries.Where(entry => entry.Queued))
+        foreach (HexAgentEntry entry in entries)
         {
-            asked.Queued = false;
-            asked.Unheard = true;
-            asked.Version++;
+            if (entry.Queued)
+            {
+                entry.Queued = false;
+                entry.Unheard = true;
+                entry.Version++;
+            }
         }
 
         Version++;

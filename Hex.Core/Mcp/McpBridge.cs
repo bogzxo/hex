@@ -206,22 +206,13 @@ internal static partial class McpBridge
         // Said by the stdin thread, read by this one
         bool clientGone = false;
 
-        void ToClient(string line)
-        {
-            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(line + "\n");
-            lock (writing)
-            {
-                stdout.Write(bytes);
-                stdout.Flush();
-            }
-        }
+        void ToClient(string line) => McpProtocol.WriteLine(stdout, line, writing);
 
         static bool ToHex(Stream to, string line)
         {
             try
             {
-                to.Write(System.Text.Encoding.UTF8.GetBytes(line + "\n"));
-                to.Flush();
+                McpProtocol.WriteLine(to, line);
                 return true;
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
