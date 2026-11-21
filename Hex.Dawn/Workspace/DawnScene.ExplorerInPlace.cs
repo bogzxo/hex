@@ -85,6 +85,9 @@ internal sealed partial class DawnScene
                 at++;
         }
 
+        // The row picked before, picked again once the new one goes. The edit picks the new row, and left picked once it
+        // was gone the next New File went by a row that wasn't there and into the workspace's first folder
+        UITreeItem picked = sideTree.Selected ?? row;
         row.Children.Insert(at, made);
         sideTree.Refresh();
 
@@ -92,6 +95,8 @@ internal sealed partial class DawnScene
         {
             row.Children?.Remove(made);
             sideTree.Refresh();
+            if (sideTree.Selected is null || sideTree.Selected == made)
+                sideTree.Selected = explorer.explorerRows.Any(shown => shown.Row == picked) ? picked : row;
         }
 
         sideTree.Edit(made, string.Empty, 0, 0,
