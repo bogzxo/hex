@@ -1561,10 +1561,6 @@ pre {
   color: var(--dim);
 }
 
-.persistent {
-  --accent: var(--noon);
-}
-
 .persistent .bars,
 .persistent .receipts {
   margin-block-start: 1.25rem;
@@ -1905,27 +1901,6 @@ details:not([open])::details-content {
   }
 }
 
-/* A line by the title that it's the editor you already know how to use */
-.hero .familiar {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-block-start: 1rem;
-  padding: 0.25rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--dim);
-  font-size: 0.88rem;
-
-  &::before {
-    content: "";
-    inline-size: 0.45rem;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: var(--noon);
-  }
-}
-
 /* Rails. A list that's a grid where there's room is a row you swipe on a phone, each card most of the screen wide
    with the next one peeking in, snapping as it goes and running out to the screen's edges. Its controls are put in by
    site.js and only shown while it scrolls */
@@ -2040,6 +2015,11 @@ details:not([open])::details-content {
       border-radius: 4px;
       background: var(--dim);
       opacity: 0.5;
+
+      /* The one on screen stretches out and the one left shrinks back, as the rail moves */
+      @media (prefers-reduced-motion: no-preference) {
+        transition: inline-size 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), background-color 0.3s ease, opacity 0.3s ease;
+      }
     }
 
     &[aria-current="true"]::after {
