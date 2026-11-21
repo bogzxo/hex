@@ -318,7 +318,7 @@ relay for machines with no route between them, the debugger shared read-only, a 
 ## Status
 
 Kept current by the orchestrator (chat #107) at every phase change, so another agent can take over.
-Last updated 2026-11-21 19:15, phase 2 finishing, sync engine merged.
+Last updated 2026-11-21 19:40, phases 3, 4 and 5 running.
 
 **Where things are**
 - Integration branch: hex `feat/hex-link`, worktree `../hexwt-link` (beside `hex/`). No engine changes so far (engine
@@ -339,29 +339,30 @@ Last updated 2026-11-21 19:15, phase 2 finishing, sync engine merged.
   (106c471, f340236). Glue 1d1cb46. 141 `HexLink` unit tests pass on Windows and macOS. PC and Mac paired and
   linked over LAN and Tailscale with the transport's console harness (TLS 1.2 to the Mac).
 
-**Running**
-- #111 `feat/hex-link-wiring` (`../hexwt-link-wiring`), head 94e2b75 (768604f wiring, 50deefc self test, 94e2b75
-  goldens + docs): phase 2 written and unit tested (385 of 385 in its filter). `Hex.Dawn/Link/DawnScene.Link*.cs`,
-  settings `link*`, `--link`, tools `hex_link_devices/call/spawn`, self tests `link` and `link-peer`. Left: the
-  `link` self test green three times (first run 21 of 22, fixed since), `mcp`, `agents-layout`, `settings` once,
-  then its report. Not merged yet.
-- #112 `feat/hex-link-sync`: finished and merged (bb03029, c61191b). `HexLinkSync` (start, flush, resolve, state,
-  conflicts, skipped), the manifest gains `root` (the repository's first commit). 164 `HexLink` unit tests on
-  `feat/hex-link`. `The_fleet_is_sent_at_most_five_times_a_second...` failed once under a loaded machine and
-  passed three reruns: to be made sturdier.
+**Merged since** (`feat/hex-link` d9d7b32): phase 2 wiring (#111: 768604f, 50deefc, 94e2b75, e37dbe6) and the sync
+engine (#112: bb03029, c61191b). 408 unit tests in the Link, settings, MCP and agents filters; self test `link`
+22 of 22 (two Hex on the PC).
+
+**Running** (each commits work in progress often and messages the orchestrator its commit and what is left)
+- #118 `feat/hex-link-ui` (`../hexwt-link-ui`, engine-transport): phase 3. Link window, pairing dialog, device
+  sections and badges in the fleet and chat list, a remote chat on screen, the Runs on picker, suite `link-ui`.
+  Owns `DawnScene.LinkWindow*/LinkPairing*/LinkFleet*/LinkChats*/LinkRunsOn*.cs`.
+- #119 `feat/hex-link-share` (`../hexwt-link-share`, engine-protocol): phase 4 and 4b glue. Working-tree sync
+  per device and folder with `hex_link_sync` (first), open remote file with save back and conflicts, presence,
+  clone, fetch and offered changes, suite `link-files`. Owns `DawnScene.LinkFiles*/LinkSync*/LinkGit*/
+  LinkPresence*.cs` and `DawnScene.McpLink.cs`.
+- #120 `feat/hex-link-test` (`../hexwt-link-test`, engine-test): phase 5 on what is merged. `link` on the Mac,
+  the four route and direction combinations (LAN, Tailscale; who listens), a real agent started across machines
+  both ways (haiku), the wire through a logging relay, mDNS, fixes, `docs/hex-link-test-evidence.md`.
 
 **Next, in order**
-1. Review and merge #111 into `feat/hex-link`; unit tests and the `link` self test green; `mac-sync`,
-   `mac-build`, `mac-test`.
-2. Phase 3 UI worker: Link window, pairing dialog, status item, a section per device in Agentic's fleet, remote
-   chats in both machines' chat lists with a device badge, the **Runs on** picker in the box.
-3. Phase 4 worker: Open Remote File, save back and conflicts, presence, clone, fetch and offer changes; and the
-   sync engine's glue: start and show sync per folder, `hex_link_sync` tool, pulled writes routed through open tabs.
-4. Phase 6: predictions over Link with chat #110 (`feat/edit-prediction`): right `Predict = 8`,
+1. Merge #120's fixes as they come, then #119, then #118 (the UI shows #119's `LinkSyncs` and `LinkConflicts`;
+   a small follow-up for the UI worker once #119 says their signatures). Unit tests, `link`, `link-ui`,
+   `link-files` green on the PC; `mac-sync`, `mac-build`, `mac-test`.
+2. Phase 6: predictions over Link with chat #110 (`feat/edit-prediction`): right `Predict = 8`,
    `predict/start|chunk|done|cancel`, glue to their `HexPredictionRelay` seam. Waits on their seam commit.
-5. Phase 5 on two machines, LAN and Tailscale: `link-peer` listening on one and dialling from the other, each
-   way; a real agent on the Mac started from the PC and the other way; pairing, revocation, an unpaired device
-   refused; a capture of the wire (TLS, none of the text); a file edit synced; then the report to chat #3.
+3. A last two-machine pass on the whole (sync between PC and Mac with an agent on each, over LAN and Tailscale),
+   the evidence gathered, then the report to chat #3.
 
 **Open**
 - The Keychain path on macOS and `secret-tool` on Linux are untested (ssh has no unlocked Keychain; the file
