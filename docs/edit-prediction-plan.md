@@ -497,7 +497,20 @@ server as context, several predictions to step through, predictions in notebooks
 Kept current by the orchestrator (chat #110) at every phase change, so that another agent can take this over. The
 copy on the branch (`hexwt-predict/docs/edit-prediction-plan.md`) is the one that is edited; `hex/docs/` has a copy.
 
-**As of 2026-11-21 18:50, phase 1 running.**
+**As of 2026-11-21 19:10, phase 1 running, nothing merged yet.**
+
+Worker state at 19:10 (each was told to commit its work in progress and keep a `PREDICT-STATE.md` at the root of its
+worktree with done / left / next step / branch / commit; read that first when taking one over):
+- #115 engine (`<scratch>/predict/engine-ghost`, `feat/edit-prediction-ghost`): `CodeEditor.Prediction.cs` built to the
+  contract of 5, `UIFormKind.Secret` added (FormPanel and SettingRow), 15 new tests green, the full engine suite was
+  running. It reported: `Prediction` returns what is left of ghost text after typing through or a word taken;
+  `SetPrediction` over a showing one replaces it with no `OnPredictionEnded`; typing the whole ghost ends it as taken;
+  losing focus ends it on the next update.
+- #114 core (`../hexwt-predict-core`): `Hex.Core/Prediction/` and `Hex.Tests/Goldens/Prediction/` being written,
+  nothing committed at 19:10.
+- #116 settings (`../hexwt-predict-settings`): rows, catalog, strings, goldens, `HexSettings.Prediction.cs`,
+  `Hex.Core/Prediction/PredictionKey.cs` and `PredictionSettings.cs`, `PredictionSettingsTests.cs` being written,
+  nothing committed at 19:10.
 
 Done:
 - Research and this plan. Commit `88e9687` on `feat/edit-prediction` (hex), which also carries
