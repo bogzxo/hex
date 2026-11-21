@@ -6,7 +6,7 @@ internal sealed partial class DawnScene
 {
     private void OpenLaunchFiles(IReadOnlyList<HexLaunchFile> files)
     {
-        var missing = new List<string>();
+        List<string> missing = [];
         foreach (HexLaunchFile file in files)
         {
             if (!File.Exists(file.Path))

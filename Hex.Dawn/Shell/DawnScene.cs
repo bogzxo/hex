@@ -723,7 +723,7 @@ internal sealed partial class DawnScene : Scene
     /// </summary>
     private void RestoreBackupsUnder(string folder)
     {
-        var brought = new List<string>();
+        List<string> brought = [];
         foreach (var backup in Backups.All())
         {
             if (backup.Path is not { } path || !PlatformPaths.IsUnder(path, folder))

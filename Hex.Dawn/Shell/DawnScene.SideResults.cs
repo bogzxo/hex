@@ -52,7 +52,7 @@ internal sealed partial class DawnScene
                 pattern = HexSearch.Pattern(found.Query, found.Options, out _);
         }
 
-        var items = new List<UITreeItem>();
+        List<UITreeItem> items = [];
         var byFile = new Dictionary<string, UITreeItem>(PlatformPaths.Comparer);
         foreach (HexResult result in results)
         {

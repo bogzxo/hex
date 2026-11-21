@@ -40,7 +40,7 @@ internal sealed partial class HexProperties
     /// </summary>
     private bool ProjectFileRows(List<UISetting> all)
     {
-        var rows = new List<UISetting>();
+        List<UISetting> rows = [];
         projectFileShown = false;
         if (shown.Count != 1 || !File.Exists(shown[0]) || !DotnetProjects.IsSdkProject(shown[0]))
             return false;

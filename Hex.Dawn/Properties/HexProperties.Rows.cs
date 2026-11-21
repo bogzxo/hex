@@ -26,7 +26,7 @@ internal sealed partial class HexProperties
     {
         generation++;
         values.Clear();
-        var rows = new List<UISetting>();
+        List<UISetting> rows = [];
         string general = Said(shown.Count switch
         {
             0 => "untitled",

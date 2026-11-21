@@ -24,7 +24,7 @@ internal static class HexLaunch
     /// </summary>
     public static (List<HexLaunchFile> Files, string? Folder) Parse(string[] args, string current)
     {
-        var files = new List<HexLaunchFile>();
+        List<HexLaunchFile> files = [];
         string? folder = null;
         int lineAsked = int.TryParse(ValueAfter(args, "--line"), NumberStyles.None, CultureInfo.InvariantCulture, out int line) ? line : 0;
 

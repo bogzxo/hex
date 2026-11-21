@@ -270,7 +270,7 @@ internal sealed partial class DawnScene
         if (LayoutTools)
         {
             // What the selected component is inside of, the outermost first
-            var chain = new List<UIComponent>();
+            List<UIComponent> chain = [];
             for (UIComponent? at = document.Selected; at is not null && at != document.Module.Root; at = at.Parent)
                 chain.Insert(0, at);
 
@@ -296,7 +296,7 @@ internal sealed partial class DawnScene
     /// <summary>The entries of the outline a line is inside of, the outermost first, by how deep each is.</summary>
     private static List<OutlineEntry> OutlineAt(List<OutlineEntry> outline, int line)
     {
-        var chain = new List<OutlineEntry>();
+        List<OutlineEntry> chain = [];
         foreach (OutlineEntry entry in outline)
         {
             if (entry.Line > line)

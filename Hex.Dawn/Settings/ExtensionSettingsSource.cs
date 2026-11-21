@@ -24,7 +24,7 @@ internal sealed partial class DawnScene
         public ExtensionSettingsSource(DawnScene hex)
         {
             this.hex = hex;
-            var rows = new List<UISetting>();
+            List<UISetting> rows = [];
             foreach (HexExtension extension in hex.extensions.All)
             {
                 if (!extension.Enabled || extension.Failed is not null || extension.SettingsLayout is not null)

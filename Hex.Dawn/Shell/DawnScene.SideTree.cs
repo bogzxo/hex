@@ -126,7 +126,7 @@ internal sealed partial class DawnScene
             OpenFoldersOfShown();
 
         // The Solution view, the solution's projects instead of the folders (DawnScene.Solution)
-        var items = new List<UITreeItem>();
+        List<UITreeItem> items = [];
         if (ShownSolution() is { } solutionFile)
         {
             treeTitle.Text = Said("solution.title");
@@ -426,8 +426,8 @@ internal sealed partial class DawnScene
         treeTitle.Text = Said("side.outline_of", ("file", document.Name));
 
         List<OutlineEntry> entries = KeptOutline();
-        var items = new List<UITreeItem>();
-        var open = new List<(int Depth, UITreeItem Item, string Key)>();
+        List<UITreeItem> items = [];
+        List<(int Depth, UITreeItem Item, string Key)> open = [];
 
         foreach (OutlineEntry entry in entries)
         {

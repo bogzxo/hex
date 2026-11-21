@@ -150,7 +150,7 @@ internal sealed partial class HexProperties
     // The files the project rows are of, the ones picked and every file of the project under a folder that's picked
     private List<string> FilesOf(DotnetEvaluation evaluation)
     {
-        var files = new List<string>();
+        List<string> files = [];
         foreach (string path in shown)
         {
             if (File.Exists(path))

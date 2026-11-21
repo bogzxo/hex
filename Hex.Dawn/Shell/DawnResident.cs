@@ -82,7 +82,7 @@ internal static class DawnResident
             return;
 
         HexOptions wake = options;
-        var files = new List<HexLaunchFile>();
+        List<HexLaunchFile> files = [];
         for (string? line = first; line is not null; line = asked.TryDequeue(out string? next) ? next : null)
         {
             string[] parts = line.Split('|');

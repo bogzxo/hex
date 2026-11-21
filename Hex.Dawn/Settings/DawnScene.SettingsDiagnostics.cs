@@ -54,7 +54,7 @@ internal sealed partial class DawnScene
     /// <summary>What's wrong with the text of a settings file, the folder's when <paramref name="folder"/>, each at its line.</summary>
     internal static List<HexProblem> SettingsProblemsIn(string path, string text, bool folder)
     {
-        var found = new List<HexProblem>();
+        List<HexProblem> found = [];
         Dictionary<string, IRuntimeValue> all;
         try
         {

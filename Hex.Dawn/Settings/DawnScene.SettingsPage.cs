@@ -233,7 +233,7 @@ internal sealed partial class DawnScene
     /// <summary>The skins and themes the designer can show a layout in, as the window lists them.</summary>
     private static List<(UISkinChoice Skin, string? Theme, string Text)> LayoutSkins()
     {
-        var all = new List<(UISkinChoice, string?, string)>();
+        List<(UISkinChoice, string?, string)> all = [];
         foreach (UISkinChoice skin in UISkins.Available)
         {
             if (skin.Themes.Count == 0)
