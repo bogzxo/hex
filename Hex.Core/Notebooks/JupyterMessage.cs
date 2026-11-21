@@ -7,7 +7,7 @@ namespace Hex.Core.Notebooks;
 /// <summary>
 /// One message of the Jupyter messaging protocol (version 5.3), its header (who sent it and what it is), the header of the
 /// message it answers, its metadata and its content, and any binary buffers after them. On the wire it's the frames
-/// "&lt;IDS|MSG&gt;", the HMAC-SHA256 of the four JSON parts in hex, then the four JSON parts, then the buffers, with the
+/// "&lt;IDS|MSG>", the HMAC-SHA256 of the four JSON parts in hex, then the four JSON parts, then the buffers, with the
 /// identities of whoever it's for in front on a kernel's end of it.
 /// </summary>
 internal sealed class JupyterMessage

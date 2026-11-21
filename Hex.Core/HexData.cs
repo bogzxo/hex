@@ -8,15 +8,15 @@ namespace Hex.Core;
 /// it's a double click away from Hex.exe, its size can be said and it can be tidied in one place. A Hex whose folder
 /// can't be written (one in Program Files) keeps it in the user's local app data instead, laid out the same, and says
 /// so (<see cref="Fallback"/>). HEX_HOME (or DUSK_HOME) moves it under that folder with the settings, for a test.
-/// <code>
+/// <code><![CDATA[
 /// data/
-///   agents/chats/&lt;workspace&gt;/   chat-*.json, chats.json and history/ of each workspace (HexAgentChatsKept)
+///   agents/chats/<workspace>/   chat-*.json, chats.json and history/ of each workspace (HexAgentChatsKept)
 ///   agents/history/               the older rows of chats no workspace keeps
 ///   agents/images/                pictures pasted into the agents' box
 ///   agents/temp/                  each chat's files for its agent system (MCP config, settings), made again as it starts
 ///   agents/limits.tsv             the agent systems' usage limits last heard
 ///   cache/harness/                the harness's code index and what it saved (stats.tsv)
-/// </code>
+/// ]]></code>
 /// Every file of these was in the settings folder or %TEMP% before, <see cref="MoveOld"/> moves them over once.
 /// </summary>
 public static class HexData

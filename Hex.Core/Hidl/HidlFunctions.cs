@@ -5,7 +5,7 @@ namespace Hex.Core;
 
 /// <summary>
 /// The functions a file of HIDL declares by name, read off its tokens for the inlay hints and signature help.
-/// <c>func name(a, b)</c>, and a let or a const holding <c>func(a, b)</c>, <c>(a, b) =&gt;</c> or <c>x =&gt;</c>. A
+/// <c>func name(a, b)</c>, and a let or a const holding <c>func(a, b)</c>, <c>(a, b) =></c> or <c>x =></c>. A
 /// parameter with a default (<c>size = vec(16)</c>) is the name as far as a hint goes, and the whole of it for a signature.
 /// </summary>
 internal static class HidlFunctions
