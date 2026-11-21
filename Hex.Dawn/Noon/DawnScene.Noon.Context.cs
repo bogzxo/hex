@@ -413,7 +413,10 @@ internal sealed partial class DawnScene
 
     // How the agent is and how long its turn has gone, whole seconds while it runs and the tenths once it's done
     private string ClockLine(HexAgentChat chat) =>
-        $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}s" : $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s")}";
+        chat.RunGoing
+            // The tools' state word for this is written for agents (what to call on it), the person's is plain
+            ? $"$(watch) {UIRichText.Literal(Said("agents_panel.state_waiting"))}"
+            : $"$({(chat.Running ? "loading~spin" : "pass")}) {UIRichText.Literal(chat.Running ? $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}s" : $"{StateWord(chat)} · {chat.TurnSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s")}";
 
     /// <summary>
     /// The colour of how full a context is, green while there's plenty, turning amber past half and red as it nears its
