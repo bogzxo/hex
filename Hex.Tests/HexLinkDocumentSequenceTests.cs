@@ -1,0 +1,241 @@
+using System.Text;
+using Hex.Core;
+
+namespace Hex.Tests;
+
+public sealed class HexLinkDocumentSequenceTests
+{
+    [Fact]
+    public void Overlap_resolves_in_either_delivery_order_and_undo_changes_only_its_author()
+    {
+        var left = new HexLinkDocumentSequence("abcd");
+        var right = new HexLinkDocumentSequence("abcd");
+        HexDocEdit first = left.View().Edit(new(1, 1), 1, 2, "X");
+        HexDocEdit second = right.View().Edit(new(1, 2), 2, 1, "Y");
+        left.Apply(first);
+        left.Apply(second);
+        right.Apply(second);
+        right.Apply(first);
+        Assert.Equal("aXYd", left.View().Text);
+        Assert.Equal(left.View().Text, right.View().Text);
+
+        var undo = new HexDocVisibility(new(2, 1), first.Id, false);
+        var redo = new HexDocVisibility(new(3, 1), first.Id, true);
+        left.Apply(undo);
+        Assert.Equal("abYd", left.View().Text);
+        left.Apply(redo);
+        right.Apply(redo);
+        right.Apply(undo);
+        Assert.Equal("aXYd", right.View().Text);
+        Assert.Equal(left.View().Text, right.View().Text);
+        Assert.Throws<ArgumentException>(() => right.Apply(new HexDocVisibility(new(4, 2), first.Id, false)));
+    }
+
+    [Fact]
+    public void A_megabyte_seed_uses_one_run_and_rejects_split_surrogates()
+    {
+        string seed = new string('x', 1_048_576) + "🚀";
+        var replica = new HexLinkDocumentSequence(seed);
+        Assert.Equal(1, replica.RunCount);
+        Assert.Same(seed, replica.View().Text);
+        Assert.Single(replica.View().Spans);
+        Assert.Throws<ArgumentOutOfRangeException>(() => replica.View().Edit(new(1, 1), seed.Length - 1, 0, "b"));
+        Assert.Equal(HexDocApply.Accepted, replica.Apply(replica.View().Edit(new(1, 1), seed.Length - 2, 2, "🏠")));
+        Assert.Equal(2, replica.RunCount);
+        Assert.Equal(2, replica.View().Spans.Count);
+        Assert.EndsWith("🏠", replica.View().Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reordered_dependencies_and_exact_retries_do_not_mutate_the_replica_twice()
+    {
+        var sender = new HexLinkDocumentSequence("abc");
+        var receiver = new HexLinkDocumentSequence("abc");
+        HexDocEdit first = sender.View().Edit(new(1, 1), 1, 0, "🐙");
+        sender.Apply(first);
+        HexDocEdit second = sender.View().Edit(new(2, 1), 3, 0, "!");
+        Assert.Equal(HexDocApply.MissingDependency, receiver.Apply(second));
+        Assert.Equal("abc", receiver.View().Text);
+        Assert.Equal(0, receiver.OperationCount);
+        Assert.Equal(HexDocApply.Accepted, receiver.Apply(first));
+        Assert.Equal(HexDocApply.Accepted, receiver.Apply(second));
+        Assert.Equal(HexDocApply.Duplicate, receiver.Apply(first));
+        Assert.Throws<ArgumentException>(() => receiver.Apply(first with { Inserted = "different" }));
+        Assert.Equal("a🐙!bc", receiver.View().Text);
+    }
+
+    [Fact]
+    public void A_checkpoint_waits_for_every_participant_and_a_late_replica_reads_its_tail()
+    {
+        var authority = new HexLinkDocumentAuthority("hello");
+        authority.Reconnect(1);
+        authority.Reconnect(2);
+        Guid oldEpoch = authority.Checkpoint.Epoch;
+        var edit = authority.View().Edit(new(1, 1), 0, 1, "H");
+        Assert.Throws<InvalidOperationException>(() => authority.Submit(oldEpoch, 2, edit));
+        Assert.Equal(1L, authority.Submit(oldEpoch, 1, edit).Revision);
+        Assert.Equal(HexDocApply.Duplicate, authority.Submit(oldEpoch, 1, edit).Outcome);
+        authority.Acknowledge(oldEpoch, 1, 1, checkpointReady: true);
+        authority.Disconnect(2);
+        Assert.Null(authority.Compact());
+
+        authority.Reconnect(2);
+        Assert.Single(authority.Replay(oldEpoch, 0).Operations);
+        authority.Acknowledge(oldEpoch, 2, 1, checkpointReady: false);
+        Assert.Null(authority.Compact());
+        authority.Acknowledge(oldEpoch, 2, 1, checkpointReady: true);
+        var checkpoint = Assert.IsType<HexDocCheckpoint>(authority.Compact());
+        Assert.Equal("Hello", checkpoint.Text);
+        Assert.Equal(1L, checkpoint.Revision);
+        Assert.NotEqual(oldEpoch, checkpoint.Epoch);
+        Assert.Throws<InvalidOperationException>(() => authority.Submit(oldEpoch, 1, edit));
+
+        authority.Submit(checkpoint.Epoch, 1, authority.View().Edit(new(1, 1), 5, 0, "!"));
+        authority.Submit(checkpoint.Epoch, 2, authority.View().Edit(new(2, 2), 0, 0, "☀"));
+        var replay = authority.Replay(oldEpoch, 0, limit: 1);
+        Assert.Equal(checkpoint, replay.Checkpoint);
+        Assert.Equal(3L, replay.Head);
+        Assert.Single(replay.Operations);
+        var late = new HexLinkDocumentSequence(replay.Checkpoint!.Text);
+        late.Apply(replay.Operations[0]);
+        HexDocReplay next = authority.Replay(replay.Epoch, replay.Since + replay.Operations.Length);
+        Assert.Null(next.Checkpoint);
+        late.Apply(Assert.Single(next.Operations));
+        Assert.Equal("☀Hello!", late.View().Text);
+        Assert.Equal(authority.View().Text, late.View().Text);
+    }
+
+    [Fact]
+    public void Sixteen_editors_converge_after_random_overlaps_reorder_and_partitions()
+    {
+        string? overrideCount = Environment.GetEnvironmentVariable("HEX_LINK_CRDT_SEEDS");
+        int seeds = int.TryParse(overrideCount, out int requested) ? Math.Clamp(requested, 1, 65_536) : 32;
+        for (int seed = 0; seed < seeds; seed++)
+            Simulate(seed);
+    }
+
+    private static void Simulate(int seed)
+    {
+        const int editors = 16;
+        const string initial = "zero 種 a line\nlast 🚀";
+        var random = new Random(seed);
+        var authority = new HexLinkDocumentAuthority(initial);
+        Guid epoch = authority.Checkpoint.Epoch;
+        var model = Enumerable.Range(0, editors).Select(_ => new HexLinkDocumentSequence(initial)).ToArray();
+        var connected = Enumerable.Repeat(true, editors).ToArray();
+        List<HexDocOperation>[] inbox = Enumerable.Range(0, editors).Select(_ => new List<HexDocOperation>()).ToArray();
+        List<HexDocOperation>[] outbox = Enumerable.Range(0, editors).Select(_ => new List<HexDocOperation>()).ToArray();
+        List<HexDocId>[] authored = Enumerable.Range(0, editors).Select(_ => new List<HexDocId>()).ToArray();
+        for (int editor = 0; editor < editors; editor++)
+            authority.Reconnect(editor + 1);
+
+        string[] pieces = ["x", "YZ", "\n", "漢", "🐙", "e\u0301", ""];
+        bool authoredOffline = false;
+        for (int tick = 0; tick < 160; tick++)
+        {
+            int editor = random.Next(editors);
+            switch (random.Next(8))
+            {
+                case 0:
+                    connected[editor] = !connected[editor];
+                    if (connected[editor]) authority.Reconnect(editor + 1);
+                    else authority.Disconnect(editor + 1);
+                    break;
+                case 1:
+                    Deliver(editor);
+                    break;
+                case 2:
+                    Send(editor);
+                    break;
+                default:
+                    var id = new HexDocId(model[editor].Clock + 1, editor + 1);
+                    HexDocOperation operation;
+                    if (authored[editor].Count > 0 && random.Next(7) == 0)
+                        operation = new HexDocVisibility(id, authored[editor][random.Next(authored[editor].Count)], random.Next(2) == 0);
+                    else
+                    {
+                        HexDocView before = model[editor].View();
+                        int start = BoundaryBefore(before.Text, random.Next(before.Text.Length + 1));
+                        int end = BoundaryBefore(before.Text, Math.Min(start + random.Next(7), before.Text.Length));
+                        string text = pieces[random.Next(pieces.Length)];
+                        if (start == end && text.Length == 0)
+                            text = "!";
+                        operation = before.Edit(id, start, end - start, text);
+                        authored[editor].Add(id);
+                    }
+
+                    Assert.Equal(HexDocApply.Accepted, model[editor].Apply(operation));
+                    outbox[editor].Add(operation);
+                    authoredOffline |= !connected[editor];
+                    break;
+            }
+
+            Send(random.Next(editors));
+            Deliver(random.Next(editors));
+            Deliver(random.Next(editors));
+        }
+
+        for (int editor = 0; editor < editors; editor++)
+        {
+            connected[editor] = true;
+            authority.Reconnect(editor + 1);
+            // Local operations form a causal chain; a client only saw peer edits after the authority accepted them.
+            while (outbox[editor].Count > 0)
+                Assert.True(Send(editor, ordered: true), $"Authority missing dependency at seed {seed}, editor {editor}.");
+        }
+
+        byte[] expected = Encoding.UTF8.GetBytes(authority.View().Text);
+        for (int editor = 0; editor < editors; editor++)
+        {
+            int stalled = 0;
+            while (inbox[editor].Count > 0)
+            {
+                if (Deliver(editor)) stalled = 0;
+                else stalled++;
+                // Restore deterministic delivery if the random scheduler repeatedly selected an unmet dependency.
+                if (stalled > inbox[editor].Count * 4)
+                {
+                    HexDocOperation next = inbox[editor].MinBy(op => op.Id)!;
+                    Assert.NotEqual(HexDocApply.MissingDependency, model[editor].Apply(next));
+                    inbox[editor].Remove(next);
+                    stalled = 0;
+                }
+            }
+            byte[] actual = Encoding.UTF8.GetBytes(model[editor].View().Text);
+            Assert.True(expected.AsSpan().SequenceEqual(actual), $"Seed {seed}, editor {editor}, offline drafts {authoredOffline}.");
+        }
+
+        bool Send(int editor, bool ordered = false)
+        {
+            if (!connected[editor] || outbox[editor].Count == 0)
+                return false;
+            int at = ordered ? 0 : random.Next(outbox[editor].Count);
+            HexDocOperation operation = outbox[editor][at];
+            var receipt = authority.Submit(epoch, editor + 1, operation);
+            if (receipt.Outcome == HexDocApply.MissingDependency)
+                return false;
+            outbox[editor].RemoveAt(at);
+            for (int receiver = 0; receiver < editors; receiver++)
+            {
+                inbox[receiver].Add(operation);
+                if (random.Next(31) == 0)
+                    inbox[receiver].Add(operation);
+            }
+            return true;
+        }
+
+        bool Deliver(int editor)
+        {
+            if (!connected[editor] || inbox[editor].Count == 0)
+                return false;
+            int at = random.Next(inbox[editor].Count);
+            if (model[editor].Apply(inbox[editor][at]) == HexDocApply.MissingDependency)
+                return false;
+            inbox[editor].RemoveAt(at);
+            return true;
+        }
+    }
+
+    private static int BoundaryBefore(string text, int offset) =>
+        offset < text.Length && char.IsLowSurrogate(text[offset]) ? offset - 1 : offset;
+}
