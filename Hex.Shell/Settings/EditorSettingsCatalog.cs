@@ -193,7 +193,7 @@ public static class EditorSettingsCatalog
         new("edit_predictions_api_url", HexText.Get("settings_catalog.edit_predictions_api_url_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_api_url_help"), AI,
             Placeholder: HexText.Get("settings_catalog.edit_predictions_api_url_placeholder")),
         new(PREDICTION_KEY, HexText.Get("settings_catalog.edit_predictions_api_key_title"),
-            UIFormKind.Text, // PREDICT-MERGE: UIFormKind.Secret
+            UIFormKind.Secret,
             HexText.Get("settings_catalog.edit_predictions_api_key_help"), AI, Placeholder: HexText.Get("settings_catalog.edit_predictions_api_key_placeholder")),
         new("edit_predictions_model", HexText.Get("settings_catalog.edit_predictions_model_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_model_help"), AI,
             Placeholder: HexText.Get("settings_catalog.edit_predictions_model_placeholder")),
