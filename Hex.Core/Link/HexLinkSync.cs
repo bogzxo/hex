@@ -95,8 +95,11 @@ internal sealed partial class HexLinkSync : IDisposable
     private CancellationTokenSource stopping = new();
     private bool live, remoteWatched, ready;
     private volatile bool pullOnly;
-    private List<HexLinkTreeChange>? early;
+    private Dictionary<string, HexLinkTreeChange>? early;
+    private bool earlyOverflow, remoteCertified;
     private int sent, received;
+
+    public Func<HexExcludes> Excludes { get; init; } = () => HexExcludes.Usual;
 
     /// <summary>
     /// A folder of this machine's workspace to keep the same as the folder of the same name on <paramref name="peer"/>'s,
@@ -107,7 +110,7 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
-        tree = new HexLinkTree(folder);
+        tree = new HexLinkTree(folder, () => Excludes());
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
         WriteLocal = (full, bytes) => Task.Run(() => HexLinkFiles.WriteAtomic(full, bytes));
@@ -248,11 +251,13 @@ internal sealed partial class HexLinkSync : IDisposable
             ready = false;
             peer.RightsChanged += UpdateRights;
             pullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
-            early = [];
+            early = new Dictionary<string, HexLinkTreeChange>(StringComparer.Ordinal);
+            earlyOverflow = false;
             stopping = new CancellationTokenSource();
         }
 
         Set(HexLinkSyncState.Comparing, null);
+        HexLinkTreeWatch? watch = null;
         try
         {
             if (peer.IsClosed)
@@ -277,6 +282,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
             HexLinkManifest theirs = await peer.WatchTree(folder.Name, Heard, cancel);
             remoteWatched = true;
+            watch = new HexLinkTreeWatch(tree, Saw, Quiet, Rescan);
             HexLinkManifest mine = await Task.Run(tree.Manifest, cancel);
             LocalHead = mine.Head;
             RemoteHead = theirs.Head;
@@ -303,12 +309,17 @@ internal sealed partial class HexLinkSync : IDisposable
             }
 
             Load();
-            Begin(mine, theirs);
+            Begin(mine, theirs, watch);
+            watch = null;
         }
         catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException or OperationCanceledException or InvalidOperationException)
         {
             await Unwatch();
             Fail(e is HexLinkException { Code: HexLinkErrors.CLOSED } ? "the link closed" : e.Message);
+        }
+        finally
+        {
+            watch?.Dispose();
         }
     }
 
@@ -391,7 +402,7 @@ internal sealed partial class HexLinkSync : IDisposable
             // What both sides have once it's done, null when neither has it; whichever way it goes it's written in the
             // receiver's line ends, those of the file it replaces there or what most files there use
             HexLinkSyncAgreed? agreed;
-            byte[]? mine = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, cancel) : null;
+            byte[]? mine = await ReadLocal(full, cancel);
             if (keep == HexLinkSyncKeep.Mine)
             {
                 if (mine is null)
@@ -417,8 +428,10 @@ internal sealed partial class HexLinkSync : IDisposable
             }
             else
             {
-                if (theirs?.Hash is null)
+                if (theirs is null)
                 {
+                    if (!remoteCertified || !await Asked(() => peer.ConfirmAbsent(folder.Name, path, cancel), cancel))
+                        return "The peer cannot confirm a working-tree deletion.";
                     if (mine is not null)
                         await DeleteLocal(full);
                     agreed = null;
@@ -452,9 +465,7 @@ internal sealed partial class HexLinkSync : IDisposable
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.CONFLICT)
         {
-            lock (gate)
-                There(path, HexLinkPeer.ConflictHash(e));
-            return $"{path} changed on {peer.Device.Name} again, look at it again.";
+            return e.Message;
         }
         catch (HexLinkException e)
         {
@@ -509,6 +520,7 @@ internal sealed partial class HexLinkSync : IDisposable
             queue.Clear();
             queued.Clear();
             again.Clear();
+            retrying.Clear();
             deferredPushes.Clear();
         }
 

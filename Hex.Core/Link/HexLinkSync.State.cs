@@ -159,14 +159,16 @@ internal sealed partial class HexLinkSync
     };
 
     private readonly Lock saving = new();
-    private long savedAt;
+    private long savedAt, snapshotVersion, writtenVersion;
 
     // The bases and the conflicts written, whole or not at all
     private void Save()
     {
         JsonObject state;
+        long version;
         lock (gate)
         {
+            version = ++snapshotVersion;
             var said = new JsonObject();
             foreach (var (path, agreed) in bases.OrderBy(each => each.Key, StringComparer.Ordinal))
             {
@@ -197,11 +199,14 @@ internal sealed partial class HexLinkSync
 
         lock (saving)
         {
+            if (version <= writtenVersion)
+                return;
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
                 HexLinkFiles.WriteAtomic(StateFile, Encoding.UTF8.GetBytes(state.ToJsonString()));
-                savedAt = Environment.TickCount64;
+                writtenVersion = version;
+                Volatile.Write(ref savedAt, Environment.TickCount64);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

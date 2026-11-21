@@ -7,9 +7,8 @@ internal sealed partial class HexLinkSync
     // How many paths the queue hands over at once, asking git which of them it ignores in one go
     private const int MOST_BATCH = 64;
 
-    // How many times in a row a file is looked at again because it moved while it was being synced, before it's left
-    // until it next changes
-    private const int MOST_TRIES = 6;
+    // Cap retries at a ten-second delay without dropping a pending path.
+    private const int MAX_RETRY_DELAY = 10_000;
 
     // The most skipped files listed
     private const int MOST_SKIPPED = 2000;
@@ -32,11 +31,12 @@ internal sealed partial class HexLinkSync
     private readonly HashSet<string> deferredPushes = new(StringComparer.Ordinal);
     private int rightsVersion;
     private readonly SemaphoreSlim wake = new(0), slots = new(MOST_IN_FLIGHT, MOST_IN_FLIGHT);
-    private int taking, delayed;
+    private readonly HashSet<string> retrying = new(StringComparer.Ordinal);
+    private int taking;
     private TaskCompletionSource? drained;
 
     // The first comparison done: what differs queued, both trees watched from now on
-    private void Begin(HexLinkManifest mine, HexLinkManifest theirs)
+    private void Begin(HexLinkManifest mine, HexLinkManifest theirs, HexLinkTreeWatch watch)
     {
         var here = new Dictionary<string, HexLinkTreeFile>(StringComparer.Ordinal);
         foreach (HexLinkTreeFile file in mine.Files)
@@ -45,13 +45,17 @@ internal sealed partial class HexLinkSync
                 here[file.Path] = file;
         }
 
-        var watch = new HexLinkTreeWatch(tree, mine, Saw, Quiet, Rescan);
         var differ = new List<string>();
         CancellationToken stop;
         lock (gate)
         {
+            if (!live)
+                throw new OperationCanceledException("Sync stopped before comparison finished.");
+            if (earlyOverflow)
+                throw new HexLinkException(HexLinkErrors.TOO_BIG, "Too many paths changed during the manifest read. Retry the sync.");
             stop = stopping.Token;
             remote.Clear();
+            remoteCertified = theirs.Certified;
             foreach (HexLinkTreeFile file in theirs.Files)
             {
                 if (!Ours(file.Path))
@@ -59,9 +63,9 @@ internal sealed partial class HexLinkSync
             }
 
             // What the other side said changed while the two were being listed, on top of its manifest
-            foreach (HexLinkTreeChange change in early ?? [])
+            foreach (HexLinkTreeChange change in early?.Values ?? Enumerable.Empty<HexLinkTreeChange>())
             {
-                if (!Ours(change.Path))
+                if (!Ours(change.Path) && (!change.Deleted || remoteCertified))
                     There(change);
             }
 
@@ -98,8 +102,11 @@ internal sealed partial class HexLinkSync
                 }
                 else if (!mineThere && !theirsThere)
                 {
-                    RemoveBase(path);
-                    conflicts.Remove(path);
+                    if (remoteCertified)
+                    {
+                        RemoveBase(path);
+                        conflicts.Remove(path);
+                    }
                 }
                 else
                 {
@@ -113,6 +120,7 @@ internal sealed partial class HexLinkSync
             Why = pullOnly ? $"{peer.Device.Name} doesn't let this device write there (Edit)" : null;
         }
 
+        watch.Seed(mine);
         Notify();
         _ = Task.Run(() => Work(stop));
         foreach (string path in differ)
@@ -159,13 +167,25 @@ internal sealed partial class HexLinkSync
                 return;
             if (!ready)
             {
-                early?.AddRange(changes.Take(100_000 - early.Count));
+                if (early is not null)
+                {
+                    foreach (HexLinkTreeChange change in changes)
+                    {
+                        if (early.Count >= HexLinkTree.MOST_FILES && !early.ContainsKey(change.Path))
+                        {
+                            earlyOverflow = true;
+                            break;
+                        }
+
+                        early[change.Path] = change;
+                    }
+                }
                 return;
             }
 
             foreach (HexLinkTreeChange change in changes)
             {
-                if (Ours(change.Path))
+                if (Ours(change.Path) || (change.Deleted && !remoteCertified))
                     continue;
                 There(change);
                 bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
@@ -212,13 +232,17 @@ internal sealed partial class HexLinkSync
     }
 
     // A path queued to be looked at, after whatever's already being done with it
-    private void Dirty(string wire)
+    private void Dirty(string wire, bool retry = false)
     {
         bool woke = false, busy = false;
         lock (gate)
         {
             if (!live || !ready)
                 return;
+            if (retry)
+                retrying.Remove(wire);
+            else if (!retrying.Contains(wire))
+                tries.Remove(wire);
             if (running.Contains(wire))
             {
                 again.Add(wire);
@@ -242,33 +266,35 @@ internal sealed partial class HexLinkSync
             Notify();
     }
 
-    // A path looked at again in a moment, because it moved while it was being synced or something here had it open;
-    // left until it next changes when that keeps happening, with why (it kept changing, unless said otherwise)
     private void Again(string wire, string? why = null)
     {
         int count;
+        CancellationToken stop;
         lock (gate)
         {
-            count = tries[wire] = tries.GetValueOrDefault(wire) + 1;
-            if (count > MOST_TRIES)
-                tries.Remove(wire);
-            else
-                delayed++;
+            if (!live || !ready || !retrying.Add(wire))
+                return;
+            count = tries[wire] = Math.Min(tries.GetValueOrDefault(wire) + 1, 15);
+            stop = stopping.Token;
         }
 
-        if (count > MOST_TRIES)
-        {
-            Skip(wire, why ?? "it kept changing while it was being synced, it's tried again when it next changes");
-            return;
-        }
+        if (why is not null || count > 6)
+            Skip(wire, why ?? "The file kept changing during sync. Link will retry.");
+        _ = Retry(wire, Math.Min(MAX_RETRY_DELAY, 50 * count * count), stop);
+    }
 
-        _ = Task.Delay(50 * count * count).ContinueWith(_ =>
+    private async Task Retry(string wire, int wait, CancellationToken stop)
+    {
+        try
         {
-            Dirty(wire);
-            lock (gate)
-                delayed--;
+            await Task.Delay(wait, stop);
+            stop.ThrowIfCancellationRequested();
+            Dirty(wire, retry: true);
             CheckIdle();
-        }, TaskScheduler.Default);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     // The queue's worker: a batch at a time, git asked once which of it this side ignores, then each path worked on
@@ -296,7 +322,22 @@ internal sealed partial class HexLinkSync
                 {
                     if (batch.Count == 0)
                         continue;
-                    HashSet<string> ignored = await Task.Run(() => IgnoredOf(batch), stop);
+                    HashSet<string> ignored;
+                    try
+                    {
+                        ignored = await Task.Run(() => IgnoredOf(batch), stop);
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                    {
+                        foreach (string wire in batch)
+                            Again(wire, e.Message);
+                        lock (gate)
+                        {
+                            foreach (string wire in batch)
+                                running.Remove(wire);
+                        }
+                        continue;
+                    }
                     for (int i = 0; i < batch.Count; i++)
                     {
                         try
@@ -336,19 +377,11 @@ internal sealed partial class HexLinkSync
     {
         string start = folder.Name + "/";
         var relative = batch.Where(wire => wire.StartsWith(start, StringComparison.Ordinal)).Select(wire => wire[start.Length..]).ToList();
-        var ignored = new HashSet<string>(StringComparer.Ordinal);
-        try
-        {
-            foreach (string each in tree.Ignored(relative))
-                ignored.Add(start + each);
-        }
-        catch (Exception)
-        {
-            // Git not answering, the jail still keeps out what has to be kept out
-        }
-
-        return ignored;
+        return new HashSet<string>(tree.Ignored(relative).Select(each => start + each), StringComparer.Ordinal);
     }
+
+    private async Task<byte[]?> ReadLocal(string full, CancellationToken stop) =>
+        HexLinkTree.RegularFile(full, tree.Root) is null ? null : await HexLinkFiles.ReadSharedAsync(full, stop);
 
     // One path worked on, whatever happens the queue going on after it
     private async Task Run(string wire, bool ignored, CancellationToken stop)
@@ -363,15 +396,15 @@ internal sealed partial class HexLinkSync
         catch (HexLinkException e) when (e.Code == HexLinkErrors.CLOSED)
         {
         }
-        catch (HexLinkException e) when (e.Code == HexLinkErrors.TIMED_OUT)
+        catch (HexLinkException e) when (e.Code is HexLinkErrors.TIMED_OUT or HexLinkErrors.INTERNAL_ERROR or HexLinkErrors.NOT_FOUND)
         {
-            Again(wire);
+            Again(wire, e.Message);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // Open here a moment (an editor saving it, a virus scanner, an indexer, on Windows any reader stops a file
             // being moved over), tried again in a moment rather than left until it next changes
-            Again(wire, $"it stayed in use here, it's tried again when it next changes ({e.Message})");
+            Again(wire, $"The file is unavailable. Link will retry. {e.Message}");
         }
         catch (Exception e)
         {
@@ -417,25 +450,17 @@ internal sealed partial class HexLinkSync
         // This side's file hashed from what's on the disk now, never a hash cached by its length and time written, which
         // two saves within one tick of the clock can share
         HexLinkTreeFile? mine = null;
-        try
+        byte[]? localBytes = null;
+        if (HexLinkTree.RegularFile(full, tree.Root) is { } info)
         {
-            var info = new FileInfo(full);
-            if (info.Exists && info.Length > HexLinkFiles.MOST_READ)
-            {
+            if (info.Length > HexLinkFiles.MOST_READ)
                 mine = new HexLinkTreeFile(wire, null, info.Length);
-            }
-            else if (info.Exists)
+            else
             {
-                byte[] bytes = await HexLinkFiles.ReadSharedAsync(full, stop);
-                TextInfo text = TextOf(bytes);
-                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(bytes), info.Length, text.Norm, EolWord(text.Eol));
+                localBytes = await HexLinkFiles.ReadSharedAsync(full, stop);
+                TextInfo text = TextOf(localBytes);
+                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(localBytes), localBytes.LongLength, text.Norm, EolWord(text.Eol));
             }
-        }
-        catch (IOException)
-        {
-            // Being written, looked at again in a moment
-            Again(wire);
-            return;
         }
         HexLinkTreeFile? theirs;
         HexLinkSyncAgreed? agreed;
@@ -504,24 +529,24 @@ internal sealed partial class HexLinkSync
         {
             if (m == agreed.Local)
             {
-                await Pull(wire, full, m, stop);
+                await Pull(wire, full, m, theirs, stop);
                 return;
             }
 
             if (t == agreed.Remote)
             {
-                await Push(wire, full, agreed, t, stop);
+                await Push(wire, full, agreed, localBytes, m, t, stop);
                 return;
             }
         }
         else if (m is null)
         {
-            await Pull(wire, full, null, stop);
+            await Pull(wire, full, null, theirs, stop);
             return;
         }
         else if (t is null)
         {
-            await Push(wire, full, null, null, stop);
+            await Push(wire, full, null, localBytes, m, null, stop);
             return;
         }
 
@@ -530,22 +555,26 @@ internal sealed partial class HexLinkSync
 
     // The other side's version written here (or its delete carried out), when this side's is still what it was
     // (expected) by the time it's written
-    private async Task Pull(string wire, string full, string? expected, CancellationToken stop)
+    private async Task Pull(string wire, string full, string? expected, HexLinkTreeFile? theirs, CancellationToken stop)
     {
-        HexLinkTreeFile? theirs;
-        lock (gate)
-            remote.TryGetValue(wire, out theirs);
-
         if (theirs is null)
         {
-            if (HexLinkFiles.HashOf(full) != expected)
+            if (!remoteCertified || !await Asked(() => peer.ConfirmAbsent(folder.Name, wire, stop), stop))
             {
-                Again(wire);
+                Skip(wire, "The peer cannot confirm a working-tree deletion.");
                 return;
             }
 
             if (expected is not null)
+            {
+                byte[]? disk = await ReadLocal(full, stop);
+                if (disk is null || HexLinkFiles.Hash(disk) != expected)
+                {
+                    Again(wire);
+                    return;
+                }
                 await DeleteLocal(full);
+            }
             lock (gate)
                 Agree(wire, null);
             Interlocked.Increment(ref received);
@@ -553,36 +582,18 @@ internal sealed partial class HexLinkSync
             return;
         }
 
-        HexLinkFile file;
-        try
-        {
-            file = await Fetch(wire, stop);
-        }
-        catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
-        {
-            lock (gate)
-                There(wire, null);
-            Again(wire);
-            return;
-        }
-
-        byte[]? local;
-        try
-        {
-            local = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
-        }
-        catch (IOException)
+        HexLinkFile file = await Fetch(wire, stop);
+        if (file.Hash != theirs.Hash)
         {
             Again(wire);
             return;
         }
+        byte[]? local = await ReadLocal(full, stop);
 
         string? now = local is null ? null : HexLinkFiles.Hash(local);
         if (now != expected)
         {
             // Changed here while it was being fetched, looked at again with both as they are now
-            lock (gate)
-                There(wire, file.Hash);
             Again(wire);
             return;
         }
@@ -633,7 +644,6 @@ internal sealed partial class HexLinkSync
                     RemoveBase(wire);
                 else
                     SetBase(wire, before);
-                There(wire, file.Hash);
             }
 
             throw;
@@ -645,7 +655,7 @@ internal sealed partial class HexLinkSync
 
     // This side's version sent over the other's (or its delete), with what the other side had (theirs) as the base, so
     // the other side refuses it if it moved on meanwhile
-    private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, string? theirs, CancellationToken stop)
+    private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, byte[]? bytes, string? expectedLocal, string? theirs, CancellationToken stop)
     {
         int grantedAt;
         lock (gate)
@@ -661,14 +671,8 @@ internal sealed partial class HexLinkSync
             grantedAt = rightsVersion;
         }
 
-        byte[]? bytes;
-        try
+        if (bytes is null && HexLinkTree.RegularFile(full, tree.Root) is not null)
         {
-            bytes = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
-        }
-        catch (IOException)
-        {
-            // Still being written, most likely
             Again(wire);
             return;
         }
@@ -707,7 +711,7 @@ internal sealed partial class HexLinkSync
                     if (agreed?.Text is { } text && text == info.Norm)
                     {
                         lock (gate)
-                            SetBase(wire, agreed with { Local = HexLinkFiles.Hash(bytes), LocalEol = info.Eol });
+                            SetBase(wire, agreed with { Local = expectedLocal!, LocalEol = info.Eol });
                         Interlocked.Increment(ref eolOnly);
                         Notify();
                         return;
@@ -726,7 +730,7 @@ internal sealed partial class HexLinkSync
                         if (saidText == info.Norm)
                         {
                             lock (gate)
-                                SetBase(wire, new HexLinkSyncAgreed(HexLinkFiles.Hash(bytes), theirs, saidText, info.Eol, EolIn(said.Eol)));
+                                SetBase(wire, new HexLinkSyncAgreed(expectedLocal!, theirs, saidText, info.Eol, EolIn(said.Eol)));
                             Interlocked.Increment(ref eolOnly);
                             Notify();
                             return;
@@ -775,19 +779,10 @@ internal sealed partial class HexLinkSync
             Interlocked.Increment(ref sent);
             Notify();
         }
-        catch (HexLinkException e) when (e.Code == HexLinkErrors.CONFLICT)
+        catch (HexLinkException e) when (e.Code is HexLinkErrors.CONFLICT or HexLinkErrors.NOT_FOUND)
         {
-            // It moved on over there, looked at again with what it has now
-            lock (gate)
-                There(wire, HexLinkPeer.ConflictHash(e));
-            Again(wire);
-        }
-        catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
-        {
-            // Gone there while its line ends were being looked at
-            lock (gate)
-                There(wire, null);
-            Again(wire);
+            // A failed read or compare can be a lock or loss of access. Only the tree watcher can confirm deletion.
+            Again(wire, e.Message);
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_ALLOWED)
         {
@@ -806,27 +801,12 @@ internal sealed partial class HexLinkSync
         string? copy = null, copyHash = null;
         if (mine is not null && theirs is not null)
         {
-            HexLinkFile file;
-            try
+            HexLinkFile file = await Fetch(wire, stop);
+            byte[]? local = await ReadLocal(full, stop);
+            if (file.Hash != theirs)
             {
-                file = await Fetch(wire, stop);
-            }
-            catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
-            {
-                lock (gate)
-                    There(wire, null);
                 Again(wire);
                 return;
-            }
-
-            byte[]? local;
-            try
-            {
-                local = File.Exists(full) ? await HexLinkFiles.ReadSharedAsync(full, stop) : null;
-            }
-            catch (IOException)
-            {
-                local = null;
             }
 
             if (local is null || HexLinkFiles.Hash(local) != mine)
@@ -970,7 +950,7 @@ internal sealed partial class HexLinkSync
         bool idled = false;
         lock (gate)
         {
-            if (queue.Count > 0 || running.Count > 0 || taking > 0 || delayed > 0)
+            if (queue.Count > 0 || running.Count > 0 || taking > 0 || retrying.Count > 0)
                 return;
             waiting = drained;
             drained = null;
@@ -995,7 +975,7 @@ internal sealed partial class HexLinkSync
         Task wait;
         lock (gate)
         {
-            if (!live || (queue.Count == 0 && running.Count == 0 && taking == 0 && delayed == 0))
+            if (!live || (queue.Count == 0 && running.Count == 0 && taking == 0 && retrying.Count == 0))
                 return;
             drained ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             wait = drained.Task;

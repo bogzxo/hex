@@ -13,7 +13,7 @@ internal sealed partial class HexLinkPeer
     /// (tracked, and untracked but not ignored), with the hash of its bytes, and the commit its repository is at.
     /// </summary>
     public async Task<HexLinkManifest> Manifest(string folder, CancellationToken cancel = default) =>
-        HexLinkTree.Of(await AskObject("sync/manifest", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5)));
+        await ReadManifest("sync/manifest", folder, cancel);
 
     /// <summary>
     /// A folder of the other machine's watched: its manifest now, then <paramref name="changes"/> told of every batch of
@@ -24,13 +24,51 @@ internal sealed partial class HexLinkPeer
         trees[folder] = changes;
         try
         {
-            return HexLinkTree.Of(await AskObject("sync/watch", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5)));
+            return await ReadManifest("sync/watch", folder, cancel);
         }
         catch (Exception)
         {
             trees.TryRemove(folder, out _);
+            try { await UnwatchTree(folder); } catch (HexLinkException) { }
             throw;
         }
+    }
+
+    private async Task<HexLinkManifest> ReadManifest(string method, string folder, CancellationToken cancel)
+    {
+        var patience = TimeSpan.FromMinutes(5);
+        JsonObject said = await AskObject(method, new JsonObject { ["folder"] = folder, ["paged"] = true }, cancel, patience);
+        HexLinkManifest first = HexLinkTree.Of(said);
+        if (first.Folder != folder)
+            throw HexLinkException.Invalid("The peer sent a manifest for a different folder.");
+        if (HexLinkData.String(said, "snapshot", 64) is not { } id)
+            return first;
+
+        int total = HexLinkData.Int(said, "total") ?? -1;
+        HexLinkTree.CheckCount(total);
+        if (!first.Certified || HexLinkData.Int(said, "offset") != 0 || first.Files.Count == 0 || total <= first.Files.Count)
+            throw HexLinkException.Invalid("The peer sent an invalid first manifest page.");
+
+        var files = new List<HexLinkTreeFile>(total);
+        files.AddRange(first.Files);
+        var paths = new HashSet<string>(files.Select(file => file.Path), StringComparer.Ordinal);
+        while (files.Count < total)
+        {
+            said = await AskObject(method, new JsonObject { ["folder"] = folder, ["snapshot"] = id, ["offset"] = files.Count }, cancel, patience);
+            HexLinkManifest page = HexLinkTree.Of(said);
+            if (HexLinkData.String(said, "snapshot", 64) != id || HexLinkData.Int(said, "offset") != files.Count ||
+                HexLinkData.Int(said, "total") != total || page.Folder != first.Folder || page.Head != first.Head ||
+                page.Root != first.Root || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
+                throw HexLinkException.Invalid("The peer sent an inconsistent manifest page.");
+            foreach (HexLinkTreeFile file in page.Files)
+            {
+                if (!paths.Add(file.Path))
+                    throw HexLinkException.Invalid($"The peer's manifest repeated {file.Path}.");
+                files.Add(file);
+            }
+        }
+
+        return first with { Files = files };
     }
 
     /// <summary>A folder of the other machine's no longer watched.</summary>
@@ -46,6 +84,12 @@ internal sealed partial class HexLinkPeer
     /// </summary>
     public Task Flush(string folder, CancellationToken cancel = default) =>
         session.Ask("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
+
+    internal async Task<bool> ConfirmAbsent(string folder, string path, CancellationToken cancel)
+    {
+        JsonObject said = await AskObject("sync/manifest", new JsonObject { ["folder"] = folder, ["absent"] = path }, cancel);
+        return HexLinkData.Bool(said, "absent") == true;
+    }
 
     /// <summary>A file of the other machine's deleted if it's still what was read (its hash), conflict otherwise, not found when it's gone.</summary>
     public Task Delete(string path, string baseHash, CancellationToken cancel = default) =>
