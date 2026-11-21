@@ -116,6 +116,19 @@ public sealed class HexLinkStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_store_can_be_published_while_a_reader_still_has_its_old_version()
+    {
+        Directory.CreateDirectory(folder);
+        string path = Path.Combine(folder, "known");
+        HexLinkIdentity.WriteUserOnly(path, "old"u8.ToArray());
+        using var old = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var reader = new StreamReader(old);
+        HexLinkIdentity.WriteUserOnly(path, "new"u8.ToArray());
+        Assert.Equal("new", File.ReadAllText(path));
+        Assert.Equal("old", reader.ReadToEnd());
+    }
+
+    [Fact]
     public void Secrets_wrapped_by_the_file_come_back_and_broken_ones_dont()
     {
         byte[] secret = RandomNumberGenerator.GetBytes(100);

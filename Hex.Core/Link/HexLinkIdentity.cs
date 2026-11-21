@@ -232,18 +232,19 @@ internal sealed class HexLinkIdentity : IDisposable
     /// </summary>
     public static void WriteUserOnly(string path, byte[] bytes, bool overwrite = true)
     {
-        string next = overwrite ? path + ".new" : $"{path}.{Guid.NewGuid():N}.new";
+        string next = $"{path}.{Guid.NewGuid():N}.new";
         try
         {
             if (OperatingSystem.IsWindows())
             {
-                File.WriteAllBytes(next, bytes);
+                using var stream = new FileStream(next, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                stream.Write(bytes);
             }
             else
             {
                 var options = new FileStreamOptions
                 {
-                    Mode = FileMode.Create,
+                    Mode = FileMode.CreateNew,
                     Access = FileAccess.Write,
                     UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
                 };
@@ -251,14 +252,14 @@ internal sealed class HexLinkIdentity : IDisposable
                     stream.Write(bytes);
                 File.SetUnixFileMode(next, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
-            File.Move(next, path, overwrite);
+            if (overwrite && OperatingSystem.IsWindows() && File.Exists(path))
+                HexLinkFiles.ReplaceWhileOpenOnWindows(next, path);
+            else
+                File.Move(next, path, overwrite);
         }
         finally
         {
-            if (!overwrite)
-            {
-                try { File.Delete(next); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            }
+            try { File.Delete(next); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
     }
 
