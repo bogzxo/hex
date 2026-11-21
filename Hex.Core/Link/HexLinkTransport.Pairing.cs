@@ -130,7 +130,8 @@ internal sealed partial class HexLinkTransport
     }
 
     /// <summary>The host's end of a pairing, from the joiner's <c>pair</c> line on. Whether the connection was kept as a link.</summary>
-    private async Task<bool> HostPairing(SslStream ssl, Socket socket, HexLinkDevice device, string address, CancellationToken stop)
+    private async Task<bool> HostPairing(SslStream ssl, Socket socket, HexLinkDevice device, string address, CancellationToken stop,
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
     {
         Func<HexLinkPairing, Task<HexLinkRights?>>? ask = TakePairing();
         if (ask is null)
@@ -181,7 +182,7 @@ internal sealed partial class HexLinkTransport
             result = new HexLinkPairResult(true, "paired", device, code, granted, null);
             try
             {
-                kept = await ListenerSettles(ssl, socket, device, address, 0, ended.Token, yes: "link");
+                kept = await ListenerSettles(ssl, socket, device, address, 0, ended.Token, yes: "link", bulk: bulk);
                 if (kept)
                     result = result with { Connection = LinkTo(device.Id) };
             }
@@ -262,7 +263,7 @@ internal sealed partial class HexLinkTransport
             {
                 if (await Answer(ssl, ended.Token) == "link")
                 {
-                    HexLinkConnection connection = await DiallerSettles(ssl, socket, device, address, port, ended.Token);
+                    HexLinkConnection connection = await DiallerSettles(ssl, socket, device, address, port, ended.Token, NegotiateBulk(hello.Bulk));
                     kept = true;
                     result = result with { Connection = connection };
                 }

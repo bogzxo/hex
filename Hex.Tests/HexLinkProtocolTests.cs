@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -15,6 +16,296 @@ namespace Hex.Tests;
 /// </summary>
 public sealed class HexLinkProtocolTests
 {
+    [Fact]
+    public async Task A_stalled_writer_backpressures_and_cancels_asks_and_picks_ping_next()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var methods = new ConcurrentQueue<string>();
+        using var a = Session(new ObservedStream(end, async (bytes, cancel) =>
+        {
+            methods.Enqueue(JsonNode.Parse(bytes.Span)!["method"]!.GetValue<string>());
+            entered.TrySetResult();
+            await release.Task.WaitAsync(cancel);
+        }), true).Start();
+        using var b = Session(other, false);
+        b.Requested = Echo("b");
+        b.Start();
+
+        Task<JsonNode?> first = a.Ask("echo", cancel: timeout.Token);
+        await entered.Task.WaitAsync(timeout.Token);
+        using var cancelled = new CancellationTokenSource();
+        Task<JsonNode?>[] queued = [.. Enumerable.Range(0, 12).Select(_ => a.Ask("echo", cancel: cancelled.Token))];
+        Task<JsonNode?> ping = a.Ask("link/ping", cancel: timeout.Token);
+        Assert.All(queued, ask => Assert.False(ask.IsCompleted));
+        cancelled.Cancel();
+        foreach (Task<JsonNode?> ask in queued)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ask.WaitAsync(timeout.Token));
+        Assert.False(first.IsCompleted);
+        Assert.False(ping.IsCompleted);
+
+        release.SetResult();
+        await Task.WhenAll(first, ping).WaitAsync(timeout.Token);
+        Assert.Equal(new[] { "echo", "link/ping" }, methods.ToArray());
+    }
+
+    [Fact]
+    public async Task Ordered_notifications_run_off_the_reader_and_handler_faults_are_audited()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        string auditPath = Path.GetTempFileName();
+        try
+        {
+            var audit = new HexLinkAudit(auditPath);
+            using var a = Session(end, true).Start();
+            using var b = new HexLinkSession(new HexLinkConnection(other, DeviceA, "memory", false, () => HexLinkRights.View, audit: audit));
+            using var release = new ManualResetEventSlim();
+            var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var last = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var handled = new List<int>();
+            b.Told = (_, notice) =>
+            {
+                int number = notice["number"]!.GetValue<int>();
+                handled.Add(number);
+                if (number == 1)
+                {
+                    first.SetResult();
+                    release.Wait(timeout.Token);
+                }
+                else if (number == 2)
+                    throw new InvalidOperationException("notice handler failed");
+                else
+                    last.SetResult();
+            };
+            b.Start();
+
+            try
+            {
+                for (int i = 1; i <= 3; i++)
+                    Assert.True(a.Tell("test/notice", new JsonObject { ["number"] = i }));
+                await first.Task.WaitAsync(timeout.Token);
+                Assert.NotNull(await a.Ask("link/ping", cancel: timeout.Token));
+                Assert.False(last.Task.IsCompleted);
+            }
+            finally
+            {
+                release.Set();
+            }
+            await last.Task.WaitAsync(timeout.Token);
+            Assert.Equal(new[] { 1, 2, 3 }, handled);
+            HexLinkAuditEntry fault = Assert.Single(audit.Latest(10));
+            Assert.Equal("session fault", fault.Event);
+            Assert.Contains("notice handler failed", fault.Detail);
+        }
+        finally
+        {
+            File.Delete(auditPath);
+        }
+    }
+
+    [Fact]
+    public async Task Bulk_frames_round_trip_raw_and_compressed_bytes_in_order()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        var kinds = new ConcurrentQueue<HexLinkFrameKind>();
+        using var a = Session(new ObservedStream(end, (bytes, _) =>
+        {
+            if (bytes.Span[0] == HexLinkFrameHeader.Marker)
+                kinds.Enqueue((HexLinkFrameKind)bytes.Span[1]);
+            return ValueTask.CompletedTask;
+        }), true, HexLinkBulkSupport.Zstandard).Start();
+        using var b = Session(other, false, HexLinkBulkSupport.Zstandard);
+        var sink = new MemorySink();
+        b.RegisterBulkReceiver("test/upload", HexLinkRights.Edit, (length, metadata, _) =>
+        {
+            Assert.Equal(3 * HexLinkFrameHeader.MaximumPayload, length);
+            Assert.Equal("ordered", metadata["name"]!.GetValue<string>());
+            return ValueTask.FromResult<IHexLinkBulkSink>(sink);
+        });
+        b.Start();
+
+        int block = HexLinkFrameHeader.MaximumPayload;
+        byte[] bytes = new byte[3 * block];
+        bytes.AsSpan(0, block).Fill((byte)'a');
+        new Random(0).NextBytes(bytes.AsSpan(block, block));
+        bytes.AsSpan(2 * block, block).Fill((byte)'z');
+        await using HexLinkSession.BulkUpload upload = await a.OpenBulkAsync("test/upload", bytes.Length,
+            new JsonObject { ["name"] = "ordered" }, timeout.Token);
+        await upload.WriteAsync(bytes, timeout.Token);
+        await upload.CompleteAsync(timeout.Token);
+
+        Assert.True(sink.Committed);
+        Assert.Equal(bytes, sink.Data.ToArray());
+        Assert.Equal(new[] { HexLinkFrameKind.Compressed, HexLinkFrameKind.Data, HexLinkFrameKind.Compressed }, kinds.ToArray());
+    }
+
+    [Fact]
+    public async Task Bulk_credit_tracks_sink_consumption_and_cancelling_releases_the_sink()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        using var a = Session(end, true, HexLinkBulkSupport.Raw).Start();
+        using var b = Session(other, false, HexLinkBulkSupport.Raw);
+        var sink = new StalledSink();
+        b.RegisterBulkReceiver("test/stalled", HexLinkRights.Edit, (_, _, _) => ValueTask.FromResult<IHexLinkBulkSink>(sink));
+        b.Start();
+
+        byte[] data = new byte[(HexLinkFrameHeader.Window + 1) * HexLinkFrameHeader.MaximumPayload];
+        using var stopWrite = new CancellationTokenSource();
+        await using (HexLinkSession.BulkUpload upload = await a.OpenBulkAsync("test/stalled", data.Length, cancel: timeout.Token))
+        {
+            Task writing = upload.WriteAsync(data, stopWrite.Token).AsTask();
+            await sink.Entered.Task.WaitAsync(timeout.Token);
+            Assert.NotNull(await a.Ask("link/ping", cancel: timeout.Token));
+            Assert.False(writing.IsCompleted);
+            stopWrite.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => writing.WaitAsync(timeout.Token));
+        }
+        await sink.Disposed.Task.WaitAsync(timeout.Token);
+        Assert.False(a.IsClosed);
+        Assert.False(b.IsClosed);
+    }
+
+    [Fact]
+    public async Task Bulk_open_requires_the_registered_right_and_frames_recheck_revocation()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        int rights = (int)HexLinkRights.View;
+        using var a = Session(end, true, HexLinkBulkSupport.Raw).Start();
+        using var b = Session(other, false, HexLinkBulkSupport.Raw, () => (HexLinkRights)Volatile.Read(ref rights));
+        var sink = new MemorySink();
+        b.RegisterBulkReceiver("test/rights", HexLinkRights.Edit, (_, _, _) => ValueTask.FromResult<IHexLinkBulkSink>(sink));
+        b.Start();
+
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(a.OpenBulkAsync("test/rights", 1, cancel: timeout.Token)));
+        Volatile.Write(ref rights, (int)(HexLinkRights.View | HexLinkRights.Edit));
+        await using HexLinkSession.BulkUpload upload = await a.OpenBulkAsync("test/rights", 1, cancel: timeout.Token);
+        Volatile.Write(ref rights, (int)HexLinkRights.View);
+        await upload.WriteAsync(new byte[] { 42 }, timeout.Token);
+        Assert.True(Eventually(() => b.IsClosed));
+        Assert.Contains("stream rights", b.Why);
+        Assert.False(sink.Committed);
+        Assert.Empty(sink.Data.ToArray());
+    }
+
+    [Theory]
+    [InlineData((int)HexLinkFrameKind.Data, 1, 1, "unopened stream")]
+    [InlineData((int)HexLinkFrameKind.Data, HexLinkFrameHeader.MaximumPayload + 1, HexLinkFrameHeader.MaximumPayload + 1, "frame header")]
+    [InlineData((int)HexLinkFrameKind.Compressed, 1, 100, "frame header")]
+    public void Bulk_rejects_invalid_lengths_unnegotiated_compression_and_unopened_streams(
+        int kind, int wireLength, int length, string reason)
+    {
+        var (end, other) = Pair();
+        using (end)
+        using (var receiver = Session(other, false, HexLinkBulkSupport.Raw).Start())
+        {
+            var header = new HexLinkFrameHeader((HexLinkFrameKind)kind, 1, 0, wireLength, length);
+            byte[] packet = new byte[HexLinkFrameHeader.Size];
+            header.Write(packet);
+            end.Write(packet.AsSpan(0, 7));
+            end.Write(packet.AsSpan(7));
+            Assert.True(Eventually(() => receiver.IsClosed));
+            Assert.Contains(reason, receiver.Why);
+        }
+    }
+
+    [Fact]
+    public async Task Bulk_commit_refuses_an_incorrect_hash()
+    {
+        var (end, other) = Pair();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS));
+        using var a = Session(end, true, HexLinkBulkSupport.Raw).Start();
+        using var b = Session(other, false, HexLinkBulkSupport.Raw);
+        var sink = new MemorySink();
+        b.RegisterBulkReceiver("test/hash", HexLinkRights.Edit, (_, _, _) => ValueTask.FromResult<IHexLinkBulkSink>(sink));
+        b.Start();
+
+        await using HexLinkSession.BulkUpload upload = await a.OpenBulkAsync("test/hash", 0, cancel: timeout.Token);
+        HexLinkException mismatch = await Assert.ThrowsAsync<HexLinkException>(() => a.Ask("link/bulk/complete",
+            new JsonObject { ["stream"] = 1, ["sha256"] = new string('0', 64) }, timeout.Token));
+        Assert.Equal(HexLinkErrors.INVALID_PARAMS, mismatch.Code);
+        Assert.Contains("hash did not match", mismatch.Message);
+        Assert.False(sink.Committed);
+        Assert.NotNull(await a.Ask("link/ping", cancel: timeout.Token));
+    }
+
+    private static HexLinkSession Session(Stream stream, bool dialled, HexLinkBulkSupport bulk = HexLinkBulkSupport.None,
+        Func<HexLinkRights>? rights = null) =>
+        new(new HexLinkConnection(stream, dialled ? DeviceB : DeviceA, "memory", dialled,
+            rights ?? (() => HexLinkRights.View | HexLinkRights.Edit), bulk: bulk));
+
+    private sealed class MemorySink : IHexLinkBulkSink
+    {
+        public MemoryStream Data { get; } = new();
+        public bool Committed { get; private set; }
+
+        public ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel) => Data.WriteAsync(data, cancel);
+
+        public ValueTask CommitAsync(CancellationToken cancel)
+        {
+            Committed = true;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => Data.DisposeAsync();
+    }
+
+    private sealed class StalledSink : IHexLinkBulkSink
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Disposed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancel)
+        {
+            Entered.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancel);
+        }
+
+        public ValueTask CommitAsync(CancellationToken cancel) => throw new InvalidOperationException();
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    internal sealed class ObservedStream(Stream inner, Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> beforeWrite) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancel) => inner.FlushAsync(cancel);
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancel = default) =>
+            inner.ReadAsync(buffer, cancel);
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancel = default)
+        {
+            await beforeWrite(buffer, cancel);
+            await inner.WriteAsync(buffer, cancel);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                inner.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
     private static Func<string, JsonObject, CancellationToken, Task<JsonNode?>> Echo(string who) =>
         (method, parameters, _) => method switch
         {
@@ -166,22 +457,48 @@ public sealed class HexLinkProtocolTests
     [Fact]
     public async Task Past_the_rate_requests_are_told_busy_and_the_link_stays()
     {
-        var (a, b) = Sessions();
-        b.Requested = Echo("b");
-        a.Start();
-        b.Start();
+        var (a, b) = Pair();
+        using (a)
+        using (var receiver = Session(b, false))
+        using (var reader = new StreamReader(a, Encoding.UTF8, leaveOpen: true))
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS)))
+        {
+            receiver.Requested = Echo("b");
+            receiver.Start();
 
-        // Sent within the same second (most of the time; a second boundary splits them, so a few hundred)
-        Task<JsonNode?>[] flood = [.. Enumerable.Range(0, 300).Select(i => a.Ask("echo", new JsonObject { ["text"] = "x" }))];
-        int?[] codes = await Task.WhenAll(flood.Select(CodeOf));
-        Assert.Contains(codes, code => code == HexLinkErrors.BUSY);
-        Assert.Contains(codes, code => code is null);
-        Assert.True(codes.Count(code => code is null) <= HexLinkSession.MOST_REQUESTS * 6);
-        Assert.False(a.IsClosed);
+            // Deliver one wire burst. A cooperative session's bounded send queue can spread concurrent asks
+            // across several admission windows on a busy host, and would not exercise receiver overload.
+            const int count = 300;
+            string burst = string.Concat(Enumerable.Range(1, count).Select(id => Request(id, "burst")));
+            a.Write(Encoding.UTF8.GetBytes(burst));
 
-        await Task.Delay(1100);
-        Assert.NotNull(await a.Ask("echo", new JsonObject { ["text"] = "after" }));
-        a.Dispose();
+            int admitted = 0, busy = 0;
+            for (int i = 0; i < count; i++)
+            {
+                JsonNode reply = JsonNode.Parse((await reader.ReadLineAsync(timeout.Token))!)!;
+                if (reply["error"] is JsonObject error)
+                {
+                    Assert.Equal(HexLinkErrors.BUSY, error["code"]!.GetValue<int>());
+                    busy++;
+                }
+                else
+                {
+                    Assert.Equal("burst", reply["result"]!["said"]!.GetValue<string>());
+                    admitted++;
+                }
+            }
+            Assert.InRange(admitted, 1, HexLinkSession.MOST_REQUESTS * 2);
+            Assert.Equal(count - admitted, busy);
+            Assert.False(receiver.IsClosed);
+
+            await Task.Delay(1100, timeout.Token);
+            a.Write(Encoding.UTF8.GetBytes(Request(count + 1, "after")));
+            JsonNode after = JsonNode.Parse((await reader.ReadLineAsync(timeout.Token))!)!;
+            Assert.Equal("after", after["result"]!["said"]!.GetValue<string>());
+        }
+
+        static string Request(int id, string text) =>
+            $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"echo\",\"params\":{{\"text\":\"{text}\"}}}}\n";
     }
 
     [Fact]

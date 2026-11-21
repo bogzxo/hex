@@ -16,7 +16,7 @@ namespace Hex.Core;
 internal sealed partial class HexLinkTransport
 {
     // What a device said in its first line, its id the pin the handshake proved
-    private sealed record Hello(int Version, string Mode, HexLinkDevice Device);
+    private sealed record Hello(int Version, string Mode, HexLinkDevice Device, HexLinkBulkSupport Bulk);
 
     /// <summary>Dials whichever known device answers at an address. One this machine doesn't know is refused.</summary>
     public Task<HexLinkConnection> Dial(string host, int port, CancellationToken cancel) => Dial(host, port, null, cancel);
@@ -53,10 +53,10 @@ internal sealed partial class HexLinkTransport
             await Say(ssl, HelloLine("link"), timeout.Token);
             string? line = await Answer(ssl, timeout.Token);
             Hello? hello = ParseHello(line, pin);
-            if (hello is null || hello.Mode != "link")
+            if (hello is null || hello.Mode != "link" || hello.Version != 1)
                 throw new HexLinkRefused("refused", $"{address} said something that isn't Link's answer");
 
-            HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token);
+            HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token, NegotiateBulk(hello.Bulk));
             kept = true;
             return connection;
         }
@@ -75,7 +75,8 @@ internal sealed partial class HexLinkTransport
     /// The dialler's end of the last line: a place for the device taken and raised, then OK, or <c>NO busy</c> when
     /// there's a link already or a winning one coming in.
     /// </summary>
-    private async Task<HexLinkConnection> DiallerSettles(SslStream ssl, Socket socket, HexLinkDevice device, string address, int port, CancellationToken cancel)
+    private async Task<HexLinkConnection> DiallerSettles(SslStream ssl, Socket socket, HexLinkDevice device, string address, int port, CancellationToken cancel,
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
     {
         Slot? slot = Claim(device.Id, socket, dialledByMe: true, out string refusal);
         if (slot is null)
@@ -94,7 +95,7 @@ internal sealed partial class HexLinkTransport
             throw;
         }
 
-        return Up(slot, ssl, device, address, port, dialled: true);
+        return Up(slot, ssl, device, address, port, dialled: true, bulk);
     }
 
     /// <summary>A TCP connection and the TLS handshake as the client, the server's pin noted, nothing yet said.</summary>
@@ -214,6 +215,8 @@ internal sealed partial class HexLinkTransport
     {
         HexLinkDevice me = identity.Device;
         var about = new JsonObject { ["name"] = me.Name, ["os"] = me.Os, ["arch"] = me.Arch, ["version"] = me.Version };
+        if ((mode is "link" or "pair") && BulkSupport != HexLinkBulkSupport.None)
+            about["bulk"] = BulkSupport == HexLinkBulkSupport.Zstandard ? "zstd-v1" : "raw-v1";
         return $"HEX-LINK 1 {mode} {about.ToJsonString()}";
     }
 
@@ -230,6 +233,7 @@ internal sealed partial class HexLinkTransport
             return null;
 
         string name = "", os = "", arch = "", said = "";
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None;
         try
         {
             switch (JsonNode.Parse(parts[3]))
@@ -242,6 +246,12 @@ internal sealed partial class HexLinkTransport
                     os = Text(about, "os");
                     arch = Text(about, "arch");
                     said = Text(about, "version");
+                    bulk = Text(about, "bulk") switch
+                    {
+                        "zstd-v1" => HexLinkBulkSupport.Zstandard,
+                        "raw-v1" => HexLinkBulkSupport.Raw,
+                        _ => HexLinkBulkSupport.None
+                    };
                     break;
                 default:
                     return null;
@@ -252,8 +262,10 @@ internal sealed partial class HexLinkTransport
             return null;
         }
 
-        return new Hello(version, parts[2], new HexLinkDevice(pin, Clean(name, NAME_MOST), Clean(os, 32), Clean(arch, 32), Clean(said, 64)));
+        return new Hello(version, parts[2], new HexLinkDevice(pin, Clean(name, NAME_MOST), Clean(os, 32), Clean(arch, 32), Clean(said, 64)), bulk);
     }
+
+    private HexLinkBulkSupport NegotiateBulk(HexLinkBulkSupport peer) => peer < BulkSupport ? peer : BulkSupport;
 
     private static string Text(JsonObject json, string name) => json[name] is JsonValue value && value.TryGetValue(out string? text) ? text : "";
 
