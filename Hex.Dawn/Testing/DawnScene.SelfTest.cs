@@ -119,8 +119,10 @@ internal sealed partial class DawnScene
                 // How long each part takes is said after it, the slow ones are the ones to look at
                 var took = new System.Diagnostics.Stopwatch();
                 test.Run(() => { Console.WriteLine($"[Hex self-test] {name}"); took.Restart(); });
+                test.BeginPart(name, PartLimit);
                 MakeTestFiles();
                 run(test);
+                test.EndPart();
                 test.Run(TidyAfterSuite);
                 test.Run(() => Console.WriteLine($"[Hex self-test] {name} took {took.Elapsed.TotalSeconds:0.0} s"));
             }
@@ -135,6 +137,12 @@ internal sealed partial class DawnScene
     }
 
     private const string REPEAT_VARIABLE = "HEX_SELFTEST_REPEAT";
+
+    // How long a part may take by the clock before the rest of it is skipped and the run goes on, ten minutes unless
+    // HEX_SELFTEST_PART_MINUTES says otherwise. The slowest take a few minutes on a busy machine; one waiting on a
+    // question nobody answers sat there for good, its window left open
+    private static float PartLimit =>
+        60.0f * (float.TryParse(System.Environment.GetEnvironmentVariable("HEX_SELFTEST_PART_MINUTES"), System.Globalization.CultureInfo.InvariantCulture, out float minutes) && minutes > 0.0f ? minutes : 10.0f);
 
     // Rounds are minutes each for some parts, fifty is a long evening already
     private const int MOST_ROUNDS = 50;

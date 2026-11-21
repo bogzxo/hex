@@ -126,7 +126,12 @@ internal sealed partial class DawnScene
 
     private void TidyAfterSuite()
     {
+        // Whatever asks something left up, answered by nobody: a part that ran out of time with a chooser over the
+        // window (a configuration to pick) left it there for every part after it
         chrome.Dialog?.Close();
+        if (textDialog is { IsOpen: true } asking)
+            asking.Close();
+        contextMenu?.Close();
 
         // The test's own files that were typed into, closed without asking, whatever was typed in them is the test's. A
         // layout with no file that a suite added to as well: left open and changed it put "Unsaved Changes" up in the
