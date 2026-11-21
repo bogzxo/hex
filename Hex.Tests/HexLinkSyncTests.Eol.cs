@@ -257,6 +257,151 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task Five_hundred_files_crlf_against_lf_are_agreed_from_the_manifests_without_reading_one()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        for (int i = 0; i < 500; i++)
+        {
+            string[] lines = [$"// file {i}", "namespace Some.Where;", $"class C{i} {{ }}"];
+            Put(pair.A, $"src/{i % 20}/c{i}.cs", Lines("\r\n", lines));
+            Put(pair.B, $"src/{i % 20}/c{i}.cs", Lines("\n", lines));
+        }
+
+        using HexLinkSync sync = SyncOf(pair);
+        long started = Environment.TickCount64;
+        await sync.Start();
+        await Settled(sync);
+        long took = Environment.TickCount64 - started;
+        Assert.Equal(0, sync.Reads);
+        Assert.Equal(0, sync.Sent + sync.Received);
+        Assert.Equal(500, sync.EolOnly);
+        Assert.Empty(sync.Conflicts);
+        Assert.True(took < 60_000, $"took {took} ms");
+
+        // An edit afterwards needs no read to know what the other side's line ends are
+        Put(pair.A, "src/3/c3.cs", Lines("\r\n", "// changed", "class C3 { int x; }"));
+        Assert.True(await Until(() => Get(pair.B, "src/3/c3.cs") == Lines("\n", "// changed", "class C3 { int x; }")), Said(sync));
+        // A change there of only line ends (to this side's, so both now have the same bytes) is agreed, not read or sent
+        Put(pair.B, "src/4/c4.cs", Lines("\r\n", "// file 4", "namespace Some.Where;", "class C4 { }"));
+        await Task.Delay(500);
+        await Settled(sync);
+        Assert.Equal(0, sync.Reads);
+        Assert.Equal(1, sync.Sent);
+        Assert.Equal(0, sync.Received);
+        Assert.Equal(Lines("\r\n", "// file 4", "namespace Some.Where;", "class C4 { }"), Get(pair.A, "src/4/c4.cs"));
+    }
+
+    [Fact]
+    public async Task A_peer_that_doesnt_say_text_and_line_ends_is_read_instead()
+    {
+        // An older Hex: its manifest says paths, hashes and sizes, nothing of text or line ends
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        for (int i = 0; i < 12; i++)
+            files[$"work/f{i}.txt"] = Encoding.UTF8.GetBytes(Lines("\n", $"file {i}", "two"));
+        var (sessionA, sessionB) = Sessions(() => EDIT, () => EDIT);
+        string root = Path.Combine(Path.GetTempPath(), "hexlink-tests", Guid.NewGuid().ToString("N"));
+        string work = Path.Combine(root, "work");
+        Directory.CreateDirectory(work);
+        for (int i = 0; i < 12; i++)
+            File.WriteAllText(Path.Combine(work, $"f{i}.txt"), Lines("\r\n", $"file {i}", "two"));
+        try
+        {
+            sessionB.Requested = (method, parameters, _) => Task.FromResult<JsonNode?>(method switch
+            {
+                "link/hello" => new JsonObject
+                {
+                    ["protocol"] = HexLinkHost.PROTOCOL,
+                    ["device"] = HexLinkData.DeviceJson(DeviceB),
+                    ["granted"] = new JsonArray("view", "edit"),
+                    ["workspace"] = new JsonObject { ["name"] = "Old", ["folders"] = new JsonArray(new JsonObject { ["name"] = "work" }) }
+                },
+                "sync/watch" or "sync/manifest" => new JsonObject
+                {
+                    ["folder"] = "work",
+                    ["entries"] = new JsonArray([.. files.Select(each => (JsonNode)new JsonObject
+                    {
+                        ["path"] = each.Key, ["hash"] = HexLinkFiles.Hash(each.Value), ["size"] = each.Value.Length
+                    })])
+                },
+                "fs/read" when files.TryGetValue(HexLinkData.String(parameters, "path", 4000) ?? string.Empty, out byte[]? bytes) => new JsonObject
+                {
+                    ["path"] = HexLinkData.String(parameters, "path", 4000),
+                    ["hash"] = HexLinkFiles.Hash(bytes),
+                    ["base64"] = Convert.ToBase64String(bytes),
+                    ["encoding"] = "binary",
+                    ["size"] = bytes.Length
+                },
+                _ => new JsonObject()
+            });
+            var peer = new HexLinkPeer(sessionA, DeviceA);
+            sessionA.Told = peer.Told;
+            sessionA.Start();
+            sessionB.Start();
+            await peer.Hello();
+
+            using var sync = new HexLinkSync(peer, new HexLinkFolder("work", work), Path.Combine(root, "state")) { Quiet = TimeSpan.FromMilliseconds(50) };
+            await sync.Start();
+            await Settled(sync);
+            Assert.Equal(12, sync.Reads);
+            Assert.Equal(12, sync.EolOnly);
+            Assert.Equal(0, sync.Sent + sync.Received);
+            Assert.Empty(sync.Conflicts);
+            Assert.Empty(Directory.EnumerateFiles(work, "*.theirs-*"));
+        }
+        finally
+        {
+            sessionA.Close("done");
+            try { Directory.Delete(root, true); } catch (Exception) { }
+        }
+    }
+
+    [Fact]
+    public void A_manifest_says_text_and_line_ends_only_for_text_with_one_kind_of_them()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "hexlink-tests", Guid.NewGuid().ToString("N"), "work");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(Path.Combine(folder, "crlf.txt"), "a\r\nb\r\n");
+            File.WriteAllText(Path.Combine(folder, "lf.txt"), "a\nb\n");
+            File.WriteAllText(Path.Combine(folder, "none.txt"), "a");
+            File.WriteAllText(Path.Combine(folder, "mixed.txt"), "a\r\nb\n");
+            File.WriteAllBytes(Path.Combine(folder, "binary.bin"), [0, 13, 10]);
+            HexLinkManifest made = new HexLinkTree(new HexLinkFolder("work", folder)).Manifest();
+            HexLinkManifest read = HexLinkTree.Of(HexLinkTree.Json(made));
+            HexLinkTreeFile Of(string name) => read.Files.Single(file => file.Path == "work/" + name);
+
+            Assert.Equal("crlf", Of("crlf.txt").Eol);
+            Assert.Equal("lf", Of("lf.txt").Eol);
+            Assert.Equal("none", Of("none.txt").Eol);
+            Assert.Equal(Of("crlf.txt").Text, Of("lf.txt").Text);
+            Assert.NotEqual(Of("crlf.txt").Hash, Of("lf.txt").Hash);
+            Assert.Null(Of("mixed.txt").Text);
+            Assert.Null(Of("mixed.txt").Eol);
+            Assert.Null(Of("binary.bin").Text);
+
+            // What a peer says that isn't a hash and one of the three words is passed over, both together
+            HexLinkManifest bogus = HexLinkTree.Of(new JsonObject
+            {
+                ["folder"] = "work",
+                ["entries"] = new JsonArray(
+                    new JsonObject { ["path"] = "work/a", ["hash"] = new string('a', 64), ["text"] = new string('b', 64), ["eol"] = "cr" },
+                    new JsonObject { ["path"] = "work/b", ["hash"] = new string('a', 64), ["text"] = "short", ["eol"] = "lf" })
+            });
+            Assert.All(bogus.Files, file => Assert.Null(file.Text ?? file.Eol));
+
+            // And a change says them the same way
+            HexLinkTreeChange change = HexLinkTree.ChangeOf("work/lf.txt", HexLinkTree.ChangeJson(new HexLinkTreeChange("work/lf.txt", Of("lf.txt").Hash, Text: Of("lf.txt").Text, Eol: "lf")));
+            Assert.Equal(Of("lf.txt").Text, change.Text);
+            Assert.Equal("lf", change.Eol);
+        }
+        finally
+        {
+            try { Directory.Delete(Path.GetDirectoryName(folder)!, true); } catch (Exception) { }
+        }
+    }
+
+    [Fact]
     public void Text_is_the_same_whatever_its_line_ends_and_binary_never_is()
     {
         Assert.True(HexLinkSync.SameText(Encoding.UTF8.GetBytes("a\r\nb\r\n"), Encoding.UTF8.GetBytes("a\nb\n")));

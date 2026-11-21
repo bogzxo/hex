@@ -70,8 +70,9 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(conflicts.Keys);
             foreach (string path in paths)
             {
-                string? m = here.GetValueOrDefault(path)?.Hash, t = remote.GetValueOrDefault(path)?.Hash;
-                bool mineThere = here.ContainsKey(path), theirsThere = remote.ContainsKey(path);
+                HexLinkTreeFile? mineFile = here.GetValueOrDefault(path), theirsFile = remote.GetValueOrDefault(path);
+                string? m = mineFile?.Hash, t = theirsFile?.Hash;
+                bool mineThere = mineFile is not null, theirsThere = theirsFile is not null;
                 if (m is not null && bases.TryGetValue(path, out HexLinkSyncAgreed? agreed) && agreed.Local == m && agreed.Remote == t)
                 {
                     // Where both were left, line ends and all
@@ -79,8 +80,19 @@ internal sealed partial class HexLinkSync
                 else if (m is not null && m == t)
                 {
                     // The same on both, agreed whatever was known before, a conflict settled by hand on both sides with it
-                    Agree(path, m);
+                    if (mineFile!.Text is { } same && mineFile.Eol is not null)
+                        SetBase(path, new HexLinkSyncAgreed(m, m, same, EolIn(mineFile.Eol), EolIn(mineFile.Eol)));
+                    else
+                        Agree(path, m);
                     conflicts.Remove(path);
+                }
+                else if (m is not null && t is not null && mineFile!.Text is { } text && text == theirsFile!.Text)
+                {
+                    // The same text with other line ends, a CRLF checkout against an LF one, told by the two manifests
+                    // alone: agreed as each side has it, nothing read
+                    SetBase(path, new HexLinkSyncAgreed(m, t, text, EolIn(mineFile.Eol), EolIn(theirsFile.Eol)));
+                    conflicts.Remove(path);
+                    eolOnly++;
                 }
                 else if (!mineThere && !theirsThere)
                 {
@@ -171,7 +183,7 @@ internal sealed partial class HexLinkSync
         if (change.Deleted)
             remote.Remove(change.Path);
         else
-            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0);
+            remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0, change.Text, change.Eol);
     }
 
     private void There(string path, string? hash)
@@ -406,8 +418,16 @@ internal sealed partial class HexLinkSync
         try
         {
             var info = new FileInfo(full);
-            if (info.Exists)
-                mine = new HexLinkTreeFile(wire, info.Length > HexLinkFiles.MOST_READ ? null : HexLinkFiles.Hash(await File.ReadAllBytesAsync(full, stop)), info.Length);
+            if (info.Exists && info.Length > HexLinkFiles.MOST_READ)
+            {
+                mine = new HexLinkTreeFile(wire, null, info.Length);
+            }
+            else if (info.Exists)
+            {
+                byte[] bytes = await File.ReadAllBytesAsync(full, stop);
+                TextInfo text = TextOf(bytes);
+                mine = new HexLinkTreeFile(wire, HexLinkFiles.Hash(bytes), info.Length, text.Norm, EolWord(text.Eol));
+            }
         }
         catch (IOException)
         {
@@ -452,6 +472,24 @@ internal sealed partial class HexLinkSync
                 Notify();
             }
 
+            return;
+        }
+
+        // The same text but for line ends, by what the other side said of its file: agreed as each has it, nothing read.
+        // A change there of only its line ends lands here.
+        if (m is not null && t is not null && mine!.Text is { } same && same == theirs!.Text)
+        {
+            bool settled;
+            lock (gate)
+            {
+                SetBase(wire, new HexLinkSyncAgreed(m, t, same, EolIn(mine.Eol), EolIn(theirs.Eol)));
+                settled = conflicts.Remove(wire);
+            }
+
+            Interlocked.Increment(ref eolOnly);
+            if (settled)
+                Save();
+            Notify();
             return;
         }
 
@@ -516,7 +554,7 @@ internal sealed partial class HexLinkSync
         HexLinkFile file;
         try
         {
-            file = await Asked(() => peer.Read(wire, stop), stop);
+            file = await Fetch(wire, stop);
         }
         catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
         {
@@ -668,11 +706,32 @@ internal sealed partial class HexLinkSync
                     }
 
                     there = agreed?.RemoteEol ?? HexLinkEol.Unknown;
-                    if (there is not (HexLinkEol.Lf or HexLinkEol.Crlf))
+                    bool known = there is HexLinkEol.Lf or HexLinkEol.Crlf;
+                    HexLinkTreeFile? said;
+                    lock (gate)
+                        said = remote.GetValueOrDefault(wire);
+                    if (!known && said is { Text: { } saidText } && said.Hash == theirs)
+                    {
+                        known = true;
+                        // What the other side said of its file (a peer that says its text and line ends): the same text
+                        // is nothing to send, otherwise it goes in its line ends, or what most files there have
+                        if (saidText == info.Norm)
+                        {
+                            lock (gate)
+                                SetBase(wire, new HexLinkSyncAgreed(HexLinkFiles.Hash(bytes), theirs, saidText, info.Eol, EolIn(said.Eol)));
+                            Interlocked.Increment(ref eolOnly);
+                            Notify();
+                            return;
+                        }
+
+                        there = EolIn(said.Eol) is HexLinkEol.Lf or HexLinkEol.Crlf ? EolIn(said.Eol) : Most(here: false);
+                    }
+
+                    if (!known)
                     {
                         // What the other side has isn't known by its line ends (a base from before they were kept, or
                         // one agreed by hash alone), so it's read: the same but for line ends is nothing to send
-                        HexLinkFile now = await Asked(() => peer.Read(wire, stop), stop);
+                        HexLinkFile now = await Fetch(wire, stop);
                         if (now.Hash != theirs)
                         {
                             lock (gate)
@@ -742,7 +801,7 @@ internal sealed partial class HexLinkSync
             HexLinkFile file;
             try
             {
-                file = await Asked(() => peer.Read(wire, stop), stop);
+                file = await Fetch(wire, stop);
             }
             catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
             {

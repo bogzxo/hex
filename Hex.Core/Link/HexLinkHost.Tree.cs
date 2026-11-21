@@ -81,11 +81,7 @@ internal sealed partial class HexLinkHost
             return;
         var said = new JsonArray();
         foreach (HexLinkTreeChange change in changes)
-        {
-            said.Add((JsonNode)(change.Deleted
-                ? new JsonObject { ["path"] = change.Path, ["deleted"] = true }
-                : change.Hash is null ? new JsonObject { ["path"] = change.Path, ["big"] = true } : new JsonObject { ["path"] = change.Path, ["hash"] = change.Hash }));
-        }
+            said.Add((JsonNode)HexLinkTree.ChangeJson(change));
 
         session.Tell("sync/changed", new JsonObject { ["folder"] = folder, ["changes"] = said });
     }

@@ -174,6 +174,18 @@ internal sealed partial class HexLinkSync : IDisposable
     /// </summary>
     public int EolOnly => Volatile.Read(ref eolOnly);
 
+    /// <summary>Files read from the other side so far, to write here, to keep beside a conflict or to compare by their text.</summary>
+    public int Reads => Volatile.Read(ref reads);
+
+    private int reads;
+
+    // A file of the other side's read, counted
+    private Task<HexLinkFile> Fetch(string wire, CancellationToken cancel)
+    {
+        Interlocked.Increment(ref reads);
+        return Asked(() => peer.Read(wire, cancel), cancel);
+    }
+
     /// <summary>The files that don't travel and why, by path.</summary>
     public IReadOnlyList<HexLinkSyncSkipped> Skipped
     {
@@ -388,7 +400,7 @@ internal sealed partial class HexLinkSync : IDisposable
                     TextInfo info = TextOf(mine);
                     HexLinkEol eol = HexLinkEol.Unknown;
                     if (info.Norm is not null)
-                        eol = theirs?.Hash is not null ? TextOf((await Asked(() => peer.Read(path, cancel), cancel)).Bytes).Eol : Most(here: false);
+                        eol = theirs?.Hash is not null ? TextOf((await Fetch(path, cancel)).Bytes).Eol : Most(here: false);
                     byte[] sending = Converted(mine, info, eol);
                     await Asked(() => peer.Write(path, theirs?.Hash, sending, cancel), cancel);
                     agreed = AgreedOf(mine, sending);
@@ -406,7 +418,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 }
                 else
                 {
-                    HexLinkFile file = await Asked(() => peer.Read(path, cancel), cancel);
+                    HexLinkFile file = await Fetch(path, cancel);
                     HexLinkEol eol = mine is null ? Most(here: true) : TextOf(mine).Eol;
                     byte[] written = Converted(file.Bytes, TextOf(file.Bytes), eol);
                     Directory.CreateDirectory(Path.GetDirectoryName(full)!);
