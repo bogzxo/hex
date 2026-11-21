@@ -20,11 +20,13 @@ internal sealed partial class DawnScene
     // The chat whose card takes the keys back once it's on screen again, after Enter or Escape
     private HexAgentChat? chatRenameRefocus;
 
-    // The chat whose name was last clicked and when, for a second click on it to be a double click
-    private (int Chat, long At) chatTitlePress = (-1, 0);
+    // The chat whose name was last clicked and how long ago by the UI's time, for a second click on it to be a double
+    // click. The UI's time, the way the tree and the table count theirs: by the clock a frame that took long (the
+    // window busy, the machine busy) used up the double click between two clicks a frame or two apart
+    private (int Chat, float Since) chatTitlePress = (-1, float.MaxValue);
 
-    // How soon a second click on a card's name has to come to rename it, in milliseconds
-    private const long TITLE_DOUBLE_CLICK = 400;
+    // How soon a second click on a card's name has to come to rename it, in seconds
+    private const float TITLE_DOUBLE_CLICK = 0.4f;
 
     /// <summary>A chat's card turned to renaming, its name a box on the next drawing of the list it's in.</summary>
     private void BeginChatRename(HexAgentChat chat)
@@ -111,15 +113,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private bool ChatTitleClicked(HexAgentChat chat)
     {
-        long now = Environment.TickCount64;
-        if (chatTitlePress.Chat == chat.Id && now - chatTitlePress.At <= TITLE_DOUBLE_CLICK)
+        if (chatTitlePress.Chat == chat.Id && chatTitlePress.Since <= TITLE_DOUBLE_CLICK)
         {
-            chatTitlePress = (-1, 0);
+            chatTitlePress = (-1, float.MaxValue);
             BeginChatRename(chat);
             return true;
         }
 
-        chatTitlePress = (chat.Id, now);
+        chatTitlePress = (chat.Id, 0.0f);
         return false;
     }
 
@@ -176,13 +177,17 @@ internal sealed partial class DawnScene
             if (title && scene.ChatTitleClicked(Chat))
                 return;
             if (!title)
-                scene.chatTitlePress = (-1, 0);
+                scene.chatTitlePress = (-1, float.MaxValue);
             base.OnClick();
         }
 
         protected override void Update(float dt)
         {
             base.Update(dt);
+
+            // The time since its name was clicked goes by on the card of the chat that was clicked
+            if (scene.chatTitlePress.Chat == Chat.Id && scene.chatTitlePress.Since < float.MaxValue)
+                scene.chatTitlePress.Since += dt;
             if (FocusWhenShown && Module is not null)
             {
                 FocusWhenShown = false;
