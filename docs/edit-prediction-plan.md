@@ -491,3 +491,55 @@ a wrong URL and a wrong key, and the latency log.
 
 Not in the first version: Zeta 1 and 2.1's formats, Zed's hosted service, Copilot, definitions from the language
 server as context, several predictions to step through, predictions in notebooks' cells and in the terminal.
+
+## Status
+
+Kept current by the orchestrator (chat #110) at every phase change, so that another agent can take this over. The
+copy on the branch (`hexwt-predict/docs/edit-prediction-plan.md`) is the one that is edited; `hex/docs/` has a copy.
+
+**As of 2026-11-21 18:50, phase 1 running.**
+
+Done:
+- Research and this plan. Commit `88e9687` on `feat/edit-prediction` (hex), which also carries
+  `Hex.Core/Link/HexLinkSecrets*.cs` copied unchanged from `feat/hex-link` `1d1cb46` (same path, so the two branches
+  merge clean; Hex Link owns those files).
+- Ollama installed with winget (`%LOCALAPPDATA%\Programs\Ollama`, serves `http://localhost:11434`, started by its
+  tray app; do not start a second `ollama serve` by hand, the one started during the install ran on the CPU).
+  Models pulled: `hf.co/bartowski/zed-industries_zeta-2-GGUF:Q4_K_M` (5.5 GB VRAM, about 50 tokens/s) and
+  `qwen2.5-coder:14b-base-q4_K_M` (9.5 GB VRAM, about 30 tokens/s). Only one fits the RTX 3060 at a time, Ollama swaps
+  them (20 to 40 s to load).
+- Baseline build of the worktree against the scratch engine copy is green.
+
+Where things are:
+- hex worktrees: `../hexwt-predict` (`feat/edit-prediction`, the branch everything merges into),
+  `../hexwt-predict-core` (`feat/edit-prediction-core`), `../hexwt-predict-settings`
+  (`feat/edit-prediction-settings`). `hex-extensions` in each is a detached worktree of the live one at `66022c3`.
+- engine worktrees, in `hex/Hex/bin/Debug/net11.0/data/agents/temp/scratch/predict/`: `engine`
+  (`feat/edit-prediction`, what hex builds against) and `engine-ghost` (`feat/edit-prediction-ghost`).
+  `Horizon.HIDL` in each is a detached worktree of the live one at `bf0f436`.
+- Build: `dotnet build Hex/Hex.csproj -p:HorizonRoot=<scratch>/predict/engine/ -p:HidlRoot=<scratch>/predict/engine/Horizon.HIDL/`.
+- Scratch: `<scratch>/predict/research` (Zed's prompt source, the model card's sample), `<scratch>/predict/scripts`
+  (`probe.py`, `fim.py`: latency probes against Ollama).
+
+Running (Opus workers started through Hex by #110, briefs in their chats):
+- #114 core: all of `Hex.Core/Prediction` but the two settings files, and its unit tests, including the
+  `HexPredictionRelay` seam for Hex Link.
+- #115 engine: `CodeEditor.Prediction.cs`, `UIFormKind.Secret`, engine tests.
+- #116 settings: the twelve keys, the AI section, strings, `PredictionKey` and `PredictionSettings`.
+
+Next:
+1. Review each worker's result, merge core and settings into `feat/edit-prediction`, the ghost branch into the
+   engine's `feat/edit-prediction`; flip the line marked `PREDICT-MERGE: UIFormKind.Secret`; build, all unit tests.
+2. Phase 2, one Opus worker on the merged branches: `Hex.Dawn/Code/DawnScene.Prediction.cs` (the glue of 4), the
+   commands and keys of 7, the status bar item, the self test `prediction` with its fake server (9).
+3. End to end by the orchestrator in a build of the branch driven through its own MCP pipe
+   (`HEX_REMOTE_PIPE=<unique>`, `HORIZON_AUDIO=off`, `HEX_LINK_KEYSTORE=file`, its own settings folder): Zeta 2 and
+   Qwen through `/api/generate` and `/v1/completions`, Tab, cancelling, a bad URL and a bad key, the latency log
+   (`HEX_PREDICT_LOG`), screenshots from its own window through MCP.
+4. Tell #107 (Hex Link) the commit that has `HexPredictionRelay` and its loopback test; it builds the Link side
+   (`HexLinkRights.Predict = 8`, `predict/start`, `predict/chunk`, `predict/done`, `predict/cancel`, the hello's
+   `serves: ["predictions"]`) after its wiring lands. Whichever branch merges second carries the glue commit.
+5. Report to the lead (#3).
+
+Open questions: none that block. Which Hex Link device is preferred when several serve predictions is first
+connected wins until a setting is asked for.
