@@ -125,6 +125,7 @@ What a device may do is the host's to say, per device, and is checked by the hos
 | **View** | The fleet, chats, plans, mail. The workspace's tree, files and search. Presence. Git's state, a clone or fetch of the repository. | `hex_agent_list`, `hex_agent_read`, `hex_plan_read`, `hex_map`, `hex_files`, `hex_symbols`, `hex_search`, `hex_refs`, `hex_read`, `hex_skim`, `hex_changes`, `hex_projects`, `hex_git_diff` |
 | **Steer** | View, and: say something to an agent, answer its questions and approvals, stop, restart, start and close agents. | plus `hex_agent_send`, `hex_agent_message`, `hex_agent_stop`, `hex_agent_restart`, `hex_agent_spawn`, `hex_agent_approve`, `hex_agent_close` |
 | **Edit** | View, and: write the workspace's files. | plus `hex_edit`, `hex_write`, `hex_edit_symbol`, `hex_rename` (and `fs/write`) |
+| **Predict** | Use this machine's model for autocomplete (5.6), while this machine shares its predictions. Nothing else, and it needs nothing else: not even View, so a device may borrow the model without seeing a file. Never given by another right, unticked at pairing. | none (`predict/start`, `predict/cancel`) |
 
 Never over a link, whatever was granted: the terminal, tasks, clicking, typing and keys, screenshots, the
 debugger, settings, `hex_dev_*`, the self test, notebooks' kernels. The list is an allow list, a tool added to
@@ -172,7 +173,9 @@ request (the device, the tool, the chat or file). Kept to 2 MB. Link's window sh
 
 JSON-RPC 2.0, a message a line of UTF-8 JSON, after the TLS handshake and the `HEX-LINK 1 link` line. Both ends
 send requests, responses and notifications. Errors use JSON-RPC's codes plus `-32001` not allowed (the right it
-would take is in `data.needs`), `-32002` conflict, `-32003` not found, `-32004` too big.
+would take is in `data.needs`), `-32002` conflict, `-32003` not found, `-32004` too big, `-32005` busy, `-32006`
+prediction failed (`data.status` says how in a word: `refused` when the machine doesn't share its predictions,
+otherwise the prediction side's own, `unreachable`, `timedout`, ...).
 
 | Method | Right | What |
 | --- | --- | --- |
@@ -191,6 +194,9 @@ would take is in `data.needs`), `-32002` conflict, `-32003` not found, `-32004` 
 | `presence/set` (notification) | View | `{file, line, column, selection}` of the sender; the receiver shows it and passes it on to its other links. |
 | `git/bundle` | View | `{repository, have[]}` → `{id, size, refs}` then `git/chunk {id, data}` notifications and `git/done`. What `git bundle create` wrote of the branches, less what the asker has. |
 | `patch/offer` | View | `{title, diff}` → a card on the receiver, which applies it, keeps it as a file or throws it away. The answer says which. |
+| `link/serves` (notification) | none | `{serves: ["predictions"] or []}`, what the host would do for the asker changed (hello says it first, as `serves`). |
+| `predict/start` | Predict | `{id, prompt, suffix, max_tokens, stop[], format}` → `{id}` once checked, the id the asker's. Then `predict/chunk {id, text}` notifications in order and `predict/done {id, ok, error?, status?}`. Refused with `-32001` (needs `predict`) or `-32006`. |
+| `predict/cancel` (notification) | Predict | `{id}`, the model's token cancelled at once; `predict/done` follows with status `cancelled`. |
 
 Paths are `folder-name/relative/path` with forward slashes, the folder one of the workspace's by name.
 
@@ -261,12 +267,40 @@ written on the other within a moment, both ways:
   there, so "now build it on the Mac" is said after the code arrived, not before.
 - Files over 8 MB, `.git` and ignored files never travel.
 
+### 5.6 Predictions over a link (added 2026-11-21)
+A weaker machine borrows the autocomplete (edit predictions, ghost text) of a stronger one it's linked to: the Mac
+types, the desktop's model answers. Two things have to be so on the desktop, checked on every request: the Mac has
+the **Predict** right (3.4), and the desktop shares its predictions (`edit_predictions_share` on, with a provider of
+its own it can reach, never one that is itself another device). Hello says `serves: ["predictions"]` when both are,
+and `link/serves` says it again whenever either changes (the right in Link's window, the setting, the model coming
+or going, looked at once a second). With several devices that serve, the first linked is used, and kept while it
+serves.
+
+The asker cancels on every keystroke, so nothing waits: `predict/start` is answered as soon as its fields are
+checked, the model runs on a task of its own and its pieces go back as `predict/chunk`, which may arrive before the
+start's answer (the asker picked the id, so it takes them from the first moment). `predict/cancel` is taken on the
+reading task and cancels the model's token there and then. None of it touches the editor's thread on either side.
+
+Limits on the host: prompt and suffix 256 KB together (UTF-8), `max_tokens` clamped to 1..1024, at most 16 stop
+strings of 64 characters, two predictions of a device running at once (a third cancels the oldest, which the asker
+has typed past), and one audit line a minute at most saying how many were asked, not one a keystroke. A model that
+fails ends the stream with `-32006` and its status; the link closing ends it with the link's own closed error.
+
+What it can't do: a link is one stream, so a prediction's piece written just after a big answer (an 8 MB `fs/read`)
+waits for that answer to be written. Requests are answered on tasks of their own, so a slow request in flight never
+holds a prediction up, only a big one being sent at that moment does.
+
+In the code: `HexLinkHost.Predict.cs`, `HexLinkPeer.Predict.cs` (`ServesPredictions`, `Predict`),
+`HexLinkPrediction` (the request and its limits), `IHexLinkServices.ServesPredictions/Predict`, and in Dawn
+`DawnScene.LinkPredict.cs`: `LinkPredictServing` and `LinkPredictServe`, which the prediction side binds, and
+`LinkPredictSource` with `LinkPredictSourceChanged`, which it reads to send its prompts to another machine.
+
 ## 6. UI
 
 - **Status bar.** A link item while Link is on: how many devices are connected, breathing while one is steering.
   Its tooltip names them and what each may do. A press opens the Link window.
 - **Link window** (View › Link, the palette's "Link: ..."). This device's name and fingerprint and the switch.
-  **Devices**: each known device with whether it's connected, its address, three toggles for what it may do
+  **Devices**: each known device with whether it's connected, its address, four toggles for what it may do
   here, what this machine may do there, and Forget. **Nearby**: Hex's found on the LAN, Pair or Connect.
   **Connect to address**. **Pair a Device** with its countdown. The latest of the audit log.
 - **Pairing dialog** on both machines: the other's name and fingerprint, the code in large type, the three
