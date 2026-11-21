@@ -63,6 +63,7 @@ internal sealed class HexLinkDiscovery : IDisposable
     private readonly Dictionary<string, Heard> heard = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (List<IPAddress> Addresses, DateTime Until)> hosts = new(StringComparer.OrdinalIgnoreCase);
     private Socket? socket;
+    private CancellationTokenSource? receiving;
     private List<IPAddress> interfaces = [];
     private HexLinkAnnouncement? announcing;
     private Timer? browsing;
@@ -263,7 +264,9 @@ internal sealed class HexLinkDiscovery : IDisposable
             }
 
             socket = made;
-            new Thread(Receive) { IsBackground = true, Name = "link mdns" }.Start(made);
+            receiving = new CancellationTokenSource();
+            CancellationToken stop = receiving.Token;
+            _ = Task.Run(() => Receive(made, stop));
             return true;
         }
     }
@@ -292,28 +295,30 @@ internal sealed class HexLinkDiscovery : IDisposable
         return found;
     }
 
-    private void Receive(object? state)
+    // Asynchronous on purpose: on macOS a socket can't be closed while a thread is blocked in a synchronous receive on it,
+    // Dispose spins calling shutdown until the receive returns, which a quiet LAN never makes it do. An asynchronous
+    // receive is cancelled and the socket closes at once, on every OS.
+    private async Task Receive(Socket made, CancellationToken stop)
     {
-        var made = (Socket)state!;
         var buffer = new byte[9000];
-        while (true)
+        EndPoint any = new IPEndPoint(IPAddress.Any, 0);
+        while (!stop.IsCancellationRequested)
         {
-            EndPoint from = new IPEndPoint(IPAddress.Any, 0);
-            int read;
+            SocketReceiveFromResult received;
             try
             {
-                read = made.ReceiveFrom(buffer, ref from);
+                received = await made.ReceiveFromAsync(buffer, SocketFlags.None, any, stop);
             }
             catch (SocketException e) when (e.SocketErrorCode is SocketError.ConnectionReset or SocketError.MessageSize)
             {
                 continue;
             }
-            catch (Exception e) when (e is SocketException or ObjectDisposedException)
+            catch (Exception e) when (e is SocketException or ObjectDisposedException or OperationCanceledException)
             {
                 return;
             }
 
-            if (HexLinkDns.Decode(buffer.AsSpan(0, read)) is not { } message || from is not IPEndPoint sender)
+            if (HexLinkDns.Decode(buffer.AsSpan(0, received.ReceivedBytes)) is not { } message || received.RemoteEndPoint is not IPEndPoint sender)
                 continue;
 
             if (!message.Response)
@@ -543,6 +548,9 @@ internal sealed class HexLinkDiscovery : IDisposable
             browsing = sweeping = null;
             made = socket;
             socket = null;
+            receiving?.Cancel();
+            receiving?.Dispose();
+            receiving = null;
         }
 
         made?.Dispose();
