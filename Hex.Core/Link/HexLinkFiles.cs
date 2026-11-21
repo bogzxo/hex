@@ -409,6 +409,68 @@ internal static partial class HexLinkFiles
         }
     }
 
+
+    /// <summary>
+    /// Stages a length- and hash-checked stream beside the destination and publishes it through the same
+    /// compare-and-replace gate as a small linked write. The caller owns the source stream.
+    /// </summary>
+    internal static async Task<string?> CompareAndReplace(string full, string wire, string? baseHash, Stream source,
+        long length, string expectedHash, CancellationToken cancel, bool? executable = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        full = Path.GetFullPath(full);
+        cancel.ThrowIfCancellationRequested();
+        if (Directory.Exists(full))
+            throw HexLinkException.Invalid($"{wire} is a folder.");
+
+        string folder = Path.GetDirectoryName(full)!;
+        Directory.CreateDirectory(folder);
+        string temp = Path.Combine(folder, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.hexlink");
+        byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
+        try
+        {
+            string next;
+            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+            {
+                await using var staged = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, useAsync: true);
+                long remaining = length;
+                while (remaining != 0)
+                {
+                    int count = await source.ReadAsync(buffer.AsMemory(0, (int)Math.Min(remaining, buffer.Length)), cancel).ConfigureAwait(false);
+                    if (count == 0)
+                        throw HexLinkException.Invalid($"The streamed file {wire} ended early.");
+                    hash.AppendData(buffer, 0, count);
+                    await staged.WriteAsync(buffer.AsMemory(0, count), cancel).ConfigureAwait(false);
+                    remaining -= count;
+                }
+                if (await source.ReadAsync(buffer.AsMemory(0, 1), cancel).ConfigureAwait(false) != 0)
+                    throw HexLinkException.Invalid($"The streamed file {wire} exceeded its declared length.");
+                next = Convert.ToHexStringLower(hash.GetHashAndReset());
+                if (!string.Equals(next, expectedHash, StringComparison.OrdinalIgnoreCase))
+                    throw HexLinkException.Invalid($"The streamed file {wire} did not match its SHA-256.");
+            }
+
+            PathWrite gate = JoinPath(full);
+            bool entered = false;
+            try
+            {
+                await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+                entered = true;
+                await ReplaceChecked(full, wire, baseHash, temp, executable, cancel, fullHash: true).ConfigureAwait(false);
+                return next;
+            }
+            finally
+            {
+                LeavePath(full, gate, entered);
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
     private sealed class PathWrite
     {
         public SemaphoreSlim Turn { get; } = new(1, 1);
@@ -457,7 +519,7 @@ internal static partial class HexLinkFiles
     }
 
     private static async Task ReplaceChecked(string full, string wire, string? baseHash, string? temp,
-        bool? executable, CancellationToken cancel)
+        bool? executable, CancellationToken cancel, bool fullHash = false)
     {
         cancel.ThrowIfCancellationRequested();
         string? now = null;
@@ -466,8 +528,10 @@ internal static partial class HexLinkFiles
             DateTime written = File.GetLastWriteTimeUtc(full);
             using FileStream? current = OpenForComparison(full);
             long length = current?.Length ?? 0;
-            if (current is not null && length <= MOST_READ)
-                now = await HashForComparison(current, cancel).ConfigureAwait(false);
+            if (current is not null && (fullHash || length <= MOST_READ))
+                now = fullHash
+                    ? Convert.ToHexStringLower(await SHA256.HashDataAsync(current, cancel).ConfigureAwait(false))
+                    : await HashForComparison(current, cancel).ConfigureAwait(false);
 
             if (baseHash is null ? current is not null : !string.Equals(baseHash, now, StringComparison.OrdinalIgnoreCase))
                 throw Conflict(wire, now);

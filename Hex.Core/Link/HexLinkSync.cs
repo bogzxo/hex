@@ -113,7 +113,13 @@ internal sealed partial class HexLinkSync : IDisposable
     {
         this.peer = peer;
         this.folder = folder;
-        tree = new HexLinkTree(folder, () => Excludes());
+        int inFlight = peer.Session.SupportsBulk ? HexLinkFilePack.MaximumFiles : MOST_IN_FLIGHT;
+        slots = new SemaphoreSlim(inFlight, inFlight);
+        if (peer.CanReadFilePacks)
+            packedReads = new PackBatcher<PendingRead>(ReadPacked);
+        if (peer.CanWriteFilePacks)
+            packedWrites = new PackBatcher<PendingWrite>(WritePacked);
+        tree = new HexLinkTree(folder, () => Excludes(), stateFolder);
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
         ApplyLocal = HexLinkFiles.CompareAndReplace;
@@ -188,7 +194,7 @@ internal sealed partial class HexLinkSync : IDisposable
     private Task<HexLinkFile> Fetch(string wire, CancellationToken cancel)
     {
         Interlocked.Increment(ref reads);
-        return Asked(() => peer.Read(wire, cancel), cancel);
+        return FetchPacked(wire, cancel);
     }
 
     /// <summary>The files that don't travel and why, by path.</summary>

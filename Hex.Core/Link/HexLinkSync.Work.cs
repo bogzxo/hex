@@ -31,7 +31,7 @@ internal sealed partial class HexLinkSync
     private readonly Dictionary<string, int> tries = new(StringComparer.Ordinal);
     private readonly HashSet<string> deferredPushes = new(StringComparer.Ordinal);
     private int rightsVersion;
-    private readonly SemaphoreSlim wake = new(0), slots = new(MOST_IN_FLIGHT, MOST_IN_FLIGHT);
+    private readonly SemaphoreSlim wake = new(0), slots;
     private readonly HashSet<string> retrying = new(StringComparer.Ordinal);
     private int taking, filesDone, filesTotal;
     private long bytesDone, bytesTotal;
@@ -990,7 +990,7 @@ internal sealed partial class HexLinkSync
                 }
 
                 byte[] sending = Converted(bytes, info, there);
-                await Asked(() => peer.Write(wire, theirs, sending, stop), stop);
+                await PushPacked(wire, theirs, sending, stop);
                 lock (gate)
                     SetBase(wire, AgreedOf(bytes, sending));
             }

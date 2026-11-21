@@ -91,9 +91,9 @@ internal sealed partial class HexLinkHost
             ?? throw HexLinkException.NotFound($"The workspace has no folder called {name}.");
         // Through the jail like any path, so a folder that's itself a link out is refused the same way
         HexLinkFiles.Resolve(Folders, folder.Name);
-        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => new HexLinkTree(folder, () => services.Excludes));
+        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => new HexLinkTree(folder, () => services.Excludes, services.TreeCacheDirectory));
         if (tree.Folder != folder)
-            trees[folder.Name] = tree = new HexLinkTree(folder, () => services.Excludes);
+            trees[folder.Name] = tree = new HexLinkTree(folder, () => services.Excludes, services.TreeCacheDirectory);
         return tree;
     }
 

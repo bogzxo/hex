@@ -27,6 +27,7 @@ internal sealed partial class HexLinkHost : IDisposable
         this.session = session;
         this.services = services;
         fleet = new HexLinkCoalesce(FLEET_GAP, SendFleet);
+        InstallFilePacks();
     }
 
     /// <summary>Who's asking, as the connection proved it.</summary>
@@ -59,6 +60,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "fs/watch" => Task.FromResult<JsonNode?>(FsWatch(parameters)),
         "fs/unwatch" => Task.FromResult<JsonNode?>(FsUnwatch(parameters)),
         "fs/delete" => FsDeleteChecked(parameters, cancel),
+        "sync/pack/read" => ReadFilePack(parameters, cancel),
         "sync/manifest" => SyncManifest(parameters, cancel),
         "sync/watch" => SyncWatch(parameters, cancel),
         "sync/unwatch" => Task.FromResult<JsonNode?>(SyncUnwatch(parameters)),
