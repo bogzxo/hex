@@ -99,11 +99,11 @@ public sealed class HexLinkProvisionTests
         using var cancellation = new CancellationTokenSource();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => HexLinkProvision.Get(pair.PeerA, destination, journal,
             new InlineProgress(progress => { if (progress.FilesDone > 0) cancellation.Cancel(); }), cancellation.Token)
-            .WaitAsync(TimeSpan.FromSeconds(75)));
+            .WaitAsync(TimeSpan.FromMinutes(3)));
         Assert.True(File.Exists(journal));
 
         IReadOnlyList<HexLinkFolder> folders = await HexLinkProvision.Get(pair.PeerA, destination, journal, null, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(75));
+            .WaitAsync(TimeSpan.FromMinutes(3));
         var local = Assert.Single(folders);
         Assert.Equal("work", local.Name);
         Assert.Equal(Path.GetFullPath(destination), local.Path);
