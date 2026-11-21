@@ -457,22 +457,48 @@ public sealed class HexLinkProtocolTests
     [Fact]
     public async Task Past_the_rate_requests_are_told_busy_and_the_link_stays()
     {
-        var (a, b) = Sessions();
-        b.Requested = Echo("b");
-        a.Start();
-        b.Start();
+        var (a, b) = Pair();
+        using (a)
+        using (var receiver = Session(b, false))
+        using (var reader = new StreamReader(a, Encoding.UTF8, leaveOpen: true))
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(WAIT_MS)))
+        {
+            receiver.Requested = Echo("b");
+            receiver.Start();
 
-        // Sent within the same second (most of the time; a second boundary splits them, so a few hundred)
-        Task<JsonNode?>[] flood = [.. Enumerable.Range(0, 300).Select(i => a.Ask("echo", new JsonObject { ["text"] = "x" }))];
-        int?[] codes = await Task.WhenAll(flood.Select(CodeOf));
-        Assert.Contains(codes, code => code == HexLinkErrors.BUSY);
-        Assert.Contains(codes, code => code is null);
-        Assert.True(codes.Count(code => code is null) <= HexLinkSession.MOST_REQUESTS * 6);
-        Assert.False(a.IsClosed);
+            // Deliver one wire burst. A cooperative session's bounded send queue can spread concurrent asks
+            // across several admission windows on a busy host, and would not exercise receiver overload.
+            const int count = 300;
+            string burst = string.Concat(Enumerable.Range(1, count).Select(id => Request(id, "burst")));
+            a.Write(Encoding.UTF8.GetBytes(burst));
 
-        await Task.Delay(1100);
-        Assert.NotNull(await a.Ask("echo", new JsonObject { ["text"] = "after" }));
-        a.Dispose();
+            int admitted = 0, busy = 0;
+            for (int i = 0; i < count; i++)
+            {
+                JsonNode reply = JsonNode.Parse((await reader.ReadLineAsync(timeout.Token))!)!;
+                if (reply["error"] is JsonObject error)
+                {
+                    Assert.Equal(HexLinkErrors.BUSY, error["code"]!.GetValue<int>());
+                    busy++;
+                }
+                else
+                {
+                    Assert.Equal("burst", reply["result"]!["said"]!.GetValue<string>());
+                    admitted++;
+                }
+            }
+            Assert.InRange(admitted, 1, HexLinkSession.MOST_REQUESTS * 2);
+            Assert.Equal(count - admitted, busy);
+            Assert.False(receiver.IsClosed);
+
+            await Task.Delay(1100, timeout.Token);
+            a.Write(Encoding.UTF8.GetBytes(Request(count + 1, "after")));
+            JsonNode after = JsonNode.Parse((await reader.ReadLineAsync(timeout.Token))!)!;
+            Assert.Equal("after", after["result"]!["said"]!.GetValue<string>());
+        }
+
+        static string Request(int id, string text) =>
+            $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"echo\",\"params\":{{\"text\":\"{text}\"}}}}\n";
     }
 
     [Fact]
