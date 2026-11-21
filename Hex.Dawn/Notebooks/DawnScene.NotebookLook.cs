@@ -165,7 +165,7 @@ internal sealed partial class DawnScene
             view.RunButton.Icon = state switch
             {
                 CellState.Running => "debug-stop",
-                CellState.Queued => "loading",
+                CellState.Queued => "loading~spin",
                 _ => "play"
             };
             view.RunButton.IconColor = state == CellState.Running ? look.Accent : null;
