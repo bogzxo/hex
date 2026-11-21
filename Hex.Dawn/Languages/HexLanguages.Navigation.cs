@@ -195,7 +195,8 @@ internal sealed partial class HexLanguages
     }
 
     // Two blank lines or more, with whatever spaces are on them
-    private static readonly System.Text.RegularExpressions.Regex BlankLines = new(@"\n(?:[ \t]*\n){2,}", System.Text.RegularExpressions.RegexOptions.Compiled);
+    [System.Text.RegularExpressions.GeneratedRegex(@"\n(?:[ \t]*\n){2,}")]
+    private static partial System.Text.RegularExpressions.Regex BlankLines { get; }
 
     private sealed record SignatureRequest(HexDocument Of, LanguageServer Server, int Version, UITextPosition Caret, string Name, int Argument);
     private (SignatureRequest? Request, UISignature? Said) signed;
