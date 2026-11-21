@@ -119,7 +119,7 @@ internal sealed partial class DawnScene
     /// couldn't (no such device linked, no such folder here or there). <paramref name="force"/> goes on when the two
     /// have different commits checked out.
     /// </summary>
-    internal async Task<string?> LinkSyncStart(string deviceId, string folder, bool force = false, bool remember = true)
+    internal async Task<string?> LinkSyncStart(string deviceId, string folder, bool force = false, bool remember = true, bool automatic = false)
     {
         if (link is not { } links || linkServices is not { } services)
             return Said("link.off");
@@ -159,7 +159,7 @@ internal sealed partial class DawnScene
                 entry.Sync = sync;
                 entry.Announced.Clear();
                 entry.Said = HexLinkSyncState.Off;
-                starting = entry.Starting = Task.Run(() => sync.Start(force));
+                starting = entry.Starting = Task.Run(() => sync.Start(force, automatic: automatic));
             }
         }
 
@@ -239,7 +239,8 @@ internal sealed partial class DawnScene
         var chosen = new List<string>();
         foreach (JsonObject each in choices)
         {
-            if (HexLinkData.String(each, "device", 200) == deviceId && HexLinkData.String(each, "folder", 200) is { Length: > 0 } folder)
+            if (HexLinkData.String(each, "device", 200) == deviceId && HexLinkData.Bool(each, "enabled") != false
+                && HexLinkData.String(each, "folder", 200) is { Length: > 0 } folder)
                 chosen.Add(folder);
         }
 
@@ -268,7 +269,7 @@ internal sealed partial class DawnScene
             return;
         lock (linkSyncGate)
         {
-            JsonObject kept = LinkSyncChoicesWith(LinkSyncChoices(), deviceId, folder, on);
+            JsonObject kept = LinkSyncChoicesWith(LinkSyncChoices(), deviceId, folder, on, keepDisabled: true);
             try
             {
                 Directory.CreateDirectory(linkKeys);
@@ -282,11 +283,11 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>The kept choices with a device's folder turned on or off, once at most, as the file keeps them.</summary>
-    internal static JsonObject LinkSyncChoicesWith(List<JsonObject> choices, string deviceId, string folder, bool on)
+    internal static JsonObject LinkSyncChoicesWith(List<JsonObject> choices, string deviceId, string folder, bool on, bool keepDisabled = false)
     {
         choices.RemoveAll(each => HexLinkData.String(each, "device", 200) == deviceId && PlatformPaths.Comparer.Equals(HexLinkData.String(each, "folder", 200) ?? string.Empty, folder));
-        if (on)
-            choices.Add(new JsonObject { ["device"] = deviceId, ["folder"] = folder });
+        if (on || keepDisabled)
+            choices.Add(new JsonObject { ["device"] = deviceId, ["folder"] = folder, ["enabled"] = on });
         return new JsonObject { ["syncs"] = new JsonArray([.. choices.Select(each => (JsonNode)each)]) };
     }
 

@@ -22,7 +22,8 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// repository's first commit (<see cref="Root"/>, null outside one or before its first commit), which is what tells two
 /// clones of one repository from two repositories that only share a folder name.
 /// </summary>
-internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null, bool Certified = true);
+internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
+    bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
@@ -99,6 +100,7 @@ internal sealed partial class HexLinkTree
         }
 
         relative ??= Walk();
+        var nested = AddNestedGitFiles(relative);
         CheckCount(relative.Count);
         var files = new List<HexLinkTreeFile>(relative.Count);
         foreach (string each in relative)
@@ -114,7 +116,7 @@ internal sealed partial class HexLinkTree
                 hashes.TryRemove(full, out _);
         }
 
-        return new HexLinkManifest(Folder.Name, head, files, root);
+        return new HexLinkManifest(Folder.Name, head, files, root, nested);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -303,20 +305,11 @@ internal sealed partial class HexLinkTree
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (string each in relative)
         {
-            if (!Plain(each) || Hidden(each) || (!InRepository && each.Split('/').SkipLast(1).Any(SKIPPED.Contains)))
+            if (!Plain(each) || Hidden(each))
                 ignored.Add(each);
         }
 
-        string[] ask = [.. relative.Where(each => !ignored.Contains(each))];
-        if (!InRepository || ask.Length == 0)
-            return ignored;
-
-        // Exit 1 is "none of them", what it lists are the ignored ones
-        GitResult said = GitProcess.Run(Root, ["check-ignore", "--stdin", "-z"], string.Join('\0', ask) + "\0");
-        if (said.Exit is not (0 or 1) || !string.IsNullOrWhiteSpace(said.Error))
-            throw new IOException($"Git could not check ignored paths in {Folder.Name}: {said.Why}");
-        foreach (string each in said.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
-            ignored.Add(each);
+        AddGitIgnored(ignored, relative);
         return ignored;
     }
 
@@ -336,7 +329,10 @@ internal sealed partial class HexLinkTree
             entries.Add((JsonNode)entry);
         }
 
-        return new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["root"] = manifest.Root, ["entries"] = entries, ["complete"] = manifest.Certified };
+        var said = new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["root"] = manifest.Root, ["entries"] = entries, ["complete"] = manifest.Certified };
+        if (NestedHeadsJson(manifest.NestedHeads) is { } heads)
+            said["repositories"] = heads;
+        return said;
     }
 
     /// <summary>A manifest read off the wire with limits, its paths only those of the folder it says.</summary>
@@ -374,7 +370,7 @@ internal sealed partial class HexLinkTree
 
         string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
-            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified);
+            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said));
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends

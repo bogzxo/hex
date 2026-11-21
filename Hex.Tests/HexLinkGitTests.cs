@@ -146,6 +146,63 @@ public sealed class HexLinkGitTests
     }
 
     [Fact]
+    public async Task A_shared_root_carries_ignored_nested_checkouts_and_their_submodules()
+    {
+        if (NoGit)
+            return;
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        string root = MadeRepository(pair.A);
+        string nested = Path.Combine(root, "nested");
+        string source = Path.Combine(pair.B.Root, "sub-source");
+        foreach (string repository in new[] { nested, source })
+        {
+            Directory.CreateDirectory(repository);
+            Git(repository, "init", "-q", "-b", "development");
+            Git(repository, "config", "user.email", "test@example.com");
+            Git(repository, "config", "user.name", "Test");
+            File.WriteAllText(Path.Combine(repository, ".gitignore"), "out/\n");
+            File.WriteAllText(Path.Combine(repository, "tracked.txt"), "commit\n");
+            Git(repository, "add", ".");
+            Git(repository, "commit", "-qm", "first");
+        }
+
+        File.WriteAllText(Path.Combine(root, ".gitignore"), "/nested/\n");
+        Git(nested, "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, "lib/module");
+        Git(nested, "commit", "-qam", "Add submodule");
+        string submodule = Path.Combine(nested, "lib", "module");
+        File.WriteAllText(Path.Combine(submodule, "new.txt"), "untracked\n");
+        Directory.CreateDirectory(Path.Combine(submodule, "out"));
+        File.WriteAllText(Path.Combine(submodule, "out", "build.txt"), "ignored\n");
+
+        var changes = new System.Collections.Concurrent.ConcurrentQueue<HexLinkTreeChange>();
+        HexLinkManifest manifest = await pair.PeerA.WatchTree("work", batch =>
+        {
+            foreach (HexLinkTreeChange change in batch)
+                changes.Enqueue(change);
+        });
+
+        Assert.Equal(Head(nested), manifest.NestedHeads!["nested"]);
+        Assert.Equal(Head(submodule), manifest.NestedHeads["nested/lib/module"]);
+        Assert.Contains(manifest.Files, file => file.Path == "work/nested/tracked.txt");
+        Assert.Contains(manifest.Files, file => file.Path == "work/nested/lib/module/new.txt");
+        Assert.DoesNotContain(manifest.Files, file => file.Path.Contains("/out/") || file.Path.EndsWith("/.git"));
+        Assert.Null(HexLinkTree.CommitsDiffer(manifest, HexLinkTree.Of(HexLinkTree.Json(manifest))));
+
+        var tree = new HexLinkTree(new HexLinkFolder("work", root));
+        tree.Manifest();
+        Assert.Equal(["nested/lib/module/out/build.txt"], tree.Ignored(["nested/tracked.txt", "nested/lib/module/new.txt", "nested/lib/module/out/build.txt"]));
+
+        File.WriteAllText(Path.Combine(submodule, "later.txt"), "live\n");
+        Assert.True(Eventually(() => changes.Any(change => change.Path == "work/nested/lib/module/later.txt")));
+        Assert.DoesNotContain(changes, change => change.Path.Contains("/out/"));
+
+        Git(nested, "commit", "--allow-empty", "-qm", "Nested head changed");
+        HexLinkManifest moved = await pair.PeerA.Manifest("work");
+        Assert.Equal(manifest.Head, moved.Head);
+        Assert.StartsWith("nested is at ", HexLinkTree.CommitsDiffer(manifest, moved));
+    }
+
+    [Fact]
     public async Task A_folder_that_isnt_a_repository_is_walked_without_what_builds_make()
     {
         using var pair = await LinkedPair.Up(HexLinkRights.View);

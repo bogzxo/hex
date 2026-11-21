@@ -9,9 +9,48 @@ internal sealed partial class DawnScene
     private void LinkShareJoined(HexLinkPeer peer)
     {
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+        {
             LinkSyncResume(peer);
+            LinkSyncStartSharedFolders(peer);
+        }
         LinkFilesJoined(peer);
         LinkPresenceJoined(peer);
+    }
+
+    // A matching workspace folder starts on connect unless the person turned it off. The sync still checks Git identity.
+    private void LinkSyncStartSharedFolders(HexLinkPeer peer)
+    {
+        if (linkServices is not { } services)
+            return;
+
+        string[] common = [.. services.Workspace.Folders
+            .Where(local => peer.Workspace.Folders.Any(remote => PlatformPaths.Comparer.Equals(local.Name, remote.Name)))
+            .Select(local => local.Name)];
+        if (common.Length == 0)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            var choices = LinkSyncChoices();
+            var chosen = new HashSet<string>(LinkSyncChosenIn(choices, peer.Device.Id), PlatformPaths.Comparer);
+            var disabled = new HashSet<string>(choices
+                .Where(choice => HexLinkData.String(choice, "device", 200) == peer.Device.Id && HexLinkData.Bool(choice, "enabled") == false)
+                .Select(choice => HexLinkData.String(choice, "folder", 200) ?? string.Empty), PlatformPaths.Comparer);
+            int available = Math.Max(0, HexLinkHost.MOST_TREES - chosen.Count);
+            foreach (string folder in common.Where(folder => !chosen.Contains(folder) && !disabled.Contains(folder)).Take(available))
+            {
+                if (peer.IsClosed)
+                    break;
+                try
+                {
+                    await LinkSyncStart(peer.Device.Id, folder, remember: false, automatic: true);
+                }
+                catch (Exception e)
+                {
+                    PostLink(() => Say(Said("link.sync_not_resumed", ("folder", folder), ("device", peer.Device.Name), ("why", e.Message)), error: true));
+                }
+            }
+        });
     }
 
     // Link going down: every sync stopped and every remote tab's watch let go

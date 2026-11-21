@@ -241,7 +241,7 @@ internal sealed partial class HexLinkSync : IDisposable
     /// person brought them together, or chose not to). Without Edit granted there it runs pull-only and says so. Never
     /// throws for what the other side or the disk does, <see cref="State"/> and <see cref="Why"/> say.
     /// </summary>
-    public async Task Start(bool force = false, CancellationToken cancel = default)
+    public async Task Start(bool force = false, CancellationToken cancel = default, bool automatic = false)
     {
         lock (gate)
         {
@@ -294,7 +294,14 @@ internal sealed partial class HexLinkSync : IDisposable
                 return;
             }
 
-            if (!force && mine.Head is not null && theirs.Head is not null && !mine.Head.Equals(theirs.Head, StringComparison.OrdinalIgnoreCase))
+            if (automatic && mine.Root is null && mine.NestedHeads is not { Count: > 0 })
+            {
+                await Unwatch();
+                Dispose();
+                return;
+            }
+
+            if (!force && HexLinkTree.CommitsDiffer(mine, theirs) is { } difference)
             {
                 await Unwatch();
                 lock (gate)
@@ -304,7 +311,7 @@ internal sealed partial class HexLinkSync : IDisposable
                 }
                 peer.Session.Closed -= LinkClosed;
                 Set(HexLinkSyncState.NeedsGit,
-                    $"{folder.Name} is at {mine.Head[..10]} here and at {theirs.Head[..10]} on {peer.Device.Name}, bring them to the same commit with git first or go on anyway");
+                    $"{folder.Name} differs from {peer.Device.Name}: {difference}. Bring them to the same commits with git first or go on anyway.");
                 return;
             }
 
