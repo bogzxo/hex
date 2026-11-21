@@ -1,7 +1,62 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
+
+internal enum HexLinkBulkSupport
+{
+    None,
+    Raw,
+    Zstandard
+}
+
+internal enum HexLinkFrameKind : byte
+{
+    Data,
+    Compressed,
+    Credit,
+    Abort
+}
+
+/// <summary>A binary frame starts with a zero byte at a message boundary. All integers are little-endian.</summary>
+internal readonly record struct HexLinkFrameHeader(HexLinkFrameKind Kind, long StreamId, uint Sequence, int WireLength, int Length)
+{
+    public const byte Marker = 0;
+    public const int Size = 22;
+    public const int MaximumPayload = 256 * 1024;
+    public const int Window = 8;
+
+    public void Write(Span<byte> header)
+    {
+        header[0] = Marker;
+        header[1] = (byte)Kind;
+        BinaryPrimitives.WriteInt64LittleEndian(header[2..], StreamId);
+        BinaryPrimitives.WriteUInt32LittleEndian(header[10..], Sequence);
+        BinaryPrimitives.WriteInt32LittleEndian(header[14..], WireLength);
+        BinaryPrimitives.WriteInt32LittleEndian(header[18..], Length);
+    }
+
+    public static HexLinkFrameHeader Read(ReadOnlySpan<byte> header, HexLinkBulkSupport support)
+    {
+        var frame = new HexLinkFrameHeader((HexLinkFrameKind)header[1],
+            BinaryPrimitives.ReadInt64LittleEndian(header[2..]), BinaryPrimitives.ReadUInt32LittleEndian(header[10..]),
+            BinaryPrimitives.ReadInt32LittleEndian(header[14..]), BinaryPrimitives.ReadInt32LittleEndian(header[18..]));
+        bool valid = frame.Kind switch
+        {
+            HexLinkFrameKind.Data => frame.Length == frame.WireLength,
+            HexLinkFrameKind.Compressed => support == HexLinkBulkSupport.Zstandard && frame.WireLength < frame.Length,
+            HexLinkFrameKind.Credit => frame.WireLength == 0 && frame.Length == 0,
+            HexLinkFrameKind.Abort => frame.WireLength == 0 && frame.Length == 0 && frame.Sequence == 0,
+            _ => false
+        };
+        bool payload = frame.Kind is HexLinkFrameKind.Data or HexLinkFrameKind.Compressed;
+        if (support == HexLinkBulkSupport.None || header[0] != Marker || !valid || frame.StreamId <= 0 ||
+            (payload && (frame.WireLength <= 0 || frame.Length > MaximumPayload)))
+            throw new InvalidDataException("Invalid Link bulk frame header.");
+        return frame;
+    }
+}
 
 /// <summary>
 /// What the other machine sent, read field by field. Everything that comes over a link is data from somebody else's

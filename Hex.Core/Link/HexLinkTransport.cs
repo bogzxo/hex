@@ -120,6 +120,8 @@ internal sealed partial class HexLinkTransport : IDisposable
     /// <summary>Where refusals, links and pairings are written, none when null.</summary>
     public HexLinkAudit? Audit { get; set; }
 
+    internal HexLinkBulkSupport BulkSupport { get; init; } = HexLinkBulkSupport.Zstandard;
+
     /// <summary>The links up now.</summary>
     public IReadOnlyList<HexLinkConnection> Links
     {
@@ -306,7 +308,7 @@ internal sealed partial class HexLinkTransport : IDisposable
                 // The person takes as long as they take, this connection stops counting against the handshakes
                 handshakes.Release();
                 handshakeHeld = false;
-                kept = await HostPairing(ssl, socket, hello.Device, address, stop);
+                kept = await HostPairing(ssl, socket, hello.Device, address, stop, NegotiateBulk(hello.Bulk));
                 return;
             }
 
@@ -317,7 +319,7 @@ internal sealed partial class HexLinkTransport : IDisposable
                 return;
             }
 
-            kept = await ListenerSettles(ssl, socket, hello.Device, address, port: 0, timeout.Token);
+            kept = await ListenerSettles(ssl, socket, hello.Device, address, port: 0, timeout.Token, bulk: NegotiateBulk(hello.Bulk));
         }
         catch (Exception e) when (e is IOException or OperationCanceledException or System.Security.Authentication.AuthenticationException or ObjectDisposedException or SocketException or InvalidOperationException)
         {
@@ -342,7 +344,8 @@ internal sealed partial class HexLinkTransport : IDisposable
     /// The listener's end of the last two lines: a place for the device, its own first line (or <c>NO busy</c>), then the
     /// dialler's OK, after which the link is up and handed to <see cref="Accepted"/>. Whether the connection was kept.
     /// </summary>
-    private async Task<bool> ListenerSettles(SslStream ssl, Socket socket, HexLinkDevice device, string address, int port, CancellationToken cancel, string yes = "")
+    private async Task<bool> ListenerSettles(SslStream ssl, Socket socket, HexLinkDevice device, string address, int port, CancellationToken cancel, string yes = "",
+        HexLinkBulkSupport bulk = HexLinkBulkSupport.None)
     {
         Slot? slot = Claim(device.Id, socket, dialledByMe: false, out string refusal);
         if (slot is null)
@@ -369,7 +372,7 @@ internal sealed partial class HexLinkTransport : IDisposable
             throw;
         }
 
-        HexLinkConnection connection = Up(slot, ssl, device, address, port, dialled: false);
+        HexLinkConnection connection = Up(slot, ssl, device, address, port, dialled: false, bulk);
         try
         {
             Accepted?.Invoke(connection);
@@ -466,7 +469,7 @@ internal sealed partial class HexLinkTransport : IDisposable
     }
 
     // The connection for a place that's up, which gives its place back when it's disposed
-    private HexLinkConnection Up(Slot slot, SslStream ssl, HexLinkDevice said, string address, int port, bool dialled)
+    private HexLinkConnection Up(Slot slot, SslStream ssl, HexLinkDevice said, string address, int port, bool dialled, HexLinkBulkSupport bulk)
     {
         string id = said.Id;
         trust.Seen(id, said, address, port);
@@ -489,7 +492,7 @@ internal sealed partial class HexLinkTransport : IDisposable
                 Audit?.Write("link down", id, address);
                 Changed?.Invoke();
             }
-        });
+        }, bulk, Audit);
 
         bool cut;
         lock (gate)
