@@ -251,7 +251,10 @@ internal sealed partial class DawnScene
     {
         HexAgentProfile[] systems = AgentSystems();
         List<string> ready = [.. systems.Where(system => StateOf(system) != AgentStates.Missing).Select(system => system.Name)];
+        // No agent system known at all (none of their extensions here yet) says where they come from, where the names
+        // it would list were nothing and it read "Install  to start one"
         return ready.Count > 0 ? Said("welcome.getting_agents_ready", ("agents", Joined(ready)))
+            : systems.Length == 0 ? Said("welcome.getting_agents_unknown")
             : Said("welcome.getting_agents_none", ("agents", Joined([.. systems.Select(system => system.Name)])));
     }
 
