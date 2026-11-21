@@ -51,6 +51,10 @@ internal sealed partial class DawnScene
     /// <summary>When the pairing window closes, null when it's closed.</summary>
     internal DateTime? LinkPairingUntil => linkTransport?.PairingUntil;
 
+    /// <summary>The TLS version a device's link was made with (Tls13, Tls12), null when it isn't linked.</summary>
+    internal System.Security.Authentication.SslProtocols? LinkTlsOf(string id) =>
+        linkTransport?.LinkTo(id)?.Stream is System.Net.Security.SslStream ssl ? ssl.SslProtocol : null;
+
     /// <summary>Whether a known device is one the person cut, which isn't dialled again until they connect it by hand.</summary>
     internal bool LinkHeldOff(string id) => linkHeldOff.Contains(id);
 
@@ -130,11 +134,9 @@ internal sealed partial class DawnScene
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
         linkHeldOff.Remove(id);
+        // The transport writes it in the audit log as it cuts the link
         if (forgot)
-        {
-            linkAudit?.Write("forgotten", id, $"\"{name}\" by the person here");
             Say(Said("link.forgotten", ("device", name)));
-        }
 
         linkDirty = true;
         return forgot;

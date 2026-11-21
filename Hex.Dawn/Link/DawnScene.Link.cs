@@ -138,7 +138,8 @@ internal sealed partial class DawnScene
             linkData = home is not null ? Path.Combine(home, "data") : Path.Combine(HexData.Root, LINK_FOLDER);
             Directory.CreateDirectory(linkData);
             linkAudit = new HexLinkAudit(Path.Combine(linkData, "audit.log"));
-            linkIdentity = HexLinkIdentity.LoadOrCreate(keys, LinkNameWanted);
+            // A self test's key is never put in the person's Keychain or secret service, the file alone keeps it
+            linkIdentity = HexLinkIdentity.LoadOrCreate(keys, LinkNameWanted, fileOnly: options.SelfTest);
             linkTrust = new HexLinkTrust(keys);
             linkServices = new LinkServices(this);
             linkCancel = new CancellationTokenSource();

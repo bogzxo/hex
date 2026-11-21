@@ -62,9 +62,10 @@ internal static class HexLinkWorkspaces
         if (HexHost.NoProcesses("git") is not null || !GitProcess.Installed || !Directory.Exists(folder))
             return null;
 
-        GitResult said = GitProcess.Run(folder, ["rev-parse", "--show-toplevel", "--abbrev-ref", "HEAD", "--verify", "-q", "HEAD"]);
+        // The top folder and the commit at the head, then the branch's name (abbrev-ref holds for every name after it)
+        GitResult said = GitProcess.Run(folder, ["rev-parse", "--show-toplevel", "HEAD"]);
         string[] lines = said.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (lines.Length == 0 || !Directory.Exists(lines[0]))
+        if (!said.Ok || lines.Length < 2 || !Directory.Exists(lines[0]))
         {
             // No commit yet, HEAD names nothing and git says so for the lot, the top folder asked alone
             GitResult top = GitProcess.Run(folder, ["rev-parse", "--show-toplevel"]);
@@ -73,8 +74,9 @@ internal static class HexLinkWorkspaces
         }
 
         string path = Path.GetFullPath(lines[0]);
-        string branch = lines.Length > 1 ? lines[1] : string.Empty;
-        string head = lines.Length > 2 ? lines[2] : string.Empty;
+        string head = lines[1];
+        GitResult named = GitProcess.Run(folder, ["rev-parse", "--abbrev-ref", "HEAD"]);
+        string branch = named.Ok ? named.Output.Trim() : string.Empty;
         return new HexLinkRepository(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)), branch, head, path);
     }
 }
