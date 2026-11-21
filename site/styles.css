@@ -522,6 +522,23 @@ button.button {
   cursor: pointer;
 }
 
+/* A button that reads as a link in a sentence, the request dialog's way in from the words */
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}
+
 /* Asking for an extension or a feature */
 .request:modal {
   inline-size: min(34rem, 100% - 2rem);
@@ -899,11 +916,11 @@ h2 + p strong {
   }
 }
 
-/* The editor's nine are three rows of three on a wide screen, never four and an orphan.
+/* The editor's eight are two rows of four on a wide screen, never a row and an orphan.
    A list that's meant as one line is one on a wide screen, however many cards it has */
 @media (width >= 70rem) {
   .features:not(.row) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
 
@@ -1126,9 +1143,91 @@ tbody tr:last-child > * {
   border-block-end: 0;
 }
 
-.downloads td,
-.downloads th {
-  text-align: start;
+/* Getting it: the button for the system the page is on, then a card a system, Setup and Portable a row each with a
+   button for each processor. The card of the system the page is on is marked in the accent */
+.get-yours {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-block-start: var(--gap);
+
+  &[hidden] {
+    display: none;
+  }
+
+  & .note {
+    margin: 0;
+  }
+}
+
+.button.big {
+  padding: 0.95rem 1.6rem;
+  font-size: 1.1rem;
+}
+
+.platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin: var(--gap) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+
+  & h3 {
+    font-size: 1.2rem;
+  }
+
+  & > p {
+    color: var(--dim);
+    font-size: 0.92rem;
+  }
+
+  & code {
+    overflow-wrap: anywhere;
+  }
+
+  /* The first of its rows sits at the bottom, so the buttons line up across cards whatever each says above them */
+  & .pick:first-of-type {
+    margin-block-start: auto;
+  }
+
+  &.yours {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  &.yours h3::after {
+    content: "Your system";
+    margin-inline-start: 0.6rem;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+}
+
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+
+  & > span {
+    min-inline-size: 4.5rem;
+    color: var(--dim);
+    font-size: 0.9rem;
+  }
 }
 
 /* The harness's tools, a name and what it answers with, two to a row where there's room */
@@ -1475,18 +1574,8 @@ pre {
 }
 
 .persistent .bars,
-.persistent .receipts,
-#numbers .figures {
+.persistent .receipts {
   margin-block-start: 1.25rem;
-}
-
-/* The last figures read as a board of six, three to a row where there's room and two on a phone */
-#numbers .figures {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-
-  & b {
-    font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.2rem);
-  }
 }
 
 /* Little room: a bar's name and number on a line and the bar the whole width under them, rather than a sliver squeezed
@@ -1532,6 +1621,84 @@ pre {
     & span {
       font-size: 0.85rem;
     }
+  }
+}
+
+/* Hex next to VS Code, a card a measurement, each drawn to its own scale since the units differ. Hex's bar in the
+   accent, VS Code's in the dim colour */
+.vs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--border);
+  list-style: none;
+
+  & > li {
+    padding: 1.1rem 1.25rem 1.25rem;
+    background: var(--surface);
+  }
+
+  & h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  & p {
+    margin-block: 0.15rem 0.8rem;
+    color: var(--dim);
+    font-size: 0.85rem;
+  }
+}
+
+.vs-bar {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr minmax(5.5rem, auto);
+  gap: 0.75rem;
+  align-items: center;
+  margin-block-start: 0.45rem;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+
+  & > span:first-child {
+    color: var(--dim);
+  }
+
+  & i {
+    display: block;
+    block-size: 0.9rem;
+    inline-size: max(4px, calc(var(--v) / var(--max) * 100%));
+    border-radius: 0 4px 4px 0;
+    background: var(--accent);
+  }
+
+  & > :last-child {
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  &.code i {
+    background: var(--dim);
+    opacity: 0.6;
+  }
+
+  &.code > :last-child {
+    color: var(--dim);
+  }
+}
+
+@media (forced-colors: active) {
+  .vs-bar i {
+    background: CanvasText;
+  }
+
+  .vs-bar.code i {
+    background: GrayText;
   }
 }
 
@@ -1618,19 +1785,115 @@ details:not([open])::details-content {
   }
 }
 
-/* The editor's cards: what it is in a sentence, the rest a press away */
-.features details {
-  margin-block-start: 0.6rem;
+/* The editor's cards: what it is in a sentence, the rest a press away. Both texts are faces stacked in one cell, so the
+   card is always as tall as the longer of them and nothing moves when it turns from one to the other; More turns it,
+   Back turns it back. Without the page's script (no .flips on the page) both read one under the other and the buttons
+   aren't there */
+.faces {
+  display: grid;
+}
 
-  & summary {
-    inline-size: fit-content;
-    color: var(--accent);
-    font-size: 0.92rem;
-    font-weight: 600;
+.face {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.6rem;
+}
+
+.face-button {
+  margin-block-start: auto;
+  padding: 0.35rem 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: none;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+}
+
+.front .face-button::after {
+  content: " ›";
+}
+
+.back .face-button::before {
+  content: "‹ ";
+}
+
+.flips .faces {
+  & > .face {
+    grid-area: 1 / 1;
+    transition: opacity 0.22s ease, visibility 0.22s;
   }
 
-  & p {
-    padding-block-start: 0.5rem;
+  & .face-button {
+    display: inline-block;
+  }
+
+  & .back {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    & > .face {
+      transition: opacity 0.22s ease, translate 0.22s ease, visibility 0.22s;
+    }
+
+    & .back {
+      translate: 0.75rem 0;
+    }
+  }
+}
+
+/* The face coming round is visible at once (a transition of visibility is still hidden at its start, and the keyboard
+   couldn't go to its button), only its opacity and place ease in; the one going keeps visibility until it's faded */
+.flips .flip:not(.turned) .front,
+.flips .flip.turned .back {
+  transition-property: opacity, translate;
+}
+
+.flips .flip.turned .faces {
+  & .front {
+    opacity: 0;
+    visibility: hidden;
+
+    @media (prefers-reduced-motion: no-preference) {
+      translate: -0.75rem 0;
+    }
+  }
+
+  & .back {
+    opacity: 1;
+    visibility: visible;
+    translate: 0 0;
+  }
+}
+
+/* A line by the title that it's the editor you already know how to use */
+.hero .familiar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 0.88rem;
+
+  &::before {
+    content: "";
+    inline-size: 0.45rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--noon);
   }
 }
 

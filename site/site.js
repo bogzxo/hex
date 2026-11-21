@@ -41,6 +41,71 @@ if ('IntersectionObserver' in window && parts.length) {
   for (const part of parts) watch.observe(part);
 }
 
+/* The download for the system the page is opened on, a big button over the cards, and its card marked. The system
+   from the browser's client hints where it has them (and the processor with them, which only Chromium says), its user
+   agent where not. A Mac is taken to be Apple silicon, an Intel one can't be told apart from the page; anything else
+   x64 unless it says ARM. Nothing guessed means no button, the cards say it all */
+
+const yours = document.querySelector('.get-yours');
+if (yours) {
+  const NAMES = { windows: 'Windows', mac: 'macOS', linux: 'Linux' };
+  const ua = navigator.userAgent;
+  const hinted = navigator.userAgentData?.platform ?? '';
+  const os = /Windows/i.test(hinted || ua) ? 'windows'
+    : /mac/i.test(hinted || ua) && !/iPhone|iPad/i.test(ua) ? 'mac'
+    : /Linux/i.test(hinted || ua) && !/Android/i.test(ua) ? 'linux' : null;
+
+  const show = arch => {
+    const card = document.querySelector(`.platform[data-os="${os}"]`);
+    if (!card) return;
+    const [setup, portable] = card.querySelectorAll('.pick');
+    const link = pick => pick.querySelector(`a[data-arch="${arch}"]`) ?? pick.querySelector('a');
+    const main = link(setup), zip = link(portable);
+    card.classList.add('yours');
+    const button = yours.querySelector('.button');
+    button.href = main.href;
+    button.textContent = `Download for ${NAMES[os]}`;
+    const note = yours.querySelector('.note');
+    note.replaceChildren(`Setup, ${main.textContent}. Or the `, Object.assign(document.createElement('a'), { href: zip.href, textContent: 'portable ZIP' }), ', or another system below.');
+    yours.hidden = false;
+  };
+
+  if (os) {
+    const guess = os === 'mac' ? 'arm64' : /arm|aarch64/i.test(ua) ? 'arm64' : 'x64';
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      navigator.userAgentData.getHighEntropyValues(['architecture'])
+        .then(values => show(values.architecture === 'arm' ? 'arm64' : os === 'mac' ? guess : 'x64'), () => show(guess));
+    } else {
+      show(guess);
+    }
+  }
+}
+
+/* The cards that turn. More shows the rest of a card in place of its sentence and Back turns it back, the card the
+   same size either way (the stylesheet stacks both faces in one cell). The face out of sight is inert, and the
+   keyboard goes to the button on the face that came round */
+
+const flips = document.querySelectorAll('.flip');
+if (flips.length) {
+  document.documentElement.classList.add('flips');
+  for (const card of flips) {
+    const front = card.querySelector('.front');
+    const back = card.querySelector('.back');
+    const more = front.querySelector('.face-button');
+    const ret = back.querySelector('.face-button');
+    const turn = turned => {
+      card.classList.toggle('turned', turned);
+      more.setAttribute('aria-expanded', String(turned));
+      front.inert = turned;
+      back.inert = !turned;
+      (turned ? ret : more).focus({ preventScroll: true });
+    };
+    back.inert = true;
+    more.addEventListener('click', () => turn(true));
+    ret.addEventListener('click', () => turn(false));
+  }
+}
+
 /* The rails. A list that's a row you swipe on a phone (the stylesheet's .swipe) gets a slide's place said for a screen
    reader, Previous and Next, and dots or a count, all hidden while the list fits without scrolling (a wide screen,
    where it's a grid). Finite: the buttons stop at the ends rather than going round */

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <!-- Day or Night as it was pinned with the switch in the bar, before anything's drawn so the page never flashes the other -->
+  <!-- The cards that turn are laid out for it before the first paint, so they don't settle once the page's script runs -->
+  <script>document.documentElement.classList.add('flips');</script>
   <script>try { const scheme = localStorage.getItem("color-scheme"); if (scheme === "light" || scheme === "dark") document.querySelector('meta[name="color-scheme"]').content = scheme; } catch {}</script>
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#18171f" media="(prefers-color-scheme: dark)">
@@ -39,6 +41,7 @@
         </button>
         <ul id="site-menu" class="site-menu" popover>
           <li><a href="#numbers">Numbers</a></li>
+          <li><a href="#switch">From VS Code</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
@@ -65,6 +68,7 @@
       <div class="wrap">
         <div class="pitch">
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
+        <p class="familiar">A familiar interface ;)</p>
         <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
         <ul class="faces" aria-label="Hex's three faces, one program">
@@ -127,15 +131,47 @@
           <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
         </div>
 
-        <h3 class="numbers-head">And the rest</h3>
-        <ul class="receipts figures rise" aria-label="More of Hex's numbers">
-          <li><b>&lt;1 s</b><span>to a C# file's first errors</span></li>
-          <li><b>0</b><span>cores csharp-ls keeps busy doing nothing</span></li>
-          <li><b>33 ms</b><span>to open the first Dusk of a run from Dawn</span></li>
-          <li><b>11–18 MB/s</b><span>of output through a terminal pane</span></li>
-          <li><b>0</b><span>blank frames switching between Dawn, Agentic and Dusk</span></li>
-          <li><b>6.1%</b><span>of a core for Agentic standing still with a dozen long chats</span></li>
+        <h3 class="numbers-head">Next to VS Code</h3>
+        <p>The same machine, the same projects and the same file open, both editors with C# support: VS Code 1.147 with C# Dev Kit, C#, Python, Jupyter and C++ installed, Hex with its own C# server. Each opened six times in turn after a thrown-away launch, medians.</p>
+        <ul class="vs rise" aria-label="Hex next to VS Code">
+            <li>
+              <h4>Ready, a small project</h4>
+              <p>Start to the editor on screen with the file open</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 507; --max: 1302"></i><b>507 ms</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: 1302; --max: 1302"></i><span>1,302 ms</span></div>
+            </li>
+            <li>
+              <h4>Ready, a large repository</h4>
+              <p>Horizon, 995 C# files and 193,000 lines</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: HXR; --max: MAXR"></i><b>HXR ms</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXR; --max: MAXR"></i><span>CXR ms</span></div>
+            </li>
+            <li>
+              <h4>Memory, a small project</h4>
+              <p>Every process of each, language servers included, 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: 382; --max: 2136"></i><b>382 MiB</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: 2136; --max: 2136"></i><span>2,136 MiB</span></div>
+            </li>
+            <li>
+              <h4>Memory, a large repository</h4>
+              <p>The same, on Horizon</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: HXM; --max: MAXM"></i><b>HXM MiB</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXM; --max: MAXM"></i><span>CXM MiB</span></div>
+            </li>
+            <li>
+              <h4>Processes</h4>
+              <p>Running on Horizon, 30 s in</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: HXP; --max: MAXP"></i><b>HXP</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXP; --max: MAXP"></i><span>CXP</span></div>
+            </li>
+            <li>
+              <h4>On disk</h4>
+              <p>The installed program, all of it</p>
+              <div class="vs-bar"><span>Hex</span><i style="--v: HXD; --max: MAXD"></i><b>HXD MiB</b></div>
+              <div class="vs-bar code"><span>VS Code</span><i style="--v: CXD; --max: MAXD"></i><span>CXD MiB</span></div>
+            </li>
         </ul>
+        <p class="note">Hex's time is its own first frame, VS Code's its own workbench ready, each from its process starting; both carry on loading their language servers after that. VS Code ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes.</p>
 
         <details class="fold">
           <summary>Every measurement, and how they were taken</summary>
@@ -155,7 +191,7 @@
               </tbody>
             </table>
           </div>
-          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. The C# errors, csharp-ls, the first Dusk, terminal output and the blank frames were measured as each change went in; Agentic standing still is the median of three runs of its self test (3.8–22.1%). <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
+          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
         </details>
 
         <div class="split">
@@ -172,6 +208,31 @@
 <span class="t">scene set up</span>             <span class="s">678 ms</span>
 <span class="c">first frame of the scene</span> <span class="k">680 ms</span></code></pre>
         </div>
+      </div>
+    </section>
+
+    <section id="switch">
+      <div class="wrap">
+        <p class="eyebrow">Coming from VS Code</p>
+        <h2>Switch without starting over</h2>
+        <ul class="features row swipe" data-label="Coming from VS Code">
+          <li class="rise">
+            <h3>Your keys already work</h3>
+            <p>VS Code's shortcuts out of the box. Visual Studio's are one switch away.</p>
+          </li>
+          <li class="rise">
+            <h3>Your settings come with you</h3>
+            <p>Import your <code>settings.json</code> and a folder's <code>.vscode/settings.json</code>. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
+          </li>
+          <li class="rise">
+            <h3>The same language servers</h3>
+            <p>Hex speaks LSP to the servers you already rely on, eighteen declared from C# to Rust, set up one language at a time and only the ones you want.</p>
+          </li>
+          <li class="rise">
+            <h3>What doesn't come over</h3>
+            <p>VS Code extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. If your workflow lives in one marketplace extension, check the catalogue first, or <button type="button" class="link" commandfor="request" command="show-modal">request it</button>.</p>
+          </li>
+        </ul>
       </div>
     </section>
 
@@ -251,50 +312,109 @@
         <p class="eyebrow">Dawn, the editor</p>
         <h2>Lightweight doesn't mean “does fuck all”</h2>
         <ul class="features swipe" data-label="What the editor does">
-          <li class="rise">
+          <li class="rise flip">
             <h3>Code</h3>
-            <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting.</p>
-            <details><summary>More<span class="visually-hidden"> about Code</span></summary><p>Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-code">More<span class="visually-hidden"> about Code</span></button>
+              </div>
+              <div class="face back" id="more-code">
+                <p>Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Code</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3><kbd>Ctrl+.</kbd> and it's sorted</h3>
-            <p>One menu of everything that can be done to the line or the selection.</p>
-            <details><summary>More<span class="visually-hidden"> about Ctrl+. and it's sorted</span></summary><p>The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>One menu of everything that can be done to the line or the selection.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-ctrl-and-it-s-sorted">More<span class="visually-hidden"> about Ctrl+. and it's sorted</span></button>
+              </div>
+              <div class="face back" id="more-ctrl-and-it-s-sorted">
+                <p>The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Ctrl+. and it's sorted</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
-            <h3>An explorer you work in</h3>
-            <p>Type to find a file.</p>
-            <details><summary>More<span class="visually-hidden"> about An explorer you work in</span></summary><p>New File and Rename name it right on its row, and <kbd>Esc</kbd> takes it back. Drag to move, hold <kbd>Ctrl</kbd> to copy. Open files are marked, a folder carries a dot for a change or a problem somewhere under it, and a chain of single folders is one row.</p></details>
-          </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Git</h3>
-            <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls.</p>
-            <details><summary>More<span class="visually-hidden"> about Git</span></summary><p>Keep the context next to the code instead of juggling windows to find out what you changed.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-git">More<span class="visually-hidden"> about Git</span></button>
+              </div>
+              <div class="face back" id="more-git">
+                <p>Keep the context next to the code instead of juggling windows to find out what you changed.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Git</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Find your shit</h3>
-            <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting.</p>
-            <details><summary>More<span class="visually-hidden"> about Find your shit</span></summary><p>Import VS Code settings instead of rebuilding your preferences by hand.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-find-your-shit">More<span class="visually-hidden"> about Find your shit</span></button>
+              </div>
+              <div class="face back" id="more-find-your-shit">
+                <p>Import VS Code settings instead of rebuilding your preferences by hand.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Find your shit</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Run, debug and test</h3>
-            <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches.</p>
-            <details><summary>More<span class="visually-hidden"> about Run, debug and test</span></summary><p>.NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-run-debug-and-test">More<span class="visually-hidden"> about Run, debug and test</span></button>
+              </div>
+              <div class="face back" id="more-run-debug-and-test">
+                <p>.NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Run, debug and test</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Notebooks for engineers</h3>
-            <p>Jupyter notebooks with real kernels, typeset maths and plots.</p>
-            <details><summary>More<span class="visually-hidden"> about Notebooks for engineers</span></summary><p>Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Jupyter notebooks with real kernels, typeset maths and plots.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-notebooks-for-engineers">More<span class="visually-hidden"> about Notebooks for engineers</span></button>
+              </div>
+              <div class="face back" id="more-notebooks-for-engineers">
+                <p>Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Notebooks for engineers</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Build interfaces</h3>
-            <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source.</p>
-            <details><summary>More<span class="visually-hidden"> about Build interfaces</span></summary><p>Extensions are small HIDL scripts, with a catalogue inside Hex.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-build-interfaces">More<span class="visually-hidden"> about Build interfaces</span></button>
+              </div>
+              <div class="face back" id="more-build-interfaces">
+                <p>Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Build interfaces</span></button>
+              </div>
+            </div>
           </li>
-          <li class="rise">
+          <li class="rise flip">
             <h3>Usable by everyone</h3>
-            <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window.</p>
-            <details><summary>More<span class="visually-hidden"> about Usable by everyone</span></summary><p>Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p></details>
+            <div class="faces">
+              <div class="face front">
+                <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window.</p>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-usable-by-everyone">More<span class="visually-hidden"> about Usable by everyone</span></button>
+              </div>
+              <div class="face back" id="more-usable-by-everyone">
+                <p>Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Usable by everyone</span></button>
+              </div>
+            </div>
           </li>
         </ul>
       </div>
@@ -434,32 +554,35 @@
       <div class="wrap">
         <p class="eyebrow"><!-- release:title -->Hex 3.1.2 Amphetamine<!-- /release:title --></p>
         <h2>Get it</h2>
-        <p>Pick your machine. <strong>Setup</strong> handles installation, shortcuts and updates. <strong>Portable</strong> is a ZIP you unpack and run. Neither needs a separate .NET installation.</p>
-        <div class="scroller downloads" tabindex="0" role="region" aria-label="Downloads">
-          <table style="--label-2: 'Setup'; --label-3: 'Portable'">
-            <thead>
-              <tr><th scope="col">System</th><th scope="col">Setup</th><th scope="col">Portable</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">Windows</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe">ARM64</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip">ARM64</a></td>
-              </tr>
-              <tr>
-                <th scope="row">Linux</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip">ARM64</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip">x64</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip">ARM64</a></td>
-              </tr>
-              <tr>
-                <th scope="row">macOS</th>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip">Intel</a></td>
-                <td><a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip">Apple silicon</a> · <a href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip">Intel</a></td>
-              </tr>
-            </tbody>
-          </table>
+        <p>One download, nothing else to install, not even .NET. Setup adds shortcuts and keeps Hex up to date; Portable is a ZIP you unpack and run.</p>
+
+        <!-- The button for the system the page is opened on, put together by site.js from the cards under it -->
+        <div class="get-yours" hidden>
+          <a class="button big" href="#get-it"></a>
+          <p class="note"></p>
         </div>
-        <p class="note">Windows needs 10 1809 or newer. Linux needs a Vulkan loader and driver. macOS needs 11 or newer; the build is unsigned, so <code>xattr -dr com.apple.quarantine /path/to/Hex</code> if macOS blocks it. <a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
+
+        <ul class="platforms">
+          <li class="platform" data-os="windows">
+            <h3>Windows</h3>
+            <p>Windows 10 1809 or newer.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-x64.exe" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-win-arm64.exe" data-arch="arm64">ARM64</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-win-arm64.zip" data-arch="arm64">ARM64</a></div>
+          </li>
+          <li class="platform" data-os="mac">
+            <h3>macOS</h3>
+            <p>macOS 11 or newer. The build is unsigned: if macOS blocks it, run <code>xattr -dr com.apple.quarantine /path/to/Hex</code>.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-osx-x64.zip" data-arch="x64">Intel</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-arm64.zip" data-arch="arm64">Apple silicon</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-osx-x64.zip" data-arch="x64">Intel</a></div>
+          </li>
+          <li class="platform" data-os="linux">
+            <h3>Linux</h3>
+            <p>A Vulkan loader and driver.</p>
+            <div class="pick"><span>Setup</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-Setup-linux-arm64.zip" data-arch="arm64">ARM64</a></div>
+            <div class="pick"><span>Portable</span><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-x64.zip" data-arch="x64">x64</a><a class="button small quiet" href="https://github.com/bogzxo/hex/releases/latest/download/Hex-linux-arm64.zip" data-arch="arm64">ARM64</a></div>
+          </li>
+        </ul>
+        <p class="note"><a href="https://github.com/bogzxo/hex/releases">All releases</a> · <a href="https://github.com/bogzxo/hex/blob/master/RELEASE_NOTES.md">What changed</a> · <a href="https://github.com/bogzxo/hex/blob/master/docs/installer.md">Installation details</a></p>
         <!-- What's new in the latest release, put in from its notes by .github/site-release.py when the page is published -->
         <div class="whats-new"><!-- release:notes -->
 <h3>What's new in 3.1.2 Amphetamine</h3>
