@@ -4074,6 +4074,7 @@ let strings = {
         resume_prompt: "The usage limit that stopped you has reset. Carry on from where you stopped: check your plan and what you were last doing, then continue the task.",
         resume_asked: "carry on after the usage limit reset",
         started_carry_on: "The agents it started carry on ({chats}). Its menu's Stop it and its agents stops them too.",
+        restarted: "Restarted: what it had running was killed and it was told to carry on.",
         chat_close: "Close chat",
         chat_close_all: "Close chat and sub-agents",
         permission_tip: "What the agent may do without asking: {mode}. Applies to the next message.",

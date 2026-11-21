@@ -153,6 +153,22 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>Something about the chat that isn't a row moved (what it used), so what shows it is drawn again.</summary>
     public void Moved() => Version++;
 
+    /// <summary>
+    /// Whether its agent's process is still going though its turn was said to be over (a run being started, or one that
+    /// carried on of its own), set by whoever runs it. Such a chat isn't done: what it's sent waits for that run to end.
+    /// </summary>
+    public bool RunGoing
+    {
+        get;
+        set
+        {
+            if (field == value)
+                return;
+            field = value;
+            Version++;
+        }
+    }
+
     /// <summary>The messages other chats' agents sent this one, read or not, on the editor's thread.</summary>
     public IReadOnlyList<HexAgentMail> Mail => mail;
 

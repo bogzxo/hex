@@ -67,6 +67,11 @@ internal sealed partial class DawnScene
         new(new McpTool("hex_agent_stop", "Stop an agent",
             "Stop a chat's agent and everything it started. What it said so far stays in its chat.",
             McpSchema.Object([("id", McpSchema.Integer("The chat."))], "id")), AgentStopTool),
+        new(new McpTool("hex_agent_restart", "Restart a stuck agent",
+            "Kill a chat's agent with everything its process started (its commands, builds, test runs; not the agents it started, which carry on) and start it again on the same session, told to carry on from where it was, with text in front when given and its unread messages after. For an agent that's stuck, hung on a command, or whose turn ended while its process goes on. Only for agents you started, or from a client that isn't an agent of the panel.",
+            McpSchema.Object([
+                ("id", McpSchema.Integer("The chat.")),
+                ("text", McpSchema.String("What to tell it as it starts again, 'carry on from where you were' by default."))], "id")), AgentRestart),
         new(new McpTool("hex_agent_close", "Close or clear an agent you started",
             "Delete the chat of an agent you started, its agent stopped and the chats it started deleted with it, when its work is done and its chat would only be in the way. clear true keeps the chat and empties it instead, its rows, mail and session gone, so the next hex_agent_send starts it afresh on a new task without what it knew. Only for agents you started.",
             McpSchema.Object([
@@ -88,6 +93,10 @@ internal sealed partial class DawnScene
     /// </summary>
     private void PublishAgentStatuses()
     {
+        // A chat whose run goes on after its turn says so, it read as done while it worked and what it was sent waited
+        foreach (HexAgentChat chat in agentChats)
+            chat.RunGoing = !chat.Running && AgentRunBusy(chat);
+
         if (hub.Pump(AGENTS_REPLY))
         {
             agentsChanged?.Invoke();
@@ -423,6 +432,62 @@ internal sealed partial class DawnScene
         // An agent stopping one it started stops what that one started too, nothing else is waiting for them
         StopAgent(chat, withStarted: true);
         yield return McpToolResult.Text(was ? $"Stopped #{chat.Id}." : $"#{chat.Id} wasn't running.");
+    }
+
+    /// <summary>
+    /// A stuck agent killed with all its process started and started again on its session, the orchestrator's way out
+    /// of an agent hung on a command or still running after its turn (what it was sent waited behind that run for good).
+    /// The agents it started aren't stopped, they're working on their own.
+    /// </summary>
+    private IEnumerable<McpToolResult?> AgentRestart(JsonObject args)
+    {
+        int? caller = CallerOf(args);
+        if (ChatById(args.Integer("id") ?? -1) is not { } chat)
+        {
+            yield return McpToolResult.Error("There's no such chat, hex_agent_list says which there are.");
+            yield break;
+        }
+
+        if (chat.Id == caller)
+        {
+            yield return McpToolResult.Error("That's your own chat.");
+            yield break;
+        }
+
+        if (caller is { } asking && chat.Parent != asking)
+        {
+            yield return McpToolResult.Error($"#{chat.Id} wasn't started by you, only the agent that started it restarts it.");
+            yield break;
+        }
+
+        if (!extensions.AgentRuns.TryGetValue(chat.Agent, out var run))
+        {
+            yield return McpToolResult.Error($"#{chat.Id}'s agent system isn't there any more.");
+            yield break;
+        }
+
+        // Killed outright, its whole process tree, rather than asked to stop: a stuck agent doesn't answer the asking
+        bool killed = false;
+        heldSteers.RemoveAll(held => held.Chat == chat);
+        agentsStopping.Remove(chat);
+        if (agentsStarting.Remove(chat))
+            killed = true;
+        foreach (AgentRun each in agentRuns.Where(each => each.Chat == chat).ToList())
+        {
+            KillAgentRun(each);
+            killed = true;
+        }
+        if (chat.Running)
+            chat.Done();
+        chat.RunGoing = false;
+
+        string said = args.String("text") is { Length: > 0 } text ? text
+            : "You were restarted: your process was stopped while it was stuck or still running after its turn. Carry on from where you were.";
+        chat.Note(Said("agents_panel.restarted"));
+        StartAgent(chat, run.Extension, run.Run, said, said);
+        yield return McpToolResult.Text(killed
+            ? $"#{chat.Id} was killed with what it had running and is going again from where it was. hex_agent_wait waits for it."
+            : $"#{chat.Id} wasn't running, it's going again from where it was. hex_agent_wait waits for it.");
     }
 
     /// <summary>
