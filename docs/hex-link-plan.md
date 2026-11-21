@@ -234,6 +234,33 @@ the person picks and sets nothing as its remote. In a clone that already exists,
 it has and fetches the rest into `refs/remotes/<device>/*`, so work goes back and forth by ordinary merges with no
 server between. **Offer Changes** sends the working tree's diff as `patch/offer`.
 
+### 5.5 Agents started on another device, and the code kept the same (added 2026-11-21)
+An agent, or the person, on one machine starts an agent on another: the PC's agent tells an agent on the Mac to
+build, test or change what only a Mac can. Two things make that work.
+
+**Where it runs is a choice.** The box of the Agents view and Agentic has a **Runs on** picker beside the model,
+this device or any connected device that granted Steer. A chat started on another device is that device's chat
+(its process, its tools, its limits), and it shows in the chat lists of both machines, like every other chat of a
+linked device, with a badge naming the device it runs on. Agents get the same through `hex_link_call` with
+`hex_agent_spawn`, `hex_agent_send`, `hex_agent_wait` and `hex_agent_read` on the other device, and the shorter
+`hex_link_spawn {device, prompt, ...}`.
+
+**The working tree is synced.** With **Sync** on for a workspace folder both machines have open (the same
+repository, matched by its first commit, each side having granted the other Edit), a change saved on one is
+written on the other within a moment, both ways:
+
+- Each side knows, per file, the hash both last agreed on (the base). `sync/manifest` gives every file git would
+  carry (tracked, and untracked but not ignored, so no build output), `sync/watch` then says what changes.
+- Local changed, remote still at base: sent with `fs/write` and the base. Remote changed, local at base: read and
+  written here. Both changed to different things: nothing is overwritten, the other machine's version is kept
+  beside the file as `name.theirs-<device>.ext`, both sides are told and the Link window lists it. The same for a
+  delete against a change.
+- Before the first sync the two trees are compared. Different commits checked out are brought together by git
+  over the link first (5.4), then files that differ are listed for the person to pick a side, once.
+- `sync/flush`, and `hex_link_sync {device, wait: true}` for agents, answer when everything written here is
+  there, so "now build it on the Mac" is said after the code arrived, not before.
+- Files over 8 MB, `.git` and ignored files never travel.
+
 ## 6. UI
 
 - **Status bar.** A link item while Link is on: how many devices are connected, breathing while one is steering.
