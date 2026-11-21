@@ -135,6 +135,7 @@ internal sealed partial class DawnScene
         try
         {
             string keys = home ?? Path.Combine(TerminalFiles.UserFolder, LINK_FOLDER);
+            linkKeys = keys;
             linkData = home is not null ? Path.Combine(home, "data") : Path.Combine(HexData.Root, LINK_FOLDER);
             Directory.CreateDirectory(linkData);
             linkAudit = new HexLinkAudit(Path.Combine(linkData, "audit.log"));
@@ -190,6 +191,8 @@ internal sealed partial class DawnScene
             linkDiscovery = null;
         }
 
+        // What's shared over the links let go of before they go (DawnScene.LinkSync, LinkFiles, LinkPresence)
+        LinkShareStopAll();
         link?.Dispose();
         link = null;
         if (linkTrust is not null)
@@ -367,6 +370,8 @@ internal sealed partial class DawnScene
         linkHeldOff.Remove(peer.Device.Id);
         Say(Said("link.connected", ("device", peer.Device.Name)));
         linkDirty = true;
+        // What's shared with it taken up again: the folders synced with it, presence, its remote tabs (DawnScene.LinkSync, ...)
+        LinkShareJoined(peer);
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {
             _ = Task.Run(async () =>
@@ -535,7 +540,7 @@ internal sealed partial class DawnScene
     {
         if (linkServices is not { } services)
             return;
-        string[] folders = [.. explorer.workspace.Folders];
+        string[] folders = [.. explorer.workspace.Folders, .. linkTestExtraFolders];
         if (!force && folders.SequenceEqual(linkFoldersSeen, PlatformPaths.Comparer))
             return;
         if (linkWorkspaceAsking)

@@ -35,8 +35,19 @@ internal sealed partial class DawnScene
                 ("prompt", McpSchema.String("What it's to do, complete in itself.")),
                 ("name", McpSchema.String("A short name for it there.")),
                 ("agent", McpSchema.String("The agent system there, as hex_agent_list there says, that machine's own by default.")),
-                ("model", McpSchema.String("The model, that agent system's setting there by default."))], "device", "prompt")),
-            null, RunAway: LinkSpawnTool, NeedsEditor: false)
+                ("model", McpSchema.String("The model, that agent system's setting there by default.")),
+                ("sync", McpSchema.Flag("Sync the folder it runs in first (hex_link_sync start, then flush), so it works on the code as it is here."))], "device", "prompt")),
+            null, RunAway: LinkSpawnTool, NeedsEditor: false),
+        new(new McpTool("hex_link_sync", "Keep a folder the same on another machine",
+            "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. Files git ignores, .git and files over 8 MB never travel.",
+            McpSchema.Object([
+                ("device", McpSchema.String("The device, its name or the start of its id.")),
+                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve")),
+                ("folder", McpSchema.String("The workspace folder by its name, the first one by default.")),
+                ("path", McpSchema.String("For resolve, the file in conflict as status names it (folder/relative/path).")),
+                ("keep", McpSchema.OneOf("For resolve, whose version stays.", "mine", "theirs")),
+                ("force", McpSchema.Flag("For start, go on when the two have different commits checked out."))], "device")),
+            null, RunAway: LinkSyncTool, NeedsEditor: false)
     ];
 
     // What a tool says while Link is off
@@ -120,12 +131,163 @@ internal sealed partial class DawnScene
                 arguments[optional] = value;
         }
 
+        // Where it'll run there is that machine's first workspace folder, the one hex_agent_spawn starts agents in
+        string? runsIn = peer.Workspace.Folders.Count > 0 ? peer.Workspace.Folders[0].Name : null;
+        string synced;
+        if (args.Flag("sync"))
+        {
+            if (runsIn is null)
+                return McpToolResult.Error($"{peer.Device.Name} has no workspace folder open, there's nothing to sync before starting it there.");
+            if (await LinkSyncStartAndFlush(peer, runsIn, force: false, cancel) is { } why)
+                return McpToolResult.Error($"Didn't start it: {why}");
+            synced = $"{runsIn} was synced first, it sees the code as it is here, and what it changes there comes back here by the sync.";
+        }
+        else
+        {
+            synced = LinkSyncSaid(peer, runsIn);
+        }
+
         McpToolResult started = await LinkCall(peer, "hex_agent_spawn", arguments, cancel);
         if (started.IsError)
             return started;
         Match id = Regex.Match(started.AllText(), @"Started #(\d+)");
         string chat = id.Success ? id.Groups[1].Value : "its id";
-        return started.AddText($"It runs on {peer.Device.Name} as chat #{chat} there. Follow it with hex_link_call on device \"{peer.Device.Name}\": hex_agent_wait {{\"ids\": [{chat}]}} waits for it, hex_agent_read {{\"id\": {chat}}} reads it, hex_agent_send {{\"id\": {chat}, \"text\": ...}} tells it more.");
+        return started.AddText($"It runs on {peer.Device.Name} as chat #{chat} there, in its folder {runsIn ?? "(none open)"}. {synced} Follow it with hex_link_call on device \"{peer.Device.Name}\": hex_agent_wait {{\"ids\": [{chat}]}} waits for it, hex_agent_read {{\"id\": {chat}}} reads it, hex_agent_send {{\"id\": {chat}, \"text\": ...}} tells it more.");
+    }
+
+    // Whether the folder an agent there runs in is synced with this machine, in a sentence for the tools' answers
+    private string LinkSyncSaid(HexLinkPeer peer, string? runsIn)
+    {
+        if (runsIn is null)
+            return string.Empty;
+        LinkSyncShown? sync = LinkSyncs.FirstOrDefault(each => each.DeviceId == peer.Device.Id && PlatformPaths.Comparer.Equals(each.Folder, runsIn));
+        if (sync is { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing })
+            return $"{runsIn} is synced with this machine, call hex_link_sync flush before telling it to build what you changed here.";
+        if (sync is { State: HexLinkSyncState.PullOnly })
+            return $"{runsIn} is synced pull-only: what it changes comes here, what you change here doesn't go there ({sync.Why}).";
+        bool here = linkServices?.Workspace.Folders.Any(folder => PlatformPaths.Comparer.Equals(folder.Name, runsIn)) == true;
+        return here
+            ? $"{runsIn} isn't synced with this machine, so it works on the code as it is there; hex_link_sync start keeps the two the same."
+            : $"{runsIn} isn't a folder of this workspace, so it works on its own code there and nothing it changes comes here.";
+    }
+
+    // A folder's sync started (or taken as it is when it's running) and flushed; null when everything here is there, why when it isn't
+    private async Task<string?> LinkSyncStartAndFlush(HexLinkPeer peer, string folder, bool force, CancellationToken cancel)
+    {
+        if (await LinkSyncStart(peer.Device.Id, folder, force) is { } why)
+            return why;
+        if (LinkSyncOf(peer.Device.Id, folder) is not { } sync)
+            return $"the sync of {folder} with {peer.Device.Name} went away as it started.";
+        if (sync.State is HexLinkSyncState.NeedsGit or HexLinkSyncState.Failed or HexLinkSyncState.Off)
+            return sync.Summary + (sync.State == HexLinkSyncState.NeedsGit ? " (start with force to sync anyway)" : string.Empty);
+        try
+        {
+            using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            patience.CancelAfter(LINK_SYNC_PATIENCE);
+            await sync.Flush(patience.Token);
+            return null;
+        }
+        catch (InvalidOperationException e)
+        {
+            return e.Message;
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            return $"it didn't finish in {LINK_SYNC_PATIENCE.TotalMinutes} minutes, {sync.Summary}";
+        }
+    }
+
+    private async Task<McpToolResult> LinkSyncTool(JsonObject args, CancellationToken cancel)
+    {
+        if (!LinkOnForTools(out HexLink? links, out _))
+            return McpToolResult.Text(LINK_OFF_TOOL);
+        string action = args.String("action") ?? "status";
+        if (action == "status" && (args.String("device") ?? string.Empty).Trim().Length == 0)
+            return McpToolResult.Text(LinkSyncStatusSaid(null));
+        if (LinkPeerOf(links!.Peers, args.String("device") ?? string.Empty, out string? wrong) is not { } peer)
+            return McpToolResult.Error(wrong!);
+        string? folder = args.String("folder") is { Length: > 0 } named ? named.Trim().Trim('/') : linkServices?.Workspace.Folders.FirstOrDefault()?.Name;
+        if (folder is null && action is not "status")
+            return McpToolResult.Error("This workspace has no folder open to sync.");
+
+        switch (action)
+        {
+            case "status":
+                return McpToolResult.Text(LinkSyncStatusSaid(peer.Device.Id));
+            case "start":
+            {
+                if (await LinkSyncStartAndFlush(peer, folder!, args.Flag("force"), cancel) is { } why)
+                    return McpToolResult.Error($"{folder} isn't synced with {peer.Device.Name}: {why}");
+                return McpToolResult.Text($"{LinkSyncOf(peer.Device.Id, folder!)?.Summary}. Both sides are the same now; a file saved on either is written on the other within a moment. {LinkSpawnWhere(peer, folder!)}");
+            }
+            case "flush":
+            {
+                if (LinkSyncOf(peer.Device.Id, folder!) is not { State: HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.PullOnly })
+                    return McpToolResult.Error($"{folder} isn't being synced with {peer.Device.Name}, hex_link_sync start turns it on.");
+                if (await LinkSyncStartAndFlush(peer, folder!, force: false, cancel) is { } why)
+                    return McpToolResult.Error(why);
+                HexLinkSync sync = LinkSyncOf(peer.Device.Id, folder!)!;
+                return McpToolResult.Text(sync.PullOnly
+                    ? $"{sync.Summary}. Pull-only: what changed there is here now, what changed here stays here."
+                    : $"Everything saved here in {folder} is on {peer.Device.Name} now ({sync.Summary}). Tell the agent there to build or test it.");
+            }
+            case "stop":
+                return McpToolResult.Text(LinkSyncStop(peer.Device.Id, folder!)
+                    ? $"{folder} is no longer synced with {peer.Device.Name}, and won't be when it links again."
+                    : $"{folder} wasn't synced with {peer.Device.Name}.");
+            case "resolve":
+            {
+                string path = (args.String("path") ?? string.Empty).Trim();
+                if (path.Length == 0)
+                    return McpToolResult.Error("Say the path in conflict, as hex_link_sync status names it.");
+                HexLinkSyncKeep keep = args.String("keep") switch
+                {
+                    "mine" => HexLinkSyncKeep.Mine,
+                    "theirs" => HexLinkSyncKeep.Theirs,
+                    _ => (HexLinkSyncKeep)(-1)
+                };
+                if ((int)keep < 0)
+                    return McpToolResult.Error("Say keep: mine or theirs.");
+                return await LinkResolve(peer.Device.Id, path, keep) is { } why
+                    ? McpToolResult.Error(why)
+                    : McpToolResult.Text($"{path} settled, {(keep == HexLinkSyncKeep.Mine ? "this machine's" : peer.Device.Name + "'s")} version on both, the copy beside it gone.");
+            }
+            default:
+                return McpToolResult.Error("action is one of status, start, stop, flush and resolve.");
+        }
+    }
+
+    // Whether an agent started there runs in the synced folder, said so an agent knows where its work lands
+    private static string LinkSpawnWhere(HexLinkPeer peer, string folder) =>
+        peer.Workspace.Folders.Count > 0 && PlatformPaths.Comparer.Equals(peer.Workspace.Folders[0].Name, folder)
+            ? $"An agent started on {peer.Device.Name} (hex_link_spawn) runs in {folder}, this folder."
+            : $"Note: an agent started on {peer.Device.Name} runs in its first folder, {(peer.Workspace.Folders.Count > 0 ? peer.Workspace.Folders[0].Name : "none")}, not in {folder}; tell it where to work.";
+
+    /// <summary>The syncs as hex_link_sync status says them, every device's or one's, with conflicts and what doesn't travel.</summary>
+    private string LinkSyncStatusSaid(string? deviceId)
+    {
+        var said = new StringBuilder();
+        IReadOnlyList<LinkSyncShown> syncs = [.. LinkSyncs.Where(each => deviceId is null || each.DeviceId == deviceId)];
+        if (syncs.Count == 0)
+            return "No folder is synced" + (deviceId is null ? "." : " with that device.") + " hex_link_sync start turns it on for one.";
+        foreach (LinkSyncShown sync in syncs)
+        {
+            said.Append("- ").Append(sync.Summary).Append(" [").Append(sync.State.ToString().ToLowerInvariant()).Append("]\n");
+            foreach (LinkConflictShown conflict in LinkConflicts.Where(each => each.DeviceId == sync.DeviceId && each.Folder == sync.Folder))
+            {
+                said.Append("  conflict: ").Append(conflict.Path).Append(" (").Append(conflict.Kind).Append(')');
+                if (conflict.Copy is not null)
+                    said.Append(", theirs beside it as ").Append(conflict.Copy);
+                said.Append('\n');
+            }
+
+            foreach (HexLinkSyncSkipped skipped in LinkSyncSkipped(sync.DeviceId, sync.Folder).Take(20))
+                said.Append("  doesn't travel: ").Append(skipped.Path).Append(", ").Append(skipped.Why).Append('\n');
+        }
+
+        if (said.ToString().Contains("  conflict: ", StringComparison.Ordinal))
+            said.Append("Settle a conflict with hex_link_sync resolve {device, path, keep: mine|theirs}.");
+        return said.ToString().TrimEnd();
     }
 
     /// <summary>
