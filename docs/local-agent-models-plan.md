@@ -127,6 +127,8 @@ https://ollama.com/library/gpt-oss/tags), fetched 2026-11-21.
 
 Others round the web for this size (Gemma 4 26B-A4B, about 16-19 GB) weren't checked closely.
 
+(The person chose Mixtral 8x7B instead, see 1.6; this stays as the recommendation for a model that calls tools well.)
+
 **Recommended: Qwen3-Coder-30B-A3B-Instruct**, because it is the one model all three runtimes run (Ollama, AirLLM's
 Qwen3 MoE support, colibri's Qwen3.6 engine), it is trained for agentic coding and tool calls, and it fits: 19 GB at
 Q4_K_M is about 10 GB on the GPU and the rest of the experts in RAM. Community numbers for 30B-A3B MoE models on a
@@ -147,13 +149,66 @@ ollama pull qwen3-coder:30b                       # 19 GB into D:\ollama\models 
 Each download is under 100 GB; both together peak at about 100 GB on D: while the shards are made, about 35 GB after
 `delete_original`. AirLLM can't use the GGUF Ollama has; colibri could (`coli import` of Ollama's blob).
 
+### 1.6 The model the person chose: Mixtral 8x7B, its smallest version
+
+After reading the above the person chose AirLLM's own example row, "Qwen3-30B / Mixtral (MoE)", then "download only
+the Mixtral 8x7B MoE model", then "the smallest version of that model". So the test model is
+**`mixtral:8x7b-instruct-v0.1-q2_K`**, 17 GB, pulled through Ollama's API into `D:\ollama\models`.
+
+- Mixtral-8x7B-Instruct-v0.1 (Mistral AI, Apache-2.0, not gated): 46.7B parameters, 12.9B active (2 of 8 experts a
+  token), 32k context. Ollama's library marks `mixtral` as having tools; the model itself was not trained for function
+  calling the way Qwen3 was, so expect weaker tool calls than 1.5's models (the fallback parser and schema errors
+  matter more).
+- Its sizes in Ollama (https://ollama.com/library/mixtral/tags): q2_K 17 GB, q3_K_M 23 GB, q4_0 26 GB, q4_K_M 28 GB,
+  q8_0 50 GB, fp16 93 GB. q2_K is the smallest and the most damaged by quantisation.
+- **AirLLM can't use it.** AirLLM reads Hugging Face safetensors, and the smallest of those for this model is the full
+  bf16 checkpoint, 93.4 GB (`mistralai/Mixtral-8x7B-Instruct-v0.1`, 19 `model-*.safetensors`; its `consolidated.*.pt`
+  files are the same weights again and are never downloaded). So the AirLLM half of the test needs either that
+  download (under 100 GB, 4-bit shards about 25 GB after) or a pre-quantised Hugging Face copy, whose loading by
+  AirLLM is unverified. Not downloaded; open question 6.
+- What was done on this machine for AirLLM so far (all on D:, per section 7): a standalone Python 3.12.10
+  (`D:\models\airllm\python`, NuGet's `python` package, no installer, nothing in the registry), a venv
+  `D:\models\airllm\venv` with `huggingface_hub`, pip's cache and temp folder at `D:\models\airllm\pipcache` and
+  `D:\models\airllm\tmp`. torch and airllm are not installed yet.
+
+### 1.7 Measured with Mixtral 8x7B q2_K on this machine (2026-11-21)
+
+Pulled through `POST /api/pull` into `D:\ollama\models` (17.3 GB). Probes are stdlib Python scripts run with the D:
+Python (`probe_tools.py`, `probe_text_tools.py` in this chat's scratch folder), against Ollama 0.40.16, three tools
+shaped like Hex's (`hex_search`, `hex_read`, `hex_edit`) and the question "Where is the class HexAgentProcess
+declared? Find it with a tool."
+
+- **Ollama refuses tools for this tag.** `/api/show` gives `capabilities: ["completion"]`, the template is the old
+  `[INST] {{ .System }} {{ .Prompt }} [/INST]` with no tool section, and `/api/chat` with `tools` answers
+  `400 {"error": "... does not support tools"}`. (The library page marks `mixtral` as having tools; that's the newer
+  `mixtral:8x7b` tag's template, not the quantisation tags.) So **a model without native tools must not be left out**:
+  the loop falls back to tools described in the system prompt and calls parsed from the text (`ToolCallText`), with
+  `</tool_call>` as a stop sequence. Section 2's picker shows such a model with "tools by prompt" rather than hiding it.
+- **The fallback works.** Step 1 answered exactly
+  `<tool_call>{"name": "hex_search", "parameters": {"query": "HexAgentProcess", "glob": "1"}}</tool_call>`; step 2,
+  given the result, answered "The class HexAgentProcess is declared in the file hex/Hex.Core/Agents/HexAgentProcess.cs".
+  Two lessons for the parser: accept `parameters` as well as `arguments`, and check arguments against the schema and
+  drop junk optional values (`glob: "1"`) with a note back to the model rather than run them.
+- **Speed and memory:**
+
+  | Context | Loaded size | On the GPU | Load | Prompt (warm) | Output |
+  | --- | --- | --- | --- | --- | --- |
+  | 8192 | 18.8 GB | 10.7 GB (57%) | 75 s | 135 tok/s | 7.2-7.4 tok/s |
+  | 32768 | 22.0 GB | 10.7 GB (49%) | 55 s | 81 tok/s | 5.2-6.1 tok/s |
+
+  A tool call of about 40 tokens takes 5-8 s, a turn of five tool calls and an answer about a minute. The 32k window
+  costs 3.2 GB more (all of it in RAM, the GPU was already full) and about 20% of the speed.
+- **Loading it pushed Zeta 2 (the edit prediction model, 5.5 GB) off the card**; afterwards only Mixtral was loaded
+  and the card was at 11.4 of 12.3 GB. This is the swap section 2's "Keep loaded" and the VRAM warning are for.
+
 ## 2. What the person gets
 
 - A **Local** chip in the Agents panel beside Claude Code and Codex. Its dot says ready (the server answers and the
   model is there), not running (Ollama isn't up, AirLLM's sidecar isn't started) or not set up.
-- A **model picker** under the box listing the server's models that can call tools (Ollama's `capabilities` has
-  `tools`), by name, with size and where it runs ("19 GB, 52% GPU") once loaded. Models without tools are left out
-  with a line saying why.
+- A **model picker** under the box listing the server's chat models by name, with size and where it runs ("19 GB,
+  52% GPU") once loaded. Those whose `capabilities` has `tools` use native tool calls; chat models without it
+  (Mixtral's quantised tags, 1.7) are marked "tools by prompt" and use the text fallback; completion-only models
+  (Zeta 2, Qwen2.5-Coder base) are left out with a line saying why.
 - The chat as with the other agents: what the model says as Markdown, its thinking dimmed, each tool call a row with
   its icon, input and output, approvals as cards with Allow and Deny.
 - **Load state**: "Loading qwen3-coder:30b…" with a spinner while the server loads the model (Ollama's
@@ -162,6 +217,24 @@ Each download is under 100 GB; both together peak at about 100 GB on D: while th
   the **context used of the window** ("9.1k of 32k"), which the line already has room for.
 - A palette command **Manage Local Models**: the models on the server, their sizes and the folder they're in, pull
   one by name with progress, delete one, and the AirLLM models with their shard folders.
+- **Which models are loaded is the person's choice.** The model manager lists every model with a switch, "Keep
+  loaded": the agent's model, the autocomplete model, both, or neither (loaded when asked, let go after
+  `keep_alive`). Hex loads the kept ones when it starts (an empty `/api/generate` with `keep_alive: -1`), lets the
+  others go (`keep_alive: 0`), and shows what is loaded now from `/api/ps`: size, how much of it is on the GPU
+  ("17 GB, 58% GPU"), the context it was loaded with.
+- **An automatic low-VRAM warning.** Before a model is loaded or kept, Hex adds up what it will need (the model's size
+  from `/api/tags`, its KV cache for the chosen context from `/api/show`'s layer and head counts, the other kept
+  models from `/api/ps`) against the card's free memory (`nvidia-smi --query-gpu=memory.total,memory.used` on NVIDIA,
+  DXGI's adapter budget elsewhere on Windows, Metal's recommended working set on macOS). When it won't fit, a warning
+  in the model manager, on the chip and as a note in the chat says by how much, what that costs ("about 7 GB will run
+  on the CPU, expect a few tokens a second") and what would fit (a smaller context, a smaller quantisation, not
+  keeping the autocomplete model loaded). It warns, it doesn't refuse. On this machine every candidate warns: the card
+  is 12 GB and the desktop holds about 3.6 GB of it.
+- **The agent's model for autocomplete too.** A switch in the AI settings, "Use the agent's model for edit
+  predictions", makes edit prediction ask the agent's model (same server, same model, so one model in VRAM instead of
+  two) with a chat-style fill-in prompt, in place of its own completion model. The trade, said in the setting's help:
+  a 17-28 GB MoE model writes a prediction much slower than Zeta 2 (5.5 GB, fully on the GPU, about 50 tokens a second
+  here), so predictions come later. See 3.8.
 - Everything works offline. Nothing leaves the machine unless the URL is set to another one.
 
 ## 3. Architecture
@@ -306,6 +379,20 @@ Hex.Dawn/Agents (small)              tokens a second and context in the turn lin
 - **The URL rules.** Local vs remote (`localhost`, `127.0.0.0/8`, `::1`), the warning for plain `http` to another
   host, user scope only: one `HexAiEndpoint`.
 - **Model folder.** One setting, `ai_models_folder` (section 7), used by both for anything Hex downloads itself.
+- **Loaded models and VRAM.** One `HexAiModels` (what is kept loaded, what is loaded now, what a model needs, the
+  card's free memory, the warning) serves the model manager, the agent chip and prediction's status item.
+
+### 3.8 The agent's model for autocomplete
+
+Edit prediction's providers ask a completion model with a raw prompt (`/api/generate`, `raw: true`, a fill-in-the-middle
+or Zeta format). An instruct model like Mixtral has no fill-in-the-middle tokens, so the switch adds a format to
+prediction's `IPredictionFormat` list, `chat`: the file's path, the lines before the caret, a marker, the lines after,
+and one instruction ("Write only the code that goes at <CURSOR>"), sent to `/api/chat` with `num_predict` small and
+`temperature` 0, the answer stripped of fences. When the switch is on, prediction's model setting is greyed and shows
+the agent's model, its provider and URL are the agent's, and the agent and prediction share the one loaded model
+(Ollama serves one request at a time per model by default, so a prediction waits while the agent generates; the status
+item says "waiting for the agent"). Lives in `feat/edit-prediction`'s `Hex.Core/Prediction` as one more format and
+provider choice, so it is built after that branch lands.
 
 ## 4. Backends
 
@@ -386,6 +473,9 @@ prediction's URL and key can't be). Each with title, help and search words in `e
 | `local_agents_airllm_python` | path | empty (then `python` on PATH) |
 | `local_agents_airllm_compression` | `none`, `8bit`, `4bit` | `4bit` |
 | `ai_models_folder` | path | empty; set to `D:\models` on this machine |
+| `ai_models_kept_loaded` | list of model names | empty (each loaded when asked) |
+| `ai_vram_warning` | flag | on |
+| `edit_predictions_use_agent_model` | flag | off |
 
 The key is passed to `--local-agent` by neither argument nor file: the process reads the protected setting itself
 (same user, same machine), so it is never in a command line, a temp file or a log.
@@ -405,10 +495,26 @@ The key is passed to `--local-agent` by neither argument nor file: the process r
   machines have no D:), but the person's settings set it.
 - Before a download Hex checks the free space of the target drive against the model's size and says both.
 
-### 7.2 What the person installs (not Hex)
+### 7.2 Everything for AirLLM on D: too, the Python runtime and CUDA included
 
-Ollama is there. For AirLLM: Python 3.11-3.12, `torch` with CUDA, `airllm`, `transformers`, `bitsandbytes` in a venv.
-Hex's model manager prints the exact commands; it does not run pip. Where that venv lives is open question 2.
+The person's rule: all of it on D:, not only the weights. The layout, under `ai_models_folder` (`D:\models`):
+
+```
+D:\models\airllm\python      a standalone CPython 3.12 (NuGet's "python" package, unzipped: no installer, no registry)
+D:\models\airllm\venv        torch (CUDA build; its wheels carry the CUDA runtime, cuBLAS and cuDNN DLLs, so no CUDA
+                             toolkit is installed anywhere), airllm, transformers, bitsandbytes, huggingface_hub
+D:\models\airllm\pipcache    PIP_CACHE_DIR
+D:\models\airllm\tmp         TMP and TEMP while installing and running (pip and torch unpack gigabytes there)
+D:\models\airllm\shards      layer_shards_saving_path
+D:\models\huggingface        HF_HOME, the downloaded checkpoints
+D:\ollama\models             Ollama's store (OLLAMA_MODELS, the person's)
+```
+
+Hex's model manager sets the runtime up itself on request ("Set up AirLLM"): downloads the Python package into that
+folder, makes the venv, runs pip with `PIP_CACHE_DIR`, `TMP`, `TEMP` and `HF_HOME` pointed there, and starts the
+sidecar with the same environment, so nothing lands under `%USERPROFILE%`, `%LOCALAPPDATA%` or `%TEMP%` on C:. The
+only thing on C: is the NVIDIA driver, which is the system's. Set up by hand on this machine as far as the venv
+(1.6), to prove the layout before it is code.
 
 ## 8. No AI and privacy
 
@@ -476,7 +582,11 @@ submodule, its own commit there and the pointer in hex), settings keys and rows 
 `docs/context/core-and-mcp.md` §7. Pull `qwen3-coder:30b` and do the Ollama runs.
 
 **Phase 3, models.** The model manager (a palette command and a window of the extension's, `hex.window`), Ollama pull
-with progress, delete, free-space check, `ai_models_folder`.
+with progress, delete, free-space check, `ai_models_folder`, "Keep loaded" per model, the low-VRAM warning
+(`Hex.Core/Ai/HexAiModels.cs`, `HexGpuMemory.cs`), "Set up AirLLM" on D:.
+
+**Phase 3b, the agent's model for autocomplete**, once `feat/edit-prediction` has landed: the `chat` format and the
+switch (`Hex.Core/Prediction/*`, the AI settings rows).
 
 **Phase 4, AirLLM.** First a spike by hand: venv, `airllm` on Windows, the 30B-A3B model, streaming or not, seconds a
 token. Then `airllm_server.py`, the sidecar's start and stop from the extension, its load state, its tests, the AirLLM
@@ -505,21 +615,25 @@ runs. If the spike shows AirLLM doesn't work on Windows, stop there and report, 
 
 1. **Colibrì**: is JustVugg/colibri (the C engine that streams MoE experts from NVMe) the one meant? You narrowed the
    build to AirLLM and Ollama; should colibri follow as phase 5, or not at all?
-2. **AirLLM's Python**: it needs about 5-6 GB of torch and CUDA libraries in a venv. Is it all right for that venv to
-   live on D: too (`D:\models\airllm\venv`), or on C: with only the weights on D:? And may the build agent install
-   Python packages there itself, or will you?
-3. **The test model**: `qwen3-coder:30b` (19 GB, Ollama) plus the same model's safetensors for AirLLM (about 61 GB,
-   about 17 GB of shards after) — both downloads, about 80 GB on D: at most at once with `delete_original`, about
-   35 GB kept. Or Qwen3.6-35B-A3B for Ollama (23 GB, it thinks, stronger) and AirLLM tried on the coder?
-4. **Edit prediction and agents at once**: the card can't hold both models. Prefer the agent's model (prediction waits
-   while an agent runs) or leave Ollama to swap?
+2. ~~AirLLM's Python~~ answered: everything on D:, the runtime and CUDA too (7.2).
+3. ~~The test model~~ answered: Mixtral 8x7B, its smallest version, `mixtral:8x7b-instruct-v0.1-q2_K` (1.6).
+6. **AirLLM's half of the test**: AirLLM can't read Ollama's GGUF. Download the full `mistralai/Mixtral-8x7B-Instruct-v0.1`
+   safetensors (93.4 GB to `D:\models\huggingface`, about 25 GB of 4-bit shards after, the original deleted), try a
+   smaller pre-quantised Hugging Face copy that AirLLM may not load, or leave AirLLM untested on a real model for now?
+   And may torch and airllm (about 6 GB) be installed into `D:\models\airllm\venv` now?
+4. ~~Edit prediction and agents at once~~ answered: the person chooses which models stay loaded, Hex warns about low
+   VRAM, and prediction can use the agent's model (section 2, 3.8).
 5. **Approvals by default**: `ask` (every edit and command asks) or `edits` (edits go through, commands ask, as Claude
    Code is set up here)?
 
 ## Status
 
-- **Done:** research (Hex's agent systems and tools, Ollama, AirLLM, colibrì, the MoE model), this plan. Probes of
-  the running Ollama only (`/api/version` 0.40.16, `/api/ps`, `/api/show`); nothing installed or downloaded.
-- **Next:** #110 reads this; on its word, phase 1 (core and fake-server tests), then phase 2 with `qwen3-coder:30b`
-  pulled into `D:\ollama\models`, then the AirLLM spike.
-- **Open questions:** section 12.
+- **Done:** research (Hex's agent systems and tools, Ollama, AirLLM, colibrì, the MoE models), this plan with the
+  person's later answers (everything on D:, which models are loaded, the VRAM warning, the agent's model for
+  autocomplete). `mixtral:8x7b-instruct-v0.1-q2_K` pulled into `D:\ollama\models` (17.3 GB) and measured (1.7): no
+  native tools on that tag, tools by prompt work, 7 tok/s output at 8k. A standalone Python 3.12.10 and an empty venv
+  on `D:\models\airllm`. A partial Qwen3-30B download (0.4 GB) and a C: venv from before the person's D: rule were
+  deleted; nothing of this work is left on C: but the probe scripts in the scratch folder.
+- **Next:** #110 reads this; on its word, phase 1 (core, the text-tools fallback included, and fake-server tests),
+  then phase 2 with Mixtral, then the AirLLM spike once question 6 is answered.
+- **Open questions:** section 12 (1, 5 and 6 still open).
