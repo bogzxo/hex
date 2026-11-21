@@ -14,7 +14,7 @@ namespace Hex.Tests;
 /// travels, bursts, two engines at once, rights changing, heads that differ, restarts from the state file, a link
 /// dropping halfway and a peer that lies. The cases that need git pass over quietly where it isn't installed.
 /// </summary>
-public sealed class HexLinkSyncTests
+public sealed partial class HexLinkSyncTests
 {
     // Long enough for a slow machine running the whole suite, never what a test passes by
     private const int LONG_MS = 60_000;
