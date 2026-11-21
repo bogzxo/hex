@@ -3,7 +3,11 @@ using System.Text.Json.Nodes;
 namespace Hex.Core;
 
 /// <summary>A folder of the workspace, by the name the wire knows it by, and where it is here (never sent).</summary>
-internal sealed record HexLinkFolder(string Name, string Path);
+internal sealed record HexLinkFolder(string Name, string Path, HexLinkAuthority? Authority = null)
+{
+    public string? FolderAuthorityId => Authority?.DeviceId;
+    public long FolderAuthorityEpoch => Authority?.Epoch ?? 0;
+}
 
 /// <summary>A repository of the workspace, its name, the branch it's on and the commit at its head, and where it is here (never sent).</summary>
 internal sealed record HexLinkRepository(string Name, string Branch, string Head, string Path);

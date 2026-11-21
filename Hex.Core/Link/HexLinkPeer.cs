@@ -115,8 +115,9 @@ internal sealed partial class HexLinkPeer : IDisposable
         if (said is null)
             return HexLinkWorkspace.Empty;
         return new HexLinkWorkspace(HexLinkData.String(said, "name", MOST_NAME) ?? string.Empty,
-            [.. HexLinkData.Objects(said, "folders", 64).Select(folder => HexLinkData.String(folder, "name", MOST_NAME)).OfType<string>()
-                .Where(name => name.Length > 0).Select(name => new HexLinkFolder(name, string.Empty))],
+            [.. HexLinkData.Objects(said, "folders", 64).Where(folder => HexLinkData.String(folder, "name", MOST_NAME) is { Length: > 0 })
+                  .Select(folder => new HexLinkFolder(HexLinkData.String(folder, "name", MOST_NAME)!, string.Empty,
+                      HexLinkAuthority.Of(HexLinkData.Object(folder, "authority"))))],
             [.. HexLinkData.Objects(said, "repositories", 64).Where(each => HexLinkData.String(each, "name", MOST_NAME) is { Length: > 0 })
                 .Select(each => new HexLinkRepository(HexLinkData.String(each, "name", MOST_NAME)!, HexLinkData.String(each, "branch", MOST_NAME) ?? string.Empty,
                     HexLinkData.String(each, "head", 64) ?? string.Empty, string.Empty))]);
