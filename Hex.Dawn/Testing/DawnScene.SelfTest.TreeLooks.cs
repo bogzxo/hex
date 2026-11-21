@@ -193,6 +193,10 @@ internal sealed partial class DawnScene
         {
             UseEditorSkin(skinBefore, themeBefore, save: false);
             properties.Follow(null);
+
+            // The Properties it asked for put away again, they stayed up pinned for every file of the parts after it
+            if (properties.Pinned && right.Shown)
+                ToggleProperties();
             CloseAll();
         });
         test.Wait();
