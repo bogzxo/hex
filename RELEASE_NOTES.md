@@ -1,3 +1,45 @@
+# Hex 3.3.0 Amphetamine
+
+Ctrl+. as a menu of everything that can be done to a line, an explorer you work in place, faces that switch without a flash, a C# language server that answers in under a second, and a pass over the whole of Hex and its engine to make it lighter.
+
+## the editor
+
+- Ctrl+. is a menu of actions for the line or what's selected: the language server's fixes first (the one it would pick at the top), its refactorings and what tidies the file, the editor's own (rename, format the selection, organise imports), and an agent to fix the problem, write what a TODO or a stub leaves or explain the code, started at once with the code attached
+- a lightbulb in the gutter on the caret's line when the compiler or the server has a fix, a click opens the menu
+- tabs can be pinned, a problem's hover is a card saying how bad it is, and the editor's bars, gutter and popups are tidied to one look
+- the explorer is worked in place: type to find a file, New File and Rename name it on the row (Esc or a click away with nothing typed takes it back), drag to move and Ctrl to copy, the files you have open are marked and the one on screen is shown as you switch tabs
+- folders in the explorer are in the text's colour with a dot for a change or a problem under them, a file with problems says how many, and a chain of single folders is one row
+- Properties starts with the file's icon, name, place and git state, with buttons to open, copy its path, show it in the file explorer or open it with the system's program, and read-only values read as text
+- the welcome page leads with one thing, Open Folder or Clone the first time and what you had open after, and Getting started is a checklist of six that says what's done
+- the settings window says what each setting does in a line, the Language Servers window reads like it and takes the first click, and both fit the screen at 200%
+- menus that don't fit the title bar at 200% fold into a … menu
+- notebooks say what their cells are doing: a count, the time of the last run, queued and running with the seconds going, errors with a button to the line that failed, long output folded, and the kernel's state on the bar
+- Dusk and the terminal page say when a shell ended and with what, a failed shell keeps its pane, tabs show busy, rung and failed, and find floats over the pane
+- going between Dawn, Agentic and Dusk never flashes: a face is warmed when you point at its button and a short crossfade carries you over (none with UI animation at 0); the first Dusk of a run opens in about 30 ms instead of over a second
+- every focusable thing shows a focus ring, Tab goes through the window, links, dim text and the accent's text meet 4.5:1 in every look, and nothing moves with UI animation at 0
+- unsent text stays with its chat when you switch chats
+
+## C# and the language servers
+
+- C# is checked by the compiler alone unless its analyzers are switched on: a file's first diagnostics take under a second where they took 5 to 43, and an idle csharp-ls uses nothing where it kept four cores busy
+- csharp-ls is warmed in the background, so the first callers or types an agent asks for come in about a second where they took ten
+- a language server is told only of the files it asked to watch, never of another repository's working copy, and a file open in it is never read again behind its back (an edit made twice, errors at lines that were fine)
+
+## Agentic
+
+- finished agents, subagents too, fold into a Finished group a few minutes after they end, with those waiting on you and working at the top
+- an agent's edits are checked in under a second where they waited up to 30, hex_diagnostics on an unchanged file answers at once, and hex_screenshot sends a picture a model can use
+- hex_agent_restart kills a stuck agent with what it had running and starts it again where it was, and a chat whose process outlived its turn says it's still running
+- a tool group's time is the time it took, calls side by side counted once
+- twelve agents started by agents can run at once
+
+## faster and lighter
+
+- terminal output three to four times faster, and a language server's messages read about ten times faster
+- HIDL parses with a third of the garbage, and an agent's stream of output costs a sixth of what it did
+- typing in the command palette or quick open allocates nothing per key, lists, trees and labels stop measuring and copying every frame
+- the first frame no longer decodes a background picture twice, and git no longer walks the workspace every six seconds looking for repositories
+
 # Hex 3.2.0 Amphetamine
 
 Sharper text, a Hex that stays ready in the background, and agents that share their servers, keep their data in one place and get eight new tools.
