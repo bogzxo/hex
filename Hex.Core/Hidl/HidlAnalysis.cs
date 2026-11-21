@@ -93,7 +93,7 @@ internal static class HidlAnalysis
 
         // Inside a text, the quotes before the place on its line odd in number
         int quote = before.LastIndexOf('"');
-        if (quote >= 0 && before.Count(character => character == '"') % 2 == 1)
+        if (quote >= 0 && before.AsSpan().Count('"') % 2 == 1)
         {
             string inside = before[(quote + 1)..];
 

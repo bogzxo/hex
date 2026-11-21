@@ -55,7 +55,7 @@ internal static class HexFileFacts
         else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
             (encoding, text) = ("UTF-16 BE", Encoding.BigEndianUnicode.GetString(bytes, 2, (bytes.Length - 2) & ~1));
         else if (IsUtf8(bytes))
-            (encoding, text) = (bytes.Any(b => b >= 0x80) ? "UTF-8" : "UTF-8 (ASCII)", Encoding.UTF8.GetString(bytes));
+            (encoding, text) = (bytes.AsSpan().IndexOfAnyExceptInRange((byte)0, (byte)0x7F) >= 0 ? "UTF-8" : "UTF-8 (ASCII)", Encoding.UTF8.GetString(bytes));
         else
             (encoding, text) = ("Windows-1252", Encoding.Latin1.GetString(bytes));
 
@@ -101,9 +101,10 @@ internal static class HexFileFacts
         int tabs = 0, spaced = 0;
         var steps = new Dictionary<int, int>();
         int previous = 0;
-        foreach (string line in text.Split('\n'))
+        foreach (Range range in text.AsSpan().Split('\n'))
         {
-            if (line.Trim().Length == 0)
+            ReadOnlySpan<char> line = text.AsSpan(range);
+            if (line.IsWhiteSpace())
                 continue;
 
             if (line[0] == '\t')
