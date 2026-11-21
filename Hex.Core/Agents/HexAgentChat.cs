@@ -625,7 +625,10 @@ internal sealed partial class HexAgentChat(int id, string agent)
     /// <summary>A tool done, by its id, false when there's no tool of that id going (it's added as done then).</summary>
     public bool ToolDone(string id, bool ok, string output)
     {
-        HexAgentEntry? tool = ToolOfTurn(id);
+        // Looked for back past what was asked since too, for one still going: a wait woken by a message the person typed
+        // came back once that message had started a turn of its own, wasn't found in it, and spun in the turn before for good
+        HexAgentEntry? tool = ToolOfTurn(id)
+            ?? entries.FindLast(entry => entry.Kind == HexAgentEntryKind.Tool && entry.ToolId == id && entry.State == HexAgentToolState.Running);
         bool found = tool is not null;
         tool ??= Tool(id, "tool", string.Empty);
         tool.State = ok ? HexAgentToolState.Done : HexAgentToolState.Failed;

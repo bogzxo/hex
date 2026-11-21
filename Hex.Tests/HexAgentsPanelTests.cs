@@ -66,6 +66,21 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     }
 
     [Fact]
+    public void A_tool_still_going_when_the_person_says_more_is_ended_by_its_result()
+    {
+        // A wait for its agents, woken by a message typed to it, which stands as something asked in the middle of the turn
+        var chat = new HexAgentChat(1, "claude_code");
+        chat.Ask("watch the agents");
+        chat.Tool("wait_1", "mcp__hex__hex_agent_wait", "{}");
+        chat.Steer("and fix the website");
+        Assert.True(chat.ToolDone("wait_1", true, "messages for you"));
+
+        HexAgentEntry wait = chat.Entries.Single(entry => entry.Kind == HexAgentEntryKind.Tool);
+        Assert.Equal(HexAgentToolState.Done, wait.State);
+        Assert.Equal("messages for you", wait.Output);
+    }
+
+    [Fact]
     public void Json_comes_in_as_hidl_values_and_goes_back_out()
     {
         IRuntimeValue parsed = HexJson.Parse("{\"type\":\"result\",\"n\":3,\"ok\":true,\"list\":[\"a\",null],\"inner\":{\"x\":1.5}}")!;
