@@ -218,6 +218,11 @@ internal sealed partial class DawnScene : Scene
         AddExtensionsSettings();
         terminalFiles = new HexTerminalFiles(Context);
         languages = new HexLanguages(Context) { SayMissing = !options.SelfTest };
+        languages.TypesNear = () =>
+        {
+            HexCodeIndex index = Harness;
+            return file => InterfacesNear(index, file);
+        };
         explorer.FoldersChanged += languages.WorkspaceChanged;
         codeEditing.languages = languages;
 

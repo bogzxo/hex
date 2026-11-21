@@ -62,6 +62,7 @@ internal sealed partial class HexLanguages
 
         with.Documents.Opened += StartLinting;
         with.Documents.Edited += LintChanged;
+        with.Documents.Edited += _ => WarmTyped();
         with.Documents.Closed += StopLinting;
         with.Documents.Saved += LintSaved;
         with.Documents.AddDiagnostics(of => lintFound.GetValueOrDefault(of));
@@ -540,6 +541,7 @@ internal sealed partial class HexLanguages
 
             while (server.TryTake(out string path, out IReadOnlyList<UICodeDiagnostic> found))
             {
+                WarmHeard(server);
                 string full = Path.GetFullPath(path);
                 if (notebookShadows.Count > 0 && NotebookFound(server, full, found))
                     continue;
@@ -558,6 +560,7 @@ internal sealed partial class HexLanguages
 
         UpdateChecks(dt);
         UpdateAnswers();
+        UpdateWarm();
         UpdateDocumentHighlights();
         ServersStopped();
         AskNext();
@@ -576,7 +579,11 @@ internal sealed partial class HexLanguages
         foreach (LanguageServer server in servers)
         {
             if (server.Failure is null && ServerFiles(server, changes) is { Count: > 0 } its)
+            {
                 server.FilesChanged(its);
+                if (its.Any(change => IsProjectFile(change.Path)))
+                    WarmAgainAfter(server);
+            }
         }
 
         // A project of a server's that reads them only as it starts, the server started again a moment after. And one that

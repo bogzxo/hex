@@ -42,6 +42,27 @@ internal sealed partial class DawnScene
         }
     }
 
+    /// <summary>
+    /// The C# interfaces the index knows, those in the folders nearest a file first, for warming a server's derived types
+    /// (HexLanguages.Warm). The index looked at first, off the editor's thread: an agent's first question walks it anyway.
+    /// </summary>
+    private static IEnumerable<(string Path, int Line, int Column)> InterfacesNear(HexCodeIndex harness, string file)
+    {
+        HexIndexSnapshot index = harness.Current();
+
+        static int Shared(string a, string b)
+        {
+            int at = 0;
+            while (at < a.Length && at < b.Length && char.ToUpperInvariant(a[at]) == char.ToUpperInvariant(b[at]))
+                at++;
+            return at;
+        }
+
+        return index.Files.Where(each => each.Extension == ".cs" && index.InProject(each))
+            .SelectMany(each => each.Symbols.Where(symbol => symbol.Kind == "interface").Select(symbol => (each.Path, symbol.Line, symbol.Column)))
+            .OrderByDescending(found => Shared(found.Path, file)).ToList();
+    }
+
     private IEnumerable<HexMcpTool> HarnessTools()
     {
         // A schema's node can only be in one schema, so each tool gets its own
