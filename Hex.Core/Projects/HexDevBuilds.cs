@@ -10,6 +10,23 @@ internal static class HexDevBuilds
     // The folders of a build that are Hex's state rather than the build, never copied over either way
     internal static readonly string[] KEPT = ["settings", "extensions", "extension_catalog", "cache", "layouts", "backups", "data"];
 
+    /// <summary>
+    /// The files of the build in a folder Hex runs from, every file under it but those of Hex's state. The state folders
+    /// aren't gone into at all: data holds agents' scratch, other builds among it, hundreds of thousands of files.
+    /// </summary>
+    internal static IEnumerable<string> BuildFiles(string bin, string pattern = "*")
+    {
+        foreach (string file in Directory.EnumerateFiles(bin, pattern))
+            yield return file;
+        foreach (string folder in Directory.EnumerateDirectories(bin))
+        {
+            if (KEPT.Contains(Path.GetFileName(folder), StringComparer.OrdinalIgnoreCase))
+                continue;
+            foreach (string file in Directory.EnumerateFiles(folder, pattern, SearchOption.AllDirectories))
+                yield return file;
+        }
+    }
+
     /// <summary>Where the good build of a folder Hex runs from is kept, beside it.</summary>
     public static string GoodFolder(string bin) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(bin)) + ".last-good";
 
@@ -20,11 +37,10 @@ internal static class HexDevBuilds
     internal static int Mirror(string from, string to)
     {
         int copied = 0;
-        foreach (string file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+        foreach (string file in BuildFiles(from))
         {
             string relative = Path.GetRelativePath(from, file);
-            string top = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
-            if (KEPT.Contains(top, StringComparer.OrdinalIgnoreCase) || file.EndsWith(".old", StringComparison.OrdinalIgnoreCase)
+            if (file.EndsWith(".old", StringComparison.OrdinalIgnoreCase)
                 || file.EndsWith(".hexold", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
                 continue;
 
