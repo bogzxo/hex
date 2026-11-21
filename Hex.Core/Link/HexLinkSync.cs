@@ -63,6 +63,14 @@ internal sealed record HexLinkSyncSkipped(string Path, string Why);
 /// sent comes back from the other side's watcher with the hash it already agreed: neither echoes.
 /// </para>
 /// <para>
+/// A Windows checkout with core.autocrlf has CRLF where a Mac's of the same commit has LF, so the base is kept as each
+/// side has it (<see cref="HexLinkSyncAgreed"/>): text that only differs in its line ends is agreed with nothing sent
+/// (<see cref="EolOnly"/>), each side is compared with its own hash, what's sent is written in the receiver's line ends
+/// (those of the file it replaces, or what most files there have for a new one), and a change of only line ends stays
+/// on the side it was made. Binary files, and text with more than one kind of line end, go exactly as they are.
+/// .gitattributes isn't read.
+/// </para>
+/// <para>
 /// Everything the other side says is data. Its paths go through the same jail its own requests do
 /// (<see cref="HexLinkFiles.Resolve"/>), plus what this side ignores, the conflict copies and the state file, so a
 /// peer can never make this side write outside the folder, into .git, over something git ignores here or over the
@@ -160,6 +168,12 @@ internal sealed partial class HexLinkSync : IDisposable
         }
     }
 
+    /// <summary>
+    /// Files found the same on both sides but for their line ends (a CRLF checkout against an LF one), or changed on one
+    /// side only in their line ends, agreed with nothing sent, each side keeping its own.
+    /// </summary>
+    public int EolOnly => Volatile.Read(ref eolOnly);
+
     /// <summary>The files that don't travel and why, by path.</summary>
     public IReadOnlyList<HexLinkSyncSkipped> Skipped
     {
@@ -186,7 +200,8 @@ internal sealed partial class HexLinkSync : IDisposable
                 skips = skipped.Count;
             }
 
-            string counts = $"{Sent} sent, {Received} received, {conflicted} {(conflicted == 1 ? "conflict" : "conflicts")}, {skips} skipped";
+            string counts = $"{Sent} sent, {Received} received, {conflicted} {(conflicted == 1 ? "conflict" : "conflicts")}, {skips} skipped"
+                + (EolOnly > 0 ? $", {EolOnly} only differing in line ends" : string.Empty);
             return State switch
             {
                 HexLinkSyncState.Comparing => $"Comparing {with}",
@@ -354,11 +369,13 @@ internal sealed partial class HexLinkSync : IDisposable
 
         try
         {
-            string? agreed;
+            // What both sides have once it's done, null when neither has it; whichever way it goes it's written in the
+            // receiver's line ends, those of the file it replaces there or what most files there use
+            HexLinkSyncAgreed? agreed;
+            byte[]? mine = File.Exists(full) ? await File.ReadAllBytesAsync(full, cancel) : null;
             if (keep == HexLinkSyncKeep.Mine)
             {
-                byte[]? bytes = File.Exists(full) ? await File.ReadAllBytesAsync(full, cancel) : null;
-                if (bytes is null)
+                if (mine is null)
                 {
                     if (theirs?.Hash is { } there)
                         await Asked(() => peer.Delete(path, there, cancel), cancel);
@@ -366,10 +383,15 @@ internal sealed partial class HexLinkSync : IDisposable
                 }
                 else
                 {
-                    if (bytes.Length > HexLinkFiles.MOST_READ)
+                    if (mine.Length > HexLinkFiles.MOST_READ)
                         return $"{path} is over {HexLinkFiles.MOST_READ / 1024 / 1024} MB, a link doesn't carry it.";
-                    await Asked(() => peer.Write(path, theirs?.Hash, bytes, cancel), cancel);
-                    agreed = HexLinkFiles.Hash(bytes);
+                    TextInfo info = TextOf(mine);
+                    HexLinkEol eol = HexLinkEol.Unknown;
+                    if (info.Norm is not null)
+                        eol = theirs?.Hash is not null ? TextOf((await Asked(() => peer.Read(path, cancel), cancel)).Bytes).Eol : Most(here: false);
+                    byte[] sending = Converted(mine, info, eol);
+                    await Asked(() => peer.Write(path, theirs?.Hash, sending, cancel), cancel);
+                    agreed = AgreedOf(mine, sending);
                 }
 
                 Interlocked.Increment(ref sent);
@@ -378,16 +400,18 @@ internal sealed partial class HexLinkSync : IDisposable
             {
                 if (theirs?.Hash is null)
                 {
-                    if (File.Exists(full))
+                    if (mine is not null)
                         await DeleteLocal(full);
                     agreed = null;
                 }
                 else
                 {
                     HexLinkFile file = await Asked(() => peer.Read(path, cancel), cancel);
+                    HexLinkEol eol = mine is null ? Most(here: true) : TextOf(mine).Eol;
+                    byte[] written = Converted(file.Bytes, TextOf(file.Bytes), eol);
                     Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-                    await WriteLocal(full, file.Bytes);
-                    agreed = file.Hash;
+                    await WriteLocal(full, written);
+                    agreed = AgreedOf(written, file.Bytes);
                 }
 
                 Interlocked.Increment(ref received);
@@ -396,7 +420,10 @@ internal sealed partial class HexLinkSync : IDisposable
             lock (gate)
             {
                 conflicts.Remove(path);
-                Agree(path, agreed);
+                if (agreed is null)
+                    Agree(path, null);
+                else
+                    SetBase(path, agreed);
             }
 
             DropCopy(conflict);

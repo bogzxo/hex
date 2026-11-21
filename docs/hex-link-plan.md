@@ -193,6 +193,7 @@ otherwise the prediction side's own, `unreachable`, `timedout`, ...).
 | `fs/watch`, `fs/unwatch` | View | `fs/changed {path, hash}` for files the asker has open. |
 | `presence/set` (notification) | View | `{file, line, column, selection}` of the sender; the receiver shows it and passes it on to its other links. |
 | `git/bundle` | View | `{repository, have[]}` → `{id, size, refs}` then `git/chunk {id, data}` notifications and `git/done`. What `git bundle create` wrote of the branches, less what the asker has. |
+| `sync/manifest`, `sync/watch` | View | `{folder}` → `{folder, head, root, entries[{path, hash or big, size}]}`, every file git would carry; `root` is the repository's first commit, which tells two clones of one repository from two that share a folder name. `sync/watch` then sends `sync/changed {folder, changes[{path, hash or big or deleted}]}`; `sync/unwatch`, `sync/flush`, `fs/delete {path, base}` (Edit). |
 | `patch/offer` | View | `{title, diff}` → a card on the receiver, which applies it, keeps it as a file or throws it away. The answer says which. |
 | `link/serves` (notification) | none | `{serves: ["predictions"] or []}`, what the host would do for the asker changed (hello says it first, as `serves`). |
 | `predict/start` | Predict | `{id, prompt, suffix, max_tokens, stop[], format}` → `{id}` once checked, the id the asker's. Then `predict/chunk {id, text}` notifications in order and `predict/done {id, ok, error?, status?}`. Refused with `-32001` (needs `predict`) or `-32006`. |
