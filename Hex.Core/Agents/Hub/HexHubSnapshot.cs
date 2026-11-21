@@ -9,6 +9,18 @@ internal sealed record HexHubRow(int Id, string Shown, string Agent, string? Mod
 {
     /// <summary>Its messages not read yet, read off any thread by the number the chat has read up to.</summary>
     public HexAgentMail[] Unread => [.. Mail.Where(message => message.Seq > Chat.MailSeen)];
+
+    /// <summary>Returns the whole unread batch when the wait ends or mail wakes it, with the person's messages first.</summary>
+    public HexAgentMail[] UnreadForWait(bool wakesOnMail, bool finished)
+    {
+        HexAgentMail[] unread = Unread;
+        if (!finished && !wakesOnMail &&
+            !unread.Any(message => message.FromPerson || message.Kind is "question" or "blocked"))
+            return [];
+
+        // OrderBy is stable. Both the person's messages and the other messages stay in arrival order.
+        return [.. unread.OrderByDescending(message => message.FromPerson)];
+    }
 }
 
 /// <summary>Every session as it was at one pump of the hub, made again only when one of them moved.</summary>

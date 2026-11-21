@@ -182,8 +182,56 @@ internal sealed partial class DawnScene
         test.Check("noon mail: and its answer is the agent's, the card answered with it", () =>
             approved is { IsCompletedSuccessfully: true, Result.IsError: false } && decided == false && !scout!.Pending.Any());
 
+
+        // The child stays running while the waiter receives a whole batch from the editor's next pump.
+        Task<McpToolResult>? waiting = null;
         test.Run(() =>
         {
+            lead!.MailRead(lead.Mail[^1].Seq);
+            lead.Ask("Wait for the scout");
+            scout!.Ask("Keep working");
+            PublishAgentStatuses();
+            waiting = McpTools.CallAs("hex_agent_wait",
+                new JsonObject { ["mode"] = "any", ["messages"] = false, ["timeout"] = 30d }, CancellationToken.None, lead.Id);
+        });
+        test.WaitFor(() => AgentWaiting(lead!), 5.0f);
+        test.Run(() => Deliver(lead!, scout, "progress", "the scout is still scanning", directive: false));
+        test.Settle(0.35f);
+        test.Check("noon mail: progress alone leaves a messages=false wait running", () => waiting is { IsCompleted: false });
+
+        test.Run(() =>
+        {
+            Deliver(lead!, scout, "finding", "a finding from the same tick", directive: false);
+            DeliverFromPerson(lead!, "please read the tests first");
+            Deliver(lead!, scout, "progress", "the last message in the tick", directive: false);
+        });
+        test.WaitFor(() => waiting?.IsCompleted == true, 5.0f);
+        test.Check("noon mail: the person wakes an any wait and its reply includes the full batch", () =>
+        {
+            if (waiting is not { IsCompletedSuccessfully: true, Result.IsError: false } || scout is not { Running: true })
+                return false;
+            string reply = waiting.Result.AllText();
+            int progress = reply.IndexOf("the scout is still scanning", StringComparison.Ordinal);
+            int finding = reply.IndexOf("a finding from the same tick", StringComparison.Ordinal);
+            int last = reply.IndexOf("the last message in the tick", StringComparison.Ordinal);
+            return reply.StartsWith("Messages for you:\n\n[instruction from the person watching] please read the tests first", StringComparison.Ordinal)
+                && progress > 0 && finding > progress && last > finding && lead!.UnreadMail().Length == 0;
+        });
+
+        test.Run(() => waiting = McpTools.CallAs("hex_agent_wait",
+            new JsonObject { ["mode"] = "all", ["messages"] = false, ["timeout"] = 30d }, CancellationToken.None, lead!.Id));
+        test.WaitFor(() => AgentWaiting(lead!), 5.0f);
+        test.Run(() => Deliver(lead!, scout, "question", "which tests should I run?", directive: false));
+        test.WaitFor(() => waiting?.IsCompleted == true, 5.0f);
+        test.Check("noon mail: an addressed question wakes an all wait without repeating read messages", () =>
+            waiting is { IsCompletedSuccessfully: true, Result.IsError: false } && scout is { Running: true }
+            && waiting.Result.AllText().Contains("which tests should I run?", StringComparison.Ordinal)
+            && !waiting.Result.AllText().Contains("please read the tests first", StringComparison.Ordinal));
+
+        test.Run(() =>
+        {
+            scout!.Done();
+            lead!.Done();
             familyWindow?.OnClosed?.Invoke();
             CloseAgentChat(lead!);
             ShowFace(HexFace.Dawn);
