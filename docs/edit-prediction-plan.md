@@ -497,31 +497,33 @@ server as context, several predictions to step through, predictions in notebooks
 Kept current by the orchestrator (chat #110) at every phase change, so that another agent can take this over. The
 copy on the branch (`hexwt-predict/docs/edit-prediction-plan.md`) is the one that is edited; `hex/docs/` has a copy.
 
-**As of 2026-11-21 19:10, phase 1 running, nothing merged yet.**
-
-Worker state at 19:10 (each was told to commit its work in progress and keep a `PREDICT-STATE.md` at the root of its
-worktree with done / left / next step / branch / commit; read that first when taking one over):
-- #115 engine (`<scratch>/predict/engine-ghost`, `feat/edit-prediction-ghost`): `CodeEditor.Prediction.cs` built to the
-  contract of 5, `UIFormKind.Secret` added (FormPanel and SettingRow), 15 new tests green, the full engine suite was
-  running. It reported: `Prediction` returns what is left of ghost text after typing through or a word taken;
-  `SetPrediction` over a showing one replaces it with no `OnPredictionEnded`; typing the whole ghost ends it as taken;
-  losing focus ends it on the next update.
-- #114 core (`../hexwt-predict-core`): `Hex.Core/Prediction/` and `Hex.Tests/Goldens/Prediction/` being written,
-  nothing committed at 19:10.
-- #116 settings (`../hexwt-predict-settings`): rows, catalog, strings, goldens, `HexSettings.Prediction.cs`,
-  `Hex.Core/Prediction/PredictionKey.cs` and `PredictionSettings.cs`, `PredictionSettingsTests.cs` being written,
-  nothing committed at 19:10.
+**As of 2026-11-21 19:45, phase 1 merged, phase 2 running.**
 
 Done:
-- Research and this plan. Commit `88e9687` on `feat/edit-prediction` (hex), which also carries
-  `Hex.Core/Link/HexLinkSecrets*.cs` copied unchanged from `feat/hex-link` `1d1cb46` (same path, so the two branches
-  merge clean; Hex Link owns those files).
-- Ollama installed with winget (`%LOCALAPPDATA%\Programs\Ollama`, serves `http://localhost:11434`, started by its
-  tray app; do not start a second `ollama serve` by hand, the one started during the install ran on the CPU).
-  Models pulled: `hf.co/bartowski/zed-industries_zeta-2-GGUF:Q4_K_M` (5.5 GB VRAM, about 50 tokens/s) and
-  `qwen2.5-coder:14b-base-q4_K_M` (9.5 GB VRAM, about 30 tokens/s). Only one fits the RTX 3060 at a time, Ollama swaps
-  them (20 to 40 s to load).
-- Baseline build of the worktree against the scratch engine copy is green.
+- Research and this plan; Ollama installed (winget), serving `http://localhost:11434`. Model store moved to
+  `D:\ollama\models` (user variable `OLLAMA_MODELS`), the person wants every model on D:. Models:
+  `hf.co/bartowski/zed-industries_zeta-2-GGUF:Q4_K_M` (5.5 GB VRAM, about 50 tokens/s) and
+  `qwen2.5-coder:14b-base-q4_K_M` (9.5 GB VRAM, about 30 tokens/s); only one fits the RTX 3060 at a time, Ollama swaps
+  them in 20 to 40 s. The server now running is an `ollama serve` a worker started by hand (GPU works in it; its log
+  in `<scratch>/predict/core/ollama.log` is large and can go once it is stopped); the tray app's own server is the one
+  to leave running in the end.
+- Phase 1, merged into `feat/edit-prediction` (hex, head `d98c1d7`) and the engine's `feat/edit-prediction`
+  (`<scratch>/predict/engine`): core (`Hex.Core/Prediction`, 131 tests, real Zeta 2 through it: 588 ms to the first
+  piece, 6.4 s for a 234 token answer), engine (`CodeEditor.Prediction.cs`, `UIFormKind.Secret`, 2040/2040 engine
+  tests), settings (twelve keys, section Editor · AI, the key protected and hidden from listings). Hex.Tests on the
+  merge: 1462 of 1462 (one run of four had a single failure that did not repeat and was not identified).
+- Known gaps from phase 1: typing through gives up on auto-closed brackets; word wrap ignores the ghost's width;
+  decorations after the caret on the ghost's line are not moved along; Dusk's settings window shows the stored
+  `protected:` text for the key. An answer of 234 tokens is too slow to be useful: the editable region wants to be
+  smaller in real use (to tune in the end to end step, `Zeta2Format.Ranges`).
+
+Running:
+- #121 glue (`../hexwt-predict-glue`, `feat/edit-prediction-glue`): `Hex.Dawn/Code/DawnScene.Prediction.cs`, commands
+  and keys, the status bar item, the first-time notice, the self test `prediction` with its fake server. It keeps a
+  `PREDICT-STATE.md` at the root of its worktree.
+- #117 (`../hexwt-localagents`, `feat/local-agents`): a second task the person gave this chat, local models in the
+  Agentic panel (Ollama, AirLLM, Colibrì). Its plan is `docs/local-agent-models-plan.md` there (commit `99ed997`);
+  the person steered it directly to try Qwen3-30B (a MoE) with AirLLM and `ollama pull qwen3:30b`.
 
 Where things are:
 - hex worktrees: `../hexwt-predict` (`feat/edit-prediction`, the branch everything merges into),
@@ -534,17 +536,10 @@ Where things are:
 - Scratch: `<scratch>/predict/research` (Zed's prompt source, the model card's sample), `<scratch>/predict/scripts`
   (`probe.py`, `fim.py`: latency probes against Ollama).
 
-Running (Opus workers started through Hex by #110, briefs in their chats):
-- #114 core: all of `Hex.Core/Prediction` but the two settings files, and its unit tests, including the
-  `HexPredictionRelay` seam for Hex Link.
-- #115 engine: `CodeEditor.Prediction.cs`, `UIFormKind.Secret`, engine tests.
-- #116 settings: the twelve keys, the AI section, strings, `PredictionKey` and `PredictionSettings`.
-
 Next:
-1. Review each worker's result, merge core and settings into `feat/edit-prediction`, the ghost branch into the
-   engine's `feat/edit-prediction`; flip the line marked `PREDICT-MERGE: UIFormKind.Secret`; build, all unit tests.
-2. Phase 2, one Opus worker on the merged branches: `Hex.Dawn/Code/DawnScene.Prediction.cs` (the glue of 4), the
-   commands and keys of 7, the status bar item, the self test `prediction` with its fake server (9).
+1. Review #121's result, merge `feat/edit-prediction-glue` into `feat/edit-prediction`, build, unit tests, self tests
+   `prediction code settings`.
+2. Tell #107 the seam is at `d98c1d7` (`Hex.Core/Prediction/HexPredictionRelay.cs`, tested in one process).
 3. End to end by the orchestrator in a build of the branch driven through its own MCP pipe
    (`HEX_REMOTE_PIPE=<unique>`, `HORIZON_AUDIO=off`, `HEX_LINK_KEYSTORE=file`, its own settings folder): Zeta 2 and
    Qwen through `/api/generate` and `/v1/completions`, Tab, cancelling, a bad URL and a bad key, the latency log
