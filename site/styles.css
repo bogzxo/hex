@@ -540,7 +540,14 @@ button.link {
 }
 
 /* Asking for an extension or a feature */
-.request:modal {
+/* Styled whether or not it's modal, so it keeps its shape and place while it fades out after it's closed (it stops
+   being :modal the moment it closes) */
+.request {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  max-block-size: calc(100dvh - 2rem);
+  overflow: auto;
   inline-size: min(34rem, 100% - 2rem);
   padding: clamp(1.25rem, 1rem + 2vw, 2rem);
   border: 1px solid var(--border);
@@ -1049,7 +1056,10 @@ h2 + p strong {
 }
 
 /* The screenshot leads. Controls stay in the dialog chrome, clear of the image. */
-.lightbox:modal {
+.lightbox {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   --lightbox-gutter: clamp(0.5rem, 2vw, 1rem);
   --lightbox-padding: clamp(0.75rem, 2vw, 1rem);
 
