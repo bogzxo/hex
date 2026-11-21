@@ -130,6 +130,27 @@ internal sealed partial class DawnScene
                 share.Add(LinkConflictRow(conflict));
         }
 
+        // The other devices' files open here, each opened again with a press
+        IReadOnlyList<LinkRemoteShown> remote = LinkRemoteFiles;
+        if (remote.Count > 0)
+        {
+            share.Add(LinkHeading(Said("link.remote_files_heading", ("count", remote.Count.ToString(CultureInfo.InvariantCulture)))));
+            foreach (LinkRemoteShown file in remote)
+            {
+                var row = share.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
+                string said = Said(file.CanEdit ? "link.remote_file" : "link.remote_file_read_only", ("device", LinkNameOf(file.DeviceId, file.DeviceName)));
+                row.Add(new Label
+                {
+                    Text = $"[color:{HexColour(LinkDeviceTint(file.DeviceId, Skin))}]$(vm)[/color] [b]{UIRichText.Literal(file.Wire)}[/b]  {UIRichText.Literal(said)}",
+                    TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = file.Copy
+                });
+                if (file.MovedThere)
+                    row.Add(new Badge { Text = Said("link.remote_file_moved"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
+                string device = file.DeviceId, wire = file.Wire;
+                row.Add(LinkButton(Said("link.remote_file_open"), "go-to-file", () => _ = LinkOpenRemote(device, wire)));
+            }
+        }
+
         if (offered.Count > 0)
         {
             share.Add(LinkHeading(Said("link.patches_heading", ("count", offered.Count.ToString(CultureInfo.InvariantCulture)))));

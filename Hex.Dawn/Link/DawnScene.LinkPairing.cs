@@ -9,9 +9,9 @@ namespace Hex.Dawn;
 // The pairing dialog (docs/hex-link-plan.md, 3.3 and 6), shown on both machines as two meet. It says who the other is
 // (its name, which is only what it says, and its fingerprint, which is proved), the six digits both screens show in
 // large type grouped three and three, and asks the person to check they're the same. Under that what this machine grants
-// the other, a switch for each right with what it means, nothing ticked beforehand: View is what the others stand on,
-// and Steer is said in the warning colour to be as much as sitting at this machine. Pair stays greyed until View at the
-// least is ticked; Cancel declines. When the pairing ends without this side's answer (the other declined, two minutes
+// the other, a switch for each right with what it means, nothing ticked beforehand: View is what Steer and Edit stand
+// on, Autocomplete stands alone (it sees no files), and Steer is said in the warning colour to be as much as sitting at
+// this machine. Pair stays greyed until View or Autocomplete is ticked; Cancel declines. When the pairing ends without this side's answer (the other declined, two minutes
 // passed, the connection broke) the dialog says why and closes itself a moment later.
 internal sealed partial class DawnScene
 {
@@ -20,7 +20,7 @@ internal sealed partial class DawnScene
     private const long LINK_ENDED_SHOWN_MS = 2500;
 
     // The switches of the dialog up, the line that says why it ended and when it closes by itself after that
-    private ToggleButton? linkPairView, linkPairSteer, linkPairEdit;
+    private ToggleButton? linkPairView, linkPairSteer, linkPairEdit, linkPairPredict;
     private Label? linkPairEnded;
     private long linkPairCloseAt;
 
@@ -31,7 +31,8 @@ internal sealed partial class DawnScene
     internal HexLinkRights LinkPairTicked =>
         (linkPairView?.State == true ? HexLinkRights.View : HexLinkRights.None)
         | (linkPairSteer?.State == true ? HexLinkRights.Steer : HexLinkRights.None)
-        | (linkPairEdit?.State == true ? HexLinkRights.Edit : HexLinkRights.None);
+        | (linkPairEdit?.State == true ? HexLinkRights.Edit : HexLinkRights.None)
+        | (linkPairPredict?.State == true ? HexLinkRights.Predict : HexLinkRights.None);
 
     /// <summary>A pairing asked about with the dialog, one up already for another pairing declined and closed first.</summary>
     private void ShowLinkPairing(LinkPairingAsk ask)
@@ -50,7 +51,7 @@ internal sealed partial class DawnScene
             new DialogChoice(Said("link.pair_go"), () =>
             {
                 HexLinkRights granted = LinkPairTicked;
-                ask.Decide(HexLinkAllowed.Has(granted, HexLinkRights.View) ? granted : null);
+                ask.Decide(LinkRightsAnything(granted) ? granted : null);
                 linkDirty = true;
             }),
             new DialogChoice(Said("link.pair_cancel"), () =>
@@ -95,6 +96,7 @@ internal sealed partial class DawnScene
         linkPairView = Right("view", false);
         linkPairSteer = Right("steer", true);
         linkPairEdit = Right("edit", false);
+        linkPairPredict = Right("predict", false);
         linkPairEnded = body.Add(new Label { Text = string.Empty, Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft, Visible = false });
 
         // Steer and Edit stand on View: ticking one ticks View, taking View away takes them, and Pair waits for View
@@ -104,12 +106,14 @@ internal sealed partial class DawnScene
             linkPairView!.State = (now & HexLinkRights.View) != 0;
             linkPairSteer!.State = (now & HexLinkRights.Steer) != 0;
             linkPairEdit!.State = (now & HexLinkRights.Edit) != 0;
-            dialog.Buttons[0].Enabled = linkPairView.State && !ask.IsDecided;
+            linkPairPredict!.State = (now & HexLinkRights.Predict) != 0;
+            dialog.Buttons[0].Enabled = LinkRightsAnything(now) && !ask.IsDecided;
         }
 
         linkPairView.OnPressed = () => Flipped(HexLinkRights.View, linkPairView);
         linkPairSteer.OnPressed = () => Flipped(HexLinkRights.Steer, linkPairSteer);
         linkPairEdit.OnPressed = () => Flipped(HexLinkRights.Edit, linkPairEdit);
+        linkPairPredict.OnPressed = () => Flipped(HexLinkRights.Predict, linkPairPredict);
         dialog.Buttons[0].Enabled = false;
         dialog.Closed = () =>
         {
@@ -154,7 +158,7 @@ internal sealed partial class DawnScene
         if (linkPairingDialog is { IsOpen: true } open)
             open.Close();
         linkPairingDialog = null;
-        linkPairView = linkPairSteer = linkPairEdit = null;
+        linkPairView = linkPairSteer = linkPairEdit = linkPairPredict = null;
         linkPairEnded = null;
         linkPairCloseAt = 0;
     }

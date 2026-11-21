@@ -403,7 +403,7 @@ internal sealed partial class DawnScene
         // What it may do here, a switch each, every change through LinkSetRights and never more than was ticked
         column.Add(new Label { Text = Said("link.device_may_here", ("device", UIRichText.Literal(known.Shown))), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         var rights = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 18.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        foreach (HexLinkRights right in (ReadOnlySpan<HexLinkRights>)[HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit])
+        foreach (HexLinkRights right in (ReadOnlySpan<HexLinkRights>)[HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit, HexLinkRights.Predict])
         {
             bool has = (known.Rights & right) != 0;
             string label = Said("link.right_title_" + HexLinkTrust.RightsNames(right).First());
@@ -462,15 +462,21 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>
-    /// What a device may do after one of its switches was flipped: View is what the others stand on, so ticking Steer or
-    /// Edit ticks View with it and taking View away takes them all.
+    /// What a device may do after one of its switches was flipped: View is what Steer and Edit stand on, so ticking one of
+    /// them ticks View with it and taking View away takes them. Autocomplete (Predict) stands alone, it sees no files:
+    /// it neither needs View nor goes with it.
     /// </summary>
     internal static HexLinkRights LinkRightsToggled(HexLinkRights was, HexLinkRights right, bool on)
     {
+        if (right == HexLinkRights.Predict)
+            return on ? was | HexLinkRights.Predict : was & ~HexLinkRights.Predict;
         if (!on)
-            return right == HexLinkRights.View ? HexLinkRights.None : was & ~right;
+            return right == HexLinkRights.View ? was & HexLinkRights.Predict : was & ~right;
         return was | right | HexLinkRights.View;
     }
+
+    /// <summary>Whether what's ticked is enough to pair or to be linked for: View, or Autocomplete on its own.</summary>
+    internal static bool LinkRightsAnything(HexLinkRights rights) => (rights & (HexLinkRights.View | HexLinkRights.Predict)) != 0;
 
     // Forgetting asked about once, it can't come back without pairing again
     private void AskForgetDevice(HexLinkKnown known)
@@ -607,7 +613,7 @@ internal sealed partial class DawnScene
         {
             chips.Add(new Badge
             {
-                Text = Said("link.right_title_" + name), Tone = name == "steer" ? UIBadgeTone.Warning : name == "edit" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
+                Text = Said("link.right_title_" + name), Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name)
             });
         }

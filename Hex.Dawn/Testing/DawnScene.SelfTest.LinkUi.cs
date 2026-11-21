@@ -58,7 +58,7 @@ internal sealed partial class DawnScene
 
         Vector2 Centre(UIComponent? component) => component?.Bounds.Center ?? Vector2.Zero;
         Button? WindowButton(string label) => linkWindow is null ? null : Descendants(linkWindow).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
-        ToggleButton? DialogRight(string name) => name switch { "view" => linkPairView, "steer" => linkPairSteer, _ => linkPairEdit };
+        ToggleButton? DialogRight(string name) => name switch { "view" => linkPairView, "steer" => linkPairSteer, "predict" => linkPairPredict, _ => linkPairEdit };
         AgentCardButton? RemoteCard(UIComponent rows) => Descendants(rows).OfType<AgentCardButton>().FirstOrDefault(card => LinkRemoteOf(card.Chat) is { } remote && remote.DeviceName == LINK_PEER_NAME && card.Chat.Shown == LINK_PEER_CHAT);
 
         // A up at a free port in a folder of its own, its Link window opened
@@ -97,6 +97,13 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the dialog says Steer is as much as sitting at this machine", () =>
             Descendants(linkPairingDialog!).OfType<Label>().Any(label => label.Text.Contains(Said("link.right_means_steer"), StringComparison.Ordinal)));
         Shot("link_ui_pairing_dialog.png");
+        // Autocomplete stands alone: it can be paired for without View, and doesn't tick View
+        test.Click(() => Centre(DialogRight("predict")));
+        test.Wait();
+        test.Check("link-ui: Autocomplete alone can be paired for, without View", () =>
+            LinkPairTicked == HexLinkRights.Predict && linkPairingDialog?.Buttons[0].Enabled == true);
+        test.Click(() => Centre(DialogRight("predict")));
+        test.Wait();
         test.Click(() => Centre(DialogRight("steer")));
         test.Wait();
         test.Check("link-ui: ticking Steer ticks View with it, and Pair can be pressed", () =>
@@ -120,7 +127,7 @@ internal sealed partial class DawnScene
 
         // The window lists B as connected, its switches as granted and what B lets this machine do
         test.Settle(0.5f);
-        test.Check("link-ui: the window lists B connected, its View and Steer switches on and Edit off, and what B lets this machine do", () =>
+        test.Check("link-ui: the window lists B connected, its View and Steer switches on, Edit and Autocomplete off, and what B lets this machine do", () =>
         {
             if (linkWindowDevices is null)
                 return false;
@@ -128,7 +135,7 @@ internal sealed partial class DawnScene
             var toggles = Descendants(linkWindowDevices).OfType<ToggleButton>().ToList();
             return labels.Any(text => text.Contains(LINK_PEER_NAME, StringComparison.Ordinal))
                 && Descendants(linkWindowDevices).OfType<Badge>().Any(badge => badge.Text == Said("link.device_connected"))
-                && toggles.Count == 3 && toggles[0].State && toggles[1].State && !toggles[2].State
+                && toggles.Count == 4 && toggles[0].State && toggles[1].State && !toggles[2].State && !toggles[3].State
                 && Descendants(linkWindowDevices).OfType<Badge>().Count(badge => badge.Text == Said("link.right_title_steer")) == 1;
         });
         Shot("link_ui_window_device.png");
