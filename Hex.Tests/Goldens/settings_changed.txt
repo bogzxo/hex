@@ -102,6 +102,7 @@ files_associations = {     "*.foo": "csharp" }
 files_exclude = ["**/a", "**/b"]
 search_exclude = ["**/fixtures"]
 search_use_ignore_files = false
+explorer_auto_reveal = false
 language_overrides = {}
 language_servers_added = {     zig: {         name: "zls",         extensions: [".zig"],         command: "C:/zls/zls.exe",         args: ["--stdio"]     } }
 language_server_updates = false

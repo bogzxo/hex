@@ -102,6 +102,7 @@ files_associations = {}
 files_exclude = [     "**/.git",     "**/.svn",     "**/.hg",     "**/CVS",     "**/.DS_Store",     "**/Thumbs.db",     "**/.vs" ]
 search_exclude = [     "**/node_modules",     "**/bin",     "**/obj",     "**/venv",     "**/.venv",     "**/__pycache__",     "**/target",     "**/dist",     "**/.terraform",     "**/.gradle",     "**/.tox",     "**/.pytest_cache",     "**/Build History" ]
 search_use_ignore_files = true
+explorer_auto_reveal = true
 language_overrides = {}
 language_servers_added = {}
 language_server_updates = true
