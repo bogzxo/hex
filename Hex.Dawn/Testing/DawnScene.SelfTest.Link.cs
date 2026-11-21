@@ -21,7 +21,7 @@ internal sealed partial class DawnScene
 {
     // The environment B is told what to do by, and how long it serves at most
     private const string LINK_TEST_DIAL = "HEX_LINK_TEST_DIAL", LINK_TEST_LISTEN = "HEX_LINK_TEST_LISTEN", LINK_TEST_GRANT = "HEX_LINK_TEST_GRANT",
-        LINK_TEST_SECONDS = "HEX_LINK_TEST_SECONDS";
+        LINK_TEST_SECONDS = "HEX_LINK_TEST_SECONDS", LINK_TEST_FOLDER = "HEX_LINK_TEST_FOLDER";
 
     // What B calls itself, its workspace's folder and its stand-in chat, and the flag files A writes there for it
     private const string LINK_PEER_NAME = "Hex B", LINK_PEER_FOLDER = "link-peer-work", LINK_PEER_CHAT = "Link stand-in",
@@ -240,10 +240,16 @@ internal sealed partial class DawnScene
             return Task.FromResult<HexLinkRights?>(grant);
         }
 
+        // The link-files part's folder, a clone of a repository A has, opened as B's workspace (where its agents run), the
+        // usual folder alongside it in what the link says B has
+        string? syncFolder = System.Environment.GetEnvironmentVariable(LINK_TEST_FOLDER) is { Length: > 0 } given && Directory.Exists(given) ? given : null;
+
         test.Run(() =>
         {
             Directory.CreateDirectory(work);
-            explorer.OpenFolder(work);
+            explorer.OpenFolder(syncFolder ?? work);
+            if (syncFolder is not null)
+                linkTestExtraFolders = [work];
             settings.LinkName = LINK_PEER_NAME;
 
             standIn = new HexAgentChat(++agentChatsMade, "link_stand_in") { Name = LINK_PEER_CHAT };
@@ -322,6 +328,10 @@ internal sealed partial class DawnScene
                 Console.WriteLine("[Hex self-test] link-peer: the other may only view here now");
             }
 
+            // A patch the other offers applied, as the person here would press Apply (the link-files part)
+            foreach (LinkPatchOffer offer in LinkPatchesOffered)
+                Console.WriteLine($"[Hex self-test] link-peer: patch \"{offer.Title}\" {LinkDecidePatch(offer, "applied")}");
+
             return cut && refused;
         }, seconds);
         test.Check("link-peer: the link was cut and the redial refused", () => !wasLinked || (cut && refused));
@@ -357,7 +367,7 @@ internal sealed partial class DawnScene
     /// B started: this Hex again with a home, a pipe and a key of its own, told to dial and pair with A, what it prints
     /// kept for the checks and said after "B|". Killed in the tidy after the part (and as this process exits) whatever happened.
     /// </summary>
-    private void LinkStartPeer(string peerHome, string dial)
+    private void LinkStartPeer(string peerHome, string dial, IReadOnlyDictionary<string, string>? also = null)
     {
         var start = new ProcessStartInfo(System.Environment.ProcessPath!)
         {
@@ -375,6 +385,9 @@ internal sealed partial class DawnScene
         start.Environment[LINK_TEST_DIAL] = dial;
         start.Environment[LINK_TEST_SECONDS] = "150";
         start.Environment.Remove(LINK_TEST_LISTEN);
+        start.Environment.Remove(LINK_TEST_FOLDER);
+        foreach (var (name, value) in also ?? new Dictionary<string, string>())
+            start.Environment[name] = value;
 
         var process = new Process { StartInfo = start };
         void Heard(object sender, DataReceivedEventArgs said)
@@ -415,6 +428,7 @@ internal sealed partial class DawnScene
             return;
         KillLinkTestPeer();
         StopLink();
+        linkTestExtraFolders = [];
         foreach (string folder in linkTestFolders)
         {
             try

@@ -525,6 +525,7 @@ internal sealed partial class DawnScene
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),
         ("mcp-check", "the check after hex_edit through csharp-ls, timed, one after another and three at once, when csharp-ls is on this machine", TestMcpCheck),
         ("link", "Hex Link between this Hex and a second one it starts: pairing by code, hello, the fleet and a chat mirrored, tools, an approval, a file written, conflicted and read, rights taken away, a stranger refused, the hex_link tools, forgetting", TestLink),
+        ("link-files", "sharing the code over Hex Link with a second Hex: a folder synced both ways, a conflict kept and resolved, what git ignores left, hex_link_sync flush, a remote file opened and saved back, the repository cloned and fetched, pull-only, a patch offered", TestLinkFiles),
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
@@ -557,7 +558,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-peer" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-peer" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;
