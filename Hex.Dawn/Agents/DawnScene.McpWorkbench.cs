@@ -93,7 +93,10 @@ internal sealed partial class DawnScene
         ? [.. new[] { ScreenTools(), EditorTools(), WorkbenchTools(), NotebookTools(), Behind(WorkspaceTools()), DevTools(), Behind(HarnessTools()),
             Alongside(Behind(FileTools())), Alongside(Behind(CodeTools())), GitDiffTools(), TerminalTools(), DebugTools() }.SelectMany(tools => tools).Where(tool => !AgentsOnly(tool.Meta.Name))]
         : [.. ScreenTools(), .. EditorTools(), .. WorkbenchTools(), .. NotebookTools(), .. AgentTools(),
-        .. Behind(AgentsTools()), .. AskTools(), .. Behind(PlanTools()), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Behind(AgentMailTools()), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
+        // The agents', their mail's and their plans' alongside the call going on: they touch chats, not the screen, and
+        // queued behind another agent's long call (a build in the terminal, a wait on a language server) an orchestrator's
+        // send or restart timed out before it started
+        .. Alongside(Behind(AgentsTools())), .. AskTools(), .. Alongside(Behind(PlanTools())), .. Behind(PictureTools()), .. Behind(WorkspaceTools()), .. Alongside(Behind(AgentMailTools())), .. DevTools(), .. Behind(HarnessTools()), .. Alongside(Behind(FileTools())), .. Alongside(Behind(CodeTools())), .. GitDiffTools(), .. TerminalTools(), .. DebugTools()];
 
     /// <summary>Whether a tool is one only Hex's agents have a use for, the ones No AI leaves out wherever they're listed.</summary>
     internal static bool AgentsOnly(string tool) =>
