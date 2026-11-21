@@ -181,6 +181,7 @@ internal sealed class LinkServices : IHexLinkServices, IDisposable
     public HexLinkDevice Device { get; }
 
     public HexLinkWorkspace Workspace { get; set; }
+    public HexLinkAuthorityStore? FolderAuthorities { get; set; }
 
     public HexLinkDocuments Documents { get; } = new();
 

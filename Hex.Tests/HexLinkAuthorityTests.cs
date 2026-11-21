@@ -36,4 +36,29 @@ public sealed class HexLinkAuthorityTests
             File.Delete(file);
         }
     }
+
+    [Fact]
+    public async Task Transfer_checks_Edit_on_the_pinned_old_owner_and_returns_an_authenticated_receipt()
+    {
+        const HexLinkRights allow = HexLinkRights.View | HexLinkRights.Edit;
+        using var pair = await LinkedPair.Up(allow, HexLinkRights.View);
+        HexLinkFolder folder = Assert.Single(pair.B.Workspace.Folders);
+        var previous = new HexLinkAuthority(pair.B.Device.Id, 1);
+        var store = new HexLinkAuthorityStore(Path.Combine(pair.B.Root, "authorities.json"));
+        store.Bind(folder, previous);
+        pair.B.FolderAuthorities = store;
+        pair.B.Workspace = store.Advertise(pair.B.Workspace);
+        await pair.PeerB.Hello();
+
+        Assert.Equal(previous, Assert.Single(pair.PeerB.Workspace.Folders).Authority);
+        await Assert.ThrowsAsync<HexLinkException>(() => pair.PeerB.TransferAuthority(folder.Name, previous, CancellationToken.None));
+        Assert.Equal(previous, store.Of(folder));
+
+        pair.AOnB = allow;
+        await pair.PeerB.Hello();
+        HexLinkAuthority receipt = await pair.PeerB.TransferAuthority(folder.Name, previous, CancellationToken.None);
+        Assert.Equal(new HexLinkAuthority(pair.A.Device.Id, 2), receipt);
+        Assert.Equal(receipt, store.Of(folder));
+        Assert.Equal(receipt, await pair.PeerB.TransferAuthority(folder.Name, previous, CancellationToken.None));
+    }
 }
