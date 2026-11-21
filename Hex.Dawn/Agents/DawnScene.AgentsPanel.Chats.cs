@@ -283,7 +283,7 @@ internal sealed partial class DawnScene
             started |= chat.Parent is not null;
             working += chat.Running ? 1 : 0;
         }
-        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || started);
+        bool wanted = Face != HexFace.Noon && (agentChats.Count > 1 || started || LinkFleetShown);
         float width = agentsView.Size.X;
 
         // The systems under the chats in Dawn, Noon has them under its fleet. Their words put right every time, the list
@@ -306,6 +306,7 @@ internal sealed partial class DawnScene
         ChatsInOrder();
         long said = ((((AgentCardsKey(ChatsShown()) * 31 + (wanted ? 1 : 0)) * 31 + (agentsListOpen ? 1 : 0)) * 31 + (long)most) * 31 + working) * 31 + (systems ? 1 : 0);
         said = (said * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0);
+        said = said * 31 + LinkFleetKey();
         if (said == agentsListDrawn)
         {
             foreach (Action<float> refresh in chatRowFits)
@@ -356,6 +357,8 @@ internal sealed partial class DawnScene
                     cardsPlaced.Add((chat.Id, card.Root, depth));
                     depth += AGENT_CARD + agentsListRows.Spacing;
                 }
+                // Then a section for each linked device's agents (DawnScene.LinkFleet)
+                depth += LinkFleetSections(agentsListRows, chatRowFits);
                 // As many cards as the list shows before it scrolls, the finished group's head as tall as it is
                 tall = MathF.Min(depth, most * (AGENT_CARD + 1.0f));
                 SlideCards(agentsListPlaces, cardsPlaced);
@@ -407,9 +410,11 @@ internal sealed partial class DawnScene
     {
         agentsList.Position = new Vector2(0, -(agentsHeadHeight - 2.0f));
         // The card sits on the bottom, the harness's line that was under it being in the head now
-        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f + AgentsWaitStripTall);
+        agentsBody.Padding = new UIEdges(4, agentsHeadHeight + agentsListHeight, 4, agentsComposeTall + 12.0f + AgentsWaitStripTall + LinkBannerTall);
         if (agentsWaitStrip is not null)
-            agentsWaitStrip.Position = new Vector2(0, agentsComposeTall + 6.0f);
+            agentsWaitStrip.Position = new Vector2(0, agentsComposeTall + 6.0f + LinkBannerTall);
+        if (linkBanner is not null)
+            linkBanner.Position = new Vector2(0, agentsComposeTall + 6.0f);
     }
 
     private string ChatName(int id) => ChatById(id) is { } chat ? $"#{id} {chat.Shown}" : $"#{id}";
@@ -548,6 +553,14 @@ internal sealed partial class DawnScene
     /// </summary>
     private void AskCloseAgentChat(HexAgentChat chat)
     {
+        // Another device's chat is only put away here, it's that device's to close (DawnScene.LinkChats)
+        if (LinkRemoteOf(chat) is not null)
+        {
+            if (agentChat == chat)
+                ShowDraftOf(agentChats.LastOrDefault());
+            return;
+        }
+
         List<HexAgentChat> family = FamilyOf(chat);
         int working = family.Count(each => each.Running || each.HasPending);
         if (working == 0)

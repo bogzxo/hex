@@ -52,29 +52,37 @@ internal sealed partial class DawnScene
             key = key * 31 + (chat.Parent ?? -1);
         }
 
-        return key;
+        // And whether the cards carry the badge of the machine they run on (DawnScene.LinkFleet)
+        return key * 31 + (LinkBadgesShown ? 1 : 0);
     }
 
     /// <param name="quiet">Its name dimmed, a finished chat's in a list where the working ones should read first.</param>
     /// <param name="rail">A rail of the warning colour down its left, a chat waiting on the person, the one thing in the list meant to catch the eye.</param>
-    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false)
+    /// <param name="remote">The chat of another device the card is, its stand-in drawn and picking it opens that (DawnScene.LinkFleet).</param>
+    private AgentCard AgentCardOf(HexAgentChat chat, int step, bool closable, bool quiet = false, bool rail = false, LinkRemoteCard? remote = null)
     {
         UISkin? skin = Skin;
         float indent = step * CHAT_STEP;
         var root = new Panel { Fill = UIFill.Horizontal, Size = new Vector2(0, AGENT_CARD), Padding = new UIEdges(indent, 0, 0, 0), Color = Vector4.Zero };
         var pick = root.Add(new AgentCardButton(this, chat)
         {
-            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = chat == agentChat,
+            Style = "button_flat", Fill = UIFill.Both, Label = string.Empty, Animated = false, Selected = remote is null ? chat == agentChat : linkRemoteOpen == remote,
             Tooltip = $"#{chat.Id} {chat.Shown}"
         });
         pick.OnPressed = () =>
         {
+            if (remote is not null)
+            {
+                OpenRemoteChat(remote);
+                return;
+            }
+
             // Opened first, a narrow fleet giving the middle back, and the box given the keys only when it's the stage up
             OpenAgentChat(chat);
             if (Face == Hex.Shell.HexFace.Noon && noonStage == NoonStage.Chat)
                 agentsInput.Focus();
         };
-        pick.OnContextMenu = at => ContextMenu.Show(chrome, at, ChatMenu(chat));
+        pick.OnContextMenu = at => ContextMenu.Show(chrome, at, remote is null ? ChatMenu(chat) : LinkRemoteMenu(remote));
 
         // The badge, the agent system's letters on a tint of its colour
         HexAgentProfile? profile = HexAgentProfiles.All.FirstOrDefault(each => each.Id == chat.Agent);
@@ -83,7 +91,9 @@ internal sealed partial class DawnScene
         // A pill of the system's letters in its own colour, the same badge as the card's state across from it
         root.Add(new Badge { Text = Initials(system), Colour = tint, TextScale = 0.1f, Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(10, -CARD_TOP + 1) });
 
-        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(38, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
+        // The machine it runs on, while there's more than one to say (DawnScene.LinkFleet), and who started it after that
+        float fromAt = 38 + LinkCardBadge(root, remote, -CARD_TOP + 1);
+        var from = root.Add(new Label { Anchor = Origin.TopLeft, Pivot = Origin.TopLeft, Position = new Vector2(fromAt, -CARD_TOP - 1), TextScale = CARD_SMALL, Dim = true, Align = Origin.Left });
         // How it's doing as a badge in the colour of it, a beating dot while it works. It was words in a colour, which read
         // as one more line of the card's small print
         var state = root.Add(new Badge { Anchor = Origin.TopRight, Pivot = Origin.TopRight, Position = new Vector2(closable ? -30 : -10, -CARD_TOP + 2), TextScale = CARD_SMALL });
@@ -129,12 +139,12 @@ internal sealed partial class DawnScene
             string? model = HexAgentModels.Of(chat);
             // Who it's run by over its name, the agent system, and the chat that started it first for one an agent started.
             // The model goes with what it used under its name, where the model and what it cost read together
-            string starter = chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
+            string starter = remote is not null ? LinkStarterOf(remote, chat, system) : chat.Parent is { } parent ? $"{ChatName(parent)} · {system}" : system;
             ShowAgentStatus(state, chat);
 
             // As much of it as fits beside the state, measured in the font, which a count of letters guessed at short
             float stateWidth = (Skin?.Font.Measure(state.Text, state.TextScale, markup: false).X ?? 100.0f) + 40.0f;
-            string said = UIRichText.Literal(FitText(starter, from.TextScale, room - 38 - stateWidth - (closable ? 30 : 10) - 10));
+            string said = UIRichText.Literal(FitText(starter, from.TextScale, room - fromAt - stateWidth - (closable ? 30 : 10) - 10));
             if (from.Text != said)
                 from.Text = said;
 

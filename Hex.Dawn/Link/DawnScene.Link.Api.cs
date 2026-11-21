@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// Opens the pairing window: for the next five minutes (or <paramref name="window"/>) one unknown device may pair,
-    /// and the person is asked about it (<see cref="LinkPairingPending"/>, and Hex's dialog until the Link window has its own).
+    /// and the person is asked about it (<see cref="LinkPairingPending"/>, and the pairing dialog, DawnScene.LinkPairing).
     /// </summary>
     internal bool LinkOpenPairing(TimeSpan? window = null)
     {
@@ -129,7 +129,7 @@ internal sealed partial class DawnScene
     {
         if (linkTrust is null)
             return false;
-        string name = linkTrust.Find(id)?.Device.Name ?? id;
+        string name = LinkNameOf(id);
         bool forgot = linkTrust.Forget(id);
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
@@ -153,15 +153,30 @@ internal sealed partial class DawnScene
         return true;
     }
 
-    /// <summary>A known device called something else here. False when it isn't known.</summary>
+    /// <summary>
+    /// A known device called something of the person's own here, which wins over what it calls itself (cleaned, 1 to 40
+    /// characters). False when it isn't known or nothing of the name is left.
+    /// </summary>
     internal bool LinkRename(string id, string name)
     {
-        string named = name.Trim();
-        if (named.Length == 0 || linkTrust?.Rename(id, named.Length > 64 ? named[..64] : named) != true)
+        if (HexLinkNames.Clean(name) is not { } named || linkTrust?.Rename(id, named) != true)
             return false;
         linkDirty = true;
         return true;
     }
+
+    /// <summary>A known device shown by its own name again, what the person called it here let go of. False when it isn't known.</summary>
+    internal bool LinkUseOwnName(string id)
+    {
+        if (linkTrust?.Rename(id, null) != true)
+            return false;
+        linkDirty = true;
+        return true;
+    }
+
+    /// <summary>What a device is shown as here: the person's name for it, else its own (cleaned), else the start of its id.</summary>
+    internal string LinkNameOf(string id, string? said = null) =>
+        linkTrust?.Find(id)?.Shown is { Length: > 0 } shown ? shown : HexLinkNames.Clean(said) ?? (id.Length > 8 ? id[..8] : id);
 
     /* Pairing, asking the person */
 
@@ -181,38 +196,7 @@ internal sealed partial class DawnScene
         return ask.Answer;
     }
 
-    // The pairing asked about with Hex's own dialog, until the Link window has a dialog of its own
-    private void ShowLinkPairing(LinkPairingAsk ask)
-    {
-        if (ask.IsDecided)
-            return;
-
-        linkPairingPending?.Decide(null);
-        CloseLinkPairingDialog();
-        linkPairingPending = ask;
-        linkDirty = true;
-
-        string viewOnly = Said("link.pair_view"), viewSteer = Said("link.pair_view_steer"), viewEdit = Said("link.pair_view_edit"), all = Said("link.pair_all"), cancel = Said("link.pair_cancel");
-        string text = Said(ask.Host ? "link.pair_text_host" : "link.pair_text_joiner", ("device", ask.Other.Name), ("fingerprint", ask.Other.Fingerprint),
-            ("address", ask.Address), ("code", ask.Code));
-        ((IWindows)this).Ask(Said("link.pair_title", ("code", ask.Code)), text, [viewOnly, viewSteer, viewEdit, all, cancel], answered =>
-        {
-            ask.Decide(answered == viewOnly ? HexLinkRights.View
-                : answered == viewSteer ? HexLinkRights.View | HexLinkRights.Steer
-                : answered == viewEdit ? HexLinkRights.View | HexLinkRights.Edit
-                : answered == all ? HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit
-                : null);
-            linkDirty = true;
-        }, risky: all);
-        linkPairingDialog = textDialog;
-    }
-
-    private void CloseLinkPairingDialog()
-    {
-        if (linkPairingDialog is { IsOpen: true } open && open == textDialog)
-            open.Close();
-        linkPairingDialog = null;
-    }
+    // The dialog that asks the person (ShowLinkPairing, CloseLinkPairingDialog) is DawnScene.LinkPairing
 
     // How a pairing ended, said, the device's redials started over when it paired
     private void LinkPairEnded(HexLinkPairResult result)
@@ -228,7 +212,11 @@ internal sealed partial class DawnScene
 
         if (result.Reason == "declined-here")
             return;
-        Say(Said("link.pair_failed", ("device", device), ("why", Said("link.pair_reason_" + (result.Reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" ? result.Reason.Replace('-', '_') : "failed")))), error: true);
+        string why = LinkPairReasonSaid(result.Reason);
+        // The dialog still saying the pairing ended says why as well
+        if (linkPairEnded is { Visible: true } ended)
+            ended.Text = $"[color:{HexColour(LinkWarning)}]$(warning) {Horizon.UI.Drawing.UIRichText.Literal(Said("link.pair_ended_why", ("why", why)))}[/color]";
+        Say(Said("link.pair_failed", ("device", device), ("why", why)), error: true);
     }
 }
 

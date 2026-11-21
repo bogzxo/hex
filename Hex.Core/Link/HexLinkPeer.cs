@@ -81,6 +81,8 @@ internal sealed partial class HexLinkPeer : IDisposable
         if (Protocol < HexLinkHost.PROTOCOL)
             throw new HexLinkException(HexLinkErrors.INVALID_REQUEST, $"The other Hex speaks link protocol {Protocol}, this one {HexLinkHost.PROTOCOL}.");
         Device = HexLinkData.DeviceOf(HexLinkData.Object(said, "device"), session.Connection.Device);
+        // Its name is its own data, shown everywhere, so cleaned first (HexLinkNames)
+        Device = Device with { Name = HexLinkNames.Clean(Device.Name) ?? HexLinkNames.Clean(session.Connection.Device.Name) ?? Device.Id[..Math.Min(8, Device.Id.Length)] };
         Granted = HexLinkData.RightsOf(said, "granted");
         Workspace = WorkspaceOf(HexLinkData.Object(said, "workspace"));
         TakeServes(said);
@@ -126,6 +128,9 @@ internal sealed partial class HexLinkPeer : IDisposable
                     break;
                 case "git/done":
                     BundleDone(parameters);
+                    break;
+                case "link/name":
+                    TakeName(parameters);
                     break;
                 case "link/rights":
                     Granted = HexLinkData.RightsOf(parameters, "granted");

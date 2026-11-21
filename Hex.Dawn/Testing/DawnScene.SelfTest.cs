@@ -529,6 +529,7 @@ internal sealed partial class DawnScene
         ("link-peer", "the other end of the link part, or a Hex to link to from another machine (HEX_LINK_TEST_DIAL or HEX_LINK_TEST_LISTEN)", TestLinkPeer),
         ("link-cross", "Hex Link across two machines, one command a side (HEX_LINK_TEST_LISTEN on one, HEX_LINK_TEST_DIAL on the other): each pairs, watches and steers the other, writes into its workspace, has its rights dropped, and the listener forgets the dialler", TestLinkCross),
         ("link-nearby", "Hex Link's discovery on the real LAN, run on two machines at once: Link up with link_discoverable on, passing once another Hex is heard", TestLinkNearby),
+        ("link-ui", "Hex Link's window, the pairing dialog, a linked device's section in the fleet, its chat on screen and steered, Runs on and Forget, driven by the pointer against a second Hex", TestLinkUi),
         ("garbage", "what sweeping the pointer over the designer and the code allocates", test =>
         {
             // The first hover over a word makes what's kept for every hover after (the docs of the library), the first
@@ -560,7 +561,7 @@ internal sealed partial class DawnScene
     {
         // OS input tests take the foreground briefly, so they only run when explicitly named, and so does dusk-noon, the
         // window having Dusk in it only when it's named
-        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-peer" or "link-cross" or "link-nearby" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
+        asked = options.Suites is { Length: > 0 } named ? new(named, StringComparer.OrdinalIgnoreCase) : [.. SelfTestSuites.Where(suite => suite.Name is not ("pyright" or "npminstall" or "native-shortcuts" or "repository" or "dusk-noon" or "face-switch" or "webshots" or "link" or "link-files" or "link-peer" or "link-cross" or "link-nearby" or "link-ui" or DawnProgram.NO_AI_SUITE)).Select(suite => suite.Name)];
         string[] unknown = [.. asked.Where(name => !SelfTestSuites.Any(suite => suite.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))];
         if (unknown.Length == 0)
             return true;

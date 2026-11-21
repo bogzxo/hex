@@ -10,7 +10,14 @@ namespace Hex.Core;
 /// <param name="Seen">When it last linked, UTC, Added until it has.</param>
 /// <param name="Address">The address it last linked from or was dialled at, empty until it has.</param>
 /// <param name="Port">The port it listens on, as last dialled or announced, 0 when not known.</param>
-internal sealed record HexLinkKnown(HexLinkDevice Device, HexLinkRights Rights, DateTime Added, DateTime Seen, string Address, int Port);
+internal sealed record HexLinkKnown(HexLinkDevice Device, HexLinkRights Rights, DateTime Added, DateTime Seen, string Address, int Port)
+{
+    /// <summary>What the person here calls it, which wins over what it calls itself, null to go by its own name.</summary>
+    public string? Named { get; init; }
+
+    /// <summary>The name it's shown by here, the person's for it or its own.</summary>
+    public string Shown => Named ?? Device.Name;
+}
 
 /// <summary>
 /// The devices this machine knows, kept in <c>&lt;folder&gt;/devices.json</c> (docs/hex-link-plan.md, 3.3 and 3.6). A
@@ -49,7 +56,7 @@ internal sealed class HexLinkTrust
         get
         {
             lock (gate)
-                return [.. devices.Values.OrderBy(known => known.Device.Name, StringComparer.OrdinalIgnoreCase).ThenBy(known => known.Device.Id)];
+                return [.. devices.Values.OrderBy(known => known.Shown, StringComparer.OrdinalIgnoreCase).ThenBy(known => known.Device.Id)];
         }
     }
 
@@ -68,7 +75,7 @@ internal sealed class HexLinkTrust
         {
             DateTime now = DateTime.UtcNow;
             DateTime first = devices.TryGetValue(device.Id, out HexLinkKnown? was) ? was.Added : now;
-            added = new HexLinkKnown(device, rights, first, now, address, port);
+            added = new HexLinkKnown(device, rights, first, now, address, port) { Named = was?.Named };
             devices[device.Id] = added;
             Save();
         }
@@ -80,8 +87,11 @@ internal sealed class HexLinkTrust
     /// <summary>Says what a device may do here from now on, false when it isn't known.</summary>
     public bool SetRights(string id, HexLinkRights rights) => Change(id, known => known with { Rights = rights });
 
-    /// <summary>Calls a device something else here, false when it isn't known.</summary>
-    public bool Rename(string id, string name) => Change(id, known => known with { Device = known.Device with { Name = name } });
+    /// <summary>
+    /// Calls a device something of the person's own here, which wins over what it calls itself, or goes back to its own
+    /// name with null. False when it isn't known.
+    /// </summary>
+    public bool Rename(string id, string? name) => Change(id, known => known with { Named = HexLinkNames.Clean(name) });
 
     /// <summary>
     /// A device linked, what it said of itself and where it was, false when it isn't known. Its name, OS, processor and
@@ -139,6 +149,7 @@ internal sealed class HexLinkTrust
             {
                 ["id"] = known.Device.Id,
                 ["name"] = known.Device.Name,
+                ["named"] = known.Named,
                 ["os"] = known.Device.Os,
                 ["arch"] = known.Device.Arch,
                 ["version"] = known.Device.Version,
@@ -203,7 +214,7 @@ internal sealed class HexLinkTrust
                 DateTime added = Time(device, "added"), seen = Time(device, "seen");
                 int port = device["port"] is JsonValue portValue && portValue.TryGetValue(out int number) ? number : 0;
                 read.Add(new HexLinkKnown(new HexLinkDevice(id.ToUpperInvariant(), Text(device, "name") ?? "", Text(device, "os") ?? "", Text(device, "arch") ?? "", Text(device, "version") ?? ""),
-                    rights, added, seen, Text(device, "address") ?? "", port));
+                    rights, added, seen, Text(device, "address") ?? "", port) { Named = HexLinkNames.Clean(Text(device, "named")) });
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)

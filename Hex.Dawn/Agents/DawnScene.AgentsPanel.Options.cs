@@ -122,7 +122,7 @@ internal sealed partial class DawnScene
     {
         static long Mix(long key, string? text) => key * 1_000_003 + (text is null ? 7 : string.GetHashCode(text, StringComparison.Ordinal));
 
-        long key = Mix(compact ? 3 : 5, agent) * 31 + (agentWithFile ? 1 : 0);
+        long key = Mix(compact ? 3 : 5, agent) * 31 + (agentWithFile ? 1 : 0) + LinkRunsOnKey() * 7;
         key = key * 1_000_003 + (document?.Path is { } path && document.IsText ? string.GetHashCode(Path.GetFileName(path.AsSpan()), StringComparison.Ordinal) : 0);
         if (agentDraftContext is { } context)
             key = Mix(key, context.Path) * 31 + HashCode.Combine(context.Line, context.Column, context.EndLine, context.EndColumn);
@@ -185,6 +185,9 @@ internal sealed partial class DawnScene
             }));
         context.Size = new System.Numerics.Vector2(captured && !compact ? 120 : 32, 32);
         context.Enabled = captured || file.Length > 0;
+        // Where a new chat runs, and another device's own pickers in place of these when it's one of those (DawnScene.LinkRunsOn)
+        if (DrawLinkRunsOn())
+            return;
         if (extension is null || options.Count == 0) return;
         AgentOption? thinking = options.FirstOrDefault(option => option.Key is
             "effort" or "reasoning_effort" or "reasoningEffort" or "thinking_level" or "thinkingLevel" or "thinking");

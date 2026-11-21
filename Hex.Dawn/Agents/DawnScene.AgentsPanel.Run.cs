@@ -31,6 +31,9 @@ internal sealed partial class DawnScene
         string asked = agentsInput.Text.Trim();
         if (asked.Length == 0 && agentImages.Count == 0)
             return;
+        // A chat of another device, or a new one to run on one, goes over the link (DawnScene.LinkChats)
+        if (LinkSendFromBox(asked))
+            return;
         if (HandleAgentCommand(asked))
             return;
 
@@ -410,7 +413,7 @@ internal sealed partial class DawnScene
     /// <param name="withStarted">Whether the agents it started (and theirs) stop too, its menu's Stop with its agents, an agent's hex_agent_stop and closing it.</param>
     private void StopAgent(HexAgentChat? chat, bool withStarted = false)
     {
-        if (chat is null)
+        if (chat is null || LinkStopRemote(chat))
             return;
 
         // What was held for it goes with the run, kept it went to the next run's agent as soon as it said anything

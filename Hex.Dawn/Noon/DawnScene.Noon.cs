@@ -369,6 +369,7 @@ internal sealed partial class DawnScene
         // And the order's own key, which moves as a finished chat's few minutes run out with nothing else about it moving
         ChatsInOrder();
         cheap = (cheap * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0);
+        cheap = cheap * 31 + LinkFleetKey();
         if (cheap != noonFleetCheap || noonFleetDrawn == NOT_DRAWN)
         {
             string filter = noonFleetFilter.Text.Trim();
@@ -376,6 +377,7 @@ internal sealed partial class DawnScene
             // The order's own key for the bands (a finished chat's few minutes running out) and the finished group's
             long said = AgentCardsKey(order) * 31 + string.GetHashCode(filter, StringComparison.Ordinal);
             said = (said * 31 + chatsOrderedFor) * 31 + (FinishedShown ? 1 : 0) + chatsFinished.Count * 7L;
+            said = said * 31 + LinkFleetKey();
             // Not made again under a held button, a card made again between the press and the letting go lost the click, the
             // same as Details and the tabs wait for it
             if (said != noonFleetDrawn && !Engine.Input.Mouse.IsDown(Horizon.Input.MouseButton.Left))
@@ -455,6 +457,8 @@ internal sealed partial class DawnScene
                 // The finished folded away, their head under the rest
                 if (!FinishedShown && chatsFinished.Count > 0 && filter.Length == 0)
                     noonFleetRows.Add(FinishedHead(alone: order.Count == 0, inset: 0.0f));
+                // Then a section for each linked device's agents (DawnScene.LinkFleet)
+                LinkFleetSections(noonFleetRows, noonCards);
                 SlideCards(noonFleetPlaces, cardsPlaced);
             }
 

@@ -312,6 +312,9 @@ internal sealed partial class DawnScene
 
         // Serving: what A asks for by the files it writes here done, until A cuts the link and the redial is refused
         bool rowAdded = false, viewOnly = false, presenceSet = false;
+        bool ui = System.Environment.GetEnvironmentVariable(LINK_TEST_UI) == "1";
+        int uiLooked = 0;
+        DateTime uiSteeredSeen = DateTime.MinValue;
         test.WaitFor(() =>
         {
             if (!rowAdded && File.Exists(Path.Combine(work, LINK_FLAG_ROW)) && standIn is not null)
@@ -327,6 +330,10 @@ internal sealed partial class DawnScene
                 LinkSetRights(otherId, HexLinkRights.View);
                 Console.WriteLine("[Hex self-test] link-peer: the other may only view here now");
             }
+
+            // For the link-ui part, each Steer request heard said, what A's UI sent checked by
+            if (ui && ++uiLooked % 20 == 0)
+                LinkTestSaySteered(ref uiSteeredSeen);
 
             // The caret put in the synced folder's README when asked, for the other to see where this one is (link-files)
             if (!presenceSet && syncFolder is not null && File.Exists(Path.Combine(work, LINK_FLAG_PRESENCE)) && Open(Path.Combine(syncFolder, "README.md")))

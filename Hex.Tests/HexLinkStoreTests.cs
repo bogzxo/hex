@@ -130,7 +130,8 @@ public sealed class HexLinkStoreTests : IDisposable
 
         HexLinkKnown read = Assert.Single(new HexLinkTrust(folder).Known);
         Assert.Equal(device.Id, read.Device.Id);
-        Assert.Equal("Laptop", read.Device.Name);
+        // Renamed here it's shown by the name given here, its own name kept beside it
+        Assert.Equal(("Laptop", "Mac"), (read.Shown, read.Device.Name));
         Assert.Equal("macos", read.Device.Os);
         Assert.Equal("arm64", read.Device.Arch);
         Assert.Equal("3.4.0", read.Device.Version);

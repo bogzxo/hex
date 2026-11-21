@@ -59,7 +59,13 @@ internal sealed partial class DawnScene
         // A card for the person, Apply, Keep as File or Discard, their answer going back (DawnScene.LinkGit)
         public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => hex.LinkPatchOffered(device, title, diff);
 
-        public void Audit(string what, HexLinkDevice who, string detail) => hex.linkAudit?.Write(what, who.Id, detail);
+        public void Audit(string what, HexLinkDevice who, string detail)
+        {
+            hex.linkAudit?.Write(what, who.Id, detail);
+            // A Steer request breathes the status item a while, so the person sees another machine is driving this one
+            if (what == "steer")
+                hex.LinkSteered();
+        }
 
         // What the prediction side bound (DawnScene.LinkPredict), off the editor's thread
         public bool ServesPredictions => hex.LinkPredictServes();
