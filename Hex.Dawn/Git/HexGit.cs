@@ -47,9 +47,9 @@ internal sealed partial class HexGit
                 if (RepositoryOf(path) is { } repository)
                     repository.Dirty();
 
-                // Something made can be a clone or a folder git init is about to make a repository of, looked down for soon
-                if (change == LanguageServerFileChange.Created)
-                    LookDownSoon();
+                // Something made can be a clone or a folder git init is about to make a repository of, looked down from soon,
+                // and something deleted can be a repository's folder
+                LookDownAfter(path, change);
             }
         };
     }
@@ -101,6 +101,7 @@ internal sealed partial class HexGit
             for (int i = 0; i < roots.Count; i++)
                 RepositoryOf(roots[i]);
             LookDown();
+            LookAtNewFolders();
             foreach (Repository repository in repositories.Values)
                 repository.LookForMoves();
 
