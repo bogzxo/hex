@@ -166,7 +166,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            foreach (HexAgentChat chat in new[] { working, asking, failed, other })
+            foreach (HexAgentChat? chat in new[] { working, asking, failed, other })
             {
                 if (chat is not null && ChatById(chat.Id) is not null)
                 {

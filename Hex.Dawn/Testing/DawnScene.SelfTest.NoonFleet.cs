@@ -212,7 +212,7 @@ internal sealed partial class DawnScene
         test.Run(() =>
         {
             StopAgent(working);
-            foreach (HexAgentChat chat in (HexAgentChat?[])[just, working])
+            foreach (HexAgentChat? chat in (HexAgentChat?[])[just, working])
                 if (chat is not null)
                     CloseAgentChat(chat);
             aside.AddRange(agentChats.Where(chat => chat != old));
@@ -238,7 +238,7 @@ internal sealed partial class DawnScene
 
         test.Run(() =>
         {
-            foreach (HexAgentChat chat in (HexAgentChat?[])[old, older])
+            foreach (HexAgentChat? chat in (HexAgentChat?[])[old, older])
                 if (chat is not null)
                     CloseAgentChat(chat);
             foreach (HexAgentChat chat in aside)
