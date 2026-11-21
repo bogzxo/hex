@@ -133,7 +133,7 @@ internal sealed partial class HexLinkPeer
                 HexAgentChat chat;
                 lock (mirrors)
                 {
-                    if (mirror.Chat is null || !mirror.Queued.TryDequeue(out said!))
+                    if (mirror.Resyncing || mirror.Chat is null || !mirror.Queued.TryDequeue(out said!))
                         break;
                     chat = mirror.Chat;
                 }
@@ -145,6 +145,50 @@ internal sealed partial class HexLinkPeer
         if (moved)
             Changed?.Invoke();
         return moved;
+    }
+
+    private async Task RestoreChatWatches(Func<Func<Task>, Task> attempt, Func<bool> stillAllowed)
+    {
+        Mirror[] open;
+        lock (mirrors)
+            open = [.. mirrors.Values.Where(mirror => mirror.Chat is not null && !mirror.Gone)];
+        foreach (Mirror mirror in open)
+        {
+            await attempt(async () =>
+            {
+                lock (mirrors)
+                {
+                    mirror.Resyncing = true;
+                    mirror.Queued.Clear();
+                }
+                try
+                {
+                    JsonObject whole = await AskObject("chat/watch", new JsonObject { ["id"] = mirror.Id }, session.Closing);
+                    lock (mirrors)
+                    {
+                        if (stillAllowed() && mirrors.GetValueOrDefault(mirror.Id) == mirror)
+                        {
+                            JsonObject[] queued = [.. mirror.Queued];
+                            mirror.Queued.Clear();
+                            mirror.Seq = -1;
+                            mirror.Queued.Enqueue(whole);
+                            foreach (JsonObject patch in queued)
+                                mirror.Queued.Enqueue(patch);
+                        }
+                    }
+                }
+                catch (HexLinkException missing) when (missing.Code == HexLinkErrors.NOT_FOUND)
+                {
+                    if (stillAllowed())
+                        ChatChanged(new JsonObject { ["id"] = mirror.Id, ["gone"] = true });
+                }
+                finally
+                {
+                    lock (mirrors)
+                        mirror.Resyncing = false;
+                }
+            });
+        }
     }
 
     // One thing said of a chat taken into its mirror, true when the chat moved

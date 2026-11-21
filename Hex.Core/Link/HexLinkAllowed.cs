@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -13,6 +14,15 @@ internal static class HexLinkAllowed
 {
     /// <summary>The argument a tool call is told its calling chat by, which a peer is never let say.</summary>
     public const string CALLER = "_hex_caller";
+
+    internal static readonly AsyncLocal<Func<string, bool>?> RemoteFileAllowed = new();
+    internal static readonly AsyncLocal<HexLinkDevice?> RelayOrigin = new();
+    private static readonly ConditionalWeakTable<JsonObject, Func<string, bool>> editorFileRules = new();
+
+    internal static void SetEditorFileRule(JsonObject arguments, Func<string, bool> allowed) => editorFileRules.Add(arguments, allowed);
+    internal static Func<string, bool>? EditorFileRule(JsonObject arguments) => editorFileRules.TryGetValue(arguments, out var allowed) ? allowed : null;
+
+    internal static bool IsRelayTool(string name) => name is "hex_link_devices" or "hex_link_call" or "hex_link_spawn" or "hex_link_sync";
 
     private static readonly FrozenDictionary<string, HexLinkRights> needs = new Dictionary<string, HexLinkRights>(StringComparer.Ordinal)
     {
@@ -42,6 +52,10 @@ internal static class HexLinkAllowed
         ["hex_agent_spawn"] = HexLinkRights.Steer,
         ["hex_agent_approve"] = HexLinkRights.Steer,
         ["hex_agent_close"] = HexLinkRights.Steer,
+        ["hex_link_devices"] = HexLinkRights.Steer,
+        ["hex_link_call"] = HexLinkRights.Steer,
+        ["hex_link_spawn"] = HexLinkRights.Steer,
+        ["hex_link_sync"] = HexLinkRights.Steer,
 
         // Writing the workspace's files, which runs nothing
         ["hex_edit"] = HexLinkRights.Edit,

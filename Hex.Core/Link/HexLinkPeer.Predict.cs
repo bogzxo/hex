@@ -18,7 +18,7 @@ internal sealed partial class HexLinkPeer
     // A prediction being received, its text in order and how it ended when it didn't end well
     private sealed class PredictionStream
     {
-        public Channel<string> Text { get; } = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        public Channel<string> Text { get; } = Channel.CreateBounded<string>(new BoundedChannelOptions(64) { SingleReader = true });
 
         public Exception? Failed { get; set; }
     }
@@ -91,8 +91,13 @@ internal sealed partial class HexLinkPeer
                 return true;
             case "predict/chunk":
                 if (HexLinkData.String(parameters, "id", HexLinkPrediction.LONGEST_ID) is { } chunkOf && predictionStreams.TryGetValue(chunkOf, out PredictionStream? into)
-                    && HexLinkData.String(parameters, "text", HexLinkPrediction.MOST_CHUNK) is { Length: > 0 } text)
-                    into.Text.Writer.TryWrite(text);
+                    && HexLinkData.String(parameters, "text", HexLinkPrediction.MOST_CHUNK) is { Length: > 0 } text
+                    && !into.Text.Writer.TryWrite(text) && !into.Text.Reader.Completion.IsCompleted)
+                {
+                    into.Failed ??= HexLinkPrediction.Failed("The prediction producer exceeded the receive buffer.", HexLinkPrediction.FAILED);
+                    if (into.Text.Writer.TryComplete())
+                        session.Tell("predict/cancel", new JsonObject { ["id"] = chunkOf });
+                }
                 return true;
             case "predict/done":
                 if (HexLinkData.String(parameters, "id", HexLinkPrediction.LONGEST_ID) is { } doneOf && predictionStreams.TryGetValue(doneOf, out PredictionStream? ending))

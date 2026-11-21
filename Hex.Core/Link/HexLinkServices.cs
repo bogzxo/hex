@@ -43,6 +43,9 @@ internal interface IHexLinkServices
     /// <summary>The workspace's current files.exclude patterns.</summary>
     HexExcludes Excludes => HexExcludes.Usual;
 
+    /// <summary>Where the authenticated device can dial this editor after the connection closes.</summary>
+    JsonObject RedialAdvertisement() => HexLinkRedial.Advertisement(0, []);
+
     /// <summary>Applies a linked write or deletion only if the local file still matches its base hash.</summary>
     Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
         HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel);

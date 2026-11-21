@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 
 namespace Hex.Core;
 
@@ -74,58 +75,102 @@ internal sealed partial class HexLinkPeer
     public static string? ConflictHash(HexLinkException conflict) =>
         conflict.Code == HexLinkErrors.CONFLICT ? HexLinkData.String(conflict.Detail as JsonObject, "hash", 64) : null;
 
+    private readonly ConcurrentDictionary<string, string?> fileWatches = new(StringComparer.Ordinal);
+
     /// <summary>A file of the other machine's watched, <see cref="FileChanged"/> said when it moves; its hash now.</summary>
-    public async Task<string?> Watch(string path, CancellationToken cancel = default) =>
+    public async Task<string?> Watch(string path, CancellationToken cancel = default)
+    {
+        string? hash = await WatchFile(path, cancel);
+        fileWatches[path] = hash;
+        return hash;
+    }
+
+    private async Task<string?> WatchFile(string path, CancellationToken cancel) =>
         HexLinkData.String(await AskObject("fs/watch", new JsonObject { ["path"] = path }, cancel), "hash", 64);
 
     /// <summary>A file no longer watched.</summary>
-    public Task Unwatch(string path, CancellationToken cancel = default) => session.Ask("fs/unwatch", new JsonObject { ["path"] = path }, cancel);
-
-    // A bundle coming over, into its temp file a chunk at a time, in order
-    private sealed class Receiving(string file, Action<long, long>? progress)
+    public Task Unwatch(string path, CancellationToken cancel = default)
     {
-        private readonly FileStream stream = new(file, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        public string File { get; } = file;
-        public long Written { get; private set; }
-        public long Expected { get; set; } = -1;
-        public TaskCompletionSource<string?> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        fileWatches.TryRemove(path, out _);
+        return session.Ask("fs/unwatch", new JsonObject { ["path"] = path }, cancel);
+    }
 
-        public void Write(long at, byte[] data)
+    private async Task RestoreFileWatches(Func<Func<Task>, Task> attempt, Func<bool> stillAllowed)
+    {
+        foreach (var (path, previous) in fileWatches)
         {
-            if (Done.Task.IsCompleted)
-                return;
-            if (at != Written || (Expected >= 0 && Written + data.Length > Expected) || Written + data.Length > MOST_BUNDLE)
+            await attempt(async () =>
             {
-                Fail("its chunks didn't come in order or came to more than it said");
-                return;
-            }
+                string? hash = await WatchFile(path, session.Closing);
+                if (stillAllowed() && fileWatches.TryUpdate(path, hash, previous) && previous != hash)
+                    FileChanged?.Invoke(path, hash);
+            });
+        }
+    }
 
-            stream.Write(data);
-            Written += data.Length;
-            progress?.Invoke(Written, Expected);
+    // The reader only enqueues messages. One asynchronous writer owns the temp file and validates both size reports.
+    private sealed class Receiving
+    {
+        private readonly Channel<(long At, string Base64)> chunks = Channel.CreateBounded<(long, string)>(
+            new BoundedChannelOptions(64) { SingleReader = true, SingleWriter = true });
+        private readonly TaskCompletionSource<long> advertised = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private long ended = -1;
+
+        public void Expect(long size) => advertised.TrySetResult(size);
+
+        public void Queue(long at, string data)
+        {
+            if (!chunks.Writer.TryWrite((at, data)))
+                Fail("the download could not keep up with its sender");
         }
 
         public void Finish(long size)
         {
-            if (Done.Task.IsCompleted)
+            if (ended >= 0)
                 return;
-            stream.Dispose();
-            if (size != Written)
+            if (size < 0 || size > MOST_BUNDLE)
             {
-                Fail($"it came to {Written} bytes where it should have been {size}");
+                Fail("the completion size was invalid");
                 return;
             }
-
-            Done.TrySetResult(File);
+            ended = size;
+            chunks.Writer.TryComplete();
         }
 
-        public void Fail(string why)
+        public void Fail(string why) => chunks.Writer.TryComplete(BundleFailure(why));
+
+        public async Task Receive(string file, Action<long, long>? progress, CancellationToken cancel)
         {
-            try { stream.Dispose(); } catch (Exception) { }
-            HexLinkGit.TryDelete(File);
-            Done.TrySetException(new HexLinkException(HexLinkErrors.INTERNAL_ERROR, $"The bundle didn't come over, {why}."));
+            await using var stream = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            long written = 0;
+            try
+            {
+                await foreach (var (at, text) in chunks.Reader.ReadAllAsync(cancel).ConfigureAwait(false))
+                {
+                    byte[] data = Convert.FromBase64String(text);
+                    long expected = advertised.Task.IsCompletedSuccessfully ? advertised.Task.Result : -1;
+                    long next = written + data.Length;
+                    if (at != written || data.Length is 0 or > HexLinkGit.CHUNK || next > MOST_BUNDLE || (expected >= 0 && next > expected))
+                        throw BundleFailure("its chunks didn't come in order or came to more than it said");
+                    await stream.WriteAsync(data, cancel).ConfigureAwait(false);
+                    written = next;
+                    progress?.Invoke(written, expected);
+                }
+
+                long size = await advertised.Task.WaitAsync(cancel).ConfigureAwait(false);
+                if (size != written || ended != written)
+                    throw BundleFailure($"it came to {written} bytes, the response said {size}, and completion said {ended}");
+                progress?.Invoke(written, size);
+            }
+            catch (Exception e) when (e is FormatException or IOException)
+            {
+                throw BundleFailure(e.Message);
+            }
         }
     }
+
+    private static HexLinkException BundleFailure(string why) =>
+        new(HexLinkErrors.INTERNAL_ERROR, $"The bundle didn't come over, {why}.");
 
     /// <summary>The biggest bundle taken, 8 GB.</summary>
     public const long MOST_BUNDLE = 8L * 1024 * 1024 * 1024;
@@ -140,44 +185,51 @@ internal sealed partial class HexLinkPeer
     public async Task<string?> Bundle(string repository, IReadOnlyList<string> have, Action<long, long>? progress = null, string? repo = null, CancellationToken cancel = default)
     {
         string id = Guid.NewGuid().ToString("N");
-        var receiving = new Receiving(Path.Combine(Path.GetTempPath(), $"hexlink-{id}.bundle"), progress);
+        string file = Path.Combine(Path.GetTempPath(), $"hexlink-{id}.bundle");
+        var receiving = new Receiving();
         bundles[id] = receiving;
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel, session.Closing);
+        Task receive = Task.Run(() => receiving.Receive(file, progress, stop.Token));
+        Task<JsonObject> request = AskObject("git/bundle", new JsonObject
+        {
+            ["repository"] = repository,
+            ["id"] = id,
+            ["have"] = new JsonArray([.. have.Take(HexLinkGit.MOST_HAVE).Select(sha => (JsonNode)sha)])
+        }, stop.Token, TimeSpan.FromMinutes(15));
+        bool finished = false;
+        bool keep = false;
         try
         {
-            JsonObject said = await AskObject("git/bundle", new JsonObject
-            {
-                ["repository"] = repository,
-                ["id"] = id,
-                ["have"] = new JsonArray([.. have.Take(HexLinkGit.MOST_HAVE).Select(sha => (JsonNode)sha)])
-            }, cancel, TimeSpan.FromMinutes(15));
+            if (await Task.WhenAny(receive, request) == receive)
+                await receive;
+            JsonObject said = await request;
+            if (HexLinkData.String(said, "id", 64) != id)
+                throw BundleFailure("the response had a different id");
             long size = HexLinkData.Long(said, "size") ?? -1;
             if (size < 0 || size > MOST_BUNDLE)
                 throw new HexLinkException(HexLinkErrors.TOO_BIG, "The bundle is bigger than a link takes.");
-            receiving.Expected = size;
-
-            string? file = await receiving.Done.Task.WaitAsync(TimeSpan.FromHours(2), cancel);
+            receiving.Expect(size);
+            await receive.WaitAsync(TimeSpan.FromHours(2), stop.Token);
+            finished = true;
             if (size == 0)
-            {
-                HexLinkGit.TryDelete(receiving.File);
                 return null;
-            }
 
-            if (await Task.Run(() => HexLinkGit.Verify(file!, repo), cancel) is { } bad)
-            {
-                HexLinkGit.TryDelete(receiving.File);
+            if (await Task.Run(() => HexLinkGit.Verify(file, repo), stop.Token) is { } bad)
                 throw new HexLinkException(HexLinkErrors.INTERNAL_ERROR, $"The bundle didn't verify, {bad}");
-            }
-
+            keep = true;
             return file;
-        }
-        catch (Exception)
-        {
-            receiving.Fail("it was given up on");
-            throw;
         }
         finally
         {
             bundles.TryRemove(id, out _);
+            if (!finished && !session.IsClosed)
+                session.Tell("git/cancel", new JsonObject { ["id"] = id });
+            stop.Cancel();
+            try { await receive; } catch (Exception) { }
+            if (!request.IsCompletedSuccessfully)
+                _ = request.ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
+            if (!keep)
+                HexLinkGit.TryDelete(file);
         }
     }
 
@@ -191,14 +243,7 @@ internal sealed partial class HexLinkPeer
             return;
         }
 
-        try
-        {
-            receiving.Write(at, Convert.FromBase64String(data));
-        }
-        catch (Exception e) when (e is FormatException or IOException)
-        {
-            receiving.Fail(e.Message);
-        }
+        receiving.Queue(at, data);
     }
 
     private void BundleDone(JsonObject said)

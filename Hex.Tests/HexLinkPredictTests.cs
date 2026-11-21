@@ -389,6 +389,41 @@ public sealed class HexLinkPredictTests
         Assert.True(Eventually(() => linked.Desk.ServesPredictions));
     }
 
+    [Fact]
+    public async Task Turning_off_prediction_sharing_cancels_an_active_model()
+    {
+        using Linked linked = await Linked.Up(HexLinkRights.Predict);
+        var model = new Waiting();
+        linked.Desktop.Model = model.Run;
+        await using IAsyncEnumerator<string> stream = linked.Desk.Predict(ASKED).GetAsyncEnumerator();
+        Assert.True(await stream.MoveNextAsync());
+        linked.Desktop.Serving = false;
+        linked.DesktopLink.PredictionsMoved();
+        await model.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await stream.MoveNextAsync());
+    }
+
+    [Fact]
+    public async Task A_prediction_that_outpaces_the_reader_is_cancelled_instead_of_buffering_unlimited_text()
+    {
+        using Linked linked = await Linked.Up(HexLinkRights.Predict);
+        var model = new Waiting();
+        linked.Desktop.Model = model.Run;
+        await using IAsyncEnumerator<string> stream = linked.Desk.Predict(ASKED).GetAsyncEnumerator();
+        Assert.True(await stream.MoveNextAsync());
+        HexLinkSession sender = Assert.Single(linked.DesktopLink.Peers).Session;
+        for (int i = 0; i < 80; i++)
+            Assert.True(sender.Tell("predict/chunk", new JsonObject { ["id"] = "p1", ["text"] = "extra" }));
+        await model.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var failure = await Assert.ThrowsAsync<HexLinkException>(async () =>
+        {
+            int count = 0;
+            while (await stream.MoveNextAsync())
+                Assert.InRange(++count, 1, 64);
+        });
+        Assert.Contains("receive buffer", failure.Message, StringComparison.Ordinal);
+    }
+
     // A link is one stream: a big answer being written holds the next line until it's out, so a prediction's first
     // piece can wait behind an 8 MB file read on a slow network. What's tested is that a slow request (one the host is
     // still working on) never holds a prediction up, each request being answered on a task of its own.

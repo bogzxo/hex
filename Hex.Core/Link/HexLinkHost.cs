@@ -42,7 +42,23 @@ internal sealed partial class HexLinkHost : IDisposable
     public Func<string, bool>? DirectlyLinked { get; set; }
 
     /// <summary>A request from the other end answered, or refused with why. What the session calls.</summary>
-    public Task<JsonNode?> Handle(string method, JsonObject parameters, CancellationToken cancel) => method switch
+    public Task<JsonNode?> Handle(string method, JsonObject parameters, CancellationToken cancel)
+    {
+        if (parameters.ContainsKey("relay"))
+        {
+            if (HexLinkData.Object(parameters, "relay") is not { } relay
+                || HexLinkData.Int(relay, "hops") != 1
+                || HexLinkData.String(relay, "origin", 65) is not { Length: 64 } origin
+                || !origin.All(char.IsAsciiHexDigit))
+                throw HexLinkException.Invalid("The Link relay identity or hop count is invalid.");
+            string name = HexLinkNames.Clean(HexLinkData.String(relay, "name", 100)) ?? origin;
+            string operation = method == "tools/call" ? $"tool {HexLinkData.String(parameters, "name", 100)}" : Cut(method, 60);
+            services.Audit("relay", Device, $"{operation} for {name} ({origin}) via {Device.Name} ({Device.Id})");
+        }
+        return Dispatch(method, parameters, cancel);
+    }
+
+    private Task<JsonNode?> Dispatch(string method, JsonObject parameters, CancellationToken cancel) => method switch
     {
         "link/hello" => Task.FromResult<JsonNode?>(Hello()),
         "fleet/get" => Task.FromResult<JsonNode?>(FleetGet()),
@@ -151,9 +167,9 @@ internal sealed partial class HexLinkHost : IDisposable
     /// <summary>What the device may do here changed (Link's window), told to it at once.</summary>
     public void RightsMoved()
     {
-        session.Tell("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
         if (!HexLinkAllowed.Has(Rights, HexLinkRights.View))
             StopWatching();
+        session.Tell("link/rights", new JsonObject { ["granted"] = HexLinkData.Words(Rights) });
         ServesMoved();
     }
 
@@ -171,11 +187,13 @@ internal sealed partial class HexLinkHost : IDisposable
     {
         HexLinkRights rights = Rights;
         HexLinkWorkspace workspace = HexLinkAllowed.Has(rights, HexLinkRights.View) ? services.Workspace : HexLinkWorkspace.Empty;
+        JsonObject redial = services.RedialAdvertisement();
         return new JsonObject
         {
             ["protocol"] = PROTOCOL,
             ["device"] = HexLinkData.DeviceJson(services.Device),
             ["granted"] = HexLinkData.Words(rights),
+            ["redial"] = redial,
             ["serves"] = Serves(),
             ["workspace"] = new JsonObject
             {
@@ -265,6 +283,8 @@ internal sealed partial class HexLinkHost : IDisposable
         }
 
         Need(right, $"tool {name}");
+        if (HexLinkAllowed.IsRelayTool(name) && parameters.ContainsKey("relay"))
+            throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link permits one relay hop.", new JsonObject { ["needs"] = "one relay hop" });
         if (services.Tools.Tools.FirstOrDefault(tool => tool.Name == name) is not { } tool)
             throw HexLinkException.NotFound($"This Hex has no tool called {name}.");
 
@@ -276,8 +296,35 @@ internal sealed partial class HexLinkHost : IDisposable
         if (right != HexLinkRights.View)
             services.Audit(HexLinkData.Word(right), Device, $"tool {name} {Cut(arguments.ToJsonString(), 300)}");
 
+        var fileRule = HexLinkAllowed.RemoteFileAllowed;
+        Func<string, bool>? previousFile = fileRule.Value;
+        var relayOrigin = HexLinkAllowed.RelayOrigin;
+        HexLinkDevice? previousOrigin = relayOrigin.Value;
         try
         {
+            fileRule.Value = CanReachToolFile;
+            HexLinkAllowed.SetEditorFileRule(arguments, CanReachToolFile);
+            if (name is "hex_edit" or "hex_write" or "hex_edit_symbol" or "hex_rename" or "hex_git_diff")
+            {
+                string? path = HexLinkData.String(arguments, "path", HexLinkFiles.MOST_PATH + 1);
+                if (string.IsNullOrWhiteSpace(path) && (name is "hex_edit" or "hex_write" or "hex_git_diff"))
+                    throw HexLinkException.NotAllowed("a visible file path");
+                if (path is { Length: > 0 })
+                {
+                    if (path.Length > HexLinkFiles.MOST_PATH)
+                        throw HexLinkException.Invalid("The file path is too long.");
+                    string full = ResolveToolFile(path);
+                    if (name == "hex_git_diff" && !File.Exists(full))
+                        throw HexLinkException.NotAllowed("a visible file for Git diff");
+                    arguments["path"] = full;
+                }
+            }
+            if (HexLinkAllowed.IsRelayTool(name))
+            {
+                services.Audit("relay", Device, $"{name} from {Device.Name} ({Device.Id})");
+                relayOrigin.Value = Device;
+            }
+
             McpToolResult result = await services.Tools.Call(name, arguments, cancel);
             return result.ToJson();
         }
@@ -289,6 +336,57 @@ internal sealed partial class HexLinkHost : IDisposable
         {
             return McpToolResult.Error($"{name} went wrong, {e.Message}").ToJson();
         }
+        finally
+        {
+            fileRule.Value = previousFile;
+            relayOrigin.Value = previousOrigin;
+        }
+    }
+
+    private bool CanReachToolFile(string path)
+    {
+        try
+        {
+            ResolveToolFile(path);
+            return true;
+        }
+        catch (Exception e) when (e is HexLinkException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private string ResolveToolFile(string path)
+    {
+        IReadOnlyList<HexLinkFolder> folders = Folders;
+        HexExcludes excludes = services.Excludes;
+        if (Path.IsPathFullyQualified(path))
+        {
+            string full = Path.GetFullPath(path);
+            foreach (HexLinkFolder folder in folders.OrderByDescending(folder => folder.Path.Length))
+            {
+                if (PlatformPaths.IsUnder(full, folder.Path))
+                {
+                    string relative = HexExcludes.Relative(folder.Path, full);
+                    return HexLinkFiles.Resolve(folders, relative.Length == 0 ? folder.Name : $"{folder.Name}/{relative}", excludes);
+                }
+            }
+        }
+        else if (folders.Count > 0)
+        {
+            string local = path.Replace('\\', '/');
+            int slash = local.IndexOf('/');
+            if (slash > 0 && folders.Any(folder => PlatformPaths.Comparer.Equals(folder.Name, local[..slash])))
+                return HexLinkFiles.Resolve(folders, local, excludes);
+            foreach (HexLinkFolder folder in folders)
+            {
+                string full = Path.Combine(folder.Path, path);
+                if (File.Exists(full) || Directory.Exists(full))
+                    return HexLinkFiles.Resolve(folders, $"{folder.Name}/{local}", excludes);
+            }
+            return HexLinkFiles.Resolve(folders, $"{folders[0].Name}/{local}", excludes);
+        }
+        throw HexLinkException.NotAllowed("a visible path inside the workspace");
     }
 
     // A patch offered, a card for the person here, the answer they gave
@@ -316,6 +414,7 @@ internal sealed partial class HexLinkHost : IDisposable
     private void StopWatching()
     {
         fleetAsked = false;
+        ForgetFetchedChats();
         foreach (var (_, watched) in chats)
             watched.Coalesce.Dispose();
         chats.Clear();

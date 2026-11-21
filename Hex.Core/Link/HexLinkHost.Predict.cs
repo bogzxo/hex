@@ -56,10 +56,10 @@ internal sealed partial class HexLinkHost
     /// </summary>
     public void ServesMoved()
     {
-        if (!Rights.HasFlag(HexLinkRights.Predict))
+        bool serves = ServesPredictions;
+        if (!serves)
             StopPredicting();
 
-        bool serves = ServesPredictions;
         if (Interlocked.Exchange(ref servesSaid, serves ? 1 : 0) != (serves ? 1 : 0))
             session.Tell("link/serves", new JsonObject { ["serves"] = ServesJson(serves) });
     }
@@ -81,6 +81,11 @@ internal sealed partial class HexLinkHost
         var running = new Predicting(id, CancellationTokenSource.CreateLinkedTokenSource(session.Closing), Interlocked.Increment(ref predictStarts));
         lock (predictGate)
         {
+            if (!ServesPredictions)
+            {
+                running.Cancel.Dispose();
+                throw HexLinkPrediction.Failed("This Hex doesn't share its predictions.", HexLinkPrediction.REFUSED);
+            }
             if (!predicting.TryAdd(id, running))
             {
                 running.Cancel.Dispose();
@@ -116,13 +121,13 @@ internal sealed partial class HexLinkHost
         {
             await foreach (string piece in text.WithCancellation(cancel).ConfigureAwait(false))
             {
-                if (cancel.IsCancellationRequested)
+                if (cancel.IsCancellationRequested || !ServesPredictions)
                     break;
                 if (piece.Length > 0 && !session.Tell("predict/chunk", new JsonObject { ["id"] = running.Id, ["text"] = piece }))
                     break;
             }
 
-            if (cancel.IsCancellationRequested)
+            if (cancel.IsCancellationRequested || !ServesPredictions)
                 Ended(done, "The prediction was cancelled.", HexLinkPrediction.CANCELLED);
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
@@ -186,7 +191,10 @@ internal sealed partial class HexLinkHost
     // Every prediction cancelled, when the device may no longer ask or the link goes
     private void StopPredicting()
     {
-        foreach (var (_, running) in predicting)
+        Predicting[] current;
+        lock (predictGate)
+            current = [.. predicting.Values];
+        foreach (Predicting running in current)
             Cancel(running);
     }
 

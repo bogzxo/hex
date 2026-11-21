@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net.NetworkInformation;
 
 using Horizon.UI.Components;
 
@@ -54,6 +55,12 @@ internal sealed partial class DawnScene
     private readonly HexLinkRedial linkRedial = new();
     private readonly HashSet<string> linkDialling = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> linkHeldOff = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> linkNearbyAddresses = new(StringComparer.OrdinalIgnoreCase);
+    private volatile IReadOnlyList<string> linkListenAddresses = [];
+    private bool linkListeningForAddressChanges;
+
+    public HexLinkRedialState? LinkRedialState(string deviceId) => linkHeldOff.Contains(deviceId) || link?.PeerOf(deviceId) is not null
+        ? null : linkRedial.State(deviceId, linkDialling.Contains(deviceId));
 
     // The versions of the chats as the hub last had them, so only the chats that moved are said to have
     private readonly Dictionary<int, int> linkChatVersions = [];
@@ -135,6 +142,35 @@ internal sealed partial class DawnScene
     /// <summary>What this device is called, the link_name setting or the machine's name.</summary>
     private string LinkNameWanted => HexLinkNames.Clean(settings.LinkName) ?? HexLinkNames.Clean(System.Environment.MachineName) ?? "Hex";
 
+    public HexLinkIdentityFailure? LinkIdentityFailure { get; private set; }
+
+    /// <summary>Sets aside the old key so the next start can create a new identity.</summary>
+    internal bool ResetLinkIdentity(out string? backup, out string? reason)
+    {
+        backup = null;
+        reason = null;
+        if (linkTransport is not null || linkKeys is not { } keys)
+        {
+            reason = "Turn Link off before resetting its identity.";
+            return false;
+        }
+
+        try
+        {
+            backup = HexLinkIdentity.Reset(keys);
+            LinkIdentityFailure = null;
+            linkAudit?.Write("identity reset", string.Empty, $"Saved the previous identity as {Path.GetFileName(backup)}.");
+            linkDirty = true;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            reason = e.Message;
+            linkAudit?.Write("identity reset failed", string.Empty, reason);
+            return false;
+        }
+    }
+
     /// <summary>
     /// Puts Link up: the device's key read (made the first time), the known devices read, the listener on its port
     /// (none on a tablet, which only dials) and the LAN looked at. True when it's up.
@@ -159,7 +195,9 @@ internal sealed partial class DawnScene
             linkAudit = new HexLinkAudit(Path.Combine(linkData, "audit.log"));
             // A self test's key is never put in the person's Keychain or secret service, the file alone keeps it
             linkIdentity = HexLinkIdentity.LoadOrCreate(keys, LinkNameWanted, fileOnly: options.SelfTest);
+            LinkIdentityFailure = null;
             linkTrust = new HexLinkTrust(keys);
+            linkRedial.Open(keys, linkTrust.Known.Select(known => known.Device.Id).ToArray());
             linkServices = new LinkServices(this);
             linkCancel = new CancellationTokenSource();
             link = new HexLink(linkServices)
@@ -176,7 +214,22 @@ internal sealed partial class DawnScene
             };
             linkTrust.Changed += LinkTrustChanged;
             if (HexHost.Listens)
+            {
+                linkListenAddresses = HexLinkRedial.LocalAddresses(loopbackOnly);
                 linkTransport.Start(port ?? options.LinkPort ?? settings.LinkPort, loopbackOnly);
+                if (!loopbackOnly)
+                {
+                    try
+                    {
+                        NetworkChange.NetworkAddressChanged += LinkNetworkAddressChanged;
+                        linkListeningForAddressChanges = true;
+                    }
+                    catch (Exception e) when (e is NetworkInformationException or PlatformNotSupportedException)
+                    {
+                        Console.WriteLine($"[Hex] Link can't monitor network address changes, {e.Message}");
+                    }
+                }
+            }
             linkOwner = this;
             linkFoldersSeen = [];
             linkLookWait = 0.0f;
@@ -190,6 +243,11 @@ internal sealed partial class DawnScene
         }
         catch (Exception e)
         {
+            if (e is HexLinkIdentityLoadException identity)
+            {
+                LinkIdentityFailure = identity.Failure;
+                linkAudit?.Write("identity load failed", string.Empty, $"{identity.Failure.Problem}: {identity.Message}");
+            }
             Say(Said("link.failed", ("why", e is System.Net.Sockets.SocketException { SocketErrorCode: System.Net.Sockets.SocketError.AddressAlreadyInUse }
                 ? Said("link.port_taken", ("port", (port ?? options.LinkPort ?? settings.LinkPort).ToString(System.Globalization.CultureInfo.InvariantCulture)))
                 : e.Message)), error: true);
@@ -202,6 +260,12 @@ internal sealed partial class DawnScene
     internal void StopLink()
     {
         linkCancel?.Cancel();
+        if (linkListeningForAddressChanges)
+        {
+            NetworkChange.NetworkAddressChanged -= LinkNetworkAddressChanged;
+            linkListeningForAddressChanges = false;
+        }
+        linkListenAddresses = [];
         if (linkDiscovery is not null)
         {
             linkDiscovery.StopAnnouncing();
@@ -232,6 +296,7 @@ internal sealed partial class DawnScene
         linkPairingPending = null;
         linkRedial.Clear();
         linkDialling.Clear();
+        linkNearbyAddresses.Clear();
         linkPresence.Clear();
         linkChatVersions.Clear();
         linkByTest = false;
@@ -405,6 +470,13 @@ internal sealed partial class DawnScene
         linkHeldOff.Remove(peer.Device.Id);
         // Its name as it says it kept as its own (the person's name for it, if any, still wins), and kept as it changes
         linkTrust?.Seen(peer.Device.Id, peer.Device, string.Empty);
+        RememberLinkAddresses(peer);
+        peer.AddressesMoved += () => PostLink(() => RememberLinkAddresses(peer));
+        peer.ViewRestored += () => PostLink(() =>
+        {
+            if (link?.PeerOf(peer.Device.Id) == peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
+                LinkShareJoined(peer);
+        });
         peer.Renamed = device => PostLink(() =>
         {
             linkTrust?.Seen(device.Id, device, string.Empty);
@@ -431,6 +503,27 @@ internal sealed partial class DawnScene
         }
     }
 
+    private void RememberLinkAddresses(HexLinkPeer peer)
+    {
+        if (linkTrust?.Find(peer.Device.Id) is null || peer.IsClosed)
+            return;
+        linkRedial.Remember(peer.Device.Id, peer.RedialAddresses);
+        linkDirty = true;
+    }
+
+    private void LinkNetworkAddressChanged(object? sender, EventArgs args)
+    {
+        IReadOnlyList<string> current = HexLinkRedial.LocalAddresses(loopbackOnly: false);
+        PostLink(() =>
+        {
+            if (!linkListeningForAddressChanges || linkServices is not { } services || linkListenAddresses.SequenceEqual(current))
+                return;
+            linkListenAddresses = current;
+            foreach (HexLinkPeer peer in LinkPeers)
+                peer.Session.Tell("link/addresses", services.RedialAdvertisement());
+        });
+    }
+
     // A link gone, said unless Link itself was turned off
     private void LinkClosed(HexLinkDevice device, string why)
     {
@@ -442,7 +535,12 @@ internal sealed partial class DawnScene
     }
 
     // A device forgotten here (or elsewhere through the file): what's shown of it goes
-    private void LinkTrustChanged(string id) => LinkMoved();
+    private void LinkTrustChanged(string id) => PostLink(() =>
+    {
+        if (linkTrust?.Find(id) is null)
+            linkRedial.Forget(id);
+        linkDirty = true;
+    });
 
     /* Redialling the known devices */
 
@@ -464,15 +562,21 @@ internal sealed partial class DawnScene
             if (linkDialling.Contains(id) || linkHeldOff.Contains(id) || link.PeerOf(id) is not null || transport.LinkTo(id) is not null || !linkRedial.Due(id, now))
                 continue;
 
-            List<(string Host, int Port)> tries = LinkAddressesOf(known, nearby);
+            List<(string Host, int Port)> tries = LinkAddressesOf(known, nearby, linkRedial.Addresses(id));
             if (tries.Count == 0)
+            {
+                linkRedial.Failed(id, now, "No listening address is known for this device.");
+                linkDirty = true;
                 continue;
+            }
 
             linkDialling.Add(id);
+            linkDirty = true;
             CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
             _ = Task.Run(async () =>
             {
                 string? why = null;
+                string? detail = null;
                 foreach (var (host, port) in tries)
                 {
                     try
@@ -481,29 +585,44 @@ internal sealed partial class DawnScene
                         HexLinkPeer? peer = await LinkAdd(connection);
                         PostLink(() =>
                         {
+                            if (linkTransport != transport)
+                                return;
                             linkDialling.Remove(id);
                             if (peer is null)
-                                linkRedial.Failed(id, DateTime.UtcNow);
+                                linkRedial.Failed(id, DateTime.UtcNow, "The device connected, then Link could not say hello.");
+                            linkDirty = true;
                         });
                         return;
                     }
                     catch (HexLinkRefused e) when (e.Reason == "busy")
                     {
                         // Linked meanwhile the other way, nothing to do
-                        PostLink(() => linkDialling.Remove(id));
+                        PostLink(() =>
+                        {
+                            if (linkTransport != transport)
+                                return;
+                            linkDialling.Remove(id);
+                            if (link?.PeerOf(id) is null)
+                                linkRedial.Failed(id, DateTime.UtcNow, e.Message);
+                            linkDirty = true;
+                        });
                         return;
                     }
                     catch (Exception e)
                     {
                         why = e is HexLinkRefused refused ? refused.Reason : e.Message;
+                        detail = e.Message;
                     }
                 }
 
                 string said = why ?? "unreachable";
                 PostLink(() =>
                 {
+                    if (linkTransport != transport)
+                        return;
                     linkDialling.Remove(id);
-                    linkRedial.Failed(id, DateTime.UtcNow);
+                    linkRedial.Failed(id, DateTime.UtcNow, detail ?? said);
+                    linkDirty = true;
                     LinkRedialRefused?.Invoke(id, said);
                 });
             }, stop);
@@ -515,10 +634,10 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// Where a known device can be dialled: the address and port it was last at, and every address the LAN says it's at
-    /// now (matched by the start of its id), the LAN's in the order HexLinkAddresses.Preferred puts them. A device that
-    /// only ever came in (its port isn't known) and isn't heard on the LAN has none, it's the one that dials.
+    /// now (matched by the start of its id), then what that device advertised over its authenticated connection.
     /// </summary>
-    internal static List<(string Host, int Port)> LinkAddressesOf(HexLinkKnown known, IReadOnlyList<HexLinkNearby> nearby)
+    internal static List<(string Host, int Port)> LinkAddressesOf(HexLinkKnown known, IReadOnlyList<HexLinkNearby> nearby,
+        IReadOnlyList<HexLinkEndpoint>? remembered = null)
     {
         var tries = new List<(string Host, int Port)>();
         foreach (HexLinkNearby heard in nearby)
@@ -531,6 +650,12 @@ internal sealed partial class DawnScene
 
         if (known.Address.Length > 0 && known.Port > 0 && !tries.Contains((known.Address, known.Port)))
             tries.Add((known.Address, known.Port));
+        if (remembered is not null)
+        {
+            foreach (HexLinkEndpoint endpoint in remembered)
+                if (!tries.Contains((endpoint.Host, endpoint.Port)))
+                    tries.Add((endpoint.Host, endpoint.Port));
+        }
         return tries;
     }
 
@@ -563,11 +688,21 @@ internal sealed partial class DawnScene
     {
         if (linkTrust is null || linkDiscovery is null)
             return;
+        var stillNearby = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (HexLinkNearby heard in linkDiscovery.Found)
         {
             if (heard.Id8.Length >= 8 && linkTrust.Known.FirstOrDefault(known => known.Device.Id.StartsWith(heard.Id8, StringComparison.OrdinalIgnoreCase)) is { } known)
-                linkRedial.Soon(known.Device.Id);
+            {
+                string id = known.Device.Id;
+                string address = $"{heard.Port}/{string.Join(",", HexLinkAddresses.Preferred(heard.Addresses))}";
+                if (!linkNearbyAddresses.TryGetValue(id, out string? was) || was != address)
+                    linkRedial.Soon(id);
+                linkNearbyAddresses[id] = address;
+                stillNearby.Add(id);
+            }
         }
+        foreach (string away in linkNearbyAddresses.Keys.Where(id => !stillNearby.Contains(id)).ToArray())
+            linkNearbyAddresses.Remove(away);
 
         linkDirty = true;
     });

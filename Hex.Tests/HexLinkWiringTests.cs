@@ -127,6 +127,92 @@ public class HexLinkWiringTests : IDisposable
     }
 
     [Fact]
+    public void Advertised_addresses_survive_restart_and_make_an_inbound_device_dialable()
+    {
+        var known = new HexLinkKnown(HexLinkTestKit.DeviceB, HexLinkRights.View, DateTime.UtcNow, DateTime.UtcNow, "192.168.1.30", 0);
+        var redial = new HexLinkRedial();
+        redial.Open(folder, [known.Device.Id]);
+        JsonObject advertisement = HexLinkRedial.Advertisement(47900, ["192.168.1.50", "100.100.0.7", "8.8.8.8", "127.0.0.1"]);
+        HexLinkEndpoint[] endpoints = HexLinkRedial.AdvertisedBy(JsonNode.Parse(advertisement.ToJsonString())!.AsObject(), known.Address);
+        redial.Remember(known.Device.Id, endpoints);
+        redial.Clear();
+        redial.Open(folder, [known.Device.Id]);
+        Assert.Equal([("192.168.1.30", 47900), ("192.168.1.50", 47900), ("100.100.0.7", 47900)],
+            DawnScene.LinkAddressesOf(known, [], redial.Addresses(known.Device.Id)));
+        DateTime now = DateTime.UtcNow;
+        redial.Failed(known.Device.Id, now, "unknown");
+        Assert.Equal(new HexLinkRedialState(HexLinkRedialStatus.Retrying, now + HexLinkRedial.FIRST, "unknown"),
+            redial.State(known.Device.Id, dialling: false));
+        Assert.Equal(new HexLinkRedialState(HexLinkRedialStatus.Connecting, null, "unknown"),
+            redial.State(known.Device.Id, dialling: true));
+    }
+
+    [Fact]
+    public void Link_visibility_filters_every_harness_query_without_reusing_local_answers()
+    {
+        string hidden = Path.Combine(folder, "concealed");
+        Directory.CreateDirectory(hidden);
+        File.WriteAllText(Path.Combine(hidden, "PrivateMarker.cs"), "class PrivateMarker {}");
+        File.WriteAllText(Path.Combine(hidden, "PrivateMarker.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        File.WriteAllText(Path.Combine(folder, "PublicMarker.cs"), "class PublicMarker {}");
+        var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+        const int budget = 8000;
+        Func<string>[] queries =
+        [
+            () => index.Search("Marker", false, true, false, null, 0, 20, budget).Text,
+            () => index.References("PrivateMarker", null, 20, budget).Text,
+            () => index.Files("Marker", 20, budget).Text,
+            () => index.Symbols("Marker", null, null, 20, budget).Text,
+            () => DawnScene.LinkSymbolLocations(index.VisibleSnapshot(), [new HexLinkFolder("work", folder)],
+                new JsonObject { ["query"] = "Marker" }).Text,
+            () => index.Read(null, "PrivateMarker", null, null, true, budget).Text,
+            () => index.Read(Path.Combine(hidden, "PrivateMarker.cs"), null, 1, 1, true, budget).Text,
+            () => index.Skim("**/*.cs", 2, budget).Text,
+            () => index.Map(null, 2, budget).Text,
+            () => index.Changes(0, budget).Text,
+            () => index.Projects(null, false, budget).Text
+        ];
+        foreach (Func<string> query in queries)
+            Assert.Contains("PrivateMarker", query(), StringComparison.Ordinal);
+
+        try
+        {
+            HexLinkAllowed.RemoteFileAllowed.Value = path => !path.StartsWith(hidden, StringComparison.OrdinalIgnoreCase);
+            foreach (Func<string> query in queries)
+            {
+                string said = query();
+                Assert.DoesNotContain("class PrivateMarker", said, StringComparison.Ordinal);
+                if (!said.StartsWith("Nothing called", StringComparison.Ordinal) && !said.StartsWith("No file", StringComparison.Ordinal)
+                    && !said.StartsWith("PrivateMarker isn't used", StringComparison.Ordinal))
+                    Assert.DoesNotContain("PrivateMarker", said, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            HexLinkAllowed.RemoteFileAllowed.Value = null;
+        }
+        Assert.Contains("PrivateMarker", queries[0](), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Link_edit_and_git_diff_reject_excluded_paths_before_calling_editor_tools()
+    {
+        using var pair = await LinkedPair.Up(HexLinkRights.View | HexLinkRights.Edit);
+        Directory.CreateDirectory(Path.Combine(pair.A.Work, ".vs"));
+        File.WriteAllText(Path.Combine(pair.A.Work, ".vs", "PrivateMarker.cs"), "class PrivateMarker {}");
+        foreach (string tool in (string[])["hex_edit", "hex_write", "hex_edit_symbol", "hex_rename", "hex_git_diff"])
+        {
+            Assert.Equal(HexLinkErrors.NOT_ALLOWED,
+                await HexLinkTestKit.CodeOf(pair.PeerA.Call(tool, new JsonObject { ["path"] = ".vs/PrivateMarker.cs" })));
+        }
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED,
+            await HexLinkTestKit.CodeOf(pair.PeerA.Call("hex_git_diff", new JsonObject { ["path"] = pair.A.Work })));
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED,
+            await HexLinkTestKit.CodeOf(pair.PeerA.Call("hex_git_diff", new JsonObject { ["path"] = "" })));
+        Assert.Empty(pair.A.LinkTools.Called);
+    }
+
+    [Fact]
     public void AKnownDeviceIsDialledWhereTheLanSaysAndWhereItLastWas()
     {
         var known = new HexLinkKnown(new HexLinkDevice("ABCDEF12" + new string('0', 56), "Mac"), HexLinkRights.View, DateTime.UtcNow, DateTime.UtcNow, "192.168.1.30", 47833);
@@ -243,5 +329,64 @@ public class HexLinkWiringTests : IDisposable
         Assert.Contains("hex_link_devices", none, StringComparison.Ordinal);
         Assert.Null(DawnScene.LinkPeerOf([], "Laptop", out string? away));
         Assert.Contains("None is.", away, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_third_device_applies_its_own_rights_and_refuses_a_second_relay()
+    {
+        using var first = new LinkServices(HexLinkTestKit.DeviceA);
+        using var middle = new RelayServices();
+        using var last = new LinkServices(HexLinkTestKit.DeviceC);
+        using var a = new HexLink(first);
+        using var b = new HexLink(middle);
+        using var c = new HexLink(last);
+        HexLinkRights rightsAtB = HexLinkRights.View, rightsAtC = HexLinkRights.View;
+        var (ab, ba) = HexLinkTestKit.Pair();
+        var (bc, cb) = HexLinkTestKit.Pair();
+        static HexLinkConnection To(Stream end, HexLinkDevice device, Func<HexLinkRights> rights) => new(end, device, "memory", false, rights);
+        Task<HexLinkPeer> firstHop = a.Add(To(ab, middle.Device, () => HexLinkRights.View));
+        Task<HexLinkPeer> fromB = b.Add(To(ba, first.Device, () => rightsAtB));
+        Task<HexLinkPeer> secondHop = b.Add(To(bc, last.Device, () => HexLinkRights.View));
+        Task<HexLinkPeer> fromC = c.Add(To(cb, middle.Device, () => rightsAtC));
+        await Task.WhenAll(firstHop, fromB, secondHop, fromC);
+        middle.Destination = await secondHop;
+        HexLinkPeer peer = await firstHop;
+        static JsonObject Call(string tool) => new() { ["tool"] = tool };
+
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await HexLinkTestKit.CodeOf(peer.Call("hex_link_call", Call("hex_agent_send"))));
+        Assert.Empty(last.Audited);
+        rightsAtB |= HexLinkRights.Steer;
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await HexLinkTestKit.CodeOf(peer.Call("hex_link_call", Call("hex_agent_send"))));
+        Assert.Empty(last.LinkTools.Called);
+        Assert.Contains(middle.Audited, audit => audit.What == "relay" && audit.Who == first.Device && audit.Detail.Contains(first.Device.Name, StringComparison.Ordinal));
+        Assert.Contains(last.Audited, audit => audit.What == "relay" && audit.Who == middle.Device && audit.Detail.Contains(first.Device.Id, StringComparison.Ordinal));
+
+        rightsAtC |= HexLinkRights.Steer;
+        Assert.False((await peer.Call("hex_link_call", Call("hex_agent_send"))).IsError);
+        Assert.Equal("hex_agent_send", Assert.Single(last.LinkTools.Called).Name);
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await HexLinkTestKit.CodeOf(peer.Call("hex_link_call", Call("hex_link_devices"))));
+        Assert.Single(last.LinkTools.Called);
+    }
+
+    private sealed class RelayServices : IHexLinkServices, IMcpTools, IDisposable
+    {
+        private readonly LinkServices inner = new(HexLinkTestKit.DeviceB);
+        public HexLinkPeer Destination { get; set; } = null!;
+        public HexLinkDevice Device => inner.Device;
+        public HexLinkWorkspace Workspace => inner.Workspace;
+        public HexHubSnapshot Fleet => inner.Fleet;
+        public IReadOnlyDictionary<int, HexLinkChatExtra> FleetExtras => inner.FleetExtras;
+        IMcpTools IHexLinkServices.Tools => this;
+        public IReadOnlyList<McpTool> Tools { get; } = [new("hex_link_call", "Relay", "Relay a tool.",
+            McpSchema.Object([("tool", McpSchema.String("The destination's tool."))], "tool"))];
+        public System.Collections.Concurrent.ConcurrentQueue<(string What, HexLinkDevice Who, string Detail)> Audited => inner.Audited;
+        public Task<JsonObject?> Chat(int id, Func<HexAgentChat, JsonObject?> read) => inner.Chat(id, read);
+        public Task<bool> Answer(int chat, string answer) => inner.Answer(chat, answer);
+        public void Presence(HexLinkDevice device, HexLinkPresence? presence) => inner.Presence(device, presence);
+        public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => inner.PatchOffered(device, title, diff);
+        public void Audit(string what, HexLinkDevice who, string detail) => inner.Audit(what, who, detail);
+        public Task<McpToolResult> Call(string name, JsonObject args, CancellationToken cancel) =>
+            Destination.Call(args["tool"]!.GetValue<string>(), [], cancel);
+        public void Dispose() => inner.Dispose();
     }
 }

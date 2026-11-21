@@ -54,6 +54,8 @@ internal sealed partial class DawnScene
 
         public HexExcludes Excludes => HexExcludes.Of(hex.settings);
 
+        public JsonObject RedialAdvertisement() => HexLinkRedial.Advertisement(hex.linkTransport?.Port ?? 0, hex.linkListenAddresses);
+
         public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
             hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel);
 

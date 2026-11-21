@@ -114,7 +114,7 @@ internal sealed partial class HexCodeIndex
             }
         }
 
-        if (found is null)
+        if (found is null || (HexLinkAllowed.RemoteFileAllowed.Value is { } allowed && !allowed(found)))
             return null;
 
         string[] lines;

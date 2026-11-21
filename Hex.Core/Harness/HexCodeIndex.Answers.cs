@@ -19,6 +19,12 @@ internal sealed partial class HexCodeIndex
     public HexAnswer Ask(string tool, string asked, Func<HexIndexSnapshot, HexAnswer> make)
     {
         HexIndexSnapshot now = Current();
+        if (HexLinkAllowed.RemoteFileAllowed.Value is { } allowed)
+        {
+            HexIndexSnapshot visible = Restrict(now, allowed);
+            HexAnswer restricted = make(visible);
+            return restricted.Failed ? restricted : restricted with { Text = restricted.Text + $"(index generation {now.Generation})\n" };
+        }
         string key = $"{tool}\n{asked}";
         lock (keeping)
         {
@@ -45,6 +51,15 @@ internal sealed partial class HexCodeIndex
         Stats.Count(tool, made.Text.Length, made.Plain, kept: false);
         return made;
     }
+
+    internal HexIndexSnapshot VisibleSnapshot()
+    {
+        HexIndexSnapshot now = Current();
+        return HexLinkAllowed.RemoteFileAllowed.Value is { } allowed ? Restrict(now, allowed) : now;
+    }
+
+    private static HexIndexSnapshot Restrict(HexIndexSnapshot now, Func<string, bool> allowed) =>
+        new(now.Generation, now.Roots, [.. now.Files.Where(file => allowed(file.Path))]);
 
     /// <summary>
     /// Whether an answer made from some files alone still holds at a later generation, every one of them there as it was

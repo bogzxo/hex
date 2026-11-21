@@ -24,7 +24,9 @@ internal sealed partial class HexLinkPeer
         trees[folder] = changes;
         try
         {
-            return await ReadManifest("sync/watch", folder, cancel);
+            HexLinkManifest manifest = await ReadManifest("sync/watch", folder, cancel);
+            RememberTree(folder, manifest);
+            return manifest;
         }
         catch (Exception)
         {
@@ -76,7 +78,8 @@ internal sealed partial class HexLinkPeer
     public Task UnwatchTree(string folder, CancellationToken cancel = default)
     {
         trees.TryRemove(folder, out _);
-        return session.Ask("sync/unwatch", new JsonObject { ["folder"] = folder }, cancel);
+        treeWatchFiles.TryRemove(folder, out _);
+        return AskWithRelay("sync/unwatch", new JsonObject { ["folder"] = folder }, cancel);
     }
 
     /// <summary>
@@ -84,7 +87,7 @@ internal sealed partial class HexLinkPeer
     /// there is known here before an agent here is told to go on.
     /// </summary>
     public Task Flush(string folder, CancellationToken cancel = default) =>
-        session.Ask("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
+        AskWithRelay("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
 
     internal async Task<bool> ConfirmAbsent(string folder, string path, CancellationToken cancel)
     {
@@ -94,7 +97,7 @@ internal sealed partial class HexLinkPeer
 
     /// <summary>A file of the other machine's deleted if it's still what was read (its hash), conflict otherwise, not found when it's gone.</summary>
     public Task Delete(string path, string baseHash, CancellationToken cancel = default) =>
-        session.Ask("fs/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
+        AskWithRelay("fs/delete", new JsonObject { ["path"] = path, ["base"] = baseHash }, cancel);
 
     // A notification of the working-tree sync's, taken
     private void TreeTold(string method, JsonObject said)
@@ -110,6 +113,9 @@ internal sealed partial class HexLinkPeer
         }
 
         if (changes.Count > 0)
+        {
+            RememberTreeChanges(folder, changes);
             hear(changes);
+        }
     }
 }

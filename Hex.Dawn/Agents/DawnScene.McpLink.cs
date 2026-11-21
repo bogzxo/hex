@@ -298,6 +298,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private static async Task<McpToolResult> LinkCall(HexLinkPeer peer, string tool, JsonObject arguments, CancellationToken cancel)
     {
+        if (HexLinkAllowed.RelayOrigin.Value is not null && HexLinkAllowed.IsRelayTool(tool))
+            return McpToolResult.Error("Link permits one relay hop. Call a tool on the destination device.");
         McpToolResult answered;
         try
         {

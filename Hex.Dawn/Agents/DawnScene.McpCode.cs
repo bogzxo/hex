@@ -721,6 +721,12 @@ internal sealed partial class DawnScene
         int budget = HexAgentProfiles.BudgetFor(McpServer.CallingClient.Value, args.Integer("max_chars"));
 
         // The first declaration the server will rename, one in a copy it hasn't loaded gives no edits
+        Func<string, bool>? allowed = HexLinkAllowed.EditorFileRule(args);
+        if (allowed is not null && all.Any(at => !allowed(at.Path)))
+        {
+            yield return McpToolResult.Error("The rename reaches files outside the shared workspace.");
+            yield break;
+        }
         LanguageServer? server = null;
         McpToolResult? failure = null;
         List<McpCodeAt> tried = [];
@@ -744,6 +750,11 @@ internal sealed partial class DawnScene
             if (box.Value is not IReadOnlyDictionary<string, IReadOnlyList<LanguageServerEdit>> { Count: > 0 } edits || edits.Values.All(list => list.Count == 0))
                 continue;
 
+            if (allowed is not null && edits.Any(change => change.Value.Count > 0 && !allowed(change.Key)))
+            {
+                yield return McpToolResult.Error("The rename reaches files outside the shared workspace.");
+                yield break;
+            }
             Func<string, string> relative = McpRelative();
             string moved = at != all[0] ? $" ({all[0].Place(relative)} gave nothing to rename, {at.Place(relative)} did)" : string.Empty;
             string said = McpApplyEdits(edits, args.Flag("dry_run"), $"{(args.Flag("dry_run") ? "Would rename" : "Renamed")} {at.Name} to {renamed}{moved}", budget);
@@ -1131,6 +1142,11 @@ internal sealed partial class DawnScene
         }
 
         string path = found.File.Path;
+        if (HexLinkAllowed.EditorFileRule(args) is { } allowed && !allowed(path))
+        {
+            yield return McpToolResult.Error("The declaration is outside the shared workspace.");
+            yield break;
+        }
         HexDocument? open = Context.Documents.Find(path) is { Modified: true } modified ? modified : null;
         string raw;
         bool bom = false;

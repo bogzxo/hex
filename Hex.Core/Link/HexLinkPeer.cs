@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 
 namespace Hex.Core;
@@ -44,7 +45,8 @@ internal sealed partial class HexLinkPeer : IDisposable
     public HexLinkDevice Device { get; private set; }
 
     /// <summary>What the other machine lets this one do there.</summary>
-    public HexLinkRights Granted { get; private set; }
+    public HexLinkRights Granted => granted;
+    private volatile HexLinkRights granted;
 
     /// <summary>The other machine's workspace, its folders and repositories by name (their paths are empty, they're not this machine's).</summary>
     public HexLinkWorkspace Workspace { get; private set; } = HexLinkWorkspace.Empty;
@@ -68,6 +70,19 @@ internal sealed partial class HexLinkPeer : IDisposable
     public Action? Changed { get; set; }
 
     internal event Action? RightsChanged;
+    internal event Action? ViewRestored;
+    internal event Action? AddressesMoved;
+    private int viewRevision;
+
+    public IReadOnlyList<HexLinkEndpoint> RedialAddresses { get; private set; } = [];
+
+    private void TakeAddresses(JsonObject? said)
+    {
+        if (said is null)
+            return;
+        RedialAddresses = HexLinkRedial.AdvertisedBy(said, session.Connection.Address);
+        AddressesMoved?.Invoke();
+    }
 
     /// <summary>The link's gone.</summary>
     public bool IsClosed => session.IsClosed;
@@ -85,8 +100,9 @@ internal sealed partial class HexLinkPeer : IDisposable
         Device = HexLinkData.DeviceOf(HexLinkData.Object(said, "device"), session.Connection.Device);
         // Its name is its own data, shown everywhere, so cleaned first (HexLinkNames)
         Device = Device with { Name = HexLinkNames.Clean(Device.Name) ?? HexLinkNames.Clean(session.Connection.Device.Name) ?? Device.Id[..Math.Min(8, Device.Id.Length)] };
-        Granted = HexLinkData.RightsOf(said, "granted");
+        granted = HexLinkData.RightsOf(said, "granted");
         Workspace = WorkspaceOf(HexLinkData.Object(said, "workspace"));
+        TakeAddresses(HexLinkData.Object(said, "redial"));
         TakeServes(said);
         Changed?.Invoke();
     }
@@ -116,14 +132,20 @@ internal sealed partial class HexLinkPeer : IDisposable
             switch (method)
             {
                 case "fleet/changed":
-                    TakeFleet(parameters);
+                    if (HexLinkAllowed.Has(Granted, HexLinkRights.View))
+                        TakeFleet(parameters);
                     break;
                 case "chat/changed":
-                    ChatChanged(parameters);
+                    if (HexLinkAllowed.Has(Granted, HexLinkRights.View))
+                        ChatChanged(parameters);
                     break;
                 case "fs/changed":
-                    if (HexLinkData.String(parameters, "path", HexLinkFiles.MOST_PATH) is { } path)
+                    if (HexLinkAllowed.Has(Granted, HexLinkRights.View) && HexLinkData.String(parameters, "path", HexLinkFiles.MOST_PATH) is { } path)
+                    {
+                        if (fileWatches.TryGetValue(path, out string? was))
+                            fileWatches.TryUpdate(path, HexLinkData.String(parameters, "hash", 64), was);
                         FileChanged?.Invoke(path, HexLinkData.String(parameters, "hash", 64));
+                    }
                     break;
                 case "git/chunk":
                     BundleChunk(parameters);
@@ -134,19 +156,145 @@ internal sealed partial class HexLinkPeer : IDisposable
                 case "link/name":
                     TakeName(parameters);
                     break;
+                case "link/addresses":
+                    TakeAddresses(parameters);
+                    break;
                 case "link/rights":
-                    Granted = HexLinkData.RightsOf(parameters, "granted");
-                    RightsChanged?.Invoke();
-                    Changed?.Invoke();
+                    TakeRights(HexLinkData.RightsOf(parameters, "granted"));
                     break;
                 default:
-                    TreeTold(method, parameters);
+                    if (HexLinkAllowed.Has(Granted, HexLinkRights.View))
+                        TreeTold(method, parameters);
                     break;
             }
         }
         catch (Exception)
         {
             // Whatever it was, it was the other machine's to get right, the link goes on
+        }
+    }
+
+    private void TakeRights(HexLinkRights rights)
+    {
+        bool couldView = HexLinkAllowed.Has(Granted, HexLinkRights.View);
+        granted = rights;
+        bool canView = HexLinkAllowed.Has(rights, HexLinkRights.View);
+        if (canView != couldView)
+        {
+            int revision = Interlocked.Increment(ref viewRevision);
+            if (canView)
+                _ = Task.Run(() => RestoreView(revision));
+            else
+            {
+                Fleet = [];
+                FleetVersion = 0;
+                Tools = [];
+                Workspace = HexLinkWorkspace.Empty;
+            }
+        }
+        RightsChanged?.Invoke();
+        Changed?.Invoke();
+    }
+
+    private async Task RestoreView(int revision)
+    {
+        bool StillAllowed() => revision == Volatile.Read(ref viewRevision) && HexLinkAllowed.Has(Granted, HexLinkRights.View);
+        async Task Attempt(Func<Task> watch)
+        {
+            if (!StillAllowed())
+                return;
+            try { await watch().ConfigureAwait(false); }
+            catch (Exception e) when (e is HexLinkException or IOException or OperationCanceledException or TimeoutException) { }
+        }
+
+        await Attempt(async () =>
+        {
+            JsonObject hello = await AskObject("link/hello", null, session.Closing).ConfigureAwait(false);
+            if (StillAllowed())
+            {
+                Workspace = WorkspaceOf(HexLinkData.Object(hello, "workspace"));
+                ViewRestored?.Invoke();
+            }
+        });
+        await Task.WhenAll(
+            Attempt(async () =>
+            {
+                JsonObject fleet = await AskObject("fleet/get", null, session.Closing).ConfigureAwait(false);
+                if (StillAllowed())
+                    TakeFleet(fleet);
+            }),
+            Attempt(() => ListTools(session.Closing)),
+            Attempt(() => RestoreChatWatches(Attempt, StillAllowed)),
+            Attempt(() => RestoreFileWatches(Attempt, StillAllowed)),
+            Attempt(() => RestoreTreeWatches(Attempt, StillAllowed))).ConfigureAwait(false);
+    }
+
+    private readonly ConcurrentDictionary<string, Dictionary<string, HexLinkTreeChange>> treeWatchFiles = new(StringComparer.Ordinal);
+
+    private void RememberTree(string folder, HexLinkManifest manifest)
+    {
+        var files = new Dictionary<string, HexLinkTreeChange>(manifest.Files.Count, StringComparer.Ordinal);
+        foreach (HexLinkTreeFile file in manifest.Files)
+            files.TryAdd(file.Path, TreeChange(file));
+        treeWatchFiles[folder] = files;
+    }
+
+    private static HexLinkTreeChange TreeChange(HexLinkTreeFile file) =>
+        new(file.Path, file.Hash, Text: file.Text, Eol: file.Eol);
+
+    private void RememberTreeChanges(string folder, IReadOnlyList<HexLinkTreeChange> changes)
+    {
+        if (!treeWatchFiles.TryGetValue(folder, out var files))
+            return;
+        lock (files)
+        {
+            foreach (HexLinkTreeChange change in changes)
+            {
+                if (change.Deleted)
+                    files.Remove(change.Path);
+                else
+                    files[change.Path] = change;
+            }
+        }
+    }
+
+    private async Task RestoreTreeWatches(Func<Func<Task>, Task> attempt, Func<bool> stillAllowed)
+    {
+        foreach (var (folder, callback) in trees)
+        {
+            await attempt(async () =>
+            {
+                Dictionary<string, HexLinkTreeChange> before = new(StringComparer.Ordinal);
+                if (treeWatchFiles.TryGetValue(folder, out var files))
+                {
+                    lock (files)
+                        before = new(files, StringComparer.Ordinal);
+                }
+                HexLinkManifest manifest = await WatchTree(folder, callback, session.Closing);
+                if (!stillAllowed() || trees.GetValueOrDefault(folder) != callback)
+                    return;
+
+                var changed = new List<HexLinkTreeChange>();
+                foreach (HexLinkTreeFile file in manifest.Files)
+                {
+                    HexLinkTreeChange current = TreeChange(file);
+                    if (!before.Remove(file.Path, out HexLinkTreeChange? previous) || previous != current)
+                        changed.Add(current);
+                }
+                foreach (string missing in before.Keys)
+                {
+                    if (!stillAllowed())
+                        return;
+                    try { await Read(missing, session.Closing); }
+                    catch (HexLinkException e) when (e.Code == HexLinkErrors.NOT_FOUND)
+                    {
+                        changed.Add(new HexLinkTreeChange(missing, null, Deleted: true));
+                    }
+                    catch (HexLinkException) { }
+                }
+                if (stillAllowed() && changed.Count > 0)
+                    callback(changed);
+            });
         }
     }
 
@@ -299,8 +447,18 @@ internal sealed partial class HexLinkPeer : IDisposable
 
     // An answer that has to be an object, anything else the other end's mistake
     private async Task<JsonObject> AskObject(string method, JsonObject? parameters, CancellationToken cancel, TimeSpan? timeout = null) =>
-        await session.Ask(method, parameters, cancel, timeout) as JsonObject
+        await AskWithRelay(method, parameters, cancel, timeout) as JsonObject
             ?? throw new HexLinkException(HexLinkErrors.INVALID_REQUEST, $"The other Hex answered {method} with something that isn't an object.");
+
+    private Task<JsonNode?> AskWithRelay(string method, JsonObject? parameters, CancellationToken cancel, TimeSpan? timeout = null)
+    {
+        if (HexLinkAllowed.RelayOrigin.Value is { } origin)
+        {
+            parameters ??= [];
+            parameters["relay"] = new JsonObject { ["origin"] = origin.Id, ["name"] = origin.Name, ["hops"] = 1 };
+        }
+        return session.Ask(method, parameters, cancel, timeout);
+    }
 
     public void Dispose()
     {
