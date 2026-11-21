@@ -167,7 +167,10 @@ internal static partial class HexSearch
                     // repository is) is out of reach of the .gitignores above it, the way git and ripgrep take it: they
                     // belong to another repository. A workspace whose .gitignore leaves out the repositories cloned into it
                     // had them walked as if they weren't there, a few files of the top found and nothing of the code.
-                    // Its .git is asked about once, whether it's a folder, a file or not there
+                    // A folder the settings leave out is left out whatever its .git is, which isn't asked about. Its .git is
+                    // asked about once otherwise, whether it's a folder, a file or not there
+                    if (leftOut.Skipped(under, true))
+                        continue;
                     FileAttributes git = new FileInfo(Path.Combine(inside, ".git")).Attributes;
                     bool repository = (int)git != -1 && git.HasFlag(FileAttributes.Directory);
                     bool gitFile = (int)git != -1 && !repository;

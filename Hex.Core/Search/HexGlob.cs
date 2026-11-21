@@ -52,6 +52,16 @@ internal sealed class HexGlob
     /// <summary>Whether a path inside the folder matches it, a folder's or a file's.</summary>
     public bool Matches(string relative, bool folder)
     {
+        string[]? split = null;
+        return Matches(relative, folder, ref split);
+    }
+
+    /// <summary>
+    /// The same for a path asked of many globs, the path cut at its slashes the first time one that goes from the top
+    /// needs it and kept in <paramref name="split"/> for the rest, where each of them cut it again.
+    /// </summary>
+    public bool Matches(string relative, bool folder, ref string[]? split)
+    {
         if (FolderOnly && !folder)
             return false;
 
@@ -61,7 +71,7 @@ internal sealed class HexGlob
             return Wild(parts[0], relative.AsSpan(slash + 1));
         }
 
-        return Along(parts, 0, relative.Split('/', StringSplitOptions.RemoveEmptyEntries), 0);
+        return Along(parts, 0, split ??= relative.Split('/', StringSplitOptions.RemoveEmptyEntries), 0);
     }
 
     // The pattern's parts from one place against the path's from another, ** taking none of them or as many as it likes

@@ -101,11 +101,21 @@ internal sealed class HexReceivers
     {
         dropped = false;
         string line = file.Lines[at];
-        if (line.Length == 0)
+        if (line.Length == 0 || !line.Contains(name, StringComparison.Ordinal))
             return -1;
 
-        // A declaration of the name on the line is the container's or another's, the index says which
-        HexSymbol? declares = file.Symbols.FirstOrDefault(symbol => symbol.Line == at && symbol.Name == name);
+        // A declaration of the name on the line is the container's or another's, the index says which. Asked of the
+        // lines that have the name only, a walk of the file's symbols for each of its lines was most of this
+        HexSymbol? declares = null;
+        foreach (HexSymbol symbol in file.Symbols)
+        {
+            if (symbol.Line == at && symbol.Name == name)
+            {
+                declares = symbol;
+                break;
+            }
+        }
+
         bool any = false;
         foreach (ValueMatch match in pattern.EnumerateMatches(line))
         {

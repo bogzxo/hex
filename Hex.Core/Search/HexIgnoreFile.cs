@@ -78,9 +78,10 @@ internal sealed class HexIgnoreFile
         }
 
         bool ignored = otherwise;
+        string[]? split = null;
         foreach (var (glob, back) in rules)
         {
-            if (glob.Matches(inside, folder))
+            if (glob.Matches(inside, folder, ref split))
                 ignored = !back;
         }
 

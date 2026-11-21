@@ -69,9 +69,10 @@ internal sealed class HexExcludes
 
     private static bool Any(HexGlob[] globs, string relative, bool folder)
     {
+        string[]? split = null;
         for (int i = 0; i < globs.Length; i++)
         {
-            if (globs[i].Matches(relative, folder))
+            if (globs[i].Matches(relative, folder, ref split))
                 return true;
         }
 

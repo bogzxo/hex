@@ -36,7 +36,14 @@ internal sealed partial class HexCodeIndex
 
             HexGlob[] only = glob is { Length: > 0 } ? HexGlob.All(glob.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) : [];
             string bare = regex ? string.Empty : query;
-            return Grouped(index, file => InGlobs(only, file), (file, at) => FirstMatch(pattern, file.Lines[at], null),
+            StringComparison how = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            Func<HexIndexedFile, int, int> find = regex
+                ? (file, at) => FirstMatch(pattern, file.Lines[at], null, null, how)
+                : wholeWord
+                    ? (file, at) => FirstMatch(pattern, file.Lines[at], null, query, how)
+                    // Plain text is found by a vectorised search of the line, no expression involved
+                    : (file, at) => file.Lines[at].AsSpan().IndexOf(query, how);
+            return Grouped(index, file => InGlobs(only, file), find,
                 bare, query, Math.Clamp(context, 0, 5), most, budget, "hex_search");
         });
 
@@ -69,7 +76,7 @@ internal sealed partial class HexCodeIndex
             if (of is null)
             {
                 return Grouped(index, file => InGlobs(only, file),
-                    (file, at) => FirstMatch(pattern, file.Lines[at], file), asked, asked, 0, most, budget, "hex_refs");
+                    (file, at) => FirstMatch(pattern, file.Lines[at], file, asked, StringComparison.Ordinal), asked, asked, 0, most, budget, "hex_refs");
             }
 
             var receivers = new HexReceivers(index, container);
@@ -105,10 +112,11 @@ internal sealed partial class HexCodeIndex
     }
 
     // The column of the first match in a line, -1 for none. With a file the ones in comments and texts are passed over.
-    // Walked as spans so a line that has nothing costs no allocation, which nearly all of them are.
-    private static int FirstMatch(Regex pattern, string line, HexIndexedFile? outsideOf)
+    // Walked as spans so a line that has nothing costs no allocation, which nearly all of them are. A line without the
+    // text the expression needs in it (when there is one) is passed over before the expression looks at it.
+    private static int FirstMatch(Regex pattern, string line, HexIndexedFile? outsideOf, string? needs, StringComparison how)
     {
-        if (line.Length == 0)
+        if (line.Length == 0 || needs is not null && !line.AsSpan().Contains(needs, how))
             return -1;
 
         try
