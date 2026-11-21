@@ -313,6 +313,7 @@ public sealed partial class HexLinkSyncTests
         sessionB.Start();
         try
         {
+            sessionB.Tell("link/rights", new JsonObject { ["granted"] = new JsonArray("view") });
             HexLinkManifest manifest = await peer.WatchTree("work", changes => changed.TrySetResult(Assert.Single(changes)));
             Assert.True(manifest.Certified);
             Assert.Equal(new[] { "work/0", "work/1" }, manifest.Files.Select(file => file.Path));
