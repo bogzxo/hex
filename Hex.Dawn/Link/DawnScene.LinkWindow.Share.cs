@@ -69,11 +69,12 @@ internal sealed partial class DawnScene
                 HexLinkSyncState.Failed => UIBadgeTone.Danger,
                 _ => UIBadgeTone.Neutral
             },
+            Colour = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing ? LinkBadgeInfoColour : null,
             Dot = state is HexLinkSyncState.Syncing or HexLinkSyncState.Comparing, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left
         });
         if (sync is { PullOnly: true } && state != HexLinkSyncState.PullOnly)
             row.Add(new Badge { Text = Said("link.sync_state_pullonly"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.sync_pull_only_tip") });
-        if (sync is not null)
+        if (sync is not null && (sync.Sent != 0 || sync.Received != 0 || sync.Conflicts != 0 || sync.Skipped != 0))
         {
             Label counts = holder.Add(LinkLine(Said("link.sync_counts", ("sent", sync.Sent.ToString(CultureInfo.InvariantCulture)),
                 ("received", sync.Received.ToString(CultureInfo.InvariantCulture)), ("conflicts", sync.Conflicts.ToString(CultureInfo.InvariantCulture)),
@@ -86,14 +87,14 @@ internal sealed partial class DawnScene
         if (running)
             row.Add(LinkButton(Said("link.sync_stop"), "debug-stop", () => LinkSyncStop(id, folder)));
         else
-            row.Add(LinkButton(Said("link.sync_start"), "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
+            row.Add(LinkButton(Said(state == HexLinkSyncState.Failed ? "link.devices_try_now" : "link.sync_start"), "sync", () => LinkSyncGo(id, folder, force: false))).Enabled = HexLinkAllowed.Has(peer.Granted, HexLinkRights.View);
         if (state == HexLinkSyncState.NeedsGit)
             row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
 
         if (sync is not null)
             DrawLinkSyncProgress(holder, sync);
 
-        string said = sync?.Why ?? sync?.Summary ?? string.Empty;
+        string said = sync?.Why ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
         return holder;

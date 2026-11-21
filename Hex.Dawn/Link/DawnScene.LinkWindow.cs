@@ -553,7 +553,7 @@ internal sealed partial class DawnScene
     }
 
     /// <summary>What a set of rights is as chips, View, Steer (in the warning tone) and Edit, a quiet "nothing" for none.</summary>
-    private static List<Badge> LinkRightsChips(HexLinkRights rights)
+    private List<Badge> LinkRightsChips(HexLinkRights rights)
     {
         var chips = new List<Badge>();
         if (rights == HexLinkRights.None)
@@ -566,13 +566,17 @@ internal sealed partial class DawnScene
         {
             chips.Add(new Badge
             {
-                Text = Said("link.right_title_" + name), Icon = name == "steer" ? "warning" : string.Empty, Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
+                Text = Said("link.right_title_" + name), Icon = name == "steer" ? "warning" : string.Empty,
+                Tone = name == "steer" ? UIBadgeTone.Warning : name is "edit" or "predict" ? UIBadgeTone.Info : UIBadgeTone.Neutral,
+                Colour = name is "edit" or "predict" ? LinkBadgeInfoColour : null,
                 TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name)
             });
         }
 
         return chips;
     }
+
+    private Vector4? LinkBadgeInfoColour => Skin is { Palette.LightField: true } skin ? skin.Palette.Link : null;
 
     // TLS's version as people write it
     private static string LinkTlsSaid(System.Security.Authentication.SslProtocols tls) => tls switch

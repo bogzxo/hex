@@ -82,7 +82,8 @@ internal sealed partial class DawnScene
         body.Add(new Label { Text = $"[b]{UIRichText.Literal(Said("link.pair_grant", ("device", device)))}[/b]", Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
         ToggleButton[] toggles = LinkGrantControls(body, ask.Preset ?? HexLinkPreset.Custom, ask.InitialRights,
             (_, rights) => dialog.Buttons[0].Enabled = ask.CanApprove(rights) && !ask.IsDecided,
-            showBoth: true, hostOffer: ask.Host ? null : ask.Terms?.HostGrants, allowNone: ask.CanApproveNone);
+            showBoth: true, hostOffer: ask.Host ? null : ask.Terms?.HostGrants, allowNone: ask.CanApproveNone,
+            partnerName: device, requested: ask.Host ? ask.Terms?.HostRequests : null);
         linkPairView = toggles[0];
         linkPairSteer = toggles[1];
         linkPairEdit = toggles[2];

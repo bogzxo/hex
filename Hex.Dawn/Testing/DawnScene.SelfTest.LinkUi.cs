@@ -85,6 +85,8 @@ internal sealed partial class DawnScene
         HexExtension? localFixture = null;
         Task<McpToolResult>? refused = null;
         string localWorkspace = Path.Combine(home, "workspace", LINK_PEER_FOLDER);
+        string remoteWorkspace = Path.Combine(peerHome, LINK_PEER_FOLDER);
+        string? workspaceFailure = null;
 
         void Shot(string name) => test.Run(() =>
         {
@@ -141,6 +143,22 @@ internal sealed partial class DawnScene
         ToggleButton? DialogRight(string name) => name switch { "view" => linkPairView, "steer" => linkPairSteer, "predict" => linkPairPredict, _ => linkPairEdit };
         AgentCardButton? RemoteCard(UIComponent rows) => Descendants(rows).OfType<AgentCardButton>().FirstOrDefault(card => LinkRemoteOf(card.Chat) is { } remote && remote.DeviceName == LINK_PEER_NAME && card.Chat.Shown == LINK_PEER_CHAT);
 
+        void RevealRemoteFleet()
+        {
+            test.Run(() =>
+            {
+                if (noonNarrow && !noonFleet.Visible)
+                    noonFleetBack.OnPressed?.Invoke();
+            });
+            test.WaitFor(() => RemoteCard(noonFleetRows) is { IsShownInHierarchy: true }, 8);
+            test.Run(() =>
+            {
+                if (RemoteCard(noonFleetRows) is { } card)
+                    noonFleetScroll.ScrollIntoView(card);
+            });
+            test.Settle(0.35f);
+        }
+
         // A up at a free port in a folder of its own, its Link window opened
         test.Run(() =>
         {
@@ -150,7 +168,10 @@ internal sealed partial class DawnScene
                 return;
             linkByTest = true;
             ShowFace(HexFace.Dawn);
-            Directory.CreateDirectory(localWorkspace);
+            Directory.CreateDirectory(peerHome);
+            workspaceFailure = LinkTestRepository(localWorkspace, remoteWorkspace);
+            if (workspaceFailure is not null)
+                Console.WriteLine($"[Hex self-test] link-ui: fixture repository failed: {workspaceFailure}");
             explorer.OpenFolder(localWorkspace);
             LinkLookAtWorkspace(force: true);
             if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_LINK_THEME") is { Length: > 0 } theme)
@@ -158,6 +179,7 @@ internal sealed partial class DawnScene
             ShowLinkWindowForTest();
         });
         test.Settle(0.4f);
+        test.Check("link-ui: workspace fixtures are independent repositories", () => workspaceFailure is null && Directory.Exists(Path.Combine(remoteWorkspace, ".git")));
         test.Check("link-ui: Link's window opens, this device's name, its fingerprint and Link on", () =>
             linkWindow is not null && LinkOn && LinkDevice is { } me && Descendants(linkWindow).OfType<Label>().Any(label => label.Text.Contains(me.Fingerprint, StringComparison.Ordinal)));
         test.Check("link-ui: the window says how the key is kept (a self test's is the file alone, said as a warning)", () =>
@@ -180,8 +202,6 @@ internal sealed partial class DawnScene
             linkPairingDialog is { IsOpen: true } dialog && LinkPairingPending is { } asked && asked.Other.Name == LINK_PEER_NAME
             && Descendants(dialog).OfType<Label>().Any(label => label.Text.Contains(LinkCodeGrouped(asked.Code), StringComparison.Ordinal))
             && LinkPairTicked == HexLinkRights.None && !dialog.Buttons[0].Enabled);
-        test.Check("link-ui: the dialog says Steer is as much as sitting at this machine", () =>
-            Descendants(linkPairingDialog!).OfType<Label>().Any(label => label.Text.Contains(Said("link.right_means_steer"), StringComparison.Ordinal)));
         Shot("link_ui_pairing_dialog.png");
         // Autocomplete stands alone: it can be paired for without View, and doesn't tick View
         test.Click(() => Centre(DialogRight("predict")));
@@ -194,6 +214,8 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("link-ui: ticking Steer ticks View with it, and Pair can be pressed", () =>
             LinkPairTicked == (HexLinkRights.View | HexLinkRights.Steer) && linkPairingDialog?.Buttons[0].Enabled == true);
+        test.Check("link-ui: granting Steer shows the command-execution warning", () => linkPairingDialog is { } dialog &&
+            Descendants(dialog).OfType<Label>().Any(label => label.IsShownInHierarchy && label.Text.Contains(Said("link.right_means_steer"), StringComparison.Ordinal)));
         test.Click(() => Centre(DialogRight("view")));
         test.Wait();
         test.Check("link-ui: taking View away takes Steer with it and greys Pair", () => LinkPairTicked == HexLinkRights.None && linkPairingDialog?.Buttons[0].Enabled == false);
@@ -324,8 +346,7 @@ internal sealed partial class DawnScene
             ShowFace(HexFace.Noon);
             noonWait = 0.0f;
         });
-        test.WaitFor(() => RemoteCard(noonFleetRows) is not null, 15.0f);
-        test.Settle(0.5f);
+        RevealRemoteFleet();
         test.Check("link-ui: the fleet has a section of B's with its chat as a card", () => RemoteCard(noonFleetRows) is not null
             && Descendants(noonFleetRows).OfType<Label>().Any(label => label.Text.Contains(LINK_PEER_NAME, StringComparison.Ordinal)));
         test.Check("link-ui: B's card carries B's badge", () => RemoteCard(noonFleetRows)?.Parent is { } card && Descendants(card).OfType<Badge>().Any(badge => badge.Text == LINK_PEER_NAME));
@@ -507,6 +528,7 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Check("link-ui: with Steer taken away on B, Runs on is gone from a new chat's box", () =>
             LinkRunsOnPeer() is null && LinkRunsOnDevices().Count == 0 && (linkRunsOnPicker is null || !linkRunsOnPicker.IsShownInHierarchy));
+        RevealRemoteFleet();
         test.Click(() => Centre(RemoteCard(noonFleetRows)));
         test.WaitFor(() => LinkRemoteOf(agentChat) is not null, 10.0f);
         test.Settle(0.5f);

@@ -132,7 +132,7 @@ internal sealed partial class DawnScene
         LinkGrantControls(dialog.Body, preset, grants, (_, changed) => grants = changed);
     }
 
-    private static StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights)
+    private StackPanel LinkRightChipsRow(StackPanel column, string caption, HexLinkRights rights)
     {
         StackPanel row = LinkActionRow(column);
         row.Add(new Label { Text = caption, TextScale = LINK_SMALL, Bold = true, Anchor = Origin.Left, Pivot = Origin.Left });
@@ -284,6 +284,7 @@ internal sealed partial class DawnScene
             badge.Text = text;
         badge.Tone = state?.Connecting == true ? UIBadgeTone.Info : key == "link.devices_refused" ? UIBadgeTone.Danger
             : reason is not null ? UIBadgeTone.Warning : UIBadgeTone.Neutral;
+        badge.Colour = badge.Tone == UIBadgeTone.Info ? LinkBadgeInfoColour : null;
         string action = reason is null
             ? Said(!LinkOn ? "link.pair_off_text" : LinkHeldOff(id) ? "link.devices_held_help" : "link.devices_offline_help")
             : LinkDialFailureSaid(reason);

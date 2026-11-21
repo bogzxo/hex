@@ -30,7 +30,8 @@ internal sealed partial class DawnScene
         preset is HexLinkPreset.Collaborator or HexLinkPreset.Worker ? LINK_COLLABORATOR : HexLinkRights.None;
 
     private ToggleButton[] LinkGrantControls(StackPanel column, HexLinkPreset preset, HexLinkRights rights,
-        Action<HexLinkPreset, HexLinkRights> changed, bool showBoth = false, HexLinkRights? hostOffer = null, bool allowNone = false)
+        Action<HexLinkPreset, HexLinkRights> changed, bool showBoth = false, HexLinkRights? hostOffer = null, bool allowNone = false,
+        string? partnerName = null, HexLinkRights? requested = null)
     {
         StackPanel presets = LinkActionRow(column);
         StackPanel secondary = column.Size.X is > 0 and < 420 ? LinkActionRow(column) : presets;
@@ -44,6 +45,7 @@ internal sealed partial class DawnScene
         StackPanel? there = showBoth ? LinkActionRow(column, 24) : null;
         Label description = column.Add(LinkLine(string.Empty));
         StackPanel custom = LinkActionRow(column);
+        custom.Spacing = 18;
         StackPanel predict = LinkActionRow(column);
         ToggleButton[] toggles = new ToggleButton[4];
         HexLinkRights[] kinds = [HexLinkRights.View, HexLinkRights.Steer, HexLinkRights.Edit, HexLinkRights.Predict];
@@ -96,17 +98,22 @@ internal sealed partial class DawnScene
                 ClearRows(there);
                 there.Add(new Label
                 {
-                    Text = Said(hostOffer is null ? "link.devices_request_there" : "link.devices_host_offers"),
+                    Text = hostOffer is not null ? Said("link.devices_host_offers", ("device", partnerName ?? string.Empty))
+                        : partnerName is not null ? Said("link.devices_request_from", ("device", partnerName)) : Said("link.devices_request_there"),
                     TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left
                 });
-                foreach (Badge chip in LinkRightsChips(hostOffer ?? LinkPresetRequest(preset)))
-                    there.Add(chip);
+                HexLinkRights proposed = hostOffer ?? requested ?? LinkPresetRequest(preset);
+                if (proposed == HexLinkRights.None)
+                    there.Add(new Label { Text = Said("link.devices_request_none"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
+                else
+                    foreach (Badge chip in LinkRightsChips(proposed))
+                        there.Add(chip);
             }
 
             description.Text = UIRichText.Literal(Said(hostOffer is not null && preset == HexLinkPreset.Worker
                 ? "link.devices_worker_join_tip" : LinkPresetKey(preset) + "_tip"));
             custom.Visible = preset == HexLinkPreset.Custom;
-            warning.Visible = custom.Visible || (rights & HexLinkRights.Steer) != 0;
+            warning.Visible = (rights & HexLinkRights.Steer) != 0;
         }
 
         void Refresh(HexLinkPreset next, HexLinkRights grant)
