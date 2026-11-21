@@ -78,7 +78,13 @@ internal sealed partial class DawnScene
             return Task.FromResult("kept");
         }
 
-        public void Audit(string what, HexLinkDevice who, string detail) => hex.linkAudit?.Write(what, who.Id, detail);
+        public void Audit(string what, HexLinkDevice who, string detail)
+        {
+            hex.linkAudit?.Write(what, who.Id, detail);
+            // A Steer request breathes the status item a while, so the person sees another machine is driving this one
+            if (what == "steer")
+                hex.LinkSteered();
+        }
     }
 
     // Bytes as text when they're UTF-8 (a byte order mark let go of), null when they aren't, which goes to the disk as they are

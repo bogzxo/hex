@@ -72,9 +72,9 @@ internal sealed partial class DawnScene
     /// <summary>The status bar's item and Link itself, when the settings or the command line say so.</summary>
     private void BuildLink()
     {
-        linkItem = statusBar.Add("$(link)", right: true, pressed: () => ChooseFrom(Said("palette.title"), Said("palette.message"), PaletteChoices(), recent: RecentCommands, typed: Said("link.palette_prefix")),
-            tooltip: Said("link.status_tip_none"));
+        linkItem = statusBar.Add("$(link)", right: true, pressed: ShowLinkWindow, tooltip: Said("link.status_tip_none"));
         linkItem.IsVisible = () => linkTransport is not null;
+        BuildLinkUi();
         ApplyLink();
         AppDomain.CurrentDomain.ProcessExit -= StopLinkAtExit;
         AppDomain.CurrentDomain.ProcessExit += StopLinkAtExit;
@@ -267,6 +267,8 @@ internal sealed partial class DawnScene
     /// </summary>
     private void UpdateLink(float dt)
     {
+        // Link's window and dialog first, nothing while neither is up and nothing steers (DawnScene.LinkWindow)
+        UpdateLinkUi();
         if (linkTransport is null && linkPosted.IsEmpty && !linkDirty)
             return;
 
@@ -285,9 +287,11 @@ internal sealed partial class DawnScene
         if (link is not null && link.Pump())
             linkDirty = true;
 
-        if (linkPairingPending is { IsDecided: true })
+        if (linkPairingPending is { IsDecided: true } decided)
         {
-            CloseLinkPairingDialog();
+            // One that ended on the other side stays a moment to say so, and closes itself (DawnScene.LinkPairing)
+            if (!decided.Ended.IsCancellationRequested || linkPairCloseAt == 0)
+                CloseLinkPairingDialog();
             linkPairingPending = null;
             linkDirty = true;
         }
@@ -313,7 +317,10 @@ internal sealed partial class DawnScene
         IReadOnlyList<HexLinkPeer> peers = LinkPeers;
         if (linkItem is not null)
         {
-            linkItem.Text = peers.Count > 0 ? $"$(link) {peers.Count}" : "$(link)";
+            // Breathing while a device steers something here, so it's seen from across the room
+            linkSteeringShown = LinkSteeringNow;
+            string glyph = linkSteeringShown ? "$(link~breathe)" : "$(link)";
+            linkItem.Text = peers.Count > 0 ? $"{glyph} {peers.Count}" : glyph;
             linkItem.Tooltip = peers.Count == 0
                 ? Said(linkTransport?.PairingOpen == true ? "link.status_tip_pairing" : "link.status_tip_none")
                 : Said("link.status_tip", ("devices", string.Join("\n", peers.Select(peer =>

@@ -145,7 +145,7 @@ internal sealed partial class DawnScene
         }
 
         agentsLatest.Visible = away;
-        agentsLatest.Position = new Vector2(-18, agentsComposeTall + AgentsWaitStripTall + 10.0f);
+        agentsLatest.Position = new Vector2(-18, agentsComposeTall + AgentsWaitStripTall + LinkBannerTall + 10.0f);
     }
 
     /// <summary>The chat on screen scrolled so the row of one of its entries is at the top of what's in sight.</summary>

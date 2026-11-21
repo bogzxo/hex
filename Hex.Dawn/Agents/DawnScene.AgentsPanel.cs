@@ -378,6 +378,7 @@ internal sealed partial class DawnScene
         TickRunningTimes();
         DrawAgentsHead();
         DrawAgentsWaiting();
+        DrawLinkBanner();
         DrawHarnessSaved();
 
         // The dots wait out a quiet moment by the clock, not by the chat changing
@@ -512,10 +513,10 @@ internal sealed partial class DawnScene
             agentsScroll.ScrollToEnd();
     }
 
-    private bool CanComposeAgent() => AgentFor(agentChat) is { } id
+    private bool CanComposeAgent() => LinkCanCompose() ?? (AgentFor(agentChat) is { } id
         && extensions.AgentRuns.ContainsKey(id)
         && HexAgentProfiles.All.FirstOrDefault(profile => profile.Id == id) is { } profile
-        && StateOf(profile) != AgentStates.Missing;
+        && StateOf(profile) != AgentStates.Missing);
 
     private static string Count(long tokens) => HexAgentLimits.Tokens(tokens);
 }

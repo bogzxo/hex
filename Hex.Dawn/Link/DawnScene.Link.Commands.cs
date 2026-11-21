@@ -10,7 +10,7 @@ internal sealed partial class DawnScene
     /// <summary>Link's commands for the palette, those that make sense right now.</summary>
     private List<(string Text, Action Picked)> LinkPaletteCommands()
     {
-        var commands = new List<(string Text, Action Picked)>();
+        var commands = new List<(string Text, Action Picked)> { (Said("link.command_open"), ShowLinkWindow) };
         if (!LinkOn)
         {
             commands.Add((Said("link.command_on"), () => LinkSwitch(true)));
@@ -18,6 +18,10 @@ internal sealed partial class DawnScene
         }
 
         commands.Add((Said("link.command_off"), () => LinkSwitch(false)));
+        if (LinkPeers.Count > 0)
+            commands.Add((Said("link.command_disconnect"), LinkDisconnectCommand));
+        if (LinkPairingUntil is not null)
+            commands.Add((Said("link.command_pair_stop"), LinkClosePairing));
         if (HexHost.Listens)
             commands.Add((Said("link.command_pair"), LinkPairCommand));
         commands.Add((Said("link.command_connect"), LinkConnectCommand));
@@ -76,32 +80,35 @@ internal sealed partial class DawnScene
     // An address asked for: a device this machine knows is linked to, one it doesn't is paired with
     private void LinkConnectCommand()
     {
-        AskText(Said("link.connect_title"), Said("link.connect_text"), string.Empty, Said("link.connect_button"), typed =>
-        {
-            if (!TryLinkAddress(typed, HexLinkTransport.DEFAULT_PORT, out string host, out int port))
-            {
-                Say(Said("link.connect_bad", ("address", typed)), error: true);
-                return;
-            }
+        AskText(Said("link.connect_title"), Said("link.connect_text"), string.Empty, Said("link.connect_button"), LinkConnectAddress);
+    }
 
-            HexLinkKnown? known = LinkKnown.FirstOrDefault(each => each.Address == host && (each.Port == port || each.Port == 0));
-            _ = Task.Run(async () =>
+    /// <summary>An address as typed (the command's box or the Link window's): a device this machine knows linked to, one it doesn't paired with.</summary>
+    private void LinkConnectAddress(string typed)
+    {
+        if (!TryLinkAddress(typed, HexLinkTransport.DEFAULT_PORT, out string host, out int port))
+        {
+            Say(Said("link.connect_bad", ("address", typed)), error: true);
+            return;
+        }
+
+        HexLinkKnown? known = LinkKnown.FirstOrDefault(each => each.Address == host && (each.Port == port || each.Port == 0));
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                try
-                {
-                    await LinkConnect(host, port, known?.Device.Id);
-                }
-                catch (HexLinkRefused refused) when (refused.Reason is "unknown" or "pin")
-                {
-                    // Not a device this one knows (or not the one that was there before), so a pairing, the person asked on both sides
-                    PostLink(() => Say(Said("link.connect_pairing", ("address", $"{host}:{port}"))));
-                    await LinkPair(host, port);
-                }
-                catch (Exception e)
-                {
-                    PostLink(() => Say(Said("link.connect_failed", ("address", $"{host}:{port}"), ("why", e.Message)), error: true));
-                }
-            });
+                await LinkConnect(host, port, known?.Device.Id);
+            }
+            catch (HexLinkRefused refused) when (refused.Reason is "unknown" or "pin")
+            {
+                // Not a device this one knows (or not the one that was there before), so a pairing, the person asked on both sides
+                PostLink(() => Say(Said("link.connect_pairing", ("address", $"{host}:{port}"))));
+                await LinkPair(host, port);
+            }
+            catch (Exception e)
+            {
+                PostLink(() => Say(Said("link.connect_failed", ("address", $"{host}:{port}"), ("why", e.Message)), error: true));
+            }
         });
     }
 

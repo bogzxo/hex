@@ -60,7 +60,7 @@ internal sealed partial class DawnScene
 
     /// <summary>
     /// Opens the pairing window: for the next five minutes (or <paramref name="window"/>) one unknown device may pair,
-    /// and the person is asked about it (<see cref="LinkPairingPending"/>, and Hex's dialog until the Link window has its own).
+    /// and the person is asked about it (<see cref="LinkPairingPending"/>, and the pairing dialog, DawnScene.LinkPairing).
     /// </summary>
     internal bool LinkOpenPairing(TimeSpan? window = null)
     {
@@ -181,38 +181,7 @@ internal sealed partial class DawnScene
         return ask.Answer;
     }
 
-    // The pairing asked about with Hex's own dialog, until the Link window has a dialog of its own
-    private void ShowLinkPairing(LinkPairingAsk ask)
-    {
-        if (ask.IsDecided)
-            return;
-
-        linkPairingPending?.Decide(null);
-        CloseLinkPairingDialog();
-        linkPairingPending = ask;
-        linkDirty = true;
-
-        string viewOnly = Said("link.pair_view"), viewSteer = Said("link.pair_view_steer"), viewEdit = Said("link.pair_view_edit"), all = Said("link.pair_all"), cancel = Said("link.pair_cancel");
-        string text = Said(ask.Host ? "link.pair_text_host" : "link.pair_text_joiner", ("device", ask.Other.Name), ("fingerprint", ask.Other.Fingerprint),
-            ("address", ask.Address), ("code", ask.Code));
-        ((IWindows)this).Ask(Said("link.pair_title", ("code", ask.Code)), text, [viewOnly, viewSteer, viewEdit, all, cancel], answered =>
-        {
-            ask.Decide(answered == viewOnly ? HexLinkRights.View
-                : answered == viewSteer ? HexLinkRights.View | HexLinkRights.Steer
-                : answered == viewEdit ? HexLinkRights.View | HexLinkRights.Edit
-                : answered == all ? HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit
-                : null);
-            linkDirty = true;
-        }, risky: all);
-        linkPairingDialog = textDialog;
-    }
-
-    private void CloseLinkPairingDialog()
-    {
-        if (linkPairingDialog is { IsOpen: true } open && open == textDialog)
-            open.Close();
-        linkPairingDialog = null;
-    }
+    // The dialog that asks the person (ShowLinkPairing, CloseLinkPairingDialog) is DawnScene.LinkPairing
 
     // How a pairing ended, said, the device's redials started over when it paired
     private void LinkPairEnded(HexLinkPairResult result)
@@ -228,7 +197,11 @@ internal sealed partial class DawnScene
 
         if (result.Reason == "declined-here")
             return;
-        Say(Said("link.pair_failed", ("device", device), ("why", Said("link.pair_reason_" + (result.Reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" ? result.Reason.Replace('-', '_') : "failed")))), error: true);
+        string why = LinkPairReasonSaid(result.Reason);
+        // The dialog still saying the pairing ended says why as well
+        if (linkPairEnded is { Visible: true } ended)
+            ended.Text = $"[color:{HexColour(LinkWarning)}]$(warning) {Horizon.UI.Drawing.UIRichText.Literal(Said("link.pair_ended_why", ("why", why)))}[/color]";
+        Say(Said("link.pair_failed", ("device", device), ("why", why)), error: true);
     }
 }
 
