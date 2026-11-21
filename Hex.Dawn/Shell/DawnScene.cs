@@ -299,6 +299,7 @@ internal sealed partial class DawnScene : Scene
         BuildConflicts();
         BuildPeek();
         AddLanguageModeCommands();
+        BuildPredictions();
         commands.Build(menu);
         LoadKeys();
         WireViews();

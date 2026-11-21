@@ -117,6 +117,7 @@ edit_predictions_disabled_languages = ["python", "rust"]
 edit_predictions_exclude = ["**/.env", "**/private/**"]
 edit_predictions_workspace = false
 edit_predictions_share = true
+edit_predictions_notice_done = true
 files_associations = {     "*.foo": "csharp" }
 files_exclude = ["**/a", "**/b"]
 search_exclude = ["**/fixtures"]
