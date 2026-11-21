@@ -131,6 +131,9 @@ internal sealed partial class DawnScene
 
     private void TidyAfterSuite()
     {
+        // The link parts' second Hex never outlives them, whether they ran out of time or not
+        TidyLinkTest();
+
         // Whatever asks something left up, answered by nobody: a part that ran out of time with a chooser over the
         // window (a configuration to pick) left it there for every part after it
         chrome.Dialog?.Close();

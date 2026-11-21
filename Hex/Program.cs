@@ -224,6 +224,8 @@ internal static partial class Program
           --view <design|code|table>  which view a file comes up in
           --face <dawn|noon>       start in the editor or in Agentic, the agents' face (the one the workspace was left in otherwise)
           --no-ai                  this run without any of the agents, No AI whatever the settings say
+          --link                   Hex Link on for this run whatever the settings say, this Hex linked to the ones it paired with
+          --link-port <n>          the port Link listens on for this run, the link_port setting's otherwise
           --workspace <folder>     where layouts go when nobody says otherwise
           --scale <n>              how big the UI is drawn, 1 as it comes
           --size <w>x<h>           the window's size, maximised otherwise

@@ -312,6 +312,10 @@ internal sealed partial class DawnScene
             "git_line_length" => new NumberValue(hex.settings.GitLineLength),
             "run_to_terminal" => Values.Bool(hex.settings.RunToTerminal),
             "mcp_server" => Values.Bool(hex.settings.McpServer),
+            "link" => Values.Bool(hex.settings.Link),
+            "link_port" => new NumberValue(hex.settings.LinkPort),
+            "link_name" => new StringValue(hex.settings.LinkName),
+            "link_discoverable" => Values.Bool(hex.settings.LinkDiscoverable),
             "no_ai" => Values.Bool(hex.settings.NoAi),
             "agents_resume_after_limit" => Values.Bool(hex.settings.AgentsResumeAfterLimit),
             "agents_auto_settle_seconds" => new NumberValue(hex.settings.AgentsAutoSettleSeconds),
@@ -483,6 +487,22 @@ internal sealed partial class DawnScene
                 case ("mcp_server", BooleanValue agents):
                     settings.McpServer = agents.Value;
                     hex.ApplyMcp();
+                    break;
+                case ("link", BooleanValue link):
+                    settings.Link = link.Value;
+                    hex.ApplyLink();
+                    break;
+                case ("link_port", NumberValue port):
+                    settings.LinkPort = (int)Math.Clamp(MathF.Round(port.Value), 1024.0f, 65535.0f);
+                    hex.ApplyLink(restart: true);
+                    break;
+                case ("link_name", StringValue name):
+                    settings.LinkName = name.Value.Trim();
+                    hex.ApplyLink();
+                    break;
+                case ("link_discoverable", BooleanValue discoverable):
+                    settings.LinkDiscoverable = discoverable.Value;
+                    hex.ApplyLink();
                     break;
                 case ("agents_resume_after_limit", BooleanValue resume):
                 settings.AgentsResumeAfterLimit = resume.Value;

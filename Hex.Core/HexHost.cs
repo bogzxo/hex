@@ -31,6 +31,12 @@ public static class HexHost
     /// <summary>Whether another Hex (or an MCP client) can reach this one over a named pipe.</summary>
     public static bool Pipes { get; set; } = true;
 
+    /// <summary>
+    /// Whether this Hex may listen for other devices (Hex Link), false on a tablet, which only dials the machines it
+    /// paired with and watches them.
+    /// </summary>
+    public static bool Listens { get; set; } = true;
+
     /// <summary>Whether the desktop's own file dialogs are there (Windows' common item dialog, a portal on Linux).</summary>
     public static bool NativeDialogs { get; set; } = true;
 

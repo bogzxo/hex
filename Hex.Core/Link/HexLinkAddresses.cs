@@ -42,6 +42,41 @@ internal static class HexLinkAddresses
         return false;
     }
 
+    /// <summary>
+    /// The addresses a device said it's at, in the order they're worth dialling: a home or office network's first
+    /// (192.168/16, then 10/8, then 172.16/12, which Docker, WSL and Hyper-V's virtual switches take as often as a real
+    /// network does), then this machine, link-local, the 100.64/10 of a VPN (it works, the long way round), and IPv6 last.
+    /// What isn't private is left out, there's no dialling it. Each once, the order among equals kept.
+    /// </summary>
+    public static List<IPAddress> Preferred(IEnumerable<IPAddress> addresses)
+    {
+        var seen = new HashSet<IPAddress>();
+        return [.. addresses.Select(address => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address)
+            .Where(address => IsPrivate(address) && seen.Add(address))
+            .Select((address, at) => (address, at))
+            .OrderBy(pair => Rank(pair.address)).ThenBy(pair => pair.at)
+            .Select(pair => pair.address)];
+    }
+
+    // How good an address is to dial, lower first
+    private static int Rank(IPAddress address)
+    {
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+            return 7;
+        Span<byte> bytes = stackalloc byte[4];
+        address.TryWriteBytes(bytes, out _);
+        return bytes[0] switch
+        {
+            192 when bytes[1] == 168 => 0,
+            10 => 1,
+            172 when (bytes[1] & 0xF0) == 16 => 2,
+            127 => 3,
+            169 when bytes[1] == 254 => 4,
+            100 when (bytes[1] & 0xC0) == 64 => 5,
+            _ => 6
+        };
+    }
+
     /// <summary>An address as a person reads it, an IPv4 one written as IPv6 by a dual-mode socket said as IPv4.</summary>
     public static string Show(IPAddress address) => (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address).ToString();
 }

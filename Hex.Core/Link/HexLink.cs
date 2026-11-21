@@ -13,8 +13,11 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
     /// <summary>The most links at once.</summary>
     public const int MOST = 8;
 
-    // A link up, its session and its two halves
-    private sealed record Joined(HexLinkSession Session, HexLinkHost Host, HexLinkPeer Peer);
+    // A link up, its session and its two halves, and whether hello has been said both ways (Peers lists it from then)
+    private sealed record Joined(HexLinkSession Session, HexLinkHost Host, HexLinkPeer Peer)
+    {
+        public bool Hello { get; set; }
+    }
 
     private readonly List<Joined> links = [];
 
@@ -35,8 +38,9 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
     {
         get
         {
+            // Not one still saying hello, whose device, rights and workspace aren't known yet
             lock (links)
-                return [.. links.Select(link => link.Peer)];
+                return [.. links.Where(link => link.Hello).Select(link => link.Peer)];
         }
     }
 
@@ -91,6 +95,8 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
             throw;
         }
 
+        lock (links)
+            joined.Hello = true;
         Changed?.Invoke();
         return peer;
     }
