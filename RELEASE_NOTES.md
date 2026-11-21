@@ -18,6 +18,9 @@ Ctrl+. as a menu of everything that can be done to a line, an explorer you work 
 - going between Dawn, Agentic and Dusk never flashes: a face is warmed when you point at its button and a short crossfade carries you over (none with UI animation at 0); the first Dusk of a run opens in about 30 ms instead of over a second
 - every focusable thing shows a focus ring, Tab goes through the window, links, dim text and the accent's text meet 4.5:1 in every look, and nothing moves with UI animation at 0
 - unsent text stays with its chat when you switch chats
+- files and folders dragged onto Hex from outside open: files in tabs, a folder into the workspace, onto an explorer folder copied into it, onto Dusk's terminal pasted as quoted paths
+- middle-click scrolling glides at slow speeds instead of stepping, and the open tab's title is always readable on its highlight
+- a running notebook cell shows a spinner that turns into stop under the pointer
 
 ## C# and the language servers
 
@@ -27,7 +30,10 @@ Ctrl+. as a menu of everything that can be done to a line, an explorer you work 
 
 ## Agentic
 
-- finished agents, subagents too, fold into a Finished group a few minutes after they end, with those waiting on you and working at the top
+- finished agents settle into a Finished group by themselves after 30 seconds (Agents' settings say how long, or never), or when you pick Settle from a chat's menu, with those waiting on you and working at the top; the family conversation in Details shows the newest few and folds the rest, keeping the last 50
+- Send now gets a message through at once, interrupting a tool that's still going, and an agent waiting on a task of its own says so with Wake now and Stop
+- an agent's processes and everything they start are held together and end with it, and with Hex, on Windows, Linux and macOS, so nothing is left running behind a closed or restarted Hex
+- Claude Code keeps to Hex's tools by default, agents can start agents six deep, and the agents' tools no longer wait behind another agent's long call
 - an agent's edits are checked in under a second where they waited up to 30, hex_diagnostics on an unchanged file answers at once, and hex_screenshot sends a picture a model can use
 - hex_agent_restart kills a stuck agent with what it had running and starts it again where it was, and a chat whose process outlived its turn says it's still running
 - a tool group's time is the time it took, calls side by side counted once
@@ -39,6 +45,7 @@ Ctrl+. as a menu of everything that can be done to a line, an explorer you work 
 - HIDL parses with a third of the garbage, and an agent's stream of output costs a sixth of what it did
 - typing in the command palette or quick open allocates nothing per key, lists, trees and labels stop measuring and copying every frame
 - the first frame no longer decodes a background picture twice, and git no longer walks the workspace every six seconds looking for repositories
+- Persistent Process lets go of the window's swapchain and the system timer while asleep, and wakes in about 56 ms
 
 # Hex 3.2.0 Amphetamine
 
