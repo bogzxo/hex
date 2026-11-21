@@ -9,6 +9,12 @@
     project after it built again each time for nothing. An IDE's design time builds (Visual Studio and Rider run them
     all the time to read the project) don't count.
   -->
+  <!--
+    A release is built with the number of the build it was made from, not counted again where it's built: GitHub's
+    checkout has no .hex-build, so every official build was about 4420 while the builds it came from were thousands on.
+    .hex-build-release is kept in git, written with the count as it stands when a release is made, and the release
+    and nightly builds pass -p:HexBuildFixed from it, which neither reads nor moves the count.
+  -->
   <PropertyGroup>
     <HexBuildFile>$(MSBuildThisFileDirectory)..\.hex-build</HexBuildFile>
     <HexBuildFirst>4420</HexBuildFirst>
@@ -16,14 +22,15 @@
 
   <Target Name="CountHexBuild" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
-      <HexBuildWas Condition="Exists('$(HexBuildFile)')">$([System.IO.File]::ReadAllText('$(HexBuildFile)').Trim())</HexBuildWas>
-      <HexBuildWas Condition="'$(HexBuildWas)' == ''">$([MSBuild]::Subtract($(HexBuildFirst), 1))</HexBuildWas>
-      <HexBuild>$([MSBuild]::Add($(HexBuildWas), 1))</HexBuild>
+      <HexBuildWas Condition="'$(HexBuildFixed)' == '' and Exists('$(HexBuildFile)')">$([System.IO.File]::ReadAllText('$(HexBuildFile)').Trim())</HexBuildWas>
+      <HexBuildWas Condition="'$(HexBuildFixed)' == '' and '$(HexBuildWas)' == ''">$([MSBuild]::Subtract($(HexBuildFirst), 1))</HexBuildWas>
+      <HexBuild Condition="'$(HexBuildFixed)' == ''">$([MSBuild]::Add($(HexBuildWas), 1))</HexBuild>
+      <HexBuild Condition="'$(HexBuildFixed)' != ''">$(HexBuildFixed)</HexBuild>
       <!-- Said here and not with the rest, the SDK hasn't said where obj is yet when the project file is read -->
       <HexBuildOut>$(IntermediateOutputPath)build.txt</HexBuildOut>
     </PropertyGroup>
 
-    <WriteLinesToFile File="$(HexBuildFile)" Lines="$(HexBuild)" Overwrite="true" />
+    <WriteLinesToFile Condition="'$(HexBuildFixed)' == ''" File="$(HexBuildFile)" Lines="$(HexBuild)" Overwrite="true" />
     <MakeDir Directories="$(IntermediateOutputPath)" />
     <WriteLinesToFile File="$(HexBuildOut)" Lines="$(HexBuild)" Overwrite="true" />
     <Message Importance="high" Text="Hex build $(HexBuild)" />

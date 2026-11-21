@@ -122,8 +122,9 @@ public sealed partial class HexAgentsPanelTests : IDisposable
         Assert.Contains(lines, line => line.Error && line.Line.Trim() == "oops");
         Assert.Equal(3, run.ExitCode);
         // Started in the folder it was given, with what Hex adds to its environment
+        // (on a Mac the temp folder is under /var, a link to /private/var, and the shell says the real one)
         if (!OperatingSystem.IsWindows() && System.Environment.GetEnvironmentVariable("MSBUILDDISABLENODEREUSE") is null)
-            Assert.Contains(lines, line => line.Line == $"in {folder} with 1");
+            Assert.Contains(lines, line => line.Line == $"in {folder} with 1" || line.Line == $"in /private{folder} with 1");
     }
 
     [Fact]

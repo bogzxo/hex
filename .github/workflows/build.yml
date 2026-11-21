@@ -57,6 +57,8 @@ jobs:
           ref: ${{ inputs.ref }}
           # The extensions (bogzxo/hex-extensions at hex-extensions)
           submodules: recursive
+          # The history too, for a nightly's build number, the commits since the last release's
+          fetch-depth: 0
 
       # The engine on development, and the language inside of it
       - uses: actions/checkout@v4
@@ -92,8 +94,21 @@ jobs:
           $version = ($props.Project.PropertyGroup | Where-Object { $_.Version }).Version
           if ($env:GITHUB_REF_NAME.Substring(1) -ne $version) { throw "Release tag must match Directory.Build.props ($version)." }
 
+      # The build number of the build the release was made from (.hex-build-release, see Hex/HexBuildNumber.targets), a
+      # nightly that number and one more for every commit since, rather than counting from nothing on a fresh checkout
+      - name: Build number
+        shell: bash
+        run: |
+          n=$(tr -d '[:space:]' < .hex-build-release 2>/dev/null || true)
+          if [ -n "$n" ] && [ -n "${{ inputs.nightly }}" ]; then
+            since=$(git log -1 --format=%H -- .hex-build-release 2>/dev/null || true)
+            if [ -n "$since" ]; then n=$((n + $(git rev-list --count "$since"..HEAD 2>/dev/null || echo 0))); fi
+          fi
+          echo "HEX_BUILD_FIXED=$n" >> "$GITHUB_ENV"
+          echo "Hex build ${n:-counted}"
+
       - name: Publish
-        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}"
+        run: dotnet publish Hex/Hex.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}" "-p:HexBuildFixed=${{ env.HEX_BUILD_FIXED }}"
 
       - name: Publish installer
         run: dotnet publish Hex.Installer/Hex.Installer.csproj --configuration Release --runtime ${{ matrix.rid }} --output publish/Hex.Setup ${{ matrix.publish_args }} "-p:HexChannel=${{ inputs.channel }}" "-p:HexNightly=${{ inputs.nightly }}"
