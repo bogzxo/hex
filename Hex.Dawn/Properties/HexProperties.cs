@@ -114,12 +114,13 @@ internal sealed partial class HexProperties
         KeepHeadOverPage();
         context.Window.Grip(page, UIResize.Left, left: false);
 
-        // A file of HIDL has its values and its properties, the button over them swaps the one for the other
+        // A file of HIDL has its values and its properties, the button over them swaps the one for the other. As tall as
+        // the head's other buttons, 24, the least a target is
         swap = head.Add(new Button
         {
             Icon = "symbol-property",
             Style = "button_flat",
-            Size = new Vector2(26.0f, 22.0f),
+            Size = new Vector2(26.0f, 24.0f),
             Anchor = Origin.Right,
             Pivot = Origin.Right,
             Position = new Vector2(-30.0f, 0.0f),

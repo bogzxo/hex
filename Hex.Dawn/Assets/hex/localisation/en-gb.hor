@@ -2041,6 +2041,7 @@ let strings = {
         word_wrap: "Word Wrap",
         code_in_hack: "Code in Hack",
         split_editor: "Split Editor",
+        tab_moves_focus: "Tab Moves Focus",
         toggle_designer_code: "Switch Editor View",
         layout_debugger_on: "Layout debugger on. Padding is green, gaps are orange.",
         layout_debugger_off: "Layout debugger off",
@@ -3922,6 +3923,8 @@ let strings = {
     quiet: {
         wrap_on: "long lines wrap at the edge, Alt+Z for not",
         wrap_off: "long lines run on past the edge, Alt+Z to wrap them",
+        tab_moves_focus_on: "Tab moves on out of the code, Ctrl+M to type tabs again",
+        tab_moves_focus_off: "Tab types a tab in the code, Ctrl+M to move on with it",
         back: "back from quiet",
         on: "quiet, F11 to come back"
     },

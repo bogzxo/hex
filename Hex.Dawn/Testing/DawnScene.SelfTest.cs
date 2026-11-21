@@ -162,6 +162,7 @@ internal sealed partial class DawnScene
     [
         ("native-shortcuts", "Windows key messages through the native keyboard and application shortcut dispatcher", TestNativeShortcuts),
         ("ux", "mode focus, panel alignment, editor tab overflow and narrow layouts", TestUx),
+        ("accessibility", "every look's colours measured against their grounds, Tab round the main window with every stop ringed, named and big enough, Ctrl+M out of the code, and nothing moving with the motion at 0", TestAccessibility),
         ("interactions", "palette dismissal, single-click results, empty queries, focus and confirmation boundaries", TestInteractions),
         ("agent-commands", "Slash command scrolling, descriptions, keyboard navigation and local dispatch", TestAgentCommands),
         ("agents-layout", "Agent setup, sidebar geometry, tool disclosure and runner sizing", TestAgentLayout),

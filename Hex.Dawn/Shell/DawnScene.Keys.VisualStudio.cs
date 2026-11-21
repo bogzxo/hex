@@ -26,6 +26,9 @@ internal sealed partial class DawnScene
         ("settings_window.open", ""),
         ("code.collapse_to_definitions", "Ctrl+M Ctrl+O"),
         ("code.toggle_all_outlining", "Ctrl+M Ctrl+L"),
+
+        // Ctrl+M starts Visual Studio's outlining chords, so Tab Moves Focus has no key there
+        ("menus.tab_moves_focus", ""),
         ("tests.show", "Ctrl+E T"),
 
         // The editing keys, which the editor answers itself and UIKeyboard.VisualStudioKeys moves there. Here it's what
