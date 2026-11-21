@@ -101,6 +101,20 @@ internal sealed partial class HexLinkHost
     {
         Need(HexLinkRights.View, "sync/manifest");
         HexLinkTree tree = TreeOf(parameters);
+        if (HexLinkData.String(parameters, "rename_from", HexLinkFiles.MOST_PATH) is { } from)
+        {
+            Need(HexLinkRights.Edit, "sync/rename");
+            string to = HexLinkData.Need(parameters, "rename_to", HexLinkFiles.MOST_PATH);
+            string expected = HexLinkData.Need(parameters, "base", 64);
+            string prefix = tree.Folder.Name + "/";
+            if (!from.StartsWith(prefix, StringComparison.Ordinal) || !to.StartsWith(prefix, StringComparison.Ordinal) || !HexLinkTree.OnlyCase(from, to))
+                throw HexLinkException.Invalid("Both names must be case variants of one file in the folder.");
+            if (tree.Ignored([from[prefix.Length..], to[prefix.Length..]]).Count != 0)
+                throw new HexLinkException(HexLinkErrors.NOT_ALLOWED, "Link cannot rename an ignored file.");
+            await services.RenameCase(ResolveFile(from), ResolveFile(to), expected, cancel);
+            tree.NoteCase(to[prefix.Length..]);
+            return new JsonObject { ["renamed"] = true };
+        }
         if (HexLinkData.String(parameters, "absent", HexLinkFiles.MOST_PATH) is { } path)
         {
             string prefix = tree.Folder.Name + "/";

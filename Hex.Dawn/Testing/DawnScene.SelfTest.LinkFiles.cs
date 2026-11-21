@@ -219,6 +219,12 @@ internal sealed partial class DawnScene
 
         TestLinkOfferPatch(test, () => peer, mine, theirs);
 
+        test.Run(() => { Open(shared); Rewrite(document, "Unsaved on A.\n"); File.WriteAllText(sharedThere, "Incoming from B.\n"); });
+        test.WaitFor(() => LinkConflicts.Any(item => item.Path == $"{LINK_SYNC_FOLDER}/src/shared.txt"), 15.0f);
+        test.Check("link-files: an incoming write leaves the unsaved tab and saved file intact and shows a conflict", () =>
+            Context.Documents.Find(shared) is { } open && HasChanges(open) && open.Editor.Text == "Unsaved on A.\n"
+            && Read(shared) == "Changed on B's disk.\n" && LinkConflicts.Any(item => item.Path == $"{LINK_SYNC_FOLDER}/src/shared.txt" && item.Copy is not null));
+
         // Stopped by the person: the choice forgotten; B forgotten, it leaves
         test.Run(() =>
         {

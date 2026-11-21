@@ -59,7 +59,7 @@ internal sealed partial class HexLinkPeer
             HexLinkManifest page = HexLinkTree.Of(said);
             if (HexLinkData.String(said, "snapshot", 64) != id || HexLinkData.Int(said, "offset") != files.Count ||
                 HexLinkData.Int(said, "total") != total || page.Folder != first.Folder || page.Head != first.Head ||
-                page.Root != first.Root || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
+                page.Root != first.Root || page.CaseSensitive != first.CaseSensitive || !JsonNode.DeepEquals(said["repositories"], repositories) || !page.Certified || page.Files.Count == 0 || page.Files.Count > total - files.Count)
                 throw HexLinkException.Invalid("The peer sent an inconsistent manifest page.");
             foreach (HexLinkTreeFile file in page.Files)
             {
@@ -85,6 +85,16 @@ internal sealed partial class HexLinkPeer
     /// </summary>
     public Task Flush(string folder, CancellationToken cancel = default) =>
         session.Ask("sync/flush", new JsonObject { ["folder"] = folder }, cancel, TimeSpan.FromMinutes(5));
+
+    internal async Task RenameCase(string folder, string from, string to, string expected, CancellationToken cancel)
+    {
+        JsonObject said = await AskObject("sync/manifest", new JsonObject
+        {
+            ["folder"] = folder, ["rename_from"] = from, ["rename_to"] = to, ["base"] = expected
+        }, cancel);
+        if (HexLinkData.Bool(said, "renamed") != true)
+            throw HexLinkException.Invalid("The peer did not confirm the case-only rename.");
+    }
 
     internal async Task<bool> ConfirmAbsent(string folder, string path, CancellationToken cancel)
     {

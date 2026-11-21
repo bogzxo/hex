@@ -48,7 +48,7 @@ internal sealed partial class HexLinkTree
         if (HexLinkGit.Why() is not null)
             return null;
 
-        string[] repositories = [.. FindNestedRepositories(Root).OrderByDescending(path => path.Length)];
+        string[] repositories = [.. FindNestedRepositories(Root).Where(path => !Hidden(path, folder: true)).OrderByDescending(path => path.Length)];
         if (repositories.Length == 0)
         {
             nestedRepositories = [];

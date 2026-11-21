@@ -54,6 +54,9 @@ internal sealed partial class DawnScene
 
         public HexExcludes Excludes => HexExcludes.Of(hex.settings);
 
+        public Task RenameCase(string from, string to, string expected, CancellationToken cancel) =>
+            hex.LinkRenameCase(from, to, expected, cancel);
+
         public Task<string?> CompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes, CancellationToken cancel) =>
             hex.LinkCompareAndReplace(full, wire, baseHash, bytes, cancel);
 
@@ -83,19 +86,17 @@ internal sealed partial class DawnScene
     internal async Task<string?> LinkCompareAndReplace(string full, string wire, string? baseHash, byte[]? bytes,
         CancellationToken cancel, bool? executable = null)
     {
-        if (await OnEditorForLink(() => Context.Documents.Find(full) is { } open && HasChanges(open)).WaitAsync(cancel))
+        LinkTabStamp before = await OnEditorForLink(() => LinkTabBeforeWrite(full)).WaitAsync(cancel);
+        if (before.Dirty)
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
                 new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
 
         string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
-        if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded)
+        if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded &&
+            await OnEditorForLink(() => LinkTakeIntoTab(full, decoded.Text, before)).ConfigureAwait(false))
         {
-            await OnEditorForLink(() =>
-            {
-                if (Context.Documents.Find(full) is { } open && !HasChanges(open))
-                    LinkTakeIntoTab(full, decoded.Text);
-                return true;
-            }).ConfigureAwait(false);
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} was edited while the linked write was applying.",
+                new JsonObject { ["hash"] = hash, ["editor_dirty"] = true });
         }
         return hash;
     }

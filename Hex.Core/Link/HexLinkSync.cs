@@ -40,7 +40,10 @@ internal enum HexLinkSyncKeep
 /// wire path, what happened in a few words, and where the other machine's version was put beside it (a wire path of
 /// this side's, null when there was nothing to put, a delete). Nothing of it moves until it's resolved.
 /// </summary>
-internal sealed record HexLinkSyncConflict(string Path, string Kind, string? Copy, string? CopyHash);
+internal sealed record HexLinkSyncConflict(string Path, string Kind, string? Copy, string? CopyHash)
+{
+    public bool HasUnsavedChanges => Kind.StartsWith("unsaved changes", StringComparison.Ordinal);
+}
 
 /// <summary>A file that doesn't travel and why: too big, a name this side can't take, a path the other side had no business sending.</summary>
 internal sealed record HexLinkSyncSkipped(string Path, string Why);
@@ -95,8 +98,8 @@ internal sealed partial class HexLinkSync : IDisposable
     private CancellationTokenSource stopping = new();
     private bool live, remoteWatched, ready;
     private volatile bool pullOnly;
-    private Dictionary<string, HexLinkTreeChange>? early;
-    private bool earlyOverflow, remoteCertified;
+    private List<HexLinkTreeChange>? early;
+    private bool earlyOverflow, remoteCertified, insensitivePaths;
     private int sent, received;
 
     public Func<HexExcludes> Excludes { get; init; } = () => HexExcludes.Usual;
@@ -114,6 +117,7 @@ internal sealed partial class HexLinkSync : IDisposable
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
         ApplyLocal = HexLinkFiles.CompareAndReplace;
+        RenameLocal = (from, to, expected, cancel) => Task.Run(() => HexLinkTree.RenameCase(from, to, expected), cancel);
     }
 
     /// <summary>The device synced with.</summary>
@@ -129,6 +133,8 @@ internal sealed partial class HexLinkSync : IDisposable
 
     /// <summary>Apply a checked incoming change, optionally through the editor's dirty-tab guard.</summary>
     public Func<string, string, string?, byte[]?, CancellationToken, bool?, Task<string?>> ApplyLocal { get; init; }
+
+    public Func<string, string, string, CancellationToken, Task> RenameLocal { get; init; }
 
     /// <summary>How long this side's tree is quiet before a batch of its changes is looked at, 150 ms unless a test says.</summary>
     public TimeSpan Quiet { get; init; } = TimeSpan.FromMilliseconds(150);
@@ -198,6 +204,20 @@ internal sealed partial class HexLinkSync : IDisposable
     /// <summary>Called when anything shown of it moved (its state, a count, a conflict), on whatever thread it moved on.</summary>
     public Action? Changed { get; set; }
 
+    public int FilesDone => Volatile.Read(ref filesDone);
+    public int FilesTotal => Volatile.Read(ref filesTotal);
+    public long BytesDone => Volatile.Read(ref bytesDone);
+    public long BytesTotal => Volatile.Read(ref bytesTotal);
+    public int Queued
+    {
+        get
+        {
+            lock (gate)
+                return retrying.Count;
+        }
+    }
+    public string? Detail => Volatile.Read(ref retryDetail) ?? Volatile.Read(ref detail);
+
     /// <summary>Where it is in a line, for a status item or a tool's answer.</summary>
     public string Summary
     {
@@ -208,11 +228,13 @@ internal sealed partial class HexLinkSync : IDisposable
             lock (gate)
             {
                 conflicted = conflicts.Count;
-                skips = skipped.Count;
+                skips = Math.Max(0, skipped.Count - retrying.Count);
             }
 
             string counts = $"{Sent} sent, {Received} received, {conflicted} {(conflicted == 1 ? "conflict" : "conflicts")}, {skips} skipped"
                 + (EolOnly > 0 ? $", {EolOnly} only differing in line ends" : string.Empty);
+            if (Queued is > 0 and var retryCount)
+                counts += $", {retryCount} retrying";
             return State switch
             {
                 HexLinkSyncState.Comparing => $"Comparing {with}",
@@ -244,7 +266,7 @@ internal sealed partial class HexLinkSync : IDisposable
             ready = false;
             peer.RightsChanged += UpdateRights;
             pullOnly = !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Edit);
-            early = new Dictionary<string, HexLinkTreeChange>(StringComparer.Ordinal);
+            early = [];
             earlyOverflow = false;
             stopping = new CancellationTokenSource();
         }
@@ -371,12 +393,17 @@ internal sealed partial class HexLinkSync : IDisposable
         {
             if (!live || !ready)
                 return Summary;
+            if (insensitivePaths && (hereNames.Collides(path) || thereNames.Collides(path) ||
+                (hereNames.Name(path) is { } here && here != path) || (thereNames.Name(path) is { } there && there != path)))
+                return "The path collides with another spelling on this link.";
             conflicts.TryGetValue(path, out conflict);
             remote.TryGetValue(path, out theirs);
         }
 
         if (conflict is null)
             return $"{path} isn't in conflict.";
+        if (keep == HexLinkSyncKeep.Mine && !remoteCertified)
+            return "The peer does not support checked working-tree writes.";
         if (keep == HexLinkSyncKeep.Mine && pullOnly)
             return $"{peer.Device.Name} doesn't let this device write there, only theirs can be kept.";
 
@@ -450,7 +477,7 @@ internal sealed partial class HexLinkSync : IDisposable
                     SetBase(path, agreed);
             }
 
-            DropCopy(conflict);
+            await DropCopy(conflict, cancel);
             Save();
             Notify();
             return null;
@@ -470,7 +497,7 @@ internal sealed partial class HexLinkSync : IDisposable
     }
 
     // The copy put beside a file in conflict deleted, when it's still what was put there
-    private void DropCopy(HexLinkSyncConflict conflict)
+    private async Task DropCopy(HexLinkSyncConflict conflict, CancellationToken cancel)
     {
         if (conflict.Copy is null || conflict.CopyHash is null)
             return;
@@ -478,8 +505,8 @@ internal sealed partial class HexLinkSync : IDisposable
         {
             // A copy is the sync's own name, which Jailed refuses, so only the jail itself and the name are checked
             string full = HexLinkFiles.Resolve([folder], conflict.Copy);
-            if (Path.GetFileName(full).Contains(THEIRS, StringComparison.OrdinalIgnoreCase) && HexLinkFiles.HashOf(full) == conflict.CopyHash)
-                File.Delete(full);
+            if (Path.GetFileName(full).Contains(THEIRS, StringComparison.OrdinalIgnoreCase))
+                await ApplyLocal(full, conflict.Copy, conflict.CopyHash, null, cancel, null);
         }
         catch (Exception e) when (e is HexLinkException or IOException or UnauthorizedAccessException)
         {
@@ -513,6 +540,7 @@ internal sealed partial class HexLinkSync : IDisposable
             queued.Clear();
             again.Clear();
             retrying.Clear();
+            ResetProgress();
             deferredPushes.Clear();
         }
 

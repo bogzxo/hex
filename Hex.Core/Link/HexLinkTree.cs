@@ -23,13 +23,13 @@ internal sealed record HexLinkTreeFile(string Path, string? Hash, long Size, str
 /// clones of one repository from two repositories that only share a folder name.
 /// </summary>
 internal sealed record HexLinkManifest(string Folder, string? Head, IReadOnlyList<HexLinkTreeFile> Files, string? Root = null,
-    bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null);
+    bool Certified = true, IReadOnlyDictionary<string, string?>? NestedHeads = null, bool? CaseSensitive = null);
 
 /// <summary>
 /// A file of a watched tree that changed, its new hash (null with <see cref="Deleted"/> when it went, or when it's too
 /// big), and its text's hash and line ends as <see cref="HexLinkTreeFile"/> has them.
 /// </summary>
-internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false, string? Text = null, string? Eol = null);
+internal sealed record HexLinkTreeChange(string Path, string? Hash, bool Deleted = false, string? Text = null, string? Eol = null, string? PreviousPath = null);
 
 /// <summary>
 /// A workspace folder's tree as the working-tree sync sees it: every file git would carry (tracked, and untracked but
@@ -53,6 +53,7 @@ internal sealed partial class HexLinkTree
     private readonly ConcurrentDictionary<string, (long Length, long Written, string Hash, string? Text, string? Eol)> hashes = new(StringComparer.Ordinal);
 
     private readonly Func<HexExcludes> excludes;
+    private readonly ConcurrentDictionary<string, string> movedCase = new(StringComparer.OrdinalIgnoreCase);
 
     public HexLinkTree(HexLinkFolder folder, Func<HexExcludes>? excludes = null)
     {
@@ -85,8 +86,10 @@ internal sealed partial class HexLinkTree
             {
                 InRepository = true;
                 relative = [.. listed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MOST_FILES + 1)];
-                GitResult at = GitProcess.Run(Root, ["rev-parse", "HEAD"]);
-                head = at.Ok && HexLinkGit.IsCommitId(at.Output.Trim()) ? at.Output.Trim() : null;
+                GitResult at = GitProcess.Run(Root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+                if (at.Exit != 1 && (!at.Ok || !HexLinkGit.IsCommitId(at.Output.Trim())))
+                    throw new IOException($"Git could not read HEAD in {Folder.Name}: {at.Why}");
+                head = at.Ok ? at.Output.Trim() : null;
                 root = head is null ? null : RootOf(head);
             }
             else if (InRepository || !listed.Why.StartsWith("fatal: not a git repository (or any of the parent directories)", StringComparison.Ordinal))
@@ -99,13 +102,23 @@ internal sealed partial class HexLinkTree
             throw new IOException($"Git is unavailable to list {Folder.Name}.");
         }
 
+        bool onDiskNames = relative is null;
         relative ??= Walk();
         var nested = AddNestedGitFiles(relative);
         CheckCount(relative.Count);
         var files = new List<HexLinkTreeFile>(relative.Count);
+        HashSet<string>? actual = movedCase.IsEmpty ? null : new(StringComparer.Ordinal);
         foreach (string each in relative)
         {
-            if (FileOf(each) is { } file)
+            string path = onDiskNames ? each : CanonicalCase(each);
+            if (path != each && IsSoleSpelling(each))
+            {
+                NoteCase(each);
+                path = each;
+            }
+            if (actual is not null && !actual.Add(path))
+                continue;
+            if (FileOf(path) is { } file)
                 files.Add(file);
         }
 
@@ -116,7 +129,7 @@ internal sealed partial class HexLinkTree
                 hashes.TryRemove(full, out _);
         }
 
-        return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested);
+        return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested, CaseSensitive: PlatformPaths.Comparison == StringComparison.Ordinal);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -130,10 +143,11 @@ internal sealed partial class HexLinkTree
     {
         if (rootKnown is { } known && known.Head == head)
             return known.Root;
-        GitResult roots = GitProcess.Run(Root, ["rev-list", "--max-parents=0", "HEAD"]);
-        string? root = roots.Ok
-            ? roots.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(HexLinkGit.IsCommitId).Order(StringComparer.Ordinal).FirstOrDefault()
-            : null;
+        GitResult roots = GitProcess.Run(Root, ["rev-list", "--max-parents=0", head]);
+        if (!roots.Ok)
+            throw new IOException($"Git could not list the first commits of {Folder.Name}: {roots.Why}");
+        string? root = roots.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(HexLinkGit.IsCommitId).Order(StringComparer.Ordinal).FirstOrDefault();
         rootKnown = new RootKnown(head, root);
         return root;
     }
@@ -202,11 +216,53 @@ internal sealed partial class HexLinkTree
         }
     }
 
-    private static bool SyncArtifact(string relative)
+    internal static bool SyncArtifact(string relative)
     {
         ReadOnlySpan<char> name = relative.AsSpan(relative.LastIndexOf('/') + 1);
         return name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
-            (!name.IsEmpty && name[0] == '.' && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase));
+            (!name.IsEmpty && name[0] == '.' && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase)) ||
+            (name.Length == 46 && name.StartsWith(".hex-save-", StringComparison.Ordinal) && name.EndsWith(".tmp", StringComparison.Ordinal));
+    }
+
+    internal void NoteCase(string relative)
+    {
+        if (PlatformPaths.Comparison == StringComparison.OrdinalIgnoreCase)
+            movedCase[relative] = relative;
+    }
+
+    internal string CanonicalCase(string relative) => movedCase.TryGetValue(relative, out string? spelling) ? spelling : relative;
+
+    internal bool IsSoleSpelling(string relative) => SoleSpelling(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static bool SoleSpelling(string full)
+    {
+        string name = Path.GetFileName(full);
+        var options = new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive, IgnoreInaccessible = false, AttributesToSkip = 0 };
+        bool found = false;
+        foreach (string path in Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(full)!, name, options))
+        {
+            string leaf = Path.GetFileName(path);
+            if (!leaf.Equals(name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (found || leaf != name)
+                return false;
+            found = true;
+        }
+
+        return found;
+    }
+
+    internal static bool OnlyCase(string a, string b) => a != b && a.Equals(b, StringComparison.OrdinalIgnoreCase);
+
+    internal static void RenameCase(string from, string to, string expected)
+    {
+        string parent = Path.GetDirectoryName(from)!;
+        if (!OnlyCase(from, to) || Path.GetDirectoryName(to) != parent)
+            throw HexLinkException.Invalid("Link can rename the case of a file within its current directory.");
+
+        if (!SoleSpelling(from) || RegularFile(from, parent) is null || HexLinkFiles.HashOf(from) != expected)
+            throw new HexLinkException(HexLinkErrors.CONFLICT, "The file changed or its name collides with another file.");
+        File.Move(from, to, overwrite: false);
     }
 
     internal void ForgetHash(string relative) =>
@@ -340,6 +396,8 @@ internal sealed partial class HexLinkTree
         }
 
         var said = new JsonObject { ["folder"] = manifest.Folder, ["head"] = manifest.Head, ["root"] = manifest.Root, ["entries"] = entries, ["complete"] = manifest.Certified };
+        if (manifest.CaseSensitive is { } caseSensitive)
+            said["case_sensitive"] = caseSensitive;
         if (NestedHeadsJson(manifest.NestedHeads) is { } heads)
             said["repositories"] = heads;
         return said;
@@ -353,6 +411,8 @@ internal sealed partial class HexLinkTree
             throw HexLinkException.Invalid("The peer sent a manifest without entries.");
         CheckCount(entries.Count);
         bool certified = HexLinkData.Bool(said, "complete") == true;
+        if (said.ContainsKey("complete") && !certified)
+            throw HexLinkException.Invalid("The peer reported an incomplete working-tree manifest.");
         if (!certified && entries.Count == MOST_FILES)
             throw new HexLinkException(HexLinkErrors.TOO_BIG, "The peer's manifest reached the legacy file limit and may be incomplete.");
 
@@ -380,7 +440,7 @@ internal sealed partial class HexLinkTree
 
         string? head = HexLinkData.String(said, "head", 64), root = HexLinkData.String(said, "root", 64);
         return new HexLinkManifest(folder, head is not null && HexLinkGit.IsCommitId(head) ? head : null, files,
-            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said));
+            root is not null && HexLinkGit.IsCommitId(root) ? root : null, certified, NestedHeadsOf(said), HexLinkData.Bool(said, "case_sensitive"));
     }
 
     // A file's text hash and line ends said beside its hash, when it has them; a peer from before they were said sends
@@ -405,9 +465,13 @@ internal sealed partial class HexLinkTree
     {
         if (change.Deleted)
             return new JsonObject { ["path"] = change.Path, ["deleted"] = true };
+        var said = new JsonObject { ["path"] = change.Path };
         if (change.Hash is null)
-            return new JsonObject { ["path"] = change.Path, ["big"] = true };
-        var said = new JsonObject { ["path"] = change.Path, ["hash"] = change.Hash };
+            said["big"] = true;
+        else
+            said["hash"] = change.Hash;
+        if (change.PreviousPath is { } previous)
+            said["previous"] = previous;
         Text(said, change.Text, change.Eol);
         return said;
     }
@@ -419,7 +483,8 @@ internal sealed partial class HexLinkTree
             return new HexLinkTreeChange(path, null, Deleted: true);
         string? hash = HexLinkData.String(said, "hash", 64);
         var (text, eol) = hash is null ? (null, null) : TextOf(said);
-        return new HexLinkTreeChange(path, hash, Text: text, Eol: eol);
+        string? previous = HexLinkData.String(said, "previous", HexLinkFiles.MOST_PATH);
+        return new HexLinkTreeChange(path, hash, Text: text, Eol: eol, PreviousPath: previous is not null && OnlyCase(path, previous) ? previous : null);
     }
 }
 
@@ -440,6 +505,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
     private readonly Timer quiet, rescan;
     private readonly SemaphoreSlim looking = new(1, 1);
     private readonly HashSet<string> pending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> caseMoves = new(StringComparer.Ordinal);
     private Dictionary<string, string?> known = new(StringComparer.Ordinal);
     private bool everything, seeded, disposed;
 
@@ -469,7 +535,7 @@ internal sealed class HexLinkTreeWatch : IDisposable
             watcher.Changed += (_, e) => Moved(e.FullPath);
             watcher.Created += (_, e) => Moved(e.FullPath);
             watcher.Deleted += (_, e) => Moved(e.FullPath);
-            watcher.Renamed += (_, e) => { Moved(e.OldFullPath); Moved(e.FullPath); };
+            watcher.Renamed += (_, e) => Renamed(e.OldFullPath, e.FullPath);
             // Events dropped, the whole tree looked over instead
             watcher.Error += (_, _) => { lock (pending) everything = true; Poke(); };
             watcher.EnableRaisingEvents = true;
@@ -497,6 +563,24 @@ internal sealed class HexLinkTreeWatch : IDisposable
             if (pending.Count > 0 || everything)
                 Poke();
         }
+    }
+
+    private void Renamed(string oldFull, string newFull)
+    {
+        if (HexLinkTree.OnlyCase(oldFull, newFull))
+        {
+            string before = HexExcludes.Relative(tree.Root, oldFull), after = HexExcludes.Relative(tree.Root, newFull);
+            lock (pending)
+            {
+                if (caseMoves.Remove(before, out string? first))
+                    before = first;
+                if (before != after)
+                    caseMoves[after] = before;
+            }
+        }
+
+        Moved(oldFull);
+        Moved(newFull);
     }
 
     // Something under the folder moved, looked at once it's been quiet a moment
@@ -545,19 +629,41 @@ internal sealed class HexLinkTreeWatch : IDisposable
         {
             string[] paths;
             bool whole;
+            KeyValuePair<string, string>[] renames;
             lock (pending)
             {
                 if (!seeded || disposed)
                     return;
                 paths = [.. pending];
                 pending.Clear();
+                renames = [.. caseMoves];
+                caseMoves.Clear();
                 whole = everything;
                 everything = false;
             }
 
             foreach (string path in paths)
                 tree.ForgetHash(path);
+            string prefix = tree.Folder.Name + "/";
             var changes = new List<HexLinkTreeChange>();
+            HashSet<string>? replaced = null;
+            if (renames.Length > 0)
+            {
+                HashSet<string> ignoredNames = tree.Ignored(renames.SelectMany(move => new[] { move.Key, move.Value }).ToArray());
+                foreach (var (nextName, oldName) in renames)
+                {
+                    string from = prefix + oldName, to = prefix + nextName;
+                    if (!known.ContainsKey(from) || known.ContainsKey(to) || ignoredNames.Contains(nextName) ||
+                        ignoredNames.Contains(oldName) || !tree.IsSoleSpelling(nextName) || tree.FileOf(nextName) is not { } file)
+                        continue;
+                    tree.NoteCase(nextName);
+                    replaced ??= new HashSet<string>(StringComparer.Ordinal);
+                    replaced.Add(from);
+                    replaced.Add(to);
+                    changes.Add(new HexLinkTreeChange(to, file.Hash, Text: file.Text, Eol: file.Eol, PreviousPath: from));
+                }
+            }
+
             if (whole)
             {
                 HexLinkManifest now = tree.Manifest();
@@ -566,19 +672,35 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 foreach (HexLinkTreeFile file in now.Files)
                 {
                     next[file.Path] = file.Hash;
-                    if (!then.TryGetValue(file.Path, out string? was) || was != file.Hash || (file.Big && was is not null))
+                    if (replaced?.Contains(file.Path) != true && (!then.TryGetValue(file.Path, out string? was) || was != file.Hash || (file.Big && was is not null)))
                         changes.Add(new HexLinkTreeChange(file.Path, file.Hash, Text: file.Text, Eol: file.Eol));
                 }
 
-                int prefix = tree.Folder.Name.Length + 1;
+                Dictionary<string, int>? added = null;
                 foreach (var (path, hash) in then)
                 {
-                    if (next.ContainsKey(path))
+                    if (next.ContainsKey(path) || replaced?.Contains(path) == true)
                         continue;
-                    if (tree.Gone(path[prefix..]))
+                    added ??= AddedNames(then, changes);
+                    if (added.Remove(path, out int index) && index >= 0 &&
+                        tree.IsSoleSpelling(changes[index].Path[prefix.Length..]))
+                    {
+                        HexLinkTreeChange moved = changes[index];
+                        changes[index] = moved with { PreviousPath = path };
+                        tree.NoteCase(moved.Path[prefix.Length..]);
+                        continue;
+                    }
+                    if (tree.Gone(path[prefix.Length..]))
                         changes.Add(new HexLinkTreeChange(path, null, Deleted: true));
                     else
                         next[path] = hash;
+                }
+                foreach (HexLinkTreeChange move in changes)
+                {
+                    if (move.PreviousPath is not { } previous)
+                        continue;
+                    next.Remove(previous);
+                    next[move.Path] = move.Hash;
                 }
                 known = next;
             }
@@ -587,9 +709,11 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 HashSet<string> ignored = tree.Ignored(paths);
                 foreach (string relative in paths)
                 {
-                    if (ignored.Contains(relative))
+                    if (ignored.Contains(relative) || tree.CanonicalCase(relative) != relative)
                         continue;
-                    string wire = tree.Folder.Name + "/" + relative;
+                    string wire = prefix + relative;
+                    if (replaced?.Contains(wire) == true)
+                        continue;
                     HexLinkTreeFile? file = tree.FileOf(relative);
                     bool had = known.TryGetValue(wire, out string? was);
                     if (file is null)
@@ -605,6 +729,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
 
                 foreach (HexLinkTreeChange change in changes)
                 {
+                    if (change.PreviousPath is { } previous)
+                        known.Remove(previous);
                     if (change.Deleted)
                         known.Remove(change.Path);
                     else
@@ -618,6 +744,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 while (end < changes.Count && end - at < MOST_BATCH)
                 {
                     bytes += HexLinkTree.WireCost(changes[end].Path);
+                    if (changes[end].PreviousPath is { } previous)
+                        bytes += 6 * previous.Length;
                     if (bytes > HexLinkTree.PAGE_BUDGET)
                         break;
                     end++;
@@ -639,6 +767,20 @@ internal sealed class HexLinkTreeWatch : IDisposable
         {
             looking.Release();
         }
+    }
+
+    private static Dictionary<string, int> AddedNames(Dictionary<string, string?> known, List<HexLinkTreeChange> changes)
+    {
+        var added = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int index = 0; index < changes.Count; index++)
+        {
+            HexLinkTreeChange change = changes[index];
+            if (change.Deleted || change.PreviousPath is not null || known.ContainsKey(change.Path))
+                continue;
+            if (!added.TryAdd(change.Path, index))
+                added[change.Path] = -1;
+        }
+        return added;
     }
 
     public void Dispose()

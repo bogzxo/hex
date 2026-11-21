@@ -18,6 +18,7 @@ internal sealed partial class HexLinkSync
     // waiting and what doesn't travel
     private readonly Dictionary<string, HexLinkSyncAgreed> bases = new(StringComparer.Ordinal);
     private int eolOnly;
+    private readonly CaseNames hereNames = new(), thereNames = new();
     private readonly Dictionary<string, HexLinkTreeFile> remote = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncConflict> conflicts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HexLinkSyncSkipped> skipped = new(StringComparer.Ordinal);
@@ -32,7 +33,10 @@ internal sealed partial class HexLinkSync
     private int rightsVersion;
     private readonly SemaphoreSlim wake = new(0), slots = new(MOST_IN_FLIGHT, MOST_IN_FLIGHT);
     private readonly HashSet<string> retrying = new(StringComparer.Ordinal);
-    private int taking;
+    private int taking, filesDone, filesTotal;
+    private long bytesDone, bytesTotal;
+    private string? detail, retryDetail;
+    private Dictionary<string, long>? passSizes;
     private TaskCompletionSource? drained;
 
     // The first comparison done: what differs queued, both trees watched from now on
@@ -45,7 +49,7 @@ internal sealed partial class HexLinkSync
                 here[file.Path] = file;
         }
 
-        var differ = new List<string>();
+        var differ = new Dictionary<string, long>(StringComparer.Ordinal);
         CancellationToken stop;
         lock (gate)
         {
@@ -56,14 +60,22 @@ internal sealed partial class HexLinkSync
             stop = stopping.Token;
             remote.Clear();
             remoteCertified = theirs.Certified;
+            insensitivePaths = mine.CaseSensitive != true || theirs.CaseSensitive != true;
+            hereNames.Clear();
+            thereNames.Clear();
+            foreach (string path in here.Keys)
+                hereNames.Add(path);
             foreach (HexLinkTreeFile file in theirs.Files)
             {
                 if (!Ours(file.Path))
+                {
                     remote[file.Path] = file;
+                    thereNames.Add(file.Path);
+                }
             }
 
             // What the other side said changed while the two were being listed, on top of its manifest
-            foreach (HexLinkTreeChange change in early?.Values ?? Enumerable.Empty<HexLinkTreeChange>())
+            foreach (HexLinkTreeChange change in early ?? [])
             {
                 if (!Ours(change.Path) && (!change.Deleted || remoteCertified))
                     There(change);
@@ -76,6 +88,14 @@ internal sealed partial class HexLinkSync
             paths.UnionWith(conflicts.Keys);
             foreach (string path in paths)
             {
+                if (conflicts.GetValueOrDefault(path)?.HasUnsavedChanges == true)
+                    continue;
+                if (CaseDiffers(path))
+                {
+                    differ.Add(path, TransferSize(here.GetValueOrDefault(path), remote.GetValueOrDefault(path)));
+                    continue;
+                }
+
                 HexLinkTreeFile? mineFile = here.GetValueOrDefault(path), theirsFile = remote.GetValueOrDefault(path);
                 string? m = mineFile?.Hash, t = theirsFile?.Hash;
                 bool mineThere = mineFile is not null, theirsThere = theirsFile is not null;
@@ -110,10 +130,19 @@ internal sealed partial class HexLinkSync
                 }
                 else
                 {
-                    differ.Add(path);
+                    differ.Add(path, TransferSize(mineFile, theirsFile));
                 }
             }
 
+            ResetProgress();
+            passSizes = differ;
+            filesTotal = differ.Count;
+            bytesTotal = differ.Values.Sum();
+            foreach (string path in differ.Keys)
+            {
+                queued.Add(path);
+                queue.Enqueue(path);
+            }
             local = watch;
             ready = true;
             State = pullOnly ? HexLinkSyncState.PullOnly : HexLinkSyncState.Syncing;
@@ -123,11 +152,14 @@ internal sealed partial class HexLinkSync
         watch.Seed(mine);
         Notify();
         _ = Task.Run(() => Work(stop));
-        foreach (string path in differ)
-            Dirty(path);
+        if (differ.Count > 0)
+            wake.Release((differ.Count + MOST_BATCH - 1) / MOST_BATCH);
         CheckIdle();
         Save();
     }
+
+    private static long TransferSize(HexLinkTreeFile? here, HexLinkTreeFile? there) =>
+        here is { Big: true } || there is { Big: true } ? 0 : Math.Min(HexLinkFiles.MOST_READ, Math.Max(here?.Size ?? 0, there?.Size ?? 0));
 
     // This side's tree changed (its watcher's thread): what isn't settled already is queued
     private void Saw(IReadOnlyList<HexLinkTreeChange> changes)
@@ -141,13 +173,21 @@ internal sealed partial class HexLinkSync
             {
                 if (Ours(change.Path))
                     continue;
+                if (change.PreviousPath is { } previous)
+                    hereNames.Remove(previous);
+                if (change.Deleted)
+                    hereNames.Remove(change.Path);
+                else
+                    hereNames.Add(change.Path);
+                if (hereNames.Name(change.Path) is { } remaining && remaining != change.Path)
+                    dirty.Add(remaining);
                 bases.TryGetValue(change.Path, out HexLinkSyncAgreed? agreed);
                 remote.TryGetValue(change.Path, out HexLinkTreeFile? theirs);
                 // A file written here from the other side, reported back by the watcher with the hash it was agreed at
                 bool settled = change.Deleted
                     ? agreed is null && theirs is null
                     : change.Hash is not null && agreed is not null && change.Hash == agreed.Local && theirs?.Hash == agreed.Remote;
-                if (!settled)
+                if (!settled || change.PreviousPath is not null || CaseDiffers(change.Path))
                     dirty.Add(change.Path);
             }
         }
@@ -171,13 +211,13 @@ internal sealed partial class HexLinkSync
                 {
                     foreach (HexLinkTreeChange change in changes)
                     {
-                        if (early.Count >= HexLinkTree.MOST_FILES && !early.ContainsKey(change.Path))
+                        if (early.Count >= HexLinkTree.MOST_FILES)
                         {
                             earlyOverflow = true;
                             break;
                         }
 
-                        early[change.Path] = change;
+                        early.Add(change);
                     }
                 }
                 return;
@@ -202,18 +242,180 @@ internal sealed partial class HexLinkSync
     // What the other side has of a path now, noted (under the gate)
     private void There(HexLinkTreeChange change)
     {
+        if (change.PreviousPath is { } previous && remoteCertified)
+            RemoveRemote(previous);
         if (change.Deleted)
-            remote.Remove(change.Path);
+            RemoveRemote(change.Path);
         else
+        {
             remote[change.Path] = new HexLinkTreeFile(change.Path, change.Hash, 0, change.Text, change.Eol);
+            thereNames.Add(change.Path);
+        }
+    }
+
+    private void RemoveRemote(string path)
+    {
+        remote.Remove(path);
+        thereNames.Remove(path);
     }
 
     private void There(string path, string? hash)
     {
         if (hash is null)
-            remote.Remove(path);
-        else
+            RemoveRemote(path);
+        else if (remote.GetValueOrDefault(path)?.Hash != hash)
+        {
             remote[path] = new HexLinkTreeFile(path, hash, 0);
+            thereNames.Add(path);
+        }
+    }
+
+    // Accessed under the sync gate. One spelling per path is common, so only allocate a set for actual collisions.
+    private sealed class CaseNames
+    {
+        private readonly Dictionary<string, (string First, HashSet<string>? Others)> names = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Clear() => names.Clear();
+        public string? Name(string path) => names.GetValueOrDefault(path).First;
+        public bool Collides(string path) => names.GetValueOrDefault(path).Others is not null;
+
+        public void Add(string path)
+        {
+            if (!names.TryGetValue(path, out var group))
+                names.Add(path, (path, null));
+            else if (path != group.First)
+            {
+                if (group.Others is null)
+                    names[path] = (group.First, new HashSet<string>(StringComparer.Ordinal) { path });
+                else
+                    group.Others.Add(path);
+            }
+        }
+
+        public void Remove(string path)
+        {
+            if (!names.TryGetValue(path, out var group))
+                return;
+            if (group.First == path)
+            {
+                if (group.Others is null)
+                {
+                    names.Remove(path);
+                    return;
+                }
+                string next = group.Others.First();
+                group.Others.Remove(next);
+                group.First = next;
+            }
+            else
+            {
+                group.Others?.Remove(path);
+            }
+
+            if (group.Others is { Count: 0 })
+                group.Others = null;
+            names[path] = group;
+        }
+    }
+
+    private bool CaseDiffers(string wire) =>
+        (insensitivePaths && (hereNames.Collides(wire) || thereNames.Collides(wire))) ||
+        (hereNames.Name(wire) is { } here && thereNames.Name(wire) is { } there && here != there);
+
+    // A pair of spellings can be a rename only when one spelling has the previous shared base.
+    private async Task<bool> ReconcileCase(string wire, CancellationToken stop)
+    {
+        string? before = null, after = null, expected = null;
+        bool push = false, collision;
+        lock (gate)
+        {
+            if (!CaseDiffers(wire))
+                return false;
+
+            string? here = hereNames.Name(wire), there = thereNames.Name(wire);
+            collision = hereNames.Collides(wire) || thereNames.Collides(wire);
+            if (!collision && remoteCertified && here is not null && there is not null)
+            {
+                HexLinkSyncAgreed? hereBase = bases.GetValueOrDefault(here), thereBase = bases.GetValueOrDefault(there);
+                if (hereBase is null && thereBase is not null && !conflicts.ContainsKey(there))
+                {
+                    (before, after, expected, push) = (there, here, thereBase.Remote, true);
+                }
+                else if (thereBase is null && hereBase is not null && !conflicts.ContainsKey(here))
+                {
+                    (before, after, expected) = (here, there, hereBase.Local);
+                }
+            }
+        }
+
+        if (before is null || after is null || expected is null)
+        {
+            if (!insensitivePaths)
+                return false;
+            Skip(wire, "Its name collides with another path that differs only in case.");
+            return true;
+        }
+        if (wire != after)
+            return true;
+
+        string from = Jailed(before), to = Jailed(after);
+        if (Path.GetDirectoryName(from) != Path.GetDirectoryName(to))
+        {
+            Skip(wire, "The directory name differs only in case and requires an explicit rename.");
+            return true;
+        }
+        string prefix = folder.Name + "/";
+        if (tree.Ignored([before[prefix.Length..], after[prefix.Length..]]).Count != 0)
+        {
+            Skip(wire, "The previous or new name is ignored.");
+            return true;
+        }
+
+        if (push)
+        {
+            if (pullOnly)
+            {
+                lock (gate)
+                    deferredPushes.Add(wire);
+                return true;
+            }
+            await Asked(() => peer.RenameCase(folder.Name, before, after, expected, stop), stop);
+        }
+        else
+        {
+            await RenameLocal(from, to, expected, stop);
+            tree.NoteCase(after[prefix.Length..]);
+        }
+
+        lock (gate)
+        {
+            if (bases.TryGetValue(before, out HexLinkSyncAgreed? agreed))
+            {
+                RemoveBase(before);
+                SetBase(after, agreed);
+            }
+            if (push)
+            {
+                if (remote.GetValueOrDefault(before) is { Hash: var hash } old && hash == expected)
+                {
+                    RemoveRemote(before);
+                    remote[after] = old with { Path = after };
+                    thereNames.Add(after);
+                }
+                Interlocked.Increment(ref sent);
+            }
+            else
+            {
+                hereNames.Remove(before);
+                hereNames.Add(after);
+                Interlocked.Increment(ref received);
+            }
+        }
+
+        Unskip(before);
+        Dirty(after);
+        Notify();
+        return true;
     }
 
     // Both sides have a path with the same bytes (or neither has it), the base from now on (under the gate)
@@ -222,7 +424,6 @@ internal sealed partial class HexLinkSync
         if (hash is null)
         {
             RemoveBase(path);
-            There(path, null);
             tries.Remove(path);
         }
         else if (!bases.TryGetValue(path, out HexLinkSyncAgreed? was) || was.Local != hash || was.Remote != hash)
@@ -240,7 +441,11 @@ internal sealed partial class HexLinkSync
             if (!live || !ready)
                 return;
             if (retry)
+            {
                 retrying.Remove(wire);
+                if (retrying.Count == 0)
+                    Volatile.Write(ref retryDetail, null);
+            }
             else if (!retrying.Contains(wire))
                 tries.Remove(wire);
             if (running.Contains(wire))
@@ -276,6 +481,7 @@ internal sealed partial class HexLinkSync
                 return;
             count = tries[wire] = Math.Min(tries.GetValueOrDefault(wire) + 1, 15);
             stop = stopping.Token;
+            Volatile.Write(ref retryDetail, why ?? wire);
         }
 
         if (why is not null || count > 6)
@@ -386,6 +592,7 @@ internal sealed partial class HexLinkSync
     // One path worked on, whatever happens the queue going on after it
     private async Task Run(string wire, bool ignored, CancellationToken stop)
     {
+        Volatile.Write(ref detail, wire);
         try
         {
             await Reconcile(wire, ignored, stop);
@@ -420,6 +627,15 @@ internal sealed partial class HexLinkSync
                 requeue = again.Remove(wire) && live && queued.Add(wire);
                 if (requeue)
                     queue.Enqueue(wire);
+                else if (!retrying.Contains(wire))
+                {
+                    tries.Remove(wire);
+                    if (passSizes?.Remove(wire, out long size) == true)
+                    {
+                        Interlocked.Increment(ref filesDone);
+                        Interlocked.Add(ref bytesDone, size);
+                    }
+                }
             }
 
             if (requeue)
@@ -447,6 +663,9 @@ internal sealed partial class HexLinkSync
         if (ignored)
             return;
 
+        if (await ReconcileCase(wire, stop))
+            return;
+
         // This side's file hashed from what's on the disk now, never a hash cached by its length and time written, which
         // two saves within one tick of the clock can share
         HexLinkTreeFile? mine = null;
@@ -464,12 +683,12 @@ internal sealed partial class HexLinkSync
         }
         HexLinkTreeFile? theirs;
         HexLinkSyncAgreed? agreed;
-        bool held;
+        HexLinkSyncConflict? held;
         lock (gate)
         {
             remote.TryGetValue(wire, out theirs);
             bases.TryGetValue(wire, out agreed);
-            held = conflicts.ContainsKey(wire);
+            conflicts.TryGetValue(wire, out held);
         }
 
         if (mine is { Big: true } || theirs is { Big: true })
@@ -479,6 +698,8 @@ internal sealed partial class HexLinkSync
         }
 
         Unskip(wire);
+        if (held?.HasUnsavedChanges == true)
+            return;
         string? m = mine?.Hash, t = theirs?.Hash;
         // Each side still at what it agreed, which may be the same file with different line ends
         if (agreed is not null && m == agreed.Local && t == agreed.Remote)
@@ -521,7 +742,7 @@ internal sealed partial class HexLinkSync
         }
 
         // A conflict waits for somebody to pick a side, or for both sides to come to the same thing
-        if (held)
+        if (held is not null)
             return;
 
         // Each side is looked at against its own agreed hash: only one moved, that one goes to the other
@@ -646,6 +867,11 @@ internal sealed partial class HexLinkSync
     // the other side refuses it if it moved on meanwhile
     private async Task Push(string wire, string full, HexLinkSyncAgreed? agreed, byte[]? bytes, string? expectedLocal, string? theirs, CancellationToken stop)
     {
+        if (!remoteCertified)
+        {
+            Skip(wire, "The peer does not support checked working-tree writes.");
+            return;
+        }
         int grantedAt;
         lock (gate)
         {
@@ -682,7 +908,11 @@ internal sealed partial class HexLinkSync
                 }
 
                 lock (gate)
+                {
+                    if (remote.GetValueOrDefault(wire)?.Hash == theirs)
+                        RemoveRemote(wire);
                     Agree(wire, null);
+                }
             }
             else
             {
@@ -824,8 +1054,6 @@ internal sealed partial class HexLinkSync
 
             if (local is null || HexLinkFiles.Hash(local) != mine)
             {
-                lock (gate)
-                    There(wire, file.Hash);
                 Again(wire);
                 return;
             }
@@ -842,10 +1070,7 @@ internal sealed partial class HexLinkSync
             }
 
             (string copyFull, copy) = Beside(full, wire);
-            HexLinkFiles.WriteAtomic(copyFull, file.Bytes);
-            copyHash = file.Hash;
-            lock (gate)
-                There(wire, file.Hash);
+            copyHash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, file.Bytes, stop);
         }
 
         lock (gate)
@@ -967,6 +1192,7 @@ internal sealed partial class HexLinkSync
                 return;
             waiting = drained;
             drained = null;
+            ResetProgress();
             if (State == HexLinkSyncState.Syncing)
             {
                 State = HexLinkSyncState.Idle;
@@ -980,6 +1206,18 @@ internal sealed partial class HexLinkSync
             Save();
             Notify();
         }
+    }
+
+    // Under the gate, once a comparison has drained or been stopped.
+    private void ResetProgress()
+    {
+        passSizes = null;
+        Volatile.Write(ref filesDone, 0);
+        Volatile.Write(ref filesTotal, 0);
+        Volatile.Write(ref bytesDone, 0);
+        Volatile.Write(ref bytesTotal, 0);
+        Volatile.Write(ref detail, null);
+        Volatile.Write(ref retryDetail, null);
     }
 
     // Done when the queue is empty and nothing's being worked on

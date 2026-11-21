@@ -40,10 +40,7 @@ internal sealed partial class HexLinkSync
     {
         if (!wire.StartsWith(folder.Name + "/", StringComparison.Ordinal))
             return true;
-        string name = wire[(wire.LastIndexOf('/') + 1)..];
-        if (name.Contains(THEIRS, StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (name.StartsWith('.') && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase))
+        if (HexLinkTree.SyncArtifact(wire))
             return true;
         return StateWire is { } state && state.Equals(wire, StringComparison.OrdinalIgnoreCase);
     }
@@ -160,9 +157,10 @@ internal sealed partial class HexLinkSync
 
     private readonly Lock saving = new();
     private long savedAt, snapshotVersion, writtenVersion;
+    internal Action<long>? BeforeStateWrite { get; init; }
 
     // The bases and the conflicts written, whole or not at all
-    private void Save()
+    internal void Save()
     {
         JsonObject state;
         long version;
@@ -197,6 +195,7 @@ internal sealed partial class HexLinkSync
             };
         }
 
+        BeforeStateWrite?.Invoke(version);
         lock (saving)
         {
             if (version <= writtenVersion)
