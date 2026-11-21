@@ -135,10 +135,7 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         if (Runtime is not { } runtime || Failed is not null || !runtime.UserScope.Variables.TryGetValue(name, out IRuntimeValue? function) || !Values.IsFunction(function))
             return true;
 
-        IRuntimeValue result = Values.Null;
-        bool fine = Call(() => result = runtime.Invoke(function, arguments));
-        returned = result;
-        return fine;
+        return Call(runtime, function, arguments, out returned);
     }
 
     /// <summary>Calls a function it handed over (a command), false if it went wrong, which switches it off.</summary>
@@ -151,10 +148,7 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         if (Runtime is not { } runtime || Failed is not null)
             return false;
 
-        IRuntimeValue result = Values.Null;
-        bool fine = Call(() => result = runtime.Invoke(function, arguments));
-        returned = result;
-        return fine;
+        return Call(runtime, function, arguments, out returned);
     }
 
     /// <summary>
@@ -163,8 +157,7 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
     /// </summary>
     private bool Call(Action run)
     {
-        using var cancel = new CancellationTokenSource(1000);
-        Runtime!.Interpreter.Cancellation = cancel.Token;
+        CancellationTokenSource cancel = Arm();
 
         try
         {
@@ -178,8 +171,53 @@ internal sealed class HexExtension : Horizon.UI.Scripting.IUIScriptOwner
         }
         finally
         {
-            Runtime.Interpreter.Cancellation = CancellationToken.None;
+            Disarm(cancel);
         }
+    }
+
+    // One of its functions called as Call runs anything, without a function made to hold the call. An agent's extension
+    // is called like this for every line its agent prints
+    private bool Call(HIDLRuntime runtime, IRuntimeValue function, IRuntimeValue[] arguments, out IRuntimeValue returned)
+    {
+        CancellationTokenSource cancel = Arm();
+
+        try
+        {
+            returned = runtime.Invoke(function, arguments);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Failed = cancel.IsCancellationRequested ? "it went on for more than a second and was stopped" : e.Message;
+            returned = Values.Null;
+            return false;
+        }
+        finally
+        {
+            Disarm(cancel);
+        }
+    }
+
+    // The second a call has, kept from one call to the next and set going again, where a new one made a timer of its own
+    // for every line an agent printed. Taken while it's in use, so a call made from inside another gets one of its own
+    private CancellationTokenSource? cancelling;
+
+    private CancellationTokenSource Arm()
+    {
+        CancellationTokenSource cancel = cancelling ?? new CancellationTokenSource();
+        cancelling = null;
+        cancel.CancelAfter(1000);
+        Runtime!.Interpreter.Cancellation = cancel.Token;
+        return cancel;
+    }
+
+    private void Disarm(CancellationTokenSource cancel)
+    {
+        Runtime!.Interpreter.Cancellation = CancellationToken.None;
+        if (cancelling is null && cancel.TryReset())
+            cancelling = cancel;
+        else
+            cancel.Dispose();
     }
 
     private static string? Text(ObjectValue of, string key) =>
