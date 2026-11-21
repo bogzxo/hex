@@ -17,6 +17,19 @@ internal sealed partial class DawnScene
         test.Wait();
         test.Check("engineering: inline and display Markdown math have picture components", () =>
             cellViews[0].Written!.Children.OfType<NotebookPicture>().Count() >= 3);
+        // The cell's block of code has a # comment in it, cut out of its fence by the math's paragraphs it was a heading
+        test.Check("engineering: a # line in a fenced block of a cell with math is code, not a heading", () =>
+            cellViews[0].Written!.Children.OfType<Label>().ToList() is var labels
+            && labels.Count(label => label.Text.TrimStart().StartsWith('#')) == 1
+            && labels.Any(label => label.Text.StartsWith("```python\n# Dollar signs in code stay literal", StringComparison.Ordinal) && label.Text.EndsWith("```", StringComparison.Ordinal)));
+        test.Check("engineering: the fence wins over headings, lists and blank lines in it, ``` and ~~~", () =>
+            FencedParagraphs("Text\n```\n# not a heading\n\n- not a list\n```\n# Heading\n~~~~py\n## code\n~~~\n~~~~\nafter") is var parts
+            && parts.Count == 5
+            && parts[0] == ("Text", false)
+            && parts[1] == ("```\n# not a heading\n\n- not a list\n```", true)
+            && parts[2] == ("# Heading", false)
+            && parts[3] == ("~~~~py\n## code\n~~~\n~~~~", true)
+            && parts[4] == ("after", false));
         test.Run(() => RunCells(notebookShown!, notebookShown!.Model.Cells));
         test.WaitFor(() => notebookShown!.Model.Cells[^1].Outputs.Count > 0 && notebookShown.Run.Queued.Count == 0 && !notebookShown.Starting, 120);
         test.Settle(0.5f);

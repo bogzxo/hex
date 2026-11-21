@@ -131,16 +131,64 @@ internal sealed partial class DawnScene
             }
             else if (!piece.Math)
             {
-                string[] paragraphs = MarkdownParagraphs().Split(piece.Text);
-                for (int i = 0; i < paragraphs.Length; i++)
+                var paragraphs = FencedParagraphs(piece.Text);
+                for (int i = 0; i < paragraphs.Count; i++)
                 {
-                    if (i > 0) Flush();
-                    paragraph.Add(new NotebookMath.Piece(paragraphs[i]));
+                    // A block of code is a paragraph of its own, never glued to the math before or after it
+                    if (i > 0 || paragraphs[i].Code) Flush();
+                    paragraph.Add(new NotebookMath.Piece(paragraphs[i].Text));
+                    if (paragraphs[i].Code) Flush();
                 }
             }
             else paragraph.Add(piece);
         }
         Flush();
+    }
+
+    // Prose cut into paragraphs where MarkdownParagraphs cuts it, a fenced block of code (``` or ~~~) kept whole as a
+    // paragraph of its own. A line starting with # inside a fence is code, cut there it was written out as a heading
+    internal static List<(string Text, bool Code)> FencedParagraphs(string text)
+    {
+        var result = new List<(string Text, bool Code)>();
+        var prose = new List<string>();
+        void Prose()
+        {
+            if (prose.Count == 0) return;
+            foreach (string part in MarkdownParagraphs().Split(string.Join('\n', prose)))
+                result.Add((part, false));
+            prose.Clear();
+        }
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            int length = Fence(lines[i], out char marker);
+            if (length < 3)
+            {
+                prose.Add(lines[i]);
+                continue;
+            }
+            // The fence, its code and the fence that closes it (or the end of the text) as one paragraph
+            Prose();
+            int end = i + 1;
+            while (end < lines.Length && !(Fence(lines[end], out char closing) >= length && closing == marker && lines[end].Trim().Trim(marker).Length == 0))
+                end++;
+            end = Math.Min(end, lines.Length - 1);
+            result.Add((string.Join('\n', lines[i..(end + 1)]), true));
+            i = end;
+        }
+        Prose();
+        return result;
+
+        // How long the run of ` or ~ a line starts with is, after no more than three spaces, 0 for a line that isn't a fence
+        static int Fence(string line, out char marker)
+        {
+            string trimmed = line.TrimStart(' ');
+            marker = trimmed.Length > 0 ? trimmed[0] : '\0';
+            if (line.Length - trimmed.Length > 3 || marker is not ('`' or '~')) return 0;
+            int run = 0;
+            while (run < trimmed.Length && trimmed[run] == marker) run++;
+            return run;
+        }
     }
 
     // Where prose with math in it is cut into paragraphs, each written on its own: a blank line, a list item, and a heading,
