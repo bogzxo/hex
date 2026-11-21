@@ -807,7 +807,15 @@ figcaption,
 /* Sections */
 
 section {
-  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
+  --section-space: clamp(3rem, 2rem + 5vw, 6rem);
+
+  padding-block: var(--section-space);
+}
+
+/* A link to a part of the page lands on its words, just under the bar, not on the empty space a section starts with
+   (html's scroll-padding-top keeps it clear of the bar) */
+section[id] {
+  scroll-margin-top: calc(1.25rem - var(--section-space));
 }
 
 section + section {
