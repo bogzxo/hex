@@ -112,6 +112,75 @@ internal sealed partial class DawnScene
     // The repositories of the workspace, by their top folders here
     private IReadOnlyList<HexLinkRepository> LinkLocalRepositories => linkServices?.Workspace.Repositories ?? [];
 
+    private readonly SemaphoreSlim linkProvisioning = new(1, 1);
+
+    internal async Task<string?> LinkAlignWorkspace(string deviceId, string folder, IProgress<HexLinkProvisionProgress>? progress = null,
+        CancellationToken cancel = default)
+    {
+        if (link?.PeerOf(deviceId) is not { } peer)
+            return Said("link.sync_not_linked", ("device", deviceId));
+        if (linkServices?.Workspace.Folders.FirstOrDefault(each => PlatformPaths.Comparer.Equals(each.Name, folder)) is not { } local)
+            return Said("link.sync_no_folder_here", ("folder", folder));
+
+        await linkProvisioning.WaitAsync(cancel);
+        try
+        {
+            if (LinkSyncs.Any(sync => sync.DeviceId != deviceId && sync.Folder == folder
+                && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.Syncing or HexLinkSyncState.Comparing or HexLinkSyncState.PullOnly))
+                return Said("link.provision.other_sync", ("folder", folder));
+
+            LinkSyncOf(deviceId, folder)?.Dispose();
+            await HexLinkProvision.Align(peer, local, progress, cancel);
+            cancel.ThrowIfCancellationRequested();
+            return await LinkStartProvisionedSync(peer, local.Name);
+        }
+        catch (Exception e) when (e is HexLinkException or IOException or InvalidOperationException or UnauthorizedAccessException or ArgumentException)
+        {
+            return e.Message;
+        }
+        finally
+        {
+            linkProvisioning.Release();
+        }
+    }
+
+    private async Task<string?> LinkStartProvisionedSync(HexLinkPeer peer, string folder)
+    {
+        string? why = await LinkSyncStart(peer.Device.Id, folder);
+        return why ?? (LinkSyncOf(peer.Device.Id, folder) is { State: HexLinkSyncState.Failed or HexLinkSyncState.NeedsGit } sync ? sync.Why : null);
+    }
+
+    internal void LinkAlignWorkspaceCommand(string deviceId, string folder)
+    {
+        string device = link?.PeerOf(deviceId)?.Device.Name ?? deviceId;
+        Context.Work.Start($"link-align-{deviceId}-{folder}", Said("link.provision.align_title", ("folder", folder), ("device", device)), async work =>
+        {
+            if (await LinkAlignWorkspace(deviceId, folder, new Progress<HexLinkProvisionProgress>(progress => ReportProvision(work, progress)), work.Token) is { } why)
+                throw new InvalidOperationException(why);
+        }, done =>
+        {
+            if (done.State == WorkState.Failed)
+                Say(Said("link.provision.failed", ("why", done.Error ?? string.Empty)), error: true);
+        });
+    }
+
+    private static void ReportProvision(WorkContext work, HexLinkProvisionProgress progress)
+    {
+        string said = Said("link.provision.phase_" + progress.Phase.ToString().ToLowerInvariant(),
+            ("repo", progress.RepositoryIndex.ToString(CultureInfo.InvariantCulture)),
+            ("repos", progress.RepositoryCount.ToString(CultureInfo.InvariantCulture)),
+            ("bytes", LinkSize(progress.BytesDone)),
+            ("bytes_total", progress.BytesTotal >= 0 ? LinkSize(progress.BytesTotal) : "?"),
+            ("files", progress.FilesDone.ToString(CultureInfo.InvariantCulture)),
+            ("files_total", progress.FilesTotal.ToString(CultureInfo.InvariantCulture)));
+        if (progress is { Phase: HexLinkProvisionPhase.Repositories, BytesTotal: > 0 })
+            work.Report((float)((double)progress.BytesDone / progress.BytesTotal), said);
+        else if (progress is { Phase: HexLinkProvisionPhase.Files, FilesTotal: > 0 })
+            work.Report((float)progress.FilesDone / progress.FilesTotal, said);
+        else
+            work.Say(said);
+    }
+
     /* The palette's commands */
 
     // A device's repository picked, a folder picked, and it cloned there with a card; then offered to be opened

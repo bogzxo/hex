@@ -4646,6 +4646,17 @@ let strings = {
         connect_failed: "Couldn't connect to {address}, {why}",
         forget_title: "Forget a device",
         forget_text: "The device picked can't link to this Hex again without pairing.",
+        provision: {
+            align_button: "Align to {device}",
+            align_title: "Align {folder} to {device}",
+            other_sync: "Stop the sync of {folder} with the other device before aligning this checkout.",
+            failed: "Workspace transfer failed: {why}",
+            phase_planning: "Reading the workspace plan",
+            phase_repositories: "Repository {repo} of {repos}, {bytes} of {bytes_total}",
+            phase_files: "Files {files} of {files_total}, {bytes} of {bytes_total}",
+            phase_sync: "Starting workspace sync",
+            phase_complete: "Workspace ready"
+        },
         patch_kept: "{device} offered changes, \"{title}\", kept as {file}"
     },
 

@@ -43,6 +43,124 @@ internal static class HexLinkWorkspaces
         return new HexLinkWorkspace(named, described, repositories);
     }
 
+    /// <summary>Builds a checkout plan for the actual repositories inside the folders a peer may see.</summary>
+    internal static HexLinkHostedProvision Provision(HexLinkWorkspace workspace, string? only, CancellationToken cancel)
+    {
+        if (HexLinkGit.Why() is { } why)
+            throw new InvalidOperationException(why);
+
+        HexLinkFolder[] selected = [.. workspace.Folders.Where(folder => only is null || folder.Name == only)];
+        if (selected.Length is 0 or > HexLinkHost.MOST_TREES)
+            throw HexLinkException.Invalid("The workspace has no such folder or too many folders to provision.");
+
+        var real = selected.ToDictionary(folder => folder.Name, folder => HexLinkFiles.Resolve(selected, folder.Name), StringComparer.Ordinal);
+        HexLinkFolder[] roots = [.. selected.Where(folder => !selected.Any(other => other != folder
+            && PlatformPaths.IsUnder(real[folder.Name], real[other.Name])))];
+        var folders = new List<HexLinkProvisionFolder>();
+        foreach (HexLinkFolder folder in selected)
+        {
+            HexLinkFolder root = roots.First(root => PlatformPaths.IsUnder(real[folder.Name], real[root.Name]));
+            string prefix = roots.Length == 1 ? string.Empty : root.Name;
+            folders.Add(new HexLinkProvisionFolder(folder.Name, Under(prefix, real[root.Name], real[folder.Name])));
+        }
+
+        var repos = new List<HexLinkProvisionRepository>();
+        var wirePaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var gitlinks = new Dictionary<string, (string Parent, string Head)>(StringComparer.Ordinal);
+        var physical = new HashSet<string>(PlatformPaths.Comparer);
+        string lease = Guid.NewGuid().ToString("N");
+        foreach (HexLinkFolder root in roots)
+        {
+            string rootPath = real[root.Name];
+            string prefix = roots.Length == 1 ? string.Empty : root.Name;
+            List<string> paths = HexLinkTree.FindNestedRepositories(rootPath, cancel);
+            if (HexLinkProvision.HasRepository(rootPath))
+                paths.Add(string.Empty);
+
+            foreach (string relative in paths.OrderBy(path => path.Length))
+            {
+                cancel.ThrowIfCancellationRequested();
+                string wire = relative.Length == 0 ? root.Name : root.Name + "/" + relative;
+                string directory = HexLinkFiles.Resolve(selected, wire);
+                if (!physical.Add(directory))
+                    continue;
+                if (repos.Count == HexLinkTree.MOST_REPOS)
+                    throw HexLinkException.Invalid("The workspace has too many repositories to provision.");
+                string path = Under(prefix, rootPath, directory);
+                if (HexLinkProvision.Run(directory, ["rev-parse", "--show-prefix"], cancel).Trim().Length > 0)
+                    throw new InvalidOperationException($"The Git metadata in {path} does not identify its own checkout.");
+                string head = HexLinkProvision.ReadHead(directory, cancel)
+                    ?? throw new InvalidOperationException($"The repository {wire} has no commit to provision.");
+                string? parent = null;
+                if (gitlinks.TryGetValue(path, out var link))
+                {
+                    parent = link.Parent;
+                    if (head != link.Head)
+                        throw new InvalidOperationException($"Submodule {wire} is at {head} on the host. Its parent records {link.Head}. Check out the recorded commit on the host before sharing this workspace.");
+                }
+
+                var origin = GitProcess.Run(directory, ["config", "--local", "--get", "remote.origin.url"], cancel: cancel);
+                if (!origin.Ok && origin.Exit != 1)
+                    throw new InvalidOperationException($"Couldn't read the origin of {wire}: {HexLinkGit.ErrorOf(origin)}");
+
+                string id = $"{HexLinkProvisionPlan.BUNDLE_PREFIX}{lease}-{repos.Count}";
+                repos.Add(new HexLinkProvisionRepository(id, path, head, parent is null ? HexLinkProvision.ReadBranch(directory, cancel) : null,
+                    origin.Ok ? origin.Output.TrimEnd('\r', '\n') : null, parent));
+                wirePaths.Add(id, wire);
+                foreach (var (module, commit) in Submodules(directory, cancel))
+                {
+                    string modulePath = path.Length > 0 ? path + "/" + module : module;
+                    gitlinks.Add(modulePath, (path, commit));
+                }
+            }
+        }
+
+        var repoPaths = repos.Select(repo => repo.Path).ToHashSet(StringComparer.Ordinal);
+        foreach (string path in gitlinks.Keys)
+        {
+            if (!repoPaths.Contains(path))
+                throw new InvalidOperationException($"Submodule {path} is uninitialized on the host. Initialize it there before sharing this workspace.");
+        }
+        return new HexLinkHostedProvision(new HexLinkProvisionPlan(folders, repos), wirePaths);
+    }
+
+    private static string Under(string prefix, string root, string path)
+    {
+        string relative = Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/');
+        return relative == "." ? prefix : prefix.Length > 0 ? prefix + "/" + relative : relative;
+    }
+
+    private static Dictionary<string, string> Submodules(string directory, CancellationToken cancel)
+    {
+        string[] links = [.. HexLinkProvision.Run(directory, ["ls-tree", "-rz", "HEAD"], cancel)
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries).Where(entry => entry.StartsWith("160000 commit ", StringComparison.Ordinal))];
+        var modules = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (links.Length == 0)
+            return modules;
+
+        GitResult config = GitProcess.Run(directory, ["config", "--blob", "HEAD:.gitmodules", "-z", "--get-regexp", "^submodule\\..*\\.path$"], cancel: cancel);
+        if (!config.Ok)
+        {
+            // Gitlinks without entries in .gitmodules are not registered submodules.
+            if (config.Exit == 1 || config.Error.Contains("unable to resolve config blob", StringComparison.OrdinalIgnoreCase))
+                return modules;
+            throw new InvalidOperationException($"{directory}: {HexLinkGit.ErrorOf(config)}");
+        }
+
+        var configured = config.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Select(entry => entry[(entry.IndexOf('\n') + 1)..]).ToHashSet(StringComparer.Ordinal);
+        foreach (string entry in links)
+        {
+            int tab = entry.IndexOf('\t');
+            if (tab < 0)
+                continue;
+            string module = entry[(tab + 1)..];
+            if (configured.Contains(module))
+                modules.Add(module, entry[14..tab]);
+        }
+        return modules;
+    }
+
     // A name not taken yet, the name itself the first time, then name-2, name-3. A name that's nothing (a drive's root) is "folder"
     private static string Unique(string name, HashSet<string> taken)
     {

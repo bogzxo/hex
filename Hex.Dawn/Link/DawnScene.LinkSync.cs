@@ -377,17 +377,17 @@ internal sealed partial class DawnScene
         entry.Announced.RemoveWhere(said => !sync.Conflicts.Any(conflict => conflict.Path + "\n" + conflict.Copy == said));
     }
 
-    // The two sides have different commits out: a card to fetch from the other or go on anyway
+    // The two sides have different commits checked out. Offer a safe fast-forward to the host.
     private void LinkSyncAskGit(LinkSyncEntry entry, HexLinkSync sync)
     {
         entry.GitCard?.Close();
         string device = entry.DeviceName, folder = entry.Folder, id = entry.DeviceId;
         entry.GitCard = toasts.Show(Said("link.sync_needs_git", ("folder", folder), ("device", device), ("why", sync.Why ?? string.Empty)), "warning", null, 0.0f,
-            (Said("link.sync_fetch", ("device", device)), () =>
+            (Said("link.provision.align_button", ("device", device)), () =>
             {
                 entry.GitCard?.Close();
                 entry.GitCard = null;
-                LinkFetchFrom(id, folder);
+                LinkAlignWorkspaceCommand(id, folder);
             }),
             (Said("link.sync_anyway"), () =>
             {

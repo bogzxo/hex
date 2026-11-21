@@ -42,7 +42,7 @@ internal sealed partial class DawnScene
             "Keep a workspace folder the same here and on another linked machine that has the same folder (the same repository) open, both ways, a file saved on one written on the other within a moment. start turns it on (and waits for the first comparison), flush returns once everything saved here is there, so you can then tell an agent there to build or test (hex_link_spawn, or hex_link_call with hex_agent_send) and what it changes comes back the same way. status lists every sync, its counts, its conflicts and the files that don't travel; resolve settles a file both sides changed (keep mine or theirs); stop turns it off. Files git ignores, .git and files over 8 MB never travel.",
             McpSchema.Object([
                 ("device", McpSchema.String("The device, its name or the start of its id.")),
-                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve")),
+                ("action", McpSchema.OneOf("What to do, status by default.", "status", "start", "stop", "flush", "resolve", "align")),
                 ("folder", McpSchema.String("The workspace folder by its name, the first one by default.")),
                 ("path", McpSchema.String("For resolve, the file in conflict as status names it (folder/relative/path).")),
                 ("keep", McpSchema.OneOf("For resolve, whose version stays.", "mine", "theirs")),
@@ -233,6 +233,9 @@ internal sealed partial class DawnScene
                     ? $"Saved changes to syncable files in {folder} reached {peer.Device.Name} ({sync.Summary}). Tell the agent there to build or test them."
                     : $"{sync.Summary}. Saved changes to syncable files can now travel both ways. {LinkSpawnWhere(peer, folder!)}");
             }
+            case "align":
+                return await LinkAlignWorkspace(peer.Device.Id, folder!, cancel: cancel) is { } alignmentError
+                    ? McpToolResult.Error(alignmentError) : McpToolResult.Text($"{folder} aligned to {peer.Device.Name} and sync started.");
             case "stop":
                 return McpToolResult.Text(LinkSyncStop(peer.Device.Id, folder!)
                     ? $"{folder} is no longer synced with {peer.Device.Name}, and won't be when it links again."

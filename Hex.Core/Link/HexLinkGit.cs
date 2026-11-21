@@ -33,7 +33,7 @@ internal static class HexLinkGit
     /// this repository knows (the asker's, so only what's new goes). Null when there's nothing new; throws with git's
     /// reason when it fails. The file is the caller's to delete.
     /// </summary>
-    public static Made? Bundle(string repo, IReadOnlyList<string> have)
+    public static Made? Bundle(string repo, IReadOnlyList<string> have, CancellationToken cancel = default, bool includeHead = false)
     {
         if (Why() is { } why)
             throw new InvalidOperationException(why);
@@ -42,30 +42,40 @@ internal static class HexLinkGit
         string file = Path.Combine(Path.GetTempPath(), $"hexlink-{Guid.NewGuid():N}.bundle");
         arguments.Add(file);
         arguments.Add("--all");
-        foreach (string known in Known(repo, have))
+        if (includeHead)
+            arguments.Add("HEAD");
+        foreach (string known in Known(repo, have, cancel))
             arguments.Add("^" + known);
 
-        GitResult made = GitProcess.Run(repo, arguments, patience: PATIENCE);
-        if (!made.Ok)
+        try
+        {
+            GitResult made = GitProcess.Run(repo, arguments, patience: PATIENCE, unattended: true, cancel: cancel);
+            // Everything the asker has, git refuses to write a bundle of nothing.
+            if (!made.Ok && made.Error.Contains("empty bundle", StringComparison.OrdinalIgnoreCase))
+            {
+                TryDelete(file);
+                return null;
+            }
+            if (!made.Ok)
+                throw new InvalidOperationException($"git bundle failed: {ErrorOf(made)}");
+
+            return new Made(file, new FileInfo(file).Length, Refs(file, cancel));
+        }
+        catch
         {
             TryDelete(file);
-            // Everything the asker has, git refuses to write a bundle of nothing
-            if (made.Error.Contains("empty bundle", StringComparison.OrdinalIgnoreCase))
-                return null;
-            throw new InvalidOperationException($"git bundle failed, {made.Why}");
+            throw;
         }
-
-        return new Made(file, new FileInfo(file).Length, Refs(file));
     }
 
     // The commits of what the asker has that this repository knows, the rest (the asker's own work) can't be left out
-    private static List<string> Known(string repo, IReadOnlyList<string> have)
+    private static List<string> Known(string repo, IReadOnlyList<string> have, CancellationToken cancel)
     {
         string[] asked = [.. have.Where(IsCommitId).Distinct(StringComparer.OrdinalIgnoreCase).Take(MOST_HAVE)];
         if (asked.Length == 0)
             return [];
 
-        GitResult checkedOut = GitProcess.Run(repo, ["cat-file", "--batch-check"], string.Join('\n', asked.Select(sha => sha + "^{commit}")) + "\n");
+        GitResult checkedOut = GitProcess.Run(repo, ["cat-file", "--batch-check"], string.Join('\n', asked.Select(sha => sha + "^{commit}")) + "\n", cancel: cancel);
         if (!checkedOut.Ok)
             return [];
 
@@ -84,10 +94,10 @@ internal static class HexLinkGit
     public static bool IsCommitId(string said) => said.Length is 40 or 64 && said.All(char.IsAsciiHexDigit);
 
     /// <summary>The refs in a bundle, read without a repository.</summary>
-    public static List<(string Name, string Head)> Refs(string bundle)
+    public static List<(string Name, string Head)> Refs(string bundle, CancellationToken cancel = default)
     {
         var refs = new List<(string, string)>();
-        GitResult heads = GitProcess.Run(Path.GetDirectoryName(bundle) ?? ".", ["bundle", "list-heads", bundle]);
+        GitResult heads = GitProcess.Run(Path.GetDirectoryName(bundle) ?? ".", ["bundle", "list-heads", bundle], cancel: cancel);
         if (!heads.Ok)
             return refs;
         foreach (string line in heads.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -140,13 +150,17 @@ internal static class HexLinkGit
     }
 
     /// <summary>The commits a repository has at the tips of its refs, what it tells a host it has.</summary>
-    public static List<string> Haves(string repo)
+    public static List<string> Haves(string repo, CancellationToken cancel = default)
     {
-        GitResult refs = GitProcess.Run(repo, ["for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes", "refs/tags"]);
-        return refs.Ok
-            ? [.. refs.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(IsCommitId).Distinct().Take(MOST_HAVE)]
-            : [];
+        GitResult head = GitProcess.Run(repo, ["rev-parse", "--verify", "--quiet", "HEAD"], cancel: cancel);
+        GitResult refs = GitProcess.Run(repo, ["for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes", "refs/tags"], cancel: cancel);
+        return [.. (head.Output + "\n" + refs.Output).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(IsCommitId).Distinct(StringComparer.OrdinalIgnoreCase).Take(MOST_HAVE)];
     }
+
+    internal static string ErrorOf(GitResult git) =>
+        git.Error.Length > 0 ? git.Error.Trim() : git.Output.Length > 0 ? git.Output.Trim() : $"Git exited with code {git.Exit}.";
+
 
     /// <summary>A device's name as a ref's folder, lower case letters, digits and dashes, "device" for one with none of those.</summary>
     public static string Slug(string device)
