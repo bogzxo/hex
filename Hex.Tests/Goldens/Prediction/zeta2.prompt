@@ -1,0 +1,78 @@
+<[fim-suffix]>
+        output_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            src_path,
+            header_paths: vec![src_path],
+            parser_path: src_path.join("parser.c"),
+            scanner_path: None,
+            external_files: externals,
+<[fim-prefix]><filename>edit_history
+--- a/tree-sitter/crates/loader/src/loader.rs
++++ b/tree-sitter/crates/loader/src/loader.rs
+@@ -604,7 +604,7 @@
+ 
+ pub struct Loader {
+     pub parser_lib_path: PathBuf,
+-    languages_by_id: Vec<(PathBuf, OnceCell<Language>, Option<Vec<PathBuf>>)>,
++    languages_by_id: Vec<LanguageEntry>,
+     language_configurations: Vec<LanguageConfiguration<'static>>,
+     language_configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
+     language_configuration_in_current_path: Option<usize>,
+--- a/tree-sitter/crates/loader/src/loader.rs
++++ b/tree-sitter/crates/loader/src/loader.rs
+@@ -621,6 +621,7 @@
+     wasm_store: Mutex<Option<tree_sitter::WasmStore>>,
+ }
+ 
++str
+ pub struct CompileConfig<'a> {
+     pub src_path: &'a Path,
+     pub header_paths: Vec<&'a Path>,
+
+<filename>tree-sitter/crates/loader/src/loader.rs
+    #[cfg(feature = "tree-sitter-highlight")]
+    use_all_highlight_names: bool,
+    _phantom: PhantomData<&'a ()>,
+}
+
+pub struct Loader {
+    pub parser_lib_path: PathBuf,
+    languages_by_id: Vec<LanguageEntry>,
+<<<<<<< CURRENT
+    language_configurations: Vec<LanguageConfiguration<'static>>,
+    language_configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
+    language_configuration_in_current_path: Option<usize>,
+    language_configuration_ids_by_first_line_regex: HashMap<String, Vec<usize>>,
+    #[cfg(feature = "tree-sitter-highlight")]
+    highlight_names: Box<Mutex<Vec<String>>>,
+    #[cfg(feature = "tree-sitter-highlight")]
+    use_all_highlight_names: bool,
+    debug_build: bool,
+    sanitize_build: bool,
+    force_rebuild: bool,
+
+    #[cfg(feature = "wasm")]
+    wasm_store: Mutex<Option<tree_sitter::WasmStore>>,
+}
+
+str<|user_cursor|>
+pub struct CompileConfig<'a> {
+    pub src_path: &'a Path,
+    pub header_paths: Vec<&'a Path>,
+    pub parser_path: PathBuf,
+    pub scanner_path: Option<PathBuf>,
+    pub external_files: Option<&'a [PathBuf]>,
+    pub output_path: Option<PathBuf>,
+    pub flags: &'a [&'a str],
+    pub sanitize: bool,
+    pub name: String,
+}
+
+impl<'a> CompileConfig<'a> {
+    #[must_use]
+    pub fn new(
+        src_path: &'a Path,
+        externals: Option<&'a [PathBuf]>,
+=======
+<[fim-middle]>

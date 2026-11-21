@@ -26,10 +26,16 @@ public static class EditorSettingsCatalog
         GIT = "Editor · Git", RUN = "Editor · Run and debug", DESIGNER = "Editor · Designer", SEARCH = "Editor · Search";
 
     /// <summary>
+    /// The section of edit prediction, a model's guess at what is typed next, after running and debugging. The agents'
+    /// own rows stay under Run and debug.
+    /// </summary>
+    public const string AI = "Editor · AI";
+
+    /// <summary>
     /// The sections in the order they're shown inside their parts, the editor's text first and the profiles first of how
     /// Hex looks, they're the whole of the rest of it in one go.
     /// </summary>
-    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP, RENDERING];
+    public static readonly string[] Sections = [TEXT, CODE, FILES, SEARCH, GIT, RUN, AI, DESIGNER, WindowsSource.GROUP, PROFILES, THEME, GLASS, EFFECTS, MOTION, BACKDROP, RENDERING];
 
     /// <summary>
     /// The parts of the settings window in the order they're shown, whichever mode a setting is (Dusk's theme is the
@@ -73,6 +79,27 @@ public static class EditorSettingsCatalog
     private static UISetting Patterns(string key) =>
         new(key, HexText.Get($"settings_text.{key}_title"), UIFormKind.List, HexText.Get($"settings_text.{key}_help"), SEARCH,
             KeyPlaceholder: HexText.Get($"settings_text.{key}_placeholder"), ValuePlaceholder: HexText.Get("settings_text.add_pattern"));
+
+    /// <summary>
+    /// A row of Editor, AI that is a list, a line an item with its own pencil and bin, its words in settings_catalog by its
+    /// key (_title, _help, and what a new one looks like in _placeholder), the button under them _add.
+    /// </summary>
+    private static UISetting AiList(string key) =>
+        new(key, HexText.Get($"settings_catalog.{key}_title"), UIFormKind.List, HexText.Get($"settings_catalog.{key}_help"), AI,
+            KeyPlaceholder: HexText.Get($"settings_catalog.{key}_placeholder"), ValuePlaceholder: HexText.Get($"settings_catalog.{key}_add"));
+
+    /// <summary>The key of edit prediction's API key, a secret: listed and handed to agents as set or not, never as it is.</summary>
+    public const string PREDICTION_KEY = "edit_predictions_api_key";
+
+    /// <summary>
+    /// Whether a setting is a secret, whose value is never shown where settings are listed (MCP's hex_settings_get) but as
+    /// whether it's set. The settings window's own box for it draws stars.
+    /// </summary>
+    public static bool IsSecret(string key) => key == PREDICTION_KEY;
+
+    /// <summary>What a secret is listed as: "set" when it has a value, empty when it hasn't.</summary>
+    public static IRuntimeValue? Masked(string key, IRuntimeValue? value) =>
+        !IsSecret(key) ? value : new StringValue(value is StringValue { Value.Length: > 0 } ? "set" : string.Empty);
 
     /// <summary>
     /// The row that says what the render scale came to, the scale, the pixels the frame is drawn with and the window's,
@@ -161,6 +188,23 @@ public static class EditorSettingsCatalog
         new("files_associations", HexText.Get("settings_catalog.files_associations_title"), UIFormKind.Pairs, HexText.Get("settings_catalog.files_associations_help"), FILES,
             KeyPlaceholder: HexText.Get("settings_catalog.files_associations_key_placeholder"), ValuePlaceholder: HexText.Get("settings_catalog.files_associations_value_placeholder")),
 
+        new("edit_predictions", HexText.Get("settings_catalog.edit_predictions_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_help"), AI),
+        Choice("edit_predictions_provider", AI, ["ollama", "openai", "link"]),
+        new("edit_predictions_api_url", HexText.Get("settings_catalog.edit_predictions_api_url_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_api_url_help"), AI,
+            Placeholder: HexText.Get("settings_catalog.edit_predictions_api_url_placeholder")),
+        new(PREDICTION_KEY, HexText.Get("settings_catalog.edit_predictions_api_key_title"),
+            UIFormKind.Secret,
+            HexText.Get("settings_catalog.edit_predictions_api_key_help"), AI, Placeholder: HexText.Get("settings_catalog.edit_predictions_api_key_placeholder")),
+        new("edit_predictions_model", HexText.Get("settings_catalog.edit_predictions_model_title"), UIFormKind.Text, HexText.Get("settings_catalog.edit_predictions_model_help"), AI,
+            Placeholder: HexText.Get("settings_catalog.edit_predictions_model_placeholder")),
+        Choice("edit_predictions_prompt_format", AI, ["infer", "zeta2", "qwen", "code_llama", "star_coder", "deepseek_coder", "code_gemma", "codestral"]),
+        new("edit_predictions_max_tokens", HexText.Get("settings_catalog.edit_predictions_max_tokens_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_max_tokens_help"), AI, Least: 16.0f, Most: 2048.0f),
+        new("edit_predictions_debounce", HexText.Get("settings_catalog.edit_predictions_debounce_title"), UIFormKind.Whole, HexText.Get("settings_catalog.edit_predictions_debounce_help"), AI, Least: 0.0f, Most: 2000.0f, Unit: "ms"),
+        AiList("edit_predictions_disabled_languages"),
+        AiList(Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE),
+        new("edit_predictions_workspace", HexText.Get("settings_catalog.edit_predictions_workspace_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_workspace_help"), AI),
+        new("edit_predictions_share", HexText.Get("settings_catalog.edit_predictions_share_title"), UIFormKind.Flag, HexText.Get("settings_catalog.edit_predictions_share_help"), AI),
+
         new("git_blame", HexText.Get("settings_catalog.git_blame_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_blame_help"), GIT),
         new("git_autofetch", HexText.Get("settings_catalog.git_autofetch_title"), UIFormKind.Flag, HexText.Get("settings_catalog.git_autofetch_help"), GIT),
         new("git_autofetch_interval", HexText.Get("settings_catalog.git_autofetch_interval_title"), UIFormKind.Number, HexText.Get("settings_catalog.git_autofetch_interval_help"), GIT, Least: 1.0f, Most: 60.0f, Step: 1.0f, Slider: true, Unit: "min"),
@@ -208,6 +252,7 @@ public static class EditorSettingsCatalog
         "backdrop_opacity" or "backdrop_scale" or "backdrop_across" or "backdrop_up" or "backdrop_stretch" or "backdrop_wrap" => "backdrop",
         _ when key.StartsWith("terminal_backdrop_", StringComparison.Ordinal) => "backdrop_terminal",
         _ when key.StartsWith("glass_", StringComparison.Ordinal) => "effect_glass",
+        _ when key.StartsWith("edit_predictions_", StringComparison.Ordinal) => "edit_predictions",
         _ => string.Empty
     };
 
@@ -344,6 +389,20 @@ public static class EditorSettingsCatalog
         ["search_exclude"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualSearchExclude),
         ["search_use_ignore_files"] = Values.Bool(true),
         ["explorer_auto_reveal"] = Values.Bool(true),
+
+        ["edit_predictions"] = Values.Bool(false),
+        ["edit_predictions_provider"] = new StringValue("ollama"),
+        ["edit_predictions_api_url"] = new StringValue(Hex.Core.HexSettings.OLLAMA_URL),
+        [PREDICTION_KEY] = new StringValue(string.Empty),
+        ["edit_predictions_model"] = new StringValue(string.Empty),
+        ["edit_predictions_prompt_format"] = new StringValue("infer"),
+        ["edit_predictions_max_tokens"] = new NumberValue(256.0f),
+        ["edit_predictions_debounce"] = new NumberValue(200.0f),
+        ["edit_predictions_disabled_languages"] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsDisabledLanguages),
+        [Hex.Core.HexSettings.EDIT_PREDICTIONS_EXCLUDE] = Horizon.HIDL.Library.Natives.List(Hex.Core.HexSettings.UsualEditPredictionsExclude),
+        ["edit_predictions_workspace"] = Values.Bool(true),
+        ["edit_predictions_share"] = Values.Bool(false),
+
         ["snap"] = new NumberValue(0.0f),
         ["canvas_handles"] = Values.Bool(true)
     };
