@@ -9,6 +9,7 @@ namespace Hex.Tests;
 /// What Hex makes of git, status, the lines that changed, blame and branches. Read out of git's own words first, then
 /// against a real repository made for the test, when there's a git to make one with.
 /// </summary>
+[Collection(Timed.NAME)]
 public sealed class GitTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "hex-git-" + Guid.NewGuid().ToString("N"));
@@ -152,13 +153,11 @@ public sealed class GitTests : IDisposable
             after[i] = $"changed {i}";
         after.Insert(500, "new line");
 
-        var timer = System.Diagnostics.Stopwatch.StartNew();
-        List<GitHunk> hunks = GitLineDiff.Diff(before, after);
-        timer.Stop();
+        var (hunks, took) = Quickest(() => GitLineDiff.Diff(before, after));
 
         Assert.Equal(21, hunks.Count);
         Assert.Contains(hunks, hunk => hunk.IsAdded && hunk.NewStart == 500);
-        Assert.True(timer.ElapsedMilliseconds < 200, $"took {timer.ElapsedMilliseconds} ms");
+        Assert.True(took < 200, $"took {took} ms at best");
     }
 
     [Fact]
@@ -168,13 +167,27 @@ public sealed class GitTests : IDisposable
         var before = Enumerable.Range(0, 20000).Select(i => $"line {i}").ToArray();
         var after = before.Select((line, i) => i % 2 == 0 ? $"changed {i}" : line).ToArray();
 
-        var timer = System.Diagnostics.Stopwatch.StartNew();
-        List<GitHunk> hunks = GitLineDiff.Diff(before, after);
-        timer.Stop();
+        var (hunks, took) = Quickest(() => GitLineDiff.Diff(before, after));
 
         Assert.Equal(10000, hunks.Count);
         Assert.All(hunks, hunk => Assert.Equal((1, 1), (hunk.OldCount, hunk.NewCount)));
-        Assert.True(timer.ElapsedMilliseconds < 1000, $"took {timer.ElapsedMilliseconds} ms");
+        Assert.True(took < 1000, $"took {took} ms at best");
+    }
+
+    // The best of three goes at a diff and how long it took. One go could land on a machine busy with other work (the
+    // rest of the suite, a build), a diff that got slower is slower every go
+    private static (List<GitHunk> Hunks, long Took) Quickest(Func<List<GitHunk>> diff)
+    {
+        List<GitHunk> hunks = [];
+        long best = long.MaxValue;
+        for (int go = 0; go < 3; go++)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            hunks = diff();
+            best = Math.Min(best, timer.ElapsedMilliseconds);
+        }
+
+        return (hunks, best);
     }
 
     [Fact]

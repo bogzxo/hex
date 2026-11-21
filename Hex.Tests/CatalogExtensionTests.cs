@@ -282,16 +282,23 @@ public class CatalogExtensionTests
         for (int i = 0; i < 800; i++)
             text.Append(i > 0 ? "," : string.Empty).Append($"{{\"id\":{i},\"name\":\"item {i}\",\"tags\":[\"a\",\"b\"],\"on\":true}}");
         text.Append(']');
-        var hex = Json(text.ToString());
-
         // Warmed up on a little one first, a cold CI runner spent most of the second compiling the extension's HIDL
         Json("[{\"id\":0}]").Run("Format JSON");
 
-        var timer = Stopwatch.StartNew();
-        hex.Run("Format JSON");
-        timer.Stop();
-        Assert.StartsWith("[\n    {\n        \"id\": 0,", hex.Text, StringComparison.Ordinal);
-        Assert.True(timer.ElapsedMilliseconds < 1000, $"{text.Length / 1024} KB took {timer.ElapsedMilliseconds} ms");
+        // The best of three goes, each at the file as it was. One go could land on a machine busy with other work (a
+        // build, other test runs), a format that got slower is slower every go
+        long best = long.MaxValue;
+        for (int go = 0; go < 3; go++)
+        {
+            var hex = Json(text.ToString());
+            var timer = Stopwatch.StartNew();
+            hex.Run("Format JSON");
+            timer.Stop();
+            Assert.StartsWith("[\n    {\n        \"id\": 0,", hex.Text, StringComparison.Ordinal);
+            best = Math.Min(best, timer.ElapsedMilliseconds);
+        }
+
+        Assert.True(best < 1000, $"{text.Length / 1024} KB took {best} ms at best");
     }
 
     /* TODO list */

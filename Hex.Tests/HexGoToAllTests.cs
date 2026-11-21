@@ -9,6 +9,7 @@ namespace Hex.Tests;
 /// a member as good, the capitals and the letters in pieces found, Container.Name narrowing, nothing but code listed,
 /// and a workspace the size of the engine's searched in well under a frame or two.
 /// </summary>
+[Collection(Timed.NAME)]
 public sealed class HexGoToAllTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "hex-gotoall-" + Guid.NewGuid().ToString("N")[..8]);
