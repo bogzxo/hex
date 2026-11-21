@@ -306,6 +306,9 @@ internal sealed partial class DawnScene
 
         // Serving: what A asks for by the files it writes here done, until A cuts the link and the redial is refused
         bool rowAdded = false, viewOnly = false;
+        bool ui = System.Environment.GetEnvironmentVariable(LINK_TEST_UI) == "1";
+        int uiLooked = 0;
+        DateTime uiSteeredSeen = DateTime.MinValue;
         test.WaitFor(() =>
         {
             if (!rowAdded && File.Exists(Path.Combine(work, LINK_FLAG_ROW)) && standIn is not null)
@@ -321,6 +324,10 @@ internal sealed partial class DawnScene
                 LinkSetRights(otherId, HexLinkRights.View);
                 Console.WriteLine("[Hex self-test] link-peer: the other may only view here now");
             }
+
+            // For the link-ui part, each Steer request heard said, what A's UI sent checked by
+            if (ui && ++uiLooked % 20 == 0)
+                LinkTestSaySteered(ref uiSteeredSeen);
 
             return cut && refused;
         }, seconds);
@@ -357,7 +364,8 @@ internal sealed partial class DawnScene
     /// B started: this Hex again with a home, a pipe and a key of its own, told to dial and pair with A, what it prints
     /// kept for the checks and said after "B|". Killed in the tidy after the part (and as this process exits) whatever happened.
     /// </summary>
-    private void LinkStartPeer(string peerHome, string dial)
+    /// <param name="ui">For the link-ui part: B says each Steer request it hears (HEX_LINK_TEST_UI).</param>
+    private void LinkStartPeer(string peerHome, string dial, bool ui = false)
     {
         var start = new ProcessStartInfo(System.Environment.ProcessPath!)
         {
@@ -375,6 +383,10 @@ internal sealed partial class DawnScene
         start.Environment[LINK_TEST_DIAL] = dial;
         start.Environment[LINK_TEST_SECONDS] = "150";
         start.Environment.Remove(LINK_TEST_LISTEN);
+        if (ui)
+            start.Environment[LINK_TEST_UI] = "1";
+        else
+            start.Environment.Remove(LINK_TEST_UI);
 
         var process = new Process { StartInfo = start };
         void Heard(object sender, DataReceivedEventArgs said)

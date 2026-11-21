@@ -385,7 +385,8 @@ internal sealed partial class DawnScene
         {
             bool has = (known.Rights & right) != 0;
             string label = Said("link.right_title_" + HexLinkTrust.RightsNames(right).First());
-            var toggle = rights.Add(new ToggleButton(right == HexLinkRights.Steer ? $"[color:{HexColour(LinkWarning)}]{label}[/color]" : label, has)
+            // A switch's caption is plain text, Steer's warning colour is in the line under the switches
+            var toggle = rights.Add(new ToggleButton(label, has)
             {
                 Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT, Tooltip = Said("link.right_means_" + HexLinkTrust.RightsNames(right).First())
             });

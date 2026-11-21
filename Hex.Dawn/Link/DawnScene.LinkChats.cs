@@ -139,6 +139,16 @@ internal sealed partial class DawnScene
             return;
         }
 
+        // Its device forgotten (or Link turned off): the chat put away, there's no coming back to it
+        if (link is null || !LinkKnown.Any(known => known.Device.Id.Equals(open.DeviceId, StringComparison.OrdinalIgnoreCase)))
+        {
+            CloseRemoteMirror();
+            linkRemoteOf.Remove(agentChat!);
+            ShowDraftOf(agentChats.Count > 0 ? agentChats[^1] : null);
+            linkBannerDrawn = default;
+            return;
+        }
+
         // Back after the link dropped: the device linked again, the chat asked for anew over the new link
         if ((linkRemotePeer is { IsClosed: true } || linkRemoteMirror is null) && LinkPeerOf(open.DeviceId) is { } back && back != linkRemotePeer
             && HexLinkAllowed.Has(back.Granted, HexLinkRights.View) && !linkRemoteOpening)
@@ -151,6 +161,10 @@ internal sealed partial class DawnScene
             || (linkRemoteMirror is { } mirror && mirror.Entries.Any(entry => entry.Kind == HexAgentEntryKind.User && entry.Text.Contains(queued, StringComparison.Ordinal)))))
             linkRemoteQueued = null;
     }
+
+    /// <summary>Whether a chat can be steered from here: every one of this machine's, another device's while it grants Steer.</summary>
+    private bool LinkMaySteer(HexAgentChat? chat) =>
+        LinkRemoteOf(chat) is not { } remote || (LinkPeerOf(remote.DeviceId) is { } peer && HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer));
 
     /// <summary>
     /// Whether the box can send for what's on screen, null when it's no business of Link's: a remote chat can be told
@@ -272,6 +286,7 @@ internal sealed partial class DawnScene
         // The box shut, saying why, for a chat this machine can only watch or that isn't linked now
         bool shut = remote is not null && state != 3;
         agentsInput.ReadOnly = shut;
+        agentsStop.Enabled = !shut;
         linkPlaceholderWas ??= agentsPlaceholder.Text;
         agentsPlaceholder.Text = remote is null ? linkPlaceholderWas
             : state == 1 ? Said("link.chat_not_connected", ("device", remote.DeviceName))

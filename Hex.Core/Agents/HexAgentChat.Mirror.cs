@@ -63,6 +63,10 @@ internal sealed partial class HexAgentChat
     /// <summary>What a mirrored chat says of itself that only its own agent sets here: its title, whether it's running and how long its turn has taken.</summary>
     public void MirrorHead(string title, bool running, double turnSeconds)
     {
+        // The turn's start put where the other machine's clock says, so Tick counts on from what it said rather than from
+        // the start of this machine's clock (a mirror's turn showed as running for days)
+        if (running)
+            turnStarted = Environment.TickCount64 - (long)(turnSeconds * 1000.0);
         if (Title == title && Running == running && TurnSeconds == turnSeconds)
             return;
         Title = title;

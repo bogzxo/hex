@@ -68,7 +68,7 @@ internal sealed partial class DawnScene
             Text = Said(ask.Host ? "link.pair_who_host" : "link.pair_who_joiner", ("device", $"[b]{UIRichText.Literal(device)}[/b]"), ("address", UIRichText.Literal(ask.Address))),
             Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft
         });
-        body.Add(new Label { Text = Said("link.pair_fingerprint", ("fingerprint", ask.Other.Fingerprint)), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left });
+        body.Add(new Label { Text = Said("link.pair_fingerprint", ("fingerprint", ask.Other.Fingerprint)), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
 
         // The code, large, in the accent, grouped as it's read out
         var codeRow = body.Add(new Panel { Size = new Vector2(WIDE, 76), Color = (Skin?.Palette.Field ?? new Vector4(0, 0, 0, 0.3f)) with { W = 0.5f }, Radius = 10, Outline = Skin?.BorderColor ?? Vector4.Zero });
@@ -81,7 +81,8 @@ internal sealed partial class DawnScene
         ToggleButton Right(string name, bool risky)
         {
             string label = Said("link.right_title_" + name);
-            var toggle = body.Add(new ToggleButton(risky ? $"[color:{HexColour(warning)}]{label}[/color]" : label, false) { Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name) });
+            // A switch's caption is plain text, Steer's warning colour is in the line under it
+            var toggle = body.Add(new ToggleButton(label, false) { Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name) });
             string means = Said("link.right_means_" + name);
             body.Add(new Label
             {
@@ -112,8 +113,9 @@ internal sealed partial class DawnScene
         dialog.Buttons[0].Enabled = false;
         dialog.Closed = () =>
         {
-            // Closed however it was (Escape is Cancel), never left waiting
-            ask.Decide(null);
+            // Closed however it was (Escape is Cancel), never left waiting. On the next tick: a button's Picked runs after
+            // the dialog has closed, and Pair's answer is the one that counts
+            PostLink(() => ask.Decide(null));
             if (linkPairingDialog == dialog)
                 linkPairingDialog = null;
         };
