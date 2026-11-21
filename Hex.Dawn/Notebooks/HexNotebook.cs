@@ -49,6 +49,9 @@ internal sealed class HexNotebook
     /// <summary>Whether the cells on screen have to be made again (another notebook shown, cells added or taken out).</summary>
     public bool Remake { get; set; } = true;
 
+    /// <summary>The cells' text and kinds as last sent to the language's server, sent again as they are while no cell's code changed.</summary>
+    public (string Source, bool Code)[]? SentCells { get; set; }
+
     /// <summary>The cell picked, null in a notebook with none.</summary>
     public NotebookCell? Cell => Selected >= 0 && Selected < Model.Cells.Count ? Model.Cells[Selected] : null;
 }

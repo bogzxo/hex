@@ -175,8 +175,35 @@ internal sealed partial class DawnScene
             return;
 
         languages.NotebookSaid ??= ShowCellDiagnostics;
-        languages.NotebookChanged(notebook, path, ExtensionOfLanguage(notebook.Model.Language),
-            [.. notebook.Model.Cells.Select(cell => (cell.Source, cell.Kind == CellKind.Code))], now);
+        languages.NotebookChanged(notebook, path, ExtensionOfLanguage(notebook.Model.Language), CellsAsSent(notebook), now);
+    }
+
+    // The cells' text and kinds for the server. Every line a kernel prints says the notebook changed with no cell's code
+    // different, and a new list made of them each time was garbage for nothing, so the last one is sent again while every
+    // cell is still the same string of the same kind
+    private static (string Source, bool Code)[] CellsAsSent(HexNotebook notebook)
+    {
+        IReadOnlyList<NotebookCell> cells = notebook.Model.Cells;
+        (string Source, bool Code)[]? last = notebook.SentCells;
+        bool same = last is not null && last.Length == cells.Count;
+        var made = same ? last! : new (string Source, bool Code)[cells.Count];
+        for (int i = 0; i < made.Length; i++)
+        {
+            (string Source, bool Code) cell = (cells[i].Source, cells[i].Kind == CellKind.Code);
+            if (same && ReferenceEquals(last![i].Source, cell.Source) && last[i].Code == cell.Code)
+                continue;
+
+            // Another cell, so a list of its own, the last one is what the server may still be holding
+            if (same)
+            {
+                made = [.. last!];
+                same = false;
+            }
+
+            made[i] = cell;
+        }
+
+        return notebook.SentCells = made;
     }
 
     // What the server said of a notebook's cells, under each one's code when it's the notebook on screen
