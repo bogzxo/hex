@@ -108,7 +108,7 @@
       <div class="wrap">
         <p class="eyebrow">Measured, not vibes</p>
         <h2>Fast as fuck, with receipts</h2>
-        <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>, the same native build you download, taken on one ordinary Windows machine, how they were taken is folded under the numbers.</p>
+        <p>Hex is C# compiled ahead of time to native code and drawn through Vulkan by the <a href="https://github.com/bogzxo/horizon">Horizon engine</a>, a game engine, with no browser underneath. Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>, the same native build you download, taken on one ordinary Windows machine, how they were taken is folded under the numbers.</p>
 
         <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
           <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
@@ -206,20 +206,6 @@
           <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
         </details>
 
-        <div class="split">
-          <div>
-            <h3>A game engine underneath. Seriously.</h3>
-            <p class="intro">Hex is C# compiled ahead of time to native code. No JIT warming up while you stare at a splash screen. The <a href="https://github.com/bogzxo/horizon">Horizon engine</a> draws the interface through <strong>Vulkan</strong>, with rendering on its own thread. On macOS, MoltenVK bridges that to Metal.</p>
-            <p class="intro">There's no DOM to lay out, no browser to haul around, and no reason a text editor should need either.</p>
-          </div>
-          <pre class="rise"><code><span class="d">// Hex.exe, start to first frame</span>
-<span class="t">main</span>                      <span class="s">14 ms</span>
-<span class="t">editor made</span>              <span class="s">226 ms</span>
-<span class="t">device made</span>              <span class="s">368 ms</span>
-<span class="t">window shown</span>             <span class="s">388 ms</span>
-<span class="t">scene set up</span>             <span class="s">678 ms</span>
-<span class="c">first frame of the scene</span> <span class="k">680 ms</span></code></pre>
-        </div>
       </div>
     </section>
 
