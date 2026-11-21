@@ -20,6 +20,16 @@ internal static class HexAgentRows
     public static string ToolPreview(string? input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        // A call's input is parsed once for as long as that text lives, a group's tooltip asked it of every call in it each
+        // time the group was made again
+        return Previews.GetValue(input, PreviewOf);
+    }
+
+    // What each input text was read to say, kept as long as the text is
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, string> Previews = new();
+
+    private static string PreviewOf(string input)
+    {
         try
         {
             using JsonDocument document = JsonDocument.Parse(input);
@@ -113,8 +123,19 @@ internal static class HexAgentRows
     /// <summary>A text cut to so many lines, the rest said as how many more there were.</summary>
     public static string Lines(string text, int most)
     {
-        string[] lines = text.Replace("\r", string.Empty).Trim('\n').Split('\n');
-        return lines.Length <= most ? string.Join('\n', lines) : string.Join('\n', lines.Take(most)) + $"\n... {lines.Length - most} more lines";
+        // The lines are counted and cut at in place, a tool's output of thousands of lines was split whole for the twelve shown
+        string plain = text.Contains('\r') ? text.Replace("\r", string.Empty) : text;
+        ReadOnlySpan<char> trimmed = plain.AsSpan().Trim('\n');
+        int total = trimmed.Count('\n') + 1;
+        if (total <= most)
+            return trimmed.Length == plain.Length ? plain : trimmed.ToString();
+
+        // Where the last line to show ends, at the newline that's the `most`th of them
+        int end = -1;
+        for (int shown = 0; shown < most; shown++)
+            end += 1 + trimmed[(end + 1)..].IndexOf('\n');
+        end = Math.Max(end, 0);
+        return string.Concat(trimmed[..end], $"\n... {total - most} more lines");
     }
 
 

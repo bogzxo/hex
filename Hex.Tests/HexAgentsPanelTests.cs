@@ -129,6 +129,24 @@ public sealed partial class HexAgentsPanelTests : IDisposable
         Assert.Null(HexAgentRows.ToolColour("web_search", palette));
         Assert.Equal("a b c", HexAgentRows.OneLine("a\n  b\tc", 40));
         Assert.Equal("abcdefg...", HexAgentRows.OneLine("abcdefghijklmnop", 10));
+        // The case an agent says a tool's name in makes no difference to its icon
+        Assert.Equal("terminal", HexAgentRows.ToolIcon("Bash"));
+        Assert.Equal("search", HexAgentRows.ToolIcon("mcp__hex__HEX_Search"));
+        Assert.Equal("robot", HexAgentRows.ToolIcon("hex_anything"));
+    }
+
+    [Fact]
+    public void A_text_is_cut_to_its_lines_and_a_tools_input_read_once()
+    {
+        Assert.Equal("a\nb\nc", HexAgentRows.Lines("\n\r\na\r\nb\nc\n\n", 12));
+        Assert.Equal("a\nb\n... 3 more lines", HexAgentRows.Lines("a\nb\nc\nd\ne\n", 2));
+        Assert.Equal("\n... 2 more lines", HexAgentRows.Lines("a\nb", 0));
+        Assert.Equal(string.Empty, HexAgentRows.Lines(string.Empty, 12));
+        string input = "{\"file_path\":\"a.cs\"}";
+        Assert.Equal("a.cs", HexAgentRows.ToolPreview(input));
+        Assert.Equal("a.cs", HexAgentRows.ToolPreview(input));
+        Assert.Equal("plain words", HexAgentRows.ToolPreview(" plain words "));
+        Assert.Equal(string.Empty, HexAgentRows.ToolPreview(null));
     }
 
     [Theory]

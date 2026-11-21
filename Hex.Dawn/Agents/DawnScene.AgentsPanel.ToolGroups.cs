@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 
 using Horizon.Rendering;
 using Horizon.UI.Drawing;
@@ -163,8 +164,7 @@ internal sealed partial class DawnScene
 
         HexAgentEntry? running = calls.LastOrDefault(call => call.State == HexAgentToolState.Running);
         int failed = calls.Count(call => call.State == HexAgentToolState.Failed);
-        string kinds = string.Join(", ", calls.GroupBy(call => ShortToolName(call)).OrderByDescending(kind => kind.Count())
-            .Take(4).Select(kind => kind.Count() > 1 ? $"{kind.Key} ×{kind.Count()}" : kind.Key));
+        string kinds = ToolKinds(calls);
         double seconds = GroupSeconds(calls);
         // One that failed on the way and was got past (its last call went) is a warning, a group that ended failing an error
         bool endedFailing = calls[^1].State == HexAgentToolState.Failed;
@@ -257,6 +257,43 @@ internal sealed partial class DawnScene
         }
         total += to > from ? to - from : 0;
         return total / 1000.0;
+    }
+
+    // A call's name as a line says it, Hex's without hex_ and in words
+    // The four kinds of call a group has most of, the most first and those as many in the order they came, each with how
+    // many when there's more than one
+    private static string ToolKinds(List<HexAgentEntry> calls)
+    {
+        List<(string Kind, int Count)> counted = [];
+        foreach (HexAgentEntry call in calls)
+        {
+            string kind = ShortToolName(call);
+            int at = counted.FindIndex(each => each.Kind == kind);
+            if (at < 0)
+                counted.Add((kind, 1));
+            else
+                counted[at] = (kind, counted[at].Count + 1);
+        }
+
+        var said = new StringBuilder();
+        for (int taken = 0; taken < 4 && counted.Count > 0; taken++)
+        {
+            int most = 0;
+            for (int i = 1; i < counted.Count; i++)
+            {
+                if (counted[i].Count > counted[most].Count)
+                    most = i;
+            }
+            var (name, count) = counted[most];
+            counted.RemoveAt(most);
+            if (said.Length > 0)
+                said.Append(", ");
+            said.Append(name);
+            if (count > 1)
+                said.Append(" ×").Append(count);
+        }
+
+        return said.ToString();
     }
 
     // A call's name as a line says it, Hex's without hex_ and in words
