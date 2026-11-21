@@ -88,7 +88,7 @@
           <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
           <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
         </figure>
-        <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
+        <p class="note">Dawn, the editor. Semantic colours, hints, reference counts and blame, live from csharp-ls and git, not a mockup. It follows your system between Solstice and Solstice Day.</p>
 
         <ul class="receipts" aria-label="Measured on the 3.3.0 build">
           <li><b>56 ms</b><span>woken from sleep</span></li>
@@ -184,43 +184,43 @@
         <div class="gallery swipe" data-label="Screenshots">
           <figure class="rise">
             <a href="images/actions-1600.webp"><img src="images/actions-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Sum isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Linq, at the top, then two refactorings from csharp-ls and the editor's own Rename and Organise Imports"></a>
-            <figcaption><b><kbd>Ctrl+.</kbd></b> The fix the server would pick on top, then everything else that can be done to the line.</figcaption>
+            <figcaption><b><kbd>Ctrl+.</kbd></b> Every fix and refactoring for the line, the best one first.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/explorer-1600.webp"><img src="images/explorer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The explorer with mi typed into its find box, Mixer.cs found and outlined, a dot on the project folder for a change under it and a chain of single folders shown as one row"></a>
-            <figcaption><b>The explorer.</b> Type to find a file. Dots say where the changes and problems are.</figcaption>
+            <figcaption><b>The explorer.</b> Type to find a file. Changes and problems are flagged on their folders.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
-            <figcaption><b>Welcome.</b> One thing to do first, and a checklist of six that ticks itself off.</figcaption>
+            <figcaption><b>Welcome.</b> Open a folder and get to work. Setup is six steps, tracked for you.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
-            <figcaption><b>Shells that say how they ended.</b> A failed one keeps its pane and its tab says so.</figcaption>
+            <figcaption><b>Shells that report their exit.</b> The code on screen, the pane kept, the tab flagged.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
-            <figcaption><b>Completion.</b> The language server's, as you type, every member in its own colour.</figcaption>
+            <figcaption><b>Completion.</b> Straight from the language server as you type, coloured by kind.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
-            <figcaption><b>The web.</b> HTML, CSS and SCSS, with CSS completing inside a page's own <code>&lt;style&gt;</code>.</figcaption>
+            <figcaption><b>The web.</b> HTML, CSS and SCSS, CSS included inside a page's <code>&lt;style&gt;</code>.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
-            <figcaption><b>TypeScript.</b> TypeScript 7's own server, the native one: type errors as you go and members after a dot.</figcaption>
+            <figcaption><b>TypeScript.</b> TypeScript 7's native server: type errors and members as you type.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/hover-1600.webp"><img src="images/hover-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
-            <figcaption><b>Hover.</b> Documentation where the pointer is.</figcaption>
+            <figcaption><b>Hover.</b> Documentation under the pointer.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/debug-1600.webp"><img src="images/debug-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
-            <figcaption><b>Debugging.</b> Stopped in Render, stack and locals beside it.</figcaption>
+            <figcaption><b>Debugging.</b> Breakpoints, stack and locals beside the code.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/git-1600.webp"><img src="images/git-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
-            <figcaption><b>Git.</b> What changed, word by word, next to the commit box.</figcaption>
+            <figcaption><b>Git.</b> Word-level diffs next to the commit box.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/search-1600.webp"><img src="images/search-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
@@ -228,19 +228,19 @@
           </figure>
           <figure class="rise">
             <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
-            <figcaption><b>Notebooks.</b> A real kernel, typeset maths, and each cell's count and time.</figcaption>
+            <figcaption><b>Notebooks.</b> Real kernels, typeset maths, every cell timed.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
-            <figcaption><b>Markdown.</b> Tables and maths, drawn natively.</figcaption>
+            <figcaption><b>Markdown.</b> Tables and maths, rendered natively.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/designer-1600.webp"><img src="images/designer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
-            <figcaption><b>Designer.</b> Hex's own welcome page, open in Hex.</figcaption>
+            <figcaption><b>Designer.</b> Hex's own welcome page, edited in Hex.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used under it, the sections down the left, and each setting saying in a line what it does"></a>
-            <figcaption><b>Settings.</b> Each one says what it does in a line, and one press shows only what you changed.</figcaption>
+            <figcaption><b>Settings.</b> Every setting explained in one line. One click shows what you changed.</figcaption>
           </figure>
         </div>
       </div>
@@ -309,7 +309,7 @@
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
         </figure>
-        <p class="note">PowerShell running a small showcase script: actual files, actual Git history, ANSI colors.</p>
+        <p class="note">PowerShell running a showcase script: real files, real Git history, full ANSI colour.</p>
       </div>
     </section>
 
@@ -331,16 +331,16 @@
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/agentic-1600.webp" srcset="images/agentic-800.webp 800w, images/agentic-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Agentic: a Claude Code chat working on Hex itself, its card on the left with a Working badge, the chat in the middle with its tool calls, Changes and Plan tabs with their counts as badges, and on the right its model, tokens, cost, context, limits, how many times it used each tool and the files it touched">
         </figure>
-        <p class="note">Claude Code at work on Hex itself, the chat that built this release. The badges say how each agent is doing, what changed and how far its plan has got.</p>
+        <p class="note">Claude Code building this release, inside Hex. Badges show each agent's state, its changes and its plan's progress.</p>
 
         <div class="gallery pairs swipe" data-label="Agentic screenshots">
           <figure class="rise">
             <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
-            <figcaption><b>The Inbox.</b> Everything any agent is waiting on you for, in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
+            <figcaption><b>The Inbox.</b> Every pending agent request in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
-            <figcaption><b>Changes you can take back.</b> Every turn is checkpointed. Keep or undo each hunk, or restore the whole turn.</figcaption>
+            <figcaption><b>Every change reversible.</b> Each turn checkpointed. Keep or undo a hunk, or restore the turn.</figcaption>
           </figure>
         </div>
 
@@ -402,7 +402,7 @@
           </figure>
           <figure class="rise">
             <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating over a dark blue with a blue accent"></a>
-            <figcaption><b>Fluid Glass.</b> Panels that float.</figcaption>
+            <figcaption><b>Fluid Glass.</b> Floating panels.</figcaption>
           </figure>
           <figure class="rise">
             <a href="images/visual-studio-1600.webp"><img src="images/visual-studio-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Visual Studio look, a neutral dark grey with blue file icons"></a>
