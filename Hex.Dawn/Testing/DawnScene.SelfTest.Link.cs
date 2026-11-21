@@ -25,7 +25,7 @@ internal sealed partial class DawnScene
 
     // What B calls itself, its workspace's folder and its stand-in chat, and the flag files A writes there for it
     private const string LINK_PEER_NAME = "Hex B", LINK_PEER_FOLDER = "link-peer-work", LINK_PEER_CHAT = "Link stand-in",
-        LINK_FLAG_ROW = "link-test-add-row.flag", LINK_FLAG_VIEW = "link-test-view-only.flag", LINK_LATER_ROW = "A later row, added when A asked";
+        LINK_FLAG_ROW = "link-test-add-row.flag", LINK_FLAG_VIEW = "link-test-view-only.flag", LINK_FLAG_PRESENCE = "link-test-presence.flag", LINK_LATER_ROW = "A later row, added when A asked";
 
     // B, while it runs, what it printed, and the folders the part made
     private Process? linkTestPeer;
@@ -311,7 +311,7 @@ internal sealed partial class DawnScene
         });
 
         // Serving: what A asks for by the files it writes here done, until A cuts the link and the redial is refused
-        bool rowAdded = false, viewOnly = false;
+        bool rowAdded = false, viewOnly = false, presenceSet = false;
         test.WaitFor(() =>
         {
             if (!rowAdded && File.Exists(Path.Combine(work, LINK_FLAG_ROW)) && standIn is not null)
@@ -326,6 +326,14 @@ internal sealed partial class DawnScene
                 viewOnly = true;
                 LinkSetRights(otherId, HexLinkRights.View);
                 Console.WriteLine("[Hex self-test] link-peer: the other may only view here now");
+            }
+
+            // The caret put in the synced folder's README when asked, for the other to see where this one is (link-files)
+            if (!presenceSet && syncFolder is not null && File.Exists(Path.Combine(work, LINK_FLAG_PRESENCE)) && Open(Path.Combine(syncFolder, "README.md")))
+            {
+                presenceSet = true;
+                document.Editor.GoTo(0, 2);
+                Console.WriteLine("[Hex self-test] link-peer: the caret is in README.md at 0:2");
             }
 
             // A patch the other offers applied, as the person here would press Apply (the link-files part)

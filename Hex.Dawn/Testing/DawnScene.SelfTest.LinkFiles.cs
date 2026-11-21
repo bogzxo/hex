@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 
 using Hex.Core.Git;
+using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
@@ -159,6 +160,35 @@ internal sealed partial class DawnScene
 
         TestLinkRemoteFiles(test, () => peer, peerWork, mine);
         TestLinkRepository(test, () => peer, mine, theirs);
+
+        // B's person in the synced README: drawn in A's tab of it in B's colour with B's name; then followed
+        string readme = Path.Combine(mine, "README.md");
+        test.Run(() =>
+        {
+            linkPresenceDrawnKey = string.Empty;
+            _ = peer?.Write($"{LINK_PEER_FOLDER}/{LINK_FLAG_PRESENCE}", null, [1]);
+        });
+        test.WaitFor(() => peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen) && seen.Presence?.File == $"{LINK_SYNC_FOLDER}/README.md", 20.0f);
+        test.Check("link-files: B's caret arrives as presence with its file as folder/path, line and column", () =>
+            peerId is not null && LinkPresence.TryGetValue(peerId, out LinkPresenceSeen? seen) && seen.Presence is { Line: 0, Column: 2 });
+        test.Settle(0.3f);
+        test.Check("link-files: B's caret is drawn in A's open tab of the file, in B's colour with its name", () =>
+            Context.Documents.Find(readme) is { } open && peerId is not null
+            && open.Editor.RangeHighlights.Any(range => range is { Line: 0, Column: 2 } && range.Colour.X == LinkDeviceColour(peerId).X)
+            && open.Editor.InlineHints.Any(hint => hint.Text.Contains(LINK_PEER_NAME, StringComparison.Ordinal)));
+        test.Run(() =>
+        {
+            if (Context.Documents.Find(readme) is { } open)
+                CloseDocument(open);
+            if (peerId is not null)
+                LinkFollow(peerId);
+        });
+        test.WaitFor(() => document.Path is { } path && PlatformPaths.Same(path, readme), 10.0f);
+        test.Check("link-files: following B opens its file here with the caret on B's", () =>
+            LinkFollowing == peerId && document.Path is { } path && PlatformPaths.Same(path, readme) && document.Editor.Document.Caret == new UITextPosition(0, 2));
+        test.Run(() => document.Editor.GoTo(0, 0));
+        test.Settle(0.2f);
+        test.Check("link-files: moving the caret here lets go of following", () => LinkFollowing is null);
 
         // A's rights on B down to View: the sync goes pull-only, what changes here stays here, what changes there comes
         string pulled = Path.Combine(mine, "src", "pulled.txt"), pulledThere = Path.Combine(theirs, "src", "pulled.txt");

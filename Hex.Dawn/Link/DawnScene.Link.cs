@@ -288,6 +288,10 @@ internal sealed partial class DawnScene
         if (link is not null && link.Pump())
             linkDirty = true;
 
+        // Where the person is here told, and where the others are drawn (DawnScene.LinkPresence)
+        if (link is not null)
+            UpdateLinkPresence();
+
         if (linkPairingPending is { IsDecided: true })
         {
             CloseLinkPairingDialog();
