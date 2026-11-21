@@ -4,7 +4,8 @@ These are measurements of the local **Hex 2.8.0 “thickboy” development worki
 to Hex and Horizon. They replace the Hex 2.0.0 figures formerly in the README. They are not measurements of the
 existing `v2.8.0` download, a Debug build, or a self-test session.
 
-The site's figures are newer, from 3.3.0 on 21 November, [further down](#the-sites-numbers-330-against-320--21-november-2026);
+The site's figures are newer, from 3.3.0 on 21 November, [further down](#the-sites-numbers-330-against-320--21-november-2026),
+with its Persistent Process figures [just above those](#persistent-process-330--21-november-2026);
 the README's are from 3.1.0 on 18 November, [below those](#the-readmes-numbers-310--18-november-2026).
 The method below is the one they were taken by.
 
@@ -253,6 +254,39 @@ working set (a first launch, see above) and 636 to 639 handles, so the chats lea
 
 Raw logs and the measuring scripts were kept outside the repository. `run-hex.ps1` samples working set, private bytes,
 CPU, handles and threads every half second from the outside, the self-tests say the rest.
+
+## Persistent Process, 3.3.0 — 21 November 2026
+
+A Release win-x64 NativeAOT publish of `development` at `feb363f` with the notebook gutter change on top (build 4423,
+Hex 3.3.0; `Hex.exe` SHA-256 `054D238BDD46A3C0FBABC575EE9F272957CD1156636B857E1A805A4D8094F941`), made with
+`dotnet publish Hex/Hex.csproj -c Release -r win-x64`. The machine above, not quiet, other agents building and testing
+on it.
+
+The cycle script starts Hex with `HEX_PERSISTENT=1`, a home of its own (`HEX_HOME`) and a pipe of its own
+(`HEX_REMOTE_PIPE`), and times from `Start-Process` to the process having a main window: the cold window. After six
+seconds it closes the window, waits 15 s and reads the asleep process's working set, private bytes and threads, then its
+CPU time over 20 s. Then six times: a second `Hex.exe` started (it hands over to the sleeping one through the pipe and
+exits), timed from its start to the sleeping process having its window again, the window closed again after 5 s and
+the memory read after 8 s more.
+
+| Measurement | Median | Range | Samples |
+| --- | ---: | ---: | ---: |
+| Cold start to window, persistent mode on | **366 ms** | 320–461 ms | 7 |
+| Woken from sleep to window | **56 ms** | 40–201 ms | 36 |
+| Working set asleep (after a wake and close) | 5 MiB | 4–7 MiB | 36 |
+| Working set asleep, 15 s after the first close | 8 MiB | 8 MiB | 6 |
+| Private bytes asleep | 296 MiB | 294–299 MiB | 42 |
+| CPU time asleep, over 20 s | 16 ms (0.08% of a core) | 0–31 ms | 6 |
+| Working set open, 6 s after the cold window | 212 MiB | 211–218 MiB | 6 |
+
+Raw cold windows, ms: 343 320 399 368 365 461 366. Raw wakes, ms, six to a run: 76 56 56 73 55 55, 48 40 42 40 41 42,
+48 57 43 41 41 42, 77 72 56 102 56 42, 47 87 167 56 59 56, 201 87 91 93 98 87. The last run came while the machine was
+busiest and is slower throughout, its first wake (201 ms) the slowest of all. The private bytes stay committed while
+Windows trims the working set, so what's in RAM asleep is the working set. A seventh run was cut short by the session
+it ran in after its cold window, which is counted, and nothing after it is.
+
+First frames of the same executable, timed by an A/B launcher kept outside the repository (`--window --fresh` into an empty workspace, one
+discarded launch, then eight): median **450 ms** (431–487); raw 487 438 462 438 458 450 431 435.
 
 ## The site's numbers, 3.3.0 against 3.2.0 — 21 November 2026
 

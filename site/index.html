@@ -24,6 +24,7 @@
   <script defer src="gallery.js"></script>
   <script defer src="request.js"></script>
   <script defer src="theme.js"></script>
+  <script defer src="site.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to the content</a>
@@ -31,14 +32,22 @@
   <header class="bar">
     <div class="wrap">
       <a class="mark" href="#top" aria-label="Hex, to the top"><img src="images/hex.png" width="28" height="28" alt="">Hex</a>
-      <nav aria-label="On this page">
-        <a href="#numbers">Numbers</a>
-        <a href="#gallery">Gallery</a>
-        <a href="#features">Features</a>
-        <a href="#dusk">Dusk</a>
-        <a href="#agents">Agents</a>
-        <a href="#looks">Looks</a>
-        <a href="#build">Build</a>
+      <nav class="site-nav" aria-label="On this page">
+        <button type="button" class="button small quiet menu-button" popovertarget="site-menu" aria-controls="site-menu">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          <span>Menu</span>
+        </button>
+        <ul id="site-menu" class="site-menu" popover>
+          <li><a href="#numbers">Numbers</a></li>
+          <li><a href="#gallery">Gallery</a></li>
+          <li><a href="#features">Features</a></li>
+          <li class="dusk"><a href="#dusk">Dusk</a></li>
+          <li class="noon"><a href="#agents">Agents</a></li>
+          <li><a href="#looks">Looks</a></li>
+          <li><a href="#build">Build</a></li>
+          <li class="menu-only"><a href="https://github.com/bogzxo/hex">GitHub</a></li>
+          <li class="menu-only"><a class="button" href="#get-it">Download</a></li>
+        </ul>
       </nav>
       <button type="button" class="button small quiet icon-button scheme" id="scheme" aria-label="Switch to Solstice Night" hidden>
         <svg class="to-day" hidden viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
@@ -47,6 +56,8 @@
       <a class="button small quiet repo" href="https://github.com/bogzxo/hex">GitHub</a>
       <a class="button small get" href="#get-it">Download</a>
     </div>
+    <!-- How far down the page you are, in Dawn's, Dusk's and Agentic's colours in turn -->
+    <span class="progress" aria-hidden="true"></span>
   </header>
 
   <main id="main">
@@ -56,6 +67,11 @@
         <h1>Modern <em>Motherfucking</em> Code Editor</h1>
         <p class="lede"><strong>This is Hex: It opens, you write code, and it gets the fuck out of your way.</strong></p>
         <p class="sub">That's the entire fucking point. A native code editor, a proper terminal, a place for your agents, and the tools around them. No Electron. No Chromium in a trench coat. No account to open a text file. No shaming you by denying access to first-party extensions.</p>
+        <ul class="faces" aria-label="Hex's three faces, one program">
+          <li><a href="#features"><b>Dawn</b> the code editor</a></li>
+          <li class="dusk"><a href="#dusk"><b>Dusk</b> the terminal</a></li>
+          <li class="noon"><a href="#agents"><b>Agentic</b> your agents</a></li>
+        </ul>
         <div class="actions">
           <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.1.2 Amphetamine<!-- /release:button --></a>
           <a class="button quiet" href="#numbers">Show me the receipts</a>
@@ -75,10 +91,10 @@
         <p class="note">Dawn, the editor. The colours, the hints, the reference counts and the blame are csharp-ls and git talking, not a mockup. It follows your system the way Hex's own Solstice and Solstice Day do.</p>
 
         <ul class="receipts" aria-label="Measured on the 3.3.0 build">
-          <li><b>405 ms</b><span>to Dusk's first frame, from a cold process</span></li>
-          <li><b>660 ms</b><span>to Dawn's, its window up at 381</span></li>
-          <li><b>50.6 MiB</b><span>zipped, all three faces and their assets</span></li>
-          <li><b>0</b><span>browsers shipped inside it</span></li>
+          <li><b>56 ms</b><span>woken from sleep</span></li>
+          <li><b>381 ms</b><span>editor window, cold start</span></li>
+          <li><b>50.6 MiB</b><span>zipped, all three faces</span></li>
+          <li><b>0</b><span>browsers shipped inside</span></li>
         </ul>
         </div>
       </div>
@@ -88,75 +104,59 @@
       <div class="wrap">
         <p class="eyebrow">Measured, not vibes</p>
         <h2>Fast as fuck, with receipts</h2>
-        <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches. Dawn opens Hex's own source with a C# file up; Dusk opens one shell.</p>
+        <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>, the same native build you download, taken on one ordinary Windows machine, how they were taken is folded under the numbers.</p>
 
-        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn 660 milliseconds, ranging 571 to 693. Dusk 405 milliseconds, ranging 394 to 479.">
-          <div><span>Dawn</span><i style="--ms: 660"></i><span><b>660 ms</b> <small>571–693</small></span></div>
-          <div class="dusk"><span>Dusk</span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
+        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
+          <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
+          <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
+        </div>
+        <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 660 ms (571–693), its window up at 381.</p>
+
+        <div class="persistent">
+          <h3 class="numbers-head">Persistent Process. Closed isn't gone.</h3>
+          <p>Persistent Process keeps Hex asleep in the background once its last window is closed, the window context and a minimally loaded engine are kept while the threads remain frozen, awaiting an open request, so opening it again is a wake rather than a launch. It's off by default, the switch is in Getting started on the welcome page.</p>
+          <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 366 milliseconds, ranging 320 to 461. Woken from sleep 56 milliseconds, ranging 40 to 201.">
+            <div><span>Cold</span><i style="--ms: 366"></i><span><b>366 ms</b> <small>320–461</small></span></div>
+            <div class="noon"><span>Woken</span><i style="--ms: 56"></i><span><b>56 ms</b> <small>40–201</small></span></div>
+          </div>
+          <ul class="receipts rise" aria-label="Hex asleep">
+            <li><b>5 MiB</b><span>of RAM in use while it sleeps</span></li>
+            <li><b>0.08%</b><span>of one core, 16 ms of CPU in 20 s asleep</span></li>
+            <li><b>6.5×</b><span>sooner on screen woken than launched</span></li>
+          </ul>
+          <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
         </div>
 
-        <div class="scroller rise" tabindex="0" role="region" aria-label="What was measured">
-          <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
-            <thead>
-              <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
-            </thead>
-            <tbody>
-              <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>660 ms</strong></td><td><strong>405 ms</strong></td></tr>
-              <tr><th scope="row">First-frame range, 6 launches each</th><td>571–693 ms</td><td>394–479 ms</td></tr>
-              <tr><th scope="row">Process start to window shown, median</th><td>381 ms</td><td>333 ms</td></tr>
-              <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>253.8 MiB</strong></td><td><strong>152.6 MiB</strong></td></tr>
-              <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>349.7 MiB</td><td>247.2 MiB</td></tr>
-              <tr><th scope="row">CPU at rest, median, of one logical core</th><td>2.09%</td><td>0.39%</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. <strong>Dawn got heavier and I'm saying so:</strong> 3.2.0, measured the same way the same morning, sat at 231.9 MiB against 3.3.0's 253.8. <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
-
-        <div class="versus-key">
-          <h3>3.3.0 against 3.2.0</h3>
-          <span class="was">3.2.0</span>
-          <span>3.3.0</span>
-        </div>
-        <ul class="versus rise" aria-label="3.3.0 against 3.2.0, measurement by measurement">
-          <li>
-            <h4>A C# file's first errors</h4>
-            <p class="better">Seconds, lower is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--from: 5; --to: 43; --max: 43"></i><span>5–43 s</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--to: 1; --max: 43"></i><b>under 1 s</b></div>
-          </li>
-          <li>
-            <h4>csharp-ls, doing nothing</h4>
-            <p class="better">Logical cores kept busy, lower is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--to: 4; --max: 4"></i><span>4 cores</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--to: 0; --max: 4"></i><b>0</b></div>
-          </li>
-          <li>
-            <h4>The first Dusk of a run</h4>
-            <p class="better">Milliseconds to open it from Dawn, lower is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--to: 1379; --max: 1379"></i><span>1,379 ms</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--to: 33; --max: 1379"></i><b>33 ms</b></div>
-          </li>
-          <li>
-            <h4>Terminal output</h4>
-            <p class="better">MB/s through a pane, higher is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--from: 3; --to: 5; --max: 18"></i><span>3–5 MB/s</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--from: 11; --to: 18; --max: 18"></i><b>11–18 MB/s</b></div>
-          </li>
-          <li>
-            <h4>Dawn's first frame</h4>
-            <p class="better">Milliseconds, median of 6, lower is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--to: 721; --max: 721"></i><span>721 ms</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--to: 660; --max: 721"></i><b>660 ms</b></div>
-          </li>
-          <li>
-            <h4>Dawn at rest</h4>
-            <p class="better">Percent of one core, median of 6, lower is better</p>
-            <div class="pair was"><span>3.2.0</span><i style="--to: 3.00; --max: 3.00"></i><span>3.00%</span></div>
-            <div class="pair"><span>3.3.0</span><i style="--to: 2.09; --max: 3.00"></i><b>2.09%</b></div>
-          </li>
+        <h3 class="numbers-head">And the rest</h3>
+        <ul class="receipts figures rise" aria-label="More of Hex's numbers">
+          <li><b>&lt;1 s</b><span>to a C# file's first errors</span></li>
+          <li><b>0</b><span>cores csharp-ls keeps busy doing nothing</span></li>
+          <li><b>33 ms</b><span>to open the first Dusk of a run from Dawn</span></li>
+          <li><b>11–18 MB/s</b><span>of output through a terminal pane</span></li>
+          <li><b>0</b><span>blank frames switching between Dawn, Agentic and Dusk</span></li>
+          <li><b>6.1%</b><span>of a core for Agentic standing still with a dozen long chats</span></li>
         </ul>
-        <p class="note">Switching between Dawn, Agentic and Dusk now draws no blank frame at all. The top four are from the work on 3.3.0, measured as each change went in; the bottom two are the run above, 3.2.0's download against 3.3.0's build. The agentic-perf self test, Agentic with a dozen long chats, three runs of each build: standing still it used a median 6.1% of a core against 17.5% (ranges 3.8–22.1 and 13.7–22.1, so they overlap); streaming and opening groups came out within the noise.</p>
+
+        <details class="fold">
+          <summary>Every measurement, and how they were taken</summary>
+          <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
+          <div class="scroller" tabindex="0" role="region" aria-label="What was measured">
+            <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
+              <thead>
+                <tr><th scope="col">Measurement</th><th scope="col">Dawn, the editor</th><th scope="col">Dusk, the terminal</th></tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Process start to first rendered scene, median</th><td><strong>660 ms</strong></td><td><strong>405 ms</strong></td></tr>
+                <tr><th scope="row">First-frame range, 6 launches each</th><td>571–693 ms</td><td>394–479 ms</td></tr>
+                <tr><th scope="row">Process start to window shown, median</th><td>381 ms</td><td>333 ms</td></tr>
+                <tr><th scope="row">Working set, 30 s after the first frame, median</th><td><strong>253.8 MiB</strong></td><td><strong>152.6 MiB</strong></td></tr>
+                <tr><th scope="row">Private memory, 30 s after the first frame, median</th><td>349.7 MiB</td><td>247.2 MiB</td></tr>
+                <tr><th scope="row">CPU at rest, median, of one logical core</th><td>2.09%</td><td>0.39%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">First frame means first frame; it doesn't mean every language server has finished indexing. Memory and CPU cover Hex itself, not child shells or language servers, sampled for 10 s once it had sat for 30. This is one machine, and a busy one, with other agents at work on it. It's not a race rigged against somebody else's editor. The C# errors, csharp-ls, the first Dusk, terminal output and the blank frames were measured as each change went in; Agentic standing still is the median of three runs of its self test (3.8–22.1%). <a href="https://github.com/bogzxo/hex/blob/master/docs/benchmarks.md">Method and reproduction commands</a>.</p>
+        </details>
 
         <div class="split">
           <div>
@@ -181,7 +181,7 @@
         <h2>Look at the bloody thing</h2>
         <p>Every picture is the real Hex window, most of them 3.3.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
-        <div class="gallery">
+        <div class="gallery swipe" data-label="Screenshots">
           <figure class="rise">
             <a href="images/actions-1600.webp"><img src="images/actions-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Sum isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Linq, at the top, then two refactorings from csharp-ls and the editor's own Rename and Organise Imports"></a>
             <figcaption><b><kbd>Ctrl+.</kbd></b> The fix the server would pick on top, then everything else that can be done to the line.</figcaption>
@@ -250,42 +250,51 @@
       <div class="wrap">
         <p class="eyebrow">Dawn, the editor</p>
         <h2>Lightweight doesn't mean “does fuck all”</h2>
-        <ul class="features">
+        <ul class="features swipe" data-label="What the editor does">
           <li class="rise">
             <h3>Code</h3>
-            <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting. Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p>
+            <p>Language-server completion, hovers, definitions, references, rename, inlay hints, reference counts and semantic highlighting.</p>
+            <details><summary>More<span class="visually-hidden"> about Code</span></summary><p>Folding, sticky scroll, minimap, peek, pinned tabs, format on save and <code>.editorconfig</code>. Eighteen language servers come declared, C# to Rust, the web among them. C# is checked by the compiler alone unless you switch its analyzers on, so a file's first errors come in under a second, not half a minute.</p></details>
           </li>
           <li class="rise">
             <h3><kbd>Ctrl+.</kbd> and it's sorted</h3>
-            <p>One menu of everything that can be done to the line or the selection. The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p>
+            <p>One menu of everything that can be done to the line or the selection.</p>
+            <details><summary>More<span class="visually-hidden"> about Ctrl+. and it's sorted</span></summary><p>The language server's fixes come first, the one it would pick on top, then its refactorings and the editor's own rename, format and organise imports. Or hand the line to an agent to fix the problem, fill in a TODO or explain the code. A lightbulb in the gutter says there's a fix before you ask.</p></details>
           </li>
           <li class="rise">
             <h3>An explorer you work in</h3>
-            <p>Type to find a file. New File and Rename name it right on its row, and <kbd>Esc</kbd> takes it back. Drag to move, hold <kbd>Ctrl</kbd> to copy. Open files are marked, a folder carries a dot for a change or a problem somewhere under it, and a chain of single folders is one row.</p>
+            <p>Type to find a file.</p>
+            <details><summary>More<span class="visually-hidden"> about An explorer you work in</span></summary><p>New File and Rename name it right on its row, and <kbd>Esc</kbd> takes it back. Drag to move, hold <kbd>Ctrl</kbd> to copy. Open files are marked, a folder carries a dot for a change or a problem somewhere under it, and a chain of single folders is one row.</p></details>
           </li>
           <li class="rise">
             <h3>Git</h3>
-            <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls. Keep the context next to the code instead of juggling windows to find out what you changed.</p>
+            <p>Gutter changes, stage and revert, inline blame, commits, branches, stash, history, diffs and merge-conflict controls.</p>
+            <details><summary>More<span class="visually-hidden"> about Git</span></summary><p>Keep the context next to the code instead of juggling windows to find out what you changed.</p></details>
           </li>
           <li class="rise">
             <h3>Find your shit</h3>
-            <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting. Import VS Code settings instead of rebuilding your preferences by hand.</p>
+            <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting.</p>
+            <details><summary>More<span class="visually-hidden"> about Find your shit</span></summary><p>Import VS Code settings instead of rebuilding your preferences by hand.</p></details>
           </li>
           <li class="rise">
             <h3>Run, debug and test</h3>
-            <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches. .NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p>
+            <p>Workspace tasks, a Test Explorer and a debugger with breakpoints, conditions, stepping and watches.</p>
+            <details><summary>More<span class="visually-hidden"> about Run, debug and test</span></summary><p>.NET through netcoredbg, which Hex fetches the first time you press <kbd>F5</kbd>; Python through debugpy; D, C and C++ through lldb-dap.</p></details>
           </li>
           <li class="rise">
             <h3>Notebooks for engineers</h3>
-            <p>Jupyter notebooks with real kernels, typeset maths and plots. Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p>
+            <p>Jupyter notebooks with real kernels, typeset maths and plots.</p>
+            <details><summary>More<span class="visually-hidden"> about Notebooks for engineers</span></summary><p>Each cell says what it's doing: a run count, when it last ran, queued or running with the seconds going, and an error with a button to the line that failed. Long output folds. Kernels are separate tools, not secretly bundled into the download number.</p></details>
           </li>
           <li class="rise">
             <h3>Build interfaces</h3>
-            <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source. Extensions are small HIDL scripts, with a catalogue inside Hex.</p>
+            <p>A live layout designer for Horizon and HIDL, component properties, and evaluated HIDL values beside the source.</p>
+            <details><summary>More<span class="visually-hidden"> about Build interfaces</span></summary><p>Extensions are small HIDL scripts, with a catalogue inside Hex.</p></details>
           </li>
           <li class="rise">
             <h3>Usable by everyone</h3>
-            <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window. Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p>
+            <p>Everything you can focus shows a focus ring, and <kbd>Tab</kbd> goes through the whole window.</p>
+            <details><summary>More<span class="visually-hidden"> about Usable by everyone</span></summary><p>Links, dim text and the accent's text meet 4.5:1 contrast in every look. Settings fit the screen at 200%, and UI animation at 0 means nothing moves. The welcome page is a checklist of six that ticks itself off.</p></details>
           </li>
         </ul>
       </div>
@@ -324,7 +333,7 @@
         </figure>
         <p class="note">Claude Code at work on Hex itself, the chat that built this release. The badges say how each agent is doing, what changed and how far its plan has got.</p>
 
-        <div class="gallery pairs">
+        <div class="gallery pairs swipe" data-label="Agentic screenshots">
           <figure class="rise">
             <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
             <figcaption><b>The Inbox.</b> Everything any agent is waiting on you for, in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
@@ -335,7 +344,7 @@
           </figure>
         </div>
 
-        <ul class="features row">
+        <ul class="features row swipe" data-label="Agentic">
           <li class="rise">
             <h3>The fleet</h3>
             <p>Every chat is a card: its model, tokens, cost, what it's doing and how full its context is. Finished agents fold into a Finished group a few minutes after they end, so the ones waiting on you stay on top.</p>
@@ -360,7 +369,7 @@
 
         <h3 class="harness-head">The harness: answers, not file dumps</h3>
         <p>An agent's bill on an existing <strong>massive</strong> codebase is mostly what it reads. Hex keeps a live index of the workspace and answers an agent from it in <code>path:line</code>, so the agent gets the lines it asked about instead of a grep's worth of noise or a 3,000-line file for one method. These are the real tools, and Hex counts the input tokens each one saved in a window of its own.</p>
-        <dl class="harness">
+        <dl class="harness swipe" data-label="The harness's tools">
           <div><dt><code>hex_map</code></dt><dd>The folders a few levels down, the languages in each and the main types they declare. Where to start in a codebase it's never seen.</dd></div>
           <div><dt><code>hex_symbols</code></dt><dd>Where a name is declared, ranked: exact first, then by its capitals (<code>QM</code> finds <code>QueueMcp</code>). One line a hit.</dd></div>
           <div><dt><code>hex_search</code></dt><dd>Text or a regex across the workspace, ranked and grouped by file, lines cut to the match. In place of grep, rg and Select-String.</dd></div>
@@ -382,7 +391,7 @@
         <p class="eyebrow">Appearance</p>
         <h2>Make it look how you want</h2>
         <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
-        <div class="gallery pairs">
+        <div class="gallery pairs swipe" data-label="Looks">
           <figure class="rise">
             <a href="images/light-1600.webp"><img src="images/light-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
             <figcaption><b>Solstice Day.</b> For a bright room.</figcaption>
