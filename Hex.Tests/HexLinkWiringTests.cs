@@ -152,10 +152,13 @@ public class HexLinkWiringTests : IDisposable
     {
         string hidden = Path.Combine(folder, "concealed");
         Directory.CreateDirectory(hidden);
-        File.WriteAllText(Path.Combine(hidden, "PrivateMarker.cs"), "class PrivateMarker {}");
+        string hiddenSource = Path.Combine(hidden, "PrivateMarker.cs");
+        File.WriteAllText(hiddenSource, "class PrivateMarker {}");
         File.WriteAllText(Path.Combine(hidden, "PrivateMarker.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
         File.WriteAllText(Path.Combine(folder, "PublicMarker.cs"), "class PublicMarker {}");
         var index = new HexCodeIndex(() => [folder]) { StaleAfter = 0 };
+        long generation = index.Current().Generation;
+        File.AppendAllText(hiddenSource, " // changed");
         const int budget = 8000;
         Func<string>[] queries =
         [
@@ -169,7 +172,7 @@ public class HexLinkWiringTests : IDisposable
             () => index.Read(Path.Combine(hidden, "PrivateMarker.cs"), null, 1, 1, true, budget).Text,
             () => index.Skim("**/*.cs", 2, budget).Text,
             () => index.Map(null, 2, budget).Text,
-            () => index.Changes(0, budget).Text,
+            () => index.Changes(generation, budget).Text,
             () => index.Projects(null, false, budget).Text
         ];
         foreach (Func<string> query in queries)
