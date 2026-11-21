@@ -139,6 +139,11 @@ public class HexLinkWiringTests : IDisposable
         redial.Open(folder, [known.Device.Id]);
         Assert.Equal([("192.168.1.30", 47900), ("192.168.1.50", 47900), ("100.100.0.7", 47900)],
             DawnScene.LinkAddressesOf(known, [], redial.Addresses(known.Device.Id)));
+        redial.Remember(known.Device.Id, [], HexLinkRedial.Endpoint(known.Address, 47911));
+        redial.Clear();
+        redial.Open(folder, [known.Device.Id]);
+        Assert.Equal([("192.168.1.30", 47911), ("192.168.1.30", 47900), ("192.168.1.50", 47900), ("100.100.0.7", 47900)],
+            DawnScene.LinkAddressesOf(known, [], redial.Addresses(known.Device.Id)));
         DateTime now = DateTime.UtcNow;
         redial.Failed(known.Device.Id, now, "unknown");
         Assert.Equal(new HexLinkRedialState(HexLinkRedialStatus.Retrying, now + HexLinkRedial.FIRST, "unknown"),

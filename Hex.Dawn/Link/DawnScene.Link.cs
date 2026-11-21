@@ -505,9 +505,11 @@ internal sealed partial class DawnScene
 
     private void RememberLinkAddresses(HexLinkPeer peer)
     {
-        if (linkTrust?.Find(peer.Device.Id) is null || peer.IsClosed)
+        if (linkTrust?.Find(peer.Device.Id) is not { } known || peer.IsClosed)
             return;
-        linkRedial.Remember(peer.Device.Id, peer.RedialAddresses);
+        HexLinkConnection connection = peer.Session.Connection;
+        HexLinkEndpoint? reached = connection.Dialled ? HexLinkRedial.Endpoint(connection.Address, known.Port) : null;
+        linkRedial.Remember(peer.Device.Id, peer.RedialAddresses, reached);
         linkDirty = true;
     }
 

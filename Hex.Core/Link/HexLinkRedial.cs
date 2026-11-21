@@ -62,12 +62,13 @@ internal sealed class HexLinkRedial
 
     public IReadOnlyList<HexLinkEndpoint> Addresses(string id) => addresses.GetValueOrDefault(id) ?? [];
 
-    public void Remember(string id, IReadOnlyList<HexLinkEndpoint> seen)
+    public void Remember(string id, IReadOnlyList<HexLinkEndpoint> seen, HexLinkEndpoint? reached = null)
     {
-        if (seen.Count == 0)
+        if (seen.Count == 0 && reached is null)
             return;
         IReadOnlyList<HexLinkEndpoint> was = Addresses(id);
-        HexLinkEndpoint[] next = [.. seen.Concat(was).Distinct().Take(MOST_KEPT_ENDPOINTS)];
+        IEnumerable<HexLinkEndpoint> latest = reached is { } direct ? seen.Prepend(direct) : seen;
+        HexLinkEndpoint[] next = [.. latest.Concat(was).Distinct().Take(MOST_KEPT_ENDPOINTS)];
         if (next.SequenceEqual(was))
             return;
         addresses[id] = next;
@@ -136,7 +137,7 @@ internal sealed class HexLinkRedial
             .Where(endpoint => allowLoopback || !IPAddress.IsLoopback(IPAddress.Parse(endpoint.Host)))];
     }
 
-    private static HexLinkEndpoint? Endpoint(string? host, int port) =>
+    internal static HexLinkEndpoint? Endpoint(string? host, int port) =>
         port is > 0 and <= 65535 && IPAddress.TryParse(host, out var address) && HexLinkAddresses.IsPrivate(address)
             ? new HexLinkEndpoint(HexLinkAddresses.Show(address), port) : null;
 
