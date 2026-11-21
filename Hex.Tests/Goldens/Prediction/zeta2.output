@@ -1,0 +1,41 @@
+    language_configurations: Vec<LanguageConfiguration<'static>>,
+    language_configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
+    language_configuration_in_current_path: Option<usize>,
+    language_configuration_ids_by_first_line_regex: HashMap<String, Vec<usize>>,
+    #[cfg(feature = "tree-sitter-highlight")]
+    highlight_names: Box<Mutex<Vec<String>>>,
+    #[cfg(feature = "tree-sitter-highlight")]
+    use_all_highlight_names: bool,
+    debug_build: bool,
+    sanitize_build: bool,
+    force_rebuild: bool,
+
+    #[cfg(feature = "wasm")]
+    wasm_store: Mutex<Option<tree_sitter::WasmStore>>,
+}
+
+struct LanguageEntry {
+    path: PathBuf,
+    language: OnceCell<Language>,
+    external_files: Option<Vec<PathBuf>>,
+}
+
+pub struct CompileConfig<'a> {
+    pub src_path: &'a Path,
+    pub header_paths: Vec<&'a Path>,
+    pub parser_path: PathBuf,
+    pub scanner_path: Option<PathBuf>,
+    pub external_files: Option<&'a [PathBuf]>,
+    pub output_path: Option<PathBuf>,
+    pub flags: &'a [&'a str],
+    pub sanitize: bool,
+    pub name: String,
+}
+
+impl<'a> CompileConfig<'a> {
+    #[must_use]
+    pub fn new(
+        src_path: &'a Path,
+        externals: Option<&'a [PathBuf]>,
+>>>>>>> UPDATED
+
