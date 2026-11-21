@@ -31,7 +31,7 @@ internal sealed record HexLinkPairResult(bool Paired, string Reason, HexLinkDevi
 /// A link or pairing refused or broken, with a word for why, one of the words the other end said after <c>NO</c> (unknown,
 /// busy, full, closed, version, mismatch) or one of this end's own (pin, refused, timeout).
 /// </summary>
-internal sealed class HexLinkException(string reason, string message, Exception? inner = null) : IOException(message, inner)
+internal sealed class HexLinkRefused(string reason, string message, Exception? inner = null) : IOException(message, inner)
 {
     /// <summary>Why, a word.</summary>
     public string Reason { get; } = reason;

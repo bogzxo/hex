@@ -199,7 +199,7 @@ internal sealed partial class HexLinkTransport
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException or SocketException)
         {
-            result = HexLinkPairResult.Failed(e is HexLinkException link ? link.Reason : "failed", device, code);
+            result = HexLinkPairResult.Failed(e is HexLinkRefused link ? link.Reason : "failed", device, code);
             return false;
         }
         finally
@@ -278,7 +278,7 @@ internal sealed partial class HexLinkTransport
         {
             return result = HexLinkPairResult.Failed("timeout", device, code);
         }
-        catch (HexLinkException e)
+        catch (HexLinkRefused e)
         {
             return result = HexLinkPairResult.Failed(e.Reason, device, code);
         }

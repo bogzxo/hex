@@ -64,7 +64,7 @@ public sealed class HexLinkTransportTests : IDisposable
         int port = mac.Listen();
 
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
-        HexLinkException refused = await Assert.ThrowsAsync<HexLinkException>(() => pc.Transport.Dial("127.0.0.1", port, mac.Device.Id, cancel.Token));
+        HexLinkRefused refused = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", port, mac.Device.Id, cancel.Token));
         Assert.Equal("unknown", refused.Reason);
 
         // By hand: everything the Mac says to an unknown device is the refusal
@@ -107,7 +107,7 @@ public sealed class HexLinkTransportTests : IDisposable
         int port = mac.Listen();
 
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
-        HexLinkException refused = await Assert.ThrowsAsync<HexLinkException>(() => pc.Transport.Dial("127.0.0.1", port, other.Device.Id, cancel.Token));
+        HexLinkRefused refused = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", port, other.Device.Id, cancel.Token));
         Assert.Equal("pin", refused.Reason);
         Assert.False(mac.Accepted.Task.IsCompleted);
         Assert.Empty(pc.Transport.Links);
@@ -120,7 +120,7 @@ public sealed class HexLinkTransportTests : IDisposable
         mac.Trust.Add(pc.Device, HexLinkRights.View);
         int port = mac.Listen();
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
-        HexLinkException refused = await Assert.ThrowsAsync<HexLinkException>(() => pc.Transport.Dial("127.0.0.1", port, cancel.Token));
+        HexLinkRefused refused = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", port, cancel.Token));
         Assert.Equal("unknown", refused.Reason);
         Assert.False(mac.Accepted.Task.IsCompleted);
     }
@@ -139,7 +139,7 @@ public sealed class HexLinkTransportTests : IDisposable
 
         dialled.Dispose();
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
-        HexLinkException refused = await Assert.ThrowsAsync<HexLinkException>(() => pc.Transport.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
+        HexLinkRefused refused = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
         Assert.Equal("unknown", refused.Reason);
     }
 
@@ -159,12 +159,12 @@ public sealed class HexLinkTransportTests : IDisposable
         (HexLinkConnection dialled, _) = await Link();
 
         using var cancel = new CancellationTokenSource(HexLinkTestMachine.WAIT);
-        HexLinkException busy = await Assert.ThrowsAsync<HexLinkException>(() => pc.Transport.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
+        HexLinkRefused busy = await Assert.ThrowsAsync<HexLinkRefused>(() => pc.Transport.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
         Assert.Equal("busy", busy.Reason);
 
         // Another transport of the same device's, which doesn't know it has a link already, is told so by the Mac
         using var again = new HexLinkTransport(pc.Identity, pc.Trust);
-        busy = await Assert.ThrowsAsync<HexLinkException>(() => again.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
+        busy = await Assert.ThrowsAsync<HexLinkRefused>(() => again.Dial("127.0.0.1", mac.Transport.Port, mac.Device.Id, cancel.Token));
         Assert.Equal("busy", busy.Reason);
 
         // Once the first is gone a new one is let in
@@ -184,7 +184,7 @@ public sealed class HexLinkTransportTests : IDisposable
             {
                 return await transport.Dial("127.0.0.1", port, id, cancel.Token);
             }
-            catch (HexLinkException e) when (e.Reason == "busy" && !cancel.IsCancellationRequested)
+            catch (HexLinkRefused e) when (e.Reason == "busy" && !cancel.IsCancellationRequested)
             {
                 await Task.Delay(50);
             }
@@ -204,7 +204,7 @@ public sealed class HexLinkTransportTests : IDisposable
         {
             await Task.WhenAll(one, two);
         }
-        catch (HexLinkException)
+        catch (HexLinkRefused)
         {
         }
 

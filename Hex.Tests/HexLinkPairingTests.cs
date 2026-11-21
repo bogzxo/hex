@@ -83,7 +83,7 @@ public sealed class HexLinkPairingTests : IDisposable
             {
                 return await transport.Dial("127.0.0.1", port, id, cancel);
             }
-            catch (HexLinkException e) when (e.Reason == "busy" && !cancel.IsCancellationRequested)
+            catch (HexLinkRefused e) when (e.Reason == "busy" && !cancel.IsCancellationRequested)
             {
                 await Task.Delay(50, cancel);
             }

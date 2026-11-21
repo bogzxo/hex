@@ -24,13 +24,13 @@ internal sealed partial class HexLinkTransport
     /// <summary>
     /// Dials a known device at an address and links to it. When <paramref name="expectId"/> is said, the device that
     /// answers has to be that one, another (a different machine at the address now, or somebody in the middle) is
-    /// closed having been told nothing. Throws <see cref="HexLinkException"/> with why when it isn't let in or gives up,
+    /// closed having been told nothing. Throws <see cref="HexLinkRefused"/> with why when it isn't let in or gives up,
     /// <c>busy</c> when there's a link to the device already.
     /// </summary>
     public async Task<HexLinkConnection> Dial(string host, int port, string? expectId, CancellationToken cancel)
     {
         if (expectId is not null && LinkTo(expectId) is not null)
-            throw new HexLinkException("busy", "there's a link to that device already");
+            throw new HexLinkRefused("busy", "there's a link to that device already");
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         timeout.CancelAfter(HANDSHAKE_MS);
@@ -41,20 +41,20 @@ internal sealed partial class HexLinkTransport
             if (expectId is not null && !string.Equals(pin, expectId, StringComparison.OrdinalIgnoreCase))
             {
                 Audit?.Write("refused", pin, $"{address} answered as another device than {expectId}");
-                throw new HexLinkException("pin", $"{address} answered as another device than the one dialled");
+                throw new HexLinkRefused("pin", $"{address} answered as another device than the one dialled");
             }
 
             if (trust.Find(pin) is null)
             {
                 Audit?.Write("refused", pin, $"{address} answered as a device this machine doesn't know");
-                throw new HexLinkException("unknown", $"{address} answered as a device this machine doesn't know");
+                throw new HexLinkRefused("unknown", $"{address} answered as a device this machine doesn't know");
             }
 
             await Say(ssl, HelloLine("link"), timeout.Token);
             string? line = await Answer(ssl, timeout.Token);
             Hello? hello = ParseHello(line, pin);
             if (hello is null || hello.Mode != "link")
-                throw new HexLinkException("refused", $"{address} said something that isn't Link's answer");
+                throw new HexLinkRefused("refused", $"{address} said something that isn't Link's answer");
 
             HexLinkConnection connection = await DiallerSettles(ssl, socket, hello.Device, address, port, timeout.Token);
             kept = true;
@@ -62,7 +62,7 @@ internal sealed partial class HexLinkTransport
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
-            throw new HexLinkException("timeout", $"{address} didn't finish the handshake in time");
+            throw new HexLinkRefused("timeout", $"{address} didn't finish the handshake in time");
         }
         finally
         {
@@ -81,7 +81,7 @@ internal sealed partial class HexLinkTransport
         if (slot is null)
         {
             await Say(ssl, "NO " + refusal, cancel);
-            throw new HexLinkException(refusal, refusal == "busy" ? "there's a link to that device already" : "there are as many links as there may be");
+            throw new HexLinkRefused(refusal, refusal == "busy" ? "there's a link to that device already" : "there are as many links as there may be");
         }
 
         try
@@ -110,7 +110,7 @@ internal sealed partial class HexLinkTransport
             }
             catch (SocketException e)
             {
-                throw new HexLinkException("unreachable", $"{host}:{port} couldn't be reached, {e.Message}", e);
+                throw new HexLinkRefused("unreachable", $"{host}:{port} couldn't be reached, {e.Message}", e);
             }
 
             string address = socket.RemoteEndPoint is IPEndPoint remote ? HexLinkAddresses.Show(remote.Address) : host;
@@ -122,11 +122,11 @@ internal sealed partial class HexLinkTransport
             }
             catch (AuthenticationException e)
             {
-                throw new HexLinkException("refused", $"{address} refused the handshake, {e.Message}", e);
+                throw new HexLinkRefused("refused", $"{address} refused the handshake, {e.Message}", e);
             }
 
             if (pin is null)
-                throw new HexLinkException("refused", $"{address} presented no certificate");
+                throw new HexLinkRefused("refused", $"{address} presented no certificate");
             return (ssl, socket, pin, address);
         }
         catch
@@ -148,17 +148,17 @@ internal sealed partial class HexLinkTransport
         {
             line = await ReadLine(ssl, cancel);
         }
-        catch (IOException e) when (e is not HexLinkException)
+        catch (IOException e) when (e is not HexLinkRefused)
         {
-            throw new HexLinkException("refused", $"the connection was closed, {e.Message}", e);
+            throw new HexLinkRefused("refused", $"the connection was closed, {e.Message}", e);
         }
 
         if (line is null)
-            throw new HexLinkException("refused", "the connection was closed without an answer");
+            throw new HexLinkRefused("refused", "the connection was closed without an answer");
         if (line.StartsWith("NO", StringComparison.Ordinal))
         {
             string reason = line.Length > 3 ? line[3..] : "refused";
-            throw new HexLinkException(reason, reason switch
+            throw new HexLinkRefused(reason, reason switch
             {
                 "unknown" => "the other device doesn't know this one, pair first",
                 "busy" => "there's a link between the two already",
@@ -284,11 +284,11 @@ internal sealed partial class HexLinkTransport
         {
             int read = await stream.ReadAsync(one.AsMemory(), cancel);
             if (read == 0)
-                return count == 0 ? null : throw new HexLinkException("refused", "the connection was closed in the middle of a line");
+                return count == 0 ? null : throw new HexLinkRefused("refused", "the connection was closed in the middle of a line");
             if (one[0] == (byte)'\n')
                 return Encoding.UTF8.GetString(line, 0, count).TrimEnd('\r');
             if (count == LINE_MOST)
-                throw new HexLinkException("refused", "a first line too long");
+                throw new HexLinkRefused("refused", "a first line too long");
             line[count++] = one[0];
         }
     }
@@ -303,7 +303,7 @@ internal sealed partial class HexLinkTransport
     {
         OperationCanceledException => "the handshake took too long",
         AuthenticationException => $"the handshake failed, {e.Message}",
-        HexLinkException link => link.Message,
+        HexLinkRefused link => link.Message,
         _ => e.Message
     };
 }
