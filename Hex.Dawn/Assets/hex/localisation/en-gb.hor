@@ -3517,7 +3517,18 @@ let strings = {
         command_palette: "Hex's command palette",
         command_run_to_terminal: "switch where a run says what it did, the terminal or the output",
         runs_to_terminal: "F5 says what a file did in the terminal",
-        runs_to_output: "F5 says what a file did in the output"
+        runs_to_output: "F5 says what a file did in the output",
+        exited: "Exited",
+        exited_code: "Exited with code {code}",
+        restart_hint: "Press Enter to restart",
+        find_placeholder: "Find in terminal",
+        find_previous: "Previous match (Up)",
+        find_next: "Next match (Enter or Down)",
+        find_close: "Close (Escape)",
+        find_searching: "Searching…",
+        find_many: "100,000+",
+        find_none: "No results",
+        find_of: "{at} of {count}"
     },
 
     views: {

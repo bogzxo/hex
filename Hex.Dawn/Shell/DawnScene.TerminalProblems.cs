@@ -196,6 +196,10 @@ internal sealed partial class DawnScene
         NoteTaskEnded(code);
         finished(code, view.Screen.LastOutput());
         view.Feed($"\r\n\u001b[2m{Said("terminal_page.task_ended", ("code", code.ToString()))}\u001b[0m\r\n");
+
+        // It says how it ended itself, and Enter starting a shell in its place would take the output it was kept for
+        view.ShowEnded = false;
+        view.OnRestart = null;
         return true;
     }
 

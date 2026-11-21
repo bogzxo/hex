@@ -78,7 +78,10 @@ internal sealed partial class DuskScene
             TestBackdrop(test);
             TestBackdropArrange(test);
             TestSettingsText(test);
-        })
+        }),
+        ("states", "a tab's icon for a running command, an unseen bell and a failed program, an ended pane kept and started again with Enter, find over the pane", TestStates),
+        ("throughput", "a long build's output typed out by the shell, timed in MB a second, only when asked for by name", TestThroughput),
+        ("looks", "the tabs, a split, an exited program and a bell in every look Hex comes with at 100, 150 and 200%", TestLooks)
     ];
 
     /// <summary>A point inside a rectangle, as far along and up as the shares say, moved across by so much, where the pointer goes.</summary>
@@ -131,6 +134,9 @@ internal sealed partial class DuskScene
             }
 
             // Claude Code is somebody's own, signed in, it's only started when it's asked for by name
+            if (name == "throughput" && !asked.Contains(name))
+                continue;
+
             if (name == "claude" && !asked.Contains(name))
             {
                 test.Run(() => Console.WriteLine("[Dusk self-test] claude left out, it starts your own Claude Code, --selftest claude runs it"));
