@@ -197,14 +197,15 @@ internal static partial class HexLinkFiles
     /// <summary>The hash a file's bytes are known by, lower-case hex SHA-256.</summary>
     public static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    /// <summary>The hash of a file as it is now, null when there's none.</summary>
+    /// <summary>The hash of a shareable file as it is now, null when it is absent, unreadable or too large.</summary>
     public static string? HashOf(string full)
     {
         try
         {
-            return File.Exists(full) ? Hash(ReadShared(full)) : null;
+            using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return stream.Length <= MOST_READ ? Hash(ReadBounded(stream, full)) : null;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException || e is HexLinkException { Code: HexLinkErrors.TOO_BIG })
         {
             return null;
         }
@@ -368,56 +369,11 @@ internal static partial class HexLinkFiles
         if (bytes is { Length: > MOST_READ })
             throw new HexLinkException(HexLinkErrors.TOO_BIG, $"A link writes files of up to {MOST_READ / 1024 / 1024} MB.");
         full = Path.GetFullPath(full);
-        PathWrite gate;
-        lock (writing)
-        {
-            if (!writing.TryGetValue(full, out gate!))
-                writing.Add(full, gate = new PathWrite());
-            gate.Users++;
-        }
-
-        try
-        {
-            await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
-            try
-            {
-                return await ReplaceChecked(full, wire, baseHash, bytes, executable, cancel).ConfigureAwait(false);
-            }
-            finally
-            {
-                gate.Turn.Release();
-            }
-        }
-        finally
-        {
-            lock (writing)
-            {
-                if (--gate.Users == 0)
-                {
-                    writing.Remove(full);
-                    gate.Turn.Dispose();
-                }
-            }
-        }
-    }
-
-    private sealed class PathWrite
-    {
-        public SemaphoreSlim Turn { get; } = new(1, 1);
-        public int Users { get; set; }
-    }
-
-    private static readonly Dictionary<string, PathWrite> writing = new(PlatformPaths.Comparer);
-
-    private static async Task<string?> ReplaceChecked(string full, string wire, string? baseHash, byte[]? bytes,
-        bool? executable, CancellationToken cancel)
-    {
         cancel.ThrowIfCancellationRequested();
         if (Directory.Exists(full))
             throw HexLinkException.Invalid($"{wire} is a folder.");
 
         string? temp = null;
-        string? now = null;
         try
         {
             if (bytes is not null)
@@ -430,11 +386,88 @@ internal static partial class HexLinkFiles
             }
 
             string? next = bytes is null ? null : Hash(bytes);
+            PathWrite gate = JoinPath(full);
+            bool entered = false;
+            try
+            {
+                await gate.Turn.WaitAsync(cancel).ConfigureAwait(false);
+                entered = true;
+                await ReplaceChecked(full, wire, baseHash, temp, executable, cancel).ConfigureAwait(false);
+                return next;
+            }
+            finally
+            {
+                LeavePath(full, gate, entered);
+            }
+        }
+        finally
+        {
+            if (temp is not null)
+            {
+                try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            }
+        }
+    }
+
+    private sealed class PathWrite
+    {
+        public SemaphoreSlim Turn { get; } = new(1, 1);
+        public int Users { get; set; }
+    }
+
+    private static readonly Dictionary<string, PathWrite> writing = new(PlatformPaths.Comparer);
+
+    private static PathWrite JoinPath(string full)
+    {
+        lock (writing)
+        {
+            if (!writing.TryGetValue(full, out PathWrite? gate))
+                writing.Add(full, gate = new PathWrite());
+            gate.Users++;
+            return gate;
+        }
+    }
+
+    private static void LeavePath(string full, PathWrite gate, bool entered)
+    {
+        if (entered)
+            gate.Turn.Release();
+        lock (writing)
+        {
+            if (--gate.Users == 0)
+            {
+                writing.Remove(full);
+                gate.Turn.Dispose();
+            }
+        }
+    }
+
+    private sealed class LocalWrite(string full, PathWrite gate) : IDisposable
+    {
+        public void Dispose() => LeavePath(full, gate, entered: true);
+    }
+
+    /// <summary>Coordinates the final publication of an editor save with linked compare-and-replace.</summary>
+    internal static IDisposable LockForLocalWrite(string full)
+    {
+        full = Path.GetFullPath(full);
+        PathWrite gate = JoinPath(full);
+        gate.Turn.Wait();
+        return new LocalWrite(full, gate);
+    }
+
+    private static async Task ReplaceChecked(string full, string wire, string? baseHash, string? temp,
+        bool? executable, CancellationToken cancel)
+    {
+        cancel.ThrowIfCancellationRequested();
+        string? now = null;
+        try
+        {
             DateTime written = File.GetLastWriteTimeUtc(full);
             using FileStream? current = OpenForComparison(full);
             long length = current?.Length ?? 0;
             if (current is not null && length <= MOST_READ)
-                now = Convert.ToHexStringLower(await SHA256.HashDataAsync(current, cancel).ConfigureAwait(false));
+                now = await HashForComparison(current, cancel).ConfigureAwait(false);
 
             if (baseHash is null ? current is not null : !string.Equals(baseHash, now, StringComparison.OrdinalIgnoreCase))
                 throw Conflict(wire, now);
@@ -467,18 +500,10 @@ internal static partial class HexLinkFiles
             }
             else if (current is not null)
                 File.Delete(full);
-            return next;
         }
         catch (IOException failure) when ((failure.HResult & 0xffff) is 17 or 32 or 33 or 80 or 183)
         {
-            throw Conflict(wire, now);
-        }
-        finally
-        {
-            if (temp is not null)
-            {
-                try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            }
+            throw Conflict(wire, now ?? HashOf(full));
         }
     }
 
@@ -491,6 +516,29 @@ internal static partial class HexLinkFiles
         catch (IOException e) when (e is FileNotFoundException or DirectoryNotFoundException)
         {
             return null;
+        }
+    }
+
+    private static async Task<string?> HashForComparison(FileStream current, CancellationToken cancel)
+    {
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(64 * 1024);
+        try
+        {
+            int total = 0;
+            while (total <= MOST_READ)
+            {
+                int read = await current.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, MOST_READ + 1 - total)), cancel).ConfigureAwait(false);
+                if (read == 0)
+                    return Convert.ToHexStringLower(hash.GetHashAndReset());
+                hash.AppendData(buffer, 0, read);
+                total += read;
+            }
+            return null;
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
