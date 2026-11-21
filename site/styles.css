@@ -164,6 +164,8 @@ img.night-only {
 }
 
 html {
+  /* The scrollbar's room is kept whether it's there or not, so nothing moves sideways when a dialog takes it away */
+  scrollbar-gutter: stable;
   scroll-behavior: smooth;
   scroll-padding-top: 4.5rem;
   -webkit-text-size-adjust: 100%;
@@ -228,6 +230,15 @@ pre,
 kbd {
   font-family: var(--mono);
   font-size: 0.9em;
+}
+
+/* A flag or a name in a sentence stays on one line rather than breaking at its hyphen */
+p code {
+  white-space: nowrap;
+}
+
+.platform p code {
+  white-space: normal;
 }
 
 kbd {
@@ -794,6 +805,16 @@ button.link {
     display: inline-flex;
     align-items: center;
   }
+
+  .face-chips a,
+  .mark,
+  .swipe-controls .dot {
+    min-block-size: 44px;
+  }
+
+  .swipe-controls .dot {
+    inline-size: 44px;
+  }
 }
 
 .shot {
@@ -902,7 +923,7 @@ section {
 /* A link to a part of the page lands on its words, just under the bar, not on the empty space a section starts with
    (html's scroll-padding-top keeps it clear of the bar) */
 section[id] {
-  scroll-margin-top: calc(1.25rem - var(--section-space));
+  scroll-margin-top: calc(2.25rem - var(--section-space));
 }
 
 section + section {
@@ -1532,7 +1553,6 @@ tbody tr:last-child > * {
 
   display: grid;
   gap: 1rem;
-  max-inline-size: 52rem;
   margin-block-start: var(--gap);
   padding: 1.5rem;
   border: 1px solid var(--border);
@@ -1565,7 +1585,7 @@ tbody tr:last-child > * {
   /* What the face is, under its name */
   & span:first-child small {
     display: block;
-    font-size: 0.78rem;
+    font-size: 0.85rem;
     line-height: 1.2;
   }
 }
@@ -1665,6 +1685,47 @@ pre {
   margin-block-start: 1.25rem;
 }
 
+/* Words beside their chart where there's the room, so a wide screen isn't words down the left and nothing on the
+   right; one over the other where there isn't. The chart and the figures under it share the one column, as wide as
+   each other */
+.pair {
+  & .intro {
+    margin-block-start: 1.25rem;
+  }
+
+  @media (width >= 70rem) {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: calc(var(--gap) * 2);
+    align-items: start;
+
+    & > :last-child > :first-child {
+      margin-block-start: 0;
+    }
+  }
+}
+
+/* Two runs of words of a size, side by side as halves, and starting on one line */
+.pair.even {
+  @media (width >= 70rem) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.persistent.pair {
+  margin-block-start: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+
+  & .numbers-head {
+    margin-block-start: 0;
+  }
+
+  & .numbers-head + p {
+    margin-block-start: 0.75rem;
+    color: var(--dim);
+  }
+}
+
 /* Little room: a bar's name and number on a line and the bar the whole width under them, rather than a sliver squeezed
    between the two */
 @container (inline-size < 26rem) {
@@ -1753,7 +1814,7 @@ pre {
   & p {
     margin-block: 0.15rem 0.8rem;
     color: var(--dim);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
   }
 }
 
@@ -1919,14 +1980,28 @@ details:not([open])::details-content {
 
 /* At the foot of the card where the cards are a grid, so the buttons of a row line up; right under the words in a
    rail on a phone, where a card is alone and a gap over its button would only look empty */
+/* A card is a column, its faces fill what's left under the title, so every card's button sits at the same place, its
+   foot, in a row of cards or alone in a rail */
+.flips .flip {
+  display: flex;
+  flex-direction: column;
+
+  & > .faces {
+    flex: 1;
+  }
+}
+
 .face-button {
   margin-block-start: auto;
+  padding: 0.35rem 0.1rem;
+  min-block-size: 2rem;
+  align-items: center;
 
-  @media (width < 44rem) {
-    margin-block-start: 0;
+  @media (pointer: coarse) {
+    min-block-size: 44px;
+    min-inline-size: 44px;
   }
 
-  padding: 0.35rem 0;
   border: 0;
   background: none;
   color: var(--accent);
@@ -1957,7 +2032,7 @@ details:not([open])::details-content {
   }
 
   & .face-button {
-    display: inline-block;
+    display: inline-flex;
   }
 
   & .back {
@@ -2052,8 +2127,15 @@ details:not([open])::details-content {
   }
 
   .features.swipe,
-  .harness.swipe {
+  .harness.swipe,
+  .vs.swipe {
     align-items: stretch;
+  }
+
+  /* The comparison's cards, a rail of their own on a phone rather than eight screens of them */
+  .vs.swipe > li {
+    border: 1px solid var(--border);
+    border-radius: 12px;
   }
 
   .gallery.swipe > figure {
@@ -2225,9 +2307,9 @@ details:not([open])::details-content {
       }
     }
 
-    /* The big pieces only, a chart, a picture, the build: a card or a thumbnail each rising on its own was motion
-       for its own sake */
-    .rise:not(li, figure:not(.shot), .nots > div) {
+    /* The big pieces only, a chart, the comparison, the build: a card or a thumbnail each rising on its own was motion
+       for its own sake, and a big screenshot fading in looked dim for a moment rather than arriving */
+    .rise:not(li, figure, .nots > div) {
       animation: rise auto linear backwards;
       animation-timeline: view();
       animation-range: entry 0% entry 60%;

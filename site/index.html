@@ -40,8 +40,8 @@
           <span>Menu</span>
         </button>
         <ul id="site-menu" class="site-menu" popover>
-          <li><a href="#numbers">Numbers</a></li>
           <li><a href="#switch">Switching</a></li>
+          <li><a href="#numbers">Numbers</a></li>
           <li><a href="#gallery">Gallery</a></li>
           <li><a href="#features">Features</a></li>
           <li class="dusk"><a href="#dusk">Dusk</a></li>
@@ -101,36 +101,74 @@
       </div>
     </div>
 
+    <section id="switch">
+      <div class="wrap">
+        <p class="eyebrow">Coming from another editor</p>
+        <h2>Switch without starting over</h2>
+        <p>Most of what your hands know comes over on the first day. The extensions don't, and that's where Hex is honestly behind: if your work lives in one marketplace extension, look for it in Hex's catalogue before you switch.</p>
+        <ul class="features row swipe" data-label="Coming from another editor">
+          <li>
+            <h3>Your keys already work</h3>
+            <p>The other editor's shortcuts are Hex's by default. Visual Studio's are one switch away.</p>
+          </li>
+          <li>
+            <h3>Your settings come with you</h3>
+            <p>Point Hex at your old editor's <code>settings.json</code>, yours and a folder's. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
+          </li>
+          <li>
+            <h3>The same language servers</h3>
+            <p>Hex speaks LSP to the servers you already rely on, eighteen declared from C# to Rust, set up one language at a time and only the ones you want.</p>
+          </li>
+          <li class="behind">
+            <h3>What doesn't come over</h3>
+            <p>The other editor's extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. Missing one? <button type="button" class="link" commandfor="request" command="show-modal">Request it</button>.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section id="numbers">
       <div class="wrap">
         <p class="eyebrow">Measured, not vibes</p>
-        <h2>Fast as fuck, with receipts</h2>
-        <p>Hex is C# compiled ahead of time to native code and drawn through Vulkan by the <a href="https://github.com/bogzxo/horizon">Horizon engine</a>, a game engine, with no browser underneath. Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>, the same native build you download, taken on one ordinary Windows machine, how they were taken is folded under the numbers.</p>
-
-        <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
-          <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
-          <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
-        </div>
-        <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 660 ms (571–693), its window up at 381.</p>
-
-        <div class="persistent">
-          <h3 class="numbers-head">Persistent Process. Closed isn't gone.</h3>
-          <p>Persistent Process keeps Hex asleep in the background once its last window is closed, the window context and a minimally loaded engine are kept while the threads remain frozen, awaiting an open request, so opening it again is a wake rather than a launch. It's off by default, the switch is in Getting started on the welcome page.</p>
-          <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 366 milliseconds, ranging 320 to 461. Woken from sleep 56 milliseconds, ranging 40 to 201.">
-            <div><span>Cold</span><i style="--ms: 366"></i><span><b>366 ms</b> <small>320–461</small></span></div>
-            <div><span>Woken</span><i style="--ms: 56"></i><span><b>56 ms</b> <small>40–201</small></span></div>
+        <h2>Fast, with receipts</h2>
+        <!-- The words and their chart side by side where there's the room, one over the other where there isn't -->
+        <div class="pair">
+          <div>
+            <p class="intro">Hex is C# compiled ahead of time to native code and drawn through Vulkan by the <a href="https://github.com/bogzxo/horizon">Horizon engine</a>, a game engine, with no browser underneath.</p>
+            <p class="note">Measured on <strong>Hex 3.3.0 Amphetamine</strong>, the release coming next, on one ordinary Windows machine. The pictures on this page are of it too. How it was all taken is folded under the numbers.</p>
           </div>
-          <ul class="receipts rise" aria-label="Hex asleep">
-            <li><b>5 MiB</b><span>of RAM in use while it sleeps</span></li>
-            <li><b>0.08%</b><span>of one core, 16 ms of CPU in 20 s asleep</span></li>
-            <li><b>6.5×</b><span>sooner on screen woken than launched</span></li>
-          </ul>
-          <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
+          <div>
+            <div class="bars rise" role="img" aria-label="Process start to first rendered scene. Dawn, the editor, 450 milliseconds, ranging 431 to 487. Dusk, the terminal, 405 milliseconds, ranging 394 to 479.">
+              <div><span>Dawn<small>editor</small></span><i style="--ms: 450"></i><span><b>450 ms</b> <small>431–487</small></span></div>
+              <div class="dusk"><span>Dusk<small>terminal</small></span><i style="--ms: 405"></i><span><b>405 ms</b> <small>394–479</small></span></div>
+            </div>
+            <p class="note">Process start to the first rendered scene, medians, the editor opening an empty folder and the terminal one shell. Opening Hex's own source with a C# file up instead, the editor's first frame comes at 660 ms (571–693), its window up at 381.</p>
+          </div>
+        </div>
+
+        <div class="persistent pair">
+          <div>
+            <h3 class="numbers-head">Persistent Process. Closed isn't gone.</h3>
+            <p>Close the last window and Hex goes to sleep instead of quitting, so opening it again is a wake, not a launch. It's off by default, the switch is in Getting started on the welcome page.</p>
+            <p class="note">The window context and a minimally loaded engine are kept while the threads stay frozen, waiting for an open request.</p>
+          </div>
+          <div>
+            <div class="bars wake rise" role="img" aria-label="Start to the window on screen. A cold launch 366 milliseconds, ranging 320 to 461. Woken from sleep 56 milliseconds, ranging 40 to 201.">
+              <div><span>Cold</span><i style="--ms: 366"></i><span><b>366 ms</b> <small>320–461</small></span></div>
+              <div><span>Woken</span><i style="--ms: 56"></i><span><b>56 ms</b> <small>40–201</small></span></div>
+            </div>
+            <ul class="receipts rise" aria-label="Hex asleep">
+              <li><b>5 MiB</b><span>of RAM in use while it sleeps</span></li>
+              <li><b>0.08%</b><span>of one core, 16 ms of CPU in 20 s asleep</span></li>
+              <li><b>6.5×</b><span>sooner on screen woken than launched</span></li>
+            </ul>
+            <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
+          </div>
         </div>
 
         <h3 class="numbers-head" id="next-to-the-other">Next to the other editor</h3>
         <p>You know the one, built on a browser. The same machine, with the same projects and files open, both with C# support: its current release with its C# kit, C#, Python, Jupyter and C++ extensions installed, Hex with its own C# server. Each opened three times in turn after a thrown-away launch, medians.</p>
-        <ul class="vs rise" aria-label="Hex next to the other editor">
+        <ul class="vs swipe rise" aria-label="Hex next to the other editor" data-label="Hex next to the other editor">
             <li>
               <h4>Ready, a small project</h4>
               <p>Start to the editor on screen with the file open</p>
@@ -180,10 +218,9 @@
               <div class="vs-bar code"><span>The other one</span><i style="--v: 1092; --max: 1092"></i><span>1,092 MiB</span></div>
             </li>
         </ul>
-        <p class="note">Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then.</p>
-
         <details class="fold">
           <summary>Every measurement, and how they were taken</summary>
+          <p>Next to the other editor, Hex's time is its own first frame, the other editor's its own "workbench ready", each from its process starting; both carry on loading their language servers after that. It ran with a fresh profile and the extensions above, Hex with fresh settings. Memory is private bytes summed over each editor's whole tree of processes, CPU the share of the whole processor that tree used over 10 s once each had been open for 30, the other editor's still indexing Horizon then.</p>
           <p>Fresh measurements of <strong>Hex 3.3.0 Amphetamine</strong>: Release, Windows x64, NativeAOT, self-contained, published the way the download is. Taken on 21 November 2026 on Windows 11, a Ryzen 5 5600X, an RTX 3060 and 32 GB of RAM. Six launches of each face after one that's thrown away, because the first one fills the shader caches.</p>
           <div class="scroller" tabindex="0" role="region" aria-label="What was measured">
             <table style="--label-2: 'Dawn'; --label-3: 'Dusk'">
@@ -206,35 +243,10 @@
       </div>
     </section>
 
-    <section id="switch">
-      <div class="wrap">
-        <p class="eyebrow">Coming from another editor</p>
-        <h2>Switch without starting over</h2>
-        <ul class="features row swipe" data-label="Coming from another editor">
-          <li class="rise">
-            <h3>Your keys already work</h3>
-            <p>The shortcuts you learnt in that other editor, out of the box. Visual Studio's are one switch away.</p>
-          </li>
-          <li class="rise">
-            <h3>Your settings come with you</h3>
-            <p>Point Hex at your old editor's <code>settings.json</code>, yours and a folder's. Every change is previewed first, and whatever Hex can't take is listed, not silently dropped.</p>
-          </li>
-          <li class="rise">
-            <h3>The same language servers</h3>
-            <p>Hex speaks LSP to the servers you already rely on, eighteen declared from C# to Rust, set up one language at a time and only the ones you want.</p>
-          </li>
-          <li class="rise">
-            <h3>What doesn't come over</h3>
-            <p>The other editor's extensions don't run in Hex. Its own are small HIDL scripts with a catalogue inside the editor. If your workflow lives in one marketplace extension, check the catalogue first, or <button type="button" class="link" commandfor="request" command="show-modal">request it</button>.</p>
-          </li>
-        </ul>
-      </div>
-    </section>
-
     <section id="gallery">
       <div class="wrap">
         <p class="eyebrow">Unedited, 1600 × 900</p>
-        <h2>Look at the bloody thing</h2>
+        <h2>The real window, unedited</h2>
         <p>Every picture is the real Hex window, most of them 3.3.0 with a small sample project open. An agent took them, driving Hex through its own MCP server. Open any screenshot for a closer look.</p>
 
         <div class="gallery swipe" data-label="Screenshots">
@@ -305,7 +317,7 @@
     <section id="features">
       <div class="wrap">
         <p class="eyebrow">Dawn, the editor</p>
-        <h2>Lightweight doesn't mean “does fuck all”</h2>
+        <h2>Lightweight doesn't mean bare</h2>
         <ul class="features swipe" data-label="What the editor does">
           <li class="rise flip">
             <h3>Code</h3>
@@ -347,15 +359,15 @@
             </div>
           </li>
           <li class="rise flip">
-            <h3>Find your shit</h3>
+            <h3>Find anything</h3>
             <div class="faces">
               <div class="face front">
                 <p>Quick Open, a command palette of over 350 commands, workspace search and replace, searchable settings and configurable keybindings with conflict reporting.</p>
-                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-find-your-shit">More<span class="visually-hidden"> about Find your shit</span></button>
+                <button type="button" class="face-button" aria-expanded="false" aria-controls="more-find-your-shit">More<span class="visually-hidden"> about Find anything</span></button>
               </div>
               <div class="face back" id="more-find-your-shit">
                 <p>Import your old editor's settings instead of rebuilding your preferences by hand.</p>
-                <button type="button" class="face-button">Back<span class="visually-hidden"> to Find your shit</span></button>
+                <button type="button" class="face-button">Back<span class="visually-hidden"> to Find anything</span></button>
               </div>
             </div>
           </li>
@@ -418,9 +430,11 @@
     <section id="dusk" class="dusk">
       <div class="wrap">
         <p class="eyebrow">Dusk, the terminal</p>
-        <h2>Dusk. A whole fucking terminal.</h2>
-        <p>Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
-        <p class="intro">Dusk says when a shell ended and with what. A shell that failed keeps its pane, so you can read why. Tabs show busy, rung and failed, and find floats over the pane. Going between Dawn, Agentic and Dusk never flashes: a face warms up as you point at its button and a short crossfade carries you over. The first Dusk of a run opens in about 30 ms, not over a second.</p>
+        <h2>Dusk. A whole terminal.</h2>
+        <div class="pair even">
+        <p class="intro">Tabs, split panes, shell profiles, search, scrollback and a drop-down mode. ConPTY on Windows, a PTY on Linux and macOS. Run it on its own with <code>Hex --dusk</code>, use the terminal panel inside Dawn, or switch faces from the title bar with <kbd>Ctrl+Alt+Shift+D</kbd>. The editor stays where you left it.</p>
+        <p class="intro">A shell that failed keeps its pane and its exit code, so you can read why. The first Dusk of a run opens in about 30 ms, and going between the faces is a short crossfade, never a flash.</p>
+        </div>
         <figure class="shot rise" style="margin: var(--gap) 0 0">
           <img src="images/terminal-1600.webp" srcset="images/terminal-800.webp 800w, images/terminal-1600.webp 1600w" sizes="(min-width: 85rem) 80rem, 94vw" width="1600" height="900" loading="lazy" decoding="async" alt="Hex's terminal running PowerShell: a directory listing, six lines of git history with coloured hashes and dates, and swatches of the sixteen colours and a true-colour gradient">
         </figure>
@@ -473,7 +487,7 @@
             <p><code>hex_agent_restart</code> kills a stuck agent along with whatever it had running and starts it again where it was. A chat whose process outlived its turn says it's still running.</p>
           </li>
           <li class="rise">
-            <h3>One method, not the whole bloody file</h3>
+            <h3>One method, not the whole file</h3>
             <p>Over MCP Hex exposes <strong>80 tools</strong>: repository maps, symbol search, references, focused code reads, screenshots, editor commands, the debugger, notebooks and terminals.</p>
           </li>
           <li class="rise">
@@ -505,7 +519,7 @@
       <div class="wrap">
         <p class="eyebrow">Appearance</p>
         <h2>Make it look how you want</h2>
-        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
+        <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen.</p>
         <div class="gallery pairs swipe" data-label="Looks">
           <figure class="rise">
             <a href="images/light-3200.webp"><img src="images/light-800.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
@@ -535,7 +549,7 @@
         <div class="nots">
           <div class="rise">
             <h3>It doesn't track you</h3>
-            <p>No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code. It does make network requests for features that need them: update checks, changelogs, extension, debugger and language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that <code>git fetch</code> works by fucking magic.</p>
+            <p>No built-in telemetry, analytics account or crash-report upload. No sign-in to edit code. It does make network requests for features that need them: update checks, changelogs, extension, debugger and language-server downloads, and the services you choose to use. “No telemetry” isn't a claim that <code>git fetch</code> works by magic.</p>
           </div>
           <div class="rise">
             <h3>It doesn't require an installer</h3>
@@ -598,7 +612,7 @@
     <section id="build">
       <div class="wrap">
         <p class="eyebrow">From source</p>
-        <h2>Build the bloody thing</h2>
+        <h2>Build it from source</h2>
         <p>Use the SDK in <code>global.json</code>, currently a .NET 11 release candidate. A standalone checkout needs Horizon's <code>development</code> branch as well as Hex's extensions.</p>
         <pre class="rise" style="margin-block-start: var(--gap)"><code><span class="c">git</span> clone --branch development --recursive https://github.com/bogzxo/hex.git
 <span class="c">cd</span> hex
