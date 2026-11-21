@@ -597,6 +597,7 @@ internal sealed partial class DawnScene
         var sessions = new System.Collections.Concurrent.ConcurrentBag<HexLinkSession>();
         const string Device = "Invite fixture";
         string? clipboard = null;
+        int workspaceOffers = 0;
         UIDialog? OpenDialog() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen);
         bool HasBadge(string key) => linkWindowDevices is { } rows &&
             Descendants(rows).OfType<Badge>().Any(badge => badge.Text == Said(key));
@@ -649,17 +650,24 @@ internal sealed partial class DawnScene
             other = new HexLinkTransport(identity, new HexLinkTrust(Path.Combine(home, "invite-fixture")));
             other.Accepted = connection => sessions.Add(new HexLinkSession(connection)
             {
-                Requested = (method, _, _) => Task.FromResult<JsonNode?>(method == "link/hello" ? new JsonObject
+                Requested = (method, parameters, _) =>
                 {
-                    ["protocol"] = HexLinkHost.PROTOCOL,
-                    ["device"] = HexLinkData.DeviceJson(identity.Device),
-                    ["granted"] = HexLinkData.Words(HexLinkRights.View | HexLinkRights.Steer),
-                    ["workspace"] = new JsonObject
+                    if (method == "git/bundle" && parameters?["operation"]?.GetValue<string>() == "offer")
+                        Interlocked.Increment(ref workspaceOffers);
+                    if (method != "link/hello")
+                        return Task.FromResult<JsonNode?>(new JsonObject());
+                    return Task.FromResult<JsonNode?>(new JsonObject
                     {
-                        ["name"] = "Fixture workspace",
-                        ["repositories"] = new JsonArray(new JsonObject { ["name"] = "fixture", ["branch"] = "main", ["head"] = "0123456789abcdef" })
-                    }
-                } : new JsonObject())
+                        ["protocol"] = HexLinkHost.PROTOCOL,
+                        ["device"] = HexLinkData.DeviceJson(identity.Device),
+                        ["granted"] = HexLinkData.Words(HexLinkRights.View | HexLinkRights.Steer),
+                        ["workspace"] = new JsonObject
+                        {
+                            ["name"] = "Fixture workspace",
+                            ["repositories"] = new JsonArray(new JsonObject { ["name"] = "fixture", ["branch"] = "main", ["head"] = "0123456789abcdef" })
+                        }
+                    });
+                }
             }.Start());
             other.Start(0, loopbackOnly: true);
             other.OpenInvite([IPAddress.Loopback], TimeSpan.FromMinutes(1), _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View | HexLinkRights.Steer));
@@ -696,9 +704,15 @@ internal sealed partial class DawnScene
             LinkPeers.Any(peer => peer.Device.Name == Device) && other?.ActiveInvite is null && HasBadge("link.device_connected"));
         test.WaitFor(() => linkLatencies.Values.Any(sample => sample.Milliseconds is not null), 5);
         shot("link_ui_invite_connected.png");
-        test.Check("link-ui: workspace provisioning actions explain their availability", () =>
-            (windowButton(Said("link.devices_share")) ?? windowButton(Said("link.devices_get"))) is { } provision &&
-            (provision.Enabled || provision.Tooltip.Length > 0));
+        clickWindow("link.devices_share");
+        test.WaitFor(() => Volatile.Read(ref workspaceOffers) == 1, 5);
+        test.Check("link-ui: Share workspace sends a provisioning offer to the paired device", () =>
+            Volatile.Read(ref workspaceOffers) == 1);
+        clickMore("link.devices_get");
+        test.WaitFor(() => textDialog is { IsOpen: true }, 5);
+        test.Check("link-ui: Get workspace opens the destination prompt", () =>
+            textDialog is { IsOpen: true } destination && destination.Buttons[0].Label == Said("link.provision.get_button"));
+        test.Run(() => textDialog?.Close());
         clickWindow("link.devices_open_files");
         test.WaitFor(() => OpenDialog() is { IsPalette: true }, 5);
         test.Check("link-ui: Open its files opens a browser for the connected device", () => OpenDialog() is { IsOpen: true, IsPalette: true });
