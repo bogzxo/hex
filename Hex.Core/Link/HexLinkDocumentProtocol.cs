@@ -36,6 +36,53 @@ internal static class HexLinkDocumentProtocol
 
 internal sealed partial class HexLinkHost
 {
+    private JsonObject Document2Request(string method, JsonObject parameters)
+    {
+        Need(HexLinkRights.View, method);
+        string path = HexLinkDocumentProtocol.Field(parameters, "path", HexLinkFiles.MOST_PATH);
+        ResolveFile(path);
+        var rooms = services.Documents?.Rooms ?? throw HexLinkException.NotFound("No documents are shared.");
+        HexLinkDocumentRoom room = rooms.Find(path);
+        string scope = Device.Id;
+        var author = Device;
+        if (HexLinkData.Object(parameters, "relay") is { } envelope && HexLinkData.String(envelope, "origin", 64) is { } origin)
+        {
+            scope = Device.Id + "/" + origin;
+            author = new HexLinkDevice(origin, HexLinkNames.Clean(HexLinkData.String(envelope, "name", 80)) ?? origin[..8]);
+        }
+
+        try
+        {
+            if (method == "doc2/leave")
+            {
+                room.Leave(scope, this);
+                return [];
+            }
+
+            Guid? epoch = HexLinkDocumentWire.Epoch(parameters);
+            long revision = HexLinkDocumentWire.Revision(parameters);
+            if (method == "doc2/open")
+                return HexLinkDocumentWire.Encode(room.Join(scope, this, author, epoch, revision));
+
+            HexDocOperation[] operations = HexLinkDocumentWire.DecodeOperations(parameters);
+            if (operations.Length > 0)
+                Need(HexLinkRights.Edit, method);
+            if (epoch is null)
+                throw HexLinkException.Invalid("The shared document operation needs an epoch.");
+            return HexLinkDocumentWire.Encode(room.Exchange(scope, this, epoch.Value, revision, operations,
+                HexLinkDocumentWire.DecodePoint(parameters["caret"]), HexLinkDocumentWire.DecodePoint(parameters["anchor"]),
+                HexLinkDocumentWire.DecodePoint(parameters["pointer"]), HexLinkData.Bool(parameters, "ready") == true));
+        }
+        catch (ArgumentException e)
+        {
+            throw HexLinkException.Invalid(e.Message);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new HexLinkException(HexLinkErrors.CONFLICT, e.Message);
+        }
+    }
+
     private JsonObject DocumentRequest(string method, JsonObject parameters)
     {
         bool edit = method == "doc/edit";
@@ -61,6 +108,17 @@ internal sealed partial class HexLinkHost
 
 internal sealed partial class HexLinkPeer
 {
+    public async Task<HexDocExchange> OpenDocument(string path, Guid? epoch, long revision, CancellationToken cancel = default) =>
+        HexLinkDocumentWire.Decode(await AskObject("doc2/open", HexLinkDocumentWire.Open(path, epoch, revision), cancel));
+
+    public async Task<HexDocExchange> ExchangeDocument(string path, Guid epoch, long revision, IReadOnlyList<HexDocOperation> operations,
+        HexDocPoint? caret, HexDocPoint? anchor, HexDocPoint? pointer, bool checkpointReady, CancellationToken cancel = default) =>
+        HexLinkDocumentWire.Decode(await AskObject("doc2/exchange",
+            HexLinkDocumentWire.Exchange(path, epoch, revision, operations, caret, anchor, pointer, checkpointReady), cancel));
+
+    public Task LeaveDocument(string path, CancellationToken cancel = default) =>
+        AskWithRelay("doc2/leave", new JsonObject { ["path"] = path }, cancel);
+
     public async Task<HexLinkDocSnapshot> JoinDocument(string path, CancellationToken cancel = default) =>
         HexLinkDocumentProtocol.Decode(await AskObject("doc/join", new JsonObject { ["path"] = path }, cancel), path);
 

@@ -10,7 +10,7 @@ internal readonly record struct HexDocReceipt(Guid Epoch, long Revision, HexDocA
 /// </summary>
 internal sealed class HexLinkDocumentAuthority
 {
-    private const int MaxParticipants = 64;
+    private const int MaxParticipants = 65;
     private const int MaxReplayOperations = 256;
     private readonly Lock gate = new();
     private readonly Dictionary<int, Participant> participants = [];
@@ -44,7 +44,7 @@ internal sealed class HexLinkDocumentAuthority
             return sequence.View();
     }
 
-    public void Reconnect(int author)
+    public void Reconnect(int author, bool resetAcknowledgement = false)
     {
         if (author <= 0)
             throw new ArgumentOutOfRangeException(nameof(author));
@@ -56,6 +56,8 @@ internal sealed class HexLinkDocumentAuthority
                     throw new InvalidOperationException("The document participant limit has been reached.");
                 participants.Add(author, participant = new Participant { Acknowledged = checkpoint.Revision });
             }
+            if (resetAcknowledgement)
+                participant.Acknowledged = checkpoint.Revision;
             participant.Connected = true;
             participant.CheckpointReady = false;
         }
@@ -86,6 +88,8 @@ internal sealed class HexLinkDocumentAuthority
             RequireEpoch(epoch);
             if (!participants.TryGetValue(author, out var participant) || !participant.Connected || operation.Id.Author != author)
                 throw new InvalidOperationException("Only the connected author can submit its document operation.");
+            if (operation.Id.Clock > sequence.Clock + HexLinkDocumentSequence.MaxOperations)
+                throw new ArgumentException("The document clock is too far ahead.", nameof(operation));
             // The caller may reuse its decoded list. Keep an immutable copy for replay.
             if (operation is HexDocEdit edit)
                 operation = edit with { Removed = (HexDocSpan[])edit.Removed.Clone() };
@@ -96,14 +100,23 @@ internal sealed class HexLinkDocumentAuthority
         }
     }
 
-    public HexDocReplay Replay(Guid? epoch, long revision, int limit = MaxReplayOperations)
+    public HexDocReplay Replay(Guid? epoch, long revision, int limit = MaxReplayOperations, int budget = int.MaxValue)
     {
         lock (gate)
         {
             bool reset = epoch != checkpoint.Epoch || revision < checkpoint.Revision || revision > Head;
             long since = reset ? checkpoint.Revision : revision;
             int at = checked((int)(since - checkpoint.Revision));
-            int count = Math.Min(tail.Count - at, Math.Clamp(limit, 1, MaxReplayOperations));
+            int maximum = Math.Min(tail.Count - at, Math.Clamp(limit, 1, MaxReplayOperations));
+            long size = reset ? checkpoint.Text.Length * 6L : 0;
+            int count = 0;
+            while (count < maximum)
+            {
+                size += Estimate(tail[at + count]);
+                if (size > budget)
+                    break;
+                count++;
+            }
             HexDocOperation[] operations = new HexDocOperation[count];
             for (int i = 0; i < operations.Length; i++)
             {
@@ -113,6 +126,10 @@ internal sealed class HexLinkDocumentAuthority
             return new HexDocReplay(checkpoint.Epoch, since, Head, reset ? checkpoint : null, operations);
         }
     }
+
+    // A conservative upper bound for the default JSON encoder and numeric delimited operation fields.
+    internal static long Estimate(HexDocOperation operation) => operation is HexDocEdit edit
+        ? 160 + edit.Inserted.Length * 6L + edit.Removed.Length * 64L : 160;
 
     /// <summary>
     /// The replica may permit a checkpoint only after draining local operations and releasing undo/anchor references

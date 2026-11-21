@@ -1,5 +1,6 @@
 using System.Text;
 using Hex.Core;
+using static Hex.Tests.HexLinkTestKit;
 
 namespace Hex.Tests;
 
@@ -103,6 +104,38 @@ public sealed class HexLinkDocumentSequenceTests
         late.Apply(Assert.Single(next.Operations));
         Assert.Equal("☀Hello!", late.View().Text);
         Assert.Equal(authority.View().Text, late.View().Text);
+    }
+
+    [Fact]
+    public async Task Wire_rooms_allow_View_readers_bind_authors_and_restore_a_catchup_frontier()
+    {
+        const string path = "work/note.txt";
+        using var pair = await LinkedPair.Up(HexLinkRights.View);
+        HexLinkDocumentRoom room = pair.A.Documents.Rooms.Open(path, "ab");
+        var localConnection = new object();
+        HexDocExchange host = room.Join(DeviceA.Id, localConnection, DeviceA);
+        HexDocExchange guest = await pair.PeerA.OpenDocument(path, null, 0);
+        Assert.Equal("ab", guest.Replay.Checkpoint!.Text);
+        Assert.NotEqual(host.Author, guest.Author);
+        Assert.Equal(2, guest.Participants.Count);
+        Guid epoch = guest.Replay.Epoch;
+        var sender = new HexLinkDocumentSequence("ab");
+        HexDocEdit proposed = sender.View().Edit(new(1, guest.Author), 1, 1, "B");
+        Assert.Equal(HexLinkErrors.NOT_ALLOWED, await CodeOf(pair.PeerA.ExchangeDocument(path, epoch, 0, [proposed], null, null, null, false)));
+
+        pair.BOnA |= HexLinkRights.Edit;
+        HexDocEdit local = sender.View().Edit(new(1, host.Author), 1, 1, "A");
+        room.Exchange(DeviceA.Id, localConnection, epoch, 0, [local], null, null, null, false);
+        Assert.Equal(HexLinkErrors.CONFLICT, await CodeOf(pair.PeerA.ExchangeDocument(path, epoch, 0, [local], null, null, null, false)));
+        HexDocPoint caret = new(proposed.Id, 1);
+        HexDocExchange replay = await pair.PeerA.ExchangeDocument(path, epoch, 0, [proposed], caret, caret, null, false);
+        Assert.Equal(2L, replay.Replay.Head);
+        Assert.Null(replay.Replay.Checkpoint);
+        Assert.Equal(caret, replay.Participants.Single(p => p.Author == guest.Author).Caret);
+        foreach (HexDocOperation operation in replay.Replay.Operations)
+            sender.Apply(operation);
+        Assert.Equal("aBA", sender.View().Text);
+        Assert.Equal(room.View().Text, sender.View().Text);
     }
 
     [Fact]

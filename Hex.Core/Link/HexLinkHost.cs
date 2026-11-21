@@ -69,6 +69,7 @@ internal sealed partial class HexLinkHost : IDisposable
         "tools/list" => Task.FromResult<JsonNode?>(ToolsList()),
         "tools/call" => ToolsCall(parameters, cancel),
         "doc/join" or "doc/poll" or "doc/edit" => Task.FromResult<JsonNode?>(DocumentRequest(method, parameters)),
+        "doc2/open" or "doc2/exchange" or "doc2/leave" => Task.FromResult<JsonNode?>(Document2Request(method, parameters)),
         "fs/list" => Task.FromResult<JsonNode?>(FsList(parameters)),
         "fs/read" => Task.FromResult<JsonNode?>(FsRead(parameters)),
         "fs/write" => FsWrite(parameters, cancel),
@@ -415,6 +416,7 @@ internal sealed partial class HexLinkHost : IDisposable
     // The watches of chats and files let go of, when the link goes or may no longer see
     private void StopWatching()
     {
+        services.Documents?.Rooms.Disconnect(this);
         fleetAsked = false;
         ForgetFetchedChats();
         foreach (var (_, watched) in chats)
