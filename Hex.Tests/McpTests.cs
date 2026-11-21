@@ -269,6 +269,7 @@ public sealed class McpTests : IDisposable
 }
 
 /// <summary>The door's token, the bridge's command line, and its choice of Hex by folder.</summary>
+[Collection(HexHome.NAME)]
 public sealed class McpDoorTests
 {
     private static (bool Admitted, string Said) Knocking(string first, string token)
