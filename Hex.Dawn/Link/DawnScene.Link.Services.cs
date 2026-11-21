@@ -43,20 +43,10 @@ internal sealed partial class DawnScene
         public Task<bool> Answer(int chat, string answer) => hex.OnEditorForLink(() =>
             hex.ChatById(chat) is { } asked && asked.FirstPending(HexAgentEntryKind.Question) is { } question && asked.Reply(question, answer));
 
-        // As hex_write does it: an open tab with changes nobody saved yet is changed in the editor, as one step to undo;
-        // otherwise the disk, beside it and moved over it, which a tab of it takes in as it would any change on the disk
-        public async Task WriteFile(string fullPath, byte[] content)
-        {
-            bool inEditor = await hex.OnEditorForLink(() =>
-            {
-                if (hex.Context.Documents.Find(fullPath) is not { Modified: true } open || LinkText(content) is not { } text)
-                    return false;
-                hex.Context.Documents.Rewrite(open, text.Replace("\r\n", "\n"));
-                return true;
-            });
-            if (!inEditor)
-                await Task.Run(() => HexLinkFiles.WriteAtomic(fullPath, content));
-        }
+        // The disk always, whole or not at all, since the hash handed back says what's on it now (the working-tree sync
+        // takes it as what both sides agreed), and an open tab of it made what it says as one step of its undo, changes
+        // nobody saved a step back (DawnScene.LinkSync's LinkWriteLocal)
+        public Task WriteFile(string fullPath, byte[] content) => hex.LinkWriteLocal(fullPath, content);
 
         public Task DeleteFile(string fullPath) => Task.Run(() => File.Delete(fullPath));
 
@@ -66,17 +56,8 @@ internal sealed partial class DawnScene
             hex.linkDirty = true;
         });
 
-        // Kept as a file for now, said in a notice, until the Link window has a card to apply it from
-        public Task<string> PatchOffered(HexLinkDevice device, string title, string diff)
-        {
-            string folder = Path.Combine(hex.linkData, "patches");
-            string safe = new([.. device.Name.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')]);
-            string file = Path.Combine(folder, $"{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}-{(safe.Length > 0 ? safe : "device")}.diff");
-            Directory.CreateDirectory(folder);
-            File.WriteAllText(file, diff, new UTF8Encoding(false));
-            hex.PostLink(() => hex.Say(Said("link.patch_kept", ("device", device.Name), ("title", title), ("file", file))));
-            return Task.FromResult("kept");
-        }
+        // A card for the person, Apply, Keep as File or Discard, their answer going back (DawnScene.LinkGit)
+        public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => hex.LinkPatchOffered(device, title, diff);
 
         public void Audit(string what, HexLinkDevice who, string detail)
         {

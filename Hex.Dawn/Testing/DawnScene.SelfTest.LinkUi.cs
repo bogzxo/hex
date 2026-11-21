@@ -85,7 +85,7 @@ internal sealed partial class DawnScene
         test.Check("link-ui: Pair a Device opens pairing, the window counts it down", () =>
             LinkPairingUntil is not null && linkPairingCountdown is { Text.Length: > 0 } && WindowButton(Said("link.pair_stop")) is not null);
         Shot("link_ui_pairing_open.png");
-        test.Run(() => LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", ui: true));
+        test.Run(() => LinkStartPeer(peerHome, $"127.0.0.1:{LinkPort}", new Dictionary<string, string> { [LINK_TEST_UI] = "1" }));
 
         // The pairing dialog, the code large and grouped, nothing ticked, Pair waiting for View
         test.WaitFor(() => linkPairingDialog is { IsOpen: true } || linkTestPeer is { HasExited: true }, 90.0f);

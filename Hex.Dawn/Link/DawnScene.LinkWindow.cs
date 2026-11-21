@@ -78,7 +78,7 @@ internal sealed partial class DawnScene
             window.Parent?.Remove(window);
             LinkChanged -= LinkWindowChanged;
             linkWindow = null;
-            linkWindowHead = linkWindowPairing = linkWindowDevices = linkWindowNearby = linkWindowActivity = null;
+            linkWindowHead = linkWindowPairing = linkWindowDevices = linkWindowNearby = linkWindowActivity = linkWindowShare = null;
             linkNameBox = linkAddressBox = null;
             linkPairingCountdown = linkNameSeen = null;
         };
@@ -92,6 +92,7 @@ internal sealed partial class DawnScene
         linkWindowPairing = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
         column.Add(LinkAddressRow());
         linkWindowDevices = column.Add(new StackPanel { Spacing = 8.0f, Fill = UIFill.Horizontal });
+        linkWindowShare = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
         linkWindowNearby = column.Add(new StackPanel { Spacing = 6.0f, Fill = UIFill.Horizontal });
         linkWindowActivity = column.Add(new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal });
 
@@ -148,6 +149,7 @@ internal sealed partial class DawnScene
         DrawLinkHead();
         DrawLinkPairing();
         DrawLinkDevices();
+        DrawLinkShare();
         DrawLinkNearby();
         DrawLinkActivity();
         if (linkNameBox is not null && chrome.Compositor.Focus != linkNameBox && linkNameBox.Text != settings.LinkName)
@@ -437,6 +439,10 @@ internal sealed partial class DawnScene
                 there.Add(chip);
         }
 
+        // The folders both have open and how their syncs are doing (DawnScene.LinkWindow.Share)
+        if (peer is not null)
+            LinkDeviceSyncRows(column, peer);
+
         // Connect or Disconnect, Rename, Forget (asked once)
         var buttons = column.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
         if (peer is not null)
@@ -621,24 +627,10 @@ internal sealed partial class DawnScene
     private Vector4 LinkWarning => Skin?.Palette.Warning ?? new Vector4(1.0f, 0.78f, 0.3f, 1.0f);
 
     /// <summary>
-    /// A device's own colour, the same every time for the same device, out of the look's colours that aren't the danger
-    /// one, so its badge, its card's stripe and its section of the fleet read as one machine.
+    /// A device's own colour, the one its caret is drawn in (DawnScene.LinkPresence), so its badge, its card's stripe, its
+    /// section of the fleet and where its person is read as one machine.
     /// </summary>
-    internal static Vector4 LinkDeviceTint(string id, UISkin? skin)
-    {
-        Vector4[] tints =
-        [
-            RunningBlue(skin),
-            skin?.Palette.Success ?? new Vector4(0.36f, 0.85f, 0.45f, 1.0f),
-            AccentText(skin),
-            skin?.Palette.LightField == true ? new Vector4(0.55f, 0.32f, 0.75f, 1.0f) : new Vector4(0.74f, 0.58f, 0.98f, 1.0f),
-            skin?.Palette.LightField == true ? new Vector4(0.1f, 0.5f, 0.5f, 1.0f) : new Vector4(0.4f, 0.85f, 0.85f, 1.0f)
-        ];
-        int hash = 0;
-        foreach (char c in id)
-            hash = unchecked(hash * 31 + char.ToUpperInvariant(c));
-        return tints[(hash & 0x7fffffff) % tints.Length];
-    }
+    internal static Vector4 LinkDeviceTint(string id, UISkin? skin) => LinkDeviceColour(id);
 
     /* Steering, for the status item */
 

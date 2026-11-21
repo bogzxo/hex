@@ -151,6 +151,7 @@ internal sealed partial class DawnScene
         try
         {
             string keys = home ?? Path.Combine(TerminalFiles.UserFolder, LINK_FOLDER);
+            linkKeys = keys;
             linkData = home is not null ? Path.Combine(home, "data") : Path.Combine(HexData.Root, LINK_FOLDER);
             Directory.CreateDirectory(linkData);
             linkAudit = new HexLinkAudit(Path.Combine(linkData, "audit.log"));
@@ -206,6 +207,8 @@ internal sealed partial class DawnScene
             linkDiscovery = null;
         }
 
+        // What's shared over the links let go of before they go (DawnScene.LinkSync, LinkFiles, LinkPresence)
+        LinkShareStopAll();
         link?.Dispose();
         link = null;
         if (linkTrust is not null)
@@ -303,6 +306,10 @@ internal sealed partial class DawnScene
         if (link is not null && link.Pump())
             linkDirty = true;
 
+        // Where the person is here told, and where the others are drawn (DawnScene.LinkPresence)
+        if (link is not null)
+            UpdateLinkPresence();
+
         if (linkPairingPending is { IsDecided: true } decided)
         {
             // One that ended on the other side stays a moment to say so, and closes itself (DawnScene.LinkPairing)
@@ -397,6 +404,8 @@ internal sealed partial class DawnScene
         });
         Say(Said("link.connected", ("device", LinkNameOf(peer.Device.Id, peer.Device.Name))));
         linkDirty = true;
+        // What's shared with it taken up again: the folders synced with it, presence, its remote tabs (DawnScene.LinkSync, ...)
+        LinkShareJoined(peer);
         if (HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {
             _ = Task.Run(async () =>
@@ -565,7 +574,7 @@ internal sealed partial class DawnScene
     {
         if (linkServices is not { } services)
             return;
-        string[] folders = [.. explorer.workspace.Folders];
+        string[] folders = [.. explorer.workspace.Folders, .. linkTestExtraFolders];
         if (!force && folders.SequenceEqual(linkFoldersSeen, PlatformPaths.Comparer))
             return;
         if (linkWorkspaceAsking)

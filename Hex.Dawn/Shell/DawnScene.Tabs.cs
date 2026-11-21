@@ -88,10 +88,11 @@ internal sealed partial class DawnScene
             StripTab tab = docTabs.Tabs[i];
             string icon = IconOfDocument(shown);
 
-            tab.Title = shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name;
+            // Another machine's file says whose it is (DawnScene.LinkFiles)
+            tab.Title = LinkRemoteTitle(shown) ?? (shown.IsText && shown.Path is { } path ? Path.GetFileName(path) : shown.Name);
             tab.Icon = icon;
             tab.IconColor = shown.IsText ? null : FolderColor;
-            tab.Tooltip = shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name));
+            tab.Tooltip = LinkRemoteTooltip(shown) ?? (shown.Path is { } where ? where : Said("tabs.never_saved", ("name", shown.Name)));
             tab.Modified = shown.Modified;
             tab.Pinned = shown.Pinned;
             tab.TitleColor = TabGitColor(shown);
