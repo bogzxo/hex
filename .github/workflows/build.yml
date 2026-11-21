@@ -1,13 +1,13 @@
-# Every push to master, Hex published for Windows, Linux and macOS, a zip for each kept with the run (Actions, the
-# run, Artifacts). Windows Setup is a self-extracting EXE. A native compiler only builds for its own system.
-# Pushing a tag that starts with v (v0.4.0) puts the packages on a GitHub release of that name.
+# Pushing a tag that starts with v (v0.4.0), Hex published for Windows, Linux and macOS and the packages put on a
+# GitHub release of that name. Windows Setup is a self-extracting EXE. A native compiler only builds for its own
+# system. Not on every push to master as well: a release pushes master and then its tag, and the same commit was built
+# twice, once for nothing. Run by hand (Actions, Build, Run workflow) for a build without a release.
 
 name: Build
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "master" ]
     tags: [ "v*" ]
   # The nightly build (nightly.yml) runs the same build on the development branch, as the dev channel
   workflow_call:
