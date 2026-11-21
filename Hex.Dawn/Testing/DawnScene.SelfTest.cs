@@ -517,6 +517,7 @@ internal sealed partial class DawnScene
         ("explorerfiles", "stable refresh, multi-file clipboard shortcuts, staged cut and asynchronous paste", TestExplorerFiles),
         ("explorer-new", "a new file or folder named on its row from the explorer's head, a folder's menu and the palette: Escape and a click away untouched make nothing, a click away with a name makes it", TestExplorerNew),
         ("explorer-inplace", "the explorer worked in place: open files marked, the shown file revealed, type to find, rename and new file or folder on their rows, drag and drop with its cues, menus folded at 200% and Properties' read-only values as text", TestExplorerInPlace),
+        ("file-drop", "files and folders dragged onto the window from outside, faked through the engine's event: what letting go would do said while held, a folder made or added to the workspace, files each in a tab (a picture as the picture, a notebook as the notebook), one held over an explorer folder copied into it", TestFileDrop),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
         ("markdown-terminal", "a Markdown preview with code and math shown, then the terminal, its text still in its monospaced font with every column a cell wide", TestMarkdownTerminalFont),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),

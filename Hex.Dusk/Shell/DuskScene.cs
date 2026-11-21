@@ -265,6 +265,7 @@ internal sealed partial class DuskScene : Scene
         UpdateQuake();
         UpdateInstance();
         UpdateHandoffs();
+        UpdateFileDrops();
         UpdateStatusBar();
 
         // The horizon under the title bar in a flush look, Dawn's runs with its tasks and Dusk's is the line alone

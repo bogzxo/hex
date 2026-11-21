@@ -4299,6 +4299,25 @@ let strings = {
         component_one: "1 component",
         component_many: "{count} components",
         frame_one: "1 frame",
-        frame_many: "{count} frames"
+        frame_many: "{count} frames",
+        item_one: "1 item",
+        item_many: "{count} items",
+        path_one: "1 path",
+        path_many: "{count} paths"
+    },
+
+    // Files and folders dragged onto the window from outside, what letting go of them would do (HexDropOverlay)
+    file_drop: {
+        open_files: "Open {files}",
+        open_folder: "Open {folders} as the workspace",
+        add_folders: "Add {folders} to the workspace",
+        open_files_and_folder: "Open {files} with {folders} as the workspace",
+        open_files_add_folders: "Open {files} and add {folders} to the workspace",
+        copy_into: "Copy {items} into {name}",
+        nothing: "Nothing dropped is a file or a folder that's there",
+        paste_paths: "Paste {paths} into {shell}",
+        the_shell: "the shell",
+        open_in_hex: "Open {items} in Hex",
+        no_hex: "There's no Hex to open {name} in"
     }
 };

@@ -550,6 +550,7 @@ internal sealed partial class DawnScene : Scene
         UpdateClosing();
         UpdateOpening();
         UpdateHosted();
+        UpdateFileDrops();
         UpdateRenderScale();
         Hex.Shell.HexModes.Update(dt);
         ColourChrome();

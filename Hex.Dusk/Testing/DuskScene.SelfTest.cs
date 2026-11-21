@@ -70,6 +70,7 @@ internal sealed partial class DuskScene
         ("dawn", "the dawn command typed into every shell there is, a file edited in place and saved, no Dawn said", TestDawn),
         ("effects", "the palette over glass, sparks off the cursor at a prompt, a burst for a long command that went well", TestEffects),
         ("path", "a new shell gets the PATH the system has now, not the one Dusk was started with", TestPath),
+        ("filedrop", "files dragged onto Dusk from outside: held over a pane its shell is said, dropped there the path typed at the prompt quoted for the shell, over the title bar Hex is said", TestFileDrop),
         ("micro", "micro in the shell, every key, the mouse, a paste, its splits and colours, how a console TUI gets on in Dusk", TestMicro),
         ("tuikeys", "the arrows pressed for real into micro, the whole way a person's keys go", TestTuiKeys),
         ("claude", "Claude Code in the shell, a TUI drawn on the main screen, its list moved with the arrows", TestClaude),
