@@ -592,7 +592,7 @@ switch (`Hex.Core/Prediction/*`, the AI settings rows).
 token. Then `airllm_server.py`, the sidecar's start and stop from the extension, its load state, its tests, the AirLLM
 runs. If the spike shows AirLLM doesn't work on Windows, stop there and report, with WSL2 as the fallback to ask about.
 
-**Phase 5 (if wanted), colibrì preset and test.**
+~~**Phase 5, colibrì preset and test.**~~ Dropped by the person.
 
 ## 11. Risks
 
@@ -613,27 +613,65 @@ runs. If the spike shows AirLLM doesn't work on Windows, stop there and report, 
 
 ## 12. Open questions for the person
 
-1. **Colibrì**: is JustVugg/colibri (the C engine that streams MoE experts from NVMe) the one meant? You narrowed the
-   build to AirLLM and Ollama; should colibri follow as phase 5, or not at all?
+1. ~~Colibrì~~ answered: dropped. No preset, no phase 5; section 1.4 stays as what was found. (Any OpenAI-compatible
+   server still works through that backend, colibri included, without anything said about it.)
 2. ~~AirLLM's Python~~ answered: everything on D:, the runtime and CUDA too (7.2).
 3. ~~The test model~~ answered: Mixtral 8x7B, its smallest version, `mixtral:8x7b-instruct-v0.1-q2_K` (1.6).
-6. **AirLLM's half of the test**: AirLLM can't read Ollama's GGUF. Download the full `mistralai/Mixtral-8x7B-Instruct-v0.1`
-   safetensors (93.4 GB to `D:\models\huggingface`, about 25 GB of 4-bit shards after, the original deleted), try a
-   smaller pre-quantised Hugging Face copy that AirLLM may not load, or leave AirLLM untested on a real model for now?
-   And may torch and airllm (about 6 GB) be installed into `D:\models\airllm\venv` now?
+6. ~~AirLLM's half of the test~~ answered: download the full `mistralai/Mixtral-8x7B-Instruct-v0.1` safetensors
+   (93.4 GB to `D:\models\huggingface`) and install torch and airllm into `D:\models\airllm\venv`. Started 2026-11-21.
 4. ~~Edit prediction and agents at once~~ answered: the person chooses which models stay loaded, Hex warns about low
    VRAM, and prediction can use the agent's model (section 2, 3.8).
-5. **Approvals by default**: `ask` (every edit and command asks) or `edits` (edits go through, commands ask, as Claude
-   Code is set up here)?
+5. ~~Approvals by default~~ answered: `edits`, file edits go through, commands ask. `local_agents_approvals` defaults
+   to `edits`.
 
 ## Status
 
-- **Done:** research (Hex's agent systems and tools, Ollama, AirLLM, colibrì, the MoE models), this plan with the
-  person's later answers (everything on D:, which models are loaded, the VRAM warning, the agent's model for
-  autocomplete). `mixtral:8x7b-instruct-v0.1-q2_K` pulled into `D:\ollama\models` (17.3 GB) and measured (1.7): no
-  native tools on that tag, tools by prompt work, 7 tok/s output at 8k. A standalone Python 3.12.10 and an empty venv
-  on `D:\models\airllm`. A partial Qwen3-30B download (0.4 GB) and a C: venv from before the person's D: rule were
-  deleted; nothing of this work is left on C: but the probe scripts in the scratch folder.
-- **Next:** #110 reads this; on its word, phase 1 (core, the text-tools fallback included, and fake-server tests),
-  then phase 2 with Mixtral, then the AirLLM spike once question 6 is answered.
-- **Open questions:** section 12 (1, 5 and 6 still open).
+**Paused 2026-11-21** on the person's word ("we can test local models another time, prioritise simply implementing
+predictions"): the GPU is needed for prediction testing. No product code was written. Nothing is loaded in Ollama
+(`/api/ps` empty) and no download or install is running.
+
+- **Done:**
+  - Research: Hex's agent systems and tools, Ollama, AirLLM, colibrì, the MoE models (sections 1.1-1.5).
+  - This plan, with the person's decisions:
+    - everything on D:, including the Python runtime and CUDA libraries (7.2);
+    - which models stay loaded is the person's choice in the model manager (section 2);
+    - an automatic low-VRAM warning (section 2);
+    - the agent's model usable for autocomplete (3.8);
+    - test model Mixtral 8x7B, its smallest version through Ollama (1.6), and the full model for AirLLM (question 6);
+    - Colibrì dropped (question 1);
+    - approvals default `edits`: edits go through, commands ask (question 5).
+  - Measured through Ollama with `mixtral:8x7b-instruct-v0.1-q2_K` (1.7):
+    - no native tools on that tag (`400 does not support tools`);
+    - tools by prompt work: a correct `hex_search` call, then a correct answer;
+    - at 8k context, 7.2-7.4 tok/s output and 75 s to load, 10.7 of 18.8 GB on the GPU;
+    - at 32k context, 5.2-6.1 tok/s.
+  - A partial Qwen3-30B download (0.4 GB) and a C: venv, both from before the person's D: rule, were deleted. Nothing
+    of this work is on C: but probe scripts in Hex's agent scratch folder (`probe_tools.py`, `probe_text_tools.py`,
+    `probe_airllm.py`).
+- **On D: now:**
+  - `D:\ollama\models`: `mixtral:8x7b-instruct-v0.1-q2_K`, 17.3 GB, complete (Ollama's store, beside the edit
+    prediction models).
+  - `D:\models\huggingface\Mixtral-8x7B-Instruct-v0.1`: the full safetensors (93.4 GB), **partial**. 27.0 GB is
+    there, all of it still `.incomplete` files under `.cache\huggingface\download` (no shard finished). Some of it may
+    be left over from runs that were restarted. `hf download` takes up `.incomplete` files where they stopped.
+  - `D:\models\airllm`, 10.0 GB in all:
+    - `python`: standalone CPython 3.12.10;
+    - `venv`: torch with CUDA (cu128 wheels), airllm 4.0.0, transformers, accelerate, bitsandbytes 0.50.2 and
+      huggingface_hub, installed. torch's CUDA check was never run, the session ended first.
+    - `pipcache`, `tmp`: logs, and the two scripts below.
+  - D: had 282 GB free.
+- **To resume:**
+  - The download: run `D:\models\airllm\tmp\fetch_mixtral.cmd`. It sets `HF_HOME`, `TMP` and `TEMP` to D:, turns
+    Xet off (it stalled here) and uses 16 workers. It logs to `D:\models\airllm\tmp\hf_mixtral.log` and ends that log
+    with `exit N`.
+  - Reinstalling: `D:\models\airllm\tmp\install_airllm.cmd`.
+  - The AirLLM probe, once the download has finished:
+    `D:\models\airllm\venv\Scripts\python probe_airllm.py D:\models\huggingface\Mixtral-8x7B-Instruct-v0.1 4bit 48`,
+    with `HF_HOME`, `TMP` and `TEMP` set to D:. Its layer files go to `D:\models\airllm\shards`.
+  - Run Hugging Face downloads as detached processes. Background shells died with the agent's session twice.
+- **Next, when local models are taken up again:**
+  1. Finish the download and the AirLLM probe.
+  2. Phase 1: the core, with the tools-by-prompt fallback, and its tests against a fake server.
+  3. Phase 2 with Mixtral.
+  4. Phases 3 and 3b; 3b, the agent's model for autocomplete, after `feat/edit-prediction` has landed.
+- **Open questions:** none left; section 12 has all of them answered.
