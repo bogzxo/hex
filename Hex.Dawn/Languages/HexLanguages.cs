@@ -561,6 +561,7 @@ internal sealed partial class HexLanguages
         UpdateChecks(dt);
         UpdateAnswers();
         UpdateWarm();
+        UpdateLightbulb();
         UpdateDocumentHighlights();
         ServersStopped();
         AskNext();

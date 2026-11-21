@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
@@ -28,9 +30,21 @@ internal sealed partial class DawnScene
             code.Document.Insert("// unsaved work\n");
             before = code.Text;
             debugger.Settle(file, 5, settings);
-            code.Document.MoveTo(new(4, 8));
-            languages.QuickFix();
+            code.Document.MoveTo(new(0, 0));
         });
+
+        // The lightbulb, nothing asked of a line with nothing wrong, the server asked once the caret rests on the line
+        // that has, and pressed in the gutter it's Ctrl+.'s menu
+        int asksBefore = 0;
+        test.Settle(0.6f);
+        test.Run(() => asksBefore = languages.LightbulbAsks);
+        test.Check("Lightbulb: none on a line with nothing wrong, and nothing asked for it", () => code.ActionLine < 0 && code.ActionBounds is null && languages.LightbulbAsks == asksBefore);
+        test.Run(() => code.Document.MoveTo(new(4, 8)));
+        test.WaitFor(() => code.ActionLine == 4 && code.ActionBounds is not null, 20);
+        test.Check("Lightbulb: shown in the gutter on the caret's line with a fix", () => code.ActionLine == 4 && code.ActionBounds is not null);
+        test.Settle(0.6f);
+        test.Check("Lightbulb: the server asked at most once for the line", () => languages.LightbulbAsks - asksBefore <= 1);
+        test.Click(() => code.Module is { } module && code.ActionBounds is { } bulb ? module.ToWorld(bulb.Center) : Vector2.Zero);
         test.WaitFor(() => Choices()?.Items.Any(item => item.Contains("using Tools;")) == true, 20);
         test.Check("Using quick fix: native missing-namespace fix is offered first", () => Choices()?.Items.FirstOrDefault()?.Contains("using Tools;") == true);
         test.Run(() =>
