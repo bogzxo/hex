@@ -518,6 +518,7 @@ internal sealed partial class DawnScene
         ("explorer-new", "a new file or folder named on its row from the explorer's head, a folder's menu and the palette: Escape and a click away untouched make nothing, a click away with a name makes it", TestExplorerNew),
         ("explorer-inplace", "the explorer worked in place: open files marked, the shown file revealed, type to find, rename and new file or folder on their rows, drag and drop with its cues, menus folded at 200% and Properties' read-only values as text", TestExplorerInPlace),
         ("markdown", "native Markdown preview, live changes, legacy state and shared scroll speed", TestNativeMarkdown),
+        ("markdown-terminal", "a Markdown preview with code and math shown, then the terminal, its text still in its monospaced font with every column a cell wide", TestMarkdownTerminalFont),
         ("still", "the code staying still as a line is typed red and put right again, every line in sight and the code's box watched every tick", TestStill),
         ("launch", "how Hex starts, the test's folders its own, a step that throws a failure and not a crash, a folder's start bringing back only its tabs", TestLaunch),
         ("mcp", "the MCP server for agents, a client at its door with the token, a screenshot, the ui tree, a click, typing, a command, problems and waiting", TestMcp),

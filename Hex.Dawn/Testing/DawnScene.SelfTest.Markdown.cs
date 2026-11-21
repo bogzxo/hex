@@ -45,4 +45,48 @@ internal sealed partial class DawnScene
         test.Run(() => { Show(document); CloseNow(); });
         test.Check("native markdown: closing cancels render work and releases preview ownership", () => !MarkdownShown && previewPictures.Count == 0);
     }
+
+    // A Markdown preview with a block of code and math in it shown, then the terminal: its text was written in a
+    // proportional font after one, every column a different width
+    private void TestMarkdownTerminalFont(HexPointerScript test)
+    {
+        string file = Path.Combine(testFolder, "terminal-after-preview.md");
+        test.Run(() =>
+        {
+            File.WriteAllText(file, "# Tones\n\nA voice's next sample is $x_n = g \\cdot w(\\varphi_n)$.\n\n| Voice | Gain |\n|---|---:|\n| root | 0.50 |\n\n```python\n# a comment\nprint('preview')\n```\n\n- [x] voices\n- [ ] a WAV file\n");
+            Open(file);
+            SwitchView(HexView.Markdown);
+        });
+        test.Settle(0.3f);
+        test.WaitFor(() => notebookRenders.Count == 0, 20);
+        test.Check("markdown terminal: the preview is shown", () => MarkdownShown);
+        test.Run(() =>
+        {
+            terminalPanel.AnimationTime = 0.0f;
+            foreach (TerminalTab tab in terminalPanel.Tabs.ToArray())
+                terminalPanel.CloseTab(tab);
+        });
+        test.Wait();
+        test.Run(ToggleTerminalPage);
+        test.Wait();
+        test.WaitFor(() => terminalPanel.FocusedView?.Screen.Text().Trim().Length > 0, 10.0f);
+        test.Run(() => terminalPanel.FocusedView?.Send("echo iiiii-MMMMM\r"));
+        test.WaitFor(() => TerminalSays("iiiii-MMMMM", 2), 8.0f);
+        test.Run(() => Shot("markdown-terminal"));
+        test.Settle(0.2f);
+        test.Check("markdown terminal: the terminal writes in the code font, not the skin's", () =>
+            terminalPanel.FocusedView is { Font: { } font } && !ReferenceEquals(font, compositor.Skin?.Font));
+        test.Check("markdown terminal: every letter of its font is a cell wide", () =>
+            terminalPanel.FocusedView?.Font is { } font
+            && font.Measure("i", 1.0f, markup: false).X == font.Measure("M", 1.0f, markup: false).X
+            && font.Measure("iiiii", 1.0f, markup: false).X == font.Measure("MMMMM", 1.0f, markup: false).X);
+        test.Run(() =>
+        {
+            foreach (TerminalTab tab in terminalPanel.Tabs.ToArray())
+                terminalPanel.CloseTab(tab);
+            Show(documents.First(open => open.Path == file));
+            CloseNow();
+        });
+        test.Wait();
+    }
 }
