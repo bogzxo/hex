@@ -420,6 +420,46 @@ internal sealed partial class DawnScene
         });
     }
 
+    /// <summary>
+    /// Whether this Hex finds another on the LAN by mDNS: Link up as the settings would put it with link_discoverable on
+    /// (HEX_LINK_TEST_LISTEN the port, HEX_LINK_TEST_SECONDS how long to look, 60 by default), what's heard printed as it
+    /// comes, passing once another Hex than this one is heard. Run on two machines at once.
+    /// </summary>
+    private void TestLinkNearby(HexPointerScript test)
+    {
+        int listen = int.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_LISTEN), NumberStyles.None, CultureInfo.InvariantCulture, out int port) ? port : 0;
+        float seconds = float.TryParse(System.Environment.GetEnvironmentVariable(LINK_TEST_SECONDS), NumberStyles.Float, CultureInfo.InvariantCulture, out float asked) ? asked : 60.0f;
+        string myName = System.Environment.GetEnvironmentVariable(LINK_TEST_NAME) is { Length: > 0 } calledBy ? calledBy : "Hex " + System.Environment.MachineName;
+        string heardSaid = string.Empty;
+
+        test.Run(() =>
+        {
+            settings.LinkName = myName;
+            settings.LinkDiscoverable = true;
+            StopLink();
+            if (!StartLink(port: listen, discover: true))
+                return;
+            linkByTest = true;
+            Console.WriteLine($"[Hex self-test] link-nearby: up as {myName} ({LinkDevice?.Id[..8]}) on port {LinkPort}, looking for {seconds} s{(LinkNearbyOff is { } off ? ", can't look: " + off : string.Empty)}");
+        });
+        test.WaitFor(() =>
+        {
+            string said = string.Join("; ", LinkNearby.Select(heard => $"{heard.Name} ({heard.Id8}) port {heard.Port} at {string.Join(',', heard.Addresses)}"));
+            if (said != heardSaid)
+            {
+                heardSaid = said;
+                Console.WriteLine($"[Hex self-test] link-nearby: heard {(said.Length > 0 ? said : "nobody")}");
+            }
+
+            return LinkNearby.Any(heard => LinkDevice is { } me && !me.Id.StartsWith(heard.Id8, StringComparison.OrdinalIgnoreCase));
+        }, seconds);
+        test.Check("link-nearby: another Hex is heard on the LAN", () =>
+            LinkNearby.Any(heard => LinkDevice is { } me && !me.Id.StartsWith(heard.Id8, StringComparison.OrdinalIgnoreCase)));
+        // Heard, it stays a little longer so the other machine hears this one too
+        test.WaitFor(() => false, Math.Min(15.0f, seconds));
+        test.Run(StopLink);
+    }
+
     // A file the other side wrote into this one's workspace, its SHA-256 on this disk said and put in the status once
     private static void LinkCrossIncoming(string work, string mine, ref bool seen, Action<string> mark)
     {
