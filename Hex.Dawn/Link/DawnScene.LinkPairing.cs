@@ -57,6 +57,11 @@ internal sealed partial class DawnScene
                 linkDirty = true;
             }));
         linkPairingDialog = dialog;
+        foreach (Button button in dialog.Buttons)
+        {
+            button.Style = string.Empty;
+            button.Animated = false;
+        }
         StackPanel body = dialog.Body;
         float wide = Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460);
         body.Size = new Vector2(wide, 0);

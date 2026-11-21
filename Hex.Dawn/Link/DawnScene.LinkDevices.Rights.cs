@@ -110,8 +110,13 @@ internal sealed partial class DawnScene
                         there.Add(chip);
             }
 
-            description.Text = UIRichText.Literal(Said(hostOffer is not null && preset == HexLinkPreset.Worker
-                ? "link.devices_worker_join_tip" : LinkPresetKey(preset) + "_tip"));
+            description.Text = UIRichText.Literal((preset, hostOffer, partnerName) switch
+            {
+                (HexLinkPreset.Worker, not null, _) => Said("link.devices_worker_join_tip"),
+                (HexLinkPreset.Viewer, not null, { } partner) => Said("link.devices_viewer_join_tip", ("device", partner)),
+                (HexLinkPreset.Viewer, null, { } partner) => Said("link.devices_viewer_host_tip", ("device", partner)),
+                _ => Said(LinkPresetKey(preset) + "_tip")
+            });
             custom.Visible = preset == HexLinkPreset.Custom;
             warning.Visible = (rights & HexLinkRights.Steer) != 0;
         }
