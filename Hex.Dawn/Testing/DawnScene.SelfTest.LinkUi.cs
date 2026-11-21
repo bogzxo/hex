@@ -1,4 +1,6 @@
+using System.Net;
 using System.Numerics;
+using System.Text.Json.Nodes;
 
 using Hex.Shell;
 
@@ -19,6 +21,8 @@ internal sealed partial class DawnScene
 {
     // What's typed in the box and sent to B's chat, and the environment that has B say each Steer request it hears
     private const string LINK_UI_SENT = "Hello from A over the link", LINK_TEST_UI = "HEX_LINK_TEST_UI";
+
+    private Action<string>? linkInviteCopyForTest;
 
     private const string LINK_UI_AGENT = "link_ui_fixture", LINK_UI_AGENT_NAME = "Link fixture agent";
     private const string LINK_UI_START = "Start from the Runs on picker", LINK_UI_FOLLOW = "Follow up on the same chat";
@@ -80,6 +84,7 @@ internal sealed partial class DawnScene
         bool localMcpWasRunning = false;
         HexExtension? localFixture = null;
         Task<McpToolResult>? refused = null;
+        string localWorkspace = Path.Combine(home, "workspace", LINK_PEER_FOLDER);
 
         void Shot(string name) => test.Run(() =>
         {
@@ -99,7 +104,39 @@ internal sealed partial class DawnScene
             foreach (UINotification card in toasts.Cards)
                 card.Close();
         }
-        Button? WindowButton(string label) => linkWindow is null ? null : Descendants(linkWindow).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
+        Button? WindowButton(string label)
+        {
+            UIComponent? surface = (UIComponent?)linkOnboardingDialog ?? (UIComponent?)linkThisDeviceDialog ?? linkWindow;
+            return surface is null ? null : Descendants(surface).OfType<Button>().FirstOrDefault(button => button.Label == label && button.IsShownInHierarchy);
+        }
+        void ClickWindow(string key)
+        {
+            string label = Said(key);
+            test.Run(() =>
+            {
+                if (linkOnboardingDialog is null && linkThisDeviceDialog is null && WindowButton(label) is { } button)
+                    linkDevicesScroll?.ScrollIntoView(button);
+            });
+            test.Settle(0.2f);
+            test.Click(() => Centre(WindowButton(label)));
+        }
+
+        void ClickMore(string key, bool local = false)
+        {
+            Button? More() => linkWindow is null ? null : Descendants(linkWindow).OfType<Button>().FirstOrDefault(button =>
+                button.Label == Said("link.devices_more") && (button.Tooltip == Said("link.devices_more_this")) == local);
+            test.Run(() =>
+            {
+                if (More() is { } button)
+                    linkDevicesScroll?.ScrollIntoView(button);
+            });
+            test.Settle(0.2f);
+            test.Click(() => Centre(More()));
+            string label = Said(key);
+            test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == label) == true, 3);
+            test.Click(() => MenuItem(label));
+        }
+
         ToggleButton? DialogRight(string name) => name switch { "view" => linkPairView, "steer" => linkPairSteer, "predict" => linkPairPredict, _ => linkPairEdit };
         AgentCardButton? RemoteCard(UIComponent rows) => Descendants(rows).OfType<AgentCardButton>().FirstOrDefault(card => LinkRemoteOf(card.Chat) is { } remote && remote.DeviceName == LINK_PEER_NAME && card.Chat.Shown == LINK_PEER_CHAT);
 
@@ -112,6 +149,11 @@ internal sealed partial class DawnScene
                 return;
             linkByTest = true;
             ShowFace(HexFace.Dawn);
+            Directory.CreateDirectory(localWorkspace);
+            explorer.OpenFolder(localWorkspace);
+            LinkLookAtWorkspace(force: true);
+            if (System.Environment.GetEnvironmentVariable("HEX_SELFTEST_LINK_THEME") is { Length: > 0 } theme)
+                UseEditorTheme(theme, save: false);
             ShowLinkWindow();
         });
         test.Settle(0.4f);
@@ -123,7 +165,8 @@ internal sealed partial class DawnScene
         test.Check("link-ui: A listens on IPv4 loopback without LAN discovery", () => LinkTestBoundOnlyToLoopback);
 
         // Pairing started from the window, its countdown and addresses shown, B started to dial in
-        test.Click(() => Centre(WindowButton(Said("link.pair_button"))));
+        ClickWindow("link.devices_invite");
+        ClickWindow("link.pair_button");
         test.Settle(0.3f);
         test.Check("link-ui: Pair a Device opens pairing, the window counts it down", () =>
             LinkPairingUntil is not null && linkPairingCountdown is { Text.Length: > 0 } && WindowButton(Said("link.pair_stop")) is not null);
@@ -170,18 +213,26 @@ internal sealed partial class DawnScene
 
         // The window lists B as connected, its switches as granted and what B lets this machine do
         test.Settle(0.5f);
-        test.Check("link-ui: the window lists B connected, its View and Steer switches on, Edit and Autocomplete off, and what B lets this machine do", () =>
+        test.Check("link-ui: B's card shows Connected and the exact grants in both directions", () =>
         {
             if (linkWindowDevices is null)
                 return false;
             var labels = Descendants(linkWindowDevices).OfType<Label>().Select(label => label.Text).ToList();
-            var toggles = Descendants(linkWindowDevices).OfType<ToggleButton>().ToList();
+            Badge[] badges = [.. Descendants(linkWindowDevices).OfType<Badge>()];
             return labels.Any(text => text.Contains(LINK_PEER_NAME, StringComparison.Ordinal))
-                && Descendants(linkWindowDevices).OfType<Badge>().Any(badge => badge.Text == Said("link.device_connected"))
-                && toggles.Count == 4 && toggles[0].State && toggles[1].State && !toggles[2].State && !toggles[3].State
-                && Descendants(linkWindowDevices).OfType<Badge>().Count(badge => badge.Text == Said("link.right_title_steer")) == 1;
+                && badges.Any(badge => badge.Text == Said("link.device_connected"))
+                && badges.Count(badge => badge.Text == Said("link.right_title_steer") && badge.Icon == "warning") == 2
+                && badges.Count(badge => badge.Text == Said("link.right_title_view")) == 2
+                && badges.Count(badge => badge.Text == Said("link.right_title_edit")) == 1
+                && !badges.Any(badge => badge.Text == Said("link.right_title_predict"));
         });
         Shot("link_ui_window_device.png");
+        ClickWindow("link.devices_change_rights");
+        test.Check("link-ui: Change opens the rights editor after pairing", () =>
+            chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen &&
+                Descendants(dialog).OfType<Button>().Any(button => button.Label == Said("link.devices_preset_worker"))));
+        test.Run(() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Close());
+        ClickMore("link.devices_identity_details", local: true);
 
         // This device's name: the machine's when the box is empty, typed and kept, heard by B at once, then back
         string machine = HexLinkNames.Clean(System.Environment.MachineName) ?? string.Empty;
@@ -189,17 +240,31 @@ internal sealed partial class DawnScene
             linkNameBox is { Text.Length: 0 } box && box.Placeholder == machine && settings.LinkName.Length == 0
             && linkNameSeen?.Text.Contains(machine, StringComparison.Ordinal) == true);
         test.Run(() => linkNameBox!.Text = "  A‮ renamed  ");
-        test.Click(() => Centre(WindowButton(Said("link.name_keep"))));
+        ClickWindow("link.name_keep");
         test.WaitFor(() => LinkTestPeerSaid("other is called A renamed"), 15.0f);
         test.Check("link-ui: a name kept is cleaned into link_name, and B hears it at once over the link", () =>
             settings.LinkName == "A renamed" && LinkDevice?.Name == "A renamed" && LinkTestPeerSaid("other is called A renamed"));
         Shot("link_ui_renamed_here.png");
-        test.Click(() => Centre(WindowButton(Said("link.name_reset"))));
+        ClickWindow("link.name_reset");
         // B heard the machine's name as the link came up, and again now
         bool HeardMachineAgain() => linkTestPeerSaid.Count(line => line.EndsWith($"link-peer: other is called {machine}", StringComparison.Ordinal)) >= 2;
         test.WaitFor(HeardMachineAgain, 15.0f);
         test.Check("link-ui: Use the Machine's Name empties link_name and B hears the machine's name", () =>
             settings.LinkName.Length == 0 && LinkDevice?.Name == machine && HeardMachineAgain());
+
+        ClickWindow("link.devices_done");
+
+        ClickWindow("link.sync_start");
+        test.WaitFor(() => peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly), 12);
+        ClickMore("link.devices_stop_sharing");
+        test.Check("link-ui: Stop sharing asks before stopping a running sync", () =>
+            peerId is not null && LinkSyncs.Any(sync => sync.DeviceId == peerId && sync.State is HexLinkSyncState.Idle or HexLinkSyncState.PullOnly) &&
+            chrome.Root.Children.OfType<UIDialog>().Any(dialog => dialog.IsOpen && dialog.Buttons.Any(button => button.Danger && button.Label == Said("link.devices_stop_sharing"))));
+        test.Click(() => Centre(chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Buttons.FirstOrDefault(button =>
+            button.Label == Said("link.devices_stop_sharing"))));
+        test.WaitFor(() => LinkSyncs.All(sync => sync.DeviceId != peerId || sync.State == HexLinkSyncState.Off), 5);
+        test.Check("link-ui: confirming Stop sharing stops the sync and keeps the peer connected", () =>
+            LinkSyncs.All(sync => sync.DeviceId != peerId || sync.State == HexLinkSyncState.Off) && LinkPeers.Count == 1);
 
         // B called something of this machine's own, which wins everywhere it's shown, and undone
         const string LOCAL = "Bee box";
@@ -207,8 +272,7 @@ internal sealed partial class DawnScene
         test.Settle(0.4f);
         test.Check("link-ui: B named here shows by that name in the window, saying what it calls itself, with Use Its Own Name", () =>
             linkWindowDevices is { } devices && Descendants(devices).OfType<Label>().Any(label => label.Text.Contains(LOCAL, StringComparison.Ordinal))
-            && Descendants(devices).OfType<Label>().Any(label => label.Text.Contains(Said("link.device_calls_itself", ("name", LINK_PEER_NAME)), StringComparison.Ordinal))
-            && WindowButton(Said("link.device_own_name")) is not null);
+            && Descendants(devices).OfType<Label>().Any(label => label.Text.Contains(Said("link.device_calls_itself", ("name", LINK_PEER_NAME)), StringComparison.Ordinal)));
         test.Run(() =>
         {
             linkWindow?.Close();
@@ -224,7 +288,7 @@ internal sealed partial class DawnScene
         test.Settle(0.6f);
         test.Run(ShowLinkWindow);
         test.Settle(0.4f);
-        test.Click(() => Centre(WindowButton(Said("link.device_own_name"))));
+        ClickMore("link.device_own_name");
         test.Settle(0.3f);
         test.Check("link-ui: Use Its Own Name gives B its own name back", () => LinkKnown.FirstOrDefault(known => known.Device.Id == peerId) is { Named: null, Shown: LINK_PEER_NAME });
 
@@ -251,6 +315,16 @@ internal sealed partial class DawnScene
         test.Check("link-ui: the banner over the box says the chat runs on B", () =>
             linkBanner is { Visible: true } banner && Descendants(banner).OfType<Label>().Any(label => label.Tooltip.Contains(Said("link.chat_runs_on", ("device", LINK_PEER_NAME)), StringComparison.Ordinal)));
         Shot("link_ui_remote_chat.png");
+        test.Check("link-ui: a running mirror may show typing before its first entry arrives", () =>
+        {
+            var empty = new HexAgentChat(-1, LINK_UI_AGENT);
+            empty.MirrorHead("New remote chat", running: true, 0);
+            ShowTyping(empty, still: true);
+            bool shown = empty.Entries.Count == 0 && agentsTyping is not null;
+            empty.MirrorHead("New remote chat", running: false, 0);
+            ShowTyping(empty, still: true);
+            return shown;
+        });
 
         // Typed in the box and sent, it reaches B
         test.Run(() =>
@@ -303,6 +377,15 @@ internal sealed partial class DawnScene
             button.Tooltip == Said("link.runs_on_agent_tip", ("device", LINK_PEER_NAME)))));
         test.WaitFor(() => OpenMenu()?.Showing?.Items.Any(item => item.Label == LINK_UI_AGENT_NAME) == true, 3.0f);
         test.Click(() => MenuItem(LINK_UI_AGENT_NAME));
+        test.Check("link-ui: the agent-system picker selects B's fixture without covering Send", () =>
+        {
+            if (peerId is not null && linkRemotePicked.GetValueOrDefault(peerId).Agent == LINK_UI_AGENT)
+                return true;
+            Button? picker = Descendants(agentsOptions).OfType<Button>().FirstOrDefault(button =>
+                button.Tooltip == Said("link.runs_on_agent_tip", ("device", LINK_PEER_NAME)));
+            Console.WriteLine($"[Hex self-test] link-ui: fixture selection failed at composer width {agentsCompose.Bounds.Width:F0}, agent picker {picker?.Bounds.Center}, send {agentsSend.Bounds.Center}, menu items {OpenMenu()?.Showing?.Items.Count}");
+            return false;
+        });
         test.Run(() =>
         {
             if (peerId is not null && LinkRunsOnPeer()?.Device.Id == peerId && linkRemotePicked.GetValueOrDefault(peerId).Agent == LINK_UI_AGENT)
@@ -381,7 +464,7 @@ internal sealed partial class DawnScene
         // Forgotten from the window, asked once, B's section goes
         test.Run(ShowLinkWindow);
         test.Settle(0.4f);
-        test.Click(() => Centre(WindowButton(Said("link.device_forget"))));
+        ClickMore("link.device_forget");
         test.Settle(0.3f);
         test.Click(() => Centre(chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen)?.Buttons.FirstOrDefault(button => button.Label == Said("link.forget_go"))));
         test.WaitFor(() => LinkPeers.Count == 0, 10.0f);
@@ -398,6 +481,7 @@ internal sealed partial class DawnScene
         Shot("link_ui_forgotten.png");
         test.WaitFor(() => linkTestPeer is null or { HasExited: true }, 60.0f);
         test.Check("link-ui: B left by itself once forgotten", () => linkTestPeer is { HasExited: true, ExitCode: 0 });
+        TestLinkInviteUi(test, home, Centre, WindowButton, ClickWindow, key => ClickMore(key), Shot);
         test.Run(() =>
         {
             foreach (HexAgentChat chat in agentChats.Where(chat => chat.Agent == LINK_UI_AGENT && chat.Id > localChatsMade).ToArray())
@@ -419,6 +503,160 @@ internal sealed partial class DawnScene
             }
             agentPicked = previousAgent;
             ShowFace(HexFace.Dawn);
+        });
+    }
+
+    private void TestLinkInviteUi(HexPointerScript test, string home, Func<UIComponent?, Vector2> centre, Func<string, Button?> windowButton,
+        Action<string> clickWindow, Action<string> clickMore, Action<string> shot)
+    {
+        HexLinkIdentity? identity = null;
+        HexLinkTransport? other = null;
+        HexLinkInvite? token = null;
+        var sessions = new System.Collections.Concurrent.ConcurrentBag<HexLinkSession>();
+        const string Device = "Invite fixture";
+        string? clipboard = null;
+        UIDialog? OpenDialog() => chrome.Root.Children.OfType<UIDialog>().LastOrDefault(dialog => dialog.IsOpen);
+        bool HasBadge(string key) => linkWindowDevices is { } rows &&
+            Descendants(rows).OfType<Badge>().Any(badge => badge.Text == Said(key));
+
+        void ShowConnectionState(string badge, LinkDeviceConnection state, string file)
+        {
+            test.Run(() =>
+            {
+                if (identity is not null)
+                    linkManualDials[identity.Id] = state;
+                linkWindowStale = true;
+            });
+            test.Settle(0.2f);
+            test.Check($"link-ui: device card shows {Said(badge)}", () => HasBadge(badge));
+            shot(file);
+        }
+
+        test.Run(() =>
+        {
+            ShowFace(HexFace.Dawn);
+            ShowLinkWindow();
+            linkInviteCopyForTest = copied => clipboard = copied;
+        });
+        clickWindow("link.devices_invite");
+        clickWindow("link.devices_preset_worker");
+        test.Check("link-ui: worker preset grants View, Steer and Edit, with Autocomplete off", () =>
+            linkInvitePreset == LinkRightsPreset.Worker && linkInviteRights == (HexLinkRights.View | HexLinkRights.Steer | HexLinkRights.Edit));
+        shot("link_ui_invite_preset.png");
+        test.WaitFor(() => LinkActiveInvite is not null && linkPairingCountdown?.Text.Length > 0, 4);
+        test.Check("link-ui: Invite creates one scoped token and countdown", () => LinkActiveInvite is { } open &&
+            open.Pin == LinkDevice?.Id && open.Port == LinkPort && linkPairingCountdown?.Text.Length > 0);
+        clickWindow("link.devices_copy_invite");
+        test.Check("link-ui: Copy invite puts the token and its loopback endpoint on the clipboard", () =>
+            HexLinkInvite.TryParse(clipboard ?? string.Empty, out HexLinkInvite? copied) && copied is not null &&
+            copied.Port == LinkPort && copied.Addresses.SequenceEqual([IPAddress.Loopback]));
+        shot("link_ui_invite_open.png");
+        clickWindow("link.pair_stop");
+        test.Check("link-ui: stop pairing cancels the invitation", () => LinkActiveInvite is null && LinkPairingUntil is null);
+        clickWindow("link.devices_done");
+
+        test.Run(() =>
+        {
+            identity = HexLinkIdentity.LoadOrCreate(Path.Combine(home, "invite-fixture"), Device, fileOnly: true);
+            other = new HexLinkTransport(identity, new HexLinkTrust(Path.Combine(home, "invite-fixture")));
+            other.Accepted = connection => sessions.Add(new HexLinkSession(connection)
+            {
+                Requested = (method, _, _) => Task.FromResult<JsonNode?>(method == "link/hello" ? new JsonObject
+                {
+                    ["protocol"] = HexLinkHost.PROTOCOL,
+                    ["device"] = HexLinkData.DeviceJson(identity.Device),
+                    ["granted"] = HexLinkData.Words(HexLinkRights.View | HexLinkRights.Steer),
+                    ["workspace"] = new JsonObject { ["name"] = "Fixture workspace" }
+                } : new JsonObject())
+            }.Start());
+            other.Start(0, loopbackOnly: true);
+            other.OpenInvite([IPAddress.Loopback], TimeSpan.FromMinutes(1), _ => Task.FromResult<HexLinkRights?>(HexLinkRights.View | HexLinkRights.Steer));
+            token = other.ActiveInvite;
+        });
+        clickWindow("link.devices_join");
+        void TypeJoin(string text)
+        {
+            if (linkAddressBox is not null)
+                linkAddressBox.Text = text;
+            DrawLinkJoinStatus();
+        }
+
+        test.Run(() => TypeJoin("hex-link:v1.bad"));
+        clickWindow("link.devices_join_submit");
+        test.Check("link-ui: a malformed invite gives recovery instructions in the join card", () =>
+            linkJoinStatus?.Text.Contains(Said("link.devices_bad_invite"), StringComparison.Ordinal) == true);
+        test.Run(() => TypeJoin(string.Empty));
+        shot("link_ui_join.png");
+        test.Run(() => TypeJoin(token?.Encode() ?? string.Empty));
+        clickWindow("link.devices_join_submit");
+        test.WaitFor(() => linkPairingDialog is { IsOpen: true }, 12);
+        test.Check("link-ui: join by invite verifies identity and opens grants with no comparison code", () =>
+            LinkPairingPending is { Invited: true, Other.Name: Device, Code.Length: 0 } &&
+            linkPairingDialog is { IsOpen: true } dialog && Descendants(dialog).OfType<Label>().Any(label => label.Text.Contains(Said("link.devices_invite_verified"), StringComparison.Ordinal)));
+        test.Click(() => centre(linkPairingDialog is { } dialog ? Descendants(dialog).OfType<Button>().FirstOrDefault(button =>
+            button.Label == Said("link.devices_preset_viewer")) : null));
+        test.Check("link-ui: viewer preset grants View alone", () => LinkPairTicked == HexLinkRights.View);
+        shot("link_ui_invite_verified.png");
+        test.Click(() => centre(linkPairingDialog?.Buttons[0]));
+        test.WaitFor(() => LinkPeers.Any(peer => peer.Device.Name == Device), 12);
+        test.Check("link-ui: a verified invite becomes a connected device and consumes the invitation", () =>
+            LinkPeers.Any(peer => peer.Device.Name == Device) && other?.ActiveInvite is null && HasBadge("link.device_connected"));
+        test.WaitFor(() => linkLatencies.Values.Any(sample => sample.Milliseconds is not null), 5);
+        shot("link_ui_invite_connected.png");
+        test.Check("link-ui: workspace provisioning actions explain their availability", () =>
+            (windowButton(Said("link.devices_share")) ?? windowButton(Said("link.devices_get"))) is { } provision &&
+            (provision.Enabled || provision.Tooltip.Length > 0));
+        clickWindow("link.devices_open_files");
+        test.WaitFor(() => OpenDialog() is not null, 5);
+        test.Check("link-ui: Open its files opens a browser for the connected device", () => OpenDialog() is { IsOpen: true });
+        test.Run(() => OpenDialog()?.Close());
+        clickWindow("link.devices_start_agent");
+        test.WaitFor(() => linkWindow is null, 4);
+        test.Check("link-ui: Start agent there opens a new draft with Runs on set", () => agentChat is null && LinkRunsOnPeer()?.Device.Name == Device);
+        test.Run(ShowLinkWindow);
+        clickMore("link.device_disconnect");
+        test.WaitFor(() => LinkPeers.Count == 0, 5);
+        test.Check("link-ui: Disconnect holds the device offline without forgetting it", () =>
+            identity is not null && LinkHeldOff(identity.Id) && LinkKnown.Any(known => known.Device.Id == identity.Id) && HasBadge("link.device_held_off"));
+        shot("link_ui_disconnected.png");
+        ShowConnectionState("link.devices_connecting", new LinkDeviceConnection(true, null, null), "link_ui_connecting.png");
+        ShowConnectionState("link.devices_version", new LinkDeviceConnection(false, null, "version"), "link_ui_update_needed.png");
+        ShowConnectionState("link.devices_refused", new LinkDeviceConnection(false, null, "refused"), "link_ui_refused.png");
+        test.Run(() =>
+        {
+            if (identity is not null)
+                linkManualDials[identity.Id] = new LinkDeviceConnection(false, DateTime.UtcNow.AddSeconds(25), "unreachable");
+            linkWindowStale = true;
+        });
+        test.Settle(0.2f);
+        test.Check("link-ui: retrying shows a countdown and actionable firewall guidance", () =>
+            linkOfflineRows.Any(row => row.State.Text.StartsWith(Said("link.devices_retrying", ("seconds", "")).TrimEnd(' ', 's'), StringComparison.Ordinal)
+                && row.Details.Text.Contains("firewall", StringComparison.OrdinalIgnoreCase)));
+        shot("link_ui_retrying.png");
+        test.Run(() =>
+        {
+            if (identity is not null)
+                linkManualDials.Remove(identity.Id);
+            linkWindowStale = true;
+        });
+        clickWindow("link.device_connect");
+        test.WaitFor(() => LinkPeers.Count == 1, 8);
+        test.Check("link-ui: Connect redials the saved route", () => LinkPeers.Count == 1 && HasBadge("link.device_connected"));
+        clickMore("link.device_forget");
+        test.WaitFor(() => OpenDialog() is not null, 5);
+        test.Check("link-ui: Forget asks for confirmation before removing the pin", () => LinkKnown.Count == 1 && OpenDialog() is { IsOpen: true });
+        test.Click(() => centre(OpenDialog()?.Buttons.FirstOrDefault(button => button.Label == Said("link.forget_go"))));
+        test.WaitFor(() => LinkKnown.Count == 0, 6);
+        test.Check("link-ui: confirming Forget removes the invited device and its live link", () => LinkKnown.Count == 0 && LinkPeers.Count == 0);
+        test.Run(() =>
+        {
+            LinkPickRunsOn(null);
+            linkWindow?.Close();
+            foreach (HexLinkSession session in sessions)
+                session.Dispose();
+            other?.Dispose();
+            identity?.Dispose();
+            linkInviteCopyForTest = null;
         });
     }
 }

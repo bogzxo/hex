@@ -50,6 +50,7 @@ internal sealed partial class DawnScene
 
     /// <summary>When the pairing window closes, null when it's closed.</summary>
     internal DateTime? LinkPairingUntil => linkTransport?.PairingUntil;
+    internal HexLinkInvite? LinkActiveInvite => linkTransport?.ActiveInvite;
 
     /// <summary>The TLS version a device's link was made with (Tls13, Tls12), null when it isn't linked.</summary>
     internal System.Security.Authentication.SslProtocols? LinkTlsOf(string id) =>
@@ -71,6 +72,18 @@ internal sealed partial class DawnScene
         return true;
     }
 
+    internal bool LinkOpenInvite()
+    {
+        if (linkTransport is not { Listening: true } transport || !transport.OpenInvite(InviteAddresses(), LINK_PAIRING_WINDOW, pairing =>
+        {
+            LinkInviteOptions chosen = Volatile.Read(ref linkInviteOptions);
+            return LinkAskPerson(pairing, host: true, chosen.Preset, chosen.Rights, linkAutoShareAvailable && chosen.Share);
+        }))
+            return false;
+        linkDirty = true;
+        return true;
+    }
+
     /// <summary>Closes the pairing window, a pairing already under way going on to its end.</summary>
     internal void LinkClosePairing()
     {
@@ -83,14 +96,14 @@ internal sealed partial class DawnScene
     /// it as the person there is, unless <paramref name="ask"/> answers instead (a self test, never the program). Once
     /// paired the connection carries on as a link. How it ended, never throws but for Link being off.
     /// </summary>
-    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null)
+    internal async Task<HexLinkPairResult> LinkPair(string host, int port, Func<HexLinkPairing, Task<HexLinkRights?>>? ask = null, HexLinkInvite? invite = null)
     {
         HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
         CancellationToken stop = linkCancel?.Token ?? CancellationToken.None;
         HexLinkPairResult result;
         try
         {
-            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop);
+            result = await transport.Pair(host, port, ask ?? (pairing => LinkAskPerson(pairing, host: false)), stop, invite);
         }
         catch (OperationCanceledException)
         {
@@ -119,6 +132,7 @@ internal sealed partial class DawnScene
     /// <summary>A device's link cut by the person, not dialled again until they connect it. False when it wasn't linked.</summary>
     internal bool LinkDisconnect(string id)
     {
+        linkManualDials.Remove(id);
         linkHeldOff.Add(id);
         linkDirty = true;
         return link?.Remove(id, "it was disconnected here") == true;
@@ -134,6 +148,7 @@ internal sealed partial class DawnScene
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
         linkHeldOff.Remove(id);
+        linkManualDials.Remove(id);
         // The transport writes it in the audit log as it cuts the link
         if (forgot)
             Say(Said("link.forgotten", ("device", name)));
@@ -184,9 +199,15 @@ internal sealed partial class DawnScene
     /// A pairing to ask the person about, from the transport's thread: shown on the editor's, answered when they pick
     /// (or the pairing ends without them, which its Ended token says, and the dialog closes).
     /// </summary>
-    private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host)
+    private Task<HexLinkRights?> LinkAskPerson(HexLinkPairing pairing, bool host, LinkRightsPreset? preset = null, HexLinkRights initial = HexLinkRights.None, bool share = false)
     {
-        var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended);
+        var ask = new LinkPairingAsk(pairing.Other, pairing.Code, pairing.Address, host, pairing.Ended)
+        {
+            Invited = pairing.Invited,
+            Preset = preset ?? (pairing.Invited ? LinkRightsPreset.Collaborator : null),
+            InitialRights = preset is null && pairing.Invited ? LinkPresetRights(LinkRightsPreset.Collaborator) : initial,
+            ShareOnJoin = share
+        };
         pairing.Ended.Register(() =>
         {
             ask.Decide(null);
@@ -202,6 +223,13 @@ internal sealed partial class DawnScene
     private void LinkPairEnded(HexLinkPairResult result)
     {
         linkDirty = true;
+        if (result.Device?.Id is { } id && linkShareAfterPairing == id)
+        {
+            linkShareAfterPairing = null;
+            if (result.Paired)
+                linkShareAfterConnected = (id, System.Environment.TickCount64 + 30000);
+        }
+
         string device = result.Device?.Name ?? Said("link.another_device");
         if (result.Paired)
         {
@@ -238,6 +266,11 @@ internal sealed class LinkPairingAsk(HexLinkDevice other, string code, string ad
     public string Address { get; } = address;
 
     public bool Host { get; } = host;
+
+    public bool Invited { get; init; }
+    public LinkRightsPreset? Preset { get; init; }
+    public HexLinkRights InitialRights { get; init; }
+    public bool ShareOnJoin { get; init; }
 
     public CancellationToken Ended { get; } = ended;
 

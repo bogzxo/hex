@@ -6,13 +6,7 @@ using Horizon.UI.Components;
 
 namespace Hex.Dawn;
 
-// The pairing dialog (docs/hex-link-plan.md, 3.3 and 6), shown on both machines as two meet. It says who the other is
-// (its name, which is only what it says, and its fingerprint, which is proved), the six digits both screens show in
-// large type grouped three and three, and asks the person to check they're the same. Under that what this machine grants
-// the other, a switch for each right with what it means, nothing ticked beforehand: View is what Steer and Edit stand
-// on, Autocomplete stands alone (it sees no files), and Steer is said in the warning colour to be as much as sitting at
-// this machine. Pair stays greyed until View or Autocomplete is ticked; Cancel declines. When the pairing ends without this side's answer (the other declined, two minutes
-// passed, the connection broke) the dialog says why and closes itself a moment later.
+// Pairing confirmation on each device. Address pairing shows the comparison code. Invites show verified identity.
 internal sealed partial class DawnScene
 {
     // How large the code is written, and how long a pairing that ended is said in the dialog before it closes
@@ -43,6 +37,7 @@ internal sealed partial class DawnScene
         linkPairingPending?.Decide(null);
         CloseLinkPairingDialog();
         linkPairingPending = ask;
+        linkReopenJoin = !ask.Host && linkJoining && linkDevicePage == LinkDevicePage.Join;
         linkDirty = true;
         linkPairCloseAt = 0;
 
@@ -51,6 +46,8 @@ internal sealed partial class DawnScene
             new DialogChoice(Said("link.pair_go"), () =>
             {
                 HexLinkRights granted = LinkPairTicked;
+                if (ask.ShareOnJoin && LinkRightsAnything(granted))
+                    linkShareAfterPairing = ask.Other.Id;
                 ask.Decide(LinkRightsAnything(granted) ? granted : null);
                 linkDirty = true;
             }),
@@ -61,60 +58,36 @@ internal sealed partial class DawnScene
             }));
         linkPairingDialog = dialog;
         StackPanel body = dialog.Body;
-        const float WIDE = 460.0f;
+        float wide = Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460);
+        body.Size = new Vector2(wide, 0);
+        body.Spacing = 7;
 
         // Who it is, and where
         body.Add(new Label
         {
             Text = Said(ask.Host ? "link.pair_who_host" : "link.pair_who_joiner", ("device", $"[b]{UIRichText.Literal(device)}[/b]"), ("address", UIRichText.Literal(ask.Address))),
-            Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft
+            Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left
         });
         body.Add(new Label { Text = Said("link.pair_fingerprint", ("fingerprint", ask.Other.Fingerprint)), TextScale = LINK_SMALL, Dim = true, Align = Origin.Left, Anchor = Origin.Left, Pivot = Origin.Left });
 
-        // The code, large, in the accent, grouped as it's read out
-        var codeRow = body.Add(new Panel { Size = new Vector2(WIDE, 76), Color = (Skin?.Palette.Field ?? new Vector4(0, 0, 0, 0.3f)) with { W = 0.5f }, Radius = 10, Outline = Skin?.BorderColor ?? Vector4.Zero });
-        codeRow.Add(new Label { Text = $"[b]{LinkCodeGrouped(ask.Code)}[/b]", TextScale = LINK_CODE_SCALE, Anchor = Origin.Center, Pivot = Origin.Center, Tooltip = Said("link.pair_code_tip") });
-        body.Add(new Label { Text = Said("link.pair_check"), Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft });
-
-        // What this machine grants, nothing ticked
-        body.Add(new Label { Text = $"[b]{UIRichText.Literal(Said("link.pair_grant", ("device", device)))}[/b]", Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft });
-        Vector4 warning = LinkWarning;
-        ToggleButton Right(string name, bool risky)
+        if (ask.Invited)
+            body.Add(LinkLine(Said("link.devices_invite_verified")));
+        else
         {
-            string label = Said("link.right_title_" + name);
-            // A switch's caption is plain text, Steer's warning colour is in the line under it
-            var toggle = body.Add(new ToggleButton(label, false) { Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.right_means_" + name) });
-            string means = Said("link.right_means_" + name);
-            body.Add(new Label
-            {
-                Text = risky ? $"[color:{HexColour(warning)}]$(warning) {UIRichText.Literal(means)}[/color]" : UIRichText.Literal(means),
-                TextScale = LINK_SMALL, Dim = !risky, Wrap = true, Size = new Vector2(WIDE - 40, 0), Align = Origin.TopLeft, Padding = new UIEdges(40, 0, 0, 0)
-            });
-            return toggle;
+            var codeRow = body.Add(new Panel { Size = new Vector2(wide, 64), Anchor = Origin.Left, Color = (Skin?.Palette.Field ?? new Vector4(0, 0, 0, 0.3f)) with { W = 0.5f }, Radius = 8, Outline = Skin?.BorderColor ?? Vector4.Zero });
+            codeRow.Add(new Label { Text = $"[b]{LinkCodeGrouped(ask.Code)}[/b]", TextScale = LINK_CODE_SCALE, Anchor = Origin.Center, Pivot = Origin.Center, Tooltip = Said("link.pair_code_tip") });
+            body.Add(new Label { Text = Said("link.pair_check"), Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
         }
 
-        linkPairView = Right("view", false);
-        linkPairSteer = Right("steer", true);
-        linkPairEdit = Right("edit", false);
-        linkPairPredict = Right("predict", false);
-        linkPairEnded = body.Add(new Label { Text = string.Empty, Wrap = true, Size = new Vector2(WIDE, 0), Align = Origin.TopLeft, Visible = false });
-
-        // Steer and Edit stand on View: ticking one ticks View, taking View away takes them, and Pair waits for View
-        void Flipped(HexLinkRights right, ToggleButton toggle)
-        {
-            HexLinkRights now = LinkRightsToggled(LinkPairTicked & ~right | (toggle.State ? HexLinkRights.None : right), right, toggle.State);
-            linkPairView!.State = (now & HexLinkRights.View) != 0;
-            linkPairSteer!.State = (now & HexLinkRights.Steer) != 0;
-            linkPairEdit!.State = (now & HexLinkRights.Edit) != 0;
-            linkPairPredict!.State = (now & HexLinkRights.Predict) != 0;
-            dialog.Buttons[0].Enabled = LinkRightsAnything(now) && !ask.IsDecided;
-        }
-
-        linkPairView.OnPressed = () => Flipped(HexLinkRights.View, linkPairView);
-        linkPairSteer.OnPressed = () => Flipped(HexLinkRights.Steer, linkPairSteer);
-        linkPairEdit.OnPressed = () => Flipped(HexLinkRights.Edit, linkPairEdit);
-        linkPairPredict.OnPressed = () => Flipped(HexLinkRights.Predict, linkPairPredict);
-        dialog.Buttons[0].Enabled = false;
+        body.Add(new Label { Text = $"[b]{UIRichText.Literal(Said("link.pair_grant", ("device", device)))}[/b]", Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left });
+        ToggleButton[] toggles = LinkGrantControls(body, ask.Preset ?? LinkRightsPreset.Custom, ask.InitialRights,
+            (_, rights) => dialog.Buttons[0].Enabled = LinkRightsAnything(rights) && !ask.IsDecided);
+        linkPairView = toggles[0];
+        linkPairSteer = toggles[1];
+        linkPairEdit = toggles[2];
+        linkPairPredict = toggles[3];
+        linkPairEnded = body.Add(new Label { Text = string.Empty, Wrap = true, Size = new Vector2(wide, 0), Align = Origin.TopLeft, Anchor = Origin.Left, Visible = false });
+        dialog.Buttons[0].Enabled = LinkRightsAnything(ask.InitialRights);
         dialog.Closed = () =>
         {
             // Closed however it was (Escape is Cancel), never left waiting. On the next tick: a button's Picked runs after
@@ -151,7 +124,7 @@ internal sealed partial class DawnScene
 
     /// <summary>Why a pairing ended in words, for the dialog and the notice.</summary>
     private static string LinkPairReasonSaid(string? reason) =>
-        Said("link.pair_reason_" + (reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" ? reason.Replace('-', '_') : "failed"));
+        Said("link.pair_reason_" + (reason is "declined-there" or "mismatch" or "closed" or "busy" or "timeout" or "unknown" or "unreachable" or "invite_expired" or "invite_invalid" or "version" or "pin" ? reason.Replace('-', '_') : "failed"));
 
     private void CloseLinkPairingDialog()
     {

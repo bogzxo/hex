@@ -23,8 +23,8 @@ internal sealed partial class DawnScene
         if (LinkPairingUntil is not null)
             commands.Add((Said("link.command_pair_stop"), LinkClosePairing));
         if (HexHost.Listens)
-            commands.Add((Said("link.command_pair"), LinkPairCommand));
-        commands.Add((Said("link.command_connect"), LinkConnectCommand));
+            commands.Add((Said("link.command_pair"), () => ShowLinkDevicePage(LinkDevicePage.Invite)));
+        commands.Add((Said("link.command_connect"), () => ShowLinkDevicePage(LinkDevicePage.Join)));
         if (LinkKnown.Count > 0)
             commands.Add((Said("link.command_forget"), LinkForgetCommand));
         // Sharing the code with the devices linked now: sync, remote files, presence, git (DawnScene.LinkSync.Share)
@@ -69,7 +69,7 @@ internal sealed partial class DawnScene
                     continue;
                 foreach (var unicast in adapter.GetIPProperties().UnicastAddresses)
                 {
-                    if (unicast.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(unicast.Address))
+                    if (HexLinkAddresses.IsPrivate(unicast.Address) && !unicast.Address.IsIPv6LinkLocal && !System.Net.IPAddress.IsLoopback(unicast.Address))
                         found.Add(unicast.Address);
                 }
             }
@@ -79,41 +79,6 @@ internal sealed partial class DawnScene
         }
 
         return found;
-    }
-
-    // An address asked for: a device this machine knows is linked to, one it doesn't is paired with
-    private void LinkConnectCommand()
-    {
-        AskText(Said("link.connect_title"), Said("link.connect_text"), string.Empty, Said("link.connect_button"), LinkConnectAddress);
-    }
-
-    /// <summary>An address as typed (the command's box or the Link window's): a device this machine knows linked to, one it doesn't paired with.</summary>
-    private void LinkConnectAddress(string typed)
-    {
-        if (!TryLinkAddress(typed, HexLinkTransport.DEFAULT_PORT, out string host, out int port))
-        {
-            Say(Said("link.connect_bad", ("address", typed)), error: true);
-            return;
-        }
-
-        HexLinkKnown? known = LinkKnown.FirstOrDefault(each => each.Address == host && (each.Port == port || each.Port == 0));
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await LinkConnect(host, port, known?.Device.Id);
-            }
-            catch (HexLinkRefused refused) when (refused.Reason is "unknown" or "pin")
-            {
-                // Not a device this one knows (or not the one that was there before), so a pairing, the person asked on both sides
-                PostLink(() => Say(Said("link.connect_pairing", ("address", $"{host}:{port}"))));
-                await LinkPair(host, port);
-            }
-            catch (Exception e)
-            {
-                PostLink(() => Say(Said("link.connect_failed", ("address", $"{host}:{port}"), ("why", e.Message)), error: true));
-            }
-        });
     }
 
     /// <summary>
@@ -158,7 +123,7 @@ internal sealed partial class DawnScene
     {
         List<(string Text, Action Picked)> devices = [.. LinkKnown.Select(known => (
             $"{known.Shown}  ({known.Device.Fingerprint})",
-            (Action)(() => LinkForget(known.Device.Id))))];
+            (Action)(() => AskForgetDevice(known))))];
         ChooseFrom(Said("link.forget_title"), Said("link.forget_text"), devices);
     }
 }

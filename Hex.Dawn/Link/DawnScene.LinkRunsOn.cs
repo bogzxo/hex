@@ -46,6 +46,20 @@ internal sealed partial class DawnScene
         return devices;
     }
 
+    private void LinkStartAgentOnDevice(string id)
+    {
+        if (LinkPeerOf(id) is not { } peer || !HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer))
+        {
+            Say(Said("link.devices_needs_steer"), error: true);
+            return;
+        }
+
+        linkWindow?.Close();
+        ShowAgentsPanel();
+        NewAgentChat();
+        LinkPickRunsOn(id);
+    }
+
     /// <summary>The device a new chat runs on, null for this one (or when the one picked can't be steered now).</summary>
     internal HexLinkPeer? LinkRunsOnPeer()
     {
@@ -75,7 +89,7 @@ internal sealed partial class DawnScene
     {
         if (link is null || LinkPeers.Count == 0)
             return 0;
-        long key = 29 + (LinkRemoteOf(agentChat) is not null ? 1 : 0);
+        long key = 29 + (LinkRemoteOf(agentChat) is not null ? 1 : 0) + (LinkPickersCompact ? 3 : 0);
         foreach (HexLinkPeer peer in LinkRunsOnDevices())
             key = key * 31 + string.GetHashCode(peer.Device.Id, StringComparison.Ordinal) + string.GetHashCode(peer.Device.Name, StringComparison.Ordinal);
         if (LinkRunsOnPeer() is { } there)
@@ -94,6 +108,8 @@ internal sealed partial class DawnScene
     /// it), Runs on while a new chat is written and a device offers Steer, and with a device picked that device's agent
     /// system and model in place of this machine's (true). False leaves the rest of the row to the usual pickers.
     /// </summary>
+    private bool LinkPickersCompact => agentsCompose.Bounds.Width < 450;
+
     private bool DrawLinkRunsOn()
     {
         if (LinkRemoteOf(agentChat) is not null)
@@ -107,9 +123,10 @@ internal sealed partial class DawnScene
         HexLinkPeer? there = LinkRunsOnPeer();
         string current = there is null ? Said("link.runs_on_here") : LinkNameOf(there.Device.Id, there.Device.Name);
         float wide = MathF.Ceiling((Skin?.Font.Measure(current, 0.135f).X ?? current.Length * 7.0f) + 44.0f);
-        Button picker = agentsOptions.Add(Picker(agentsCompose.Bounds.Width >= 300 ? current : string.Empty, "vm", there is not null,
+        bool compact = LinkPickersCompact;
+        Button picker = agentsOptions.Add(Picker(compact ? string.Empty : current, "vm", there is not null,
             Said("link.runs_on_tip", ("device", current)), () => { }));
-        picker.Size = new System.Numerics.Vector2(MathF.Min(wide, 160), 32);
+        picker.Size = new System.Numerics.Vector2(compact ? 32 : MathF.Min(wide, 160), 32);
         linkRunsOnPicker = picker;
         picker.OnPressed = () => ContextMenu.Show(chrome, picker.Bounds.PointAt(Origin.TopLeft), LinkRunsOnMenu());
         if (there is null)
@@ -121,8 +138,8 @@ internal sealed partial class DawnScene
         var (agent, model) = linkRemotePicked.GetValueOrDefault(id);
         LinkRemoteSystem? system = systems.FirstOrDefault(each => each.Id == agent) ?? systems.FirstOrDefault(each => !each.Missing);
         string agentShown = system?.Name ?? agent ?? Said("link.runs_on_agent_default");
-        Button agentPicker = agentsOptions.Add(Picker(agentShown, "robot", false, Said("link.runs_on_agent_tip", ("device", current)), () => { }));
-        agentPicker.Size = new System.Numerics.Vector2(MathF.Min(MathF.Ceiling((Skin?.Font.Measure(agentShown, 0.135f).X ?? 60) + 44.0f), 150), 32);
+        Button agentPicker = agentsOptions.Add(Picker(compact ? string.Empty : agentShown, "robot", false, Said("link.runs_on_agent_tip", ("device", current)), () => { }));
+        agentPicker.Size = new System.Numerics.Vector2(compact ? 32 : MathF.Min(MathF.Ceiling((Skin?.Font.Measure(agentShown, 0.135f).X ?? 60) + 44.0f), 150), 32);
         agentPicker.OnPressed = () =>
         {
             var menu = new Menu("remote agent");
@@ -139,8 +156,8 @@ internal sealed partial class DawnScene
         };
 
         string modelShown = model ?? Said("agents_panel.model_default");
-        Button modelPicker = agentsOptions.Add(Picker(modelShown, "sparkle", false, Said("agents_panel.model_tip", ("model", modelShown)), () => { }));
-        modelPicker.Size = new System.Numerics.Vector2(MathF.Min(MathF.Ceiling((Skin?.Font.Measure(modelShown, 0.135f).X ?? 60) + 44.0f), 160), 32);
+        Button modelPicker = agentsOptions.Add(Picker(compact ? string.Empty : modelShown, "sparkle", false, Said("agents_panel.model_tip", ("model", modelShown)), () => { }));
+        modelPicker.Size = new System.Numerics.Vector2(compact ? 32 : MathF.Min(MathF.Ceiling((Skin?.Font.Measure(modelShown, 0.135f).X ?? 60) + 44.0f), 160), 32);
         modelPicker.OnPressed = () =>
         {
             var menu = new Menu("remote model");
@@ -186,7 +203,7 @@ internal sealed partial class DawnScene
     // What a device offers asked of it once a session, its answer read when it comes
     private void LinkAskSystems(string deviceId)
     {
-        if (linkRemoteSystems.ContainsKey(deviceId) || !linkSystemsAsking.Add(deviceId) || LinkPeerOf(deviceId) is not { } peer)
+        if (linkRemoteSystems.ContainsKey(deviceId) || LinkPeerOf(deviceId) is not { } peer || !linkSystemsAsking.Add(deviceId))
             return;
         _ = Task.Run(async () =>
         {

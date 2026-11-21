@@ -72,13 +72,11 @@ internal sealed partial class DawnScene
             row.Add(new Badge { Text = Said("link.sync_state_pullonly"), Tone = UIBadgeTone.Warning, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.sync_pull_only_tip") });
         if (sync is not null)
         {
-            row.Add(new Label
-            {
-                Text = Said("link.sync_counts", ("sent", sync.Sent.ToString(CultureInfo.InvariantCulture)), ("received", sync.Received.ToString(CultureInfo.InvariantCulture)),
-                    ("conflicts", sync.Conflicts.ToString(CultureInfo.InvariantCulture)), ("skipped", sync.Skipped.ToString(CultureInfo.InvariantCulture))),
-                TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left,
-                Tooltip = sync.Skipped > 0 ? string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString())) : string.Empty
-            });
+            Label counts = holder.Add(LinkLine(Said("link.sync_counts", ("sent", sync.Sent.ToString(CultureInfo.InvariantCulture)),
+                ("received", sync.Received.ToString(CultureInfo.InvariantCulture)), ("conflicts", sync.Conflicts.ToString(CultureInfo.InvariantCulture)),
+                ("skipped", sync.Skipped.ToString(CultureInfo.InvariantCulture)))));
+            if (sync.Skipped > 0)
+                counts.Tooltip = string.Join("\n", LinkSyncSkipped(id, folder).Take(20).Select(each => each.ToString()));
         }
 
         bool running = state is HexLinkSyncState.Comparing or HexLinkSyncState.Syncing or HexLinkSyncState.Idle or HexLinkSyncState.PullOnly or HexLinkSyncState.NeedsGit;
@@ -89,11 +87,46 @@ internal sealed partial class DawnScene
         if (state == HexLinkSyncState.NeedsGit)
             row.Add(LinkButton(Said("link.sync_anyway"), "warning", () => LinkSyncGo(id, folder, force: true)));
 
+        if (sync is not null)
+            DrawLinkSyncProgress(holder, sync);
+
         string said = sync?.Why ?? sync?.Summary ?? string.Empty;
         if (said.Length > 0)
             holder.Add(new Label { Text = UIRichText.Literal(said), TextScale = LINK_SMALL, Dim = true, Wrap = true, Align = Origin.Left, Fill = UIFill.Horizontal, Padding = new UIEdges(18, 0, 0, 0) });
         return holder;
     }
+
+    private void DrawLinkSyncProgress(StackPanel holder, LinkSyncShown sync)
+    {
+        int filesDone = 0, filesTotal = 0;
+        long bytesDone = 0, bytesTotal = 0;
+        int queued = 0;
+        string? detail = null;
+        LinkDeviceSyncProgress(sync, ref filesDone, ref filesTotal, ref bytesDone, ref bytesTotal, ref queued, ref detail);
+        if (filesTotal > 0 || bytesTotal > 0)
+        {
+            holder.Add(new ProgressBar
+            {
+                Size = new Vector2(0, 9), Fill = UIFill.Horizontal, ShowText = false,
+                Progress = bytesTotal > 0 ? (float)((double)bytesDone / bytesTotal) : (float)filesDone / filesTotal
+            });
+            var counts = new List<string>(3);
+            if (filesTotal > 0)
+                counts.Add(Said("link.devices_sync_progress", ("done", filesDone.ToString(CultureInfo.InvariantCulture)), ("total", filesTotal.ToString(CultureInfo.InvariantCulture))));
+            if (bytesTotal > 0)
+                counts.Add(Said("link.devices_sync_bytes", ("done", (bytesDone / 1048576.0).ToString("0.0", CultureInfo.InvariantCulture)),
+                    ("total", (bytesTotal / 1048576.0).ToString("0.0", CultureInfo.InvariantCulture))));
+            if (queued > 0)
+                counts.Add(Said("link.devices_sync_queue", ("count", queued.ToString(CultureInfo.InvariantCulture))));
+            holder.Add(LinkLine(string.Join(" · ", counts)));
+        }
+
+        if (detail is { Length: > 0 })
+            holder.Add(LinkLine(detail));
+    }
+
+    // Worker A supplies counters for the active pass when the sync engine reports them.
+    partial void LinkDeviceSyncProgress(LinkSyncShown sync, ref int filesDone, ref int filesTotal, ref long bytesDone, ref long bytesTotal, ref int queued, ref string? detail);
 
     // A sync started from the window, why it couldn't said
     private void LinkSyncGo(string deviceId, string folder, bool force)
