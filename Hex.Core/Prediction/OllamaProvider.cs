@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -10,16 +9,17 @@ namespace Hex.Core;
 /// </summary>
 internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : IPredictionProvider
 {
-    // The servers and models asked in this run; the first request to one may wait while Ollama loads the model
-    private static readonly ConcurrentDictionary<string, bool> asked = new(StringComparer.Ordinal);
-
     /// <summary>The address requests go to, /api/generate on the server.</summary>
     public Uri Api => api;
 
-    /// <summary>How long the first piece may take once the model has been asked for in this run, and between pieces.</summary>
+    /// <summary>How long between pieces once the first has come.</summary>
     internal TimeSpan FirstPiece { get; init; } = PredictionHttp.FirstPiece;
 
-    /// <summary>How long the first piece may take the first time the model is asked for, while it may be loading.</summary>
+    /// <summary>
+    /// How long the first piece may take. Long enough for Ollama to load the model, which it does again whenever another
+    /// model took its memory, and nothing says beforehand whether it will; a request typing has left behind is cancelled
+    /// long before this.
+    /// </summary>
     internal TimeSpan Loading { get; init; } = PredictionHttp.Loading;
 
     public async IAsyncEnumerable<string> Complete(PredictionWireRequest request, [EnumeratorCancellation] CancellationToken cancel)
@@ -29,9 +29,8 @@ internal sealed class OllamaProvider(HttpClient http, Uri api, string model) : I
             Content = PredictionHttp.Json(writer => Body(writer, request)),
         };
 
-        bool first = asked.TryAdd(api.GetLeftPart(UriPartial.Path) + "\n" + model, true);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        TimeSpan wait = first ? Loading : FirstPiece;
+        TimeSpan wait = Loading;
         deadline.CancelAfter(wait);
 
         using HttpResponseMessage response = await PredictionHttp.Send(http, message, deadline, cancel, api, null).ConfigureAwait(false);

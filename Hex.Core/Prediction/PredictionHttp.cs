@@ -13,10 +13,10 @@ namespace Hex.Core;
 /// </summary>
 internal static class PredictionHttp
 {
-    /// <summary>How long the first piece of an answer may take, and between pieces after it.</summary>
+    /// <summary>How long between pieces of an answer once it has started.</summary>
     public static readonly TimeSpan FirstPiece = TimeSpan.FromSeconds(15);
 
-    /// <summary>How long the first piece may take when the server may be loading the model, the first request of a run.</summary>
+    /// <summary>How long the first piece may take, the server perhaps loading the model first.</summary>
     public static readonly TimeSpan Loading = TimeSpan.FromSeconds(60);
 
     // The most of a server's own error message put in a status sentence

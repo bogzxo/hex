@@ -46,7 +46,7 @@ public sealed class PredictionOllamaTests(ITestOutputHelper output)
             output.WriteLine($"run {run}: first {first:0} ms, total {clock.Elapsed.TotalMilliseconds:0} ms, " +
                 $"{pieces} pieces, prompt ~{PredictionTokens.Of(prompt.Request.Prompt)} tokens, max {prompt.Request.MaxTokens}, " +
                 $"stopped early {parsed.Done && answer.ToString().IndexOf(Zeta2Format.UPDATED, StringComparison.Ordinal) < 0}, " +
-                $"edits {parsed.Edits.Count}, ghost {PredictionDiff.IsGhost(parsed.Edits, input.Text, input.Caret)}");
+                $"edits {parsed.Edits.Count}, ghost {PredictionDiff.IsGhost(parsed.Edits, input.Text, input.Caret)}, caret {input.Caret} -> {parsed.CaretAfter}");
             foreach (PredictionEdit edit in parsed.Edits)
                 output.WriteLine($"  {edit.Start}-{edit.End}: {edit.Text.Replace("\n", "\\n")}");
 
