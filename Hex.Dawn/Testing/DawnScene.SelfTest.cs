@@ -104,6 +104,7 @@ internal sealed partial class DawnScene
         test.Settle(0.3f);
 
         suitesAsked = asked;
+        test.Run(KeepStartLayout);
 
         // HEX_SELFTEST_REPEAT runs the parts asked for that many times over in the one process, and weighs what's left
         // after each round, so something a part keeps that it shouldn't shows as a number climbing round by round
