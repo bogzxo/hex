@@ -48,8 +48,8 @@ public class NotebookHtmlExportTests
         Assert.DoesNotMatch(new Regex("<[^>]*\\s(src|srcset|poster|data|action|formaction)\\s*=\\s*\"(?!data:image/)", RegexOptions.IgnoreCase), html);
         Assert.DoesNotMatch(new Regex("<[^>]*\\son[a-z]+\\s*=", RegexOptions.IgnoreCase), html);
         Assert.DoesNotContain("javascript:", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, Regex.Matches(html, "</main>").Count);
-        Assert.Equal(1, Regex.Matches(html, "</body>").Count);
+        Assert.Single(Regex.Matches(html, "</main>"));
+        Assert.Single(Regex.Matches(html, "</body>"));
     }
 
     [Fact]

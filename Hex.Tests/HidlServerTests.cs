@@ -197,7 +197,7 @@ public sealed class HidlServerTests : IDisposable
         await Ask("shutdown", null);
         client.Notify("exit", null);
 
-        Assert.True(Task.Run(server.Wait).Wait(WAIT_MS));
+        await Task.Run(server.Wait).WaitAsync(TimeSpan.FromMilliseconds(WAIT_MS));
         Assert.True(server.ShutDownCleanly);
     }
 }

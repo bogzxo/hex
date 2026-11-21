@@ -52,7 +52,7 @@ public sealed class HexDebugEvaluatorTests
         string.Join("|", values.Select(value => value.Value).Where(value => value.Length > 0).Prepend(key));
 
     [Fact]
-    public void A_call_given_an_enums_member_is_refused_rather_than_answered_wrong()
+    public async Task A_call_given_an_enums_member_is_refused_rather_than_answered_wrong()
     {
         var asked = new List<string>();
         var answers = new Dictionary<string, object>
@@ -62,18 +62,18 @@ public sealed class HexDebugEvaluatorTests
             ["Horizon.Core.Tweening.Ease.Apply(Horizon.Core.Tweening.Easing.OutQuad, 0.5f)"] = Value("0.5", "float")
         };
 
-        DebugEvaluation said = Evaluator(answers, asked).Evaluate("Ease.Apply(Easing.OutQuad, 0.5f)", 0, Tweening).Result;
+        DebugEvaluation said = await Evaluator(answers, asked).Evaluate("Ease.Apply(Easing.OutQuad, 0.5f)", 0, Tweening);
         Assert.Null(said.Value);
         Assert.Equal("debugging.eval_enum_argument|Easing.OutQuad", said.Error);
         Assert.DoesNotContain(asked, expression => expression.Contains("Apply"));
 
         // Written out whole it's refused the same
-        said = Evaluator(answers).Evaluate("Horizon.Core.Tweening.Ease.Apply(Horizon.Core.Tweening.Easing.OutQuad, 0.5f)", 0, Tweening).Result;
+        said = await Evaluator(answers).Evaluate("Horizon.Core.Tweening.Ease.Apply(Horizon.Core.Tweening.Easing.OutQuad, 0.5f)", 0, Tweening);
         Assert.Equal("debugging.eval_enum_argument|Horizon.Core.Tweening.Easing.OutQuad", said.Error);
     }
 
     [Fact]
-    public void A_variable_holding_an_enum_goes_through_and_the_call_is_found_through_the_usings()
+    public async Task A_variable_holding_an_enum_goes_through_and_the_call_is_found_through_the_usings()
     {
         var answers = new Dictionary<string, object>
         {
@@ -81,12 +81,12 @@ public sealed class HexDebugEvaluatorTests
             ["Horizon.Core.Tweening.Ease.Apply(mode, 0.5f)"] = Value("0.75", "float")
         };
 
-        DebugEvaluation said = Evaluator(answers).Evaluate("Ease.Apply(mode, 0.5f)", 0, Tweening).Result;
+        DebugEvaluation said = await Evaluator(answers).Evaluate("Ease.Apply(mode, 0.5f)", 0, Tweening);
         Assert.Equal(("Ease.Apply(mode, 0.5f)", "0.75"), (said.Value!.Value.Name, said.Value!.Value.Value));
     }
 
     [Fact]
-    public void Whole_numbers_passed_to_a_call_are_widened_the_way_CSharp_would()
+    public async Task Whole_numbers_passed_to_a_call_are_widened_the_way_CSharp_would()
     {
         var answers = new Dictionary<string, object>
         {
@@ -95,12 +95,12 @@ public sealed class HexDebugEvaluatorTests
             ["System.MathF.Pow(2f, 3f)"] = Value("8", "float")
         };
 
-        DebugEvaluation said = Evaluator(answers).Evaluate("MathF.Pow(2, 3)", 0, Tweening).Result;
+        DebugEvaluation said = await Evaluator(answers).Evaluate("MathF.Pow(2, 3)", 0, Tweening);
         Assert.Equal(("8", "float"), (said.Value!.Value.Value, said.Value!.Value.Type));
     }
 
     [Fact]
-    public void A_name_found_once_is_written_that_way_from_then_on()
+    public async Task A_name_found_once_is_written_that_way_from_then_on()
     {
         var asked = new List<string>();
         var answers = new Dictionary<string, object>
@@ -109,22 +109,22 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers, asked);
-        Assert.Equal("OutQuad", evaluator.Evaluate("Easing.OutQuad", 0, Tweening).Result.Value!.Value.Value);
+        Assert.Equal("OutQuad", (await evaluator.Evaluate("Easing.OutQuad", 0, Tweening)).Value!.Value.Value);
         asked.Clear();
-        Assert.Equal("OutQuad", evaluator.Evaluate("Easing.OutQuad", 0, Tweening).Result.Value!.Value.Value);
+        Assert.Equal("OutQuad", (await evaluator.Evaluate("Easing.OutQuad", 0, Tweening)).Value!.Value.Value);
         Assert.Equal(["Easing.OutQuad", "Horizon.Core.Tweening.Easing.OutQuad"], asked);
     }
 
     [Fact]
-    public void A_const_local_is_what_its_set_to_with_its_types_suffix()
+    public async Task A_const_local_is_what_its_set_to_with_its_types_suffix()
     {
         var answers = new Dictionary<string, object> { ["7"] = Value("7", "int"), ["2f * 3"] = Value("6", "float") };
-        Assert.Equal("7", Evaluator(answers).Evaluate("Limit", 0, Tweening).Result.Value!.Value.Value);
-        Assert.Equal("6", Evaluator(answers).Evaluate("Speed * 3", 0, Tweening).Result.Value!.Value.Value);
+        Assert.Equal("7", (await Evaluator(answers).Evaluate("Limit", 0, Tweening)).Value!.Value.Value);
+        Assert.Equal("6", (await Evaluator(answers).Evaluate("Speed * 3", 0, Tweening)).Value!.Value.Value);
     }
 
     [Fact]
-    public void A_cast_in_front_is_worked_out_from_what_was_cast()
+    public async Task A_cast_in_front_is_worked_out_from_what_was_cast()
     {
         var answers = new Dictionary<string, object>
         {
@@ -135,18 +135,18 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers);
-        Assert.Equal(("300", "long"), Said(evaluator.Evaluate("(long)total", 0, Tweening).Result));
-        Assert.Equal(("44", "byte"), Said(evaluator.Evaluate("(byte)total", 0, Tweening).Result));
-        Assert.Equal(("-3", "int"), Said(evaluator.Evaluate("(int)ratio", 0, Tweening).Result));
-        Assert.Equal(("300", "float"), Said(evaluator.Evaluate("(float)total", 0, Tweening).Result));
-        Assert.Equal("debugging.eval_cast_range|int", evaluator.Evaluate("(int)huge", 0, Tweening).Result.Error);
-        Assert.Equal("debugging.eval_cast_enum|int", evaluator.Evaluate("(int)k", 0, Tweening).Result.Error);
+        Assert.Equal(("300", "long"), Said((await evaluator.Evaluate("(long)total", 0, Tweening))));
+        Assert.Equal(("44", "byte"), Said((await evaluator.Evaluate("(byte)total", 0, Tweening))));
+        Assert.Equal(("-3", "int"), Said((await evaluator.Evaluate("(int)ratio", 0, Tweening))));
+        Assert.Equal(("300", "float"), Said((await evaluator.Evaluate("(float)total", 0, Tweening))));
+        Assert.Equal("debugging.eval_cast_range|int", (await evaluator.Evaluate("(int)huge", 0, Tweening)).Error);
+        Assert.Equal("debugging.eval_cast_enum|int", (await evaluator.Evaluate("(int)k", 0, Tweening)).Error);
     }
 
     private static (string, string?) Said(DebugEvaluation evaluated) => (evaluated.Value!.Value.Value, evaluated.Value!.Value.Type);
 
     [Fact]
-    public void What_netcoredbg_cant_do_is_said_plainly()
+    public async Task What_netcoredbg_cant_do_is_said_plainly()
     {
         var answers = new Dictionary<string, object>
         {
@@ -155,12 +155,12 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers);
-        Assert.Equal("debugging.eval_not_done|debugging.eval_kind_cast", evaluator.Evaluate("(long)total + 1", 0, Tweening).Result.Error);
-        Assert.Equal("debugging.eval_no_method", evaluator.Evaluate("Nothing.Here(1)", 0, HexDebugScope.Empty).Result.Error);
+        Assert.Equal("debugging.eval_not_done|debugging.eval_kind_cast", (await evaluator.Evaluate("(long)total + 1", 0, Tweening)).Error);
+        Assert.Equal("debugging.eval_no_method", (await evaluator.Evaluate("Nothing.Here(1)", 0, HexDebugScope.Empty)).Error);
     }
 
     [Fact]
-    public void An_arrays_Length_is_put_in_as_what_it_comes_to_inside_a_bigger_expression()
+    public async Task An_arrays_Length_is_put_in_as_what_it_comes_to_inside_a_bigger_expression()
     {
         var answers = new Dictionary<string, object>
         {
@@ -171,13 +171,13 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers);
-        Assert.Equal(("true", "bool"), Said(evaluator.Evaluate("args.Length == 0", 0, Tweening).Result));
-        Assert.Equal(("0", "int"), Said(evaluator.Evaluate("args.Length", 0, Tweening).Result));
-        Assert.Equal(("true", "bool"), Said(evaluator.Evaluate("name.Length > 2 && args.Length == 0", 0, Tweening).Result));
+        Assert.Equal(("true", "bool"), Said((await evaluator.Evaluate("args.Length == 0", 0, Tweening))));
+        Assert.Equal(("0", "int"), Said((await evaluator.Evaluate("args.Length", 0, Tweening))));
+        Assert.Equal(("true", "bool"), Said((await evaluator.Evaluate("name.Length > 2 && args.Length == 0", 0, Tweening))));
     }
 
     [Fact]
-    public void The_Length_of_what_a_call_comes_to_is_worked_out_too()
+    public async Task The_Length_of_what_a_call_comes_to_is_worked_out_too()
     {
         var answers = new Dictionary<string, object>
         {
@@ -187,12 +187,12 @@ public sealed class HexDebugEvaluatorTests
             ["3 > 0"] = Value("true", "bool")
         };
 
-        Assert.Equal(("true", "bool"), Said(Evaluator(answers).Evaluate("t.ToString().Length > 0", 0, Tweening).Result));
+        Assert.Equal(("true", "bool"), Said((await Evaluator(answers).Evaluate("t.ToString().Length > 0", 0, Tweening))));
         Assert.Equal((0, 9, 16), HexDebugExpressions.MemberOfCall("a.b(c)[0].Length", "Length") is var (start, dot, end) ? (start, dot, end) : default);
     }
 
     [Fact]
-    public void A_member_a_value_hasnt_got_is_said_plainly_with_the_nearest_it_has()
+    public async Task A_member_a_value_hasnt_got_is_said_plainly_with_the_nearest_it_has()
     {
         var answers = new Dictionary<string, object>
         {
@@ -207,17 +207,17 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers, inside: inside);
-        Assert.Equal("debugging.eval_no_member_has|Count|TestEntry[]|Length", evaluator.Evaluate("TestCatalog.Tests.Count", 0, Tweening).Result.Error);
-        Assert.Equal("debugging.eval_no_member_has|Widht|Box|Width", evaluator.Evaluate("box.Widht", 0, Tweening).Result.Error);
-        Assert.Equal("debugging.eval_no_member|Depth|Box", evaluator.Evaluate("box.Depth", 0, Tweening).Result.Error);
-        Assert.Equal("debugging.eval_no_member_has|Length|List<int>|Count", evaluator.Evaluate("items.Length", 0, Tweening).Result.Error);
+        Assert.Equal("debugging.eval_no_member_has|Count|TestEntry[]|Length", (await evaluator.Evaluate("TestCatalog.Tests.Count", 0, Tweening)).Error);
+        Assert.Equal("debugging.eval_no_member_has|Widht|Box|Width", (await evaluator.Evaluate("box.Widht", 0, Tweening)).Error);
+        Assert.Equal("debugging.eval_no_member|Depth|Box", (await evaluator.Evaluate("box.Depth", 0, Tweening)).Error);
+        Assert.Equal("debugging.eval_no_member_has|Length|List<int>|Count", (await evaluator.Evaluate("items.Length", 0, Tweening)).Error);
 
         // A member it has that netcoredbg couldn't reach keeps netcoredbg's own words, nothing is said to be missing that isn't
-        Assert.DoesNotContain("eval_no_member", evaluator.Evaluate("TestCatalog.Tests.Rank", 0, Tweening).Result.Error);
+        Assert.DoesNotContain("eval_no_member", (await evaluator.Evaluate("TestCatalog.Tests.Rank", 0, Tweening)).Error);
     }
 
     [Fact]
-    public void And_and_or_stop_at_the_operand_that_decides_them_the_way_CSharp_does()
+    public async Task And_and_or_stop_at_the_operand_that_decides_them_the_way_CSharp_does()
     {
         var asked = new List<string>();
         var answers = new Dictionary<string, object>
@@ -229,10 +229,10 @@ public sealed class HexDebugEvaluatorTests
         };
 
         HexDebugEvaluator evaluator = Evaluator(answers, asked);
-        Assert.Equal(("false", "bool"), Said(evaluator.Evaluate("args.Length == 1 && args[0] == \"quickstart\"", 0, Tweening).Result));
+        Assert.Equal(("false", "bool"), Said((await evaluator.Evaluate("args.Length == 1 && args[0] == \"quickstart\"", 0, Tweening))));
         Assert.DoesNotContain(asked, expression => expression.Contains("quickstart"));
-        Assert.Equal(("true", "bool"), Said(evaluator.Evaluate("args.Length == 1 || args.Length == 0", 0, Tweening).Result));
-        Assert.Equal("debugging.eval_not_bool|i", evaluator.Evaluate("i && args.Length == 0", 0, Tweening).Result.Error);
+        Assert.Equal(("true", "bool"), Said((await evaluator.Evaluate("args.Length == 1 || args.Length == 0", 0, Tweening))));
+        Assert.Equal("debugging.eval_not_bool|i", (await evaluator.Evaluate("i && args.Length == 0", 0, Tweening)).Error);
         Assert.Null(HexDebugExpressions.LogicalParts("a ? b && c : d"));
         Assert.Equal([["a", "b"], ["c"]], HexDebugExpressions.LogicalParts("a && b || c"));
     }

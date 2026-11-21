@@ -97,7 +97,7 @@ class Sample(unittest.TestCase):
             var results = run["results"]!.AsArray();
             Assert.Equal(4, results.Count);
             Assert.Equal(2, results.Count(row => row!["outcome"]!.GetValue<string>() == "failed"));
-            Assert.Single(results.Where(row => row!["outcome"]!.GetValue<string>() == "skipped"));
+            Assert.Single(results, row => row!["outcome"]!.GetValue<string>() == "skipped");
             Assert.Contains("test output", run["output"]!.GetValue<string>());
             var selected = await PythonUnitTests.Execute(python, folder, true, ["test_sample.Sample.test_pass"]);
             Assert.Equal("passed", Assert.Single(selected["results"]!.AsArray())!["outcome"]!.GetValue<string>());

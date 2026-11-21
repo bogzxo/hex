@@ -191,6 +191,6 @@ public sealed class HexServerSetupTests
         foreach (HexServerEntry entry in HexServerCatalog.Read(text))
             foreach (string named in (entry.Tools ?? []).Concat(entry.ToolsOptional ?? []))
                 Assert.True(tools.ContainsKey(named), $"{entry.Name} names a tool {named} that isn't in the catalog");
-        Assert.Equal(["dotnet"], HexServerCatalog.Read(text).Single(entry => entry.Name == "csharp").Tools);
+        Assert.Equal(["dotnet"], HexServerCatalog.Read(text).Single(entry => entry.Name == "csharp").Tools!);
     }
 }

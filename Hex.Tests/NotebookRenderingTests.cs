@@ -127,7 +127,7 @@ public class NotebookRenderingTests
     public void Attachment_references_ignore_fenced_code_and_preserve_names()
     {
         var parts = NotebookAttachments.Split("Before ![beam](attachment:beam%20plot.svg) after\n`![x](attachment:no.png)`\n```\n![x](attachment:no.svg)\n```");
-        Assert.Equal("beam plot.svg", Assert.Single(parts.Where(piece => piece.Name is not null)).Name);
+        Assert.Equal("beam plot.svg", Assert.Single(parts, piece => piece.Name is not null).Name);
         Assert.Equal(3, parts.Count);
     }
 
