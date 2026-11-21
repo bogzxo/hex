@@ -146,7 +146,8 @@ internal static partial class HexDebugExpressions
         "double", "decimal", "nint", "nuint"
     ];
 
-    private static readonly Regex EnumSaid = new(@"^(?:-?\d+|[A-Za-z_]\w*(?:\s*[|,]\s*[A-Za-z_]\w*)*)$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^(?:-?\d+|[A-Za-z_]\w*(?:\s*[|,]\s*[A-Za-z_]\w*)*)$")]
+    private static partial Regex EnumSaid { get; }
 
     /// <summary>
     /// Whether what netcoredbg says a value is looks like an enum, a name (or names put together) or a bare number with a
@@ -197,8 +198,10 @@ internal static partial class HexDebugExpressions
 
     internal readonly record struct Failed(Failure Kind, string Name);
 
-    private static readonly Regex NoNameSaid = new(@"The name '(?<name>[^']+)' does not exist", RegexOptions.Compiled);
-    private static readonly Regex NotDoneSaid = new(@"SyntaxKindNotImplementedException: (?<kind>\w+) not implemented", RegexOptions.Compiled);
+    [GeneratedRegex(@"The name '(?<name>[^']+)' does not exist")]
+    private static partial Regex NoNameSaid { get; }
+    [GeneratedRegex(@"SyntaxKindNotImplementedException: (?<kind>\w+) not implemented")]
+    private static partial Regex NotDoneSaid { get; }
 
     /// <summary>What an error netcoredbg gave means.</summary>
     internal static Failed FailureOf(string? error)

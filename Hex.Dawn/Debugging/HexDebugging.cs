@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
+using System.Text.RegularExpressions;
 
 using Hex.Core.Projects;
 
@@ -723,7 +724,8 @@ internal sealed partial class HexDebugging
 
     // Build failures without a source location: linker symbols and compiler driver
     // options/toolchain setup. Keep the tool prefix so ordinary output is not an error.
-    private static readonly System.Text.RegularExpressions.Regex LinkError = new(@"^(?:Error: .+|.*\berror LNK\d+: .+|(?:clang(?:\+\+|-cl)?|gcc|g\+\+|cc|c\+\+|ld(?:\.lld|\.gold)?|lld(?:-link)?|collect2)(?:-\d+(?:\.\d+)*)?(?:\.exe)?: (?:fatal )?error: .+)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    [GeneratedRegex(@"^(?:Error: .+|.*\berror LNK\d+: .+|(?:clang(?:\+\+|-cl)?|gcc|g\+\+|cc|c\+\+|ld(?:\.lld|\.gold)?|lld(?:-link)?|collect2)(?:-\d+(?:\.\d+)*)?(?:\.exe)?: (?:fatal )?error: .+)$")]
+    private static partial Regex LinkError { get; }
 
     /// <summary>The first few lines of what a build said that are a linker's errors, each once.</summary>
     internal static IEnumerable<string> LinkErrorsIn(string said) =>

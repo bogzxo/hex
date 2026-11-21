@@ -81,7 +81,8 @@ internal sealed partial class HexDebugging
     private string? lastDEntry;
 
     // A main of D's, void or int, extern(C) or not
-    private static readonly Regex MainDeclared = new(@"^\s*(?:extern\s*\(\s*C\s*\)\s*)?(?:void|int|noreturn)\s+main\s*\(", RegexOptions.Compiled | RegexOptions.Multiline);
+    [GeneratedRegex(@"^\s*(?:extern\s*\(\s*C\s*\)\s*)?(?:void|int|noreturn)\s+main\s*\(", RegexOptions.Multiline)]
+    private static partial Regex MainDeclared { get; }
 
     /// <summary>
     /// The file a D program starts from that a file is part of, what F5 in it builds. A dub project's file is its own (dub

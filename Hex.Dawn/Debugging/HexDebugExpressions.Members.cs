@@ -89,7 +89,8 @@ internal static partial class HexDebugExpressions
     }
 
     // An array as netcoredbg says it, {string[3]} or {int[2, 3]}, and the empty brackets after of a jagged one
-    private static readonly Regex ArraySaid = new(@"\[(?<sizes>\d+(?:\s*,\s*\d+)*)\](?:\[[,\s]*\])*\}$", RegexOptions.Compiled);
+    [GeneratedRegex(@"\[(?<sizes>\d+(?:\s*,\s*\d+)*)\](?:\[[,\s]*\])*\}$")]
+    private static partial Regex ArraySaid { get; }
 
     /// <summary>
     /// How long an array or a string is by what netcoredbg says it comes to, every element of an array of more than one
@@ -220,7 +221,8 @@ internal static partial class HexDebugExpressions
         return row[b.Length];
     }
 
-    private static readonly Regex Qualified = new(@"\b(?:[A-Za-z_]\w*\.)+(?=[A-Za-z_])", RegexOptions.Compiled);
+    [GeneratedRegex(@"\b(?:[A-Za-z_]\w*\.)+(?=[A-Za-z_])")]
+    private static partial Regex Qualified { get; }
 
     /// <summary>A type as netcoredbg says it without its namespaces, Horizon.Testing.TestEntry[] as TestEntry[].</summary>
     internal static string ShortType(string type) => Qualified.Replace(type, string.Empty);
