@@ -14,10 +14,10 @@ Branch `feat/edit-prediction-settings` (worktree `hexwt-predict-settings`), base
 
 ## Results
 - Build green. Settings tests 40/40. Full Hex.Tests 1332/1332.
-- Self test settings at 1600x900: 339 of 340, `nav: other parts folded on first open` fails because the extra Editor section pushes Extensions out of the nav at 900 px. At 1600x960: 340 of 340.
+- Self test settings at 1600x900: 340 of 340. The check `nav: other parts folded on first open` now scrolls the nav to the Extensions heading first (the new Editor section pushed it 6 px out of sight at 900 px), as #110 agreed.
 
 ## Left / next
-- Decide on the nav check (self test at 900 px tall): adjust the check or the section placement. Asked #110.
+- Nothing of the brief left. At merge: flip the `// PREDICT-MERGE: UIFormKind.Secret` line in EditorSettingsCatalog.cs.
 - Dusk's settings window (FileSectionSource) shows the key row's raw file text (`protected:...`), not the key.
 
 ## Build and test
