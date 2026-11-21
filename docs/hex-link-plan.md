@@ -190,6 +190,7 @@ would take is in `data.needs`), `-32002` conflict, `-32003` not found, `-32004` 
 | `fs/watch`, `fs/unwatch` | View | `fs/changed {path, hash}` for files the asker has open. |
 | `presence/set` (notification) | View | `{file, line, column, selection}` of the sender; the receiver shows it and passes it on to its other links. |
 | `git/bundle` | View | `{repository, have[]}` → `{id, size, refs}` then `git/chunk {id, data}` notifications and `git/done`. What `git bundle create` wrote of the branches, less what the asker has. |
+| `sync/manifest`, `sync/watch` | View | `{folder}` → `{folder, head, root, entries[{path, hash or big, size}]}`, every file git would carry; `root` is the repository's first commit, which tells two clones of one repository from two that share a folder name. `sync/watch` then sends `sync/changed {folder, changes[{path, hash or big or deleted}]}`; `sync/unwatch`, `sync/flush`, `fs/delete {path, base}` (Edit). |
 | `patch/offer` | View | `{title, diff}` → a card on the receiver, which applies it, keeps it as a file or throws it away. The answer says which. |
 
 Paths are `folder-name/relative/path` with forward slashes, the folder one of the workspace's by name.
