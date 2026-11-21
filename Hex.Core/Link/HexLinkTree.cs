@@ -260,6 +260,10 @@ internal sealed partial class HexLinkTree
         if (!OnlyCase(from, to) || Path.GetDirectoryName(to) != parent)
             throw HexLinkException.Invalid("Link can rename the case of a file within its current directory.");
 
+        // Use the editor/CAS publication gate for both names. Acquire in one order on case-sensitive disks.
+        bool sourceFirst = string.CompareOrdinal(from, to) < 0;
+        using IDisposable first = HexLinkFiles.LockForLocalWrite(sourceFirst ? from : to);
+        using IDisposable? second = PlatformPaths.Comparer.Equals(from, to) ? null : HexLinkFiles.LockForLocalWrite(sourceFirst ? to : from);
         if (!SoleSpelling(from) || RegularFile(from, parent) is null || HexLinkFiles.HashOf(from) != expected)
             throw new HexLinkException(HexLinkErrors.CONFLICT, "The file changed or its name collides with another file.");
         File.Move(from, to, overwrite: false);

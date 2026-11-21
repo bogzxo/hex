@@ -163,12 +163,12 @@ public sealed partial class HexLinkSyncTests
         using var pair = await LinkedPair.Up(EDIT, EDIT);
         using var blocked = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        int armed = 0;
+        int olderThread = 0;
         using var sync = new HexLinkSync(pair.PeerB, pair.A.Workspace.Folders[0], Path.Combine(pair.A.Root, "state"))
         {
             BeforeStateWrite = _ =>
             {
-                if (Interlocked.Exchange(ref armed, 0) == 1)
+                if (Environment.CurrentManagedThreadId == Volatile.Read(ref olderThread))
                 {
                     blocked.Set();
                     release.Wait(TimeSpan.FromSeconds(15));
@@ -180,8 +180,11 @@ public sealed partial class HexLinkSyncTests
 
         Put(pair.A, "first.txt", "first");
         await Settled(sync);
-        Volatile.Write(ref armed, 1);
-        Task older = Task.Run(sync.Save);
+        Task older = Task.Run(() =>
+        {
+            Volatile.Write(ref olderThread, Environment.CurrentManagedThreadId);
+            sync.Save();
+        });
         try
         {
             Assert.True(await Task.Run(() => blocked.Wait(TimeSpan.FromSeconds(10))));
@@ -320,5 +323,17 @@ public sealed partial class HexLinkSyncTests
             sessionA.Close("done");
             sessionB.Close("done");
         }
+    }
+
+    [Fact]
+    public async Task Editor_save_staging_files_are_never_listed_or_watched()
+    {
+        using var pair = await LinkedPair.Up(EDIT, EDIT);
+        string stage = $".hex-save-{Guid.NewGuid():N}.tmp";
+        Put(pair.B, stage, "partly staged editor save");
+        HexLinkManifest manifest = await pair.PeerB.Manifest("work");
+        Assert.DoesNotContain(manifest.Files, file => file.Path == $"work/{stage}");
+        var tree = new HexLinkTree(pair.B.Workspace.Folders[0]);
+        Assert.Contains(stage, tree.Ignored([stage]));
     }
 }
