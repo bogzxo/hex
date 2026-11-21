@@ -21,7 +21,9 @@ internal sealed partial class DawnScene
     private LinkDevicePage linkDevicePage;
     private UIDialog? linkOnboardingDialog;
     private Button? linkJoinSubmit, linkCopyInvite;
+    private ToggleButton? linkInviteShare;
     private Label? linkJoinStatus;
+    private Panel? linkJoinField;
     private bool linkJoining, linkJoinError, linkReopenJoin, linkInviteExpired;
     private string? linkJoinMessage, linkInviteError;
     private string linkJoinTyped = string.Empty;
@@ -55,8 +57,10 @@ internal sealed partial class DawnScene
             return;
 
         string title = Said(page == LinkDevicePage.Invite ? "link.devices_invite" : "link.devices_join");
-        UIDialog dialog = UIDialog.Show(chrome, title, string.Empty,
-            new DialogChoice(Said(page == LinkDevicePage.Invite ? "link.devices_done" : "link.pair_cancel")));
+        UIDialog dialog = page == LinkDevicePage.Invite
+            ? UIDialog.Show(chrome, title, string.Empty, new DialogChoice(Said("link.devices_done")),
+                new DialogChoice(Said("link.devices_cancel_invite"), LinkClosePairing))
+            : UIDialog.Show(chrome, title, string.Empty, new DialogChoice(Said("link.pair_cancel")));
         linkOnboardingDialog = dialog;
         linkDevicePage = page;
         dialog.Body.Size = new Vector2(Math.Clamp(chrome.Root.Bounds.Width - 80, 350, 460), 0);
@@ -68,6 +72,7 @@ internal sealed partial class DawnScene
             linkOnboardingDialog = null;
             linkWindowNearby = null;
             linkAddressBox = null;
+            linkJoinField = null;
             linkJoinSubmit = linkCopyInvite = null;
             linkJoinStatus = linkPairingCountdown = null;
             linkDevicePage = LinkDevicePage.Overview;
@@ -121,6 +126,7 @@ internal sealed partial class DawnScene
         ClearRows(body);
         linkPairingCountdown = null;
         linkCopyInvite = null;
+        linkInviteShare = null;
         linkCountdownShown = -1;
         if (!LinkOn || LinkPort == 0)
         {
@@ -147,30 +153,39 @@ internal sealed partial class DawnScene
 
             StackPanel commands = LinkActionRow(body);
             linkPairingCountdown = commands.Add(new Label { TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Size = new Vector2(110, LINK_ROW) });
-            commands.Add(LinkButton(Said("link.pair_stop"), "debug-stop", () =>
-            {
-                LinkClosePairing();
-                linkWindowStale = true;
-            }));
             if (token is null)
+            {
+                commands.Add(LinkButton(Said("link.pair_stop"), "debug-stop", () =>
+                {
+                    LinkClosePairing();
+                    linkWindowStale = true;
+                }));
                 return;
+            }
 
-            LinkGrantControls(body, linkInvitePreset, linkInviteRights,
-                (preset, rights) => Volatile.Write(ref linkInviteOptions, linkInviteOptions with { Preset = preset, Rights = rights }));
-            var share = body.Add(new ToggleButton(Said("link.devices_auto_share"), linkAutoShareAvailable && linkInviteOptions.Share)
+            LinkGrantControls(body, linkInvitePreset, linkInviteRights, (preset, rights) =>
+            {
+                Volatile.Write(ref linkInviteOptions, linkInviteOptions with
+                {
+                    Preset = preset, Rights = rights, Share = preset == LinkRightsPreset.Worker || linkInviteOptions.Share
+                });
+                if (linkInviteShare is not null)
+                    linkInviteShare.State = linkAutoShareAvailable && linkInviteOptions.Share;
+            });
+            ToggleButton share = linkInviteShare = body.Add(new ToggleButton(Said("link.devices_auto_share"), linkAutoShareAvailable && linkInviteOptions.Share)
             {
                 Enabled = linkAutoShareAvailable, Anchor = Origin.Left, Pivot = Origin.Left, LabelScale = LINK_TEXT,
                 Tooltip = Said(linkAutoShareAvailable ? "link.devices_auto_share_tip" : "link.devices_provision_pending")
             });
             share.OnPressed = () => Volatile.Write(ref linkInviteOptions, linkInviteOptions with { Share = share.State });
-            LinkActionRow(body).Add(LinkButton(Said("link.pair_button"), "plug", LinkStartAddressPairing));
+            if (!linkAutoShareAvailable)
+                body.Add(LinkLine(Said("link.devices_auto_share_unavailable")));
         }
         else
         {
             body.Add(LinkLine(linkInviteError ?? Said(linkInviteExpired ? "link.devices_invite_expired" : "link.devices_invite_intro")));
             StackPanel row = LinkActionRow(body);
             row.Add(LinkButton(Said("link.devices_create_invite"), "add", LinkCreateInvite)).Primary = true;
-            row.Add(LinkButton(Said("link.pair_button"), "plug", LinkStartAddressPairing));
         }
     }
 
@@ -216,14 +231,18 @@ internal sealed partial class DawnScene
     private void BuildLinkJoin(StackPanel body)
     {
         StackPanel row = LinkActionRow(body);
-        linkAddressBox = row.Add(new TextBox
+        linkJoinField = row.Add(new Panel
+        {
+            Size = new Vector2(Math.Clamp(body.Size.X - 92, 220, 340), LINK_ROW), Padding = new UIEdges(1),
+            Anchor = Origin.Left, Pivot = Origin.Left, Radius = 4
+        });
+        linkAddressBox = linkJoinField.Add(new TextBox
         {
             Text = linkJoinTyped, Placeholder = Said("link.devices_join_placeholder"), MaxLength = 320,
-            Size = new Vector2(Math.Clamp(body.Size.X - 92, 220, 340), LINK_ROW),
-            Anchor = Origin.Left, Pivot = Origin.Left, Tooltip = Said("link.devices_join_help")
+            Fill = UIFill.Both, Tooltip = Said("link.devices_join_help")
         });
         linkAddressBox.OnSubmitted = _ => JoinTyped();
-        linkAddressBox.OnChanged = _ => DrawLinkJoinStatus();
+        linkAddressBox.OnChanged = _ => LinkSetJoinMessage(null);
         linkJoinSubmit = row.Add(LinkButton(Said("link.devices_join_submit"), "plug", JoinTyped));
         linkJoinSubmit.Primary = true;
         linkJoinStatus = body.Add(LinkLine(string.Empty));
@@ -237,7 +256,11 @@ internal sealed partial class DawnScene
         linkAddressBox.Enabled = LinkOn && !linkJoining;
         linkJoinSubmit.Enabled = LinkOn && !linkJoining && linkAddressBox.Text.Trim().Length > 0;
         string said = UIRichText.Literal(linkJoinMessage ?? Said(LinkOn ? "link.devices_join_help" : "link.pair_off_text"));
-        linkJoinStatus.Text = linkJoinError && Skin is { } skin ? $"[color:{HexColour(skin.Palette.Error)}]$(error) {said}[/color]" : said;
+        bool error = linkJoinError && linkJoinMessage is not null;
+        Vector4 tint = error ? Skin?.Palette.Error ?? LinkWarning : Vector4.Zero;
+        if (linkJoinField is not null)
+            linkJoinField.Outline = tint;
+        linkJoinStatus.Text = error ? $"[color:{HexColour(tint)}]$(error) {said}[/color]" : said;
         linkJoinStatus.Dim = linkJoinMessage is null;
     }
 

@@ -143,7 +143,8 @@ internal sealed partial class DawnScene
         agentPicker.OnPressed = () =>
         {
             var menu = new Menu("remote agent");
-            foreach (LinkRemoteSystem each in systems)
+            // The device can answer while this row is being laid out. Read its choices when the menu opens.
+            foreach (LinkRemoteSystem each in linkRemoteSystems.GetValueOrDefault(id) ?? [])
             {
                 string picked = each.Id;
                 menu.Add(each.Missing ? Said("link.runs_on_missing", ("name", each.Name)) : each.Name, () => LinkPickRemote(id, picked, null)).IsChecked = () => (linkRemotePicked.GetValueOrDefault(id).Agent ?? system?.Id) == picked;

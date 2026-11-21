@@ -38,7 +38,10 @@ internal sealed partial class DawnScene
         }
 
         if (folders.Count == 0)
+        {
+            column.Add(LinkLine(Said("link.devices_sync_none")));
             return;
+        }
         column.Add(new Label { Text = Said("link.sync_heading"), TextScale = LINK_SMALL, Bold = true, Align = Origin.Left, Fill = UIFill.Horizontal });
         foreach (string folder in folders)
         {
@@ -53,7 +56,7 @@ internal sealed partial class DawnScene
         string id = peer.Device.Id;
         var holder = new StackPanel { Spacing = 2.0f, Fill = UIFill.Horizontal, Padding = new UIEdges(12, 0, 0, 0) };
         var row = holder.Add(new StackPanel { Direction = UIDirection.Horizontal, Spacing = 8.0f, Fill = UIFill.Horizontal, Size = new Vector2(0, LINK_ROW) });
-        row.Add(new Label { Text = $"$(folder) [b]{UIRichText.Literal(folder)}[/b]", TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left });
+        row.Add(new Label { Text = $"$(folder) [b]{UIRichText.Literal(OneLine(folder, 25))}[/b]", TextScale = LINK_TEXT, Anchor = Origin.Left, Pivot = Origin.Left, Align = Origin.Left, Tooltip = folder });
         HexLinkSyncState state = sync?.State ?? HexLinkSyncState.Off;
         row.Add(new Badge
         {

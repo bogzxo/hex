@@ -30,7 +30,8 @@ internal sealed partial class DawnScene
     {
         StackPanel presets = LinkActionRow(column);
         StackPanel secondary = column.Size.X is > 0 and < 420 ? LinkActionRow(column) : presets;
-        Label exact = column.Add(LinkLine(string.Empty));
+        StackPanel exact = LinkActionRow(column, 24);
+        Label choose = column.Add(LinkLine(Said("link.devices_grant_none")));
         Label description = column.Add(LinkLine(string.Empty));
         StackPanel custom = LinkActionRow(column);
         StackPanel predict = LinkActionRow(column);
@@ -75,10 +76,16 @@ internal sealed partial class DawnScene
             for (int index = 0; index < kinds.Length; index++)
                 toggles[index].State = (rights & kinds[index]) != 0;
             for (int index = 0; index < buttons.Length; index++)
-                buttons[index].Selected = index == (int)preset;
-            exact.Text = UIRichText.Literal(LinkRightsAnything(rights)
-                ? Said("link.devices_grant_summary", ("rights", LinkRightsSaid(rights)))
-                : Said("link.devices_grant_none"));
+                buttons[index].Primary = index == (int)preset;
+            ClearRows(exact);
+            exact.Visible = LinkRightsAnything(rights);
+            choose.Visible = !exact.Visible;
+            if (exact.Visible)
+            {
+                exact.Add(new Label { Text = Said("link.devices_grants_here"), TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left });
+                foreach (Badge chip in LinkRightsChips(rights))
+                    exact.Add(chip);
+            }
             description.Text = UIRichText.Literal(Said(LinkPresetKey(preset) + "_tip"));
             custom.Visible = preset == LinkRightsPreset.Custom;
             warning.Visible = custom.Visible || (rights & HexLinkRights.Steer) != 0;

@@ -121,10 +121,15 @@ internal sealed partial class DawnScene
     /// said). The peer once it's up; throws HexLinkRefused with why when it isn't let in (unknown when the other end
     /// doesn't know this one, busy when they're linked already).
     /// </summary>
-    internal async Task<HexLinkPeer> LinkConnect(string host, int port, string? expectId = null)
+    internal async Task<HexLinkPeer> LinkConnect(string host, int port, string? expectId = null, CancellationToken cancel = default)
     {
         HexLinkTransport transport = linkTransport ?? throw new InvalidOperationException(Said("link.off"));
-        HexLinkConnection connection = await transport.Dial(host, port, expectId, linkCancel?.Token ?? CancellationToken.None);
+        HexLinkConnection connection = await transport.Dial(host, port, expectId, cancel.CanBeCanceled ? cancel : linkCancel?.Token ?? CancellationToken.None);
+        if (cancel.IsCancellationRequested)
+        {
+            connection.Dispose();
+            cancel.ThrowIfCancellationRequested();
+        }
         PostLink(() => linkHeldOff.Remove(connection.Device.Id));
         return await LinkAdd(connection) ?? throw new HexLinkRefused("refused", Said("link.not_linked", ("device", connection.Device.Name), ("why", "hello failed")));
     }
@@ -132,7 +137,8 @@ internal sealed partial class DawnScene
     /// <summary>A device's link cut by the person, not dialled again until they connect it. False when it wasn't linked.</summary>
     internal bool LinkDisconnect(string id)
     {
-        linkManualDials.Remove(id);
+        if (linkManualDials.Remove(id, out LinkDeviceConnection? connecting))
+            connecting.Attempt?.Cancel();
         linkHeldOff.Add(id);
         linkDirty = true;
         return link?.Remove(id, "it was disconnected here") == true;
@@ -148,7 +154,8 @@ internal sealed partial class DawnScene
         link?.Remove(id, "it was forgotten here");
         linkRedial.Soon(id);
         linkHeldOff.Remove(id);
-        linkManualDials.Remove(id);
+        if (linkManualDials.Remove(id, out LinkDeviceConnection? connecting))
+            connecting.Attempt?.Cancel();
         // The transport writes it in the audit log as it cuts the link
         if (forgot)
             Say(Said("link.forgotten", ("device", name)));

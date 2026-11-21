@@ -11,7 +11,7 @@ namespace Hex.Dawn;
 
 internal sealed partial class DawnScene
 {
-    private sealed record LinkDeviceConnection(bool Connecting, DateTime? RetryAtUtc, string? Reason);
+    private sealed record LinkDeviceConnection(bool Connecting, DateTime? RetryAtUtc, string? Reason, CancellationTokenSource? Attempt = null);
     private readonly Dictionary<string, LinkDeviceConnection> linkManualDials = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (HexLinkPeer Peer, long Sampled, double? Milliseconds)> linkLatencies = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(Badge State, Label Details, HexLinkKnown Device)> linkOfflineRows = [];
@@ -49,8 +49,7 @@ internal sealed partial class DawnScene
         if (known.Named is not null)
             column.Add(LinkLine(Said("link.device_calls_itself", ("name", known.Device.Name))));
         AddLinkNetwork(top, known, peer);
-        if ((peer?.Device ?? known.Device) is { Os.Length: > 0 } device)
-            column.Add(LinkLine($"{device.Os} {device.Arch}".Trim()));
+        string platform = LinkPlatform(peer?.Device ?? known.Device);
 
         if (peer is not null && HexLinkAllowed.Has(peer.Granted, HexLinkRights.View))
         {
@@ -62,10 +61,14 @@ internal sealed partial class DawnScene
                 Text = UIRichText.Literal(Said(running == 0 ? "link.devices_no_agents" : "link.devices_agent_count", ("count", running.ToString(CultureInfo.InvariantCulture)))),
                 TextScale = LINK_SMALL, Dim = true, Anchor = Origin.Left, Pivot = Origin.Left
             });
-            column.Add(LinkLine(name.Length > 0 ? OneLine(name, 90) : Said("link.devices_workspace_empty")));
+            string shownWorkspace = name.Length > 0 ? OneLine(name, 90) : Said("link.devices_workspace_empty");
+            column.Add(LinkLine(platform.Length > 0 ? $"{platform} · {shownWorkspace}" : shownWorkspace));
             foreach (HexLinkRepository repository in workspace.Repositories)
                 column.Add(LinkWorkspaceCommit(repository));
         }
+
+        else if (platform.Length > 0)
+            column.Add(LinkLine(platform));
 
         if (peer is not null)
             LinkDeviceSyncRows(column, peer);
@@ -92,7 +95,7 @@ internal sealed partial class DawnScene
         if (address.Length > 0)
         {
             string route = IPAddress.TryParse(address, out IPAddress? ip)
-                ? Said(IPAddress.IsLoopback(ip) ? "link.devices_route_local" : LinkIsVpn(ip) ? "link.devices_route_vpn" : "link.devices_route_lan")
+                ? Said(LinkIsVpn(ip) ? "link.devices_route_vpn" : "link.devices_route_lan")
                 : Said("link.devices_route_network");
             row.Add(new Badge { Text = route, Tooltip = address, TextScale = 0.11f, Anchor = Origin.Left, Pivot = Origin.Left });
         }
@@ -130,13 +133,26 @@ internal sealed partial class DawnScene
         return row;
     }
 
+    private static string LinkPlatform(HexLinkDevice device)
+    {
+        string os = device.Os switch
+        {
+            "windows" => "Windows",
+            "linux" => "Linux",
+            "macos" => "macOS",
+            _ => OneLine(device.Os, 40)
+        };
+        return $"{os} {device.Arch}".Trim();
+    }
+
     private Label LinkWorkspaceCommit(HexLinkRepository repo)
     {
         HexLinkRepository? local = linkServices?.Workspace.Repositories.FirstOrDefault(each => each.Name.Equals(repo.Name, StringComparison.OrdinalIgnoreCase));
         string comparison = repo.Head.Length == 0 || local is not { Head.Length: > 0 } ? Said("link.devices_commit_unknown")
             : Said(local.Head.Equals(repo.Head, StringComparison.OrdinalIgnoreCase) ? "link.devices_commit_same" : "link.devices_commit_different");
         string head = repo.Head[..Math.Min(repo.Head.Length, 8)];
-        return LinkLine(Said("link.devices_commit", ("repo", OneLine(repo.Name, 45)), ("branch", OneLine(repo.Branch, 24)), ("head", head), ("state", comparison)));
+        string branch = repo.Branch.Length > 0 ? OneLine(repo.Branch, 24) : Said("link.devices_commit_detached");
+        return LinkLine(Said("link.devices_commit", ("repo", OneLine(repo.Name, 45)), ("branch", branch), ("head", head), ("state", comparison)));
     }
 
     private void DrawLinkDeviceActions(StackPanel column, HexLinkKnown known, HexLinkPeer? peer)
@@ -153,19 +169,31 @@ internal sealed partial class DawnScene
                 offerShare ? share : get, "link.devices_provision_pending");
             AddLinkAction(actions, "link.devices_start_agent", "robot", HexLinkAllowed.Has(peer.Granted, HexLinkRights.Steer)
                 ? () => LinkStartAgentOnDevice(id) : null, "link.devices_needs_steer");
+            if (linkDeviceRowsNarrow)
+                actions = LinkActionRow(column);
             AddLinkAction(actions, "link.devices_open_files", "folder-opened", HexLinkAllowed.Has(peer.Granted, HexLinkRights.View)
                 ? () => LinkOpenRemoteCommand(peer) : null, "link.devices_needs_view");
         }
         else
         {
             LinkDeviceConnection? state = GetLinkDeviceConnection(id);
-            string key = state?.RetryAtUtc is not null ? "link.devices_try_now" : "link.device_connect";
-            AddLinkAction(actions, key, "plug", LinkOn && state?.Connecting != true && state?.Reason != "version" && LinkAddressesOf(known, LinkNearby).Count > 0
-                ? () => LinkConnectKnown(known) : null, "link.devices_no_reconnect");
+            if (state is { Attempt: not null, Connecting: true })
+                actions.Add(LinkButton(Said("link.pair_cancel"), "debug-stop", () => LinkDisconnect(id)));
+            else if (state?.Reason is "refused" or "pin" or "unknown")
+                actions.Add(LinkButton(Said("link.devices_pair_again"), "link", () => ShowLinkDevicePage(LinkDevicePage.Join)));
+            else if (state?.Reason != "version")
+            {
+                string key = state?.RetryAtUtc is not null || state?.Reason is "unreachable" or "timeout" or "firewall" ? "link.devices_try_now" : "link.device_connect";
+                AddLinkAction(actions, key, "plug", LinkOn && state?.Connecting != true && LinkAddressesOf(known, LinkNearby).Count > 0
+                    ? () => LinkConnectKnown(known) : null, "link.devices_no_reconnect");
+            }
         }
 
         Button more = actions.Add(LinkButton(Said("link.devices_more"), string.Empty, () => { }));
         more.Tooltip = Said("link.devices_more_other", ("device", known.Shown));
+        if (peer is not null && (offerShare ? share : get) is null)
+            column.Add(LinkLine(Said("link.devices_provision_pending")));
+
         more.OnPressed = () =>
         {
             var menu = new Menu("device actions");
@@ -238,6 +266,7 @@ internal sealed partial class DawnScene
             { RetryAtUtc: not null } => "link.devices_retrying",
             _ when reason is "version" => "link.devices_version",
             _ when reason is "refused" or "pin" or "unknown" => "link.devices_refused",
+            _ when reason is "unreachable" or "timeout" or "firewall" => "link.devices_unreachable",
             _ when LinkHeldOff(id) => "link.device_held_off",
             _ => "link.device_not_connected"
         };
