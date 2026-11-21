@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using System.Runtime;
-using System.Runtime.InteropServices;
 
 using Horizon.Engine;
 
@@ -97,32 +95,17 @@ internal static class DawnResident
 
         Asleep = false;
         Waking = true;
-        engine.WindowManager.Dormant = false;
+        engine.WindowManager.Resume();
         engine.SceneManager.CollectAfterChange = false;
         engine.SetScene(make(wake), null);
     }
 
-    /// <summary>The empty scene is in, the editor gone: nothing ticks from now on, and what memory can be is given back.</summary>
-    internal static void Settled(GameEngine engine)
-    {
-        // Hidden already, said again so the engine holds its frames (a start with the system never showed it at all)
-        engine.WindowManager.Hide();
-        engine.WindowManager.Dormant = true;
-        DawnScene.OffThread("giving memory back while asleep", () =>
-        {
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            Console.WriteLine($"[Hex] asleep, {GC.GetTotalMemory(false) / (1024 * 1024)} MB of objects kept, {GC.GetGCMemoryInfo().TotalCommittedBytes / (1024 * 1024)} MB committed");
-            if (Asleep && OperatingSystem.IsWindows())
-                SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, -1, -1);
-        });
-    }
-
-    [DllImport("kernel32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetProcessWorkingSetSize(nint process, nint least, nint most);
+    /// <summary>
+    /// The empty scene is in, the editor gone: the engine's application sleep from now on (WindowManager.Sleep), nothing
+    /// ticking or drawing, the surface let go of and what memory can be given back. It hides the window again, which a
+    /// start with the system never showed at all.
+    /// </summary>
+    internal static void Settled(GameEngine engine) => engine.WindowManager.Sleep();
 }
 
 /// <summary>What's on screen while Hex sleeps, nothing, see DawnResident.</summary>
