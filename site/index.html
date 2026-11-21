@@ -77,7 +77,7 @@
         </ul>
         <div class="actions">
           <a class="button" href="#get-it"><!-- release:button -->Download Hex 3.2.0 Amphetamine<!-- /release:button --></a>
-          <a class="button quiet" href="#numbers">Show me the receipts</a>
+          <a class="button quiet" href="#next-to-the-other">Show me the receipts</a>
         </div>
         <p class="note wip"><a href="https://github.com/bogzxo/hex">Source on GitHub</a>. Hex is a work in progress, more features are always on the way, and you can <button type="button" class="link" commandfor="request" command="show-modal">request one</button> :)</p>
         </div>
@@ -86,8 +86,8 @@
         <figure class="shot" style="margin-inline: 0">
           <!-- One picture a look, the stylesheet showing the one the page is in. A <source media> only knows the system's
                choice, never the switch's -->
-          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
-          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
+          <img class="night-only" src="images/editor-1600.webp" srcset="images/editor-800.webp 800w, images/editor-1600.webp 1600w, images/editor-3200.webp 3200w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" fetchpriority="high" alt="Hex's editor with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
+          <img class="day-only" src="images/light-1600.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w, images/light-3200.webp 3200w" sizes="(min-width: 70rem) 50vw, 94vw" width="1600" height="900" loading="lazy" alt="Hex's editor in Solstice Day with a small C# synthesiser open: the explorer on the left, semantic colours, inlay hints naming the arguments, reference counts over each member, git blame on the current line, a highlighted TODO and a minimap">
         </figure>
         <p class="note">Dawn, the editor. Semantic colours, hints, reference counts and blame, live from csharp-ls and git, not a mockup. It follows your system between Solstice and Solstice Day.</p>
 
@@ -128,7 +128,7 @@
           <p class="note">Start to the window on screen, the same build both ways, 7 cold launches and 36 wakes, medians. Asleep, Hex keeps 296 MiB of private memory committed so it can wake without loading anything again, regardless, Windows pages nearly all of it out to disk, and the 5 MiB is what actually stays in RAM.</p>
         </div>
 
-        <h3 class="numbers-head">Next to the other editor</h3>
+        <h3 class="numbers-head" id="next-to-the-other">Next to the other editor</h3>
         <p>You know the one, built on a browser. The same machine, with the same projects and files open, both with C# support: its current release with its C# kit, C#, Python, Jupyter and C++ extensions installed, Hex with its own C# server. Each opened three times in turn after a thrown-away launch, medians.</p>
         <ul class="vs rise" aria-label="Hex next to the other editor">
             <li>
@@ -239,63 +239,63 @@
 
         <div class="gallery swipe" data-label="Screenshots">
           <figure class="rise">
-            <a href="images/actions-1600.webp"><img src="images/actions-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Sum isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Linq, at the top, then two refactorings from csharp-ls and the editor's own Rename and Organise Imports"></a>
+            <a href="images/actions-3200.webp"><img src="images/actions-800.webp" srcset="images/actions-800.webp 800w, images/actions-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Ctrl+. on a line where Stopwatch isn't found, a lightbulb in the gutter and a menu of actions: the fix, using System.Diagnostics, at the top, then csharp-ls's refactorings to extract a method or generate the missing name"></a>
             <figcaption><b><kbd>Ctrl+.</kbd></b> Every fix and refactoring for the line, the best one first.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/explorer-1600.webp"><img src="images/explorer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The explorer with mi typed into its find box, Mixer.cs found and outlined, a dot on the project folder for a change under it and a chain of single folders shown as one row"></a>
+            <a href="images/explorer-1600.webp"><img src="images/explorer-800.webp" srcset="images/explorer-800.webp 800w, images/explorer-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The explorer with mi typed into its find box, Mixer.cs found and outlined, a dot on the project folder for a change under it and a chain of single folders shown as one row"></a>
             <figcaption><b>The explorer.</b> Type to find a file. Changes and problems are flagged on their folders.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
+            <a href="images/welcome-1600.webp"><img src="images/welcome-800.webp" srcset="images/welcome-800.webp 800w, images/welcome-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The welcome page leading with Open Folder and Clone Repository, a Getting started checklist of six with 0 of 6 done, and what's new in 3.3.0 beside it"></a>
             <figcaption><b>Welcome.</b> Open a folder and get to work. Setup is six steps, tracked for you.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
+            <a href="images/terminal-states-1600.webp"><img src="images/terminal-states-800.webp" srcset="images/terminal-states-800.webp 800w, images/terminal-states-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A C# file over the terminal panel, its second tab marked failed, and a bar under the pane saying Exited with code 2, Press Enter to restart"></a>
             <figcaption><b>Shells that report their exit.</b> The exit code stays on screen and the tab is flagged.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/completion-1600.webp"><img src="images/completion-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
+            <a href="images/completion-3200.webp"><img src="images/completion-800.webp" srcset="images/completion-800.webp 800w, images/completion-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A completion list under mixer. offering Add, the Clipped event, methods and the Peak and SampleRate properties, each name in the colour its kind has in the code, with Add's signature beside it"></a>
             <figcaption><b>Completion.</b> Straight from the language server as you type, coloured by kind.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
+            <a href="images/webdev-1600.webp"><img src="images/webdev-800.webp" srcset="images/webdev-800.webp 800w, images/webdev-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="An HTML page with a style block, CSS background properties offered as the word is typed inside it, with MDN's description of background-color and its browser support beside the list"></a>
             <figcaption><b>The web.</b> HTML, CSS and SCSS, CSS included inside a page's <code>&lt;style&gt;</code>.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
+            <a href="images/typescript-1600.webp"><img src="images/typescript-800.webp" srcset="images/typescript-800.webp 800w, images/typescript-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="TypeScript with a property that isn't on the Track interface underlined, and title, seconds and gain offered after track. in a template string"></a>
             <figcaption><b>TypeScript.</b> TypeScript 7's native server: type errors and members as you type.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/hover-1600.webp"><img src="images/hover-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
+            <a href="images/hover-3200.webp"><img src="images/hover-800.webp" srcset="images/hover-800.webp 800w, images/hover-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A hover card over MathF with its documentation"></a>
             <figcaption><b>Hover.</b> Documentation under the pointer.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/debug-1600.webp"><img src="images/debug-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
+            <a href="images/debug-1600.webp"><img src="images/debug-800.webp" srcset="images/debug-800.webp 800w, images/debug-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The debugger stopped on a highlighted line, with threads, the call stack, variables and breakpoints in the side bar and stepping controls over the code"></a>
             <figcaption><b>Debugging.</b> Breakpoints, stack and locals beside the code.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/git-1600.webp"><img src="images/git-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
+            <a href="images/git-3200.webp"><img src="images/git-800.webp" srcset="images/git-800.webp 800w, images/git-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Source Control with a commit box and one changed file, and its diff with added lines in green and a changed line marked word by word"></a>
             <figcaption><b>Git.</b> Word-level diffs next to the commit box.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/search-1600.webp"><img src="images/search-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
+            <a href="images/search-3200.webp"><img src="images/search-800.webp" srcset="images/search-800.webp 800w, images/search-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Workspace search for Peak listing 22 results in 4 files, grouped by file"></a>
             <figcaption><b>Search.</b> The whole workspace, grouped by file.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/notebook-1600.webp"><img src="images/notebook-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
+            <a href="images/notebook-3200.webp"><img src="images/notebook-800.webp" srcset="images/notebook-800.webp 800w, images/notebook-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The engineering sample notebook after Run All: Python cells numbered with their run times, each printing a PASS line and a typeset equation for a cantilever's deflection, an RC circuit's charge and a pipe's pressure drop, and the kernel idle on the bar"></a>
             <figcaption><b>Notebooks.</b> Real kernels and typeset maths, with every cell timed.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/markdown-1600.webp"><img src="images/markdown-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
+            <a href="images/markdown-3200.webp"><img src="images/markdown-800.webp" srcset="images/markdown-800.webp 800w, images/markdown-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="A Markdown preview with headings, typeset equations, a table of voices and a task list"></a>
             <figcaption><b>Markdown.</b> Tables and maths, rendered natively.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/designer-1600.webp"><img src="images/designer-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
+            <a href="images/designer-1600.webp"><img src="images/designer-800.webp" srcset="images/designer-800.webp 800w, images/designer-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The layout designer: a toolbox of components, the layout's tree, the canvas with a button selected and that button's properties"></a>
             <figcaption><b>Designer.</b> Hex's own welcome page, edited in Hex.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used under it, the sections down the left, and each setting saying in a line what it does"></a>
+            <a href="images/settings-1600.webp"><img src="images/settings-800.webp" srcset="images/settings-800.webp 800w, images/settings-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The settings window at Editor, Text: a search box with All, Modified and Commonly used under it, the sections down the left, and each setting saying in a line what it does"></a>
             <figcaption><b>Settings.</b> Every setting explained in one line. One click shows what you changed.</figcaption>
           </figure>
         </div>
@@ -450,11 +450,11 @@
 
         <div class="gallery pairs swipe" data-label="Agentic screenshots">
           <figure class="rise">
-            <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
+            <a href="images/agentic-inbox-1600.webp"><img src="images/agentic-inbox-800.webp" srcset="images/agentic-inbox-800.webp 800w, images/agentic-inbox-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The Inbox: a card where one agent asks leave to run dotnet build, with Allow and Deny buttons, and two cards for chats that finished"></a>
             <figcaption><b>The Inbox.</b> Every pending agent request in one place. <kbd>Ctrl+Alt+Y</kbd> allows, <kbd>Ctrl+Alt+N</kbd> denies.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
+            <a href="images/agentic-review-1600.webp"><img src="images/agentic-review-800.webp" srcset="images/agentic-review-800.webp 800w, images/agentic-review-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="Changes: one turn's edit to Mixer.cs opened as three hunks, each with Keep and Undo buttons, and Restore the turn above them"></a>
             <figcaption><b>Every change reversible.</b> Each turn checkpointed. Keep or undo a hunk, or restore the turn.</figcaption>
           </figure>
         </div>
@@ -508,19 +508,19 @@
         <p>Hex3 comes in Solstice: flush panes and an accent for each face, orange for Dawn, violet for Dusk, teal for Agentic. Go light with Solstice Day, back to quiet Graphite, float the panels in glass, or make it feel like Visual Studio. In every look, links, dim text and accent text meet 4.5:1 contrast. Keep it calm, make it loud, or switch the effects off. It's your screen, for fuck's sake.</p>
         <div class="gallery pairs swipe" data-label="Looks">
           <figure class="rise">
-            <a href="images/light-1600.webp"><img src="images/light-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
+            <a href="images/light-3200.webp"><img src="images/light-800.webp" srcset="images/light-800.webp 800w, images/light-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Solstice Day, dark text on white with an orange accent"></a>
             <figcaption><b>Solstice Day.</b> For a bright room.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/graphite-1600.webp"><img src="images/graphite-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Graphite, a neutral dark grey"></a>
+            <a href="images/graphite-3200.webp"><img src="images/graphite-800.webp" srcset="images/graphite-800.webp 800w, images/graphite-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Graphite, a neutral dark grey"></a>
             <figcaption><b>Graphite.</b> Quiet.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/glass-1600.webp"><img src="images/glass-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating over a dark blue with a blue accent"></a>
+            <a href="images/glass-3200.webp"><img src="images/glass-800.webp" srcset="images/glass-800.webp 800w, images/glass-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in Fluid Glass, its panels rounded and floating over a dark blue with a blue accent"></a>
             <figcaption><b>Fluid Glass.</b> Floating panels.</figcaption>
           </figure>
           <figure class="rise">
-            <a href="images/visual-studio-1600.webp"><img src="images/visual-studio-800.webp" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Visual Studio look, a neutral dark grey with blue file icons"></a>
+            <a href="images/visual-studio-3200.webp"><img src="images/visual-studio-800.webp" srcset="images/visual-studio-800.webp 800w, images/visual-studio-1600.webp 1600w" sizes="(min-width: 70rem) 30vw, (min-width: 44rem) 45vw, 88vw" width="800" height="450" loading="lazy" decoding="async" alt="The editor in the Visual Studio look, a neutral dark grey with blue file icons"></a>
             <figcaption><b>Visual Studio.</b> For the muscle memory.</figcaption>
           </figure>
         </div>
