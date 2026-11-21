@@ -1,16 +1,19 @@
 // What Hex opens on when nothing is open, over the canvas of the empty layout it starts with. Gone the moment anything
-// is added to that layout or a file is opened. The recent files are put in by the editor, see HexScene.Welcome.
+// is added to that layout or a file is opened. The editor fills it in and lays it out, see DawnScene.Welcome.
+//
+// One thing leads. The first time that's opening a folder (or cloning one), with Getting started under it, a short list
+// of what's worth setting up that ticks itself off. Once there's history the files worked on last lead instead, the row
+// of what to start with quieter under them.
 #define layout
 
+// Its colour is the skin's, put in by DawnScene.MakeWelcome
 let welcome = compositor.panel({
     fill: "both",
-    color: vec(0.065, 0.07, 0.092, 1),
 });
 
-// Scroll on short windows. The page grows with the window to 1240 wide and sits in the middle of it: a column of 760 at
-// the left of a 1920 window left two thirds of it empty. The room over and under the page is spacers scrolled with it
-// rather than the scroll's padding, which it clips inside of: scrolled, the page went 48 pixels under the pane's top.
-// DawnScene.Welcome sizes the room over it to the window's height.
+// Scroll on short windows. The page grows with the window to 1080 wide and sits in the middle of it. The room over and
+// under the page is spacers scrolled with it rather than the scroll's padding, which it clips inside of. DawnScene.Welcome
+// sizes the room over it to the window's height and the room either side to its width
 let welcome_scroll = compositor.scroll({ parent: welcome, fill: "both", padding: vec(56, 0, 32, 0) });
 let welcome_body = compositor.stack({ parent: welcome_scroll, spacing: 0 });
 let welcome_top = compositor.spacer({ parent: welcome_body, size: vec(0, 48) });
@@ -19,11 +22,11 @@ let page = compositor.stack({
     anchor: "top",
     pivot: "top",
     size: vec(760, 0),
-    spacing: 32,
+    spacing: 28,
 });
 let welcome_bottom = compositor.spacer({ parent: welcome_body, size: vec(0, 32) });
 
-// The icon beside the name, the way an app's welcome window has it
+// The icon beside the name, the way an app's welcome window has it, and what to do under it
 let brand = compositor.stack({
     parent: page,
     anchor: "left",
@@ -38,7 +41,7 @@ let icon = compositor.image({
     pivot: "left",
     // The build's own mark, grey in a Debug build (DawnScene.MakeWelcome puts HexIdentity.ICON here)
     file: "Assets/hex_icon.png",
-    size: vec(72, 72),
+    size: vec(56, 56),
 });
 
 // The name over what this release is called, the two as one block beside the icon
@@ -54,7 +57,7 @@ let title = compositor.label({
     anchor: "left",
     pivot: "left",
     text: "@welcome.title",
-    text_scale: 0.56,
+    text_scale: 0.44,
     bold: true,
     align: "left",
 });
@@ -74,7 +77,7 @@ let release_name = compositor.label({
     anchor: "bottom_left",
     pivot: "bottom_left",
     text: "Amphetamine",
-    text_scale: 0.19,
+    text_scale: 0.16,
     bold: true,
     align: "left",
 });
@@ -84,11 +87,12 @@ let release_number = compositor.label({
     anchor: "bottom_left",
     pivot: "bottom_left",
     text: "3.1.0",
-    text_scale: 0.14,
+    text_scale: 0.13,
     dim: true,
     align: "left",
 });
 
+// What to do now, said for the first time or for the times after (DawnScene.Welcome)
 let subtitle = compositor.label({
     parent: page,
     anchor: "left",
@@ -97,18 +101,88 @@ let subtitle = compositor.label({
     text_scale: 0.17,
     wrap: true,
     size: vec(560, 0),
-    dim: false,
+    dim: true,
     align: "left",
 });
 
-// What to start with, in one row under the words: Open Folder first and the one primary, the rest quiet beside it.
-// DawnScene.Welcome puts New File and New Project in, orders the row for the designer's welcome or the plain one, and
-// sizes each to its words. Stacked a line each where the page is narrow
-let start = compositor.stack({
+// The files worked on last, the lead once there are any: a row each with its icon, its name and the folder it's in.
+// Away the first time, when there's nothing to show. Put in by the editor
+let recent_column = compositor.stack({
     parent: page,
     anchor: "top_left",
     pivot: "top_left",
+    spacing: 6,
+});
+
+let recent_title = compositor.label({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.recent",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let recent = compositor.stack({
+    parent: recent_column,
+    anchor: "left",
+    pivot: "left",
+    template: "link.hor",
+    preview_count: 3,
+    spacing: 0,
+});
+
+// What to start with: Open Folder and Clone Repository, the two that lead the first time, then the quieter ones in a row of
+// their own. DawnScene.Welcome puts the rest in, orders them for the designer's welcome or the plain one and sizes each to
+// its words, a line each where the page is narrow
+let start_block = compositor.stack({
+    parent: page,
+    anchor: "top_left",
+    pivot: "top_left",
+    spacing: 10,
+});
+
+let lead = compositor.stack({
+    parent: start_block,
+    anchor: "top_left",
+    pivot: "top_left",
     spacing: 8,
+    direction: "horizontal",
+});
+
+let open_folder = compositor.button({
+    parent: lead,
+    anchor: "left",
+    pivot: "left",
+    icon: "folder-opened",
+    label: "@welcome.open_folder",
+    style: "button",
+    primary: true,
+    lbl_scale: 0.16,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
+});
+
+let clone = compositor.button({
+    parent: lead,
+    anchor: "left",
+    pivot: "left",
+    icon: "repo-clone",
+    label: "@welcome.clone",
+    style: "button",
+    lbl_scale: 0.16,
+    hover: "none",
+    hover_amount: 4,
+    hover_time: 0.08,
+});
+
+let start = compositor.stack({
+    parent: start_block,
+    anchor: "top_left",
+    pivot: "top_left",
+    spacing: 4,
     direction: "horizontal",
 });
 
@@ -119,7 +193,7 @@ let new_layout = compositor.button({
     icon: "new-file",
     label: "@welcome.new_layout",
     style: "button_flat",
-    lbl_scale: 0.15,
+    lbl_scale: 0.145,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
@@ -132,47 +206,77 @@ let open_file = compositor.button({
     icon: "go-to-file",
     label: "@welcome.open_file",
     style: "button_flat",
-    lbl_scale: 0.15,
+    lbl_scale: 0.145,
     hover: "none",
     hover_amount: 4,
     hover_time: 0.08,
 });
 
-let open_folder = compositor.button({
-    parent: start,
-    anchor: "left",
-    pivot: "left",
-    icon: "folder-opened",
-    label: "@welcome.open_folder",
-    style: "button",
-    primary: true,
-    lbl_scale: 0.15,
-    hover: "none",
-    hover_amount: 4,
-    hover_time: 0.08,
-});
-
-// Two columns under the row: what's been going on (what's new, recent files, the agents) on the left, and getting Hex
-// set up on the right, a row a setting worth knowing with how it is now. One over the other where the page is narrow
+// Two columns under it: Getting started, and the agents with what's new. One over the other where the page is narrow
 let columns = compositor.stack({
     parent: page,
     anchor: "top_left",
     pivot: "top_left",
-    spacing: 40,
+    spacing: 48,
     direction: "horizontal",
 });
 
-let recent_column = compositor.stack({
+// Getting started: a short list of what's worth setting up, each ticked off once it is, with how it is now and the switch
+// or button that does it there and then. Put in by the editor, see DawnScene.WelcomeChecklist
+let getting_column = compositor.stack({
     parent: columns,
     anchor: "top",
     pivot: "top",
     spacing: 4,
 });
 
+let getting = compositor.stack({
+    parent: getting_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 2,
+});
+
+// The agents of this workspace and what the release brought
+let side_column = compositor.stack({
+    parent: columns,
+    anchor: "top",
+    pivot: "top",
+    spacing: 4,
+});
+
+// A new agent, the last chat to carry on with and how many want looking at, put in by the editor (DawnScene.Welcome
+// FillWelcomeAgents) and kept up as the chats move
+let agents_block = compositor.stack({
+    parent: side_column,
+    anchor: "left",
+    pivot: "left",
+    spacing: 4,
+});
+
+let agents_title = compositor.label({
+    parent: agents_block,
+    anchor: "left",
+    pivot: "left",
+    text: "@welcome.agents",
+    text_scale: 0.17,
+    bold: true,
+    align: "left",
+});
+
+let agents = compositor.stack({
+    parent: agents_block,
+    anchor: "left",
+    pivot: "left",
+    spacing: 0,
+});
+
+let agents_gap = compositor.spacer({ parent: agents_block, size: vec(0, 18) });
+
 // What the release that's running brought, a line each with a button under it that goes to the thing, put in by the
-// editor (HexWhatsNew). First in the column so it's seen without scrolling, and away when there's nothing to say.
+// editor (HexWhatsNew), and away when there's nothing to say
 let news_column = compositor.stack({
-    parent: recent_column,
+    parent: side_column,
     anchor: "left",
     pivot: "left",
     spacing: 6,
@@ -193,84 +297,6 @@ let news = compositor.stack({
     anchor: "left",
     pivot: "left",
     spacing: 8,
-});
-
-let news_gap = compositor.spacer({ parent: news_column, size: vec(0, 10) });
-
-let recent_title = compositor.label({
-    parent: recent_column,
-    anchor: "left",
-    pivot: "left",
-    text: "@welcome.recent",
-    text_scale: 0.17,
-    bold: true,
-    align: "left",
-});
-
-// A button a file that was worked on lately, put in by the editor
-let recent = compositor.stack({
-    parent: recent_column,
-    anchor: "left",
-    pivot: "left",
-    template: "link.hor",
-    preview_count: 3,
-    spacing: 2,
-});
-
-// The agents of this workspace, a new one, the last chat to carry on with and how many want looking at, put in by the
-// editor (DawnScene.Welcome FillWelcomeAgents) and kept up as the chats move. A column of their own on a wide page
-// (side_column, after Getting started), under the recent files otherwise: DawnScene.Welcome moves them
-let agents_gap = compositor.spacer({ parent: recent_column, size: vec(0, 14) });
-
-let agents_title = compositor.label({
-    parent: recent_column,
-    anchor: "left",
-    pivot: "left",
-    text: "@welcome.agents",
-    text_scale: 0.17,
-    bold: true,
-    align: "left",
-});
-
-let agents = compositor.stack({
-    parent: recent_column,
-    anchor: "left",
-    pivot: "left",
-    spacing: 2,
-});
-
-// Getting started: the settings worth knowing about that nobody finds by looking, grouped, each saying how it is now with
-// the switch or the button that changes it there and then. Put in by the editor, see DawnScene.Welcome FillGettingStarted
-let getting_column = compositor.stack({
-    parent: columns,
-    anchor: "top",
-    pivot: "top",
-    spacing: 4,
-});
-
-let getting_title = compositor.label({
-    parent: getting_column,
-    anchor: "left",
-    pivot: "left",
-    text: "@welcome.getting_started",
-    text_scale: 0.17,
-    bold: true,
-    align: "left",
-});
-
-let getting = compositor.stack({
-    parent: getting_column,
-    anchor: "left",
-    pivot: "left",
-    spacing: 2,
-});
-
-// The third column on a wide page, the agents' (see agents_title)
-let side_column = compositor.stack({
-    parent: columns,
-    anchor: "top",
-    pivot: "top",
-    spacing: 4,
 });
 
 // Help, quietly at the foot: the commands with their key, the keys, the HIDL reference, the release notes

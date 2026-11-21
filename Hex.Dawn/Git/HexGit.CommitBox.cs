@@ -83,7 +83,7 @@ internal sealed partial class HexGit
         Vector4? accent = AccentOf?.Invoke();
         if (context.Workspace.Roots.Count > 0)
             items.Add(HexNotes.Link(context.Strings.Said("git.init_button"), "add", accent, InitRepository));
-        items.Add(HexNotes.Link(context.Strings.Said("git.clone_button"), "repo-clone", accent, AskClone));
+        items.Add(HexNotes.Link(context.Strings.Said("git.clone_button"), "repo-clone", accent, () => AskClone()));
     }
 
     /// <summary>A repository made of the workspace's first folder, git init in it.</summary>
@@ -108,8 +108,11 @@ internal sealed partial class HexGit
         }, quiet: true);
     }
 
-    /// <summary>A repository cloned, its address asked for, then the folder to put it in, and opened once it's there.</summary>
-    private void AskClone()
+    /// <summary>
+    /// A repository cloned, its address asked for, then the folder to put it in, and a note with Open once it's there, or
+    /// opened straight away when <paramref name="open"/> (the welcome's Clone Repository).
+    /// </summary>
+    internal void AskClone(bool open = false)
     {
         context.Windows.Prompt(context.Strings.Said("git.clone_title"), context.Strings.Said("git.clone_text"), string.Empty,
             context.Strings.Said("git.clone_go"), context.Strings.Said("git.clone_placeholder"), typed =>
@@ -131,6 +134,11 @@ internal sealed partial class HexGit
                         }
 
                         ClearFailure();
+                        if (open && OpenFolder is { } opening)
+                        {
+                            opening(into);
+                            return;
+                        }
                         context.Notices.Notify(context.Strings.Said("git.cloned", ("folder", into)), false,
                             (context.Strings.Said("git.clone_open"), () => OpenFolder?.Invoke(into)));
                     });

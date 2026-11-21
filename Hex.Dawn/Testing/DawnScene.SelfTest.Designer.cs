@@ -30,7 +30,7 @@ internal sealed partial class DawnScene
         test.Run(() => welcomeWanted = true);
         test.Settle(0.2f);
         test.Check("welcome: with nothing open the welcome is over the empty layout, with what to start with", () =>
-            welcome is { Visible: true } page && page.Parent == canvas && Descendants(page).OfType<Button>().Any(button => button.Label == "@welcome.new_layout"));
+            welcome is { Visible: true } page && page.Parent == canvas && Descendants(page).OfType<Button>().Any(button => button.Label == Said("welcome.new_layout")));
         test.Check("welcome: what's new lists every line of this version, each with a button that goes somewhere", () =>
             welcome is { } page && HexWhatsNew.For(Hex.Shell.HexVersion.Number) is { Count: > 0 } items
             && Descendants(page).OfType<Button>().Count(button => items.Any(item => button.Label == Said("whats_new." + item.Go))) == items.Count

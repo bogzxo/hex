@@ -231,6 +231,12 @@ internal sealed partial class HexSettings
     /// </summary>
     public bool VisualStudioKeysChosen;
 
+    /// <summary>The steps of the welcome's Getting started seen to from it, by name and a comma between.</summary>
+    public string WelcomeDone = string.Empty;
+
+    /// <summary>Whether Getting started was folded to its one line with Hide.</summary>
+    public bool WelcomeChecklistHidden;
+
     /// <summary>The colours C# is shown in, resharper, visual_studio, or skin for whatever the skin has.</summary>
     public string CSharpColors = "resharper";
     /// <summary>

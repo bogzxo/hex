@@ -395,6 +395,7 @@ internal sealed partial class DawnScene
         ("shell", "the shell round the editor, the side bar one width whatever is in it, empty notes, the title over the welcome, long tabs, Extensions lit, the explorer's buttons", TestShellLayout),
         ("work", "the work going in the background, its cards and their bars, one at a time a key, stopping it, a failure, an install pressed twice", TestWork),
         ("csharp", "C# through csharp-ls, what's wrong underlined and completion after a dot, when csharp-ls is on this machine", TestCSharp),
+        ("welcome-looks", "the welcome page in every look at 100, 150 and 200%, the first time and with history, everything inside it, pictures with HEX_SELFTEST_SHOTS", TestWelcomeLooks),
         ("getting-started", "the welcome page's Getting started, a link each to the settings nobody finds by looking, as wide as Start's, each opening its setting", TestGettingStarted),
         ("servers-window", "the Language Servers window: Overview finds the workspace's languages, a step's command shown and run (and one queued behind it), a failure with its log, a server's own settings changed and reset, every page", TestServersWindow),
         ("spelling", "spelling through Windows' spell checker, a comment in code but no names or strings, an HTML page's words and comments and its style's and script's comments but no tags or code, .txt and Markdown", TestSpelling),

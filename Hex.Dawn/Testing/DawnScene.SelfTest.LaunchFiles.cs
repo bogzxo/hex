@@ -117,12 +117,13 @@ internal sealed partial class DawnScene
         test.Check("launch: started on code the empty layout has no tab, and the status bar says nothing of HIDL or where the caret is", () =>
             PlainStart && documents.Count == 1 && docTabs.Tabs.Count == 0
             && languageItem.IsVisible?.Invoke() == false && caretItem.IsVisible?.Invoke() == false);
-        // The action bar: Open Folder first (the one primary), then New File, Open File, New Project, New Layout last. The
-        // palette and the rest of help went to the footer
-        test.Check("launch: its action bar leads with Open Folder, then New File, Open File, New Project and New Layout last", () =>
+        // Open Folder leads (the one primary) with Clone Repository beside it, then a quieter row of New File, Open File, New
+        // Project and New Layout last. The palette and the rest of help went to the footer
+        test.Check("launch: it leads with Open Folder and Clone Repository, then New File, Open File, New Project and New Layout last", () =>
             plainPage is not null && Descendant<Button>(plainPage, button => Says(button, "welcome.new_file"))?.Parent is { } start
-            && IndexIn(start, "welcome.open_folder") == start.Children.ToList().FindIndex(child => child is Button)
-            && IndexIn(start, "welcome.open_folder") < IndexIn(start, "welcome.new_file")
+            && Descendant<Button>(plainPage, button => Says(button, "welcome.open_folder")) is { Primary: true, Parent: { } lead }
+            && IndexIn(lead, "welcome.open_folder") == 0 && IndexIn(lead, "welcome.clone") == 1
+            && IndexIn(start, "welcome.new_file") == 0
             && IndexIn(start, "welcome.new_file") < IndexIn(start, "welcome.open_file")
             && IndexIn(start, "welcome.open_file") < IndexIn(start, "new_project.welcome")
             && IndexIn(start, "new_project.welcome") < IndexIn(start, "welcome.new_layout")
