@@ -2,7 +2,7 @@
 
 Branch `feat/edit-prediction-core` (worktree `hexwt-predict-core`), based on `feat/edit-prediction` 88e9687.
 
-## Done (written, not yet built)
+## Done (Hex.Core builds with no errors or warnings; no tests yet)
 
 `Hex.Core/Prediction/`: PredictionStatus, PredictionException, PredictionWireRequest, IPredictionProvider (public);
 PredictionOptions, PredictionEdit, PredictionEvent, PredictionExcerpt, PredictionInput, PredictionPrompt,
@@ -18,7 +18,7 @@ Goldens copied: `Hex.Tests/Goldens/Prediction/zeta2.prompt`, `zeta2.output` (the
 
 ## Left
 
-1. Build and fix compile errors.
+1. Next step: write the tests.
 2. Hex.Tests: embed the goldens (csproj EmbeddedResource or copy to output), tests in `Prediction*Tests.cs`: formats
    (golden byte for byte, budgets, markers refused, FIM tokens, infer), answers, PredictionDiff, providers with a fake
    HttpMessageHandler (bodies, NDJSON, SSE, split chunks, errors -> status, key never in messages, cancel closes the

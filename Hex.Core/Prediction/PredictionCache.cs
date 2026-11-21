@@ -29,7 +29,7 @@ internal sealed class PredictionCache
     public static string Key(string text, int caret, string model, string format)
     {
         int start = Math.Max(0, caret - BEFORE), end = Math.Min(text.Length, caret + AFTER);
-        return string.Concat(model, "\0", format, "\0", text.AsSpan(start, end - start), "\0") + (caret - start).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return string.Concat(model + "\0" + format + "\0", text.AsSpan(start, end - start), "\0" + (caret - start).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>The prediction kept for a key, its edits moved to the caret it's asked for at.</summary>
