@@ -53,7 +53,7 @@ internal sealed partial class DawnScene
         Exception? terminalRefusal = null, conflict = null, notAllowed = null, strangerRefusal = null, mitmRefusal = null;
         string? writtenHash = null, myCode = null, otherId = null, agentReply = null, agentWhy = null;
         string theirs = string.Empty;
-        bool cut = false, redialRefused = false, gotFile = false;
+        bool cut = false, redialRefused = false, gotFile = false, droppedHere = false;
         var stop = new CancellationTokenSource();
 
         void Say(string line) => Console.WriteLine($"[Hex self-test] link-cross: {line}");
@@ -304,13 +304,14 @@ internal sealed partial class DawnScene
         test.WaitFor(() =>
         {
             LinkCrossIncoming(work, myFile, ref gotFile, Mark);
-            if (Theirs("watched") is not null && otherId is not null && Theirs("dropped") is null && !File.ReadAllText(status).Contains("dropped\n", StringComparison.Ordinal))
+            if (!droppedHere && Theirs("watched") is not null && otherId is not null)
             {
+                droppedHere = true;
                 LinkSetRights(otherId, HexLinkRights.View);
                 Mark("dropped");
             }
 
-            return peer?.Granted == HexLinkRights.View && File.ReadAllText(status).Contains("dropped\n", StringComparison.Ordinal);
+            return peer?.Granted == HexLinkRights.View && droppedHere;
         }, agent is null ? 120.0f : 480.0f);
         test.Run(() => step = peer?.Write($"{LINK_CROSS_FOLDER}/{myFile}", writtenHash, Encoding.UTF8.GetBytes("not allowed\n")).ContinueWith(done => notAllowed = done.Exception?.InnerException, TaskScheduler.Default));
         test.WaitFor(() => step is { IsCompleted: true }, 20.0f);
