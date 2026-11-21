@@ -87,6 +87,8 @@ internal sealed class HexLinkDiscovery : IDisposable
     /// <summary>Why discovery is off, null while it's on or hasn't been started.</summary>
     public string? Off { get; private set; }
 
+    internal Func<Socket>? SocketFactory { get; init; }
+
     /// <summary>What was found changed, on the receiving thread.</summary>
     public Action? Changed { get; set; }
 
@@ -226,9 +228,10 @@ internal sealed class HexLinkDiscovery : IDisposable
             if (Off is not null)
                 return false;
 
-            var made = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            Socket? made = null;
             try
             {
+                made = SocketFactory?.Invoke() ?? new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
                 // On Unix .NET sets SO_REUSEPORT with this too, which is what lets it sit beside mDNSResponder and Avahi
                 made.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 made.Bind(new IPEndPoint(IPAddress.Any, MDNS_PORT));
@@ -257,7 +260,7 @@ internal sealed class HexLinkDiscovery : IDisposable
             }
             catch (SocketException e)
             {
-                made.Dispose();
+                made?.Dispose();
                 Off = $"mDNS couldn't use UDP port {MDNS_PORT}, {e.Message}";
                 Console.WriteLine($"[Hex] Link's discovery is off, {Off}");
                 return false;
