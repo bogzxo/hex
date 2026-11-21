@@ -9,8 +9,8 @@ namespace Hex.Core;
 /// and the job ends of itself when Hex does, closed or crashed or killed. Killing the run's tree found only what was still
 /// joined to it by its parents: a self test a shell started and then left, or a build's server, went on with nobody
 /// watching it, and an agent whose turn outlived a restart of Hex went on working beside the one started after it. What
-/// asks to break away (the bridge opening a Hex window of its own) is let go. Nothing at all elsewhere, where killing the
-/// tree is all there is.
+/// asks to break away (the bridge opening a Hex window of its own) is let go. Linux and macOS have a session and group
+/// of the run's own instead (HexAgentGroup).
 /// </summary>
 internal sealed partial class HexAgentJob : IDisposable
 {

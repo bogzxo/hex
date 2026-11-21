@@ -10,6 +10,8 @@
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <!-- The default terminal's tests call Dusk's COM class through its table of functions, the way Windows would -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Its own Main, which runs it as a stand-in for Hex that HexAgentJobTests kills (HexAgentHost) -->
+    <GenerateProgramFile>false</GenerateProgramFile>
 
     <!-- Where the engine is, its submodule unless a workspace said otherwise -->
     <HorizonRoot Condition="'$(HorizonRoot)' == ''">$(MSBuildThisFileDirectory)..\horizon\</HorizonRoot>

@@ -95,18 +95,20 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     [Fact]
     public void A_program_run_has_its_lines_read_back_and_its_exit_said()
     {
-        // A .cmd and PATHEXT's endings are Windows' own, elsewhere a name is found as it is
-        if (!OperatingSystem.IsWindows())
-            return;
-
+        // A .cmd on Windows, which goes through cmd, a sh elsewhere, started in a group of its own
         string script = Path.Combine(folder, "agent.cmd");
         File.WriteAllText(script, "@echo off\r\nset /p asked=\r\necho {\"type\":\"said\",\"text\":\"%asked%\"}\r\necho oops 1>&2\r\nexit /b 3\r\n");
-        using HexAgentProcess run = HexAgentProcess.Start(script, ["--json"], folder, "hello there\n");
+        using HexAgentProcess run = OperatingSystem.IsWindows()
+            ? HexAgentProcess.Start(script, ["--json"], folder, "hello there\n")
+            : HexAgentProcess.Start("/bin/sh", ["-c", "read asked; echo \"{\\\"type\\\":\\\"said\\\",\\\"text\\\":\\\"$asked\\\"}\"; echo oops >&2; echo \"in $PWD with $MSBUILDDISABLENODEREUSE\"; exit 3"], folder, "hello there\n");
         Assert.True(SpinWait.SpinUntil(() => run.Exited, 20_000), "it never finished");
         var lines = run.Lines.ToArray();
         Assert.Contains(lines, line => !line.Error && line.Line == "{\"type\":\"said\",\"text\":\"hello there\"}");
         Assert.Contains(lines, line => line.Error && line.Line.Trim() == "oops");
         Assert.Equal(3, run.ExitCode);
+        // Started in the folder it was given, with what Hex adds to its environment
+        if (!OperatingSystem.IsWindows() && System.Environment.GetEnvironmentVariable("MSBUILDDISABLENODEREUSE") is null)
+            Assert.Contains(lines, line => line.Line == $"in {folder} with 1");
     }
 
     [Fact]
@@ -561,12 +563,11 @@ public sealed partial class HexAgentsPanelTests : IDisposable
     [Fact]
     public void A_program_kept_open_is_told_more_until_its_input_is_closed()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
         string script = Path.Combine(folder, "steered.cmd");
         File.WriteAllText(script, "@echo off\r\nset /p first=\r\necho got %first%\r\nset /p second=\r\necho got %second%\r\n");
-        using HexAgentProcess run = HexAgentProcess.Start(script, [], folder, "one\n", keepInput: true);
+        using HexAgentProcess run = OperatingSystem.IsWindows()
+            ? HexAgentProcess.Start(script, [], folder, "one\n", keepInput: true)
+            : HexAgentProcess.Start("/bin/sh", ["-c", "read first; echo got $first; read second; echo got $second"], folder, "one\n", keepInput: true);
         Assert.True(run.TakesInput);
         Assert.True(SpinWait.SpinUntil(() => run.Lines.Any(line => line.Line.Trim() == "got one"), 20_000), "the first never came back");
         Assert.True(run.Send("two"));
