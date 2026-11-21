@@ -216,9 +216,9 @@ internal sealed partial class HexLinkSync
             Notify();
     }
 
-    // A path looked at again in a moment, because it moved while it was being synced; left until it next changes when
-    // that keeps happening
-    private void Again(string wire)
+    // A path looked at again in a moment, because it moved while it was being synced or something here had it open;
+    // left until it next changes when that keeps happening, with why (it kept changing, unless said otherwise)
+    private void Again(string wire, string? why = null)
     {
         int count;
         lock (gate)
@@ -232,7 +232,7 @@ internal sealed partial class HexLinkSync
 
         if (count > MOST_TRIES)
         {
-            Skip(wire, "it kept changing while it was being synced, it's tried again when it next changes");
+            Skip(wire, why ?? "it kept changing while it was being synced, it's tried again when it next changes");
             return;
         }
 
@@ -340,6 +340,12 @@ internal sealed partial class HexLinkSync
         catch (HexLinkException e) when (e.Code == HexLinkErrors.TIMED_OUT)
         {
             Again(wire);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Open here a moment (an editor saving it, a virus scanner, an indexer, on Windows any reader stops a file
+            // being moved over), tried again in a moment rather than left until it next changes
+            Again(wire, $"it stayed in use here, it's tried again when it next changes ({e.Message})");
         }
         catch (Exception e)
         {

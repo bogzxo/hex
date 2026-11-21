@@ -102,8 +102,11 @@ public sealed class HexLinkProtocolTests
         for (int i = 0; i <= HexLinkSession.MOST_LINE / piece.Length; i++)
             end.Write(piece);
 
+        // Closed says why from the moment it's closed; the Closed event comes a moment after, on the reading task
         Assert.True(Eventually(() => b.IsClosed));
-        Assert.Contains("longer", why);
+        Assert.Contains("longer", b.Why);
+        Assert.True(Eventually(() => Volatile.Read(ref why) is not null));
+        Assert.Equal(b.Why, why);
         Assert.Equal(HexLinkErrors.CLOSED, await CodeOf(waiting));
         Assert.Equal(HexLinkErrors.CLOSED, await CodeOf(b.Ask("after")));
         Assert.True(Eventually(() => a.IsClosed));
@@ -127,24 +130,34 @@ public sealed class HexLinkProtocolTests
     public void Pings_keep_a_link_up_and_a_dead_end_is_noticed()
     {
         var (a, b) = HexLinkTestKit.Pair();
-        var live = new HexLinkSession(new HexLinkConnection(a, DeviceB, "memory", true, () => HexLinkRights.View)) { PingEvery = TimeSpan.FromMilliseconds(100) };
-        var other = new HexLinkSession(new HexLinkConnection(b, DeviceA, "memory", false, () => HexLinkRights.View)) { PingEvery = TimeSpan.FromMilliseconds(100) };
+        // Pings every 400 ms, so the link goes after 1.2 s of quiet: short enough for a test, long enough that a loaded
+        // machine running other suites beside this one doesn't starve a ping's answer past it
+        TimeSpan every = TimeSpan.FromMilliseconds(400);
+        var live = new HexLinkSession(new HexLinkConnection(a, DeviceB, "memory", true, () => HexLinkRights.View)) { PingEvery = every };
+        var other = new HexLinkSession(new HexLinkConnection(b, DeviceA, "memory", false, () => HexLinkRights.View)) { PingEvery = every };
         live.Start();
         other.Start();
 
-        // Well past three pings both are still up, each answering the other's
-        Thread.Sleep(800);
-        Assert.False(live.IsClosed);
-        Assert.False(other.IsClosed);
-
-        // An end that's there but says nothing at all (a frozen machine): its stream is open, nothing comes back
+        // An end that's there but says nothing at all (a frozen machine): its stream is open, nothing comes back. Started
+        // beside the live pair, so both are watched over the same stretch of time
         var (c, d) = HexLinkTestKit.Pair();
-        var waiting = new HexLinkSession(new HexLinkConnection(c, DeviceB, "memory", true, () => HexLinkRights.View)) { PingEvery = TimeSpan.FromMilliseconds(100) };
-        string? why = null;
-        waiting.Closed += (_, said) => why = said;
+        var waiting = new HexLinkSession(new HexLinkConnection(c, DeviceB, "memory", true, () => HexLinkRights.View)) { PingEvery = every };
+        long closedAt = 0;
+        waiting.Closed += (_, _) => Volatile.Write(ref closedAt, Environment.TickCount64);
+        long started = Environment.TickCount64;
         waiting.Start();
-        Assert.True(Eventually(() => waiting.IsClosed, 5000));
-        Assert.Contains("stopped answering", why);
+
+        // Well past three pings both live ends are still up, each answering the other's (with nothing else said, only
+        // the pings keep them from the 1.2 s of quiet that closes a link)
+        Thread.Sleep((int)(every.TotalMilliseconds * (HexLinkSession.PINGS_MISSED + 2)));
+        Assert.False(live.IsClosed, live.Why);
+        Assert.False(other.IsClosed, other.Why);
+
+        // The silent one went for that, and not before three pings' worth of quiet
+        Assert.True(Eventually(() => waiting.IsClosed, 10_000));
+        Assert.Contains("stopped answering", waiting.Why);
+        Assert.True(Eventually(() => Volatile.Read(ref closedAt) != 0));
+        Assert.True(closedAt - started >= every.TotalMilliseconds * HexLinkSession.PINGS_MISSED - 16, $"closed after {closedAt - started} ms");
         d.Dispose();
         live.Dispose();
         other.Dispose();

@@ -123,8 +123,10 @@ internal sealed class HexLinkSession : IDisposable
     /// <summary>Whether it's gone.</summary>
     public bool IsClosed => Volatile.Read(ref ended) != 0;
 
-    /// <summary>Why it went, null while it's up.</summary>
-    public string? Why { get; private set; }
+    /// <summary>Why it went, null while it's up. Set before <see cref="IsClosed"/> is, so whoever sees it closed can say why.</summary>
+    public string? Why => Volatile.Read(ref closedWhy);
+
+    private string? closedWhy;
 
     /// <summary>The token cancelled as it goes, for what runs as long as the link does.</summary>
     public CancellationToken Closing => closing.Token;
@@ -191,10 +193,10 @@ internal sealed class HexLinkSession : IDisposable
     /// <summary>Closes the link, saying why. The asks still waiting fail, <see cref="Closed"/> is called once.</summary>
     public void Close(string why)
     {
-        if (Interlocked.Exchange(ref ended, 1) != 0)
+        // The first to close says why, and the reason is there before anybody can see the link closed
+        if (Interlocked.CompareExchange(ref closedWhy, why, null) is not null)
             return;
-
-        Why = why;
+        Volatile.Write(ref ended, 1);
         try { pinger?.Dispose(); } catch (Exception) { }
         try { closing.Cancel(); } catch (Exception) { }
         Connection.Dispose();
