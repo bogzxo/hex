@@ -229,6 +229,8 @@ internal sealed partial class DawnScene
             _ => "conflicts.kept_both"
         }));
 
+        if (conflicts.Count == 0 && LinkOfferResolvedMerge(document)) return;
+
         // The last of the file settled, a card offers to stage it, which is what tells git the file is settled
         if (conflicts.Count == 0 && document.Path is { } path && git.RepositoryFor(path) is not null)
         {

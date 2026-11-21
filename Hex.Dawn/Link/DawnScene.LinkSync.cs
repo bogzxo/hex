@@ -475,6 +475,7 @@ internal sealed partial class DawnScene
     /// </summary>
     internal bool LinkOpenConflictDifference(string deviceId, string path)
     {
+        if (LinkOpenMergePreview(deviceId, path)) return true;
         if (LinkSyncOfPath(deviceId, path) is not { } sync || sync.Conflicts.FirstOrDefault(each => each.Path == path) is not { Copy: { } copy }
             || linkServices?.Workspace.Folders is not { } folders)
             return false;

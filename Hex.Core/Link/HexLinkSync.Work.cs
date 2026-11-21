@@ -846,6 +846,7 @@ internal sealed partial class HexLinkSync
             return;
         }
 
+        if (await TryTextMerge(wire, full, agreed, localBytes, m, t, stop)) return;
         await Conflict(wire, full, m, t, stop);
     }
 
