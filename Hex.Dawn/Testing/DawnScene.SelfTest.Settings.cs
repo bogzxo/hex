@@ -39,6 +39,16 @@ internal sealed partial class DawnScene
         test.MiddleClick(() => chrome.ToWorld(middlePanel!.Bounds.Center));
         test.Check("settings: second middle click stops autoscroll", () => compositor.AutoScrollTarget is null);
         test.Run(() => { if (middlePanel is not null) middlePanel.Offset = middleOffset; });
+
+        // The editor's sections fill the left of a window 900 high, so the list is scrolled to the Extensions heading
+        // first: the parts after the editor are folded to their headings, the heading itself fits in sight
+        test.Run(() =>
+        {
+            // Up is +Y, the heading under the bottom of what's in sight has its Min below the viewport's
+            if (SettingsPage is { } page && page.PartBounds("Extensions") is { IsEmpty: false } heading && heading.Min.Y < page.NavViewport.Min.Y)
+                page.NavScroll.Offset += page.NavViewport.Min.Y - heading.Min.Y;
+        });
+        test.Settle(0.2f);
         test.Check("nav: other parts folded on first open", () =>
             SettingsPage is { } page && !Horizon.UI.Components.SettingsPage.IsPartCollapsed("Editor")
             && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Terminal") && Horizon.UI.Components.SettingsPage.IsPartCollapsed("Appearance")
