@@ -152,7 +152,7 @@ internal static partial class HexSearch
                         continue;
                     string name = Path.GetFileName(file);
                     if ((expression is null || FileSystemName.MatchesWin32Expression(expression, name, ignoreCase: true))
-                        && !name.StartsWith("~syncthing~", StringComparison.Ordinal) && !Out(Inside(name), false) && (keep is null || keep(file)))
+                        && !name.StartsWith("~syncthing~", StringComparison.Ordinal) && (keep is null || keep(file)) && !Out(Inside(name), false))
                         files.Add(new HexWalkedFile(file, length, written));
                 }
 
