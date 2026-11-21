@@ -596,19 +596,66 @@ internal sealed partial class HexLanguages
     /// in a build's output, and of the rest those it asked to watch (LanguageServer.Watches). Outside its folder too, a
     /// solution of Hex's has the engine's projects beside it. csharp-ls adds a .cs made anywhere under a project's folder
     /// to that project, so the agents' scratch files in Hex's data folder (hex/Hex/bin/...) became part of Hex.csproj.
+    /// Nor anything in another repository's working copy, a git worktree beside the clones (hexwt-*, horizonwt-*) that
+    /// isn't a dot folder: csharp-ls loads the whole solution again for any project file it's told of, and an agent
+    /// building in its worktree had the editor's solution loaded again every restore.
     /// </summary>
     internal static List<(string Path, LanguageServerFileChange Change)> ServerFiles(LanguageServer server, IReadOnlyList<(string Path, LanguageServerFileChange Change)> changes)
     {
         string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         bool dotnet = server.LanguageId == "csharp";
         var its = new List<(string Path, LanguageServerFileChange Change)>();
+        Dictionary<string, bool>? copies = null;
         foreach (var change in changes)
         {
             string full = Path.GetFullPath(change.Path);
-            if (!InSkippedFolder(Path.GetRelativePath(root, full), dotnet) && server.Watches(full, change.Change))
+            if (!InSkippedFolder(Path.GetRelativePath(root, full), dotnet) && server.Watches(full, change.Change)
+                && !InRepositoryCopy(root, full, copies ??= new Dictionary<string, bool>(PlatformPaths.Comparer)))
                 its.Add(change);
         }
         return its;
+    }
+
+    /// <summary>A project file, which has csharp-ls load its solution again, a solution or what every project imports.</summary>
+    internal static bool IsProjectFile(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj" or ".sln" or ".slnx" or ".props" or ".targets";
+
+    /// <summary>
+    /// Whether a file is in the working copy of another repository than the server's, a worktree or a dot folder with a
+    /// .git of its own (HexSearch.IsRepositoryCopy), going up its folders to the first that's a repository or holds the
+    /// server's folder. A repository of its own beside it (the engine cloned next to Hex) and a submodule are the
+    /// server's to hear of, its solution has their projects in it. What each folder was is kept in <paramref name="seen"/>
+    /// for the rest of the changes said together, a build writes hundreds in a few folders.
+    /// </summary>
+    internal static bool InRepositoryCopy(string root, string full, Dictionary<string, bool> seen)
+    {
+        var walked = new List<string>();
+        bool copy = false;
+        for (string? folder = Path.GetDirectoryName(full); folder is not null && Path.GetDirectoryName(folder) is not null; folder = Path.GetDirectoryName(folder))
+        {
+            if (seen.TryGetValue(folder, out bool known))
+            {
+                copy = known;
+                break;
+            }
+            walked.Add(folder);
+
+            // The server's own folder or one above it, the copy isn't another's
+            if (PlatformPaths.IsUnder(root, folder))
+                break;
+
+            string git = Path.Combine(folder, ".git");
+            bool gitFolder = Directory.Exists(git), gitFile = !gitFolder && File.Exists(git);
+            if (gitFolder || gitFile)
+            {
+                copy = Hex.Core.HexSearch.IsRepositoryCopy(folder);
+                break;
+            }
+        }
+
+        foreach (string folder in walked)
+            seen[folder] = copy;
+        return copy;
     }
 
     // Helper method to say whether a path from a server's folder goes through a hidden folder, or bin or obj for .NET
@@ -633,7 +680,7 @@ internal sealed partial class HexLanguages
     {
         string root = Path.GetFullPath(server.RootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string full = Path.GetFullPath(changed);
-        if (!PlatformPaths.IsUnder(full, root))
+        if (!PlatformPaths.IsUnder(full, root) || InRepositoryCopy(root, full, new Dictionary<string, bool>(PlatformPaths.Comparer)))
             return false;
 
         // The folders it's in, the file's own name (.editorconfig) left out. A build's or a restore's own folders aren't a
