@@ -60,6 +60,11 @@ internal sealed partial class DawnScene
         public Task<string> PatchOffered(HexLinkDevice device, string title, string diff) => hex.LinkPatchOffered(device, title, diff);
 
         public void Audit(string what, HexLinkDevice who, string detail) => hex.linkAudit?.Write(what, who.Id, detail);
+
+        // What the prediction side bound (DawnScene.LinkPredict), off the editor's thread
+        public bool ServesPredictions => hex.LinkPredictServes();
+
+        public IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => hex.LinkPredictMake(request, cancel);
     }
 
     // Bytes as text when they're UTF-8 (a byte order mark let go of), null when they aren't, which goes to the disk as they are

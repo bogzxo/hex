@@ -83,4 +83,17 @@ internal interface IHexLinkServices
 
     /// <summary>A line for the audit log: what was done or refused, by which device, and on what.</summary>
     void Audit(string what, HexLinkDevice who, string detail);
+
+    /// <summary>
+    /// Whether this machine would make predictions for a device that may ask (its share setting on and a model it can
+    /// reach). Read off the editor's thread on every predict/start and hello, so it's cheap. Not, unless the editor says.
+    /// </summary>
+    bool ServesPredictions => false;
+
+    /// <summary>
+    /// A prediction made with this machine's model, its text as it comes. Throws a <see cref="HexLinkException"/> with
+    /// <see cref="HexLinkErrors.PREDICTION_FAILED"/> (and data.status) when the model couldn't, from the call or the
+    /// enumeration. Called off the editor's thread and must never wait on it: somebody is typing at the other end.
+    /// </summary>
+    IAsyncEnumerable<string> Predict(HexLinkPrediction request, CancellationToken cancel) => HexLinkPrediction.NotServed();
 }

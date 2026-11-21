@@ -16,7 +16,13 @@ internal enum HexLinkRights
     Steer = 2,
 
     /// <summary>Write the workspace's files.</summary>
-    Edit = 4
+    Edit = 4,
+
+    /// <summary>
+    /// Use this machine's model for autocomplete (edit predictions), when this machine shares its predictions. It takes
+    /// nothing else, not even View, and nothing else takes it: a weaker machine may borrow the model without seeing a file.
+    /// </summary>
+    Predict = 8
 }
 
 /// <summary>

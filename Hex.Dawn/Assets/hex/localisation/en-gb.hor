@@ -4253,6 +4253,7 @@ let strings = {
         right_view: "view",
         right_steer: "steer",
         right_edit: "edit",
+        right_predict: "borrow the autocomplete",
         started: "Hex Link is on, listening on port {port}",
         started_dialling: "Hex Link is on, dialling the devices this one paired with",
         stopped: "Hex Link is off, every link closed",

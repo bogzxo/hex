@@ -166,6 +166,16 @@ internal sealed class HexLink(IHexLinkServices services) : IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether this machine shares its predictions may have changed (the setting, or the model here), each device that
+    /// may ask told when what it's served changed (link/serves).
+    /// </summary>
+    public void PredictionsMoved()
+    {
+        foreach (Joined link in All())
+            link.Host.ServesMoved();
+    }
+
     /// <summary>Where this machine's person is, told to every linked device (each at most twice a second).</summary>
     public void SetPresence(HexLinkPresence? presence)
     {

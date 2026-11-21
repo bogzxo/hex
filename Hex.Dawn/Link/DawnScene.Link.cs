@@ -305,11 +305,13 @@ internal sealed partial class DawnScene
             LinkRedialDue();
             linkGitWait -= LINK_LOOK_EVERY;
             LinkLookAtWorkspace(force: linkGitWait <= 0.0f);
+            LinkPredictLookServing();
         }
 
         if (linkDirty)
         {
             linkDirty = false;
+            LinkPredictLookSource();
             LinkRedraw();
         }
     }
