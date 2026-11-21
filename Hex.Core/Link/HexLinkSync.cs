@@ -113,8 +113,7 @@ internal sealed partial class HexLinkSync : IDisposable
         tree = new HexLinkTree(folder, () => Excludes());
         slug = HexLinkGit.Slug(peer.Device.Name);
         StateFile = Path.GetFullPath(Path.Combine(stateFolder, StateName(peer.Device.Id, folder.Name)));
-        WriteLocal = (full, bytes) => Task.Run(() => HexLinkFiles.WriteAtomic(full, bytes));
-        DeleteLocal = full => Task.Run(() => File.Delete(full));
+        ApplyLocal = HexLinkFiles.CompareAndReplace;
     }
 
     /// <summary>The device synced with.</summary>
@@ -128,14 +127,8 @@ internal sealed partial class HexLinkSync : IDisposable
     /// <summary>Where the state (the bases and the open conflicts) is kept.</summary>
     public string StateFile { get; }
 
-    /// <summary>
-    /// How a file fetched from the other side is written here, by its full path (checked by the jail already) and its
-    /// bytes. A temp file beside it moved over it unless the editor says otherwise, to route it into an open tab.
-    /// </summary>
-    public Func<string, byte[], Task> WriteLocal { get; init; }
-
-    /// <summary>How a file deleted on the other side is deleted here, by its full path. The disk unless the editor says otherwise.</summary>
-    public Func<string, Task> DeleteLocal { get; init; }
+    /// <summary>Apply a checked incoming change, optionally through the editor's dirty-tab guard.</summary>
+    public Func<string, string, string?, byte[]?, CancellationToken, bool?, Task<string?>> ApplyLocal { get; init; }
 
     /// <summary>How long this side's tree is quiet before a batch of its changes is looked at, 150 ms unless a test says.</summary>
     public TimeSpan Quiet { get; init; } = TimeSpan.FromMilliseconds(150);
@@ -357,14 +350,7 @@ internal sealed partial class HexLinkSync : IDisposable
 
         if (watch is not null)
             await watch.Flush().WaitAsync(cancel);
-        try
-        {
-            await peer.Flush(folder.Name, cancel);
-        }
-        catch (HexLinkException e) when (e.Code is not HexLinkErrors.CLOSED)
-        {
-            // The other side's changes are said a moment later anyway, what matters here is this side's
-        }
+        await peer.Flush(folder.Name, cancel);
 
         await Drained(cancel);
         if (State is HexLinkSyncState.Off or HexLinkSyncState.Failed)
@@ -440,7 +426,7 @@ internal sealed partial class HexLinkSync : IDisposable
                     if (!remoteCertified || !await Asked(() => peer.ConfirmAbsent(folder.Name, path, cancel), cancel))
                         return "The peer cannot confirm a working-tree deletion.";
                     if (mine is not null)
-                        await DeleteLocal(full);
+                        await ApplyLocal(full, path, HexLinkFiles.Hash(mine), null, cancel, null);
                     agreed = null;
                 }
                 else
@@ -448,8 +434,7 @@ internal sealed partial class HexLinkSync : IDisposable
                     HexLinkFile file = await Fetch(path, cancel);
                     HexLinkEol eol = mine is null ? Most(here: true) : TextOf(mine).Eol;
                     byte[] written = Converted(file.Bytes, TextOf(file.Bytes), eol);
-                    Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-                    await WriteLocal(full, written);
+                    await ApplyLocal(full, path, mine is null ? null : HexLinkFiles.Hash(mine), written, cancel, null);
                     agreed = AgreedOf(written, file.Bytes);
                 }
 

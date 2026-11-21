@@ -85,7 +85,7 @@ internal sealed partial class DawnScene
     {
         if (await OnEditorForLink(() => Context.Documents.Find(full) is { } open && HasChanges(open)).WaitAsync(cancel))
             throw new HexLinkException(HexLinkErrors.CONFLICT, $"{wire} has unsaved changes in the editor.",
-                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full) });
+                new JsonObject { ["hash"] = HexLinkFiles.HashOf(full), ["editor_dirty"] = true });
 
         string? hash = await HexLinkFiles.CompareAndReplace(full, wire, baseHash, bytes, cancel, executable).ConfigureAwait(false);
         if (bytes is not null && HexLinkFiles.Decode(bytes) is { } decoded)

@@ -396,7 +396,7 @@ internal sealed partial class HexLinkSync
         catch (HexLinkException e) when (e.Code == HexLinkErrors.CLOSED)
         {
         }
-        catch (HexLinkException e) when (e.Code is HexLinkErrors.TIMED_OUT or HexLinkErrors.INTERNAL_ERROR or HexLinkErrors.NOT_FOUND)
+        catch (HexLinkException e) when (e.Code is HexLinkErrors.CONFLICT or HexLinkErrors.TIMED_OUT or HexLinkErrors.INTERNAL_ERROR or HexLinkErrors.NOT_FOUND)
         {
             Again(wire, e.Message);
         }
@@ -567,13 +567,15 @@ internal sealed partial class HexLinkSync
 
             if (expected is not null)
             {
-                byte[]? disk = await ReadLocal(full, stop);
-                if (disk is null || HexLinkFiles.Hash(disk) != expected)
+                try
                 {
-                    Again(wire);
+                    await ApplyLocal(full, wire, expected, null, stop, null);
+                }
+                catch (HexLinkException e) when (EditorDirty(e))
+                {
+                    await HoldEditorConflict(wire, full, null, "unsaved changes here, deleted there", stop);
                     return;
                 }
-                await DeleteLocal(full);
             }
             lock (gate)
                 Agree(wire, null);
@@ -623,31 +625,18 @@ internal sealed partial class HexLinkSync
             here = Most(here: true);
         byte[] written = Converted(file.Bytes, info, here);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        // Agreed before it's written, so this side's watcher reporting the write finds it settled and doesn't send it back
-        HexLinkSyncAgreed? before;
-        lock (gate)
-        {
-            before = bases.GetValueOrDefault(wire);
-            SetBase(wire, AgreedOf(written, file.Bytes));
-        }
-
         try
         {
-            await WriteLocal(full, written);
+            await ApplyLocal(full, wire, expected, written, stop, null);
         }
-        catch (Exception)
+        catch (HexLinkException e) when (EditorDirty(e))
         {
-            lock (gate)
-            {
-                if (before is null)
-                    RemoveBase(wire);
-                else
-                    SetBase(wire, before);
-            }
-
-            throw;
+            await HoldEditorConflict(wire, full, file.Bytes, "unsaved changes in the editor", stop);
+            return;
         }
+
+        lock (gate)
+            SetBase(wire, AgreedOf(written, file.Bytes));
 
         Interlocked.Increment(ref received);
         Notify();
@@ -779,6 +768,10 @@ internal sealed partial class HexLinkSync
             Interlocked.Increment(ref sent);
             Notify();
         }
+        catch (HexLinkException e) when (EditorDirty(e))
+        {
+            await HoldEditorConflict(wire, full, null, "unsaved changes on the other device", stop);
+        }
         catch (HexLinkException e) when (e.Code is HexLinkErrors.CONFLICT or HexLinkErrors.NOT_FOUND)
         {
             // A failed read or compare can be a lock or loss of access. Only the tree watcher can confirm deletion.
@@ -791,6 +784,26 @@ internal sealed partial class HexLinkSync
             else
                 HoldDeniedPush(wire, grantedAt);
         }
+    }
+
+    private static bool EditorDirty(HexLinkException e) =>
+        e.Code == HexLinkErrors.CONFLICT && e.Detail is JsonObject detail && HexLinkData.Bool(detail, "editor_dirty") == true;
+
+    private async Task HoldEditorConflict(string wire, string full, byte[]? bytes, string kind, CancellationToken stop)
+    {
+        string? copy = null, hash = null;
+        if (bytes is not null)
+        {
+            (string copyFull, copy) = Beside(full, wire);
+            hash = await HexLinkFiles.CompareAndReplace(copyFull, copy, null, bytes, stop);
+        }
+        lock (gate)
+        {
+            conflicts[wire] = new HexLinkSyncConflict(wire, kind, copy, hash);
+            RemoveBase(wire);
+        }
+        Save();
+        Notify();
     }
 
     // Both changed since they agreed: nothing overwritten, the other side's version put beside this one's, the path

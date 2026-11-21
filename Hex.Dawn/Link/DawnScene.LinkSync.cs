@@ -13,11 +13,8 @@ namespace Hex.Dawn;
 // in the settings folder's link folder per device and folder, so the sync starts again by itself when the device links
 // again, and stops with the link.
 //
-// What comes from the other machine is written here through the editor's own way in: the file on the disk, whole or not
-// at all, and an open tab of it made what it now says as one step of its undo (a tab with changes nobody saved yet
-// keeps them a step back in its undo, and says so). A file deleted there is deleted here, and a tab of it says the file
-// went the way it does for any delete. A sync that needs the two repositories brought to one commit first, and a file
-// both sides changed, are cards with what can be done about them.
+// Incoming changes use the on-disk base and keep dirty tabs intact. Conflicts and commit differences are shown
+// in the Link window with the actions that settle them.
 internal sealed partial class DawnScene
 {
     // The file the person's (and the agents') choices of what's synced are kept in, in the settings folder's link folder
@@ -152,8 +149,8 @@ internal sealed partial class DawnScene
                 entry.Sync?.Dispose();
                 var sync = new HexLinkSync(peer, local, Path.Combine(linkData, LINK_SYNC_STATES))
                 {
-                    WriteLocal = LinkWriteLocal,
-                    DeleteLocal = LinkDeleteLocal
+                    ApplyLocal = LinkCompareAndReplace,
+                    Excludes = () => services.Excludes
                 };
                 sync.Changed = () => PostLink(() => LinkSyncMoved(entry));
                 entry.Sync = sync;
@@ -293,14 +290,11 @@ internal sealed partial class DawnScene
 
     /* Writing here what came from there */
 
-    /// <summary>
-    /// A file of the workspace written with what a linked device sent, from any thread: the disk first, whole or not at
-    /// all, then an open tab of it made what it now says as one step of its undo, so the disk is always what both sides
-    /// agreed and a tab never shows something else. A tab with changes nobody saved keeps them a step back in its undo
-    /// and says so. Bytes that aren't text only go to the disk.
-    /// </summary>
+    /// <summary>Writes a file from Link and refreshes a clean editor tab with the incoming text.</summary>
     internal async Task LinkWriteLocal(string fullPath, byte[] bytes)
     {
+        if (await OnEditorForLink(() => Context.Documents.Find(fullPath) is { } open && HasChanges(open)))
+            throw new HexLinkException(HexLinkErrors.CONFLICT, $"{fullPath} has unsaved changes in the editor.");
         await Task.Run(() => HexLinkFiles.WriteAtomic(fullPath, bytes));
         if (LinkText(bytes) is not { } text)
             return;
@@ -311,20 +305,12 @@ internal sealed partial class DawnScene
         });
     }
 
-    // An open tab of a file just written made what the file now says, on the editor's thread
     private void LinkTakeIntoTab(string fullPath, string text)
     {
-        if (Context.Documents.Find(fullPath) is not { } open || open.Picture is not null || !open.IsText || text == open.DiskText)
-            return;
-        bool hadChanges = HasChanges(open);
-        if (!TakeFromDisk(open, text))
-            return;
-        if (hadChanges)
-            Say(Said("link.sync_took_over_tab", ("name", open.Name)));
+        if (Context.Documents.Find(fullPath) is { } open && open.Picture is null && open.IsText &&
+            text != open.DiskText && !HasChanges(open))
+            TakeFromDisk(open, text);
     }
-
-    /// <summary>A file of the workspace deleted because it went on a linked device. A tab of it says it went, as for any delete, and stays open.</summary>
-    internal Task LinkDeleteLocal(string fullPath) => Task.Run(() => File.Delete(fullPath));
 
     /* What's said of a sync as it moves */
 

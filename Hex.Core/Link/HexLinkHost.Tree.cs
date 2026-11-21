@@ -91,9 +91,9 @@ internal sealed partial class HexLinkHost
             ?? throw HexLinkException.NotFound($"The workspace has no folder called {name}.");
         // Through the jail like any path, so a folder that's itself a link out is refused the same way
         HexLinkFiles.Resolve(Folders, folder.Name);
-        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => new HexLinkTree(folder));
+        HexLinkTree tree = trees.GetOrAdd(folder.Name, _ => new HexLinkTree(folder, () => services.Excludes));
         if (tree.Folder != folder)
-            trees[folder.Name] = tree = new HexLinkTree(folder);
+            trees[folder.Name] = tree = new HexLinkTree(folder, () => services.Excludes);
         return tree;
     }
 
@@ -106,7 +106,7 @@ internal sealed partial class HexLinkHost
             string prefix = tree.Folder.Name + "/";
             if (!path.StartsWith(prefix, StringComparison.Ordinal))
                 throw HexLinkException.Invalid("The path is outside the manifest folder.");
-            HexLinkFiles.Resolve(Folders, path);
+            ResolveFile(path);
             return new JsonObject { ["absent"] = tree.Gone(path[prefix.Length..]) };
         }
         if (HexLinkData.String(parameters, "snapshot", 64) is { } id)

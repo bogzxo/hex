@@ -116,7 +116,7 @@ internal sealed partial class HexLinkTree
                 hashes.TryRemove(full, out _);
         }
 
-        return new HexLinkManifest(Folder.Name, head, files, root, nested);
+        return new HexLinkManifest(Folder.Name, head, files, root, NestedHeads: nested);
     }
 
     // The first commit of the repository, worked out once per head (it only moves if history is rewritten). A history
@@ -141,7 +141,7 @@ internal sealed partial class HexLinkTree
     /// <summary>A file of the tree, or null when the path is absent or excluded. Read failures propagate.</summary>
     public HexLinkTreeFile? FileOf(string relative)
     {
-        if (!Plain(relative) || Hidden(relative))
+        if (!Plain(relative) || SyncArtifact(relative) || Hidden(relative))
             return null;
         string full = Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar));
         FileInfo? info = RegularFile(full, Root, excludeNonFiles: true);
@@ -201,6 +201,16 @@ internal sealed partial class HexLinkTree
             return true;
         }
     }
+
+    private static bool SyncArtifact(string relative)
+    {
+        ReadOnlySpan<char> name = relative.AsSpan(relative.LastIndexOf('/') + 1);
+        return name.Contains(HexLinkSync.THEIRS, StringComparison.OrdinalIgnoreCase) ||
+            (!name.IsEmpty && name[0] == '.' && name.EndsWith(".hexlink", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal void ForgetHash(string relative) =>
+        hashes.TryRemove(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)), out _);
 
     private bool Hidden(string relative, bool folder = false)
     {
@@ -279,7 +289,7 @@ internal sealed partial class HexLinkTree
             foreach (string file in Directory.EnumerateFiles(at, "*", options))
             {
                 string relative = Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/');
-                if (Hidden(relative))
+                if (SyncArtifact(relative) || Hidden(relative))
                     continue;
                 found.Add(relative);
                 CheckCount(found.Count);
@@ -305,7 +315,7 @@ internal sealed partial class HexLinkTree
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (string each in relative)
         {
-            if (!Plain(each) || Hidden(each))
+            if (!Plain(each) || SyncArtifact(each) || Hidden(each))
                 ignored.Add(each);
         }
 
@@ -545,6 +555,8 @@ internal sealed class HexLinkTreeWatch : IDisposable
                 everything = false;
             }
 
+            foreach (string path in paths)
+                tree.ForgetHash(path);
             var changes = new List<HexLinkTreeChange>();
             if (whole)
             {
