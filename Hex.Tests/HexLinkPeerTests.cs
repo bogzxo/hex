@@ -91,7 +91,8 @@ public sealed class HexLinkPeerTests
             lock (heard)
                 heard.Add(Environment.TickCount64);
         };
-        long until = Environment.TickCount64 + 1000;
+        long started = Environment.TickCount64;
+        long until = started + 1000;
         int said = 0;
         while (Environment.TickCount64 < until || said < 60)
         {
@@ -107,11 +108,45 @@ public sealed class HexLinkPeerTests
         long[] times;
         lock (heard)
             times = [.. heard];
-        // Moved sixty times and more, sent far fewer: never more than five in any second (one more for where the
-        // second's edges fall), so every sixth send is a second or more after the first of them
-        Assert.InRange(times.Length, 1, said / 4);
-        for (int i = 6; i < times.Length; i++)
-            Assert.True(times[i] - times[i - 6] >= 1000 - 100, $"sends {i - 6} and {i} were {times[i] - times[i - 6]} ms apart");
+        // Moved sixty times and more, sent far fewer. The sends start at least 200 ms apart (HexLinkCoalesce's own test
+        // holds that to the millisecond on the sending side), so however many were heard, they fit five a second into
+        // the time from the first move to the last arrival: arrivals a loaded machine delivers late and bunched only
+        // stretch that time, never shorten it, where gaps between arrivals would shrink and fail for no fault of the link
+        // (Not a fixed share of the moves: a loaded machine makes the sixty moves take seconds, and five a second of
+        // seconds is more sends, rightly)
+        Assert.InRange(times.Length, 1, said - 1);
+        long span = times[^1] - started;
+        Assert.True(times.Length <= span / 200 + 2, $"{times.Length} sends were heard in {span} ms");
+    }
+
+    [Fact]
+    public async Task Coalescing_runs_at_most_once_a_gap_however_often_it_is_poked()
+    {
+        // What the five a second of the fleet and the chats stands on, timed where it runs rather than where it arrives
+        var ran = new List<long>();
+        using var coalesce = new HexLinkCoalesce(TimeSpan.FromMilliseconds(200), () =>
+        {
+            lock (ran)
+                ran.Add(Environment.TickCount64);
+            return Task.CompletedTask;
+        });
+
+        long until = Environment.TickCount64 + 1200;
+        while (Environment.TickCount64 < until)
+        {
+            coalesce.Poke();
+            await Task.Delay(1);
+        }
+
+        // The last poke runs as well, never lost
+        await Task.Delay(600);
+        long[] times;
+        lock (ran)
+            times = [.. ran];
+        Assert.InRange(times.Length, 2, 1200 / 200 + 2);
+        // A timer never fires before its time; the clock it's read by ticks in steps of up to 16 ms on Windows
+        for (int i = 1; i < times.Length; i++)
+            Assert.True(times[i] - times[i - 1] >= 200 - 16, $"runs {i - 1} and {i} were {times[i] - times[i - 1]} ms apart");
     }
 
     [Fact]

@@ -443,6 +443,29 @@ public sealed partial class HexLinkSyncTests
     }
 
     [Fact]
+    public async Task A_file_held_open_here_for_a_moment_is_still_pulled()
+    {
+        // On Windows a reader holding the file (an editor, a virus scanner, an indexer) stops it being moved over; the
+        // pull is tried again in a moment rather than left until the file next changes
+        using var pair = await LinkedPair.Up(EDIT, HexLinkRights.View);
+        Put(pair.B, "held.txt", "first");
+        using HexLinkSync sync = SyncOf(pair);
+        await sync.Start();
+        Assert.True(await Until(() => Get(pair.A, "held.txt") == "first"), sync.Summary);
+
+        string full = Path.Combine(pair.A.Work, "held.txt");
+        using (new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Put(pair.B, "held.txt", "second");
+            await Task.Delay(700);
+        }
+
+        Assert.True(await Until(() => Get(pair.A, "held.txt") == "second"), sync.Summary);
+        await Settled(sync);
+        Assert.Empty(sync.Skipped);
+    }
+
+    [Fact]
     public async Task Edit_taken_away_mid_sync_turns_it_pull_only()
     {
         using var pair = await LinkedPair.Up(EDIT, EDIT);
